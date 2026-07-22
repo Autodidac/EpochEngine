@@ -1,7 +1,32 @@
-/************************************************
- *  Epoch Engine - SDL Renderer Device Module
- *
- *  SPDX-License-Identifier: LicenseRef-MIT-NoSell
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
  ***********************************************/
 module;
 
@@ -24,7 +49,7 @@ import sdl.renderer;
 import sdl.state;
 #endif
 
-export namespace epoch
+export namespace epochengine
 {
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
     struct SdlRenderTextureRecord
@@ -79,14 +104,14 @@ export namespace epoch
         {
             SdlRenderTextureRecord* const record = resolve(render_target);
             SDL_Renderer* const renderer = active_renderer();
-            if (!record || !renderer || epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted)
+            if (!record || !renderer || epochengine::sdlcontext::state::get_sdl_state().renderFaulted)
                 return;
 
             record->previous_target = SDL_GetRenderTarget(renderer);
             if (!SDL_SetRenderTarget(renderer, record->texture))
             {
-                epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderTarget");
-                epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+                epochengine::sdlcontext::check_sdl_error("SDL_SetRenderTarget");
+                epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
                 return;
             }
 
@@ -104,15 +129,15 @@ export namespace epoch
                         to_channel(pass.clear[2]),
                         to_channel(pass.clear[3])))
                 {
-                    epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderDrawColor");
-                    epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+                    epochengine::sdlcontext::check_sdl_error("SDL_SetRenderDrawColor");
+                    epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
                     return;
                 }
 
                 if (!SDL_RenderClear(renderer))
                 {
-                    epochnamespace::sdlcontext::check_sdl_error("SDL_RenderClear");
-                    epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+                    epochengine::sdlcontext::check_sdl_error("SDL_RenderClear");
+                    epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
                     return;
                 }
             }
@@ -129,8 +154,8 @@ export namespace epoch
             {
                 if (!SDL_SetRenderTarget(renderer, record->previous_target))
                 {
-                    epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderTarget restore");
-                    epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+                    epochengine::sdlcontext::check_sdl_error("SDL_SetRenderTarget restore");
+                    epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
                 }
                 record->previous_target = nullptr;
             }
@@ -163,7 +188,7 @@ export namespace epoch
     private:
         [[nodiscard]] static SDL_Renderer* active_renderer() noexcept
         {
-            return epochnamespace::sdlcontext::sdl_renderer.renderer;
+            return epochengine::sdlcontext::sdl_renderer.renderer;
         }
 
         [[nodiscard]] SdlRenderTextureRecord* resolve(RenderTargetHandle render_target) noexcept
@@ -261,8 +286,8 @@ export namespace epoch
 
         RenderTextureAssetHandles create_render_texture_asset(const RenderTextureAssetDesc& desc) override
         {
-            SDL_Renderer* const renderer = epochnamespace::sdlcontext::sdl_renderer.renderer;
-            if (!renderer || epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted)
+            SDL_Renderer* const renderer = epochengine::sdlcontext::sdl_renderer.renderer;
+            if (!renderer || epochengine::sdlcontext::state::get_sdl_state().renderFaulted)
                 return {};
 
             const u32 width = desc.width == 0 ? 1u : desc.width;
@@ -277,7 +302,7 @@ export namespace epoch
 
             if (!texture)
             {
-                epochnamespace::sdlcontext::check_sdl_error("SDL_CreateTexture render target");
+                epochengine::sdlcontext::check_sdl_error("SDL_CreateTexture render target");
                 return {};
             }
 
@@ -362,8 +387,8 @@ export namespace epoch
 
         [[nodiscard]] bool runtime_renderer_available() const noexcept
         {
-            return epochnamespace::sdlcontext::sdl_renderer.renderer != nullptr &&
-                   !epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted;
+            return epochengine::sdlcontext::sdl_renderer.renderer != nullptr &&
+                   !epochengine::sdlcontext::state::get_sdl_state().renderFaulted;
         }
 
         [[nodiscard]] const SdlRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept

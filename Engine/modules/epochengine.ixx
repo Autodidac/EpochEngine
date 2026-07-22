@@ -54,9 +54,7 @@ import applicationmodule;
 
 
 // this is required for module linkage
-export namespace epochnamespace::core
+export namespace epochengine::core
 {
-
-
 	// You can add global functions, types, variables, etc. here if needed.
 }

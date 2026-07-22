@@ -53,7 +53,7 @@ import atlas.texture;
 import core.logger;
 
 
-namespace epochnamespace
+namespace epochengine
 {
     // Forward declaration only â€” definition lives in atlas module
 

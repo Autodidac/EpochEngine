@@ -28,10 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // ============================================================================
+// ============================================================================
 // src/core.time.cpp
 // ============================================================================
-
 module;
 
 #include <algorithm>
@@ -45,7 +44,7 @@ module;
 
 module core.time;
 
-namespace epoch::core::time
+namespace epochengine::core::time
 {
     std::uint64_t now_ns() noexcept
     {

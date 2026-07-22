@@ -34,15 +34,15 @@ module;
 
 export module core.string;
 
-export namespace epoch::core::string
+export namespace epochengine::core::string
 {
     // Returns a view with leading/trailing ASCII whitespace removed.
-    [[nodiscard]] epoch::string_view trim(epoch::string_view s) noexcept;
+    [[nodiscard]] epochengine::string_view trim(epochengine::string_view s) noexcept;
 
     // Splits on a single character delimiter. Empty tokens are preserved.
-    [[nodiscard]] epoch::small_vector<epoch::string_view> split(epoch::string_view s, char delim);
+    [[nodiscard]] epochengine::small_vector<epochengine::string_view> split(epochengine::string_view s, char delim);
 
     // Joins views with a delimiter into a new string.
-    [[nodiscard]] epoch::string join(epoch::span<const epoch::string_view> parts,
-        epoch::string_view delim);
+    [[nodiscard]] epochengine::string join(epochengine::span<const epochengine::string_view> parts,
+        epochengine::string_view delim);
 }

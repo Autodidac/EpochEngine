@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -90,9 +90,28 @@ import raylib.api;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
-namespace epochnamespace::raylibcontext
+namespace epochengine::raylibcontext
 {
     using NativeWindowHandle = void*;
+
+    export struct RaylibNativeDiagnostics
+    {
+        std::uintptr_t hwnd = 0;
+        std::uintptr_t parent = 0;
+        std::uintptr_t dc = 0;
+        std::uintptr_t glContext = 0;
+        std::uintptr_t currentDc = 0;
+        std::uintptr_t currentGlContext = 0;
+        std::uintptr_t windowFromDc = 0;
+        bool windowValid = false;
+        bool windowVisible = false;
+        bool childStyle = false;
+        bool currentMatchesExpected = false;
+        int clientWidth = 0;
+        int clientHeight = 0;
+        std::uint32_t ownerThread = 0;
+        std::uint32_t currentThread = 0;
+    };
 
     inline std::string& title_storage()
     {
@@ -125,7 +144,7 @@ namespace epochnamespace::raylibcontext
         }
 
         // Debug helper: verify the multiplexer has made the raylib context current
-        inline void debug_expect_raylib_current(const epochnamespace::raylibstate::RaylibState& st, const char* where)
+        inline void debug_expect_raylib_current(const epochengine::raylibstate::RaylibState& st, const char* where)
         {
 #if defined(_DEBUG)
             const auto dc = current_dc();
@@ -176,7 +195,7 @@ namespace epochnamespace::raylibcontext
         }
 
         inline void adopt_raylib_window(
-            epochnamespace::raylibstate::RaylibState& st,
+            epochengine::raylibstate::RaylibState& st,
             std::shared_ptr<core::Context> ctx,
             HWND parent,
             HWND raylibHwnd)
@@ -200,6 +219,12 @@ namespace epochnamespace::raylibcontext
 
             if (st.parent && st.parent != raylibHwnd)
             {
+                // GLFW owns this HWND and its WGL surface. Preserve the proven
+                // parent-first adoption order before changing top-level styles.
+                if (::GetParent(raylibHwnd) != st.parent)
+                    ::SetParent(raylibHwnd, st.parent);
+
+
                 LONG_PTR style = ::GetWindowLongPtrW(raylibHwnd, GWL_STYLE);
                 style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW | WS_POPUP);
                 style |= (WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN);
@@ -216,9 +241,6 @@ namespace epochnamespace::raylibcontext
                 exStyle |= WS_EX_NOPARENTNOTIFY;
                 ::SetWindowLongPtrW(raylibHwnd, GWL_EXSTYLE, exStyle);
 
-                if (::GetParent(raylibHwnd) != st.parent)
-                    ::SetParent(raylibHwnd, st.parent);
-
                 RECT client{};
                 const HWND sizeSource = parent ? parent : st.parent;
                 ::GetClientRect(sizeSource, &client);
@@ -226,29 +248,34 @@ namespace epochnamespace::raylibcontext
                 const int height = (std::max)(1, static_cast<int>(client.bottom - client.top));
                 st.width = static_cast<unsigned>(width);
                 st.height = static_cast<unsigned>(height);
+
+                if (parent
+                    && parent != st.parent
+                    && parent != raylibHwnd
+                    && ::IsWindow(parent) != FALSE)
+                {
+                    ::ShowWindow(parent, SW_HIDE);
+                }
                 ::SetWindowPos(raylibHwnd,
-                    nullptr,
+                    HWND_TOP,
                     0,
                     0,
                     width,
                     height,
-                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                    SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
                 ::ShowWindow(raylibHwnd, SW_SHOWNA);
                 ::UpdateWindow(raylibHwnd);
 
-                epochnamespace::core::MakeDockable(raylibHwnd, st.parent);
+                epochengine::core::MakeDockable(raylibHwnd, st.parent);
                 ::SetFocus(raylibHwnd);
-
-                if (parent && parent != raylibHwnd && ::IsWindow(parent) != FALSE)
-                    ::ShowWindow(parent, SW_HIDE);
             }
 
             if (ctx)
             {
                 ctx->width = static_cast<int>(st.width);
                 ctx->height = static_cast<int>(st.height);
-                ctx->framebufferWidth = (std::max)(1, epochnamespace::raylib_api::get_render_width());
-                ctx->framebufferHeight = (std::max)(1, epochnamespace::raylib_api::get_render_height());
+                ctx->framebufferWidth = (std::max)(1, epochengine::raylib_api::get_render_width());
+                ctx->framebufferHeight = (std::max)(1, epochengine::raylib_api::get_render_height());
                 ctx->hwnd = raylibHwnd;
                 ctx->hdc = st.hdc;
                 ctx->hglrc = st.hglrc;
@@ -257,17 +284,29 @@ namespace epochnamespace::raylibcontext
                 ctx->native_gl_context = st.hglrc;
                 if (ctx->windowData)
                 {
-                    const HWND previousHost = ctx->windowData->hwnd;
+                    const HWND stableHost = ctx->windowData->host_hwnd
+                        ? ctx->windowData->host_hwnd
+                        : ctx->windowData->hwnd;
                     const HDC previousDc = ctx->windowData->hdc;
-                    if (previousHost
-                        && previousHost != raylibHwnd
+                    if (stableHost
+                        && stableHost != raylibHwnd
                         && previousDc
                         && ctx->windowData->ownsNativeDc)
                     {
-                        ::ReleaseDC(previousHost, previousDc);
+                        // Keep the CS_OWNDC placeholder pairing intact while
+                        // GLFW owns the active surface. It is released with the
+                        // parked host after Raylib has closed its own context.
+                        ctx->windowData->parked_host_hdc = previousDc;
+                        ctx->windowData->ownsParkedHostDc = true;
+
                     }
+
+                    // hwnd always names the live surface. The original Epoch
+                    // placeholder remains host_hwnd and keys the render thread
+                    // while Raylib's GLFW window becomes the backend child.
+                    // This is the stable multicontext handle contract.
                     ctx->windowData->hwnd = raylibHwnd;
-                    ctx->windowData->host_hwnd = previousHost ? previousHost : parent;
+                    ctx->windowData->host_hwnd = stableHost ? stableHost : parent;
                     ctx->windowData->hwndChild = raylibHwnd;
                     ctx->windowData->hdc = st.hdc;
                     ctx->windowData->glContext = st.hglrc;
@@ -278,7 +317,7 @@ namespace epochnamespace::raylibcontext
                 }
             }
 
-            epochnamespace::core::RequestActiveParentLayout();
+            epochengine::core::RequestActiveParentLayout();
         }
 
     }
@@ -303,19 +342,19 @@ namespace epochnamespace::raylibcontext
             if (capturePath.empty())
                 return;
 
-            const auto image = epochnamespace::raylib_api::load_image_from_screen();
+            const auto image = epochengine::raylib_api::load_image_from_screen();
             if (!image.data || image.width <= 0 || image.height <= 0)
             {
                 logger::warn("Raylib", "Failed to read raylib frame for capture.");
                 return;
             }
 
-            if (image.format != epochnamespace::raylib_api::pixelformat_rgba8)
+            if (image.format != epochengine::raylib_api::pixelformat_rgba8)
             {
                 logger::warn(
                     "Raylib",
                     std::format("Unsupported raylib capture format {}; expected RGBA8.", image.format));
-                epochnamespace::raylib_api::unload_image(image);
+                epochengine::raylib_api::unload_image(image);
                 return;
             }
 
@@ -329,11 +368,11 @@ namespace epochnamespace::raylibcontext
             else
                 logger::warn("Raylib", "Failed to write capture to " + capturePath.string());
 
-            epochnamespace::raylib_api::unload_image(image);
+            epochengine::raylib_api::unload_image(image);
         }
 
-        [[nodiscard]] inline epochnamespace::raylib_api::Color to_raylib_color(
-            const epochnamespace::previewgrid::Vec3& color) noexcept
+        [[nodiscard]] inline epochengine::raylib_api::Color to_raylib_color(
+            const epochengine::previewgrid::Vec3& color) noexcept
         {
             const auto clamp_channel = [](float value) noexcept -> std::uint8_t
             {
@@ -341,7 +380,7 @@ namespace epochnamespace::raylibcontext
                 return static_cast<std::uint8_t>(scaled);
             };
 
-            return epochnamespace::raylib_api::Color{
+            return epochengine::raylib_api::Color{
                 clamp_channel(color.x),
                 clamp_channel(color.y),
                 clamp_channel(color.z),
@@ -350,12 +389,12 @@ namespace epochnamespace::raylibcontext
         }
 
         [[nodiscard]] inline bool project_preview_vertex(
-            const epochnamespace::previewgrid::Mat4& mvp,
-            const epochnamespace::previewgrid::Vec3& position,
+            const epochengine::previewgrid::Mat4& mvp,
+            const epochengine::previewgrid::Vec3& position,
             const core::RenderViewport& viewport,
-            epochnamespace::raylib_api::Vector2& out) noexcept
+            epochengine::raylib_api::Vector2& out) noexcept
         {
-            const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+            const auto clip = epochengine::previewgrid::transform_point(mvp, position);
             if (clip.w <= 1.0e-4f)
                 return false;
 
@@ -372,26 +411,26 @@ namespace epochnamespace::raylibcontext
             return true;
         }
 
-        inline void raylib_stop_rendering_backend(epochnamespace::raylibstate::RaylibState& st)
+        inline void raylib_stop_rendering_backend(epochengine::raylibstate::RaylibState& st)
         {
             if (!st.renderingActive)
                 return;
 
-            epochnamespace::raylibtextures::shutdown_current_context_backend();
+            epochengine::raylibtextures::shutdown_current_context_backend();
 
             if (st.frameActive)
             {
                 if (st.frameInTextureMode)
-                    epochnamespace::raylib_api::end_texture_mode();
+                    epochengine::raylib_api::end_texture_mode();
                 else
-                    epochnamespace::raylib_api::end_drawing();
+                    epochengine::raylib_api::end_drawing();
                 st.frameActive = false;
                 st.frameInTextureMode = false;
             }
 
             if (st.offscreen.id != 0)
             {
-                epochnamespace::raylib_api::unload_render_texture(st.offscreen);
+                epochengine::raylib_api::unload_render_texture(st.offscreen);
                 st.offscreen = {};
                 st.offscreenWidth = 0;
                 st.offscreenHeight = 0;
@@ -400,12 +439,12 @@ namespace epochnamespace::raylibcontext
             st.renderingActive = false;
         }
 
-        inline void ensure_frame_started(epochnamespace::raylibstate::RaylibState& st)
+        inline void ensure_frame_started(epochengine::raylibstate::RaylibState& st)
         {
             if (st.frameActive)
                 return;
 
-            epochnamespace::raylib_api::begin_drawing();
+            epochengine::raylib_api::begin_drawing();
             st.frameActive = true;
             st.frameInTextureMode = false;
         }
@@ -419,69 +458,69 @@ namespace epochnamespace::raylibcontext
             if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
                 return;
 
-            const auto clearColor = epochnamespace::previewgrid::kClearColor;
-            epochnamespace::raylib_api::begin_scissor_mode(
+            const auto clearColor = epochengine::previewgrid::kClearColor;
+            epochengine::raylib_api::begin_scissor_mode(
                 viewport.x,
                 viewport.y,
                 viewport.width,
                 viewport.height);
 
-            epochnamespace::raylib_api::draw_rectangle_rec(
-                epochnamespace::raylib_api::Rectangle{
+            epochengine::raylib_api::draw_rectangle_rec(
+                epochengine::raylib_api::Rectangle{
                     static_cast<float>(viewport.x),
                     static_cast<float>(viewport.y),
                     static_cast<float>(viewport.width),
                     static_cast<float>(viewport.height)
                 },
-                epochnamespace::raylib_api::Color{
+                epochengine::raylib_api::Color{
                     static_cast<std::uint8_t>((std::clamp)(clearColor[0], 0.0f, 1.0f) * 255.0f),
                     static_cast<std::uint8_t>((std::clamp)(clearColor[1], 0.0f, 1.0f) * 255.0f),
                     static_cast<std::uint8_t>((std::clamp)(clearColor[2], 0.0f, 1.0f) * 255.0f),
                     static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
                 });
-            const auto cameraMode = epochnamespace::previewgrid::camera_mode_for(ctx.get());
-            if (epochnamespace::raylib_api::has_loaded_models()
-                && cameraMode != epochnamespace::previewgrid::CameraMode::Canvas2D)
+            const auto cameraMode = epochengine::previewgrid::camera_mode_for(ctx.get());
+            if (epochengine::raylib_api::has_loaded_models()
+                && cameraMode != epochengine::previewgrid::CameraMode::Canvas2D)
             {
                 constexpr float kRadiansToDegrees = 57.29577951308232f;
-                const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
-                const int renderHeight = (std::max)(1, epochnamespace::raylib_api::get_render_height());
-                const int renderWidth = (std::max)(1, epochnamespace::raylib_api::get_render_width());
+                const auto camera = epochengine::previewgrid::camera_for(ctx.get());
+                const int renderHeight = (std::max)(1, epochengine::raylib_api::get_render_height());
+                const int renderWidth = (std::max)(1, epochengine::raylib_api::get_render_width());
                 const int viewportY = renderHeight - (viewport.y + viewport.height);
 
-                epochnamespace::raylib_api::set_viewport(
+                epochengine::raylib_api::set_viewport(
                     viewport.x,
                     viewportY,
                     viewport.width,
                     viewport.height);
 
-                epochnamespace::raylib_api::begin_mode_3d(epochnamespace::raylib_api::Camera3D{
+                epochengine::raylib_api::begin_mode_3d(epochengine::raylib_api::Camera3D{
                     .position = { camera.eye.x, camera.eye.y, camera.eye.z },
                     .target = { camera.target.x, camera.target.y, camera.target.z },
                     .up = { camera.up.x, camera.up.y, camera.up.z },
                     .fovy = camera.fovRadians * kRadiansToDegrees,
-                    .projection = epochnamespace::raylib_api::camera_perspective
+                    .projection = epochengine::raylib_api::camera_perspective
                 });
-                epochnamespace::raylib_api::draw_grid(20, 1.0f);
-                epochnamespace::raylib_api::draw_loaded_models();
-                epochnamespace::raylib_api::end_mode_3d();
-                epochnamespace::raylib_api::set_viewport(0, 0, renderWidth, renderHeight);
-                epochnamespace::raylib_api::end_scissor_mode();
+                epochengine::raylib_api::draw_grid(20, 1.0f);
+                epochengine::raylib_api::draw_loaded_models();
+                epochengine::raylib_api::end_mode_3d();
+                epochengine::raylib_api::set_viewport(0, 0, renderWidth, renderHeight);
+                epochengine::raylib_api::end_scissor_mode();
                 return;
             }
 
-            const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+            const auto camera = epochengine::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
-            const auto proj = epochnamespace::previewgrid::projection_for(ctx.get(), aspect, camera);
-            const auto view = epochnamespace::previewgrid::look_at(
+            const auto proj = epochengine::previewgrid::projection_for(ctx.get(), aspect, camera);
+            const auto view = epochengine::previewgrid::look_at(
                 camera.eye,
                 camera.target,
                 camera.up);
-            const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
-            const auto vertices = epochnamespace::previewgrid::grid_vertices();
-            const auto indices = epochnamespace::previewgrid::grid_indices();
+            const auto mvp = epochengine::previewgrid::multiply(proj, view);
+            const auto vertices = epochengine::previewgrid::grid_vertices();
+            const auto indices = epochengine::previewgrid::grid_indices();
 
             for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
             {
@@ -490,26 +529,26 @@ namespace epochnamespace::raylibcontext
                 if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
                     continue;
 
-                epochnamespace::raylib_api::Vector2 a{};
-                epochnamespace::raylib_api::Vector2 b{};
+                epochengine::raylib_api::Vector2 a{};
+                epochengine::raylib_api::Vector2 b{};
                 if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
                     || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
                 {
                     continue;
                 }
 
-                epochnamespace::raylib_api::draw_line_v(
+                epochengine::raylib_api::draw_line_v(
                     a,
                     b,
                     to_raylib_color(vertices[firstIndex].color));
             }
 
-            const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx.get());
+            const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
             for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
             {
-                epochnamespace::raylib_api::Vector2 a{};
-                epochnamespace::raylib_api::Vector2 b{};
-                epochnamespace::raylib_api::Vector2 c{};
+                epochengine::raylib_api::Vector2 a{};
+                epochengine::raylib_api::Vector2 b{};
+                epochengine::raylib_api::Vector2 c{};
                 if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, a)
                     || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, b)
                     || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, c))
@@ -518,70 +557,59 @@ namespace epochnamespace::raylibcontext
                 }
 
                 const auto color = to_raylib_color(solidVertices[i].color);
-                epochnamespace::raylib_api::draw_triangle(a, b, c, color);
-                epochnamespace::raylib_api::draw_triangle(c, b, a, color);
+                epochengine::raylib_api::draw_triangle(a, b, c, color);
+                epochengine::raylib_api::draw_triangle(c, b, a, color);
             }
 
-            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
-            const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
+            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+            const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
             for (std::size_t i = 0; i + 1 < markerCount; i += 2)
             {
-                epochnamespace::raylib_api::Vector2 a{};
-                epochnamespace::raylib_api::Vector2 b{};
+                epochengine::raylib_api::Vector2 a{};
+                epochengine::raylib_api::Vector2 b{};
                 if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
                     || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
                 {
                     continue;
                 }
 
-                epochnamespace::raylib_api::draw_line_v(
+                epochengine::raylib_api::draw_line_v(
                     a,
                     b,
                     to_raylib_color(markerVertices[i].color));
             }
 
-            const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+            const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
             for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
             {
-                epochnamespace::raylib_api::Vector2 a{};
-                epochnamespace::raylib_api::Vector2 b{};
+                epochengine::raylib_api::Vector2 a{};
+                epochengine::raylib_api::Vector2 b{};
                 if (!project_preview_vertex(mvp, objectVertices[i].position, viewport, a)
                     || !project_preview_vertex(mvp, objectVertices[i + 1].position, viewport, b))
                 {
                     continue;
                 }
 
-                epochnamespace::raylib_api::draw_line_v(
+                epochengine::raylib_api::draw_line_v(
                     a,
                     b,
                     to_raylib_color(objectVertices[i].color));
             }
 
-            epochnamespace::raylib_api::end_scissor_mode();
+            epochengine::raylib_api::end_scissor_mode();
         }
 
     }
 
     export inline void raylib_resize(int w, int h)
     {
-        auto& state = epochnamespace::raylibstate::s_raylibstate;
+        auto& state = epochengine::raylibstate::s_raylibstate;
         const int clampedW = (std::max)(1, w);
         const int clampedH = (std::max)(1, h);
         int framebufferW = clampedW;
         int framebufferH = clampedH;
         state.width = static_cast<unsigned>(clampedW);
         state.height = static_cast<unsigned>(clampedH);
-
-        if (epochnamespace::raylib_api::is_window_ready())
-        {
-            const int renderWidth = epochnamespace::raylib_api::get_render_width();
-            const int renderHeight = epochnamespace::raylib_api::get_render_height();
-            if (renderWidth != clampedW || renderHeight != clampedH)
-                epochnamespace::raylib_api::set_window_size(clampedW, clampedH);
-
-            framebufferW = (std::max)(1, epochnamespace::raylib_api::get_render_width());
-            framebufferH = (std::max)(1, epochnamespace::raylib_api::get_render_height());
-        }
 
 #if defined(_WIN32)
         if (state.hwnd && ::IsWindow(state.hwnd) != FALSE)
@@ -593,6 +621,20 @@ namespace epochnamespace::raylibcontext
                 && liveParent == state.parent;
         }
 #endif
+
+        if (epochengine::raylib_api::is_window_ready())
+        {
+            // This callback is routed through Raylib's owner-thread queue.
+            // Keep GLFW/raylib's framebuffer bookkeeping synchronized with
+            // the externally docked child dimensions before the next frame.
+            const int renderWidth = epochengine::raylib_api::get_render_width();
+            const int renderHeight = epochengine::raylib_api::get_render_height();
+            if (renderWidth != clampedW || renderHeight != clampedH)
+                epochengine::raylib_api::set_window_size(clampedW, clampedH);
+
+            framebufferW = (std::max)(1, epochengine::raylib_api::get_render_width());
+            framebufferH = (std::max)(1, epochengine::raylib_api::get_render_height());
+        }
 
         if (state.owner_ctx)
         {
@@ -616,7 +658,7 @@ namespace epochnamespace::raylibcontext
         std::function<void(int, int)> resizeCallback = nullptr,
         std::string title = {})
     {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
 
         if (width == 0)  width = static_cast<unsigned>(core::cli::window_width);
         if (height == 0) height = static_cast<unsigned>(core::cli::window_height);
@@ -637,7 +679,7 @@ namespace epochnamespace::raylibcontext
 #else
             const bool sameThread = st.owner_thread == detail::current_thread_token();
 #endif
-            if (sameOwner && sameThread && epochnamespace::raylib_api::is_window_ready())
+            if (sameOwner && sameThread && epochengine::raylib_api::is_window_ready())
                 return true;
 
             logger::warn(
@@ -655,8 +697,8 @@ namespace epochnamespace::raylibcontext
         const auto fail_initialization = [&](const char* message) -> bool
         {
             logger::warn("Raylib", message);
-            if (epochnamespace::raylib_api::is_window_ready())
-                epochnamespace::raylib_api::close_window();
+            if (epochengine::raylib_api::is_window_ready())
+                epochengine::raylib_api::close_window();
 #if defined(_WIN32)
             if (previousDC && previousContext)
                 (void)detail::make_current(previousDC, previousContext);
@@ -708,16 +750,16 @@ namespace epochnamespace::raylibcontext
         }
 #endif
 
-        epochnamespace::raylib_api::set_config_flags(
-            static_cast<unsigned>(epochnamespace::raylib_api::flag_msaa_4x_hint));
-        epochnamespace::raylib_api::set_trace_log_level(epochnamespace::raylib_api::log_warning);
+        epochengine::raylib_api::set_config_flags(
+            static_cast<unsigned>(epochengine::raylib_api::flag_msaa_4x_hint));
+        epochengine::raylib_api::set_trace_log_level(epochengine::raylib_api::log_warning);
 
-        epochnamespace::raylib_api::init_window(
+        epochengine::raylib_api::init_window(
             static_cast<int>(st.width),
             static_cast<int>(st.height),
             title_storage().c_str());
 
-        if (!epochnamespace::raylib_api::is_window_ready())
+        if (!epochengine::raylib_api::is_window_ready())
             return fail_initialization("Raylib did not create a ready native window.");
 
 #if defined(_WIN32)
@@ -735,15 +777,15 @@ namespace epochnamespace::raylibcontext
                 static_cast<const void*>(st.hglrc)));
 #endif
 
-        const HWND raylibHwnd = static_cast<HWND>(epochnamespace::raylib_api::get_window_handle());
+        const HWND raylibHwnd = static_cast<HWND>(epochengine::raylib_api::get_window_handle());
         const HWND parentHwnd = static_cast<HWND>(parent);
         HWND adoptedHwnd = raylibHwnd;
         for (int attempt = 0; attempt < 5 && !adoptedHwnd; ++attempt)
         {
-            epochnamespace::raylib_api::begin_drawing();
-            epochnamespace::raylib_api::end_drawing();
+            epochengine::raylib_api::begin_drawing();
+            epochengine::raylib_api::end_drawing();
             detail::sleep_short_ms(10);
-            adoptedHwnd = static_cast<HWND>(epochnamespace::raylib_api::get_window_handle());
+            adoptedHwnd = static_cast<HWND>(epochengine::raylib_api::get_window_handle());
         }
         if (adoptedHwnd)
         {
@@ -758,7 +800,7 @@ namespace epochnamespace::raylibcontext
 
 #endif
 
-        epochnamespace::raylib_api::set_target_fps(0);
+        epochengine::raylib_api::set_target_fps(0);
 
         st.onResize = raylib_resize;
 
@@ -780,9 +822,9 @@ namespace epochnamespace::raylibcontext
         st.currentFailureStreak = 0;
         st.currentFailureWarned = false;
 
-        epochnamespace::atlasmanager::register_backend_uploader(
-            epochnamespace::core::ContextType::RayLib,
-            epochnamespace::raylibtextures::ensure_uploaded);
+        epochengine::atlasmanager::register_backend_uploader(
+            epochengine::core::ContextType::RayLib,
+            epochengine::raylibtextures::ensure_uploaded);
 
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
         logger::info(
@@ -800,7 +842,7 @@ namespace epochnamespace::raylibcontext
     export inline bool raylib_make_current() noexcept
     {
 #if defined(_WIN32)
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (!st.hdc || !st.hglrc)
             return false;
 
@@ -810,14 +852,50 @@ namespace epochnamespace::raylibcontext
 #endif
     }
 
+    export inline RaylibNativeDiagnostics raylib_native_diagnostics() noexcept
+    {
+        RaylibNativeDiagnostics diagnostics{};
+#if defined(_WIN32)
+        const auto& st = epochengine::raylibstate::s_raylibstate;
+        const HWND hwnd = st.hwnd;
+        const HDC currentDc = detail::current_dc();
+        const HGLRC currentContext = detail::current_context();
+
+        diagnostics.hwnd = reinterpret_cast<std::uintptr_t>(hwnd);
+        diagnostics.parent = reinterpret_cast<std::uintptr_t>(hwnd ? ::GetParent(hwnd) : nullptr);
+        diagnostics.dc = reinterpret_cast<std::uintptr_t>(st.hdc);
+        diagnostics.glContext = reinterpret_cast<std::uintptr_t>(st.hglrc);
+        diagnostics.currentDc = reinterpret_cast<std::uintptr_t>(currentDc);
+        diagnostics.currentGlContext = reinterpret_cast<std::uintptr_t>(currentContext);
+        diagnostics.windowFromDc = reinterpret_cast<std::uintptr_t>(
+            st.hdc ? ::WindowFromDC(st.hdc) : nullptr);
+        diagnostics.windowValid = hwnd && ::IsWindow(hwnd) != FALSE;
+        diagnostics.windowVisible = hwnd && ::IsWindowVisible(hwnd) != FALSE;
+        diagnostics.childStyle = hwnd
+            && (::GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD) != 0;
+        diagnostics.currentMatchesExpected =
+            detail::contexts_match(st.hdc, st.hglrc, currentDc, currentContext);
+        diagnostics.ownerThread = st.owner_thread_id;
+        diagnostics.currentThread = detail::current_thread_token();
+
+        RECT client{};
+        if (hwnd && ::GetClientRect(hwnd, &client) != FALSE)
+        {
+            diagnostics.clientWidth = static_cast<int>(client.right - client.left);
+            diagnostics.clientHeight = static_cast<int>(client.bottom - client.top);
+        }
+#endif
+        return diagnostics;
+    }
+
     namespace detail
     {
-        void raylib_cleanup_owner_thread(epochnamespace::core::Context* ctx);
+        void raylib_cleanup_owner_thread(epochengine::core::Context* ctx);
     }
 
     export inline bool raylib_process()
     {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (st.cleanupRequested)
         {
             detail::raylib_cleanup_owner_thread(st.owner_ctx);
@@ -833,7 +911,7 @@ namespace epochnamespace::raylibcontext
                 : 0);
 
         diagnostics::FrameTiming frameTimer{
-            epochnamespace::core::ContextType::RayLib,
+            epochengine::core::ContextType::RayLib,
             windowId,
             "Raylib"
         };
@@ -842,7 +920,7 @@ namespace epochnamespace::raylibcontext
         if (!raylib_make_current())
         {
             const bool windowHandleInvalid = st.hwnd && (::IsWindow(st.hwnd) == FALSE);
-            const bool raylibRequestedClose = epochnamespace::raylib_api::window_should_close();
+            const bool raylibRequestedClose = epochengine::raylib_api::window_should_close();
             const bool windowClosing =
                 (st.owner_ctx && st.owner_ctx->windowData && st.owner_ctx->windowData->get_should_close())
                 || !st.renderingActive
@@ -875,7 +953,7 @@ namespace epochnamespace::raylibcontext
         st.currentFailureWarned = false;
 #endif
 
-        if (epochnamespace::raylib_api::window_should_close())
+        if (epochengine::raylib_api::window_should_close())
         {
             detail::raylib_stop_rendering_backend(st);
 
@@ -910,7 +988,7 @@ namespace epochnamespace::raylibcontext
 
     export inline void raylib_idle_frame()
     {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -921,12 +999,12 @@ namespace epochnamespace::raylibcontext
 
         if (!st.frameActive)
         {
-            epochnamespace::raylib_api::begin_drawing();
+            epochengine::raylib_api::begin_drawing();
             st.frameActive = true;
             st.frameInTextureMode = false;
         }
 
-        epochnamespace::raylib_api::end_drawing();
+        epochengine::raylib_api::end_drawing();
         st.frameActive = false;
         st.frameInTextureMode = false;
 
@@ -942,7 +1020,7 @@ namespace epochnamespace::raylibcontext
         (void)b;
         (void)a;
 
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -955,8 +1033,8 @@ namespace epochnamespace::raylibcontext
 
 #if EPOCH_USE_CLEAR_COLOR
         const auto clearColor = core::clear_color_for_context(core::ContextType::RayLib);
-        epochnamespace::raylib_api::clear_background(
-            epochnamespace::raylib_api::Color{
+        epochengine::raylib_api::clear_background(
+            epochengine::raylib_api::Color{
                 static_cast<unsigned char>(std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f),
                 static_cast<unsigned char>(std::clamp(clearColor[1], 0.0f, 1.0f) * 255.0f),
                 static_cast<unsigned char>(std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f),
@@ -967,7 +1045,7 @@ namespace epochnamespace::raylibcontext
 
     export inline void raylib_render_scene_preview(const std::shared_ptr<core::Context>& ctx)
     {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -982,7 +1060,7 @@ namespace epochnamespace::raylibcontext
 
     export inline void raylib_present()
     {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (!st.running || !st.renderingActive)
             return;
 
@@ -996,9 +1074,9 @@ namespace epochnamespace::raylibcontext
         if (st.frameActive)
         {
             if (st.frameInTextureMode)
-                epochnamespace::raylib_api::end_texture_mode();
+                epochengine::raylib_api::end_texture_mode();
             else
-                epochnamespace::raylib_api::end_drawing();
+                epochengine::raylib_api::end_drawing();
             st.frameActive = false;
             st.frameInTextureMode = false;
         }
@@ -1012,9 +1090,9 @@ namespace epochnamespace::raylibcontext
 
     namespace detail
     {
-        inline void raylib_cleanup_owner_thread(epochnamespace::core::Context* ctx)
+        inline void raylib_cleanup_owner_thread(epochengine::core::Context* ctx)
         {
-            auto& st = epochnamespace::raylibstate::s_raylibstate;
+            auto& st = epochengine::raylibstate::s_raylibstate;
 
 #if defined(_WIN32)
             const HDC   previousDC = detail::current_dc();
@@ -1024,15 +1102,15 @@ namespace epochnamespace::raylibcontext
             const bool window_alive = (st.hwnd != nullptr) && (::IsWindow(st.hwnd) != FALSE);
 #endif
 
-            epochnamespace::atlasmanager::unregister_backend_uploader(
-                epochnamespace::core::ContextType::RayLib);
+            epochengine::atlasmanager::unregister_backend_uploader(
+                epochengine::core::ContextType::RayLib);
 
 #if defined(_WIN32)
             (void)raylib_make_current();
 #endif
 
             detail::raylib_stop_rendering_backend(st);
-            epochnamespace::raylib_api::unload_all_models();
+            epochengine::raylib_api::unload_all_models();
 
             if (ctx && ctx->windowData)
             {
@@ -1043,17 +1121,17 @@ namespace epochnamespace::raylibcontext
 #endif
             }
 
-            if (epochnamespace::raylib_api::is_window_ready())
+            if (epochengine::raylib_api::is_window_ready())
             {
 #if defined(_WIN32)
                 if (window_alive)
                 {
                     // If docked as child, detach to top-level before closing to avoid teardown deadlocks.
                     detail::promote_raylib_to_top_level(st.hwnd);
-                    epochnamespace::raylib_api::close_window();
+                    epochengine::raylib_api::close_window();
                 }
 #else
-                epochnamespace::raylib_api::close_window();
+                epochengine::raylib_api::close_window();
 #endif
             }
 
@@ -1075,11 +1153,11 @@ namespace epochnamespace::raylibcontext
 
     export inline void raylib_cleanup(std::shared_ptr<core::Context> ctx)
     {
-        auto& st = epochnamespace::raylibstate::s_raylibstate;
+        auto& st = epochengine::raylibstate::s_raylibstate;
         if (!st.running
             && !st.owner_ctx
             && !st.cleanupRequested
-            && !epochnamespace::raylib_api::is_window_ready())
+            && !epochengine::raylib_api::is_window_ready())
         {
             return;
         }
@@ -1107,32 +1185,32 @@ namespace epochnamespace::raylibcontext
     export inline void raylib_set_window_title(std::string_view title)
     {
         title_storage().assign(title.begin(), title.end());
-        epochnamespace::raylib_api::set_window_title(title_storage().c_str());
+        epochengine::raylib_api::set_window_title(title_storage().c_str());
     }
 
     export inline int raylib_get_width()
     {
-        return static_cast<int>(epochnamespace::raylibstate::s_raylibstate.width);
+        return static_cast<int>(epochengine::raylibstate::s_raylibstate.width);
     }
 
     export inline int raylib_get_height()
     {
-        return static_cast<int>(epochnamespace::raylibstate::s_raylibstate.height);
+        return static_cast<int>(epochengine::raylibstate::s_raylibstate.height);
     }
 
     export inline bool raylib_is_running() noexcept
     {
-        return epochnamespace::raylibstate::s_raylibstate.running;
+        return epochengine::raylibstate::s_raylibstate.running;
     }
 
-    export inline epochnamespace::raylib_api::Vector2 raylib_get_mouse_position()
+    export inline epochengine::raylib_api::Vector2 raylib_get_mouse_position()
     {
-        return epochnamespace::raylib_api::get_mouse_position();
+        return epochengine::raylib_api::get_mouse_position();
     }
 
     export inline NativeWindowHandle raylib_get_native_window()
     {
-        return epochnamespace::raylibstate::s_raylibstate.hwnd;
+        return epochengine::raylibstate::s_raylibstate.hwnd;
     }
 }
 

@@ -56,7 +56,7 @@ export module updater.tools;
 import updater.config;
 import core.logger;
 
-namespace epochnamespace::updater
+namespace epochengine::updater
 {
     namespace detail
     {

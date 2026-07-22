@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <algorithm>
@@ -18,7 +48,7 @@ export module launcher.update;
 import engine.updater;
 import gui.menu;
 
-export namespace epochnamespace::launcher_update
+export namespace epochengine::launcher_update
 {
     inline constexpr double kRestartCountdownSeconds = 10.0;
     inline constexpr int kCancelRetryCooldownSeconds = 5;
@@ -34,8 +64,8 @@ export namespace epochnamespace::launcher_update
     class Flow final
     {
     public:
-        std::optional<std::future<epochnamespace::updater::UpdateCommandResult>> pending{};
-        epochnamespace::updater::UpdateCommandResult last_result{};
+        std::optional<std::future<epochengine::updater::UpdateCommandResult>> pending{};
+        epochengine::updater::UpdateCommandResult last_result{};
         bool surface_active{ false };
         bool packaged_restart_ready{ false };
         bool source_worker_running{ false };
@@ -104,14 +134,14 @@ export namespace epochnamespace::launcher_update
                 && pending->wait_for(std::chrono::milliseconds{ 0 }) == std::future_status::ready;
         }
 
-        [[nodiscard]] epochnamespace::updater::UpdateCommandResult take_pending_result()
+        [[nodiscard]] epochengine::updater::UpdateCommandResult take_pending_result()
         {
             auto result = pending->get();
             pending.reset();
             return result;
         }
 
-        void begin_update_check(std::future<epochnamespace::updater::UpdateCommandResult> future)
+        void begin_update_check(std::future<epochengine::updater::UpdateCommandResult> future)
         {
             pending.emplace(std::move(future));
             surface_active = true;
@@ -128,7 +158,7 @@ export namespace epochnamespace::launcher_update
             status = "Checking GitHub releases, source version, and platform build gate...";
         }
 
-        void complete_pending_result(epochnamespace::updater::UpdateCommandResult result)
+        void complete_pending_result(epochengine::updater::UpdateCommandResult result)
         {
             last_result = std::move(result);
             packaged_restart_ready = last_result.packaged_handoff_staged;
@@ -384,9 +414,9 @@ export namespace epochnamespace::launcher_update
                 return;
 
             const std::string handoffTail = read_update_log_tail(
-                epochnamespace::updater::update_handoff_log_path());
+                epochengine::updater::update_handoff_log_path());
             const std::string sourceTail = read_update_log_tail(
-                epochnamespace::updater::source_update_log_path());
+                epochengine::updater::source_update_log_path());
             const std::string_view evidence = !sourceTail.empty()
                 ? std::string_view{ sourceTail }
                 : std::string_view{ handoffTail };
@@ -404,7 +434,7 @@ export namespace epochnamespace::launcher_update
             }
 
             const bool sourceWorkerActive =
-                epochnamespace::updater::source_update_worker_active();
+                epochengine::updater::source_update_worker_active();
             const bool sourceWorkerCanceled =
                 (sourceWorkerCancelEvidence || cancel_requested)
                 && !sourceWorkerActive;
@@ -615,9 +645,9 @@ export namespace epochnamespace::launcher_update
             return 0.0f;
         }
 
-        [[nodiscard]] epochnamespace::menu::LauncherUpdatePanelState panel_state()
+        [[nodiscard]] epochengine::menu::LauncherUpdatePanelState panel_state()
         {
-            epochnamespace::menu::LauncherUpdatePanelState panel{};
+            epochengine::menu::LauncherUpdatePanelState panel{};
             panel.active = surface_active
                 || pending.has_value()
                 || source_worker_running
@@ -640,7 +670,7 @@ export namespace epochnamespace::launcher_update
                 panel.progress_status = std::format("auto restart in {}s", seconds);
                 panel.action_label = std::format("Restart Now ({}s)", seconds);
                 panel.action_enabled = true;
-                panel.action_choice = epochnamespace::menu::Choice::UpdatePanelRestart;
+                panel.action_choice = epochengine::menu::Choice::UpdatePanelRestart;
                 panel.restart_ready = true;
                 return panel;
             }
@@ -654,7 +684,7 @@ export namespace epochnamespace::launcher_update
                 panel.action_label = "Back To Launcher";
                 panel.action_enabled = true;
                 panel.action_accepts_enter = true;
-                panel.action_choice = epochnamespace::menu::Choice::UpdatePanelDismiss;
+                panel.action_choice = epochengine::menu::Choice::UpdatePanelDismiss;
                 return panel;
             }
 
@@ -676,7 +706,7 @@ export namespace epochnamespace::launcher_update
                     panel.action_label = "Cancel Update";
                     panel.action_enabled = true;
                     panel.action_accepts_enter = false;
-                    panel.action_choice = epochnamespace::menu::Choice::UpdatePanelCancel;
+                    panel.action_choice = epochengine::menu::Choice::UpdatePanelCancel;
                     panel.cancel_available = true;
                 }
                 else
@@ -832,7 +862,7 @@ export namespace epochnamespace::launcher_update
         }
 
         [[nodiscard]] static std::string describe_result(
-            const epochnamespace::updater::UpdateCommandResult& result)
+            const epochengine::updater::UpdateCommandResult& result)
         {
             if (!result.status_message.empty())
                 return result.status_message;

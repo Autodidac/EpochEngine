@@ -46,7 +46,7 @@ export module ecs.entityhistory;
 ////import ecs.internal_private;
 //
 //
-//namespace epochnamespace::ecs
+//namespace epochengine::ecs
 //{
 //    /// History container: map from EntityID Ã¢â€ â€™ list of past (x,y) states
 //    using History = std::unordered_map<EntityID, std::vector<std::pair<float, float>>>;
@@ -115,4 +115,4 @@ export module ecs.entityhistory;
 //        return ok;
 //    }
 //
-//} // namespace epochnamespace::ecs
+//} // namespace epochengine::ecs

@@ -34,7 +34,7 @@ module;
 
 export module core.id;
 
-export namespace epoch::core::id
+export namespace epochengine::core::id
 {
     template <class Tag, class T = std::uint32_t>
     struct strong_id

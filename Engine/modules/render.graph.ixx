@@ -43,7 +43,7 @@ export module render.graph;
 
 import render.device;
 
-export namespace epoch
+export namespace epochengine
 {
     struct GraphResourceTag {};
     struct GraphPassTag {};
@@ -78,7 +78,7 @@ export namespace epoch
     struct GraphMaterial
     {
         MaterialDesc desc{};
-        epoch::small_vector<GraphMaterialTextureSlot> texture_slots{};
+        epochengine::small_vector<GraphMaterialTextureSlot> texture_slots{};
         MaterialHandle backend{};
     };
 
@@ -102,7 +102,7 @@ export namespace epoch
     {
         GraphResource mesh{};
         GraphResource material{};
-        epoch::string node_name{};
+        epochengine::string node_name{};
         float transform[16] = {
             1.0f, 0.0f, 0.0f, 0.0f,
             0.0f, 1.0f, 0.0f, 0.0f,
@@ -114,7 +114,7 @@ export namespace epoch
     struct GraphModel
     {
         ModelDesc desc{};
-        epoch::small_vector<GraphModelMeshSlot> mesh_slots{};
+        epochengine::small_vector<GraphModelMeshSlot> mesh_slots{};
         ModelHandle backend{};
     };
 
@@ -124,11 +124,11 @@ export namespace epoch
         ModelHandle backend{};
     };
 
-    struct ResourceDecl { ResourceKind kind{}; epoch::string name{}; u32 index = 0; };
+    struct ResourceDecl { ResourceKind kind{}; epochengine::string name{}; u32 index = 0; };
 
     struct GraphRenderTextureAsset
     {
-        epoch::string name{};
+        epochengine::string name{};
         RenderTextureAssetDesc desc{};
         GraphResource color_texture{};
         GraphResource sampler{};
@@ -139,78 +139,78 @@ export namespace epoch
 
     struct PassDecl
     {
-        epoch::string name{};
-        epoch::small_vector<GraphResource> reads{};
-        epoch::small_vector<GraphResource> writes{};
+        epochengine::string name{};
+        epochengine::small_vector<GraphResource> reads{};
+        epochengine::small_vector<GraphResource> writes{};
         GraphResource render_target_resource{};
         RenderTargetHandle render_target{};
         BindingSetHandle binding_set{};
         RenderPassDesc render_pass{};
         CommandResourceBindings bindings{};
-        epoch::small_vector<GraphModelDraw> draw_models{};
-        epoch::function_ref<void(ICommandContext&)> execute{};
+        epochengine::small_vector<GraphModelDraw> draw_models{};
+        epochengine::function_ref<void(ICommandContext&)> execute{};
     };
 
     class GraphBuilder
     {
     public:
-        [[nodiscard]] GraphResource create_buffer(epoch::string_view name, const BufferDesc& desc);
-        [[nodiscard]] GraphResource create_texture(epoch::string_view name, const TextureDesc& desc);
-        [[nodiscard]] GraphResource create_sampler(epoch::string_view name, const SamplerDesc& desc);
-        [[nodiscard]] GraphResource create_material(epoch::string_view name,
+        [[nodiscard]] GraphResource create_buffer(epochengine::string_view name, const BufferDesc& desc);
+        [[nodiscard]] GraphResource create_texture(epochengine::string_view name, const TextureDesc& desc);
+        [[nodiscard]] GraphResource create_sampler(epochengine::string_view name, const SamplerDesc& desc);
+        [[nodiscard]] GraphResource create_material(epochengine::string_view name,
                                                     const MaterialDesc& desc,
-                                                    epoch::array_view<const GraphMaterialTextureSlot> texture_slots = {});
-        [[nodiscard]] GraphResource create_render_target(epoch::string_view name, const RenderTargetDesc& desc);
-        [[nodiscard]] GraphResource create_mesh(epoch::string_view name,
+                                                    epochengine::array_view<const GraphMaterialTextureSlot> texture_slots = {});
+        [[nodiscard]] GraphResource create_render_target(epochengine::string_view name, const RenderTargetDesc& desc);
+        [[nodiscard]] GraphResource create_mesh(epochengine::string_view name,
                                                 const MeshDesc& desc,
                                                 GraphResource vertex_buffer = {},
                                                 GraphResource index_buffer = {},
                                                 GraphResource material = {});
-        [[nodiscard]] GraphResource create_model(epoch::string_view name,
+        [[nodiscard]] GraphResource create_model(epochengine::string_view name,
                                                  const ModelDesc& desc,
-                                                 epoch::array_view<const GraphModelMeshSlot> mesh_slots = {});
+                                                 epochengine::array_view<const GraphModelMeshSlot> mesh_slots = {});
         [[nodiscard]] GraphRenderTextureAsset create_render_texture_asset(
-            epoch::string_view name,
+            epochengine::string_view name,
             const RenderTextureAssetDesc& desc);
-        [[nodiscard]] GraphPass add_pass(epoch::string_view name,
-                                         epoch::array_view<const GraphResource> reads,
-                                         epoch::array_view<const GraphResource> writes,
-                                         epoch::function_ref<void(ICommandContext&)> fn);
-        [[nodiscard]] GraphPass add_render_pass(epoch::string_view name,
+        [[nodiscard]] GraphPass add_pass(epochengine::string_view name,
+                                         epochengine::array_view<const GraphResource> reads,
+                                         epochengine::array_view<const GraphResource> writes,
+                                         epochengine::function_ref<void(ICommandContext&)> fn);
+        [[nodiscard]] GraphPass add_render_pass(epochengine::string_view name,
                                                 GraphResource target,
-                                                epoch::array_view<const GraphResource> reads,
-                                                epoch::array_view<const GraphResource> writes,
+                                                epochengine::array_view<const GraphResource> reads,
+                                                epochengine::array_view<const GraphResource> writes,
                                                 const RenderPassDesc& pass,
-                                                epoch::function_ref<void(ICommandContext&)> fn);
+                                                epochengine::function_ref<void(ICommandContext&)> fn);
         void add_model_draw(GraphPass pass, GraphResource model);
 
         struct CompiledGraph compile(IRenderDevice& dev) const;
 
     private:
-        epoch::small_vector<ResourceDecl> m_resources{};
-        epoch::small_vector<GraphBuffer>  m_buffers{};
-        epoch::small_vector<GraphTexture> m_textures{};
-        epoch::small_vector<GraphSampler> m_samplers{};
-        epoch::small_vector<GraphMaterial> m_materials{};
-        epoch::small_vector<GraphRenderTarget> m_render_targets{};
-        epoch::small_vector<GraphMesh> m_meshes{};
-        epoch::small_vector<GraphModel> m_models{};
-        epoch::small_vector<GraphRenderTextureAsset> m_render_texture_assets{};
-        epoch::small_vector<PassDecl>     m_passes{};
+        epochengine::small_vector<ResourceDecl> m_resources{};
+        epochengine::small_vector<GraphBuffer>  m_buffers{};
+        epochengine::small_vector<GraphTexture> m_textures{};
+        epochengine::small_vector<GraphSampler> m_samplers{};
+        epochengine::small_vector<GraphMaterial> m_materials{};
+        epochengine::small_vector<GraphRenderTarget> m_render_targets{};
+        epochengine::small_vector<GraphMesh> m_meshes{};
+        epochengine::small_vector<GraphModel> m_models{};
+        epochengine::small_vector<GraphRenderTextureAsset> m_render_texture_assets{};
+        epochengine::small_vector<PassDecl>     m_passes{};
     };
 
     struct CompiledGraph
     {
-        epoch::small_vector<ResourceDecl> resources{};
-        epoch::small_vector<GraphBuffer>  buffers{};
-        epoch::small_vector<GraphTexture> textures{};
-        epoch::small_vector<GraphSampler> samplers{};
-        epoch::small_vector<GraphMaterial> materials{};
-        epoch::small_vector<GraphRenderTarget> render_targets{};
-        epoch::small_vector<GraphMesh> meshes{};
-        epoch::small_vector<GraphModel> models{};
-        epoch::small_vector<GraphRenderTextureAsset> render_texture_assets{};
-        epoch::small_vector<PassDecl>     passes{};
+        epochengine::small_vector<ResourceDecl> resources{};
+        epochengine::small_vector<GraphBuffer>  buffers{};
+        epochengine::small_vector<GraphTexture> textures{};
+        epochengine::small_vector<GraphSampler> samplers{};
+        epochengine::small_vector<GraphMaterial> materials{};
+        epochengine::small_vector<GraphRenderTarget> render_targets{};
+        epochengine::small_vector<GraphMesh> meshes{};
+        epochengine::small_vector<GraphModel> models{};
+        epochengine::small_vector<GraphRenderTextureAsset> render_texture_assets{};
+        epochengine::small_vector<PassDecl>     passes{};
 
         void execute(IRenderDevice& dev);
         void destroy(IRenderDevice& dev) noexcept;

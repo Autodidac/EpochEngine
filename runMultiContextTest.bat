@@ -2,7 +2,7 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "BIN=%ROOT%x64\Debug"
+set "BIN=%ROOT%x64\Release"
 set "EXE=%BIN%\EpochEditor.exe"
 
 if not exist "%EXE%" (

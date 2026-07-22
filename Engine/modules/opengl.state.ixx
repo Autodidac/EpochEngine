@@ -73,7 +73,7 @@ import opengl.platform;   // PlatformGLContext
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
-export namespace epochnamespace::openglstate
+export namespace epochengine::openglstate
 {
     struct OpenGL4State
     {

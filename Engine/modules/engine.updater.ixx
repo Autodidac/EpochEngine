@@ -36,12 +36,12 @@ export import updater.system; // Primary updater implementation module
 export import updater.config;
 export import updater.tools;
 
-namespace epochnamespace::updater
+namespace epochengine::updater
 {
 
-    export using epochnamespace::updater::UpdateChannel;
-    export using epochnamespace::updater::UpdateCommandResult;
+    export using epochengine::updater::UpdateChannel;
+    export using epochengine::updater::UpdateCommandResult;
     // Ensure the two-parameter updater entry point is visible to importers
-    export using epochnamespace::updater::run_update_command;
-    export using epochnamespace::updater::run_source_update_command;
+    export using epochengine::updater::run_update_command;
+    export using epochengine::updater::run_source_update_command;
 }

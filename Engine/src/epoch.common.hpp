@@ -28,16 +28,12 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 #pragma once
 
 #include <cstdint>
 #include <compare>
 
-namespace epoch
+namespace epochengine
 {
     using u8  = ::uint8_t;
     using u16 = ::uint16_t;

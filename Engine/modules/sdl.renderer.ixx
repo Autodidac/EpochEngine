@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <functional>
@@ -51,9 +50,9 @@ import core.logger;
 import context.type;
 import sdl.state;
 
-export namespace epochnamespace::sdlcontext
+export namespace epochengine::sdlcontext
 {
-   // using epochnamespace::sdlcontext::state::SDL3State::s_sdlstate;
+   // using epochengine::sdlcontext::state::SDL3State::s_sdlstate;
 
     struct RendererContext
     {
@@ -83,8 +82,8 @@ export namespace epochnamespace::sdlcontext
             throw std::runtime_error("SDL_Renderer is null");
         }
         sdl_renderer.renderer = renderer;
-        const auto color = epochnamespace::core::clear_color_for_context(
-            epochnamespace::core::ContextType::SDL);
+        const auto color = epochengine::core::clear_color_for_context(
+            epochengine::core::ContextType::SDL);
         SDL_SetRenderDrawColor(
             sdl_renderer.renderer,
             static_cast<Uint8>(color[0] * 255.0f),
@@ -96,19 +95,19 @@ export namespace epochnamespace::sdlcontext
 
     inline void begin_frame()
     {
-        if (!sdl_renderer.renderer || epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted)
+        if (!sdl_renderer.renderer || epochengine::sdlcontext::state::get_sdl_state().renderFaulted)
             return;
     }
 
     inline void end_frame()
     {
-        if (!sdl_renderer.renderer || epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted)
+        if (!sdl_renderer.renderer || epochengine::sdlcontext::state::get_sdl_state().renderFaulted)
             return;
 
         if (!SDL_RenderPresent(sdl_renderer.renderer))
         {
             check_sdl_error("SDL_RenderPresent");
-            epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+            epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
         }
     }
 }

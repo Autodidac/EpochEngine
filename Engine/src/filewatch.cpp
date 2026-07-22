@@ -28,9 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-module;
-
 // src modules/filewatch.cppm
+module;
 
 #include <algorithm>
 #include <cstddef>
@@ -42,7 +41,7 @@ module;
 
 module utility.filewatch;
 
-namespace epochnamespace::filewatch
+namespace epochengine::filewatch
 {
     static std::uint64_t compute_file_hash(const std::filesystem::path& p)
     {

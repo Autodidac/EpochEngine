@@ -41,7 +41,7 @@ export module raylib.api;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
-export namespace epochnamespace::raylib_api
+export namespace epochengine::raylib_api
 {
     struct Color
     {
@@ -185,9 +185,14 @@ export namespace epochnamespace::raylib_api
     int get_render_height();
     int get_screen_width();
     int get_screen_height();
+    int get_framebuffer_width();
+    int get_framebuffer_height();
+    int get_graphics_api_version();
+    std::uint32_t get_default_texture_id();
 
     void begin_drawing();
     void end_drawing();
+    void flush_render_batch();
     void clear_background(Color c);
     void begin_texture_mode(const RenderTexture2D& target);
     void end_texture_mode();

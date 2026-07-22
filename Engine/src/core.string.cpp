@@ -35,7 +35,7 @@ module;
 
 module core.string;
 
-namespace epoch::core::string
+namespace epochengine::core::string
 {
     [[nodiscard]] static constexpr bool is_ascii_ws(unsigned char c) noexcept
     {
@@ -44,7 +44,7 @@ namespace epoch::core::string
             c == '\r' || c == '\f' || c == '\v';
     }
 
-    epoch::string_view trim(epoch::string_view s) noexcept
+    epochengine::string_view trim(epochengine::string_view s) noexcept
     {
         const char* p = s.data;
         const std::size_t n = s.size;
@@ -57,12 +57,12 @@ namespace epoch::core::string
         while (e > b && is_ascii_ws(static_cast<unsigned char>(p[e - 1])))
             --e;
 
-        return epoch::string_view{ p + b, e - b };
+        return epochengine::string_view{ p + b, e - b };
     }
 
-    epoch::small_vector<epoch::string_view> split(epoch::string_view s, char delim)
+    epochengine::small_vector<epochengine::string_view> split(epochengine::string_view s, char delim)
     {
-        epoch::small_vector<epoch::string_view> out;
+        epochengine::small_vector<epochengine::string_view> out;
 
         const char* p = s.data;
         const std::size_t n = s.size;
@@ -72,20 +72,20 @@ namespace epoch::core::string
         {
             if (i == n || p[i] == delim)
             {
-                out.emplace_back(epoch::string_view{ p + start, i - start });
+                out.emplace_back(epochengine::string_view{ p + start, i - start });
                 start = i + 1;
             }
         }
         return out;
     }
 
-    epoch::string join(epoch::span<const epoch::string_view> parts, epoch::string_view delim)
+    epochengine::string join(epochengine::span<const epochengine::string_view> parts, epochengine::string_view delim)
     {
         std::string out;
 
         const std::size_t count = parts.size;
         if (count == 0)
-            return epoch::string{ std::move(out) };
+            return epochengine::string{ std::move(out) };
 
         std::size_t total = 0;
         for (std::size_t i = 0; i < count; ++i)
@@ -94,14 +94,14 @@ namespace epoch::core::string
         total += (count - 1) * delim.size;
         out.reserve(total);
 
-        const std::string_view d = epoch::to_std(delim);
+        const std::string_view d = epochengine::to_std(delim);
 
         for (std::size_t i = 0; i < count; ++i)
         {
             if (i) out.append(d);
-            out.append(epoch::to_std(parts.data[i]));
+            out.append(epochengine::to_std(parts.data[i]));
         }
 
-        return epoch::string{ std::move(out) };
+        return epochengine::string{ std::move(out) };
     }
 }

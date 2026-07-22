@@ -39,7 +39,7 @@ export module ecs.components;
 import core.logger; // LogLevel lives here
 import core.timer;   // Timer lives here
 
-export namespace epochnamespace::ecs
+export namespace epochengine::ecs
 {
     // ─── Position ─────────────────────────────────────────────────────────
     struct Position
@@ -77,9 +77,9 @@ export namespace epochnamespace::ecs
         std::string system{ "ECS" };
 
         // Minimum level to emit when THIS entity logs (call sites check this).
-        epochnamespace::logger::LogLevel min_level{ epochnamespace::logger::LogLevel::INFO };
+        epochengine::logger::LogLevel min_level{ epochengine::logger::LogLevel::INFO };
 
         // Optional entity-owned clock (nullptr means "use global timing utilities").
-        epochnamespace::timing::Timer* clock{ nullptr };
+        epochengine::timing::Timer* clock{ nullptr };
     };
-} // namespace epochnamespace::ecs
+} // namespace epochengine::ecs

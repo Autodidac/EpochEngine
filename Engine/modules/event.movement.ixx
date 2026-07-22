@@ -40,7 +40,7 @@ import ecs;
 import ecs.storage;
 import core.logger;
 
-export namespace epochnamespace
+export namespace epochengine
 {
     class MovementEvent
     {
@@ -81,4 +81,4 @@ export namespace epochnamespace
         float deltaX{ 0.f };    // Change in X position
         float deltaY{ 0.f };    // Change in Y position
     };
-} // namespace epochnamespace
+} // namespace epochengine

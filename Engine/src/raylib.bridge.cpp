@@ -1,9 +1,3 @@
-module;
-
-#include "../include/engine.config.hpp"
-
-#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
-
 /************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
@@ -34,6 +28,11 @@ module;
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+module;
+
+#include "../include/engine.config.hpp"
+
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 #include <cstdint>
 #include <string>
@@ -49,9 +48,13 @@ module;
 
 #include <raylib.h>
 #include <rlgl.h>
+#endif
 
 module raylib.api;
-namespace epochnamespace::raylib_api
+
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+
+namespace epochengine::raylib_api
 {
     namespace
     {
@@ -220,9 +223,22 @@ namespace epochnamespace::raylib_api
     int get_render_height() { return ::GetRenderHeight(); }
     int get_screen_width() { return ::GetScreenWidth(); }
     int get_screen_height() { return ::GetScreenHeight(); }
+    int get_framebuffer_width() { return ::rlGetFramebufferWidth(); }
+    int get_framebuffer_height() { return ::rlGetFramebufferHeight(); }
+    int get_graphics_api_version() { return ::rlGetVersion(); }
+    std::uint32_t get_default_texture_id() { return ::rlGetTextureIdDefault(); }
 
     void begin_drawing() { ::BeginDrawing(); }
-    void end_drawing() { ::EndDrawing(); }
+    void end_drawing()
+    {
+        // Epoch's vcpkg Raylib is built with SUPPORT_CUSTOM_FRAME_CONTROL.
+        // EndDrawing() flushes rlgl in that mode but deliberately omits the
+        // native buffer swap and event pump, so the engine owns both steps.
+        ::EndDrawing();
+        ::SwapScreenBuffer();
+        ::PollInputEvents();
+    }
+    void flush_render_batch() { ::rlDrawRenderBatchActive(); }
     void clear_background(Color c) { ::ClearBackground(to_rl(c)); }
     void begin_texture_mode(const RenderTexture2D& target) { ::BeginTextureMode(to_rl(target)); }
     void end_texture_mode() { ::EndTextureMode(); }

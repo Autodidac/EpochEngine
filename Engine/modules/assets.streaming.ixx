@@ -28,10 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
 
 #include <deque>
@@ -45,7 +41,7 @@ export module assets.streaming;
 
 //import <optional>;
 
-export namespace epoch
+export namespace epochengine
 {
     enum class AssetKind : u8 { texture, mesh, shader_blob };
 

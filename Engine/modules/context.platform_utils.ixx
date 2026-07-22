@@ -48,14 +48,14 @@ import engine.input;
 namespace
 {
 #if defined(_WIN32)
-    void ClampMouseToClientRectIfNeeded(const std::shared_ptr<epochnamespace::core::Context>& ctx, int& x, int& y) noexcept
+    void ClampMouseToClientRectIfNeeded(const std::shared_ptr<epochengine::core::Context>& ctx, int& x, int& y) noexcept
     {
         if (!ctx) return;
 
         HWND hwnd = ctx->get_hwnd();
         if (!hwnd) return;
 
-        if (epochnamespace::input::are_mouse_coords_global())
+        if (epochengine::input::are_mouse_coords_global())
             return;
 
         RECT rc{};
@@ -71,11 +71,11 @@ namespace
         }
     }
 #elif defined(__linux__)
-    void ClampMouseToClientRectIfNeeded(const std::shared_ptr<epochnamespace::core::Context>& ctx, int& x, int& y) noexcept
+    void ClampMouseToClientRectIfNeeded(const std::shared_ptr<epochengine::core::Context>& ctx, int& x, int& y) noexcept
     {
         if (!ctx) return;
 
-        if (epochnamespace::input::are_mouse_coords_global())
+        if (epochengine::input::are_mouse_coords_global())
             return;
 
         const int width = (std::max)(1, ctx->width);
@@ -87,6 +87,6 @@ namespace
         }
     }
 #else
-    void ClampMouseToClientRectIfNeeded(const std::shared_ptr<epochnamespace::core::Context>&, int&, int&) noexcept {}
+    void ClampMouseToClientRectIfNeeded(const std::shared_ptr<epochengine::core::Context>&, int&, int&) noexcept {}
 #endif
 }

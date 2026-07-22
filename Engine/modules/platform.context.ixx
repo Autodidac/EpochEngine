@@ -41,7 +41,7 @@ export module platform.context;
 import core.error;
 import platform.window;
 
-export namespace epoch::platform
+export namespace epochengine::platform
 {
     enum class GraphicsBackend : std::uint8_t
     {
@@ -69,4 +69,4 @@ export namespace epoch::platform
     };
 
     [[nodiscard]] core::error::result<std::unique_ptr<IGraphicsContext>> create_graphics_context(const ContextDesc& desc) noexcept;
-} // namespace epoch::platform
+} // namespace epochengine::platform

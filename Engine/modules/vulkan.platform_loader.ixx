@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #ifndef EPOCH_USING_VULKAN
@@ -59,7 +58,7 @@ module;
 export module vulkan.platform_loader;
 
 #if EPOCH_VULKAN_CUSTOM_LOADER
-export namespace epochnamespace::vulkan {
+export namespace epochengine::vulkan {
 
     // OS/dynamic-loader calls are runtime by definition: NOT constexpr.
     inline auto LoadLibrary() noexcept -> void*
@@ -95,9 +94,9 @@ export namespace epochnamespace::vulkan {
 #endif
     }
 
-} // namespace epochnamespace::vulkan
+} // namespace epochengine::vulkan
 #else
-export namespace epochnamespace::vulkan
+export namespace epochengine::vulkan
 {
     // Custom loader disabled: no dynamic loader entry points are exported.
 }

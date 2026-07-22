@@ -6,7 +6,7 @@ module;
 
 module epoch.gui;
 
-namespace epochnamespace::gui_lib
+namespace epochengine::gui_lib
 {
     namespace
     {

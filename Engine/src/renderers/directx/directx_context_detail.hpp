@@ -32,7 +32,7 @@
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
 
-namespace epochnamespace::directxcontext::detail
+namespace epochengine::directxcontext::detail
 {
     inline constexpr const char* kLogDirectX = "Context.DirectX";
 

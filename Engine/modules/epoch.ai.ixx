@@ -60,7 +60,7 @@ export import ai.eval;
 
 import core.log;
 
-export namespace epoch::ai
+export namespace epochengine::ai
 {
     struct Candidate
     {

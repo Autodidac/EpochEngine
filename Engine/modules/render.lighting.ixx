@@ -1,4 +1,4 @@
-/************************************************
+﻿/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,41 +30,11 @@
  ***********************************************/
 module;
 
-#include <format>
-#include <string>
-#include <string_view>
+export module render.lighting;
 
-export module ecs.internal_private;
-
-import ecs.storage;
-import core.logger;
-import core.timer;
-import engine.eventsystem;
-
-namespace epochengine::ecs::_detail
+export namespace epochengine::lighting
 {
-	using namespace epochengine::logger;
-    using namespace epochengine::timing;
-    //using namespace epochengine::ecs;
-
-    inline void notify(Logger* log,
-        Timer* clk,
-        Entity e,
-        std::string_view action,
-        std::string_view comp)
-    {
-        if (!log || !clk) return;
-        auto ts = timing::getCurrentTimeString();
-        log->log(std::format("[ECS] {}{} entity={} at {}",
-            action,
-            comp.empty() ? "" : std::format(":{}", comp),
-            e, ts));
-        events::push_event(events::Event{
-            events::EventType::Custom,
-            { {"ecs_action", std::string(action)},
-              {"entity",     std::to_string(e)},
-              {"component",  std::string(comp)},
-              {"timing",       ts} },
-            0.f, 0.f });
-    }
+    export void AmbientLighting();
+    export void DiffuseLighting();
+    export void SpecularLighting();
 }

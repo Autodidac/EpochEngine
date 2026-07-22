@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <cstddef>
@@ -12,7 +42,7 @@ export module package.registry;
 
 import forest.factory;
 
-export namespace epoch::package_registry
+export namespace epochengine::package_registry
 {
     enum class PackageKind : std::uint8_t
     {
@@ -62,7 +92,7 @@ export namespace epoch::package_registry
     };
 
     inline constexpr std::string_view kEpochEngineExtensionsRepo = "https://github.com/Autodidac/EpochEngineExtensions";
-    inline constexpr std::string_view kForestFactoryReferenceRepo = epoch::forest::kForestFactoryReferenceRepo;
+    inline constexpr std::string_view kForestFactoryReferenceRepo = epochengine::forest::kForestFactoryReferenceRepo;
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeSceneId = "engine_arcade_scene";
@@ -75,7 +105,7 @@ export namespace epoch::package_registry
     inline constexpr std::string_view kEngineArcadeRenderTextureName = "engine_arcade.screen";
     inline constexpr std::uint32_t kEngineArcadeRenderTextureWidth = 512;
     inline constexpr std::uint32_t kEngineArcadeRenderTextureHeight = 512;
-    inline constexpr std::string_view kEngineForestFactoryPackageId = epoch::forest::kForestFactoryPackageId;
+    inline constexpr std::string_view kEngineForestFactoryPackageId = epochengine::forest::kForestFactoryPackageId;
     inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
     inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";

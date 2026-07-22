@@ -15,7 +15,7 @@ import core.context;
 import core.commandline;
 import opengl.textures;
 
-namespace epochnamespace::openglcontext
+namespace epochengine::openglcontext
 {
     void opengl_present()
     {

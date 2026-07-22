@@ -174,10 +174,10 @@ int main(int argc, char** argv)
 {
     static_assert(std::is_standard_layout_v<EpochScriptHost>,
         "EpochScriptHost must stay ABI-simple for generated project scripts.");
-    static_assert(std::is_same_v<decltype(&epochnamespace::core::bridge::run_legacy_runtime),
+    static_assert(std::is_same_v<decltype(&epochengine::core::bridge::run_legacy_runtime),
         int (*)(bool)>,
         "The runtime bridge signature must remain stable for lightweight callers.");
-    static_assert(epoch::core::has_expected == (EPOCH_HAS_EXPECTED != 0),
+    static_assert(epochengine::core::has_expected == (EPOCH_HAS_EXPECTED != 0),
         "Feature probe macros and constexpr values must agree.");
 
     SmokeState state{};

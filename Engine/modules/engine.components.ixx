@@ -47,65 +47,65 @@ export module engine.components;
 //import "atetrislike.hpp";
 //import "asandsim.hpp";
 //
-//export namespace epochnamespace
+//export namespace epochengine
 //{
 //    namespace scene
 //    {
-//        using namespace ::epochnamespace::scene;
+//        using namespace ::epochengine::scene;
 //    }
 //
 //    namespace game2048
 //    {
-//        using namespace ::epochnamespace::game2048;
+//        using namespace ::epochengine::game2048;
 //    }
 //
 //    namespace cellular
 //    {
-//        using namespace ::epochnamespace::cellular;
+//        using namespace ::epochengine::cellular;
 //    }
 //
 //    namespace frogger
 //    {
-//        using namespace ::epochnamespace::frogger;
+//        using namespace ::epochengine::frogger;
 //    }
 //
 //    namespace match3
 //    {
-//        using namespace ::epochnamespace::match3;
+//        using namespace ::epochengine::match3;
 //    }
 //
 //    namespace minesweeper
 //    {
-//        using namespace ::epochnamespace::minesweeper;
+//        using namespace ::epochengine::minesweeper;
 //    }
 //
 //    namespace pacman
 //    {
-//        using namespace ::epochnamespace::pacman;
+//        using namespace ::epochengine::pacman;
 //    }
 //
 //    namespace slidingpuzzle
 //    {
-//        using namespace ::epochnamespace::slidingpuzzle;
+//        using namespace ::epochengine::slidingpuzzle;
 //    }
 //
 //    namespace snakelike
 //    {
-//        using namespace ::epochnamespace::snakelike;
+//        using namespace ::epochengine::snakelike;
 //    }
 //
 //    namespace sokoban
 //    {
-//        using namespace ::epochnamespace::sokoban;
+//        using namespace ::epochengine::sokoban;
 //    }
 //
 //    namespace tetris
 //    {
-//        using namespace ::epochnamespace::tetris;
+//        using namespace ::epochengine::tetris;
 //    }
 //
 //    namespace sandsim
 //    {
-//        using namespace ::epochnamespace::sandsim;
+//        using namespace ::epochengine::sandsim;
 //    }
 //}

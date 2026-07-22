@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <include/engine.config.hpp>
@@ -54,7 +53,7 @@ export module vulkan.platform_device;
 #if EPOCH_VULKAN_CUSTOM_LOADER
 import vulkan.platform_dispatcher;
 
-export namespace epochnamespace::vulkancontext::platform
+export namespace epochengine::vulkancontext::platform
 {
     inline auto createDevice(
         VkPhysicalDevice physicalDevice,
@@ -77,9 +76,9 @@ export namespace epochnamespace::vulkancontext::platform
         if (device && table.vkDestroyDevice)
             table.vkDestroyDevice(device, nullptr);
     }
-} // namespace epochnamespace::vulkancontext::platform
+} // namespace epochengine::vulkancontext::platform
 #else
-export namespace epochnamespace::vulkancontext::platform
+export namespace epochengine::vulkancontext::platform
 {
     // Custom loader disabled: no device entry points are exported.
 }

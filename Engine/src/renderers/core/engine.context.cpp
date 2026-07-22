@@ -58,7 +58,7 @@ import utility.atomicfunction;
 import noop.context;
 #endif
 
-namespace epochnamespace::core::detail
+namespace epochengine::core::detail
 {
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
     void register_opengl_backend();
@@ -86,21 +86,21 @@ namespace epochnamespace::core::detail
 namespace
 {
     std::uint32_t default_add_texture(
-        epochnamespace::TextureAtlas&,
+        epochengine::TextureAtlas&,
         std::string,
-        const epochnamespace::ImageData&) noexcept
+        const epochengine::ImageData&) noexcept
     {
         return 0u;
     }
 
     std::uint32_t add_atlas_default(
-        const epochnamespace::TextureAtlas& atlas,
-        const epochnamespace::core::ContextType type) noexcept
+        const epochengine::TextureAtlas& atlas,
+        const epochengine::core::ContextType type) noexcept
     {
         try
         {
-            epochnamespace::atlasmanager::ensure_uploaded(atlas);
-            epochnamespace::atlasmanager::process_pending_uploads(type);
+            epochengine::atlasmanager::ensure_uploaded(atlas);
+            epochengine::atlasmanager::process_pending_uploads(type);
         }
         catch (...)
         {
@@ -112,7 +112,7 @@ namespace
 
 }
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     std::map<ContextType, BackendState> g_backends{};
     std::shared_mutex g_backendsMutex{};
@@ -306,13 +306,13 @@ namespace epochnamespace::core
             ctx->type = ContextType::Noop;
             ctx->backendName = "Noop";
 
-            ctx->initialize = epochnamespace::noopcontext::noop_initialize;
-            ctx->cleanup = epochnamespace::noopcontext::noop_cleanup;
-            ctx->process = epochnamespace::noopcontext::noop_process;
-            ctx->clear = epochnamespace::noopcontext::noop_clear;
-            ctx->present = epochnamespace::noopcontext::noop_present;
-            ctx->get_width = epochnamespace::noopcontext::noop_get_width;
-            ctx->get_height = epochnamespace::noopcontext::noop_get_height;
+            ctx->initialize = epochengine::noopcontext::noop_initialize;
+            ctx->cleanup = epochengine::noopcontext::noop_cleanup;
+            ctx->process = epochengine::noopcontext::noop_process;
+            ctx->clear = epochengine::noopcontext::noop_clear;
+            ctx->present = epochengine::noopcontext::noop_present;
+            ctx->get_width = epochengine::noopcontext::noop_get_width;
+            ctx->get_height = epochengine::noopcontext::noop_get_height;
 
             ctx->draw_sprite = nullptr;
             ctx->add_texture = &add_texture_default;
@@ -364,4 +364,4 @@ namespace epochnamespace::core
 
         return anyRunning;
     }
-} // namespace epochnamespace::core
+} // namespace epochengine::core

@@ -23,19 +23,19 @@ namespace
 {
     constexpr std::string_view kLogSoftRenderer = "Context.SoftRenderer";
 
-    std::uint32_t default_add_texture(epochnamespace::TextureAtlas&, std::string, const epochnamespace::ImageData&) noexcept
+    std::uint32_t default_add_texture(epochengine::TextureAtlas&, std::string, const epochengine::ImageData&) noexcept
     {
         return 0u;
     }
 
     std::uint32_t default_add_atlas(
-        const epochnamespace::TextureAtlas& atlas,
-        const epochnamespace::core::ContextType type) noexcept
+        const epochengine::TextureAtlas& atlas,
+        const epochengine::core::ContextType type) noexcept
     {
         try
         {
-            epochnamespace::atlasmanager::ensure_uploaded(atlas);
-            epochnamespace::atlasmanager::process_pending_uploads(type);
+            epochengine::atlasmanager::ensure_uploaded(atlas);
+            epochengine::atlasmanager::process_pending_uploads(type);
         }
         catch (...)
         {
@@ -45,29 +45,29 @@ namespace
         return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
-    void bind_default_input(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    void bind_default_input(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
-        ctx->is_key_held = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_held(k); };
-        ctx->is_key_down = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_down(k); };
+        ctx->is_key_held = [](epochengine::input::Key k) { return epochengine::input::is_key_held(k); };
+        ctx->is_key_down = [](epochengine::input::Key k) { return epochengine::input::is_key_down(k); };
         ctx->get_mouse_position = [](int& x, int& y)
         {
-            x = epochnamespace::input::mouseX.load(std::memory_order_relaxed);
-            y = epochnamespace::input::mouseY.load(std::memory_order_relaxed);
+            x = epochengine::input::mouseX.load(std::memory_order_relaxed);
+            y = epochengine::input::mouseY.load(std::memory_order_relaxed);
         };
-        ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_held(b); };
-        ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_down(b); };
+        ctx->is_mouse_button_held = [](epochengine::input::MouseButton b) { return epochengine::input::is_mouse_button_held(b); };
+        ctx->is_mouse_button_down = [](epochengine::input::MouseButton b) { return epochengine::input::is_mouse_button_down(b); };
     }
 
     void softrenderer_initialize_adapter()
     {
-        auto ctx = epochnamespace::core::get_current_render_context();
+        auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
         ctx->init_failed = false;
         try
         {
-            ctx->init_failed = !epochnamespace::anativecontext::softrenderer_initialize(
+            ctx->init_failed = !epochengine::anativecontext::softrenderer_initialize(
                 ctx,
                 ctx->get_hwnd(),
                 static_cast<unsigned>((std::max)(1, ctx->width)),
@@ -77,8 +77,8 @@ namespace
         catch (const std::exception& e)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::get(kLogSoftRenderer).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSoftRenderer).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
@@ -86,8 +86,8 @@ namespace
         catch (...)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::get(kLogSoftRenderer).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSoftRenderer).log(
+                epochengine::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -95,43 +95,43 @@ namespace
 
     void softrenderer_cleanup_adapter()
     {
-        auto ctx = epochnamespace::core::get_current_render_context();
+        auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
         try
         {
             auto copy = ctx;
-            epochnamespace::anativecontext::softrenderer_cleanup(copy);
+            epochengine::anativecontext::softrenderer_cleanup(copy);
         }
         catch (const std::exception& e)
         {
-            epochnamespace::logger::get(kLogSoftRenderer).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSoftRenderer).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...)
         {
-            epochnamespace::logger::get(kLogSoftRenderer).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSoftRenderer).log(
+                epochengine::logger::LogLevel::Error,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
     }
 
     bool softrenderer_process_adapter(
-        std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
+        std::shared_ptr<epochengine::core::Context> ctx,
+        epochengine::core::CommandQueue& queue)
     {
         if (!ctx)
             return false;
-        return epochnamespace::anativecontext::softrenderer_process(*ctx, queue);
+        return epochengine::anativecontext::softrenderer_process(*ctx, queue);
     }
 }
 
-namespace epochnamespace::core::detail
+namespace epochengine::core::detail
 {
     void register_software_backend()
     {
@@ -145,7 +145,7 @@ namespace epochnamespace::core::detail
 
         bind_default_input(ctx);
 
-        ctx->draw_sprite = epochnamespace::anativecontext::draw_sprite;
+        ctx->draw_sprite = epochengine::anativecontext::draw_sprite;
         ctx->add_texture = &default_add_texture;
         ctx->add_atlas = +[](const TextureAtlas& a) { return default_add_atlas(a, ContextType::Software); };
 

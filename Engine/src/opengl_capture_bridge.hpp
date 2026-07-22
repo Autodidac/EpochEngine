@@ -32,7 +32,7 @@
 
 #include <cstdint>
 
-namespace epochnamespace::openglbridge
+namespace epochengine::openglbridge
 {
     void capture_frame_if_requested(int framebufferWidth, int framebufferHeight, std::uintptr_t windowId);
 }

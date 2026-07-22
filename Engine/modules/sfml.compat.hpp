@@ -16,7 +16,7 @@
 #include <SFML/Window/WindowStyle.hpp>
 #endif
 
-namespace epoch::sfml_compat
+namespace epochengine::sfml_compat
 {
     [[nodiscard]] inline sf::FloatRect float_rect(
         float left,

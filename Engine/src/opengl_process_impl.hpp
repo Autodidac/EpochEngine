@@ -32,13 +32,13 @@
 
 #include <memory>
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     class Context;
     struct CommandQueue;
 }
 
-namespace epochnamespace::openglcontext
+namespace epochengine::openglcontext
 {
     bool process_impl(
         std::shared_ptr<core::Context> ctx,

@@ -2,10 +2,10 @@
 setlocal
 
 set "ROOT=%~dp0"
-set "BIN=%ROOT%x64\Debug"
+set "BIN=%ROOT%x64\Release"
 set "EXE=%BIN%\EpochEditor.exe"
 
-if "%EPOCH_BACKEND%"=="" set "EPOCH_BACKEND=opengl"
+if "%EPOCH_BACKEND%"=="" set "EPOCH_BACKEND=raylib"
 
 if not exist "%EXE%" (
     echo Missing debug executable:

@@ -66,7 +66,7 @@
 //import atlas.texture;
 //import :shared_vk;
 //
-//namespace epochnamespace::vulkancontext
+//namespace epochengine::vulkancontext
 //{
 //    namespace
 //    {
@@ -76,8 +76,8 @@
 //            const std::source_location& loc = std::source_location::current())
 //        {
 //#if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_VULKAN_CONFIRMATION_LOGS
-//            epochnamespace::logger::get(kLogSys).log(
-//                epochnamespace::logger::LogLevel::INFO, msg, loc);
+//            epochengine::logger::get(kLogSys).log(
+//                epochengine::logger::LogLevel::INFO, msg, loc);
 //#else
 //            (void)msg;
 //            (void)loc;
@@ -87,15 +87,15 @@
 //        inline void log_warn(std::string_view msg,
 //            const std::source_location& loc = std::source_location::current())
 //        {
-//            epochnamespace::logger::get(kLogSys).log(
-//                epochnamespace::logger::LogLevel::WARN, msg, loc);
+//            epochengine::logger::get(kLogSys).log(
+//                epochengine::logger::LogLevel::WARN, msg, loc);
 //        }
 //
 //        inline void log_error(std::string_view msg,
 //            const std::source_location& loc = std::source_location::current())
 //        {
-//            epochnamespace::logger::get(kLogSys).log(
-//                epochnamespace::logger::LogLevel::Error, msg, loc);
+//            epochengine::logger::get(kLogSys).log(
+//                epochengine::logger::LogLevel::Error, msg, loc);
 //        }
 //
 //        std::filesystem::path resolve_texture_path(const std::source_location& loc)
@@ -103,9 +103,9 @@
 //            namespace fs = std::filesystem;
 //
 //                        const fs::path target = "texture.ppm";
-//            const fs::path exeDir = epochnamespace::core::cli::exe_path.empty()
+//            const fs::path exeDir = epochengine::core::cli::exe_path.empty()
 //                ? fs::path{}
-//                : fs::absolute(epochnamespace::core::cli::exe_path).parent_path();
+//                : fs::absolute(epochengine::core::cli::exe_path).parent_path();
 //            const std::array<fs::path, 8> candidates = {
 //                exeDir / target,
 //                exeDir / "assets" / "vulkan" / target,
@@ -129,7 +129,7 @@
 //            for (const auto& p : candidates)
 //            {
 //                tried += "\n  - ";
-//                tried += epochnamespace::text::path_to_utf8(fs::absolute(p).lexically_normal());
+//                tried += epochengine::text::path_to_utf8(fs::absolute(p).lexically_normal());
 //            }
 //
 //            log_error(std::format("Failed to load texture image. Tried paths:{}", tried), loc);
@@ -187,7 +187,7 @@
 //        const auto loc = std::source_location::current();
 //
 //        const std::filesystem::path texturePath = resolve_texture_path(loc);
-//        const std::string texturePathUtf8 = epochnamespace::text::path_to_utf8(texturePath);
+//        const std::string texturePathUtf8 = epochengine::text::path_to_utf8(texturePath);
 //
 //        ImageData texture = [&]() -> ImageData {
 //            try
@@ -520,13 +520,13 @@
 //            std::source_location::current());
 //#endif
 //    }
-//} // namespace epochnamespace::vulkancontext
+//} // namespace epochengine::vulkancontext
 //
-//namespace epochnamespace::vulkantextures
+//namespace epochengine::vulkantextures
 //{
-//    void ensure_uploaded(const epochnamespace::TextureAtlas& atlas)
+//    void ensure_uploaded(const epochengine::TextureAtlas& atlas)
 //    {
-//        if (!epochnamespace::vulkancontext::has_vulkan_apps())
+//        if (!epochengine::vulkancontext::has_vulkan_apps())
 //            return;
 //
 //        // Atlas uploads are driven from the active Vulkan context render loop.

@@ -62,7 +62,7 @@ export module core.utilities;
 
 import core.logger;
 
-export namespace epochnamespace::utilities
+export namespace epochengine::utilities
 {
 #ifdef _WIN32
     [[nodiscard]] inline bool isConsoleApplication() noexcept
@@ -81,7 +81,7 @@ export namespace epochnamespace::utilities
         try {                                       \
             call;                                   \
         } catch (...) {                             \
-            ::epochnamespace::logger::warn("Retry", "Retrying: " #call); \
+            ::epochengine::logger::warn("Retry", "Retrying: " #call); \
             call;                                   \
         }                                           \
     } while (0)
@@ -97,9 +97,9 @@ export namespace epochnamespace::utilities
                 }
                 catch (...)
                 {
-                    ::epochnamespace::logger::warn("Retry", "First attempt failed, retrying once.");
+                    ::epochengine::logger::warn("Retry", "First attempt failed, retrying once.");
                     return f(std::forward<decltype(args)>(args)...);
                 }
             };
     }
-} // namespace epochnamespace::utilities
+} // namespace epochengine::utilities

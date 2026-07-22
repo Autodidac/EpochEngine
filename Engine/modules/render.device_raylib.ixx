@@ -1,7 +1,32 @@
-/************************************************
- *  Epoch Engine - Raylib Renderer Device Module
- *
- *  SPDX-License-Identifier: LicenseRef-MIT-NoSell
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
  ***********************************************/
 module;
 
@@ -20,12 +45,12 @@ import raylib.api;
 import raylib.state;
 #endif
 
-export namespace epoch
+export namespace epochengine
 {
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
     struct RaylibRenderTextureRecord
     {
-        epochnamespace::raylib_api::RenderTexture2D target{};
+        epochengine::raylib_api::RenderTexture2D target{};
         u32 width = 0;
         u32 height = 0;
         bool active = false;
@@ -81,13 +106,13 @@ export namespace epoch
             if (!record)
                 return;
 
-            epochnamespace::raylib_api::begin_texture_mode(record->target);
+            epochengine::raylib_api::begin_texture_mode(record->target);
             m_render_pass_open = true;
 
             if (pass.clear_color)
             {
-                epochnamespace::raylib_api::clear_background(
-                    epochnamespace::raylib_api::Color{
+                epochengine::raylib_api::clear_background(
+                    epochengine::raylib_api::Color{
                         to_channel(pass.clear[0]),
                         to_channel(pass.clear[1]),
                         to_channel(pass.clear[2]),
@@ -100,7 +125,7 @@ export namespace epoch
             if (!m_render_pass_open)
                 return;
 
-            epochnamespace::raylib_api::end_texture_mode();
+            epochengine::raylib_api::end_texture_mode();
             m_render_pass_open = false;
         }
 
@@ -110,7 +135,7 @@ export namespace epoch
 
             const RaylibModelRecord* const record = resolve(model);
             if (record && record->live_model_id >= 0)
-                epochnamespace::raylib_api::draw_model(record->live_model_id);
+                epochengine::raylib_api::draw_model(record->live_model_id);
         }
 
         [[nodiscard]] BindingSetHandle bound_binding_set() const noexcept { return m_binding_set; }
@@ -215,7 +240,7 @@ export namespace epoch
         {
             int liveModelId = -1;
             if (runtime_renderer_available() && desc.source_path && desc.source_path[0] != '\0')
-                liveModelId = epochnamespace::raylib_api::load_model(desc.source_path);
+                liveModelId = epochengine::raylib_api::load_model(desc.source_path);
 
             const u32 slot = allocate_model_slot();
             RaylibModelRecord& record = m_models[slot];
@@ -232,8 +257,8 @@ export namespace epoch
 
             const u32 width = desc.width == 0 ? 1u : desc.width;
             const u32 height = desc.height == 0 ? 1u : desc.height;
-            const epochnamespace::raylib_api::RenderTexture2D target =
-                epochnamespace::raylib_api::load_render_texture(static_cast<int>(width), static_cast<int>(height));
+            const epochengine::raylib_api::RenderTexture2D target =
+                epochengine::raylib_api::load_render_texture(static_cast<int>(width), static_cast<int>(height));
 
             if (target.id == 0 || target.texture.id == 0)
                 return {};
@@ -291,7 +316,7 @@ export namespace epoch
 
             RaylibModelRecord& record = m_models[index];
             if (record.live_model_id >= 0)
-                epochnamespace::raylib_api::unload_model(record.live_model_id);
+                epochengine::raylib_api::unload_model(record.live_model_id);
 
             record = {};
         }
@@ -310,7 +335,7 @@ export namespace epoch
                 return;
 
             if (runtime_renderer_available())
-                epochnamespace::raylib_api::unload_render_texture(record.target);
+                epochengine::raylib_api::unload_render_texture(record.target);
 
             record = {};
         }
@@ -359,7 +384,7 @@ export namespace epoch
 
         [[nodiscard]] bool runtime_renderer_available() const noexcept
         {
-            const auto& state = epochnamespace::raylibstate::s_raylibstate;
+            const auto& state = epochengine::raylibstate::s_raylibstate;
             return state.running && state.renderingActive;
         }
 

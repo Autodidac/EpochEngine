@@ -112,30 +112,30 @@ namespace runtime
 
         inline void runtime_info(const std::string_view message)
         {
-            epochnamespace::logger::get("Epoch.Runtime").log(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get("Epoch.Runtime").log(
+                epochengine::logger::LogLevel::INFO,
                 message,
                 std::source_location::current());
         }
 
         inline void runtime_error(const std::string_view message)
         {
-            epochnamespace::logger::get("Epoch.Runtime").log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get("Epoch.Runtime").log(
+                epochengine::logger::LogLevel::Error,
                 message,
                 std::source_location::current());
         }
 
-        [[nodiscard]] inline std::string_view as_std_view(const epoch::string& text) noexcept
+        [[nodiscard]] inline std::string_view as_std_view(const epochengine::string& text) noexcept
         {
             return std::string_view{ text.data(), text.size() };
         }
 
         struct RuntimePlatformGuard
         {
-            std::unique_ptr<epoch::platform::IWindowSystem> window_system{};
-            std::unique_ptr<epoch::platform::IGraphicsContext> graphics_context{};
-            epoch::platform::WindowHandle window_handle{};
+            std::unique_ptr<epochengine::platform::IWindowSystem> window_system{};
+            std::unique_ptr<epochengine::platform::IGraphicsContext> graphics_context{};
+            epochengine::platform::WindowHandle window_handle{};
 
             ~RuntimePlatformGuard() noexcept
             {
@@ -148,10 +148,10 @@ namespace runtime
 
         [[nodiscard]] bool smoke_mode()
         {
-            if (epochnamespace::core::cli::smoke_requested)
+            if (epochengine::core::cli::smoke_requested)
                 return true;
 
-            if (auto v = epoch::core::env::get("DEMO_SMOKE"))
+            if (auto v = epochengine::core::env::get("DEMO_SMOKE"))
             {
                 const auto value = as_std_view(*v);
                 return value == std::string_view{ "1" }
@@ -169,7 +169,7 @@ namespace runtime
                     ? "epoch runtime bridge -> legacy editor"
                     : "epoch runtime bridge -> legacy engine");
 
-            return epochnamespace::core::bridge::run_legacy_runtime(editor_requested);
+            return epochengine::core::bridge::run_legacy_runtime(editor_requested);
         }
 
         int run_epoch_native()
@@ -186,7 +186,7 @@ namespace runtime
 
             if (callbacks->version != APP_API_VERSION)
             {
-                runtime_error(as_std_view(epoch::core::format::str(
+                runtime_error(as_std_view(epochengine::core::format::str(
                     "app callbacks version mismatch ({} != {})",
                     callbacks->version,
                     APP_API_VERSION)));
@@ -197,31 +197,31 @@ namespace runtime
 
             RuntimePlatformGuard platform_guard{};
 
-            auto window_system_result = epoch::platform::create_window_system();
+            auto window_system_result = epochengine::platform::create_window_system();
             if (!window_system_result)
             {
                 const auto& err = window_system_result.error();
-                runtime_error(as_std_view(epoch::core::format::str("window system init failed: {}", err.message)));
+                runtime_error(as_std_view(epochengine::core::format::str("window system init failed: {}", err.message)));
                 return 1;
             }
             platform_guard.window_system = std::move(*window_system_result);
 
-            epoch::platform::WindowDesc window_desc{};
+            epochengine::platform::WindowDesc window_desc{};
             auto window_result = platform_guard.window_system->create_window(window_desc);
             if (!window_result)
             {
                 const auto& err = window_result.error();
-                runtime_error(as_std_view(epoch::core::format::str("window creation failed: {}", err.message)));
+                runtime_error(as_std_view(epochengine::core::format::str("window creation failed: {}", err.message)));
                 return 1;
             }
             platform_guard.window_handle = *window_result;
 
-            epoch::platform::ContextDesc context_desc{};
-            auto context_result = epoch::platform::create_graphics_context(context_desc);
+            epochengine::platform::ContextDesc context_desc{};
+            auto context_result = epochengine::platform::create_graphics_context(context_desc);
             if (!context_result)
             {
                 const auto& err = context_result.error();
-                runtime_error(as_std_view(epoch::core::format::str("graphics context init failed: {}", err.message)));
+                runtime_error(as_std_view(epochengine::core::format::str("graphics context init failed: {}", err.message)));
                 return 1;
             }
             platform_guard.graphics_context = std::move(*context_result);
@@ -229,11 +229,11 @@ namespace runtime
             if (auto surface_result = platform_guard.graphics_context->create_surface(platform_guard.window_handle); !surface_result)
             {
                 const auto& err = surface_result.error();
-                runtime_error(as_std_view(epoch::core::format::str("surface creation failed: {}", err.message)));
+                runtime_error(as_std_view(epochengine::core::format::str("surface creation failed: {}", err.message)));
                 return 1;
             }
 
-            auto& systems_registry = epoch::systems::Registry::instance();
+            auto& systems_registry = epochengine::systems::Registry::instance();
             if (!systems_registry.initialize())
             {
                 runtime_error("system registry init failed");
@@ -243,29 +243,29 @@ namespace runtime
             const int init_rc = callbacks->on_init ? callbacks->on_init(cb_user) : 0;
             if (init_rc != 0)
             {
-                runtime_error(as_std_view(epoch::core::format::str("app init failed with code {}", init_rc)));
+                runtime_error(as_std_view(epochengine::core::format::str("app init failed with code {}", init_rc)));
                 systems_registry.shutdown();
                 return init_rc;
             }
 
-            epoch::core::time::frame_clock fc{};
+            epochengine::core::time::frame_clock fc{};
             fc.start();
 
-            const auto runtime_profile = epoch::platform::build_runtime_frame_profile(platform_guard.graphics_context.get());
+            const auto runtime_profile = epochengine::platform::build_runtime_frame_profile(platform_guard.graphics_context.get());
 
-            epoch::perf::frame_limiter limiter{};
+            epochengine::perf::frame_limiter limiter{};
             limiter.set_target_fps(runtime_profile.target_fps);
-            epoch::platform::log_runtime_profile("Epoch.Runtime", "Epoch.Perf", runtime_profile);
+            epochengine::platform::log_runtime_profile("Epoch.Runtime", "Epoch.Perf", runtime_profile);
 
             const bool smoke = smoke_mode();
             const std::uint64_t max_frames = smoke
-                ? (epochnamespace::core::cli::capture_requested ? 180u : 3u)
+                ? (epochengine::core::cli::capture_requested ? 180u : 3u)
                 : ~0ull;
 
             constexpr std::uint64_t FPS_PRINT_EVERY = 10;
             constexpr double WARMUP_SECONDS = 7.0;
 
-            const double t0 = epoch::core::time::now_seconds();
+            const double t0 = epochengine::core::time::now_seconds();
 
             double last_t = t0;
             std::uint64_t last_frame = fc.frame_index;
@@ -283,14 +283,14 @@ namespace runtime
                 fc.tick();
                 systems_registry.update(fc.dt_seconds());
 
-                platform_guard.window_system->pump_events([&](const epoch::platform::WindowEvent& event)
+                platform_guard.window_system->pump_events([&](const epochengine::platform::WindowEvent& event)
                     {
                         switch (event.type)
                         {
-                        case epoch::platform::WindowEventType::close:
+                        case epochengine::platform::WindowEventType::close:
                             window_close_requested = true;
                             break;
-                        case epoch::platform::WindowEventType::resized:
+                        case epochengine::platform::WindowEventType::resized:
                             platform_guard.graphics_context->resize_surface(event.handle, event.width, event.height);
                             break;
                         default:
@@ -298,7 +298,7 @@ namespace runtime
                         }
                     });
 
-                const double now = epoch::core::time::now_seconds();
+                const double now = epochengine::core::time::now_seconds();
                 const double elapsed_since_start = now - t0;
 
                 if (!warmup_done)
@@ -310,7 +310,7 @@ namespace runtime
                         if (whole_remaining != last_warmup_second_logged)
                         {
                             last_warmup_second_logged = whole_remaining;
-                            runtime_info(as_std_view(epoch::core::format::str(
+                            runtime_info(as_std_view(epochengine::core::format::str(
                                 "warming up ({}s remaining)",
                                 whole_remaining)));
                         }
@@ -330,7 +330,7 @@ namespace runtime
 
                     if ((fc.frame_index % FPS_PRINT_EVERY) == 0)
                     {
-                        runtime_info(as_std_view(epoch::core::format::str(
+                        runtime_info(as_std_view(epochengine::core::format::str(
                             "running (frame={}, dt_ms={:.3f})",
                             fc.frame_index,
                             fc.dt_seconds() * 1000.0
@@ -350,7 +350,7 @@ namespace runtime
                             fps = 0.0;
                         }
 
-                        runtime_info(as_std_view(epoch::core::format::str(
+                        runtime_info(as_std_view(epochengine::core::format::str(
                             "FPS={:.2f} (min={:.2f}, max={:.2f})",
                             fps, min_fps, max_fps
                         )));

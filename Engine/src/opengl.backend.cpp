@@ -23,7 +23,7 @@ import image.loader;
 import opengl.context;
 import opengl.textures;
 
-namespace epochnamespace::openglbackend
+namespace epochengine::openglbackend
 {
     namespace detail
     {

@@ -29,6 +29,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\app_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.runtime_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.script_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\dockable_window.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\dock_layout.hpp" />
@@ -46,6 +47,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai_response.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\context.vulkan.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\cpp_feature_probe.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\update_modal_layout.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.api_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.common.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\framework.hpp" />
@@ -78,6 +80,8 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps" />
+    <None Include="$(MSBuildThisFileDirectory)src\editor\update_modal_view.inl" />
+    <None Include="$(MSBuildThisFileDirectory)src\editor\update_runtime.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\rotate_all_entities.ascript.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -94,15 +98,11 @@
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\almondshell.ixx">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.ray.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.camera.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api_unit.ixx" />
@@ -300,6 +300,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.systems.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.headless.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\vulkan.dispatch_storage.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context-texture.cpp">
@@ -327,7 +328,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.scene.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\context_commandqueue.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\context.command_queue.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>

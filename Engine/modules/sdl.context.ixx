@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -97,7 +97,7 @@ import package.registry;
 // Std
 //import <chrono>;  // as include for intellisense stability, this can probably be changed in the future
 
-export namespace epochnamespace::sdlcontext
+export namespace epochengine::sdlcontext
 {
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 
@@ -228,13 +228,13 @@ export namespace epochnamespace::sdlcontext
         }
 
         [[nodiscard]] inline bool project_preview_vertex(
-            const epochnamespace::previewgrid::Mat4& mvp,
-            const epochnamespace::previewgrid::Vec3& position,
+            const epochengine::previewgrid::Mat4& mvp,
+            const epochengine::previewgrid::Vec3& position,
             const core::RenderViewport& viewport,
             float& outX,
             float& outY) noexcept
         {
-            const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+            const auto clip = epochengine::previewgrid::transform_point(mvp, position);
             if (clip.w <= 1.0e-4f)
                 return false;
 
@@ -281,8 +281,8 @@ export namespace epochnamespace::sdlcontext
                 return false;
 
             SdlArcadeScreenPreviewTarget& target = arcade_screen_preview_target();
-            const int width = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_width());
-            const int height = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_height());
+            const int width = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_width());
+            const int height = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_height());
             if (width <= 0 || height <= 0)
                 return false;
 
@@ -388,14 +388,14 @@ export namespace epochnamespace::sdlcontext
 
         inline void render_engine_arcade_sampled_surface_preview(
             const std::shared_ptr<core::Context>& ctx,
-            const epochnamespace::previewgrid::Mat4& mvp,
+            const epochengine::previewgrid::Mat4& mvp,
             const core::RenderViewport& viewport) noexcept
         {
             SDL_Renderer* const renderer = sdl_renderer.renderer;
             if (!ctx || !renderer)
                 return;
 
-            const auto markers = epochnamespace::previewgrid::sampled_render_surface_markers_for(ctx.get());
+            const auto markers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
             if (markers.empty() || !ensure_arcade_screen_preview_target(renderer))
                 return;
 
@@ -406,7 +406,7 @@ export namespace epochnamespace::sdlcontext
                 const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
                 const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
                 const float z = marker.position.z - (std::max)(std::abs(marker.scale.z) * 0.5f, 0.018f) - 0.012f;
-                const epochnamespace::previewgrid::Vec3 world[4]{
+                const epochengine::previewgrid::Vec3 world[4]{
                     { marker.position.x - halfX, marker.position.y - halfY, z },
                     { marker.position.x + halfX, marker.position.y - halfY, z },
                     { marker.position.x + halfX, marker.position.y + halfY, z },
@@ -451,7 +451,7 @@ export namespace epochnamespace::sdlcontext
             SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
             (void)SDL_SetRenderClipRect(sdl_renderer.renderer, &clipRect);
 
-            const auto clearColor = epochnamespace::previewgrid::kClearColor;
+            const auto clearColor = epochengine::previewgrid::kClearColor;
             const SDL_FRect background{
                 static_cast<float>(viewport.x),
                 static_cast<float>(viewport.y),
@@ -467,18 +467,18 @@ export namespace epochnamespace::sdlcontext
                 to_sdl_channel(clearColor[3]));
             (void)SDL_RenderFillRect(sdl_renderer.renderer, &background);
 
-            const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+            const auto camera = epochengine::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
-            const auto proj = epochnamespace::previewgrid::projection_for(ctx.get(), aspect, camera);
-            const auto view = epochnamespace::previewgrid::look_at(
+            const auto proj = epochengine::previewgrid::projection_for(ctx.get(), aspect, camera);
+            const auto view = epochengine::previewgrid::look_at(
                 camera.eye,
                 camera.target,
                 camera.up);
-            const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
-            const auto vertices = epochnamespace::previewgrid::grid_vertices();
-            const auto indices = epochnamespace::previewgrid::grid_indices();
+            const auto mvp = epochengine::previewgrid::multiply(proj, view);
+            const auto vertices = epochengine::previewgrid::grid_vertices();
+            const auto indices = epochengine::previewgrid::grid_indices();
 
             for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
             {
@@ -512,7 +512,7 @@ export namespace epochnamespace::sdlcontext
                 }
             }
 
-            const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx.get());
+            const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
             for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
             {
                 float ax = 0.0f;
@@ -585,12 +585,12 @@ export namespace epochnamespace::sdlcontext
                 }
             };
 
-            const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
+            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
             drawPreviewLines(
                 markerVertices,
-                epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get()));
+                epochengine::previewgrid::look_marker_vertex_count_for(ctx.get()));
 
-            const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+            const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
             drawPreviewLines(objectVertices, objectVertices.size());
 
             (void)SDL_SetRenderClipRect(sdl_renderer.renderer, nullptr);
@@ -794,7 +794,7 @@ export namespace epochnamespace::sdlcontext
                 style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
                 SetWindowLongPtr(sdlcontext.hwnd, GWL_STYLE, style);
 
-                epochnamespace::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
+                epochengine::core::MakeDockable(sdlcontext.hwnd, sdlcontext.parent);
 
                 RECT client{};
                 HWND sizeSource = hostWnd ? hostWnd : sdlcontext.parent;
@@ -987,7 +987,7 @@ export namespace epochnamespace::sdlcontext
         SDL_RenderPresent(sdl_renderer.renderer);
     }
 
-    inline void sdl_cleanup(std::shared_ptr<epochnamespace::core::Context>& ctx)
+    inline void sdl_cleanup(std::shared_ptr<epochengine::core::Context>& ctx)
     {
         (void)ctx;
 
@@ -1098,4 +1098,4 @@ export namespace epochnamespace::sdlcontext
     }
 
 #endif // EPOCH_USING_SDL
-} // namespace epochnamespace::sdlcontext
+} // namespace epochengine::sdlcontext

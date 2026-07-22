@@ -28,17 +28,13 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Events (Type-safe bus + ring queue) (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
 
 #include "../include/_epoch.stl_types.hpp"
 
 export module epoch.events;
 
-export namespace epoch::events
+export namespace epochengine::events
 {
     // -------------------------------------------------------------------------
     // Type-id: stable within one binary. For plugins/ABI boundaries, use explicit
@@ -173,4 +169,4 @@ export namespace epoch::events
     private:
         std::vector<handler> _handlers{};
     };
-} // namespace epoch::events
+} // namespace epochengine::events

@@ -36,7 +36,7 @@ export module sfml.renderer;
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 
-export namespace epochnamespace::sfmlcontext
+export namespace epochengine::sfmlcontext
 {
     struct RendererContext
     {

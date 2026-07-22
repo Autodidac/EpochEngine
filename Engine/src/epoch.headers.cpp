@@ -28,10 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 // Engine/src/epoch.headers.cpp
 #include "../include/epoch.config.hpp"
 #include "../src/epoch.common.hpp"

@@ -72,7 +72,7 @@ export module framework;
 
 #if defined(_WIN32)
 
-export namespace epochnamespace::platform::win32
+export namespace epochengine::platform::win32
 {
     using hwnd = HWND;
     using hinst = HINSTANCE;
@@ -93,7 +93,7 @@ export namespace epochnamespace::platform::win32
 
 #else
 
-export namespace epochnamespace::platform::win32
+export namespace epochengine::platform::win32
 {
     using hwnd = void*;
     using hinst = void*;

@@ -19,7 +19,7 @@ import engine.gui;
 import engine.telemetry;
 import render.preview_grid;
 
-namespace epochnamespace::anativecontext
+namespace epochengine::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     void capture_frame_if_requested(
@@ -77,9 +77,9 @@ namespace epochnamespace::anativecontext
         const auto previewMode = ctx.scene_preview_mode();
         const std::uint64_t cameraRevision =
             previewMode == core::ScenePreviewMode::Editor
-            ? epochnamespace::previewgrid::camera_revision_for(&ctx)
+            ? epochengine::previewgrid::camera_revision_for(&ctx)
             : 0;
-        const std::uint64_t guiGeneration = epochnamespace::gui::deferred_batch_generation(&ctx);
+        const std::uint64_t guiGeneration = epochengine::gui::deferred_batch_generation(&ctx);
         const std::int64_t commandDepth = static_cast<std::int64_t>(queue.depth());
         const bool hasPendingCommands = commandDepth != 0;
         const bool sceneDirty =
@@ -159,15 +159,15 @@ namespace epochnamespace::anativecontext
 
             if (ctx.windowData && ctx.windowData->context)
             {
-                if (auto liveContext = std::reinterpret_pointer_cast<epochnamespace::core::Context>(ctx.windowData->context))
-                    ::epochnamespace::gui::render_deferred_batch(liveContext.get());
+                if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
+                    ::epochengine::gui::render_deferred_batch(liveContext.get());
             }
 
             detail::render_scene_preview(ctx);
             if (ctx.windowData && ctx.windowData->context)
             {
-                if (auto liveContext = std::reinterpret_pointer_cast<epochnamespace::core::Context>(ctx.windowData->context))
-                    ::epochnamespace::gui::render_top_layer_batch(liveContext.get());
+                if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
+                    ::epochengine::gui::render_top_layer_batch(liveContext.get());
             }
 
             sr.lastGuiGeneration = guiGeneration;

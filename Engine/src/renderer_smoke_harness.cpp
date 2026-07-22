@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 #include <algorithm>
 #include <chrono>
 #include <cstdint>

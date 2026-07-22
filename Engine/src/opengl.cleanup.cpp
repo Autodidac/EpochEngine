@@ -155,7 +155,7 @@ import opengl.quad;
 // Standard library
 // ------------------------------------------------------------
 
-namespace epochnamespace::openglcontext
+namespace epochengine::openglcontext
 {
 #if !defined(EPOCH_USING_OPENGL)
 
@@ -245,6 +245,6 @@ namespace epochnamespace::openglcontext
     }
 
 #endif // EPOCH_USING_OPENGL
-} // namespace epochnamespace::openglcontext
+} // namespace epochengine::openglcontext
 
 #endif

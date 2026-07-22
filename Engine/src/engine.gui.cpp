@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,9 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-module;
-
 // Engine/src/engine.gui.cpp
+module;
 
 #include <algorithm>
 #include <array>
@@ -78,9 +77,9 @@ import spriteregistry;
 import spritehandle;
 import texture;
 
-namespace epochnamespace::gui
+namespace epochengine::gui
 {
-    using Context = epochnamespace::core::Context;
+    using Context = epochengine::core::Context;
 
     constexpr const char* kAtlasName = "__agui_builtin";
     constexpr float       kContentPadding = 6.0f;
@@ -235,6 +234,7 @@ namespace epochnamespace::gui
         {
             bool guiAtlasUploaded = false;
             bool fontAtlasUploaded = false;
+            bool uploadQueued = false;
         };
 
         struct QueuedSpriteDraw
@@ -259,6 +259,67 @@ namespace epochnamespace::gui
         static std::mutex g_deferredBatchMutex{};
         static std::unordered_map<const void*, std::vector<InputEvent>, PtrHash> g_contextPendingEvents{};
         static std::mutex g_contextPendingEventsMutex{};
+
+        constexpr std::size_t kMaxPendingInputEvents = 512;
+
+        [[nodiscard]] constexpr bool is_coalescible_input(EventType type) noexcept
+        {
+            return type == EventType::MouseMove || type == EventType::MouseWheel;
+        }
+
+        void queue_input_event(
+            std::vector<InputEvent>& events,
+            const InputEvent& event) noexcept
+        {
+            if (event.type == EventType::None)
+                return;
+
+            try
+            {
+                if (!events.empty()
+                    && event.type == EventType::MouseMove
+                    && events.back().type == EventType::MouseMove
+                    && events.back().mouse_button == event.mouse_button)
+                {
+                    events.back() = event;
+                    return;
+                }
+
+                if (!events.empty()
+                    && event.type == EventType::MouseWheel
+                    && events.back().type == EventType::MouseWheel)
+                {
+                    const auto accumulated = static_cast<long long>(events.back().wheel_delta)
+                        + static_cast<long long>(event.wheel_delta);
+                    events.back() = event;
+                    events.back().wheel_delta = static_cast<int>((std::clamp)(
+                        accumulated,
+                        static_cast<long long>((std::numeric_limits<int>::min)()),
+                        static_cast<long long>((std::numeric_limits<int>::max)())));
+                    return;
+                }
+
+                if (events.size() >= kMaxPendingInputEvents)
+                {
+                    const auto stale = std::find_if(
+                        events.begin(),
+                        events.end(),
+                        [](const InputEvent& queued) noexcept
+                        {
+                            return is_coalescible_input(queued.type);
+                        });
+                    events.erase(stale != events.end() ? stale : events.begin());
+                }
+
+                events.push_back(event);
+            }
+            catch (...)
+            {
+                // Input is transient. A failed allocation must not terminate a
+                // renderer or native message thread.
+            }
+        }
+
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextRightMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
@@ -933,17 +994,17 @@ namespace epochnamespace::gui
                 if (!entry)
                     return {};
 
-                if (epochnamespace::spritepool::capacity == 0)
-                    epochnamespace::spritepool::initialize(2048);
+                if (epochengine::spritepool::capacity == 0)
+                    epochengine::spritepool::initialize(2048);
 
-                SpriteHandle handle = epochnamespace::spritepool::allocate();
+                SpriteHandle handle = epochengine::spritepool::allocate();
                 if (!handle.is_valid())
                     return {};
 
                 handle.atlasIndex = static_cast<std::uint32_t>(atlas.get_index());
                 handle.localIndex = static_cast<std::uint32_t>(entry->index);
 
-                epochnamespace::atlasmanager::registry.add(
+                epochengine::atlasmanager::registry.add(
                     name, handle,
                     entry->region.u1,
                     entry->region.v1,
@@ -951,7 +1012,7 @@ namespace epochnamespace::gui
                     entry->region.v2 - entry->region.v1);
 
                 if (queueUpload)
-                    epochnamespace::atlasmanager::ensure_uploaded(atlas);
+                    epochengine::atlasmanager::ensure_uploaded(atlas);
 
                 return handle;
             }
@@ -978,19 +1039,19 @@ namespace epochnamespace::gui
             if (g_resources.runtimeSurfaceAtlas)
                 return g_resources.runtimeSurfaceAtlas;
 
-            auto atlasIt = epochnamespace::atlasmanager::atlas_map.find(kRuntimeSurfaceAtlasName);
-            if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
+            auto atlasIt = epochengine::atlasmanager::atlas_map.find(kRuntimeSurfaceAtlasName);
+            if (atlasIt == epochengine::atlasmanager::atlas_map.end())
             {
-                (void)epochnamespace::atlasmanager::create_atlas({
+                (void)epochengine::atlasmanager::create_atlas({
                     .name = kRuntimeSurfaceAtlasName,
                     .width = kRuntimeSurfaceAtlasSize,
                     .height = kRuntimeSurfaceAtlasSize,
                     .generate_mipmaps = false
                     });
-                atlasIt = epochnamespace::atlasmanager::atlas_map.find(kRuntimeSurfaceAtlasName);
+                atlasIt = epochengine::atlasmanager::atlas_map.find(kRuntimeSurfaceAtlasName);
             }
 
-            if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
+            if (atlasIt == epochengine::atlasmanager::atlas_map.end())
                 return nullptr;
 
             g_resources.runtimeSurfaceAtlas = atlasIt->second.get();
@@ -1044,7 +1105,7 @@ namespace epochnamespace::gui
                     return {};
                 };
 
-            if (const auto exampleAssets = epoch::core::path::example_asset_dir(); !exampleAssets.empty())
+            if (const auto exampleAssets = epochengine::core::path::example_asset_dir(); !exampleAssets.empty())
             {
                 if (auto path = try_with_root(exampleAssets / "fonts"); !path.empty())
                     return path;
@@ -1052,7 +1113,7 @@ namespace epochnamespace::gui
                     return path;
             }
 
-            if (const auto engineAssets = epoch::core::path::engine_asset_dir(); !engineAssets.empty())
+            if (const auto engineAssets = epochengine::core::path::engine_asset_dir(); !engineAssets.empty())
             {
                 if (auto path = try_with_root(engineAssets / "fonts"); !path.empty())
                     return path;
@@ -1060,7 +1121,7 @@ namespace epochnamespace::gui
                     return path;
             }
 
-            if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+            if (const auto runtimeRoot = epochengine::core::path::runtime_root_dir(); !runtimeRoot.empty())
             {
                 if (auto path = try_with_root(runtimeRoot); !path.empty())
                     return path;
@@ -1144,7 +1205,7 @@ namespace epochnamespace::gui
             g_resources.font.metrics = g_resources.font.asset->metrics;
             populate_font_lookup(g_resources.font);
 
-            auto atlasVec = epochnamespace::atlasmanager::get_atlas_vector_snapshot(); // by value snapshot
+            auto atlasVec = epochengine::atlasmanager::get_atlas_vector_snapshot(); // by value snapshot
             if (g_resources.font.asset->atlas_index >= 0 &&
                 static_cast<std::size_t>(g_resources.font.asset->atlas_index) < atlasVec.size())
             {
@@ -1153,8 +1214,8 @@ namespace epochnamespace::gui
 
             if (!g_resources.font.atlas)
             {
-                if (auto it = epochnamespace::atlasmanager::atlas_map.find("font_atlas");
-                    it != epochnamespace::atlasmanager::atlas_map.end())
+                if (auto it = epochengine::atlasmanager::atlas_map.find("font_atlas");
+                    it != epochengine::atlasmanager::atlas_map.end())
                 {
                     g_resources.font.atlas = it->second.get();
                 }
@@ -1167,18 +1228,18 @@ namespace epochnamespace::gui
 
             if (!g_resources.atlasBuilt)
             {
-                auto atlasIt = epochnamespace::atlasmanager::atlas_map.find(kAtlasName);
-                if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
+                auto atlasIt = epochengine::atlasmanager::atlas_map.find(kAtlasName);
+                if (atlasIt == epochengine::atlasmanager::atlas_map.end())
                 {
-                    epochnamespace::atlasmanager::create_atlas({
+                    epochengine::atlasmanager::create_atlas({
                         .name = kAtlasName,
                         .width = 512,
                         .height = 512,
                         .generate_mipmaps = false
                         });
 
-                    atlasIt = epochnamespace::atlasmanager::atlas_map.find(kAtlasName);
-                    if (atlasIt == epochnamespace::atlasmanager::atlas_map.end())
+                    atlasIt = epochengine::atlasmanager::atlas_map.find(kAtlasName);
+                    if (atlasIt == epochengine::atlasmanager::atlas_map.end())
                         throw std::runtime_error("[agui] Unable to create GUI atlas");
                 }
 
@@ -1361,8 +1422,17 @@ namespace epochnamespace::gui
             }
         }
 
+        [[nodiscard]] static bool backend_upload_complete(
+            const UploadState& state) noexcept
+        {
+            return (!g_resources.atlas || state.guiAtlasUploaded)
+                && (!g_resources.font.atlas || state.fontAtlasUploaded);
+        }
+
         static void ensure_backend_upload(Context& ctx)
         {
+            ensure_resources();
+
             if (auto current = core::get_current_render_context(); current && current.get() == &ctx)
             {
                 perform_backend_upload(ctx);
@@ -1371,18 +1441,48 @@ namespace epochnamespace::gui
 
             if (ctx.windowData)
             {
+                {
+                    std::scoped_lock lock(g_uploadMutex);
+                    auto& state = g_uploadedContexts[&ctx];
+                    if (backend_upload_complete(state) || state.uploadQueued)
+                        return;
+                    state.uploadQueued = true;
+                }
+
                 auto shared = ctx.windowData->context
                     ? std::reinterpret_pointer_cast<Context>(ctx.windowData->context)
                     : std::shared_ptr<Context>{};
+                if (!shared)
+                {
+                    std::scoped_lock lock(g_uploadMutex);
+                    if (auto it = g_uploadedContexts.find(&ctx); it != g_uploadedContexts.end())
+                        it->second.uploadQueued = false;
+                    return;
+                }
+
                 const core::RenderPath renderPath = render_path_for_context(&ctx);
-                ctx.windowData->commandQueue.enqueue([shared = std::move(shared)]()
-                    {
-                        if (shared)
+                try
+                {
+                    ctx.windowData->commandQueue.enqueue([shared = std::move(shared)]()
                         {
                             try { perform_backend_upload(*shared); }
                             catch (...) { /* GUI optional */ }
-                        }
-                    }, renderPath);
+
+                            std::scoped_lock lock(g_uploadMutex);
+                            if (auto it = g_uploadedContexts.find(shared.get());
+                                it != g_uploadedContexts.end())
+                            {
+                                it->second.uploadQueued = false;
+                            }
+                        }, renderPath);
+                }
+                catch (...)
+                {
+                    std::scoped_lock lock(g_uploadMutex);
+                    if (auto it = g_uploadedContexts.find(&ctx); it != g_uploadedContexts.end())
+                        it->second.uploadQueued = false;
+                    throw;
+                }
                 return;
             }
 
@@ -1443,7 +1543,7 @@ namespace epochnamespace::gui
                 return;
             }
 
-            auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+            auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
             std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
             ctx->draw_sprite_safe(handle, span, x, y, w, h);
         }
@@ -2475,7 +2575,7 @@ namespace epochnamespace::gui
 
             if (!ctx->windowData)
             {
-                auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+                auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
                 std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
                 for (const auto& draw : g_frame.queuedDraws)
                     ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
@@ -2494,7 +2594,7 @@ namespace epochnamespace::gui
                     if (!ctxShared || !draws || draws->empty())
                         return;
 
-                    auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+                    auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
                     std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
                     for (const auto& draw : *draws)
                         ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
@@ -2521,7 +2621,7 @@ namespace epochnamespace::gui
 
     void push_input(const InputEvent& e) noexcept
     {
-        g_pendingEvents.push_back(e);
+        queue_input_event(g_pendingEvents, e);
     }
 
     void push_input_for_context(const core::Context* ctx, const InputEvent& e) noexcept
@@ -2533,7 +2633,15 @@ namespace epochnamespace::gui
         }
 
         std::scoped_lock lock(g_contextPendingEventsMutex);
-        g_contextPendingEvents[ctx].push_back(e);
+        try
+        {
+            queue_input_event(g_contextPendingEvents[ctx], e);
+        }
+        catch (...)
+        {
+            // Creating the per-context bucket may allocate. Dropping one
+            // transient event is safer than terminating the native pump.
+        }
     }
 
     int consume_mouse_wheel_delta() noexcept
@@ -2629,7 +2737,7 @@ namespace epochnamespace::gui
         if (!draws || draws->empty())
             return false;
 
-        auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+        auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
         std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
         for (const auto& draw : *draws)
             ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
@@ -2653,7 +2761,7 @@ namespace epochnamespace::gui
         if (!draws || draws->empty())
             return false;
 
-        auto atlases = epochnamespace::atlasmanager::get_atlas_vector_snapshot();
+        auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
         std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
         for (const auto& draw : *draws)
             ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
@@ -5946,4 +6054,18 @@ namespace epochnamespace::gui
         end_window();
         return result;
     }
-} // namespace epochnamespace::gui
+} // namespace epochengine::gui
+
+extern "C" std::uint32_t epoch_gui_render_frame_batches(void* context) noexcept
+{
+    auto* renderContext = static_cast<epochengine::core::Context*>(context);
+    if (!renderContext)
+        return 0u;
+
+    std::uint32_t rendered = 0u;
+    if (epochengine::gui::render_deferred_batch(renderContext))
+        rendered |= 1u;
+    if (epochengine::gui::render_top_layer_batch(renderContext))
+        rendered |= 2u;
+    return rendered;
+}

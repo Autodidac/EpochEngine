@@ -4,7 +4,7 @@ module;
 
 export module ai.eval;
 
-export namespace epoch::ai
+export namespace epochengine::ai
 {
     struct EvalCase
     {

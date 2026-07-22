@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -59,7 +59,7 @@ import ecs.entityhistory;            // EntityID, history tracking
 import ecs.storage;               // ComponentStorage
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-namespace epochnamespace::ecs
+namespace epochengine::ecs
 {
     // Public alias
     using Entity = EntityID;
@@ -156,7 +156,7 @@ namespace epochnamespace::ecs
     export template<typename C, typename... Cs>
         inline void add_component(reg_ex<Cs...>& R, Entity e, C c)
     {
-        ::epochnamespace::ecs::add_component<C>(
+        ::epochengine::ecs::add_component<C>(
             R.storage, e, std::move(c));
 
         detail::notify(R, "addComponent", e, typeid(C).name());
@@ -165,7 +165,7 @@ namespace epochnamespace::ecs
     export template<typename C, typename... Cs>
         inline void remove_component(reg_ex<Cs...>& R, Entity e)
     {
-        ::epochnamespace::ecs::remove_component<C>(
+        ::epochengine::ecs::remove_component<C>(
             R.storage, e);
 
         detail::notify(R, "removeComponent", e, typeid(C).name());
@@ -176,7 +176,7 @@ namespace epochnamespace::ecs
             const reg_ex<Cs...>& R,
             Entity e)
     {
-        return ::epochnamespace::ecs::has_component<C>(
+        return ::epochengine::ecs::has_component<C>(
             R.storage, e);
     }
 
@@ -185,7 +185,7 @@ namespace epochnamespace::ecs
             reg_ex<Cs...>& R,
             Entity e)
     {
-        return ::epochnamespace::ecs::get_component<C>(
+        return ::epochengine::ecs::get_component<C>(
             R.storage, e);
     }
 
@@ -205,4 +205,4 @@ namespace epochnamespace::ecs
         }
     }
 
-} // namespace epochnamespace::ecs
+} // namespace epochengine::ecs

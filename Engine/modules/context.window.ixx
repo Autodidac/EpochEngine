@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -85,7 +85,7 @@ export module context.window;
 import context.type;
 import context.commandqueue;
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     export using OpaqueContextHandle = std::shared_ptr<void>;
     export using ThreadInitializeCallback = std::function<bool(const OpaqueContextHandle&)>;
@@ -104,8 +104,12 @@ namespace epochnamespace::core
 #if defined(_WIN32)
 #   if !defined(EPOCH_MAIN_HEADLESS)
         HWND  hwnd = nullptr;
-        HWND  hwndChild = nullptr;
+        // Backend-owned native children are published from their render thread
+        // and consumed by the editor/layout thread. The handle is the release /
+        // acquire publication point for the native window bundle.
+        std::atomic<HWND> hwndChild{ nullptr };
         HWND  host_hwnd = nullptr;
+        HDC   parked_host_hdc = nullptr;
         HDC   hdc = nullptr;
 
         HGLRC glrc = nullptr;
@@ -136,6 +140,7 @@ namespace epochnamespace::core
         bool usesSharedContext = false;
         bool ownsNativeDc = false;
         bool ownsNativeGlContext = false;
+        bool ownsParkedHostDc = false;
 
         core::ContextType type = core::ContextType::Custom;
 
@@ -203,10 +208,10 @@ namespace epochnamespace::core
 
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
         void setParentHandle(HWND v) noexcept { hwnd = v; }
-        void setChildHandle(HWND v) noexcept { hwndChild = v; }
+        void setChildHandle(HWND v) noexcept { hwndChild.store(v, std::memory_order_release); }
 
         HWND getParentHandle() const noexcept { return hwnd; }
-        HWND getChildHandle()  const noexcept { return hwndChild; }
+        HWND getChildHandle()  const noexcept { return hwndChild.load(std::memory_order_acquire); }
 #endif
 
 #if defined(_WIN32)
@@ -224,7 +229,8 @@ namespace epochnamespace::core
 #   if defined(EPOCH_MAIN_HEADLESS)
             return nullptr;
 #   else
-            return s_instance ? s_instance->hwndChild : nullptr;
+            return s_instance
+                ? s_instance->hwndChild.load(std::memory_order_acquire) : nullptr;
 #   endif
         }
 #endif
@@ -273,7 +279,7 @@ namespace epochnamespace::core
     };
 }
 
-namespace epochnamespace::contextwindow
+namespace epochengine::contextwindow
 {
-    export using WindowData = epochnamespace::core::WindowData;
+    export using WindowData = epochengine::core::WindowData;
 }

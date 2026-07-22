@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module; // REQUIRED global module fragment
 
 #include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
@@ -70,9 +69,9 @@ import core.logger;
 // Menu
 // ============================================================
 
-namespace gui = epochnamespace::gui;
+namespace gui = epochengine::gui;
 
-export namespace epochnamespace::menu
+export namespace epochengine::menu
 {
     inline constexpr std::string_view kLogSys = "Epoch.Menu";
 
@@ -285,7 +284,7 @@ export namespace epochnamespace::menu
 
         // ----------------------------------------------------
         void recompute_layout(
-            std::shared_ptr<epochnamespace::core::Context> ctx,
+            std::shared_ptr<epochengine::core::Context> ctx,
             int widthPixels,
             int heightPixels)
         {
@@ -593,7 +592,7 @@ export namespace epochnamespace::menu
                 gui::begin_window(title, framePosition, frameSize);
 
                 std::string message = "Version: ";
-                message += epochnamespace::GetEngineDisplayString();
+                message += epochengine::GetEngineDisplayString();
                 message += "\n";
                 message += updatePanel.status.empty()
                     ? std::string{ "Checking update status." }
@@ -670,7 +669,7 @@ export namespace epochnamespace::menu
             gui::begin_window(title, framePosition, frameSize);
 
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 52.0f });
-            gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
+            gui::label(std::string("Version: ") + epochengine::GetEngineDisplayString());
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 72.0f });
             gui::label(std::string("Launcher: ") + std::string(launcher_title()));
             gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 92.0f });
@@ -775,7 +774,7 @@ export namespace epochnamespace::menu
             gui::label("Epoch Updater Shell");
 
             gui::set_cursor({ contentX, contentY + lineHeight + 18.0f });
-            gui::label(std::string("Version: ") + epochnamespace::GetEngineDisplayString());
+            gui::label(std::string("Version: ") + epochengine::GetEngineDisplayString());
 
             gui::set_cursor({ contentX + textInset, contentY + lineHeight * 2.0f + 44.0f });
             gui::wrapped_label(updater_shell_description(), textWidth);

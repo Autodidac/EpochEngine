@@ -63,7 +63,7 @@ import core.timer;
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
-export namespace epochnamespace::anativecontext
+export namespace epochengine::anativecontext
 {
     struct SoftRendState
     {
@@ -84,9 +84,9 @@ export namespace epochnamespace::anativecontext
         bool frameValid{ false };
         std::uint64_t lastGuiGeneration{ 0 };
         std::uint64_t lastCameraRevision{ 0 };
-        epochnamespace::core::RenderViewport lastSceneViewport{};
+        epochengine::core::RenderViewport lastSceneViewport{};
         std::uint8_t lastPreviewMode{
-            static_cast<std::uint8_t>(epochnamespace::core::ScenePreviewMode::None)
+            static_cast<std::uint8_t>(epochengine::core::ScenePreviewMode::None)
         };
         int lastTelemetryWidth{ 0 };
         int lastTelemetryHeight{ 0 };

@@ -43,30 +43,30 @@ import platform.capabilities;
 import perf.tier;
 import core.env;
 
-export namespace epoch::perf
+export namespace epochengine::perf
 {
     // If EPOCH_TIER is set, it wins. Otherwise choose by capabilities.
-    [[nodiscard]] inline tier select_tier(const epoch::Capabilities& caps) noexcept
+    [[nodiscard]] inline tier select_tier(const epochengine::Capabilities& caps) noexcept
     {
         // Env override wins (mobile/deck/desktop/editor/uncapped or 30/40/60/120/0)
-        if (auto v = epoch::core::env::get(epoch::to_view(std::string_view{ "EPOCH_TIER" })))
+        if (auto v = epochengine::core::env::get(epochengine::to_view(std::string_view{ "EPOCH_TIER" })))
 
             return tier_from_env();
 
         // Pure policy: map your GPU tier to perf tier.
         // You can tweak these defaults later.
-        const auto key = epoch::make_tier_key(caps);
+        const auto key = epochengine::make_tier_key(caps);
 
         switch (key.tier)
         {
-        case epoch::GpuTier::tier_c_mobile:
+        case epochengine::GpuTier::tier_c_mobile:
             return tier::mobile_30;
 
-        case epoch::GpuTier::tier_b_mid:
+        case epochengine::GpuTier::tier_b_mid:
             // Mid-tier PC: 60 is usually fine.
             return tier::deck_40;
 
-        case epoch::GpuTier::tier_a_desktop:
+        case epochengine::GpuTier::tier_a_desktop:
             // Editor-capable desktop: the shared core frame limiter defaults to 120.
             return tier::editor_120;
         }
@@ -74,7 +74,7 @@ export namespace epoch::perf
         return tier::editor_120;
     }
 
-    [[nodiscard]] inline double target_fps_for_caps(const epoch::Capabilities& caps) noexcept
+    [[nodiscard]] inline double target_fps_for_caps(const epochengine::Capabilities& caps) noexcept
     {
         return target_fps_for(select_tier(caps));
     }

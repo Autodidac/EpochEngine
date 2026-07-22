@@ -5,7 +5,7 @@ module;
 
 export module ai.dataset;
 
-export namespace epoch::ai
+export namespace epochengine::ai
 {
     struct DatasetRecord
     {

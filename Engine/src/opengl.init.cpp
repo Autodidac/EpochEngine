@@ -155,7 +155,7 @@ import opengl.quad;
 // Standard library
 // ------------------------------------------------------------
 
-namespace epochnamespace::openglcontext
+namespace epochengine::openglcontext
 {
 #if !defined(EPOCH_USING_OPENGL)
 
@@ -255,7 +255,7 @@ namespace epochnamespace::openglcontext
         if (!ctx)
             throw std::runtime_error("[ OpenGL ] - opengl_initialize requires non-null Context");
 
-        auto& backend = epochnamespace::opengltextures::get_opengl_backend();
+        auto& backend = epochengine::opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
 
 #if defined(_WIN32)
@@ -635,21 +635,21 @@ namespace epochnamespace::openglcontext
         throw std::runtime_error("[ OpenGL ] - Unsupported platform");
 #endif
 
-        if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
+        if (!epochengine::openglquad::ensure_quad_pipeline(glState))
             throw std::runtime_error("[ OpenGL ] - Failed to build/ensure quad pipeline");
 
         atlasmanager::register_backend_uploader(core::ContextType::OpenGL,
             [](const TextureAtlas& atlas) { opengltextures::ensure_uploaded(atlas); });
 
-        ctx->is_key_held = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_held(k); };
-        ctx->is_key_down = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_down(k); };
-        ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_held(b); };
-        ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_down(b); };
+        ctx->is_key_held = [](epochengine::input::Key k) { return epochengine::input::is_key_held(k); };
+        ctx->is_key_down = [](epochengine::input::Key k) { return epochengine::input::is_key_down(k); };
+        ctx->is_mouse_button_held = [](epochengine::input::MouseButton b) { return epochengine::input::is_mouse_button_held(b); };
+        ctx->is_mouse_button_down = [](epochengine::input::MouseButton b) { return epochengine::input::is_mouse_button_down(b); };
 
         return true;
     }
 
 #endif // EPOCH_USING_OPENGL
-} // namespace epochnamespace::openglcontext
+} // namespace epochengine::openglcontext
 
 #endif

@@ -44,27 +44,27 @@ import platform.budgets;
 import platform.capabilities;
 import platform.context;
 
-export namespace epoch::platform
+export namespace epochengine::platform
 {
     struct RuntimeFrameProfile
     {
-        epoch::string platform_key{ "unknown" };
+        epochengine::string platform_key{ "unknown" };
         Capabilities capabilities{};
         Budgets recommended_budgets{};
         FramePolicy frame_policy{};
-        epoch::perf::tier perf_tier = epoch::perf::tier::desktop_60;
+        epochengine::perf::tier perf_tier = epochengine::perf::tier::desktop_60;
         double target_fps = 60.0;
         bool supports_parented_windows = false;
         bool prefer_single_context_runtime = false;
     };
 
-    [[nodiscard]] inline Budgets recommended_budgets_for_tier(const epoch::perf::tier perf_tier) noexcept
+    [[nodiscard]] inline Budgets recommended_budgets_for_tier(const epochengine::perf::tier perf_tier) noexcept
     {
         Budgets budgets{};
 
         switch (perf_tier)
         {
-        case epoch::perf::tier::mobile_30:
+        case epochengine::perf::tier::mobile_30:
             budgets.cpu_ms = 10.0f;
             budgets.gpu_ms = 20.0f;
             budgets.max_w = 1280;
@@ -72,7 +72,7 @@ export namespace epoch::platform
             budgets.max_lights = 32;
             budgets.shadow_cascades = 1;
             break;
-        case epoch::perf::tier::deck_40:
+        case epochengine::perf::tier::deck_40:
             budgets.cpu_ms = 8.0f;
             budgets.gpu_ms = 16.0f;
             budgets.max_w = 1600;
@@ -80,7 +80,7 @@ export namespace epoch::platform
             budgets.max_lights = 48;
             budgets.shadow_cascades = 2;
             break;
-        case epoch::perf::tier::desktop_60:
+        case epochengine::perf::tier::desktop_60:
             budgets.cpu_ms = 6.0f;
             budgets.gpu_ms = 12.0f;
             budgets.max_w = 1920;
@@ -88,7 +88,7 @@ export namespace epoch::platform
             budgets.max_lights = 64;
             budgets.shadow_cascades = 2;
             break;
-        case epoch::perf::tier::uncapped:
+        case epochengine::perf::tier::uncapped:
         default:
             budgets.cpu_ms = 4.0f;
             budgets.gpu_ms = 8.0f;
@@ -161,7 +161,7 @@ export namespace epoch::platform
 
     [[nodiscard]] inline FramePolicy build_frame_policy(
         const Capabilities& caps,
-        const epoch::perf::tier perf_tier,
+        const epochengine::perf::tier perf_tier,
         const double target_fps) noexcept
     {
         const auto budgets = recommended_budgets_for_tier(perf_tier);
@@ -179,41 +179,41 @@ export namespace epoch::platform
     [[nodiscard]] inline RuntimeFrameProfile build_runtime_frame_profile(const IGraphicsContext* context) noexcept
     {
         RuntimeFrameProfile profile{};
-        const auto runtime_policy = epoch::platform::policy::current_runtime_policy();
+        const auto runtime_policy = epochengine::platform::policy::current_runtime_policy();
 
-        profile.platform_key = epoch::string{ std::string(runtime_policy.platform_key) };
-        profile.supports_parented_windows = epoch::platform::policy::supports_parented_multiwindow();
-        profile.prefer_single_context_runtime = epoch::platform::policy::prefer_single_context_runtime();
+        profile.platform_key = epochengine::string{ std::string(runtime_policy.platform_key) };
+        profile.supports_parented_windows = epochengine::platform::policy::supports_parented_multiwindow();
+        profile.prefer_single_context_runtime = epochengine::platform::policy::prefer_single_context_runtime();
         profile.capabilities = probe_capabilities(context);
-        profile.perf_tier = epoch::perf::select_tier(profile.capabilities);
-        profile.target_fps = epoch::perf::target_fps_for(profile.perf_tier);
+        profile.perf_tier = epochengine::perf::select_tier(profile.capabilities);
+        profile.target_fps = epochengine::perf::target_fps_for(profile.perf_tier);
         profile.recommended_budgets = recommended_budgets_for_tier(profile.perf_tier);
         profile.frame_policy = build_frame_policy(profile.capabilities, profile.perf_tier, profile.target_fps);
         return profile;
     }
 
-    [[nodiscard]] inline epoch::string runtime_summary(const RuntimeFrameProfile& profile)
+    [[nodiscard]] inline epochengine::string runtime_summary(const RuntimeFrameProfile& profile)
     {
-        return epoch::core::format::str(
+        return epochengine::core::format::str(
             "platform={}, api={}, parented_windows={}, single_context_runtime={}, perf_tier={}, target_fps={}",
-            epoch::to_std(profile.platform_key),
+            epochengine::to_std(profile.platform_key),
             profile.capabilities.api_name,
             profile.supports_parented_windows,
             profile.prefer_single_context_runtime,
-            epoch::perf::to_string(profile.perf_tier),
+            epochengine::perf::to_string(profile.perf_tier),
             profile.target_fps);
     }
 
-    [[nodiscard]] inline epoch::string frame_policy_summary(const RuntimeFrameProfile& profile)
+    [[nodiscard]] inline epochengine::string frame_policy_summary(const RuntimeFrameProfile& profile)
     {
-        return epoch::core::format::str(
+        return epochengine::core::format::str(
             "frame policy={}x{}, lights={}, lighting={}, temporal={}, reconstruction={}, ai_inputs={}, visibility={}, bindless={}, async={}",
             profile.frame_policy.render_w,
             profile.frame_policy.render_h,
             profile.frame_policy.max_lights,
             profile.frame_policy.use_lighting,
             profile.frame_policy.use_temporal_history,
-            epoch::to_string(profile.frame_policy.reconstruction),
+            epochengine::to_string(profile.frame_policy.reconstruction),
             profile.frame_policy.expose_ai_reconstruction_inputs,
             profile.frame_policy.use_visibility_buffer,
             profile.frame_policy.use_bindless,
@@ -225,13 +225,13 @@ export namespace epoch::platform
         const std::string_view perf_channel,
         const RuntimeFrameProfile& profile)
     {
-        epochnamespace::logger::get(runtime_channel).log(
-            epochnamespace::logger::LogLevel::INFO,
+        epochengine::logger::get(runtime_channel).log(
+            epochengine::logger::LogLevel::INFO,
             runtime_summary(profile).impl,
             std::source_location::current());
 
-        epochnamespace::logger::get(perf_channel).log(
-            epochnamespace::logger::LogLevel::INFO,
+        epochengine::logger::get(perf_channel).log(
+            epochengine::logger::LogLevel::INFO,
             frame_policy_summary(profile).impl,
             std::source_location::current());
     }

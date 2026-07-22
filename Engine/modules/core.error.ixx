@@ -35,7 +35,7 @@ module;
 
 export module core.error;
 
-export namespace epoch::core::error
+export namespace epochengine::core::error
 {
     using domain_t = std::uint32_t;
 
@@ -50,7 +50,7 @@ export namespace epoch::core::error
     struct err
     {
         code c{};
-        epoch::string_view message{};
+        epochengine::string_view message{};
         std::source_location where = std::source_location::current();
 
         [[nodiscard]] constexpr explicit operator bool() const noexcept
@@ -60,13 +60,13 @@ export namespace epoch::core::error
     };
 
     template <class T>
-    using result = epoch::expected<T, err>;
+    using result = epochengine::expected<T, err>;
 
     [[nodiscard]] constexpr code ok_code() noexcept { return {}; }
     [[nodiscard]] constexpr err  ok() noexcept { return {}; }
 
     // Core constructor (no defaults here; overloads below provide convenience).
-    [[nodiscard]] constexpr err make(code c, epoch::string_view msg, std::source_location loc) noexcept
+    [[nodiscard]] constexpr err make(code c, epochengine::string_view msg, std::source_location loc) noexcept
     {
         return { c, msg, loc };
     }
@@ -86,10 +86,10 @@ export namespace epoch::core::error
     // ---- make overloads (module-safe; no default-arg dependence) ----
     [[nodiscard]] constexpr err make(code c) noexcept
     {
-        return make(c, epoch::string_view{}, std::source_location::current());
+        return make(c, epochengine::string_view{}, std::source_location::current());
     }
 
-    [[nodiscard]] constexpr err make(code c, epoch::string_view msg) noexcept
+    [[nodiscard]] constexpr err make(code c, epochengine::string_view msg) noexcept
     {
         return make(c, msg, std::source_location::current());
     }
@@ -97,15 +97,15 @@ export namespace epoch::core::error
     // ---- failed overloads ----
     [[nodiscard]] constexpr err failed() noexcept
     {
-        return make({ core_domain::id, core_domain::failed }, epoch::string_view{}, std::source_location::current());
+        return make({ core_domain::id, core_domain::failed }, epochengine::string_view{}, std::source_location::current());
     }
 
-    [[nodiscard]] constexpr err failed(epoch::string_view msg) noexcept
+    [[nodiscard]] constexpr err failed(epochengine::string_view msg) noexcept
     {
         return make({ core_domain::id, core_domain::failed }, msg, std::source_location::current());
     }
 
-    [[nodiscard]] constexpr err failed(epoch::string_view msg, std::source_location loc) noexcept
+    [[nodiscard]] constexpr err failed(epochengine::string_view msg, std::source_location loc) noexcept
     {
         return make({ core_domain::id, core_domain::failed }, msg, loc);
     }
@@ -113,15 +113,15 @@ export namespace epoch::core::error
     // ---- invalid_argument overloads ----
     [[nodiscard]] constexpr err invalid_argument() noexcept
     {
-        return make({ core_domain::id, core_domain::invalid_argument }, epoch::string_view{}, std::source_location::current());
+        return make({ core_domain::id, core_domain::invalid_argument }, epochengine::string_view{}, std::source_location::current());
     }
 
-    [[nodiscard]] constexpr err invalid_argument(epoch::string_view msg) noexcept
+    [[nodiscard]] constexpr err invalid_argument(epochengine::string_view msg) noexcept
     {
         return make({ core_domain::id, core_domain::invalid_argument }, msg, std::source_location::current());
     }
 
-    [[nodiscard]] constexpr err invalid_argument(epoch::string_view msg, std::source_location loc) noexcept
+    [[nodiscard]] constexpr err invalid_argument(epochengine::string_view msg, std::source_location loc) noexcept
     {
         return make({ core_domain::id, core_domain::invalid_argument }, msg, loc);
     }

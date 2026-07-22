@@ -36,7 +36,7 @@ module;
 
 export module core.types;
 
-export namespace epochnamespace
+export namespace epochengine
 {
     using int8 = int8_t;
     using uint8 = uint8_t;
@@ -54,4 +54,4 @@ export namespace epochnamespace
     {
         return (value << 24) | ((value << 8) & 0x00FF0000) | ((value >> 8) & 0x0000FF00) | (value >> 24);
     }
-} // namespace epochnamespace
+} // namespace epochengine

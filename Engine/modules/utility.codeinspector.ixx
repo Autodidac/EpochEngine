@@ -42,7 +42,7 @@ export module utility.codeinspector;
 
 #undef min
 
-export namespace epochnamespace::codeinspector {
+export namespace epochengine::codeinspector {
 
     struct InspectionResult {
         std::filesystem::path filePath;
@@ -101,7 +101,7 @@ export namespace epochnamespace::codeinspector {
     }
 
     inline bool uses_epoch_namespace(const std::vector<std::string>& lines) {
-        constexpr std::string_view ns = "namespace epochnamespace";
+        constexpr std::string_view ns = "namespace epochengine";
         return std::any_of(lines.begin(), lines.end(),
             [&](const std::string& line) { return line.find(ns) != std::string::npos; });
     }
@@ -202,7 +202,7 @@ export namespace epochnamespace::codeinspector {
 
             // Namespace check
             if (!uses_epoch_namespace(lines)) {
-                result.issues.emplace_back("Does not use 'epochnamespace' namespace");
+                result.issues.emplace_back("Does not use 'epochengine' namespace");
             }
 
             // Trailing whitespace
@@ -225,4 +225,4 @@ export namespace epochnamespace::codeinspector {
         return results;
     }
 
-} // namespace epochnamespace::codeinspector
+} // namespace epochengine::codeinspector

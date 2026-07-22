@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -54,10 +54,10 @@ import ecs.storage;
 import ecs.components;         // Position, History, LoggerComponent
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-namespace epochnamespace::ecs
+namespace epochengine::ecs
 {
-    using epochnamespace::timing::Timer;
-    using epochnamespace::logger::LogLevel;
+    using epochengine::timing::Timer;
+    using epochengine::logger::LogLevel;
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // SPAWN ENTITY
@@ -82,7 +82,7 @@ namespace epochnamespace::ecs
             R.log->log(std::format(
                 "[ECS] Entity {} spawned at {}",
                 e,
-                epochnamespace::timing::getCurrentTimeString()));
+                epochengine::timing::getCurrentTimeString()));
         }
 
         events::push_event(events::Event{
@@ -116,8 +116,8 @@ namespace epochnamespace::ecs
         pos.y += dy;
 
         auto& lc = get_component<LoggerComponent>(R, e);
-        const std::string ts = epochnamespace::timing::getCurrentTimeString();
-        epochnamespace::logger::get(lc.system).log(
+        const std::string ts = epochengine::timing::getCurrentTimeString();
+        epochengine::logger::get(lc.system).log(
             std::format(
                 "[ECS] Entity {} moved to ({:.2f},{:.2f}) at {}",
                 e, pos.x, pos.y, ts),
@@ -155,8 +155,8 @@ namespace epochnamespace::ecs
         pos.y = py;
 
         auto& lc = get_component<LoggerComponent>(R, e);
-        const std::string ts = epochnamespace::timing::getCurrentTimeString();
-        epochnamespace::logger::get(lc.system).log(
+        const std::string ts = epochengine::timing::getCurrentTimeString();
+        epochengine::logger::get(lc.system).log(
             std::format(
                 "[ECS] Entity {} rewound to ({:.2f},{:.2f}) at {}",
                 e, pos.x, pos.y, ts),
@@ -178,4 +178,4 @@ namespace epochnamespace::ecs
         return true;
     }
 
-} // namespace epochnamespace::ecs
+} // namespace epochengine::ecs

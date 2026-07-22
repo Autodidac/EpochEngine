@@ -38,7 +38,7 @@ module;
 
 export module mpmcboundedqueue;
 
-export namespace epochnamespace {
+export namespace epochengine {
     template<typename T>
     class MPMCQueue {
     public:

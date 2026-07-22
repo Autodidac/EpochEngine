@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #ifndef EPOCH_USING_VULKAN
@@ -42,7 +41,7 @@ import :shared_vk;
 import vulkan.camera;
 import engine.input;
 
-namespace epochnamespace::vulkancontext {
+namespace epochengine::vulkancontext {
 
     //// Forward declaration or definition of Application class
     //export class Application {
@@ -53,7 +52,7 @@ namespace epochnamespace::vulkancontext {
     //    bool firstMouse = true;
     //    float lastX = 0.0f;
     //    float lastY = 0.0f;
-    //    epochnamespace::vulkancamera::State cam; // Use the correct Camera type
+    //    epochengine::vulkancamera::State cam; // Use the correct Camera type
     //};
 
 #if defined(EPOCH_VULKAN_STANDALONE)
@@ -79,19 +78,19 @@ namespace epochnamespace::vulkancontext {
         lastX = static_cast<float>(xpos);
         lastY = static_cast<float>(ypos);
 
-        epochnamespace::vulkancamera::processMouse(cam, xOffset, yOffset);
+        epochengine::vulkancamera::processMouse(cam, xOffset, yOffset);
     }
 
     void Application::updateCamera(float deltaTime) {
         // Process WASD keyboard input for camera movement (engine input)
-        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::W))
-            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Forward, deltaTime);
-        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::S))
-            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Backward, deltaTime);
-        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::A))
-            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Left, deltaTime);
-        if (epochnamespace::input::is_key_held(epochnamespace::input::Key::D))
-            epochnamespace::vulkancamera::processKeyboard(cam, epochnamespace::vulkancamera::Direction::Right, deltaTime);
+        if (epochengine::input::is_key_held(epochengine::input::Key::W))
+            epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Forward, deltaTime);
+        if (epochengine::input::is_key_held(epochengine::input::Key::S))
+            epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Backward, deltaTime);
+        if (epochengine::input::is_key_held(epochengine::input::Key::A))
+            epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Left, deltaTime);
+        if (epochengine::input::is_key_held(epochengine::input::Key::D))
+            epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Right, deltaTime);
     }
 
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

@@ -15,7 +15,7 @@ import context.multiplexer;
 import context.type;
 import engine.gui;
 
-namespace epochnamespace::openglcontext
+namespace epochengine::openglcontext
 {
     void opengl_render_active_frame(
         std::shared_ptr<core::Context> ctx,

@@ -54,7 +54,7 @@ import engine.platform;
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;
 
-namespace epochnamespace::core::cli
+namespace epochengine::core::cli
 {
     export enum class RuntimePath
     {
@@ -100,12 +100,12 @@ namespace epochnamespace::core::cli
 
         [[nodiscard]] inline std::string_view default_updater_shell_backend() noexcept
         {
-            return epoch::platform::policy::updater_shell_backend_name();
+            return epochengine::platform::policy::updater_shell_backend_name();
         }
 
         [[nodiscard]] inline std::string standalone_only_window_message(const std::string_view action)
         {
-            return std::string{ epoch::platform::policy::current_runtime_policy().platform_key }
+            return std::string{ epochengine::platform::policy::current_runtime_policy().platform_key }
                 + " platform policy keeps runtime windows standalone-only; "
                 + std::string{ action };
         }
@@ -212,7 +212,7 @@ namespace epochnamespace::core::cli
         {
             const std::string lowered = to_lower(value);
             if (lowered == "parented" || lowered == "child" || lowered == "docked")
-                return epoch::platform::policy::supports_parented_multiwindow()
+                return epochengine::platform::policy::supports_parented_multiwindow()
                     ? WindowMode::Parented
                     : WindowMode::Standalone;
             if (lowered == "standalone" || lowered == "top" || lowered == "top-level")
@@ -241,7 +241,7 @@ namespace epochnamespace::core::cli
 
         [[nodiscard]] constexpr bool default_parented_mode() noexcept
         {
-            return epoch::platform::policy::default_parented_multiwindow();
+            return epochengine::platform::policy::default_parented_multiwindow();
         }
     }
 
@@ -284,7 +284,7 @@ namespace epochnamespace::core::cli
 
     export [[nodiscard]] inline std::filesystem::path capture_output_root()
     {
-        return epoch::core::path::capture_output_dir();
+        return epochengine::core::path::capture_output_dir();
     }
 
     export [[nodiscard]] inline std::string capture_output_stem()
@@ -400,9 +400,9 @@ namespace epochnamespace::core::cli
     export inline void print_engine_info()
     {
         detail::log_info(
-            std::string{ epochnamespace::GetEngineName() }
+            std::string{ epochengine::GetEngineName() }
             + " v"
-            + std::string{ epochnamespace::GetEngineVersion() });
+            + std::string{ epochengine::GetEngineVersion() });
     }
 
     export inline ParseResult parse(const int argc, char* argv[])
@@ -652,7 +652,7 @@ namespace epochnamespace::core::cli
                         parented_mode = true;
                     else if (window_mode == WindowMode::Standalone)
                         parented_mode = false;
-                    if (!epoch::platform::policy::supports_parented_multiwindow()
+                    if (!epochengine::platform::policy::supports_parented_multiwindow()
                         && (detail::to_lower(parsed) == "parented"
                             || detail::to_lower(parsed) == "child"
                             || detail::to_lower(parsed) == "docked"))
@@ -664,7 +664,7 @@ namespace epochnamespace::core::cli
             }
             else if (key == "--parented"sv)
             {
-                if (!epoch::platform::policy::supports_parented_multiwindow())
+                if (!epochengine::platform::policy::supports_parented_multiwindow())
                 {
                     detail::log_warn(detail::standalone_only_window_message(
                         "ignoring --parented."));

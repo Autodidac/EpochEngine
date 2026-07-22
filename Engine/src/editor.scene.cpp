@@ -1,7 +1,10 @@
-/************************************************
- *                    EPOCH                     *
- *                                              *
- *   Engine-owned editor scene/project source.  *
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -25,9 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Engine/src/editor.scene.cpp
 module;
-
- // Engine/src/editor.scene.cpp
 
 #include <algorithm>
 #include <array>
@@ -123,16 +125,16 @@ namespace
 {
     inline void ALOG(std::string_view s)
     {
-        epochnamespace::logger::info("Editor.Scene", std::string(s));
+        epochengine::logger::info("Editor.Scene", std::string(s));
     }
 
     inline void AERR(std::string_view s)
     {
-        epochnamespace::logger::error("Editor.Scene", std::string(s));
+        epochengine::logger::error("Editor.Scene", std::string(s));
     }
 }
 
-namespace epochnamespace::editor
+namespace epochengine::editor
 {
     // =========================================================================
     // Small math: keep this local; replace with your real Vec/Quat if you want.
@@ -945,18 +947,18 @@ inline bool apply_ai_ops(CommandBus& bus, std::span<const AiOp> ops, std::string
         // Here, keep it simple: wire your own id routing once integrated.
     }
 
-} // namespace epochnamespace::editor
+} // namespace epochengine::editor
 
 namespace
 {
     namespace fs = std::filesystem;
 
-    using epochnamespace::EditorProjectProfile;
-    using epochnamespace::EditorProjectCreationResult;
-    using epochnamespace::EditorProjectKind;
-    using epochnamespace::EditorSceneSeedEntity;
-    using epochnamespace::EditorScriptBuildResult;
-    using epochnamespace::EditorScriptProfile;
+    using epochengine::EditorProjectProfile;
+    using epochengine::EditorProjectCreationResult;
+    using epochengine::EditorProjectKind;
+    using epochengine::EditorSceneSeedEntity;
+    using epochengine::EditorScriptBuildResult;
+    using epochengine::EditorScriptProfile;
 
     constexpr std::array<EditorProjectProfile, 5> kProjectProfiles{{
         {
@@ -1227,10 +1229,10 @@ namespace
 
     [[nodiscard]] static fs::path resolve_epoch_repo_root(const fs::path& project_root)
     {
-        if (const auto found = epoch::core::path::find_epoch_repo_root(project_root); !found.empty())
+        if (const auto found = epochengine::core::path::find_epoch_repo_root(project_root); !found.empty())
             return found;
 
-        if (const auto runtimeRoot = epoch::core::path::runtime_root_dir(); !runtimeRoot.empty())
+        if (const auto runtimeRoot = epochengine::core::path::runtime_root_dir(); !runtimeRoot.empty())
             return runtimeRoot;
 
         std::error_code ec;
@@ -1282,14 +1284,14 @@ namespace
         if (fs::exists(projectLocal, ec) && !ec)
             return projectLocal;
 
-        if (const fs::path exampleAssets = epoch::core::path::example_asset_dir(); !exampleAssets.empty())
+        if (const fs::path exampleAssets = epochengine::core::path::example_asset_dir(); !exampleAssets.empty())
         {
             const fs::path exampleRelative = (exampleAssets / declared).lexically_normal();
             if (fs::exists(exampleRelative, ec) && !ec)
                 return exampleRelative;
         }
 
-        if (const fs::path engineAssets = epoch::core::path::engine_asset_dir(); !engineAssets.empty())
+        if (const fs::path engineAssets = epochengine::core::path::engine_asset_dir(); !engineAssets.empty())
         {
             const fs::path engineRelative = (engineAssets / declared).lexically_normal();
             if (fs::exists(engineRelative, ec) && !ec)
@@ -1999,7 +2001,7 @@ namespace
 
     [[nodiscard]] static constexpr std::string_view engine_arcade_scene_ids() noexcept
     {
-        return epoch::package_registry::engine_arcade_scene_ids();
+        return epochengine::package_registry::engine_arcade_scene_ids();
     }
 
     [[nodiscard]] static std::string json_array_from_csv(std::string_view csv)
@@ -2029,8 +2031,8 @@ namespace
 
     [[nodiscard]] static std::string make_engine_arcade_script_text(std::string_view script_api_include)
     {
-        const std::string sceneIds{ epoch::package_registry::engine_arcade_scene_ids() };
-        const std::string defaultScene{ epoch::package_registry::engine_arcade_default_scene_id() };
+        const std::string sceneIds{ epochengine::package_registry::engine_arcade_scene_ids() };
+        const std::string defaultScene{ epochengine::package_registry::engine_arcade_default_scene_id() };
         return std::string(script_api_include)
             + "namespace\n"
             + "{\n"
@@ -2060,15 +2062,15 @@ namespace
 
     [[nodiscard]] static std::string make_engine_arcade_package_manifest_text()
     {
-        const std::string sceneArray = json_array_from_csv(epoch::package_registry::engine_arcade_scene_ids());
-        const std::string defaultScene{ epoch::package_registry::engine_arcade_default_scene_id() };
-        const std::string renderAssetRole{ epoch::package_registry::engine_arcade_render_asset_role() };
-        const std::string rendererRequirements{ epoch::package_registry::engine_arcade_renderer_requirements() };
-        const std::string renderTextureName{ epoch::package_registry::engine_arcade_render_texture_name() };
+        const std::string sceneArray = json_array_from_csv(epochengine::package_registry::engine_arcade_scene_ids());
+        const std::string defaultScene{ epochengine::package_registry::engine_arcade_default_scene_id() };
+        const std::string renderAssetRole{ epochengine::package_registry::engine_arcade_render_asset_role() };
+        const std::string rendererRequirements{ epochengine::package_registry::engine_arcade_renderer_requirements() };
+        const std::string renderTextureName{ epochengine::package_registry::engine_arcade_render_texture_name() };
         const std::string renderTextureWidth =
-            std::to_string(epoch::package_registry::engine_arcade_render_texture_width());
+            std::to_string(epochengine::package_registry::engine_arcade_render_texture_width());
         const std::string renderTextureHeight =
-            std::to_string(epoch::package_registry::engine_arcade_render_texture_height());
+            std::to_string(epochengine::package_registry::engine_arcade_render_texture_height());
         return std::string{
             "{\n"
             "  \"package_id\": \"engine_arcade\",\n"
@@ -2291,13 +2293,13 @@ namespace
         const std::string packageManifestLine = includeEngineArcadePackage
             ? std::string{ "  \"engine_asset_packages\": [\"engine_arcade\"],\n"
                 "  \"engine_arcade_default_scene\": \"" }
-                + json_escape(epoch::package_registry::engine_arcade_default_scene_id()) + "\",\n"
-                + "  \"engine_arcade_scenes\": " + json_array_from_csv(epoch::package_registry::engine_arcade_scene_ids()) + ",\n"
-                + "  \"engine_arcade_render_asset_role\": \"" + json_escape(epoch::package_registry::engine_arcade_render_asset_role()) + "\",\n"
-                + "  \"engine_arcade_renderer_requirements\": \"" + json_escape(epoch::package_registry::engine_arcade_renderer_requirements()) + "\",\n"
-                + "  \"engine_arcade_render_texture_name\": \"" + json_escape(epoch::package_registry::engine_arcade_render_texture_name()) + "\",\n"
-                + "  \"engine_arcade_render_texture_width\": " + std::to_string(epoch::package_registry::engine_arcade_render_texture_width()) + ",\n"
-                + "  \"engine_arcade_render_texture_height\": " + std::to_string(epoch::package_registry::engine_arcade_render_texture_height()) + ",\n"
+                + json_escape(epochengine::package_registry::engine_arcade_default_scene_id()) + "\",\n"
+                + "  \"engine_arcade_scenes\": " + json_array_from_csv(epochengine::package_registry::engine_arcade_scene_ids()) + ",\n"
+                + "  \"engine_arcade_render_asset_role\": \"" + json_escape(epochengine::package_registry::engine_arcade_render_asset_role()) + "\",\n"
+                + "  \"engine_arcade_renderer_requirements\": \"" + json_escape(epochengine::package_registry::engine_arcade_renderer_requirements()) + "\",\n"
+                + "  \"engine_arcade_render_texture_name\": \"" + json_escape(epochengine::package_registry::engine_arcade_render_texture_name()) + "\",\n"
+                + "  \"engine_arcade_render_texture_width\": " + std::to_string(epochengine::package_registry::engine_arcade_render_texture_width()) + ",\n"
+                + "  \"engine_arcade_render_texture_height\": " + std::to_string(epochengine::package_registry::engine_arcade_render_texture_height()) + ",\n"
             : std::string{};
         const std::string readmeDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
@@ -2312,11 +2314,11 @@ namespace
             ? "engine_arcade_package=" + engineArcadePackageFile.generic_string() + "\n"
               "engine_arcade_script=" + engineArcadeScriptFile.generic_string() + "\n"
               "engine_arcade_scenes=" + std::string(engine_arcade_scene_ids()) + "\n"
-              "engine_arcade_render_asset_role=" + std::string(epoch::package_registry::engine_arcade_render_asset_role()) + "\n"
-              "engine_arcade_renderer_requirements=" + std::string(epoch::package_registry::engine_arcade_renderer_requirements()) + "\n"
-              "engine_arcade_render_texture_name=" + std::string(epoch::package_registry::engine_arcade_render_texture_name()) + "\n"
-              "engine_arcade_render_texture_width=" + std::to_string(epoch::package_registry::engine_arcade_render_texture_width()) + "\n"
-              "engine_arcade_render_texture_height=" + std::to_string(epoch::package_registry::engine_arcade_render_texture_height()) + "\n"
+              "engine_arcade_render_asset_role=" + std::string(epochengine::package_registry::engine_arcade_render_asset_role()) + "\n"
+              "engine_arcade_renderer_requirements=" + std::string(epochengine::package_registry::engine_arcade_renderer_requirements()) + "\n"
+              "engine_arcade_render_texture_name=" + std::string(epochengine::package_registry::engine_arcade_render_texture_name()) + "\n"
+              "engine_arcade_render_texture_width=" + std::to_string(epochengine::package_registry::engine_arcade_render_texture_width()) + "\n"
+              "engine_arcade_render_texture_height=" + std::to_string(epochengine::package_registry::engine_arcade_render_texture_height()) + "\n"
             : std::string{};
 
         const std::string manifestText =
@@ -2451,8 +2453,8 @@ namespace
             "        return 0;\n"
             "    }\n"
             "    boot_project_shell();\n"
-            "    epochnamespace::core::ParseCommandLine(argc, argv);\n"
-            "    epochnamespace::core::RunEngine();\n"
+            "    epochengine::core::ParseCommandLine(argc, argv);\n"
+            "    epochengine::core::RunEngine();\n"
             "    return 0;\n"
             "}\n";
 
@@ -2774,7 +2776,7 @@ namespace
     }
 }
 
-namespace epochnamespace
+namespace epochengine
 {
     std::span<const EditorProjectProfile> editor_project_profiles() noexcept
     {

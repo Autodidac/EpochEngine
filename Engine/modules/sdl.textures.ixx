@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <SDL3/SDL.h>
@@ -74,7 +73,7 @@ import core.logger;
 import sdl.renderer;
 import sdl.state;
 
-export namespace epochnamespace::sdltextures
+export namespace epochengine::sdltextures
 {
     using Handle = uint32_t;
 
@@ -376,5 +375,5 @@ export namespace epochnamespace::sdltextures
             return;
         }
     }
-} // namespace epochnamespace::sdltextures
+} // namespace epochengine::sdltextures
 #endif // EPOCH_USING_SDL

@@ -82,7 +82,7 @@
 #  define EPOCH_HAS_STD_PRINT 0
 #endif
 
-namespace epoch::core
+namespace epochengine::core
 {
     inline constexpr bool has_contracts = EPOCH_HAS_CONTRACTS != 0;
     inline constexpr bool has_static_reflection = EPOCH_HAS_STATIC_REFLECTION != 0;

@@ -40,7 +40,7 @@ export module platform.window;
 
 import core.error;
 
-export namespace epoch::platform
+export namespace epochengine::platform
 {
     struct WindowHandle
     {
@@ -83,11 +83,11 @@ export namespace epoch::platform
 
         [[nodiscard]] virtual core::error::result<WindowHandle> create_window(const WindowDesc& desc) noexcept = 0;
         virtual void destroy_window(WindowHandle handle) noexcept = 0;
-        virtual void pump_events(const epoch::function_ref<void(const WindowEvent&)>& handler) noexcept = 0;
+        virtual void pump_events(const epochengine::function_ref<void(const WindowEvent&)>& handler) noexcept = 0;
         virtual void request_close(WindowHandle handle) noexcept = 0;
         virtual void set_title(WindowHandle handle, string_view title) noexcept = 0;
         [[nodiscard]] virtual WindowHandle primary_window() const noexcept = 0;
     };
 
     [[nodiscard]] core::error::result<std::unique_ptr<IWindowSystem>> create_window_system() noexcept;
-} // namespace epoch::platform
+} // namespace epochengine::platform

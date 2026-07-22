@@ -28,8 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
-// modules/vulkan.context-api.ixx
+ // modules/vulkan.context-api.ixx
 // Partition: vulkan.context:api
 // Exported engine-facing API surface (declarations only).
 //
@@ -53,7 +52,7 @@ export module vulkan.context:api;
 import core.context;
 import context.commandqueue;
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     // Engine-facing API (no Vulkan types in the signatures).
     export bool vulkan_initialize(

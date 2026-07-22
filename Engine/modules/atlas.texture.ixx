@@ -68,7 +68,7 @@ import core.logger;
 // MODULE EXPORTS
 // ────────────────────────────────────────────────────────────
 
-export namespace epochnamespace
+export namespace epochengine
 {
     using u8 = std::uint8_t;
     using u32 = std::uint32_t;
@@ -269,7 +269,7 @@ export namespace epochnamespace
     };
 }
 
-namespace epochnamespace
+namespace epochengine
 {
     inline std::optional<AtlasEntry> TextureAtlas::add_entry(const std::string& id, const Texture& tex)
     {

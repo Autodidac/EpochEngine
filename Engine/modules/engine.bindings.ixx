@@ -41,5 +41,5 @@ import core.logger;
 #define scriptimport __declspec(dllexport)
 
 extern "C" void engine_print(const char* msg) {
-    epochnamespace::logger::info("Engine.Bindings", msg ? msg : "(null)");
+    epochengine::logger::info("Engine.Bindings", msg ? msg : "(null)");
 }

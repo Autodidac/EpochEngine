@@ -28,12 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
-
 
 #include "../include/epoch.config.hpp"
 #include "../src/epoch.common.hpp"
@@ -44,7 +39,7 @@ export module render.bindings;
 import platform.capabilities;
 import render.device;
 
-export namespace epoch
+export namespace epochengine
 {
     struct TextureIdTag {};
     using TextureId = Handle<TextureIdTag, u32>;

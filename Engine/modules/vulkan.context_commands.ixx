@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // ============================================================================
+// ============================================================================
 // modules/vulkan.context-commands.ixx
 // Partition implementation: vulkan.context:commands
 // Command buffers + sync + per-frame submit/present.
@@ -65,7 +65,7 @@ import atlas.texture;
 import render.preview_grid;
 
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     inline constexpr std::size_t kMaxFramesInFlight = 2;
 
@@ -119,10 +119,10 @@ namespace epochnamespace::vulkancontext
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
 #if EPOCH_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
-        const auto frameClearColor = epochnamespace::core::clear_color_for_context(
-            epochnamespace::core::ContextType::Vulkan);
+        const auto frameClearColor = epochengine::core::clear_color_for_context(
+            epochengine::core::ContextType::Vulkan);
         const std::array<float, 4> sceneClearColor =
-            preview_color_to_vulkan(epochnamespace::previewgrid::kClearColor);
+            preview_color_to_vulkan(epochengine::previewgrid::kClearColor);
         clearValues[0].setColor(vk::ClearColorValue{ frameClearColor });
         clearValues[1].setDepthStencil(vk::ClearDepthStencilValue{ 1.0f, 0 });
 #endif
@@ -147,7 +147,7 @@ namespace epochnamespace::vulkancontext
         const auto* ctx = bound_context();
         if (ctx)
         {
-            editorPreview = ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor;
+            editorPreview = ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor;
             const auto sceneViewport = ctx->scene_viewport();
             if (sceneViewport.valid())
             {
@@ -163,7 +163,7 @@ namespace epochnamespace::vulkancontext
         if (renderScenePreview && ctx)
         {
             const std::uint64_t previewRevision =
-                epochnamespace::previewgrid::camera_revision_for(ctx);
+                epochengine::previewgrid::camera_revision_for(ctx);
             if (previewRevision != previewGeometryRevision)
             {
                 createVertexBuffer();
@@ -243,9 +243,9 @@ namespace epochnamespace::vulkancontext
     }
 
     void Application::enqueue_gui_draw(
-        const epochnamespace::core::Context* ctx,
-        const epochnamespace::SpriteHandle& sprite,
-        std::span<const epochnamespace::TextureAtlas* const> atlases,
+        const epochengine::core::Context* ctx,
+        const epochengine::SpriteHandle& sprite,
+        std::span<const epochengine::TextureAtlas* const> atlases,
         float x,
         float y,
         float w,
@@ -575,4 +575,4 @@ namespace epochnamespace::vulkancontext
 
         currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
     }
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

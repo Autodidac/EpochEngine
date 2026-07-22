@@ -7,7 +7,7 @@ import core.context;
 import opengl.preview;
 import opengl.textures;
 
-namespace epochnamespace::openglbridge
+namespace epochengine::openglbridge
 {
     void render_scene_preview(
         const std::shared_ptr<core::Context>& ctx,

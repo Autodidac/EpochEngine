@@ -1,6 +1,33 @@
-// SPDX-License-Identifier: LicenseRef-MIT-NoSell
-// Copyright (c) 2026 Adam Rushford
-
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <algorithm>
@@ -21,7 +48,7 @@ export module saveload.system;
 
 import core.time;
 
-export namespace epoch::saveload
+export namespace epochengine::saveload
 {
     enum class SaveStreamMode : unsigned char
     {
@@ -418,7 +445,7 @@ export namespace epoch::saveload
     [[nodiscard]] inline bool should_capture_checkpoint(
         const StreamingSaveConfig& config,
         const StreamingSaveStatus& status,
-        const epoch::core::time::simulation_stats& stats) noexcept
+        const epochengine::core::time::simulation_stats& stats) noexcept
     {
         if (!config.enabled)
             return false;
@@ -442,7 +469,7 @@ export namespace epoch::saveload
     [[nodiscard]] inline StreamingSaveCadencePlan make_streaming_save_cadence_plan(
         const StreamingSaveConfig& config,
         const StreamingSaveStatus& status,
-        const epoch::core::time::simulation_stats& stats)
+        const epochengine::core::time::simulation_stats& stats)
     {
         StreamingSaveCadencePlan plan{};
         plan.enabled = config.enabled;
@@ -521,7 +548,7 @@ export namespace epoch::saveload
 
     [[nodiscard]] inline std::string checkpoint_label(
         std::string_view profile,
-        const epoch::core::time::simulation_stats& stats)
+        const epochengine::core::time::simulation_stats& stats)
     {
         const std::string safeProfile = profile.empty() ? std::string("editor_timeline") : std::string(profile);
         return std::format("{}_frame_{:012}_t_{:.3f}", safeProfile, stats.frame_index, stats.simulated_seconds);
@@ -542,7 +569,7 @@ export namespace epoch::saveload
     inline void mark_checkpoint_captured(
         StreamingSaveStatus& status,
         const StreamingSaveConfig& config,
-        const epoch::core::time::simulation_stats& stats)
+        const epochengine::core::time::simulation_stats& stats)
     {
         status.active = config.enabled;
         status.last_frame_index = stats.frame_index;
@@ -558,7 +585,7 @@ export namespace epoch::saveload
     [[nodiscard]] inline StreamingCheckpointRecord make_checkpoint_record(
         const StreamingSaveConfig& config,
         const StreamingSaveStatus& status,
-        const epoch::core::time::simulation_stats& stats,
+        const epochengine::core::time::simulation_stats& stats,
         std::size_t scene_text_bytes,
         std::size_t timeline_key_count)
     {

@@ -39,7 +39,7 @@ module;
 
 export module core.time;
 
-export namespace epoch::core::time
+export namespace epochengine::core::time
 {
     using steady = std::chrono::steady_clock;
 

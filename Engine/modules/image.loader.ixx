@@ -45,7 +45,7 @@ export module image.loader;
 
 import core.logger;
 
-export namespace epochnamespace
+export namespace epochengine
 {
     struct ImageData
     {

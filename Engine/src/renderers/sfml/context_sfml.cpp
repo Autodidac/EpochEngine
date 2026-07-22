@@ -57,33 +57,33 @@ namespace
 #endif
 
     std::uint32_t default_add_texture(
-        epochnamespace::TextureAtlas&,
+        epochengine::TextureAtlas&,
         std::string,
-        const epochnamespace::ImageData&) noexcept
+        const epochengine::ImageData&) noexcept
     {
         return 0u;
     }
 
-    std::uint32_t default_add_atlas(const epochnamespace::TextureAtlas& atlas) noexcept
+    std::uint32_t default_add_atlas(const epochengine::TextureAtlas& atlas) noexcept
     {
         const int idx = atlas.get_index();
         return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
-    void bind_default_input(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    void bind_default_input(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
-        ctx->is_key_held = [](epochnamespace::input::Key key) { return epochnamespace::input::is_key_held(key); };
-        ctx->is_key_down = [](epochnamespace::input::Key key) { return epochnamespace::input::is_key_down(key); };
+        ctx->is_key_held = [](epochengine::input::Key key) { return epochengine::input::is_key_held(key); };
+        ctx->is_key_down = [](epochengine::input::Key key) { return epochengine::input::is_key_down(key); };
         ctx->get_mouse_position = [](int& x, int& y)
         {
-            x = epochnamespace::input::mouseX.load(std::memory_order_relaxed);
-            y = epochnamespace::input::mouseY.load(std::memory_order_relaxed);
+            x = epochengine::input::mouseX.load(std::memory_order_relaxed);
+            y = epochengine::input::mouseY.load(std::memory_order_relaxed);
         };
-        ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_held(button); };
-        ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_down(button); };
+        ctx->is_mouse_button_held = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_held(button); };
+        ctx->is_mouse_button_down = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_down(button); };
     }
 
-    [[nodiscard]] sf::Color to_sfml_color(const epochnamespace::previewgrid::Vec3& color) noexcept
+    [[nodiscard]] sf::Color to_sfml_color(const epochengine::previewgrid::Vec3& color) noexcept
     {
         const auto clamp_channel = [](float value) noexcept -> std::uint8_t
         {
@@ -98,12 +98,12 @@ namespace
     }
 
     [[nodiscard]] bool project_preview_vertex(
-        const epochnamespace::previewgrid::Mat4& mvp,
-        const epochnamespace::previewgrid::Vec3& position,
-        const epochnamespace::core::RenderViewport& viewport,
+        const epochengine::previewgrid::Mat4& mvp,
+        const epochengine::previewgrid::Vec3& position,
+        const epochengine::core::RenderViewport& viewport,
         sf::Vector2f& out) noexcept
     {
-        const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+        const auto clip = epochengine::previewgrid::transform_point(mvp, position);
         if (clip.w <= 1.0e-4f)
             return false;
 
@@ -120,13 +120,13 @@ namespace
         return true;
     }
 
-    void render_scene_preview(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    void render_scene_preview(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
         if (!ctx || !s_window)
             return;
 
         const auto viewport = ctx->scene_viewport();
-        if (!viewport.valid() || ctx->scene_preview_mode() != epochnamespace::core::ScenePreviewMode::Editor)
+        if (!viewport.valid() || ctx->scene_preview_mode() != epochengine::core::ScenePreviewMode::Editor)
             return;
 
         const auto windowSize = s_window->getSize();
@@ -141,19 +141,19 @@ namespace
         const float viewportHeight = (std::clamp)(viewport.height * invHeight, 0.0f, 1.0f - viewportTop);
 
         const auto previousView = s_window->getView();
-        sf::View previewView{ epoch::sfml_compat::float_rect(
+        sf::View previewView{ epochengine::sfml_compat::float_rect(
             0.0f,
             0.0f,
             static_cast<float>(viewport.width),
             static_cast<float>(viewport.height)) };
-        previewView.setViewport(epoch::sfml_compat::float_rect(
+        previewView.setViewport(epochengine::sfml_compat::float_rect(
             viewportLeft,
             viewportTop,
             viewportWidth,
             viewportHeight));
         s_window->setView(previewView);
 
-        const auto clearColor = epochnamespace::previewgrid::kClearColor;
+        const auto clearColor = epochengine::previewgrid::kClearColor;
         sf::RectangleShape background{};
         background.setPosition(sf::Vector2f(0.0f, 0.0f));
         background.setSize(sf::Vector2f(
@@ -167,18 +167,18 @@ namespace
         sf::RenderStates renderStates{};
         s_window->draw(background, renderStates);
 
-        const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+        const auto camera = epochengine::previewgrid::camera_for(ctx.get());
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
-        const auto proj = epochnamespace::previewgrid::projection_for(ctx.get(), aspect, camera);
-        const auto view = epochnamespace::previewgrid::look_at(
+        const auto proj = epochengine::previewgrid::projection_for(ctx.get(), aspect, camera);
+        const auto view = epochengine::previewgrid::look_at(
             camera.eye,
             camera.target,
             camera.up);
-        const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
-        const auto vertices = epochnamespace::previewgrid::grid_vertices();
-        const auto indices = epochnamespace::previewgrid::grid_indices();
+        const auto mvp = epochengine::previewgrid::multiply(proj, view);
+        const auto vertices = epochengine::previewgrid::grid_vertices();
+        const auto indices = epochengine::previewgrid::grid_indices();
         sf::VertexArray lines(sf::PrimitiveType::Lines);
 
         for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
@@ -208,8 +208,8 @@ namespace
         if (lines.getVertexCount() > 0)
             s_window->draw(lines, renderStates);
 
-        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
-        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
+        const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+        const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
         if (markerCount > 0)
         {
             sf::VertexArray markerLines(sf::PrimitiveType::Lines);
@@ -236,7 +236,7 @@ namespace
                 s_window->draw(markerLines, renderStates);
         }
 
-        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+        const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
         if (!objectVertices.empty())
         {
             sf::VertexArray objectLines(sf::PrimitiveType::Lines);
@@ -275,14 +275,14 @@ namespace
             static_cast<unsigned>((std::max)(1, s_width)),
             static_cast<unsigned>((std::max)(1, s_height)));
         s_window->setSize(size);
-        s_window->setView(sf::View(epoch::sfml_compat::float_rect(
+        s_window->setView(sf::View(epochengine::sfml_compat::float_rect(
             0.0f,
             0.0f,
             static_cast<float>(size.x),
             static_cast<float>(size.y))));
     }
 
-    void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    void refresh_dimensions(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
 #if defined(_WIN32)
         if (s_childWindow && ::IsWindow(s_childWindow) != FALSE)
@@ -322,10 +322,10 @@ namespace
                 ctx->windowData->set_size(s_width, s_height);
         }
 
-        epochnamespace::sfmlcontext::state::s_sfmlstate.set_dimensions(s_width, s_height);
+        epochengine::sfmlcontext::state::s_sfmlstate.set_dimensions(s_width, s_height);
     }
 
-    void sync_docked_child_size(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    void sync_docked_child_size(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
 #if defined(_WIN32)
         if (!s_childWindow || ::IsWindow(s_childWindow) == FALSE)
@@ -377,17 +377,17 @@ namespace
 #endif
     }
 
-    void request_host_shutdown(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    void request_host_shutdown(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
-        epochnamespace::sfmlcontext::state::s_sfmlstate.mark_should_close(true);
-        epochnamespace::sfmlcontext::state::s_sfmlstate.running = false;
+        epochengine::sfmlcontext::state::s_sfmlstate.mark_should_close(true);
+        epochengine::sfmlcontext::state::s_sfmlstate.running = false;
         if (ctx && ctx->windowData)
             ctx->windowData->set_should_close(true);
     }
 
     void sfml_initialize_adapter()
     {
-        auto ctx = epochnamespace::core::get_current_render_context();
+        auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
@@ -403,8 +403,8 @@ namespace
             ? ctx->windowData->titleNarrow
             : (ctx->backendName.empty() ? "SFML" : ctx->backendName);
 
-        s_window = epoch::sfml_compat::make_render_window(
-            epoch::sfml_compat::video_mode(
+        s_window = epochengine::sfml_compat::make_render_window(
+            epochengine::sfml_compat::video_mode(
                 static_cast<unsigned>(s_width),
                 static_cast<unsigned>(s_height),
                 32u),
@@ -424,7 +424,7 @@ namespace
         (void)s_window->setActive(false);
 
 #if defined(_WIN32)
-        s_childWindow = static_cast<HWND>(epoch::sfml_compat::native_handle(*s_window));
+        s_childWindow = static_cast<HWND>(epochengine::sfml_compat::native_handle(*s_window));
         if (!s_childWindow)
         {
             ctx->init_failed = true;
@@ -442,7 +442,7 @@ namespace
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
             style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-            epochnamespace::core::MakeDockable(s_childWindow, liveDockParent);
+            epochengine::core::MakeDockable(s_childWindow, liveDockParent);
 
             RECT client{};
             const HWND sizeSource = s_hostWindow ? s_hostWindow : liveDockParent;
@@ -520,7 +520,7 @@ namespace
             ctx->windowData->set_size(s_width, s_height);
         }
 
-        auto& state = epochnamespace::sfmlcontext::state::s_sfmlstate;
+        auto& state = epochengine::sfmlcontext::state::s_sfmlstate;
         state.window.sfml_window = s_window.get();
         state.set_dimensions(s_width, s_height);
         state.mark_should_close(false);
@@ -537,20 +537,20 @@ namespace
             ::PostMessageW(s_dockParent, WM_SIZE, 0, 0);
 #endif
 
-        epochnamespace::atlasmanager::register_backend_uploader(
-            epochnamespace::core::ContextType::SFML,
-            [](const epochnamespace::TextureAtlas& atlas)
+        epochengine::atlasmanager::register_backend_uploader(
+            epochengine::core::ContextType::SFML,
+            [](const epochengine::TextureAtlas& atlas)
             {
-                epochnamespace::sfmlcontext::ensure_uploaded(atlas);
+                epochengine::sfmlcontext::ensure_uploaded(atlas);
             });
     }
 
     void sfml_cleanup_adapter()
     {
-        epochnamespace::atlasmanager::unregister_backend_uploader(epochnamespace::core::ContextType::SFML);
-        epochnamespace::sfmlcontext::clear_gpu_atlases();
+        epochengine::atlasmanager::unregister_backend_uploader(epochengine::core::ContextType::SFML);
+        epochengine::sfmlcontext::clear_gpu_atlases();
 
-        auto& state = epochnamespace::sfmlcontext::state::s_sfmlstate;
+        auto& state = epochengine::sfmlcontext::state::s_sfmlstate;
         state.window.sfml_window = nullptr;
         state.running = false;
         state.mark_should_close(false);
@@ -599,13 +599,13 @@ namespace
     }
 
     bool sfml_process_adapter(
-        std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
+        std::shared_ptr<epochengine::core::Context> ctx,
+        epochengine::core::CommandQueue& queue)
     {
         if (!ctx || !s_window || !s_window->isOpen())
             return false;
 
-        auto& state = epochnamespace::sfmlcontext::state::s_sfmlstate;
+        auto& state = epochengine::sfmlcontext::state::s_sfmlstate;
         const bool closeRequested =
             state.shouldClose
             || state.window.get_should_close()
@@ -626,7 +626,7 @@ namespace
         {
             if (!s_logged_activate_failure)
             {
-                epochnamespace::logger::error(
+                epochengine::logger::error(
                     "Context.SFML",
                     std::string("SFML setActive failed. size=")
                         + std::to_string(s_width)
@@ -679,10 +679,10 @@ namespace
         sync_docked_child_size(ctx);
         refresh_dimensions(ctx);
 
-        epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::SFML);
+        epochengine::atlasmanager::process_pending_uploads(epochengine::core::ContextType::SFML);
         s_window->resetGLStates();
 
-        const auto clearColor = epochnamespace::core::clear_color_for_context(epochnamespace::core::ContextType::SFML);
+        const auto clearColor = epochengine::core::clear_color_for_context(epochengine::core::ContextType::SFML);
         s_window->clear(sf::Color(
             static_cast<std::uint8_t>(clearColor[0] * 255.0f),
             static_cast<std::uint8_t>(clearColor[1] * 255.0f),
@@ -694,16 +694,16 @@ namespace
         s_window->resetGLStates();
         render_scene_preview(ctx);
         s_window->resetGLStates();
-        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
+        (void)epochengine::gui::render_deferred_batch(ctx.get());
         s_window->resetGLStates();
-        (void)epochnamespace::gui::render_top_layer_batch(ctx.get());
+        (void)epochengine::gui::render_top_layer_batch(ctx.get());
         s_window->display();
         (void)s_window->setActive(false);
         return s_window->isOpen();
     }
 }
 
-namespace epochnamespace::core::detail
+namespace epochengine::core::detail
 {
     void register_sfml_backend()
     {
@@ -717,9 +717,9 @@ namespace epochnamespace::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return s_width; };
         ctx->get_height = []() { return s_height; };
-        ctx->draw_sprite = epochnamespace::sfmlcontext::draw_sprite;
+        ctx->draw_sprite = epochengine::sfmlcontext::draw_sprite;
         ctx->add_texture = &default_add_texture;
-        ctx->add_atlas = +[](const epochnamespace::TextureAtlas& atlas)
+        ctx->add_atlas = +[](const epochengine::TextureAtlas& atlas)
         {
             return default_add_atlas(atlas);
         };

@@ -40,7 +40,7 @@ module;
 
 export module spritehandle;
 
-export namespace epochnamespace
+export namespace epochengine
 {
     struct SpriteHandle
     {

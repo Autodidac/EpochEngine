@@ -28,7 +28,7 @@ import opengl.quad;
 import opengl.state;
 import opengl.textures;
 
-namespace epochnamespace::openglcontext
+namespace epochengine::openglcontext
 {
     bool process_impl(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {

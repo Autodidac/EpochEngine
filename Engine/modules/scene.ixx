@@ -51,13 +51,13 @@ import core.context;              // core::Context
 import context.window; // core::WindowData
 import core.logger;    // Logger, LogLevel
 
-namespace epochnamespace::scene
+namespace epochengine::scene
 {
-    using epochnamespace::ecs::Entity;
-    using epochnamespace::ecs::reg_ex;
-    using epochnamespace::logger::Logger;
-    using epochnamespace::logger::LogLevel;
-    using epochnamespace::timing::Timer;
+    using epochengine::ecs::Entity;
+    using epochengine::ecs::reg_ex;
+    using epochengine::logger::Logger;
+    using epochengine::logger::LogLevel;
+    using epochengine::timing::Timer;
 
     // ------------------------------------------------------------
     // SCENE
@@ -120,8 +120,8 @@ namespace epochnamespace::scene
 
         // Per-frame hook (override in derived scenes)
         virtual bool frame(
-            std::shared_ptr<epochnamespace::core::Context>,
-            epochnamespace::core::WindowData*)
+            std::shared_ptr<epochengine::core::Context>,
+            epochengine::core::WindowData*)
         {
             return true; // default: no-op
         }
@@ -207,4 +207,4 @@ namespace epochnamespace::scene
         LogLevel  sceneLogLevel{ LogLevel::INFO };
     };
 
-} // namespace epochnamespace::scene
+} // namespace epochengine::scene

@@ -1,5 +1,18 @@
 # Epoch Changelog
 
+## [v0.88.02] - Raylib custom-frame-control presentation repair
+
+- Own Raylib presentation explicitly when the vcpkg build enables
+  SUPPORT_CUSTOM_FRAME_CONTROL: EndDrawing() flushes the render batch, then
+  Epoch swaps the native buffer and polls Raylib input events.
+- Preserve direct-child multicontext docking while hiding only a distinct
+  placeholder host, so standalone Raylib windows are not hidden after their
+  first rendered frame.
+- Complete the epochengine namespace and renderer command-queue source
+  migration across the current development tree.
+- Verify the Windows x64 MSVC Release static library and editor targets, plus
+  the build-safe engine contract suite.
+
 ## [v0.88.01] - Raylib native surface and renderer retirement repair
 
 - Make Win32 renderer-owned context retirement one-shot and marshal the final

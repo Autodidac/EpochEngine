@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 // modules/vulkan.context-shared_vk.ixx
 // Partition: vulkan.context:shared_vk
 // Vulkan-facing shared types + Application declaration.
@@ -84,7 +83,7 @@ import spritehandle;
 struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the BMI
 #endif
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     // Debug callback for validation layers
     inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -114,8 +113,8 @@ namespace epochnamespace::vulkancontext
         void initWindow();
         void initVulkan();
 
-        bool process(std::shared_ptr<epochnamespace::core::Context> ctx,
-            epochnamespace::core::CommandQueue& queue);
+        bool process(std::shared_ptr<epochengine::core::Context> ctx,
+            epochengine::core::CommandQueue& queue);
 
         void cleanup();
 
@@ -133,9 +132,9 @@ namespace epochnamespace::vulkancontext
         int get_framebuffer_width() const noexcept;
         int get_framebuffer_height() const noexcept;
 
-        void set_context(std::shared_ptr<epochnamespace::core::Context> ctx, void* nativeWindow);
-        void set_active_context(const epochnamespace::core::Context* ctx);
-        void cleanup_gui_context(const epochnamespace::core::Context* ctx);
+        void set_context(std::shared_ptr<epochengine::core::Context> ctx, void* nativeWindow);
+        void set_active_context(const epochengine::core::Context* ctx);
+        void cleanup_gui_context(const epochengine::core::Context* ctx);
         bool should_stop_rendering() noexcept;
 
         vk::CommandBuffer getCurrentCommandBuffer() const
@@ -144,14 +143,14 @@ namespace epochnamespace::vulkancontext
         }
 
         void enqueue_gui_draw(
-            const epochnamespace::core::Context* ctx,
-            const epochnamespace::SpriteHandle& sprite,
-            std::span<const epochnamespace::TextureAtlas* const> atlases,
+            const epochengine::core::Context* ctx,
+            const epochengine::SpriteHandle& sprite,
+            std::span<const epochengine::TextureAtlas* const> atlases,
             float x,
             float y,
             float w,
             float h);
-        void ensure_gui_atlas(const epochnamespace::TextureAtlas& atlas);
+        void ensure_gui_atlas(const epochengine::TextureAtlas& atlas);
 
         std::vector<vk::Image> swapChainImages;
 
@@ -178,8 +177,8 @@ namespace epochnamespace::vulkancontext
         std::uint32_t indexCount = 0;
 
     private:
-        std::weak_ptr<epochnamespace::core::Context> context;
-        const epochnamespace::core::Context* activeGuiContext = nullptr;
+        std::weak_ptr<epochengine::core::Context> context;
+        const epochengine::core::Context* activeGuiContext = nullptr;
 
         mutable std::mutex framebufferStateMutex;
         int framebufferWidth = 800;
@@ -240,8 +239,8 @@ namespace epochnamespace::vulkancontext
 
         bool validationLayersEnabled = false;
 
-        inline static epochnamespace::vulkancamera::State cam =
-            epochnamespace::vulkancamera::create(
+        inline static epochengine::vulkancamera::State cam =
+            epochengine::vulkancamera::create(
                 glm::vec3(0.0f, 0.0f, 5.0f),
                 glm::vec3(0.0f, 1.0f, 0.0f),
                 -90.0f, 0.0f);
@@ -306,10 +305,10 @@ namespace epochnamespace::vulkancontext
 
         void createUniformBuffers();
         void updateUniformBuffer(std::uint32_t currentImage,
-            const epochnamespace::vulkancamera::State& camera);
-        GuiContextState& gui_state_for_context(const epochnamespace::core::Context* ctx);
-        GuiContextState* find_gui_state(const epochnamespace::core::Context* ctx) noexcept;
-        const epochnamespace::core::Context* bound_context() const noexcept;
+            const epochengine::vulkancamera::State& camera);
+        GuiContextState& gui_state_for_context(const epochengine::core::Context* ctx);
+        GuiContextState* find_gui_state(const epochengine::core::Context* ctx) noexcept;
+        const epochengine::core::Context* bound_context() const noexcept;
         void reset_gui_swapchain_state(GuiContextState& guiState);
 
         void createDescriptorPool();
@@ -392,14 +391,14 @@ namespace epochnamespace::vulkancontext
             std::vector<GuiDrawCommand> guiDraws{};
         };
 
-        std::unordered_map<const epochnamespace::core::Context*, GuiContextState> guiContexts{};
+        std::unordered_map<const epochengine::core::Context*, GuiContextState> guiContexts{};
     };
 
-    export std::vector<Application::Vertex> preview_vertices_for(const epochnamespace::core::Context* ctx);
-    export std::vector<std::uint16_t>       preview_indices_for(const epochnamespace::core::Context* ctx);
+    export std::vector<Application::Vertex> preview_vertices_for(const epochengine::core::Context* ctx);
+    export std::vector<std::uint16_t>       preview_indices_for(const epochengine::core::Context* ctx);
 
-    export Application& bind_vulkan_app(const std::shared_ptr<epochnamespace::core::Context>& ctx);
-    export Application* try_get_vulkan_app(const epochnamespace::core::Context* ctx) noexcept;
-    export bool release_vulkan_app(const epochnamespace::core::Context* ctx) noexcept;
+    export Application& bind_vulkan_app(const std::shared_ptr<epochengine::core::Context>& ctx);
+    export Application* try_get_vulkan_app(const epochengine::core::Context* ctx) noexcept;
+    export bool release_vulkan_app(const epochengine::core::Context* ctx) noexcept;
     export bool has_vulkan_apps() noexcept;
 }

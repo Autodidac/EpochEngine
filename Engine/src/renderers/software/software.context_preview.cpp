@@ -12,7 +12,7 @@ import core.context;
 import software.state;
 import render.preview_grid;
 
-namespace epochnamespace::anativecontext::detail
+namespace epochengine::anativecontext::detail
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     void refresh_dimensions(core::Context& ctx) noexcept
@@ -171,13 +171,13 @@ namespace epochnamespace::anativecontext::detail
     }
 
     bool project_preview_vertex(
-        const epochnamespace::previewgrid::Mat4& mvp,
-        const epochnamespace::previewgrid::Vec3& position,
+        const epochengine::previewgrid::Mat4& mvp,
+        const epochengine::previewgrid::Vec3& position,
         const core::RenderViewport& viewport,
         float& outX,
         float& outY) noexcept
     {
-        const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+        const auto clip = epochengine::previewgrid::transform_point(mvp, position);
         if (clip.w <= 1.0e-4f)
             return false;
 
@@ -200,7 +200,7 @@ namespace epochnamespace::anativecontext::detail
         if (!viewport.valid() || ctx.scene_preview_mode() != core::ScenePreviewMode::Editor)
             return;
 
-        const auto clearColor = epochnamespace::previewgrid::kClearColor;
+        const auto clearColor = epochengine::previewgrid::kClearColor;
         fill_preview_rect(
             viewport.x,
             viewport.y,
@@ -208,18 +208,18 @@ namespace epochnamespace::anativecontext::detail
             viewport.height,
             pack_color(clearColor[0], clearColor[1], clearColor[2], clearColor[3]));
 
-        const auto camera = epochnamespace::previewgrid::camera_for(&ctx);
+        const auto camera = epochengine::previewgrid::camera_for(&ctx);
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
-        const auto proj = epochnamespace::previewgrid::projection_for(&ctx, aspect, camera);
-        const auto view = epochnamespace::previewgrid::look_at(
+        const auto proj = epochengine::previewgrid::projection_for(&ctx, aspect, camera);
+        const auto view = epochengine::previewgrid::look_at(
             camera.eye,
             camera.target,
             camera.up);
-        const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
-        const auto vertices = epochnamespace::previewgrid::grid_vertices();
-        const auto indices = epochnamespace::previewgrid::grid_indices();
+        const auto mvp = epochengine::previewgrid::multiply(proj, view);
+        const auto vertices = epochengine::previewgrid::grid_vertices();
+        const auto indices = epochengine::previewgrid::grid_indices();
 
         for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
         {
@@ -248,7 +248,7 @@ namespace epochnamespace::anativecontext::detail
                 viewport);
         }
 
-        const auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(&ctx);
+        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(&ctx);
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
             float ax = 0.0f;
@@ -276,8 +276,8 @@ namespace epochnamespace::anativecontext::detail
                 viewport);
         }
 
-        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(&ctx);
-        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(&ctx);
+        const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(&ctx);
+        const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(&ctx);
         for (std::size_t i = 0; i + 1 < markerCount; i += 2)
         {
             float ax = 0.0f;
@@ -300,7 +300,7 @@ namespace epochnamespace::anativecontext::detail
                 viewport);
         }
 
-        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(&ctx);
+        const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(&ctx);
         for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
         {
             float ax = 0.0f;

@@ -23,19 +23,19 @@ namespace
 {
     constexpr std::string_view kLogDirectX = "Context.DirectX";
 
-    std::uint32_t default_add_texture(epochnamespace::TextureAtlas&, std::string, const epochnamespace::ImageData&) noexcept
+    std::uint32_t default_add_texture(epochengine::TextureAtlas&, std::string, const epochengine::ImageData&) noexcept
     {
         return 0u;
     }
 
     std::uint32_t default_add_atlas(
-        const epochnamespace::TextureAtlas& atlas,
-        const epochnamespace::core::ContextType type) noexcept
+        const epochengine::TextureAtlas& atlas,
+        const epochengine::core::ContextType type) noexcept
     {
         try
         {
-            epochnamespace::atlasmanager::ensure_uploaded(atlas);
-            epochnamespace::atlasmanager::process_pending_uploads(type);
+            epochengine::atlasmanager::ensure_uploaded(atlas);
+            epochengine::atlasmanager::process_pending_uploads(type);
         }
         catch (...)
         {
@@ -45,29 +45,29 @@ namespace
         return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
-    void bind_default_input(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    void bind_default_input(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
-        ctx->is_key_held = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_held(k); };
-        ctx->is_key_down = [](epochnamespace::input::Key k) { return epochnamespace::input::is_key_down(k); };
+        ctx->is_key_held = [](epochengine::input::Key k) { return epochengine::input::is_key_held(k); };
+        ctx->is_key_down = [](epochengine::input::Key k) { return epochengine::input::is_key_down(k); };
         ctx->get_mouse_position = [](int& x, int& y)
         {
-            x = epochnamespace::input::mouseX.load(std::memory_order_relaxed);
-            y = epochnamespace::input::mouseY.load(std::memory_order_relaxed);
+            x = epochengine::input::mouseX.load(std::memory_order_relaxed);
+            y = epochengine::input::mouseY.load(std::memory_order_relaxed);
         };
-        ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_held(b); };
-        ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton b) { return epochnamespace::input::is_mouse_button_down(b); };
+        ctx->is_mouse_button_held = [](epochengine::input::MouseButton b) { return epochengine::input::is_mouse_button_held(b); };
+        ctx->is_mouse_button_down = [](epochengine::input::MouseButton b) { return epochengine::input::is_mouse_button_down(b); };
     }
 
     void directx_initialize_adapter()
     {
-        auto ctx = epochnamespace::core::get_current_render_context();
+        auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
         ctx->init_failed = false;
         try
         {
-            ctx->init_failed = !epochnamespace::directxcontext::directx_initialize(
+            ctx->init_failed = !epochengine::directxcontext::directx_initialize(
                 ctx,
                 ctx->get_hwnd(),
                 static_cast<unsigned>((std::max)(1, ctx->width)),
@@ -77,8 +77,8 @@ namespace
         catch (const std::exception& e)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::get(kLogDirectX).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogDirectX).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "init exception: {}",
                 e.what());
@@ -86,8 +86,8 @@ namespace
         catch (...)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::get(kLogDirectX).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogDirectX).log(
+                epochengine::logger::LogLevel::Error,
                 "init unknown exception",
                 std::source_location::current());
         }
@@ -95,42 +95,42 @@ namespace
 
     void directx_cleanup_adapter()
     {
-        auto ctx = epochnamespace::core::get_current_render_context();
+        auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
         try
         {
-            epochnamespace::directxcontext::directx_cleanup(ctx);
+            epochengine::directxcontext::directx_cleanup(ctx);
         }
         catch (const std::exception& e)
         {
-            epochnamespace::logger::get(kLogDirectX).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogDirectX).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "cleanup exception: {}",
                 e.what());
         }
         catch (...)
         {
-            epochnamespace::logger::get(kLogDirectX).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogDirectX).log(
+                epochengine::logger::LogLevel::Error,
                 "cleanup unknown exception",
                 std::source_location::current());
         }
     }
 
     bool directx_process_adapter(
-        std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
+        std::shared_ptr<epochengine::core::Context> ctx,
+        epochengine::core::CommandQueue& queue)
     {
         if (!ctx)
             return false;
-        return epochnamespace::directxcontext::directx_process(std::move(ctx), queue);
+        return epochengine::directxcontext::directx_process(std::move(ctx), queue);
     }
 }
 
-namespace epochnamespace::core::detail
+namespace epochengine::core::detail
 {
     void register_directx_backend()
     {
@@ -141,12 +141,12 @@ namespace epochnamespace::core::detail
         ctx->initialize = directx_initialize_adapter;
         ctx->cleanup = directx_cleanup_adapter;
         ctx->process = directx_process_adapter;
-        ctx->get_width = epochnamespace::directxcontext::directx_get_width;
-        ctx->get_height = epochnamespace::directxcontext::directx_get_height;
+        ctx->get_width = epochengine::directxcontext::directx_get_width;
+        ctx->get_height = epochengine::directxcontext::directx_get_height;
 
         bind_default_input(ctx);
 
-        ctx->draw_sprite = epochnamespace::directxcontext::directx_draw_sprite;
+        ctx->draw_sprite = epochengine::directxcontext::directx_draw_sprite;
         ctx->add_texture = &default_add_texture;
         ctx->add_atlas = +[](const TextureAtlas& a) { return default_add_atlas(a, ContextType::DirectX); };
 

@@ -71,13 +71,13 @@ export module engine.platform;
 // You were previously redefining this via macro.
 // For modules, make this explicit and stable.
 
-export namespace epochnamespace
+export namespace epochengine
 {
     // This namespace intentionally left minimal.
     // Platform-specific helpers live in other modules.
 }
 
-export namespace epochnamespace::platform
+export namespace epochengine::platform
 {
     enum class RuntimePlatform
     {
@@ -152,8 +152,7 @@ export namespace epochnamespace::platform
         SourceSnapshotArchive source_snapshot_archive = SourceSnapshotArchive::Zip;
     };
 
-    [[nodiscard]] constexpr std::string_view source_snapshot_archive_extension_for(
-        const SourceSnapshotArchive archive) noexcept
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_extension_for(const SourceSnapshotArchive archive) noexcept
     {
         switch (archive)
         {
@@ -165,8 +164,7 @@ export namespace epochnamespace::platform
         }
     }
 
-    [[nodiscard]] constexpr std::string_view source_snapshot_archive_label_for(
-        const SourceSnapshotArchive archive) noexcept
+    [[nodiscard]] constexpr std::string_view source_snapshot_archive_label_for(const SourceSnapshotArchive archive) noexcept
     {
         switch (archive)
         {
@@ -250,45 +248,45 @@ export namespace epochnamespace::platform
 #endif
 }
 
-export namespace epoch::platform::policy
+export namespace epochengine::platform::policy
 {
-    using RuntimePlatform = epochnamespace::platform::RuntimePlatform;
-    using WindowTopology = epochnamespace::platform::WindowTopology;
-    using SourceSnapshotArchive = epochnamespace::platform::SourceSnapshotArchive;
-    using RuntimePolicy = epochnamespace::platform::RuntimePolicy;
+    using RuntimePlatform = epochengine::platform::RuntimePlatform;
+    using WindowTopology = epochengine::platform::WindowTopology;
+    using SourceSnapshotArchive = epochengine::platform::SourceSnapshotArchive;
+    using RuntimePolicy = epochengine::platform::RuntimePolicy;
 
     [[nodiscard]] constexpr RuntimePolicy current_runtime_policy() noexcept
     {
-        return epochnamespace::platform::current_runtime_policy();
+        return epochengine::platform::current_runtime_policy();
     }
 
     [[nodiscard]] constexpr bool supports_parented_multiwindow() noexcept
     {
-        return epochnamespace::platform::supports_parented_multiwindow();
+        return epochengine::platform::supports_parented_multiwindow();
     }
 
     [[nodiscard]] constexpr bool default_parented_multiwindow() noexcept
     {
-        return epochnamespace::platform::default_parented_multiwindow();
+        return epochengine::platform::default_parented_multiwindow();
     }
 
     [[nodiscard]] constexpr bool prefer_single_context_runtime() noexcept
     {
-        return epochnamespace::platform::prefer_single_context_runtime();
+        return epochengine::platform::prefer_single_context_runtime();
     }
 
     [[nodiscard]] constexpr std::string_view updater_shell_backend_name() noexcept
     {
-        return epochnamespace::platform::updater_shell_backend_name();
+        return epochengine::platform::updater_shell_backend_name();
     }
 
     [[nodiscard]] constexpr std::string_view source_snapshot_archive_extension() noexcept
     {
-        return epochnamespace::platform::source_snapshot_archive_extension();
+        return epochengine::platform::source_snapshot_archive_extension();
     }
 
     [[nodiscard]] constexpr std::string_view source_snapshot_archive_label() noexcept
     {
-        return epochnamespace::platform::source_snapshot_archive_label();
+        return epochengine::platform::source_snapshot_archive_label();
     }
 }

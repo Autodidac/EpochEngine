@@ -42,7 +42,7 @@ module;
 
 export module platform.budgets;
 
-export namespace epoch
+export namespace epochengine
 {
     enum class ReconstructionMode : u8
     {

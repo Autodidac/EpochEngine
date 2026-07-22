@@ -32,7 +32,7 @@
 #include "ai_response.hpp"
 #include <string_view>
 
-namespace epoch::ai {
+namespace epochengine::ai {
 
 class EngineAiModel {
 public:
@@ -50,4 +50,4 @@ private:
     Config m_cfg;
 };
 
-} // namespace epoch::ai
+} // namespace epochengine::ai

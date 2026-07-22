@@ -34,7 +34,7 @@ module;
 
 export module core.path;
 
-export namespace epoch::core::path
+export namespace epochengine::core::path
 {
     using path = std::filesystem::path;
 

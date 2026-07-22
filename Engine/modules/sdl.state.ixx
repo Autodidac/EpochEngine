@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <array>
@@ -54,7 +53,7 @@ inline constexpr int DEFAULT_WINDOW_HEIGHT = 720;
 
 // Win32 forward decls MUST be here (module purview), not in the global module fragment.
 #if defined(_WIN32)
-namespace epochnamespace::win32
+namespace epochengine::win32
 {
     struct HWND__;
     struct HDC__;
@@ -71,7 +70,7 @@ namespace epochnamespace::win32
 }
 #endif
 
-export namespace epochnamespace::sdlcontext::state
+export namespace epochengine::sdlcontext::state
 {
     struct SDL3State
     {
@@ -84,7 +83,7 @@ export namespace epochnamespace::sdlcontext::state
             screenHeight = window.height;
         }
 
-        epochnamespace::contextwindow::WindowData window{};
+        epochengine::contextwindow::WindowData window{};
 
         SDL_Event sdl_event{};
 
@@ -112,25 +111,25 @@ export namespace epochnamespace::sdlcontext::state
             std::bitset<SDL_SCANCODE_COUNT> prevDown;
         } keyboard{};
 
-        epochnamespace::timing::Timer pollTimer = epochnamespace::timing::createTimer(1.0);
-        epochnamespace::timing::Timer fpsTimer = epochnamespace::timing::createTimer(1.0);
+        epochengine::timing::Timer pollTimer = epochengine::timing::createTimer(1.0);
+        epochengine::timing::Timer fpsTimer = epochengine::timing::createTimer(1.0);
         int frameCount = 0;
 
 #if defined(_WIN32)
     private:
-        epochnamespace::win32::WNDPROC oldWndProc_ = nullptr;
-        epochnamespace::win32::HWND    parent_ = nullptr;
+        epochengine::win32::WNDPROC oldWndProc_ = nullptr;
+        epochengine::win32::HWND    parent_ = nullptr;
 
     public:
         auto getOldWndProc() const noexcept { return oldWndProc_; }
-        void setOldWndProc(epochnamespace::win32::WNDPROC proc) noexcept { oldWndProc_ = proc; }
+        void setOldWndProc(epochengine::win32::WNDPROC proc) noexcept { oldWndProc_ = proc; }
 
-        void setParent(epochnamespace::win32::HWND parent) noexcept { parent_ = parent; }
+        void setParent(epochengine::win32::HWND parent) noexcept { parent_ = parent; }
         auto getParent() const noexcept { return parent_; }
 
         // If you want these accessors, WindowData must expose real HWND/HDC/HGLRC types
         // (meaning a Win32 header/module somewhere). Otherwise remove these.
-        // epochnamespace::win32::HWND  hwnd() const noexcept { return (epochnamespace::win32::HWND)window.hwnd; }
+        // epochengine::win32::HWND  hwnd() const noexcept { return (epochengine::win32::HWND)window.hwnd; }
 #endif
 
         void mark_should_close(bool value) noexcept
@@ -150,7 +149,7 @@ export namespace epochnamespace::sdlcontext::state
     SDL3State& get_sdl_state() noexcept;
 }
 
-namespace epochnamespace::sdlcontext::state
+namespace epochengine::sdlcontext::state
 {
     inline SDL3State& get_sdl_state() noexcept
     {

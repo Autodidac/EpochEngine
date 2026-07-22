@@ -34,16 +34,16 @@ module;
 
 module render.graph;
 
-namespace epoch
+namespace epochengine
 {
-    GraphResource GraphBuilder::create_buffer(epoch::string_view name, const BufferDesc& desc)
+    GraphResource GraphBuilder::create_buffer(epochengine::string_view name, const BufferDesc& desc)
     {
         const u32 idx = static_cast<u32>(m_buffers.size());
         m_buffers.push_back(GraphBuffer{ desc, {} });
 
         ResourceDecl r{
             .kind = ResourceKind::buffer,
-            .name = epoch::string{name},   // requires ctor from epoch::string_view
+            .name = epochengine::string{name},   // requires ctor from epochengine::string_view
             .index = idx
         };
         m_resources.push_back(std::move(r));
@@ -52,44 +52,44 @@ namespace epoch
     }
 
 
-    GraphResource GraphBuilder::create_texture(epoch::string_view name, const TextureDesc& desc)
+    GraphResource GraphBuilder::create_texture(epochengine::string_view name, const TextureDesc& desc)
     {
         const u32 idx = static_cast<u32>(m_textures.size());
         m_textures.push_back(GraphTexture{ desc, {} });
-        m_resources.push_back(ResourceDecl{ ResourceKind::texture, epoch::string(name), idx });
+        m_resources.push_back(ResourceDecl{ ResourceKind::texture, epochengine::string(name), idx });
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
-    GraphResource GraphBuilder::create_sampler(epoch::string_view name, const SamplerDesc& desc)
+    GraphResource GraphBuilder::create_sampler(epochengine::string_view name, const SamplerDesc& desc)
     {
         const u32 idx = static_cast<u32>(m_samplers.size());
         m_samplers.push_back(GraphSampler{ desc, {} });
-        m_resources.push_back(ResourceDecl{ ResourceKind::sampler, epoch::string(name), idx });
+        m_resources.push_back(ResourceDecl{ ResourceKind::sampler, epochengine::string(name), idx });
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
-    GraphResource GraphBuilder::create_material(epoch::string_view name,
+    GraphResource GraphBuilder::create_material(epochengine::string_view name,
                                                 const MaterialDesc& desc,
-                                                epoch::array_view<const GraphMaterialTextureSlot> texture_slots)
+                                                epochengine::array_view<const GraphMaterialTextureSlot> texture_slots)
     {
         const u32 idx = static_cast<u32>(m_materials.size());
         GraphMaterial material{};
         material.desc = desc;
         material.texture_slots.assign(texture_slots.begin(), texture_slots.end());
         m_materials.push_back(std::move(material));
-        m_resources.push_back(ResourceDecl{ ResourceKind::material, epoch::string(name), idx });
+        m_resources.push_back(ResourceDecl{ ResourceKind::material, epochengine::string(name), idx });
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
-    GraphResource GraphBuilder::create_render_target(epoch::string_view name, const RenderTargetDesc& desc)
+    GraphResource GraphBuilder::create_render_target(epochengine::string_view name, const RenderTargetDesc& desc)
     {
         const u32 idx = static_cast<u32>(m_render_targets.size());
         m_render_targets.push_back(GraphRenderTarget{ desc, {} });
-        m_resources.push_back(ResourceDecl{ ResourceKind::render_target, epoch::string(name), idx });
+        m_resources.push_back(ResourceDecl{ ResourceKind::render_target, epochengine::string(name), idx });
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
-    GraphResource GraphBuilder::create_mesh(epoch::string_view name,
+    GraphResource GraphBuilder::create_mesh(epochengine::string_view name,
                                             const MeshDesc& desc,
                                             GraphResource vertex_buffer,
                                             GraphResource index_buffer,
@@ -102,29 +102,29 @@ namespace epoch
         mesh.index_buffer = index_buffer;
         mesh.material = material;
         m_meshes.push_back(std::move(mesh));
-        m_resources.push_back(ResourceDecl{ ResourceKind::mesh, epoch::string(name), idx });
+        m_resources.push_back(ResourceDecl{ ResourceKind::mesh, epochengine::string(name), idx });
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
-    GraphResource GraphBuilder::create_model(epoch::string_view name,
+    GraphResource GraphBuilder::create_model(epochengine::string_view name,
                                              const ModelDesc& desc,
-                                             epoch::array_view<const GraphModelMeshSlot> mesh_slots)
+                                             epochengine::array_view<const GraphModelMeshSlot> mesh_slots)
     {
         const u32 idx = static_cast<u32>(m_models.size());
         GraphModel model{};
         model.desc = desc;
         model.mesh_slots.assign(mesh_slots.begin(), mesh_slots.end());
         m_models.push_back(std::move(model));
-        m_resources.push_back(ResourceDecl{ ResourceKind::model, epoch::string(name), idx });
+        m_resources.push_back(ResourceDecl{ ResourceKind::model, epochengine::string(name), idx });
         return GraphResource{ static_cast<u32>(m_resources.size()) };
     }
 
     GraphRenderTextureAsset GraphBuilder::create_render_texture_asset(
-        epoch::string_view name,
+        epochengine::string_view name,
         const RenderTextureAssetDesc& desc)
     {
         GraphRenderTextureAsset asset{};
-        asset.name = epoch::string(name);
+        asset.name = epochengine::string(name);
         asset.desc = desc;
         asset.plan = make_render_texture_asset_plan(desc);
         asset.color_texture = create_texture(name, asset.plan.color_texture);
@@ -134,13 +134,13 @@ namespace epoch
         return asset;
     }
 
-    GraphPass GraphBuilder::add_pass(epoch::string_view name,
-                                     epoch::array_view<const GraphResource> reads,
-                                     epoch::array_view<const GraphResource> writes,
-                                     epoch::function_ref<void(ICommandContext&)> fn)
+    GraphPass GraphBuilder::add_pass(epochengine::string_view name,
+                                     epochengine::array_view<const GraphResource> reads,
+                                     epochengine::array_view<const GraphResource> writes,
+                                     epochengine::function_ref<void(ICommandContext&)> fn)
     {
         PassDecl p{};
-        p.name = epoch::string(name);
+        p.name = epochengine::string(name);
         p.reads.assign(reads.begin(), reads.end());
         p.writes.assign(writes.begin(), writes.end());
         p.execute = std::move(fn);
@@ -148,21 +148,20 @@ namespace epoch
         return GraphPass{ static_cast<u32>(m_passes.size()) };
     }
 
-    GraphPass GraphBuilder::add_render_pass(epoch::string_view name,
+    GraphPass GraphBuilder::add_render_pass(epochengine::string_view name,
                                             GraphResource target,
-                                            epoch::array_view<const GraphResource> reads,
-                                            epoch::array_view<const GraphResource> writes,
+                                            epochengine::array_view<const GraphResource> reads,
+                                            epochengine::array_view<const GraphResource> writes,
                                             const RenderPassDesc& pass,
-                                            epoch::function_ref<void(ICommandContext&)> fn)
+                                            epochengine::function_ref<void(ICommandContext&)> fn)
     {
         PassDecl p{};
-        p.name = epoch::string(name);
+        p.name = epochengine::string(name);
         p.reads.assign(reads.begin(), reads.end());
         p.writes.assign(writes.begin(), writes.end());
         p.render_target_resource = target;
         p.render_pass = pass;
         p.execute = std::move(fn);
-
         m_passes.push_back(std::move(p));
         return GraphPass{ static_cast<u32>(m_passes.size()) };
     }

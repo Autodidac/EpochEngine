@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <cstdint>
@@ -43,7 +42,7 @@ export module vulkan.context:renderer;
 
 #if defined(EPOCH_USING_VULKAN)
 
-export namespace epochnamespace::vulkanrenderer
+export namespace epochengine::vulkanrenderer
 {
     struct RendererContext
     {

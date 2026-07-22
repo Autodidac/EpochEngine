@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <array>
@@ -14,7 +44,7 @@ import package.registry;
 import render.device;
 import render.graph;
 
-export namespace epoch::render_arcade
+export namespace epochengine::render_arcade
 {
     struct ArcadeScreenGraphBuild
     {
@@ -246,7 +276,7 @@ export namespace epoch::render_arcade
     [[nodiscard]] inline ArcadeScreenGraphBuild add_screen_graph(GraphBuilder& builder)
     {
         const std::string_view screenNameStd = package_registry::engine_arcade_render_texture_name();
-        const epoch::string_view screenName{ screenNameStd.data(), screenNameStd.size() };
+        const epochengine::string_view screenName{ screenNameStd.data(), screenNameStd.size() };
 
         ArcadeScreenGraphBuild build{};
         build.screen = builder.create_render_texture_asset(
@@ -277,13 +307,13 @@ export namespace epoch::render_arcade
         build.model = builder.create_model(
             "engine_arcade.screen_scene.model",
             make_screen_scene_model_desc(),
-            epoch::span<const GraphModelMeshSlot>{ modelSlots.data(), modelSlots.size() });
+            epochengine::span<const GraphModelMeshSlot>{ modelSlots.data(), modelSlots.size() });
 
         const std::array<GraphResource, 2> reads{ build.material, build.model };
         build.populate_pass = builder.add_render_pass(
             "engine_arcade.screen.populate",
             build.screen.render_target,
-            epoch::span<const GraphResource>{ reads.data(), reads.size() },
+            epochengine::span<const GraphResource>{ reads.data(), reads.size() },
             {},
             build.screen.plan.render_pass,
             [](ICommandContext& ctx)
@@ -316,7 +346,7 @@ export namespace epoch::render_arcade
         build.material = builder.create_material(
             "engine_arcade.cabinet.material",
             make_cabinet_material_desc(),
-            epoch::span<const GraphMaterialTextureSlot>{ materialSlots.data(), materialSlots.size() });
+            epochengine::span<const GraphMaterialTextureSlot>{ materialSlots.data(), materialSlots.size() });
 
         build.vertex_buffer = builder.create_buffer(
             "engine_arcade.cabinet.screen_vertices",
@@ -362,12 +392,12 @@ export namespace epoch::render_arcade
         build.model = builder.create_model(
             "engine_arcade.cabinet.model",
             make_cabinet_model_desc(),
-            epoch::span<const GraphModelMeshSlot>{ modelSlots.data(), modelSlots.size() });
+            epochengine::span<const GraphModelMeshSlot>{ modelSlots.data(), modelSlots.size() });
 
         const std::array<GraphResource, 3> reads{ build.material, build.body_material, build.model };
         build.cabinet_pass = builder.add_pass(
             "engine_arcade.cabinet.sampled_surface",
-            epoch::span<const GraphResource>{ reads.data(), reads.size() },
+            epochengine::span<const GraphResource>{ reads.data(), reads.size() },
             {},
             [](ICommandContext& ctx)
             {

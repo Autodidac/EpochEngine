@@ -40,7 +40,7 @@ module;
 
 export module ecs.storage;
 
-export namespace epochnamespace::ecs
+export namespace epochengine::ecs
 {
     /// The basic ID type
     using EntityID = std::size_t;

@@ -58,30 +58,30 @@ namespace
 #endif
 
     std::uint32_t default_add_texture(
-        epochnamespace::TextureAtlas&,
+        epochengine::TextureAtlas&,
         std::string,
-        const epochnamespace::ImageData&) noexcept
+        const epochengine::ImageData&) noexcept
     {
         return 0u;
     }
 
-    std::uint32_t default_add_atlas(const epochnamespace::TextureAtlas& atlas) noexcept
+    std::uint32_t default_add_atlas(const epochengine::TextureAtlas& atlas) noexcept
     {
         const int idx = atlas.get_index();
         return static_cast<std::uint32_t>(idx >= 0 ? idx + 1 : 1);
     }
 
-    void bind_default_input(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    void bind_default_input(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
-        ctx->is_key_held = [](epochnamespace::input::Key key) { return epochnamespace::input::is_key_held(key); };
-        ctx->is_key_down = [](epochnamespace::input::Key key) { return epochnamespace::input::is_key_down(key); };
+        ctx->is_key_held = [](epochengine::input::Key key) { return epochengine::input::is_key_held(key); };
+        ctx->is_key_down = [](epochengine::input::Key key) { return epochengine::input::is_key_down(key); };
         ctx->get_mouse_position = [](int& x, int& y)
         {
-            x = epochnamespace::input::mouseX.load(std::memory_order_relaxed);
-            y = epochnamespace::input::mouseY.load(std::memory_order_relaxed);
+            x = epochengine::input::mouseX.load(std::memory_order_relaxed);
+            y = epochengine::input::mouseY.load(std::memory_order_relaxed);
         };
-        ctx->is_mouse_button_held = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_held(button); };
-        ctx->is_mouse_button_down = [](epochnamespace::input::MouseButton button) { return epochnamespace::input::is_mouse_button_down(button); };
+        ctx->is_mouse_button_held = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_held(button); };
+        ctx->is_mouse_button_down = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_down(button); };
     }
 
     [[nodiscard]] Uint8 to_sdl_channel(float value) noexcept
@@ -91,13 +91,13 @@ namespace
     }
 
     [[nodiscard]] bool project_preview_vertex(
-        const epochnamespace::previewgrid::Mat4& mvp,
-        const epochnamespace::previewgrid::Vec3& position,
-        const epochnamespace::core::RenderViewport& viewport,
+        const epochengine::previewgrid::Mat4& mvp,
+        const epochengine::previewgrid::Vec3& position,
+        const epochengine::core::RenderViewport& viewport,
         float& outX,
         float& outY) noexcept
     {
-        const auto clip = epochnamespace::previewgrid::transform_point(mvp, position);
+        const auto clip = epochengine::previewgrid::transform_point(mvp, position);
         if (clip.w <= 1.0e-4f)
             return false;
 
@@ -144,8 +144,8 @@ namespace
             return false;
 
         SdlArcadeScreenPreviewTarget& target = arcade_screen_preview_target();
-        const int width = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_width());
-        const int height = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_height());
+        const int width = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_width());
+        const int height = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_height());
         if (width <= 0 || height <= 0)
             return false;
 
@@ -156,7 +156,7 @@ namespace
         target.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, width, height);
         if (!target.texture)
         {
-            epochnamespace::sdlcontext::check_sdl_error("SDL_CreateTexture engine_arcade.screen");
+            epochengine::sdlcontext::check_sdl_error("SDL_CreateTexture engine_arcade.screen");
             return false;
         }
 
@@ -185,8 +185,8 @@ namespace
         SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer);
         if (!SDL_SetRenderTarget(renderer, target.texture))
         {
-            epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderTarget engine_arcade.screen");
-            epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+            epochengine::sdlcontext::check_sdl_error("SDL_SetRenderTarget engine_arcade.screen");
+            epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
             return;
         }
 
@@ -232,19 +232,19 @@ namespace
 
         if (!SDL_SetRenderTarget(renderer, previousTarget))
         {
-            epochnamespace::sdlcontext::check_sdl_error("SDL_SetRenderTarget engine_arcade.screen restore");
-            epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+            epochengine::sdlcontext::check_sdl_error("SDL_SetRenderTarget engine_arcade.screen restore");
+            epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
         }
     }
 
     void render_engine_arcade_sampled_surface_preview(
-        const std::shared_ptr<epochnamespace::core::Context>& ctx,
-        const epochnamespace::previewgrid::Mat4& mvp,
-        const epochnamespace::core::RenderViewport& viewport) noexcept
+        const std::shared_ptr<epochengine::core::Context>& ctx,
+        const epochengine::previewgrid::Mat4& mvp,
+        const epochengine::core::RenderViewport& viewport) noexcept
     {
         if (!ctx || !s_renderer)
             return;
-        const auto markers = epochnamespace::previewgrid::sampled_render_surface_markers_for(ctx.get());
+        const auto markers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
         if (markers.empty() || !ensure_arcade_screen_preview_target(s_renderer))
             return;
 
@@ -255,7 +255,7 @@ namespace
             const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
             const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
             const float z = marker.position.z - (std::max)(std::abs(marker.scale.z) * 0.5f, 0.018f) - 0.012f;
-            const epochnamespace::previewgrid::Vec3 world[4]{
+            const epochengine::previewgrid::Vec3 world[4]{
                 { marker.position.x - halfX, marker.position.y - halfY, z },
                 { marker.position.x + halfX, marker.position.y - halfY, z },
                 { marker.position.x + halfX, marker.position.y + halfY, z },
@@ -282,25 +282,25 @@ namespace
             const int indices[6]{ 0, 1, 2, 0, 2, 3 };
             if (!SDL_RenderGeometry(s_renderer, target.texture, vertices, 4, indices, 6))
             {
-                epochnamespace::sdlcontext::check_sdl_error("SDL_RenderGeometry engine_arcade.screen");
-                epochnamespace::sdlcontext::state::get_sdl_state().renderFaulted = true;
+                epochengine::sdlcontext::check_sdl_error("SDL_RenderGeometry engine_arcade.screen");
+                epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
                 return;
             }
         }
     }
-    void render_scene_preview(const std::shared_ptr<epochnamespace::core::Context>& ctx)
+    void render_scene_preview(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
         if (!ctx || !s_renderer)
             return;
 
         const auto viewport = ctx->scene_viewport();
-        if (!viewport.valid() || ctx->scene_preview_mode() != epochnamespace::core::ScenePreviewMode::Editor)
+        if (!viewport.valid() || ctx->scene_preview_mode() != epochengine::core::ScenePreviewMode::Editor)
             return;
 
         SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
         (void)SDL_SetRenderClipRect(s_renderer, &clipRect);
 
-        const auto clearColor = epochnamespace::previewgrid::kClearColor;
+        const auto clearColor = epochengine::previewgrid::kClearColor;
         const SDL_FRect background{
             static_cast<float>(viewport.x),
             static_cast<float>(viewport.y),
@@ -316,16 +316,16 @@ namespace
             to_sdl_channel(clearColor[3]));
         (void)SDL_RenderFillRect(s_renderer, &background);
 
-        const auto camera = epochnamespace::previewgrid::camera_for(ctx.get());
+        const auto camera = epochengine::previewgrid::camera_for(ctx.get());
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
-        const auto proj = epochnamespace::previewgrid::projection_for(ctx.get(), aspect, camera);
-        const auto view = epochnamespace::previewgrid::look_at(
+        const auto proj = epochengine::previewgrid::projection_for(ctx.get(), aspect, camera);
+        const auto view = epochengine::previewgrid::look_at(
             camera.eye,
             camera.target,
             camera.up);
-        const auto mvp = epochnamespace::previewgrid::multiply(proj, view);
+        const auto mvp = epochengine::previewgrid::multiply(proj, view);
         auto draw_projected_line = [&](const auto& aVertex, const auto& bVertex) noexcept
         {
             float ax = 0.0f;
@@ -348,8 +348,8 @@ namespace
             (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
         };
 
-        const auto vertices = epochnamespace::previewgrid::grid_vertices();
-        const auto indices = epochnamespace::previewgrid::grid_indices();
+        const auto vertices = epochengine::previewgrid::grid_vertices();
+        const auto indices = epochengine::previewgrid::grid_indices();
 
         for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
         {
@@ -363,14 +363,14 @@ namespace
 
         render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
 
-        const auto markerVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx.get());
-        const std::size_t markerCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx.get());
+        const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+        const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
         for (std::size_t i = 0; i + 1 < markerCount; i += 2)
         {
             draw_projected_line(markerVertices[i], markerVertices[i + 1]);
         }
 
-        const auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx.get());
+        const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
         for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
         {
             draw_projected_line(objectVertices[i], objectVertices[i + 1]);
@@ -379,7 +379,7 @@ namespace
         (void)SDL_SetRenderClipRect(s_renderer, nullptr);
     }
 
-    void refresh_dimensions(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    void refresh_dimensions(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
 #if defined(_WIN32)
         if (s_childWindow && ::IsWindow(s_childWindow) != FALSE)
@@ -424,12 +424,12 @@ namespace
             }
         }
 
-        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.window.sdl_window = s_window;
         state.set_dimensions(s_width, s_height);
     }
 
-    void sync_docked_child_size(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    void sync_docked_child_size(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
 #if defined(_WIN32)
         if (!s_childWindow || ::IsWindow(s_childWindow) == FALSE)
@@ -480,10 +480,10 @@ namespace
 #endif
     }
 
-    void request_host_shutdown(const std::shared_ptr<epochnamespace::core::Context>& ctx) noexcept
+    void request_host_shutdown(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
         s_running = false;
-        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.running = false;
         state.mark_should_close(true);
         if (ctx && ctx->windowData)
@@ -492,7 +492,7 @@ namespace
 
     void sdl_initialize_adapter()
     {
-        auto ctx = epochnamespace::core::get_current_render_context();
+        auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
@@ -510,7 +510,7 @@ namespace
         if (static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
+            epochengine::logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
             return;
         }
 
@@ -522,7 +522,7 @@ namespace
         if (!props)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
+            epochengine::logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
             SDL_Quit();
             return;
         }
@@ -541,7 +541,7 @@ namespace
         if (!s_window)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
+            epochengine::logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
             SDL_Quit();
             return;
         }
@@ -550,22 +550,22 @@ namespace
         if (!s_renderer)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::error("SDL", std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
+            epochengine::logger::error("SDL", std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
             SDL_DestroyWindow(s_window);
             s_window = nullptr;
             SDL_Quit();
             return;
         }
 
-        epochnamespace::sdlcontext::init_renderer(s_renderer);
-        epochnamespace::sdltextures::sdl_renderer = s_renderer;
+        epochengine::sdlcontext::init_renderer(s_renderer);
+        epochengine::sdltextures::sdl_renderer = s_renderer;
 
 #if defined(_WIN32)
         SDL_PropertiesID windowProps = SDL_GetWindowProperties(s_window);
         if (!windowProps)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
+            epochengine::logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
             SDL_DestroyRenderer(s_renderer);
             SDL_DestroyWindow(s_window);
             s_renderer = nullptr;
@@ -579,7 +579,7 @@ namespace
         if (!s_childWindow)
         {
             ctx->init_failed = true;
-            epochnamespace::logger::error("SDL", "Failed to retrieve SDL HWND");
+            epochengine::logger::error("SDL", "Failed to retrieve SDL HWND");
             SDL_DestroyRenderer(s_renderer);
             SDL_DestroyWindow(s_window);
             s_renderer = nullptr;
@@ -600,7 +600,7 @@ namespace
                 style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
                 style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
                 ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-                epochnamespace::core::MakeDockable(s_childWindow, dockParent);
+                epochengine::core::MakeDockable(s_childWindow, dockParent);
 
                 RECT client{};
                 ::GetClientRect(s_hostWindow, &client);
@@ -675,7 +675,7 @@ namespace
             ctx->windowData->set_size(s_width, s_height);
         }
 
-        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.window.sdl_window = s_window;
         state.set_dimensions(s_width, s_height);
         state.mark_should_close(false);
@@ -695,22 +695,22 @@ namespace
 
         s_running = true;
         SDL_ShowWindow(s_window);
-        epochnamespace::atlasmanager::register_backend_uploader(
-            epochnamespace::core::ContextType::SDL,
-            [](const epochnamespace::TextureAtlas& atlas)
+        epochengine::atlasmanager::register_backend_uploader(
+            epochengine::core::ContextType::SDL,
+            [](const epochengine::TextureAtlas& atlas)
             {
-                epochnamespace::sdltextures::ensure_uploaded(atlas);
+                epochengine::sdltextures::ensure_uploaded(atlas);
             });
     }
 
     void sdl_cleanup_adapter()
     {
-        epochnamespace::atlasmanager::unregister_backend_uploader(epochnamespace::core::ContextType::SDL);
-        epochnamespace::sdltextures::clear_gpu_atlases();
-        epochnamespace::sdltextures::sdl_renderer = nullptr;
+        epochengine::atlasmanager::unregister_backend_uploader(epochengine::core::ContextType::SDL);
+        epochengine::sdltextures::clear_gpu_atlases();
+        epochengine::sdltextures::sdl_renderer = nullptr;
 
         s_running = false;
-        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.running = false;
         state.renderFaulted = false;
         state.mark_should_close(false);
@@ -763,13 +763,13 @@ namespace
     }
 
     bool sdl_process_adapter(
-        std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
+        std::shared_ptr<epochengine::core::Context> ctx,
+        epochengine::core::CommandQueue& queue)
     {
         if (!ctx || !s_running || !s_window || !s_renderer)
             return false;
 
-        auto& state = epochnamespace::sdlcontext::state::get_sdl_state();
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         const bool closeRequested =
             state.renderFaulted
             || state.shouldClose
@@ -811,7 +811,7 @@ namespace
         state.set_dimensions(s_width, s_height);
         state.running = s_running;
 
-        const auto clearColor = epochnamespace::core::clear_color_for_context(epochnamespace::core::ContextType::SDL);
+        const auto clearColor = epochengine::core::clear_color_for_context(epochengine::core::ContextType::SDL);
         (void)SDL_SetRenderDrawColor(
             s_renderer,
             to_sdl_channel(clearColor[0]),
@@ -820,12 +820,12 @@ namespace
             to_sdl_channel(clearColor[3]));
         SDL_RenderClear(s_renderer);
 
-        epochnamespace::atlasmanager::process_pending_uploads(epochnamespace::core::ContextType::SDL);
+        epochengine::atlasmanager::process_pending_uploads(epochengine::core::ContextType::SDL);
         (void)queue.drain();
-        (void)epochnamespace::gui::render_deferred_batch(ctx.get());
+        (void)epochengine::gui::render_deferred_batch(ctx.get());
         render_scene_preview(ctx);
-        (void)epochnamespace::gui::render_top_layer_batch(ctx.get());
-        epochnamespace::sdlcontext::end_frame();
+        (void)epochengine::gui::render_top_layer_batch(ctx.get());
+        epochengine::sdlcontext::end_frame();
         if (state.renderFaulted)
         {
             return false;
@@ -834,7 +834,7 @@ namespace
     }
 }
 
-namespace epochnamespace::core::detail
+namespace epochengine::core::detail
 {
     void register_sdl_backend()
     {
@@ -848,9 +848,9 @@ namespace epochnamespace::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return s_width; };
         ctx->get_height = []() { return s_height; };
-        ctx->draw_sprite = epochnamespace::sdltextures::draw_sprite;
+        ctx->draw_sprite = epochengine::sdltextures::draw_sprite;
         ctx->add_texture = &default_add_texture;
-        ctx->add_atlas = +[](const epochnamespace::TextureAtlas& atlas)
+        ctx->add_atlas = +[](const epochengine::TextureAtlas& atlas)
         {
             return default_add_atlas(atlas);
         };

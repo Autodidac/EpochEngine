@@ -28,8 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
- // modules/vulkan.context-shared_context.ixx
+// modules/vulkan.context-shared_context.ixx
 // Partition: vulkan.context:shared_context
 // Shared types (GLM lives here; Vulkan-Hpp moved to :shared_vk).
 // ============================================================================
@@ -52,7 +51,7 @@ module;
 
 export module vulkan.context:shared_context;
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     export extern const std::vector<const char*> validationLayers;
     export extern const std::vector<const char*> deviceExtensions;

@@ -5,7 +5,7 @@ module;
 
 export module ai.train;
 
-export namespace epoch::ai
+export namespace epochengine::ai
 {
     struct TrainingPaths
     {

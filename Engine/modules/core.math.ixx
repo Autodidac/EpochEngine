@@ -34,7 +34,7 @@ module;
 
 export module core.math;
 
-export namespace epoch::core::math
+export namespace epochengine::core::math
 {
     template <class T>
     concept arithmetic = std::is_arithmetic_v<T>;

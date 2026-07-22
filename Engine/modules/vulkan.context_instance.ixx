@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 // modules/vulkan.context-instance.ixx
 // Partition: vulkan.context:instance
 // Vulkan instance + surface creation.
@@ -89,12 +88,12 @@ import :renderer;
 import core.logger;
 
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
 }
 
-namespace epochnamespace::vulkancontext::detail
+namespace epochengine::vulkancontext::detail
 {
     using PFN_EnumLayers = VkResult(VKAPI_PTR*)(uint32_t*, VkLayerProperties*);
     using PFN_GetInstanceProcAddr = PFN_vkGetInstanceProcAddr;
@@ -183,7 +182,7 @@ namespace epochnamespace::vulkancontext::detail
     };
 }
 
-export namespace epochnamespace::vulkancontext
+export namespace epochengine::vulkancontext
 {
     bool Application::checkValidationLayerSupport()
     {
@@ -233,7 +232,7 @@ export namespace epochnamespace::vulkancontext
     void Application::createInstance()
     {
         // Important: this now uses the Vulkan loader safely (no invalid vk* call)
-        validationLayersEnabled = epochnamespace::vulkanrenderer::vulkan_config.enable_validation_layers;
+        validationLayersEnabled = epochengine::vulkanrenderer::vulkan_config.enable_validation_layers;
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
             logger::get(kLogSys).log(
@@ -330,4 +329,4 @@ export namespace epochnamespace::vulkancontext
 #endif
     }
 
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

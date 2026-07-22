@@ -28,13 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
 
-// ABI-facing primitives (string_view/span/function_ref + forward decl epoch::string).
+// ABI-facing primitives (string_view/span/function_ref + forward decl epochengine::string).
 #include "../include/_epoch.stl_types.hpp"
 
 #include <atomic>
@@ -45,7 +41,7 @@ module;
 
 export module epoch.systems;
 
-export namespace epoch::systems
+export namespace epochengine::systems
 {
     // ---------------------------------------------------------------------
     // System interface
@@ -54,10 +50,10 @@ export namespace epoch::systems
     {
         virtual ~ISystem() noexcept = default;
 
-        [[nodiscard]] virtual epoch::string_view name() const noexcept = 0;
+        [[nodiscard]] virtual epochengine::string_view name() const noexcept = 0;
 
         // Returned views must remain valid for the lifetime of the system object.
-        [[nodiscard]] virtual epoch::array_view<const epoch::string_view> dependencies() const noexcept = 0;
+        [[nodiscard]] virtual epochengine::array_view<const epochengine::string_view> dependencies() const noexcept = 0;
 
         virtual void on_init() noexcept = 0;
         virtual void on_update(double dt_seconds) noexcept = 0;
@@ -127,7 +123,7 @@ export namespace epoch::systems
     template <class T>
     [[nodiscard]] inline SystemFactory make_factory() noexcept
     {
-        static_assert(std::is_base_of_v<ISystem, T>, "T must derive from epoch::systems::ISystem");
+        static_assert(std::is_base_of_v<ISystem, T>, "T must derive from epochengine::systems::ISystem");
         static_assert(std::is_default_constructible_v<T>, "T must be default constructible");
 
         return SystemFactory{
@@ -147,14 +143,14 @@ export namespace epoch::systems
         // Takes ownership of the created system (constructed immediately).
         bool register_system(SystemFactory factory) noexcept;
 
-        [[nodiscard]] ISystem* find(epoch::string_view name) noexcept;
+        [[nodiscard]] ISystem* find(epochengine::string_view name) noexcept;
 
         // Topologically sorted by dependencies; valid after resolve_order().
-        [[nodiscard]] epoch::array_view<ISystem* const> ordered_systems() const noexcept;
+        [[nodiscard]] epochengine::array_view<ISystem* const> ordered_systems() const noexcept;
 
         bool resolve_order() noexcept;
         bool initialize() noexcept;
         void update(double dt_seconds) noexcept;
         void shutdown() noexcept;
     };
-} // namespace epoch::systems
+} // namespace epochengine::systems

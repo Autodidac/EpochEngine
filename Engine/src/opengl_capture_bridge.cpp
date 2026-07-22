@@ -3,7 +3,7 @@
 #include <include/engine.config.hpp>
 
 #if defined(_MSC_VER)
-namespace epochnamespace::openglbridge
+namespace epochengine::openglbridge
 {
     void capture_frame_if_requested(int, int, std::uintptr_t)
     {
@@ -12,7 +12,7 @@ namespace epochnamespace::openglbridge
 #elif defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.capture;
 
-namespace epochnamespace::openglbridge
+namespace epochengine::openglbridge
 {
     void capture_frame_if_requested(int framebufferWidth, int framebufferHeight, std::uintptr_t windowId)
     {

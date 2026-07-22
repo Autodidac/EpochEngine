@@ -77,7 +77,7 @@ import engine.platform;
 import updater.tools;
 import updater.config;
 
-namespace epochnamespace::updater
+namespace epochengine::updater
 {
     namespace system_detail
     {
@@ -558,7 +558,7 @@ namespace epochnamespace::updater
                 return ensure_directory(root);
 
             if (root.empty())
-                root = epoch::core::path::executable_dir();
+                root = epochengine::core::path::executable_dir();
             if (root.empty())
                 root = std::filesystem::current_path(ec);
             if (root.empty() || ec)
@@ -2480,8 +2480,8 @@ namespace epochnamespace::updater
             }
 #endif
 
-            if (!epochnamespace::core::cli::exe_path.empty())
-                return std::filesystem::absolute(epochnamespace::core::cli::exe_path, ec).lexically_normal();
+            if (!epochengine::core::cli::exe_path.empty())
+                return std::filesystem::absolute(epochengine::core::cli::exe_path, ec).lexically_normal();
 
             const auto configured_binary = std::filesystem::path{ RUNTIME_BINARY_NAME() };
             if (!configured_binary.empty())

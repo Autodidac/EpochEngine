@@ -59,11 +59,11 @@ import core.logger;
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-namespace epochnamespace::spritepool
+namespace epochengine::spritepool
 {
-    using epochnamespace::SpriteHandle;
-    using epochnamespace::Task;
-    using epochnamespace::taskgraph::Node;
+    using epochengine::SpriteHandle;
+    using epochengine::Task;
+    using epochengine::taskgraph::Node;
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Pool state (module-local singletons)

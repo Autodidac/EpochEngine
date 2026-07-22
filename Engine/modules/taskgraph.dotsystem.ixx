@@ -52,8 +52,8 @@ export module taskgraph.dotsystem;
 // Engine dependencies (header units / modules)
 // ------------------------------------------------------------
 
-import mpmcboundedqueue;   // provides epochnamespace::MPMCQueue
-import engine.systems;     // provides epochnamespace::Task
+import mpmcboundedqueue;   // provides epochengine::MPMCQueue
+import engine.systems;     // provides epochengine::Task
 import epoch.systems;
 import core.logger;
 
@@ -65,7 +65,7 @@ import core.logger;
 // Task graph system
 // ============================================================
 
-export namespace epochnamespace::taskgraph
+export namespace epochengine::taskgraph
 {
     struct Node
     {
@@ -205,7 +205,7 @@ export namespace epochnamespace::taskgraph
 
         void WorkerLoop()
         {
-            epoch::systems::threading::ScopedThreadActivity threadActivity{};
+            epochengine::systems::threading::ScopedThreadActivity threadActivity{};
             Node* n = nullptr;
 
             while (Running_) {

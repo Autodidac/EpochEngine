@@ -1,6 +1,33 @@
-// SPDX-License-Identifier: LicenseRef-MIT-NoSell
-// Copyright (c) 2026 Adam Rushford
-
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <algorithm>
@@ -17,7 +44,7 @@ export module timeline.system;
 import core.time;
 import scenesnapshot;
 
-export namespace epoch::timeline
+export namespace epochengine::timeline
 {
     enum class TimelineTrackKind : unsigned char
     {
@@ -174,7 +201,7 @@ export namespace epoch::timeline
         state.playhead_frame = static_cast<std::uint64_t>(state.playhead_seconds / state.fixed_dt_seconds + 0.5);
     }
 
-    inline void sync_to_simulation(TimelineState& state, const epoch::core::time::simulation_stats& stats) noexcept
+    inline void sync_to_simulation(TimelineState& state, const epochengine::core::time::simulation_stats& stats) noexcept
     {
         state.fixed_dt_seconds = stats.fixed_dt_seconds;
         if (state.playing)
@@ -237,7 +264,7 @@ export namespace epoch::timeline
     [[nodiscard]] inline TimelineEvent make_event_from_stats(
         std::string track_id,
         TimelineEventKind kind,
-        const epoch::core::time::simulation_stats& stats,
+        const epochengine::core::time::simulation_stats& stats,
         std::string label,
         std::string target_name,
         std::string payload = {})
@@ -465,9 +492,9 @@ export namespace epoch::timeline
             metrics.enabled_track_count);
     }
 
-    [[nodiscard]] inline epoch::scene::SceneTimelineKey to_scene_timeline_key(const TimelineEvent& event)
+    [[nodiscard]] inline epochengine::scene::SceneTimelineKey to_scene_timeline_key(const TimelineEvent& event)
     {
-        return epoch::scene::make_timeline_key(
+        return epochengine::scene::make_timeline_key(
             event.simulated_seconds,
             event.frame_index,
             event.label,

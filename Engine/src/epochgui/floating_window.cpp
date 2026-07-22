@@ -7,7 +7,7 @@ module;
 
 module epoch.gui;
 
-namespace epochnamespace::gui_lib
+namespace epochengine::gui_lib
 {
     namespace
     {
@@ -616,7 +616,7 @@ namespace epochnamespace::gui_lib
         Vec2 point,
         float hit_padding) const noexcept
     {
-        return epochnamespace::gui_lib::splitter_hit_test(layout, point, hit_padding);
+        return epochengine::gui_lib::splitter_hit_test(layout, point, hit_padding);
     }
 
     ProgressBarLayout LayoutPrimitiveController::make_progress_bar(

@@ -52,7 +52,7 @@ export module context.commandqueue;
 // Command queue (thread-safe, no raw mutex access)
 // ============================================================
 
-export namespace epochnamespace::core
+export namespace epochengine::core
 {
     enum class RenderPath : std::uint8_t
     {

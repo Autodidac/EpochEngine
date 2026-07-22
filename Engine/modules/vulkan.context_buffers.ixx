@@ -53,11 +53,11 @@ export module vulkan.context:buffers;
 import :shared_vk;
 import :meshcube;
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     void Application::createVertexBuffer()
     {
-        const auto vertices = epochnamespace::vulkancontext::preview_vertices_for(bound_context());
+        const auto vertices = epochengine::vulkancontext::preview_vertices_for(bound_context());
         if (vertices.empty())
             throw std::runtime_error("[ Vulkan ] - No vertex data available.");
 

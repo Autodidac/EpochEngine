@@ -89,44 +89,44 @@ import epoch.systems;
 import perf.tier;
 
 // ---- helpers ----
-import utility.string_converter;     // epochnamespace::text::narrow_utf8
+import utility.string_converter;     // epochengine::text::narrow_utf8
 
 // ---- backends (only referenced when enabled) ----
 #   if defined(EPOCH_USING_OPENGL)
-import opengl.context;       // epochnamespace::openglcontext::opengl_initialize
+import opengl.context;       // epochengine::openglcontext::opengl_initialize
 #   endif
 #   if defined(EPOCH_USING_OPENGL) || defined(EPOCH_USING_SDL)
-import opengl.platform;      // epochnamespace::openglcontext::PlatformGL::get_proc_address
+import opengl.platform;      // epochengine::openglcontext::PlatformGL::get_proc_address
 #   endif
 #   if defined(EPOCH_USING_RAYLIB)
-import raylib.context;       // epochnamespace::raylibcontext::raylib_initialize
+import raylib.context;       // epochengine::raylibcontext::raylib_initialize
 #   endif
 #   if defined(EPOCH_USING_SDL)
-import sdl.context;          // epochnamespace::sdlcontext::sdl_initialize
+import sdl.context;          // epochengine::sdlcontext::sdl_initialize
 #   endif
 #   if defined(EPOCH_USING_SFML)
-import sfml.context;         // epochnamespace::sfmlcontext::sfml_initialize
+import sfml.context;         // epochengine::sfmlcontext::sfml_initialize
 #   endif
 #   if defined(EPOCH_USING_SOFTWARE_RENDERER)
-import software.context; // epochnamespace::anativecontext::softrenderer_initialize
+import software.context; // epochengine::anativecontext::softrenderer_initialize
 #   endif
 
-namespace epochnamespace::platform
+namespace epochengine::platform
 {
     // Keep these as the same globals your other code expects.
     Display* global_display = nullptr;
     ::Window global_window = 0;
 }
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     namespace
     {
         constexpr auto kRenderThreadStartupStepDelay = std::chrono::milliseconds(250);
     }
 
-    using epochnamespace::platform::global_display;
-    using epochnamespace::platform::global_window;
+    using epochengine::platform::global_display;
+    using epochengine::platform::global_window;
 
     MultiContextManager* GetActiveMultiContextManager() noexcept
     {
@@ -151,11 +151,11 @@ namespace epochnamespace::core
 
 namespace
 {
-    [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
-        const epochnamespace::core::OpaqueContextHandle& opaque) noexcept
+    [[nodiscard]] inline std::shared_ptr<epochengine::core::Context> typed_context(
+        const epochengine::core::OpaqueContextHandle& opaque) noexcept
     {
         return opaque
-            ? std::reinterpret_pointer_cast<epochnamespace::core::Context>(opaque)
+            ? std::reinterpret_pointer_cast<epochengine::core::Context>(opaque)
             : nullptr;
     }
 
@@ -283,7 +283,7 @@ namespace
                 title = make_native_fps_title(state.baseTitle, state.fps);
             }
 
-            const auto narrow = epochnamespace::text::narrow_utf8(title);
+            const auto narrow = epochengine::text::narrow_utf8(title);
             XStoreName(display, xwin, narrow.c_str());
         }
 
@@ -328,9 +328,9 @@ namespace
             return (value < 1) ? 1 : value;
         }
 
-        [[nodiscard]] epochnamespace::input::Key map_keysym(KeySym sym) noexcept
+        [[nodiscard]] epochengine::input::Key map_keysym(KeySym sym) noexcept
         {
-            using epochnamespace::input::Key;
+            using epochengine::input::Key;
             switch (sym)
             {
             case XK_a: case XK_A: return Key::A;
@@ -402,9 +402,9 @@ namespace
             }
         }
 
-        [[nodiscard]] std::optional<epochnamespace::input::MouseButton> map_mouse_button(unsigned int button) noexcept
+        [[nodiscard]] std::optional<epochengine::input::MouseButton> map_mouse_button(unsigned int button) noexcept
         {
-            using epochnamespace::input::MouseButton;
+            using epochengine::input::MouseButton;
             switch (button)
             {
             case Button1: return MouseButton::MouseLeft;
@@ -418,7 +418,7 @@ namespace
 
         void clear_linux_input_state() noexcept
         {
-            using namespace epochnamespace::input;
+            using namespace epochengine::input;
             std::unique_lock lock(g_inputMutex);
             keyPressed.reset();
             mousePressed.reset();
@@ -457,8 +457,8 @@ namespace
 
         if (parented)
         {
-            epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::WARN,
+            epochengine::logger::get(kLogSys).log(
+                epochengine::logger::LogLevel::WARN,
                 "Linux multiplexer currently forces standalone windows; parented mode is ignored.",
                 std::source_location::current());
         }
@@ -470,8 +470,8 @@ namespace
 
         if (!g_xlibInitialized)
         {
-            epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).log(
+                epochengine::logger::LogLevel::Error,
                 "XInitThreads failed; aborting X11 initialization",
                 std::source_location::current());
             return false;
@@ -483,8 +483,8 @@ namespace
         display = XOpenDisplay(nullptr);
         if (!display)
         {
-            epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).log(
+                epochengine::logger::LogLevel::Error,
                 "Failed to open X display",
                 std::source_location::current());
             return false;
@@ -511,8 +511,8 @@ namespace
         GLXFBConfig* configs = glXChooseFBConfig(display, screen, visualAttribs, &fbCount);
         if (!configs || fbCount == 0)
         {
-            epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).log(
+                epochengine::logger::LogLevel::Error,
                 "glXChooseFBConfig failed",
                 std::source_location::current());
             if (configs) XFree(configs);
@@ -529,8 +529,8 @@ namespace
         }
         else
         {
-            epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).log(
+                epochengine::logger::LogLevel::Error,
                 "glXGetVisualFromFBConfig failed",
                 std::source_location::current());
             return false;
@@ -539,8 +539,8 @@ namespace
         colormap = XCreateColormap(display, RootWindow(display, screen), visualInfo.visual, AllocNone);
         if (!colormap)
         {
-            epochnamespace::logger::get(kLogSys).log(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).log(
+                epochengine::logger::LogLevel::Error,
                 "Failed to create X colormap",
                 std::source_location::current());
             return false;
@@ -563,7 +563,7 @@ namespace
                 for (int i = 0; i < count; ++i)
                 {
                     const std::wstring titleWide = BuildWindowTitle(type, i, effectiveParented);
-                    const std::string titleNarrow = epochnamespace::text::narrow_utf8(titleWide);
+                    const std::string titleNarrow = epochengine::text::narrow_utf8(titleWide);
 
                     XSetWindowAttributes swa{};
                     swa.colormap = colormap;
@@ -587,8 +587,8 @@ namespace
 
                     if (!win)
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::WARN,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::WARN,
                             "Failed to create X11 window",
                             std::source_location::current());
                         continue;
@@ -643,8 +643,8 @@ namespace
                     auto it = g_backends.find(type);
                     if (it == g_backends.end() || !it->second.master)
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Missing prototype context for backend type {}",
                             static_cast<int>(type));
@@ -719,8 +719,8 @@ namespace
                                 auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
-                                    epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).log(
+                                        epochengine::logger::LogLevel::Error,
                                         "OpenGL context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
@@ -728,11 +728,11 @@ namespace
 
                                 try
                                 {
-                                    if (!epochnamespace::openglcontext::opengl_initialize(
+                                    if (!epochengine::openglcontext::opengl_initialize(
                                         target, target->hwnd, width, height, std::move(resize)))
                                     {
-                                        epochnamespace::logger::get(kLogSys).logf(
-                                            epochnamespace::logger::LogLevel::Error,
+                                        epochengine::logger::get(kLogSys).logf(
+                                            epochengine::logger::LogLevel::Error,
                                             std::source_location::current(),
                                             "Failed to initialize OpenGL context for hwnd={}",
                                             target->hwnd);
@@ -741,8 +741,8 @@ namespace
                                 }
                                 catch (const std::exception& e)
                                 {
-                                    epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).logf(
+                                        epochengine::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Exception during OpenGL initialization for hwnd={}: {}",
                                         target->hwnd,
@@ -751,8 +751,8 @@ namespace
                                 }
                                 catch (...)
                                 {
-                                    epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).logf(
+                                        epochengine::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Unknown exception during OpenGL initialization for hwnd={}",
                                         target->hwnd);
@@ -770,11 +770,11 @@ namespace
                         const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
                         const unsigned height = static_cast<unsigned>((std::max)(1, window->height));
 
-                        if (!epochnamespace::anativecontext::softrenderer_initialize(
+                        if (!epochengine::anativecontext::softrenderer_initialize(
                             ctx, nullptr, width, height, window->onResize))
                         {
-                            epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::Error,
+                            epochengine::logger::get(kLogSys).logf(
+                                epochengine::logger::LogLevel::Error,
                                 std::source_location::current(),
                                 "Failed to initialize Software renderer for hwnd={}",
                                 ctx->hwnd);
@@ -800,18 +800,18 @@ namespace
                                 auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
-                                    epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).log(
+                                        epochengine::logger::LogLevel::Error,
                                         "SDL context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
                                 }
 
-                                if (!epochnamespace::sdlcontext::sdl_initialize(
+                                if (!epochengine::sdlcontext::sdl_initialize(
                                     target, nullptr, width, height, std::move(resize), title))
                                 {
-                                    epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).logf(
+                                        epochengine::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Failed to initialize SDL context for hwnd={}",
                                         target->hwnd);
@@ -840,18 +840,18 @@ namespace
                                 auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
-                                    epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).log(
+                                        epochengine::logger::LogLevel::Error,
                                         "RayLib context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
                                 }
 
-                                if (!epochnamespace::raylibcontext::raylib_initialize(
+                                if (!epochengine::raylibcontext::raylib_initialize(
                                     target, nullptr, width, height, std::move(resize), title))
                                 {
-                                    epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).logf(
+                                        epochengine::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Failed to initialize RayLib context for hwnd={}",
                                         target->hwnd);
@@ -880,18 +880,18 @@ namespace
                                 auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                                 if (!target)
                                 {
-                                    epochnamespace::logger::get(kLogSys).log(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).log(
+                                        epochengine::logger::LogLevel::Error,
                                         "SFML context unavailable during thread initialization",
                                         std::source_location::current());
                                     return false;
                                 }
 
-                                if (!epochnamespace::sfmlcontext::sfml_initialize(
+                                if (!epochengine::sfmlcontext::sfml_initialize(
                                     target, nullptr, width, height, std::move(resize), title))
                                 {
-                                    epochnamespace::logger::get(kLogSys).logf(
-                                        epochnamespace::logger::LogLevel::Error,
+                                    epochengine::logger::get(kLogSys).logf(
+                                        epochengine::logger::LogLevel::Error,
                                         std::source_location::current(),
                                         "Failed to initialize SFML context for hwnd={}",
                                         target->hwnd);
@@ -1142,8 +1142,8 @@ namespace
                     auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::Error,
                             "OpenGL context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
@@ -1151,11 +1151,11 @@ namespace
 
                     try
                     {
-                        if (!epochnamespace::openglcontext::opengl_initialize(
+                        if (!epochengine::openglcontext::opengl_initialize(
                             target, target->hwnd, width, height, std::move(resize)))
                         {
-                            epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::Error,
+                            epochengine::logger::get(kLogSys).logf(
+                                epochengine::logger::LogLevel::Error,
                                 std::source_location::current(),
                                 "Failed to initialize OpenGL context for hwnd={}",
                                 target->hwnd);
@@ -1164,8 +1164,8 @@ namespace
                     }
                     catch (const std::exception& e)
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Exception during OpenGL initialization for hwnd={}: {}",
                             target->hwnd,
@@ -1174,8 +1174,8 @@ namespace
                     }
                     catch (...)
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Unknown exception during OpenGL initialization for hwnd={}",
                             target->hwnd);
@@ -1205,18 +1205,18 @@ namespace
                     auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::Error,
                             "SDL context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
                     }
 
-                    if (!epochnamespace::sdlcontext::sdl_initialize(
+                    if (!epochengine::sdlcontext::sdl_initialize(
                         target, nullptr, width, height, std::move(resize), title))
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Failed to initialize SDL context for hwnd={}",
                             target->hwnd);
@@ -1246,18 +1246,18 @@ namespace
                     auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::Error,
                             "RayLib context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
                     }
 
-                    if (!epochnamespace::raylibcontext::raylib_initialize(
+                    if (!epochengine::raylibcontext::raylib_initialize(
                         target, nullptr, width, height, std::move(resize), title))
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Failed to initialize RayLib context for hwnd={}",
                             target->hwnd);
@@ -1287,18 +1287,18 @@ namespace
                     auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
                     if (!target)
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::Error,
                             "SFML context unavailable during thread initialization",
                             std::source_location::current());
                         return false;
                     }
 
-                    if (!epochnamespace::sfmlcontext::sfml_initialize(
+                    if (!epochengine::sfmlcontext::sfml_initialize(
                         target, nullptr, width, height, std::move(resize), title))
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Failed to initialize SFML context for hwnd={}",
                             target->hwnd);
@@ -1318,7 +1318,7 @@ namespace
 
         threads[xwin] = std::thread([this, raw]()
             {
-                epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                 RenderLoop(*raw);
             });
     }
@@ -1547,11 +1547,11 @@ namespace
                         kRenderThreadStartupStepDelay * static_cast<int>(launchIndex++));
                 threads[xwin] = std::thread([this, raw, startupDelay]()
                     {
-                        epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                        epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                         if (startupDelay.count() > 0)
                         {
-                            epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::INFO,
+                            epochengine::logger::get(kLogSys).logf(
+                                epochengine::logger::LogLevel::INFO,
                                 std::source_location::current(),
                                 "Startup stagger: delaying render thread {} by {} ms.",
                                 static_cast<void*>(raw ? raw->hwnd : nullptr),
@@ -1647,32 +1647,32 @@ namespace
                 std::scoped_lock gladLock(g_gladInitializationMutex);
                 if (!g_gladInitialized.load(std::memory_order_relaxed))
                 {
-                    epochnamespace::openglcontext::PlatformGL::PlatformGLContext finalCtx{};
+                    epochengine::openglcontext::PlatformGL::PlatformGLContext finalCtx{};
                     finalCtx.display = localDisplay;
                     finalCtx.drawable = xwin;
                     finalCtx.context = glxCtx;
 
-                    epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard{ finalCtx };
+                    epochengine::openglcontext::PlatformGL::ScopedContext contextGuard{ finalCtx };
                     if (!contextGuard.ok())
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::Error,
                             "PlatformGL::make_current(final) failed on Linux",
                             std::source_location::current());
                     }
 #if defined(EPOCH_FORCE_ENABLE_RAYLIB)
-                    else if (epochnamespace::openglcontext::PlatformGL::load_raylib_gl_functions())
+                    else if (epochengine::openglcontext::PlatformGL::load_raylib_gl_functions())
 #else
                     else if (gladLoadGLLoader(reinterpret_cast<GLADloadproc>(
-                        epochnamespace::openglcontext::PlatformGL::get_proc_address)))
+                        epochengine::openglcontext::PlatformGL::get_proc_address)))
 #endif
                     {
                         g_gladInitialized.store(true, std::memory_order_release);
                     }
                     else
                     {
-                        epochnamespace::logger::get(kLogSys).log(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::Error,
                             "Failed to load OpenGL functions via GLAD on Linux",
                             std::source_location::current());
                     }
@@ -1711,8 +1711,8 @@ namespace
             }
             catch (const std::exception& error)
             {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::Error,
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::Error,
                     std::source_location::current(),
                     "Backend thread initialization for {} raised an exception: {}",
                     ctx->backendName,
@@ -1720,8 +1720,8 @@ namespace
             }
             catch (...)
             {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::Error,
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::Error,
                     std::source_location::current(),
                     "Backend thread initialization for {} raised an unknown exception.",
                     ctx->backendName);
@@ -1765,8 +1765,8 @@ namespace
 
         if (ctx->init_failed)
         {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "Backend init failed for {}. Rejecting the context window.",
                 ctx->backendName);
@@ -1779,8 +1779,8 @@ namespace
 
         if (!ctx->process)
         {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "Backend {} has no frame processor. Rejecting the context window.",
                 ctx->backendName);
@@ -1797,15 +1797,15 @@ namespace
         const auto publishRenderReady = [&]()
         {
             win.set_backend_lifecycle(BackendLifecycleState::ready);
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Backend {} reached render-ready state for hwnd={}.",
                 ctx->backendName,
                 win.hwnd);
         };
 
-        epoch::perf::frame_limiter coreFrameLimiter{};
+        epochengine::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
         const auto resolveCoreFrameLimit = []() noexcept -> double
         {
@@ -1817,9 +1817,9 @@ namespace
                 && !cli::editor_requested
                 && !cli::run_menu_loop;
 
-            return epoch::perf::target_fps_for(standaloneProject
-                ? epoch::perf::frame_limit_preset::fps_60
-                : epoch::perf::frame_limit_preset::fps_120);
+            return epochengine::perf::target_fps_for(standaloneProject
+                ? epochengine::perf::frame_limit_preset::fps_60
+                : epochengine::perf::frame_limit_preset::fps_120);
         };
 
         while (running.load(std::memory_order_acquire) && win.running)
@@ -1849,8 +1849,8 @@ namespace
                 if (win.backend_lifecycle() == BackendLifecycleState::initializing
                     && running.load(std::memory_order_acquire))
                 {
-                    epochnamespace::logger::get(kLogSys).logf(
-                        epochnamespace::logger::LogLevel::Error,
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::Error,
                         std::source_location::current(),
                         "Backend {} stopped before its first successful frame. Rejecting the context window.",
                         ctx->backendName);
@@ -1888,9 +1888,9 @@ namespace
             win.set_backend_lifecycle(BackendLifecycleState::stopped);
     }
 
-} // namespace epochnamespace::core
+} // namespace epochengine::core
 
-namespace epochnamespace::platform
+namespace epochengine::platform
 {
     bool pump_events()
     {
@@ -1900,7 +1900,7 @@ namespace epochnamespace::platform
             return true;
         }
 
-        epochnamespace::core::clear_linux_input_state();
+        epochengine::core::clear_linux_input_state();
 
         bool keepRunning = true;
         while (XPending(display) > 0)
@@ -1911,86 +1911,86 @@ namespace epochnamespace::platform
             switch (event.type)
             {
             case ConfigureNotify:
-                epochnamespace::core::HandleX11Configure(
+                epochengine::core::HandleX11Configure(
                     event.xconfigure.window,
                     event.xconfigure.width,
                     event.xconfigure.height);
                 break;
             case MotionNotify:
             {
-                epochnamespace::input::mouseX.store(event.xmotion.x, std::memory_order_relaxed);
-                epochnamespace::input::mouseY.store(event.xmotion.y, std::memory_order_relaxed);
-                epochnamespace::input::set_mouse_coords_are_global(false);
+                epochengine::input::mouseX.store(event.xmotion.x, std::memory_order_relaxed);
+                epochengine::input::mouseY.store(event.xmotion.y, std::memory_order_relaxed);
+                epochengine::input::set_mouse_coords_are_global(false);
                 break;
             }
             case ButtonPress:
             {
-                epochnamespace::input::mouseX.store(event.xbutton.x, std::memory_order_relaxed);
-                epochnamespace::input::mouseY.store(event.xbutton.y, std::memory_order_relaxed);
-                epochnamespace::input::set_mouse_coords_are_global(false);
+                epochengine::input::mouseX.store(event.xbutton.x, std::memory_order_relaxed);
+                epochengine::input::mouseY.store(event.xbutton.y, std::memory_order_relaxed);
+                epochengine::input::set_mouse_coords_are_global(false);
 
                 if (event.xbutton.button == Button4)
                 {
-                    epochnamespace::input::mouseWheel.fetch_add(120, std::memory_order_relaxed);
+                    epochengine::input::mouseWheel.fetch_add(120, std::memory_order_relaxed);
                     break;
                 }
                 if (event.xbutton.button == Button5)
                 {
-                    epochnamespace::input::mouseWheel.fetch_add(-120, std::memory_order_relaxed);
+                    epochengine::input::mouseWheel.fetch_add(-120, std::memory_order_relaxed);
                     break;
                 }
 
-                if (const auto button = epochnamespace::core::map_mouse_button(event.xbutton.button))
+                if (const auto button = epochengine::core::map_mouse_button(event.xbutton.button))
                 {
-                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                    std::unique_lock lock(epochengine::input::g_inputMutex);
                     const auto index = static_cast<size_t>(*button);
-                    if (!epochnamespace::input::mouseDown.test(index))
-                        epochnamespace::input::mousePressed.set(index);
-                    epochnamespace::input::mouseDown.set(index);
+                    if (!epochengine::input::mouseDown.test(index))
+                        epochengine::input::mousePressed.set(index);
+                    epochengine::input::mouseDown.set(index);
                 }
                 break;
             }
             case ButtonRelease:
             {
-                epochnamespace::input::mouseX.store(event.xbutton.x, std::memory_order_relaxed);
-                epochnamespace::input::mouseY.store(event.xbutton.y, std::memory_order_relaxed);
-                epochnamespace::input::set_mouse_coords_are_global(false);
+                epochengine::input::mouseX.store(event.xbutton.x, std::memory_order_relaxed);
+                epochengine::input::mouseY.store(event.xbutton.y, std::memory_order_relaxed);
+                epochengine::input::set_mouse_coords_are_global(false);
 
-                if (const auto button = epochnamespace::core::map_mouse_button(event.xbutton.button))
+                if (const auto button = epochengine::core::map_mouse_button(event.xbutton.button))
                 {
-                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
-                    epochnamespace::input::mouseDown.reset(static_cast<size_t>(*button));
+                    std::unique_lock lock(epochengine::input::g_inputMutex);
+                    epochengine::input::mouseDown.reset(static_cast<size_t>(*button));
                 }
                 break;
             }
             case KeyPress:
             {
-                const auto key = epochnamespace::core::map_keysym(XLookupKeysym(&event.xkey, 0));
-                if (key != epochnamespace::input::Key::Unknown)
+                const auto key = epochengine::core::map_keysym(XLookupKeysym(&event.xkey, 0));
+                if (key != epochengine::input::Key::Unknown)
                 {
-                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
+                    std::unique_lock lock(epochengine::input::g_inputMutex);
                     const auto index = static_cast<size_t>(key);
-                    if (!epochnamespace::input::keyDown.test(index))
-                        epochnamespace::input::keyPressed.set(index);
-                    epochnamespace::input::keyDown.set(index);
+                    if (!epochengine::input::keyDown.test(index))
+                        epochengine::input::keyPressed.set(index);
+                    epochengine::input::keyDown.set(index);
                 }
                 break;
             }
             case KeyRelease:
             {
-                const auto key = epochnamespace::core::map_keysym(XLookupKeysym(&event.xkey, 0));
-                if (key != epochnamespace::input::Key::Unknown)
+                const auto key = epochengine::core::map_keysym(XLookupKeysym(&event.xkey, 0));
+                if (key != epochengine::input::Key::Unknown)
                 {
-                    std::unique_lock lock(epochnamespace::input::g_inputMutex);
-                    epochnamespace::input::keyDown.reset(static_cast<size_t>(key));
+                    std::unique_lock lock(epochengine::input::g_inputMutex);
+                    epochengine::input::keyDown.reset(static_cast<size_t>(key));
                 }
                 break;
             }
             case FocusOut:
             {
-                std::unique_lock lock(epochnamespace::input::g_inputMutex);
-                epochnamespace::input::keyDown.reset();
-                epochnamespace::input::mouseDown.reset();
+                std::unique_lock lock(epochengine::input::g_inputMutex);
+                epochengine::input::keyDown.reset();
+                epochengine::input::mouseDown.reset();
                 break;
             }
             case ClientMessage:
@@ -1998,7 +1998,7 @@ namespace epochnamespace::platform
                 const Atom wmDelete = XInternAtom(display, "WM_DELETE_WINDOW", False);
                 if (static_cast<Atom>(event.xclient.data.l[0]) == wmDelete)
                 {
-                    auto* mgr = epochnamespace::core::GetActiveMultiContextManager();
+                    auto* mgr = epochengine::core::GetActiveMultiContextManager();
                     if (mgr)
                     {
                         HWND hwnd = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(event.xclient.window));
@@ -2015,7 +2015,7 @@ namespace epochnamespace::platform
             }
             case DestroyNotify:
             {
-                auto* mgr = epochnamespace::core::GetActiveMultiContextManager();
+                auto* mgr = epochengine::core::GetActiveMultiContextManager();
                 if (mgr)
                 {
                     HWND hwnd = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(event.xdestroywindow.window));
@@ -2032,6 +2032,6 @@ namespace epochnamespace::platform
 
         return keepRunning;
     }
-} // namespace epochnamespace::platform
+} // namespace epochengine::platform
 
 #endif // __linux__

@@ -24,7 +24,7 @@ import core.commandline;
 import core.log;
 import core.path;
 
-namespace epochnamespace::anativecontext
+namespace epochengine::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     namespace detail
@@ -49,7 +49,7 @@ namespace epochnamespace::anativecontext
 
         [[nodiscard]] std::filesystem::path capture_output_root()
         {
-            return epoch::core::path::capture_output_dir();
+            return epochengine::core::path::capture_output_dir();
         }
 
         [[nodiscard]] std::string sanitize_capture_token(const std::string_view value)
@@ -201,10 +201,10 @@ namespace epochnamespace::anativecontext
             return;
 
         const bool wrote = detail::write_bmp(capturePath, framebuffer, width, height);
-        const auto level = wrote ? epoch::core::log::level::info : epoch::core::log::level::warn;
+        const auto level = wrote ? epochengine::core::log::level::info : epochengine::core::log::level::warn;
         const std::string message = std::string(wrote ? "Captured software frame: " : "Failed to capture software frame: ")
             + capturePath.string();
-        epoch::core::log::write(
+        epochengine::core::log::write(
             level,
             "Software.Capture",
             { message.c_str(), message.size() });

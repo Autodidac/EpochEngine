@@ -990,7 +990,7 @@ engine shape and should be treated as starting truth for the next passes:
   button flicker.
 - `v0.84.86` repairs the hosted Linux Clang full-engine CMake path after Forest
   Factory editor integration exposed a strict module-visibility gap. `editor.cpp`
-  now imports `voxel.field` directly before using `epoch::voxel::Float3`; this is
+  now imports `voxel.field` directly before using `epochengine::voxel::Float3`; this is
   a build-only repair and intentionally leaves renderer ordering, GUI draw-model,
   Package Manager layout, and Timeline/Forest Factory runtime behavior untouched
   for the next acceptance-gated pass.

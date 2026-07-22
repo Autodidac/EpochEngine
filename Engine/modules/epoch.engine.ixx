@@ -28,10 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Engine Context (capabilities/budgets/events/ecs) (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
 
 #include "../include/_epoch.stl_types.hpp"
@@ -49,7 +45,7 @@ import epoch.systems;
 import epoch.events;
 import epoch.ecs;
 
-export namespace epoch
+export namespace epochengine
 {
     struct EngineConfig
     {

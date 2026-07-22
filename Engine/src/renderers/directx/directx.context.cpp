@@ -37,7 +37,7 @@ import spritehandle;
 
 #include "directx_context_detail.hpp"
 
-namespace epochnamespace::directxcontext
+namespace epochengine::directxcontext
 {
     int directx_get_width()
     {
@@ -216,7 +216,7 @@ namespace epochnamespace::directxcontext
     }
 }
 #else
-namespace epochnamespace::directxcontext
+namespace epochengine::directxcontext
 {
     int directx_get_width()
     {

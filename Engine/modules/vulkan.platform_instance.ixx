@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <include/engine.config.hpp>
@@ -54,7 +53,7 @@ export module vulkan.platform_instance;
 #if EPOCH_VULKAN_CUSTOM_LOADER
 import vulkan.platform_dispatcher;
 
-export namespace epochnamespace::vulkancontext::platform
+export namespace epochengine::vulkancontext::platform
 {
     inline VkInstance createInstance(const VkInstanceCreateInfo& createInfo) noexcept
     {
@@ -81,9 +80,9 @@ export namespace epochnamespace::vulkancontext::platform
         if (table.vkDestroyInstance && instance)
             table.vkDestroyInstance(instance, nullptr);
     }
-} // namespace epochnamespace::vulkancontext::platform
+} // namespace epochengine::vulkancontext::platform
 #else
-export namespace epochnamespace::vulkancontext::platform
+export namespace epochengine::vulkancontext::platform
 {
     // Custom loader disabled: no instance entry points are exported.
 }

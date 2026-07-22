@@ -40,7 +40,7 @@ module;
 
 export module utility.allocator;
 
-export namespace epochnamespace::mem
+export namespace epochengine::mem
 {
     // ─────────────────────────────────────────────────────────────────────────────
     // helpers

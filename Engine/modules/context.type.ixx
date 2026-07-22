@@ -32,7 +32,7 @@ module;
 
 export module context.type;
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
 #ifdef None
 #undef None

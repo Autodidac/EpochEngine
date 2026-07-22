@@ -32,7 +32,7 @@
 #pragma once
 #include <string>
 
-namespace epoch::ai {
+namespace epochengine::ai {
 
 	void init_engine_ai();
 	void shutdown_engine_ai();

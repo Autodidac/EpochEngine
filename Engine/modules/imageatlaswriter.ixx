@@ -38,7 +38,7 @@ export module imageatlaswriter;
 
 import image.writer;
 
-export namespace epochnamespace::atlaswriter
+export namespace epochengine::atlaswriter
 {
     /// Writes a full atlas image (RGBA pixels) to a file.
     /// Supports any format your a_writeImage supports by extension.
@@ -50,7 +50,7 @@ export namespace epochnamespace::atlaswriter
         bool flipVertically = false)
     {
         // Placeholder for atlas-specific logging or validation.
-        return epochnamespace::a_writeImage(filepath, pixels, width, height, flipVertically);
+        return epochengine::a_writeImage(filepath, pixels, width, height, flipVertically);
     }
 
     /// Writes a single slice of an atlas.

@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <source_location>
@@ -56,7 +55,7 @@ export module vulkan.context:memory;
 import :shared_vk;
 import core.logger;
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
 
@@ -166,4 +165,4 @@ namespace epochnamespace::vulkancontext
         cmd->copyBuffer(srcBuffer, dstBuffer, 1u, &copyRegion);
         endSingleTimeCommands(cmd);
     }
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

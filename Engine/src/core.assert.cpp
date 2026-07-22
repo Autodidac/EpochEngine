@@ -40,7 +40,7 @@ module core.assert;
 
 import core.log;
 
-namespace epoch::core::asserts
+namespace epochengine::core::asserts
 {
     namespace
     {
@@ -50,12 +50,12 @@ namespace epoch::core::asserts
         inline constexpr bool kDebugEnabled = true;
 #endif
 
-        [[noreturn]] void fail(epoch::string_view kind,
-            epoch::string_view message,
+        [[noreturn]] void fail(epochengine::string_view kind,
+            epochengine::string_view message,
             std::source_location where)
         {
-            const std::string_view k = epoch::to_std(kind);
-            const std::string_view m = epoch::to_std(message);
+            const std::string_view k = epochengine::to_std(kind);
+            const std::string_view m = epochengine::to_std(message);
 
             std::string line;
             line.reserve(256);
@@ -72,9 +72,9 @@ namespace epoch::core::asserts
             line.append(where.function_name());
             line.push_back(')');
 
-            // If core.log expects epoch::string_view, feed it epoch.
-            epoch::core::log::error(epoch::to_view("assert"),
-                epoch::to_view(std::string_view{ line }));
+            // If core.log expects epochengine::string_view, feed it epoch.
+            epochengine::core::log::error(epochengine::to_view("assert"),
+                epochengine::to_view(std::string_view{ line }));
 
 #if defined(_WIN32)
             // Only trigger a breakpoint when a debugger is actually attached.
@@ -87,18 +87,18 @@ namespace epoch::core::asserts
         }
     }
 
-    void that(bool condition, epoch::string_view message, std::source_location where)
+    void that(bool condition, epochengine::string_view message, std::source_location where)
     {
         if (!condition)
-            fail(epoch::to_view("assert"), message, where);
+            fail(epochengine::to_view("assert"), message, where);
     }
 
-    void debug(bool condition, epoch::string_view message, std::source_location where)
+    void debug(bool condition, epochengine::string_view message, std::source_location where)
     {
         if constexpr (kDebugEnabled)
         {
             if (!condition)
-                fail(epoch::to_view("debug_assert"), message, where);
+                fail(epochengine::to_view("debug_assert"), message, where);
         }
         else
         {

@@ -31,7 +31,7 @@ import core.logger;
 import software.state;
 import software.textures;
 
-namespace epochnamespace::anativecontext
+namespace epochengine::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     inline TexturePtr cubeTexture{};
@@ -218,7 +218,7 @@ namespace epochnamespace::anativecontext
 
     void draw_sprite(SpriteHandle, std::span<const TextureAtlas* const>, float, float, float, float) noexcept {}
     bool softrenderer_process(core::Context&, core::CommandQueue&) { return false; }
-    void softrenderer_cleanup(std::shared_ptr<epochnamespace::core::Context>&) {}
+    void softrenderer_cleanup(std::shared_ptr<epochengine::core::Context>&) {}
     int get_width() { return 0; }
     int get_height() { return 0; }
 #endif

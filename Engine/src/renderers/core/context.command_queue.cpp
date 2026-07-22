@@ -1,6 +1,8 @@
+module;
+
 module context.commandqueue;
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     CommandQueue::CommandQueue() noexcept = default;
 }

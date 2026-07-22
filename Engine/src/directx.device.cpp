@@ -29,7 +29,7 @@ import spritehandle;
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
 #include "renderers/directx/directx_context_detail.hpp"
 
-namespace epochnamespace::directxcontext::detail
+namespace epochengine::directxcontext::detail
 {
     namespace
     {

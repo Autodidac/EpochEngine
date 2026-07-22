@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <cstddef>
@@ -25,11 +55,11 @@ import package.registry;
 import render.preview_grid;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-export namespace epochnamespace::openglpreview
+export namespace epochengine::openglpreview
 {
     namespace detail
     {
-        using Mat4 = epochnamespace::previewgrid::Mat4;
+        using Mat4 = epochengine::previewgrid::Mat4;
 
         struct ScopedPreviewGLState final
         {
@@ -193,7 +223,7 @@ export namespace epochnamespace::openglpreview
         }
     }
 
-    inline void destroy_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state) noexcept
+    inline void destroy_scene_preview_pipeline(epochengine::openglstate::OpenGL4State& state) noexcept
     {
         if (state.arcadeScreenFramebuffer && glIsFramebuffer(state.arcadeScreenFramebuffer))
             glDeleteFramebuffers(1, &state.arcadeScreenFramebuffer);
@@ -237,7 +267,7 @@ export namespace epochnamespace::openglpreview
         state.sceneMarkerVbo = 0;
     }
 
-    inline bool ensure_scene_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state)
+    inline bool ensure_scene_preview_pipeline(epochengine::openglstate::OpenGL4State& state)
     {
         if (state.sceneShader
             && state.sceneVao
@@ -316,8 +346,8 @@ void main() {
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
 
-        const auto vertices = epochnamespace::previewgrid::grid_vertices();
-        const auto indices = epochnamespace::previewgrid::grid_indices();
+        const auto vertices = epochengine::previewgrid::grid_vertices();
+        const auto indices = epochengine::previewgrid::grid_indices();
 
         glGenVertexArrays(1, &state.sceneVao);
         glGenBuffers(1, &state.sceneVbo);
@@ -342,16 +372,16 @@ void main() {
             3,
             GL_FLOAT,
             GL_FALSE,
-            static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
-            reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, position)));
+            static_cast<GLsizei>(sizeof(epochengine::previewgrid::Vertex)),
+            reinterpret_cast<void*>(offsetof(epochengine::previewgrid::Vertex, position)));
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(
             1,
             3,
             GL_FLOAT,
             GL_FALSE,
-            static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
-            reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, color)));
+            static_cast<GLsizei>(sizeof(epochengine::previewgrid::Vertex)),
+            reinterpret_cast<void*>(offsetof(epochengine::previewgrid::Vertex, color)));
         glBindVertexArray(0);
 
         glGenVertexArrays(1, &state.sceneMarkerVao);
@@ -360,7 +390,7 @@ void main() {
         glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
         glBufferData(
             GL_ARRAY_BUFFER,
-            static_cast<GLsizeiptr>(sizeof(epochnamespace::previewgrid::Vertex) * 8u),
+            static_cast<GLsizeiptr>(sizeof(epochengine::previewgrid::Vertex) * 8u),
             nullptr,
             GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(0);
@@ -369,16 +399,16 @@ void main() {
             3,
             GL_FLOAT,
             GL_FALSE,
-            static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
-            reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, position)));
+            static_cast<GLsizei>(sizeof(epochengine::previewgrid::Vertex)),
+            reinterpret_cast<void*>(offsetof(epochengine::previewgrid::Vertex, position)));
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(
             1,
             3,
             GL_FLOAT,
             GL_FALSE,
-            static_cast<GLsizei>(sizeof(epochnamespace::previewgrid::Vertex)),
-            reinterpret_cast<void*>(offsetof(epochnamespace::previewgrid::Vertex, color)));
+            static_cast<GLsizei>(sizeof(epochengine::previewgrid::Vertex)),
+            reinterpret_cast<void*>(offsetof(epochengine::previewgrid::Vertex, color)));
         glBindVertexArray(0);
 
         state.sceneMvpLoc = glGetUniformLocation(state.sceneShader, "uMvp");
@@ -389,13 +419,13 @@ void main() {
     {
         struct ArcadeScreenVertex
         {
-            epochnamespace::previewgrid::Vec3 position{};
+            epochengine::previewgrid::Vec3 position{};
             float u = 0.0f;
             float v = 0.0f;
         };
 
         [[nodiscard]] inline std::array<ArcadeScreenVertex, 4> make_arcade_screen_vertices(
-            const epochnamespace::previewgrid::ObjectMarker& marker) noexcept
+            const epochengine::previewgrid::ObjectMarker& marker) noexcept
         {
             const auto safe_axis = [](float value, float fallback) noexcept
             {
@@ -403,7 +433,7 @@ void main() {
                 return (std::max)(magnitude, fallback);
             };
 
-            const epochnamespace::previewgrid::Vec3 half{
+            const epochengine::previewgrid::Vec3 half{
                 safe_axis(marker.scale.x * 0.5f, 0.25f),
                 safe_axis(marker.scale.y * 0.5f, 0.18f),
                 safe_axis(marker.scale.z * 0.5f, 0.018f)
@@ -450,7 +480,7 @@ void main() {
         }
 
         inline void render_arcade_attract_pattern(
-            epochnamespace::openglstate::OpenGL4State& state,
+            epochengine::openglstate::OpenGL4State& state,
             int width,
             int height) noexcept
         {
@@ -508,7 +538,7 @@ void main() {
         }
     }
 
-    inline bool ensure_arcade_screen_preview_pipeline(epochnamespace::openglstate::OpenGL4State& state)
+    inline bool ensure_arcade_screen_preview_pipeline(epochengine::openglstate::OpenGL4State& state)
     {
         if (state.arcadeScreenShader
             && state.arcadeScreenVao
@@ -521,8 +551,8 @@ void main() {
             return true;
         }
 
-        const int textureWidth = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_width());
-        const int textureHeight = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_height());
+        const int textureWidth = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_width());
+        const int textureHeight = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_height());
         if (textureWidth <= 0 || textureHeight <= 0)
             return false;
 
@@ -678,7 +708,7 @@ void main() {
 
     inline void render_engine_arcade_sampled_surface_preview(
         const core::Context* ctx,
-        epochnamespace::openglstate::OpenGL4State& state,
+        epochengine::openglstate::OpenGL4State& state,
         const detail::Mat4& mvp,
         int framebufferWidth,
         int framebufferHeight,
@@ -687,15 +717,15 @@ void main() {
         int viewportWidth,
         int viewportHeight)
     {
-        const auto screenMarkers = epochnamespace::previewgrid::sampled_render_surface_markers_for(ctx);
+        const auto screenMarkers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx);
         if (screenMarkers.empty())
             return;
 
         if (!ensure_arcade_screen_preview_pipeline(state))
             return;
 
-        const int textureWidth = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_width());
-        const int textureHeight = static_cast<int>(epoch::package_registry::engine_arcade_render_texture_height());
+        const int textureWidth = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_width());
+        const int textureHeight = static_cast<int>(epochengine::package_registry::engine_arcade_render_texture_height());
         detail::render_arcade_attract_pattern(state, textureWidth, textureHeight);
 
         const int glViewportY = (std::max)(0, framebufferHeight - (viewportY + viewportHeight));
@@ -734,7 +764,7 @@ void main() {
 
     inline void render_scene_preview(
         const core::Context* ctx,
-        epochnamespace::openglstate::OpenGL4State& state,
+        epochengine::openglstate::OpenGL4State& state,
         core::ScenePreviewMode previewMode,
         int framebufferWidth,
         int framebufferHeight,
@@ -751,22 +781,22 @@ void main() {
         glScissor(viewportX, glViewportY, viewportWidth, viewportHeight);
         glViewport(viewportX, glViewportY, viewportWidth, viewportHeight);
         glDepthMask(GL_TRUE);
-        const auto clearColor = epochnamespace::previewgrid::kClearColor;
+        const auto clearColor = epochengine::previewgrid::kClearColor;
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         if (previewMode == core::ScenePreviewMode::Editor && ensure_scene_preview_pipeline(state))
         {
-            const auto camera = epochnamespace::previewgrid::camera_for(ctx);
+            const auto camera = epochengine::previewgrid::camera_for(ctx);
             const float aspect = viewportHeight > 0
                 ? (viewportWidth / static_cast<float>(viewportHeight))
                 : 1.0f;
-            const detail::Mat4 proj = epochnamespace::previewgrid::projection_for(ctx, aspect, camera);
-            const detail::Mat4 view = epochnamespace::previewgrid::look_at(
+            const detail::Mat4 proj = epochengine::previewgrid::projection_for(ctx, aspect, camera);
+            const detail::Mat4 view = epochengine::previewgrid::look_at(
                 camera.eye,
                 camera.target,
                 camera.up);
-            const detail::Mat4 mvp = epochnamespace::previewgrid::multiply(proj, view);
+            const detail::Mat4 mvp = epochengine::previewgrid::multiply(proj, view);
 
             glEnable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
@@ -780,11 +810,11 @@ void main() {
             glBindVertexArray(state.sceneVao);
             glDrawElements(
                 GL_LINES,
-                static_cast<GLsizei>(epochnamespace::previewgrid::grid_indices().size()),
+                static_cast<GLsizei>(epochengine::previewgrid::grid_indices().size()),
                 GL_UNSIGNED_INT,
                 nullptr);
 
-            auto solidVertices = epochnamespace::previewgrid::object_solid_vertices_for(ctx);
+            auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
             if (solidVertices.size() >= 3 && state.sceneMarkerVao && state.sceneMarkerVbo)
             {
                 glDepthMask(GL_TRUE);
@@ -809,12 +839,12 @@ void main() {
                 viewportWidth,
                 viewportHeight);
 
-            std::vector<epochnamespace::previewgrid::Vertex> dynamicVertices{};
-            const auto focusVertices = epochnamespace::previewgrid::look_marker_vertices_for(ctx);
-            const auto focusCount = epochnamespace::previewgrid::look_marker_vertex_count_for(ctx);
+            std::vector<epochengine::previewgrid::Vertex> dynamicVertices{};
+            const auto focusVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
+            const auto focusCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
             if (focusCount > 0)
                 dynamicVertices.insert(dynamicVertices.end(), focusVertices.begin(), focusVertices.begin() + focusCount);
-            auto objectVertices = epochnamespace::previewgrid::object_marker_vertices_for(ctx);
+            auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
             dynamicVertices.insert(dynamicVertices.end(), objectVertices.begin(), objectVertices.end());
 
             if (dynamicVertices.size() >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)

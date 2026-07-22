@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -58,12 +58,12 @@ import :shared_vk;
 import vulkan.camera;
 import render.preview_grid;
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     namespace
     {
         [[nodiscard]] inline glm::mat4 previewgrid_to_glm(
-            const epochnamespace::previewgrid::Mat4& source) noexcept
+            const epochengine::previewgrid::Mat4& source) noexcept
         {
             glm::mat4 out{ 1.0f };
             for (int column = 0; column < 4; ++column)
@@ -224,9 +224,9 @@ namespace epochnamespace::vulkancontext
         const auto* ctx = bound_context();
         const bool editorPreview =
             ctx
-            && ctx->scene_preview_mode() == epochnamespace::core::ScenePreviewMode::Editor
+            && ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor
             && ctx->scene_viewport().valid();
-        const auto previewCamera = epochnamespace::previewgrid::camera_for(ctx);
+        const auto previewCamera = epochengine::previewgrid::camera_for(ctx);
 
         ubo.model = glm::mat4(1.0f);
         if (editorPreview)
@@ -259,11 +259,11 @@ namespace epochnamespace::vulkancontext
 
         if (editorPreview)
         {
-            const auto previewProj = epochnamespace::previewgrid::projection_for(
+            const auto previewProj = epochengine::previewgrid::projection_for(
                 ctx,
                 aspect,
                 previewCamera);
-            const auto previewView = epochnamespace::previewgrid::look_at(
+            const auto previewView = epochengine::previewgrid::look_at(
                 previewCamera.eye,
                 previewCamera.target,
                 previewCamera.up);
@@ -306,4 +306,4 @@ namespace epochnamespace::vulkancontext
 
         std::memcpy(guiState->guiUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

@@ -66,7 +66,7 @@ import core.logger;
 
 import sfml.state;
 
-export namespace epochnamespace::sfmlcontext
+export namespace epochengine::sfmlcontext
 {
     using Handle = uint32_t;
 
@@ -146,7 +146,7 @@ export namespace epochnamespace::sfmlcontext
         }
 
         sf::Image image{};
-        epoch::sfml_compat::resize_image(
+        epochengine::sfml_compat::resize_image(
             image,
             static_cast<unsigned>(atlas.width),
             static_cast<unsigned>(atlas.height),
@@ -264,7 +264,7 @@ export namespace epochnamespace::sfmlcontext
         const auto& gpu = it->second;
 
         sf::Sprite sprite(gpu.texture);
-        const sf::IntRect rect = epoch::sfml_compat::int_rect(
+        const sf::IntRect rect = epochengine::sfml_compat::int_rect(
             static_cast<int>(region.x),
             static_cast<int>(region.y),
             static_cast<int>(region.width),
@@ -286,6 +286,6 @@ export namespace epochnamespace::sfmlcontext
         sf::RenderStates renderStates{};
         state::s_sfmlstate.window.sfml_window->draw(sprite, renderStates);
     }
-} // namespace epochnamespace::sfmlcontext
+} // namespace epochengine::sfmlcontext
 
 #endif // EPOCH_USING_SFML

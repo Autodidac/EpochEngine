@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -60,12 +60,12 @@ module;
 export module context.multiplexer;
 
 import engine.platform;
-import context.type;         // epochnamespace::core::ContextType
-import context.commandqueue; // epochnamespace::core::CommandQueue
-import context.window;       // epochnamespace::core::WindowData
-import core.context;         // epochnamespace::core::Context + Set/Get current render ctx
+import context.type;         // epochengine::core::ContextType
+import context.commandqueue; // epochengine::core::CommandQueue
+import context.window;       // epochengine::core::WindowData
+import core.context;         // epochengine::core::Context + Set/Get current render ctx
 
-export namespace epochnamespace::platform
+export namespace epochengine::platform
 {
 #if defined(__linux__)
     bool pump_events();
@@ -92,7 +92,7 @@ using HDC = void*;
 using HGLRC = void*;
 #endif
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     export struct DetachedContextWindowRequest
     {
@@ -163,9 +163,7 @@ namespace epochnamespace::core
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
-        bool OpenReplacementContextWindow(
-            const DetachedContextWindowRequest& request,
-            std::shared_ptr<Context>* createdContext = nullptr);
+        bool OpenReplacementContextWindow(const DetachedContextWindowRequest& request, std::shared_ptr<Context>* createdContext = nullptr);
         void BeginContextReplacement() noexcept;
         void EndContextReplacement() noexcept;
         [[nodiscard]] bool ContextReplacementInProgress() const noexcept;
@@ -178,8 +176,8 @@ namespace epochnamespace::core
         void EnqueueRenderCommand(HWND hwnd, RenderCommand cmd);
 
         // Stable API used across the engine (GUI etc.)
-        static void SetCurrent(std::shared_ptr<core::Context> ctx) { epochnamespace::core::set_current_render_context(std::move(ctx)); }
-        static std::shared_ptr<core::Context> GetCurrent() { return epochnamespace::core::get_current_render_context(); }
+        static void SetCurrent(std::shared_ptr<core::Context> ctx) { epochengine::core::set_current_render_context(std::move(ctx)); }
+        static std::shared_ptr<core::Context> GetCurrent() { return epochengine::core::get_current_render_context(); }
 
         static LRESULT CALLBACK ParentProc(HWND, UINT, WPARAM, LPARAM);
         static LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
@@ -209,9 +207,7 @@ namespace epochnamespace::core
         void SetupPixelFormat(HDC hdc);
         HGLRC CreateSharedGLContext(HDC hdc);
         int get_title_bar_thickness(const HWND window_handle);
-        bool CreateDetachedContextWindowOnOwnerThread(
-            const DetachedContextWindowRequest& request,
-            std::shared_ptr<Context>* createdContext = nullptr);
+        bool CreateDetachedContextWindowOnOwnerThread(const DetachedContextWindowRequest& request, std::shared_ptr<Context>* createdContext = nullptr);
 
         inline static MultiContextManager* s_activeInstance = nullptr;
 
@@ -359,4 +355,4 @@ namespace epochnamespace::core
     export inline void RequestActiveParentLayout() noexcept {}
 
 #endif
-} // namespace epochnamespace::core
+} // namespace epochengine::core

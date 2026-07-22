@@ -9,13 +9,13 @@ module;
 
 export module epoch.gui;
 
-export namespace epochnamespace::gui_lib
+export namespace epochengine::gui_lib
 {
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 88;
     inline constexpr int version_revision = 1;
-    inline constexpr std::string_view version_string = "0.88.01";
+    inline constexpr std::string_view version_string = "0.88.02";
 
     struct Vec2
     {
@@ -992,3 +992,36 @@ export namespace epochnamespace::gui_lib
         const PanelHostOptions& options,
         const PanelHostInput& input) noexcept;
 }
+
+//export namespace epochengine::gui
+//{
+//    // Returns true if the close button in a panel titlebar is clicked.
+//    // panel_pos: Top-left position of the panel.
+//    // panel_size: Size of the panel.
+//    inline bool titlebar_close_button(Vec2 panel_pos, Vec2 panel_size)
+//    {
+//        // Define close button size and position (right side of titlebar)
+//        constexpr float close_btn_size = 24.0f;
+//        constexpr float close_btn_margin = 4.0f;
+//        Vec2 btn_pos{
+//            panel_pos.x + panel_size.x - close_btn_size - close_btn_margin,
+//            panel_pos.y + close_btn_margin
+//        };
+//        Vec2 mouse = /* You must provide a way to get the mouse position here, e.g. from your input system */;
+//        bool mouse_down = /* You must provide a way to check mouse button state here */;
+//
+//        // Simple rectangle hit test
+//        bool hovered = mouse.x >= btn_pos.x && mouse.x <= btn_pos.x + close_btn_size &&
+//                       mouse.y >= btn_pos.y && mouse.y <= btn_pos.y + close_btn_size;
+//
+//        static bool was_down = false;
+//        bool pressed = false;
+//        if (hovered && mouse_down && !was_down)
+//            pressed = true;
+//        was_down = mouse_down;
+//
+//        // Optionally: draw the button here using your rendering system
+//
+//        return pressed;
+//    }
+//}

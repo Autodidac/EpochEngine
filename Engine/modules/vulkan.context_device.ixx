@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <stdexcept>
@@ -52,7 +51,7 @@ import :shared_context;
 import :shared_vk;
 import :swapchain;
 
-namespace epochnamespace::vulkancontext {
+namespace epochengine::vulkancontext {
 
     inline vk::PhysicalDevice Application::pickPhysicalDevice()
     {
@@ -202,4 +201,4 @@ namespace epochnamespace::vulkancontext {
         commandPool = std::move(pool);
     }
 
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

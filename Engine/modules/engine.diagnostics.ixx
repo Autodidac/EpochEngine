@@ -57,8 +57,8 @@ import engine.telemetry;
 // configuration.  The helpers are header-only so they can be used
 // by the updater target without touching the CMake target graph.
 
-export namespace epochnamespace::diagnostics {
-    using epochnamespace::core::ContextType;
+export namespace epochengine::diagnostics {
+    using epochengine::core::ContextType;
 
     namespace detail
     {
@@ -137,10 +137,10 @@ export namespace epochnamespace::diagnostics {
             lastMs = std::chrono::duration<double, std::milli>(end - start).count();
             finished = true;
 
-            epochnamespace::telemetry::emit_histogram_ms(
+            epochengine::telemetry::emit_histogram_ms(
                 "renderer.frame.time_ms",
                 lastMs,
-                epochnamespace::telemetry::RendererTelemetryTags{ backendType, windowId });
+                epochengine::telemetry::RendererTelemetryTags{ backendType, windowId });
 
             const double effectiveSlowFrameMs = (backendType == ContextType::Software)
                 ? (std::max)(slowFrameMs, 100.0)
@@ -150,7 +150,7 @@ export namespace epochnamespace::diagnostics {
                 && detail::should_emit_slow_frame_warning(backendType, windowId, end))
             {
                 const std::string_view backend = backendName.empty() ? "Unknown" : backendName;
-                epochnamespace::logger::warn(
+                epochengine::logger::warn(
                     "Renderer",
                     std::format("[{}] Slow frame {:.2f} ms (> {:.2f} ms)", backend, lastMs, effectiveSlowFrameMs));
             }
@@ -420,4 +420,4 @@ export namespace epochnamespace::diagnostics {
     {
         write_engine_configuration_summary(output);
     }
-} // namespace epochnamespace::diagnostics
+} // namespace epochengine::diagnostics

@@ -44,7 +44,7 @@ module;
     //
     // Use the same loader you use everywhere else (GLAD).
     // If your project provides a different header path for GLAD, adjust here.
-#   include <glad/glad.h>
+    #include <glad/glad.h>
 #endif
 
 export module opengl.renderer;
@@ -63,7 +63,7 @@ import spritehandle;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
-export namespace epochnamespace::openglrenderer
+export namespace epochengine::openglrenderer
 {
     // --------------------------------------------------------
     // GL STATE ACCESS
@@ -80,7 +80,7 @@ export namespace epochnamespace::openglrenderer
     inline openglstate::OpenGL4State& renderer_gl_state_with_pipeline() noexcept
     {
         auto& glState = renderer_gl_state();
-        if (!epochnamespace::openglquad::ensure_quad_pipeline(glState))
+        if (!epochengine::openglquad::ensure_quad_pipeline(glState))
             logger::error("OpenGL", "Failed to rebuild quad pipeline.");
         return glState;
     }
@@ -157,7 +157,7 @@ export namespace epochnamespace::openglrenderer
     inline void draw_quad(const openglquad::Quad& quad, GLuint texture)
     {
         auto& glState = renderer_gl_state_with_pipeline();
-        auto& pipe = epochnamespace::openglquad::quad_pipeline_state();
+        auto& pipe = epochengine::openglquad::quad_pipeline_state();
 
         glUseProgram(pipe.shader);
 

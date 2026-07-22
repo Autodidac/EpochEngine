@@ -28,12 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
-
 
 #include "../include/epoch.config.hpp"
 #include "../src/epoch.common.hpp"
@@ -43,7 +38,7 @@ export module render.streaming_feedback;
 
 import assets.streaming;
 
-export namespace epoch
+export namespace epochengine
 {
     struct FeedbackRecord
     {

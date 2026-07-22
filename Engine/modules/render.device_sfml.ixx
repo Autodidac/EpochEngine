@@ -1,7 +1,32 @@
-/************************************************
- *  Epoch Engine - SFML Renderer Device Module
- *
- *  SPDX-License-Identifier: LicenseRef-MIT-NoSell
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
  ***********************************************/
 module;
 
@@ -24,7 +49,7 @@ import render.device;
 import sfml.state;
 #endif
 
-export namespace epoch
+export namespace epochengine
 {
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
     struct SfmlRenderTextureRecord
@@ -141,7 +166,7 @@ export namespace epoch
     private:
         [[nodiscard]] static sf::RenderWindow* active_window() noexcept
         {
-            return epochnamespace::sfmlcontext::state::s_sfmlstate.get_sfml_window();
+            return epochengine::sfmlcontext::state::s_sfmlstate.get_sfml_window();
         }
 
         [[nodiscard]] SfmlRenderTextureRecord* resolve(RenderTargetHandle render_target) noexcept
@@ -245,7 +270,7 @@ export namespace epoch
             const u32 height = desc.height == 0 ? 1u : desc.height;
 
             auto target = std::make_unique<sf::RenderTexture>();
-            if (!epoch::sfml_compat::resize_render_texture(*target, width, height))
+            if (!epochengine::sfml_compat::resize_render_texture(*target, width, height))
                 return {};
 
             const u32 slot = allocate_render_texture_slot();
@@ -323,7 +348,7 @@ export namespace epoch
 
         [[nodiscard]] bool runtime_renderer_available() const noexcept
         {
-            return epochnamespace::sfmlcontext::state::s_sfmlstate.get_sfml_window() != nullptr;
+            return epochengine::sfmlcontext::state::s_sfmlstate.get_sfml_window() != nullptr;
         }
 
         [[nodiscard]] const SfmlRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept

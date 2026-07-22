@@ -30,22 +30,22 @@
  ***********************************************/
 #pragma once
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     class Context;
 }
 
-namespace epochnamespace::openglstate
+namespace epochengine::openglstate
 {
     struct OpenGL4State;
 }
 
-namespace epochnamespace::openglcontext::PlatformGL
+namespace epochengine::openglcontext::PlatformGL
 {
     struct PlatformGLContext;
 }
 
-namespace epochnamespace::openglcontext::contextdetail
+namespace epochengine::openglcontext::contextdetail
 {
     struct DrawableSize
     {

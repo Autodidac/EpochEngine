@@ -79,7 +79,7 @@ export module opengl.platform;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
-export namespace epochnamespace::openglcontext::PlatformGL
+export namespace epochengine::openglcontext::PlatformGL
 {
 #if defined(__linux__) && defined(EPOCH_FORCE_ENABLE_RAYLIB)
     namespace detail

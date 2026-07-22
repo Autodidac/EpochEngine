@@ -38,7 +38,7 @@ module;
 
 export module utility.atomicfunction;
 
-export namespace epochnamespace::core {
+export namespace epochengine::core {
 
     // Thread-safe, reusable, header-only function wrapper
     template <typename Signature>
@@ -84,4 +84,4 @@ export namespace epochnamespace::core {
         explicit operator bool() const noexcept { return !empty(); }
     };
 
-} // namespace epochnamespace::core
+} // namespace epochengine::core

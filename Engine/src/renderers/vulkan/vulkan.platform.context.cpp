@@ -31,7 +31,7 @@
  //// acontext.vulkan.platform.context.cpp
 //
 // This file MUST be a module implementation unit for `vulkan.context`
-// because it defines `epochnamespace::vulkancontext::Application` methods.
+// because it defines `epochengine::vulkancontext::Application` methods.
 //
 // It also MUST use the Vulkan-Hpp dynamic dispatch storage provided by
 // acontext.vulkan.dispatch_storage.cpp. STB image implementation ownership lives
@@ -126,15 +126,15 @@ import opengl.platform;
 
 // -----------------------------------------------------------------------------
 // Correct namespace for the exported type declared in the interface:
-// export namespace epochnamespace::vulkancontext { export class Application ... }
+// export namespace epochengine::vulkancontext { export class Application ... }
 // -----------------------------------------------------------------------------
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     constexpr std::string_view kPlatformLogSys = "Context.Vulkan.Platform";
 
     void Application::run()
     {
-        epochnamespace::core::CommandQueue queue;
+        epochengine::core::CommandQueue queue;
         initWindow();
         initVulkan();
 
@@ -256,8 +256,8 @@ namespace epochnamespace::vulkancontext
 #endif
     }
 
-    bool Application::process(std::shared_ptr<epochnamespace::core::Context> ctx,
-        epochnamespace::core::CommandQueue& queue)
+    bool Application::process(std::shared_ptr<epochengine::core::Context> ctx,
+        epochengine::core::CommandQueue& queue)
     {
         if (!device)
             return false;
@@ -320,8 +320,8 @@ namespace epochnamespace::vulkancontext
         (void)queue.drain();
         if (ctx)
         {
-            (void)epochnamespace::gui::render_deferred_batch(ctx.get());
-            (void)epochnamespace::gui::render_top_layer_batch(ctx.get());
+            (void)epochengine::gui::render_deferred_batch(ctx.get());
+            (void)epochengine::gui::render_top_layer_batch(ctx.get());
         }
 
 #if EPOCH_VULKAN_RUNTIME_DIAGNOSTICS
@@ -361,19 +361,19 @@ namespace epochnamespace::vulkancontext
         return true;
     }
 
-    void Application::set_context(std::shared_ptr<epochnamespace::core::Context> ctx, void* nativeWindow)
+    void Application::set_context(std::shared_ptr<epochengine::core::Context> ctx, void* nativeWindow)
     {
         context = std::move(ctx);
         nativeWindowHandle = nativeWindow;
         activeGuiContext = context.lock().get();
     }
 
-    void Application::set_active_context(const epochnamespace::core::Context* ctx)
+    void Application::set_active_context(const epochengine::core::Context* ctx)
     {
         activeGuiContext = ctx;
     }
 
-    void Application::cleanup_gui_context(const epochnamespace::core::Context* ctx)
+    void Application::cleanup_gui_context(const epochengine::core::Context* ctx)
     {
         if (!ctx)
             return;
@@ -384,13 +384,13 @@ namespace epochnamespace::vulkancontext
     }
 
     Application::GuiContextState& Application::gui_state_for_context(
-        const epochnamespace::core::Context* ctx)
+        const epochengine::core::Context* ctx)
     {
         return guiContexts[ctx];
     }
 
     Application::GuiContextState* Application::find_gui_state(
-        const epochnamespace::core::Context* ctx) noexcept
+        const epochengine::core::Context* ctx) noexcept
     {
         auto it = guiContexts.find(ctx);
         if (it == guiContexts.end())
@@ -548,4 +548,4 @@ namespace epochnamespace::vulkancontext
 #endif
     }
 
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <algorithm>
@@ -107,14 +106,14 @@ import render.device_opengl_family;
 // defines them. Uncomment the correct one in your project.
 // import atypes;
 
-export namespace epochnamespace::opengltextures
+export namespace epochengine::opengltextures
 {
     namespace detail
     {
-        inline epochnamespace::openglcontext::PlatformGL::PlatformGLContext
-            to_platform_context(const epochnamespace::openglstate::OpenGL4State& state) noexcept
+        inline epochengine::openglcontext::PlatformGL::PlatformGLContext
+            to_platform_context(const epochengine::openglstate::OpenGL4State& state) noexcept
         {
-            epochnamespace::openglcontext::PlatformGL::PlatformGLContext ctx{};
+            epochengine::openglcontext::PlatformGL::PlatformGLContext ctx{};
 #if defined(_WIN32)
             ctx.device = static_cast<decltype(ctx.device)>(state.hdc);
             ctx.context = static_cast<decltype(ctx.context)>(state.hglrc);
@@ -126,10 +125,10 @@ export namespace epochnamespace::opengltextures
             return ctx;
         }
 
-        inline epochnamespace::openglcontext::PlatformGL::PlatformGLContext
+        inline epochengine::openglcontext::PlatformGL::PlatformGLContext
             context_to_platform_context(const core::Context* ctx) noexcept
         {
-            epochnamespace::openglcontext::PlatformGL::PlatformGLContext result{};
+            epochengine::openglcontext::PlatformGL::PlatformGLContext result{};
             if (!ctx) return result;
 
 #if defined(_WIN32)
@@ -184,14 +183,14 @@ export namespace epochnamespace::opengltextures
     struct BackendData {
         AtlasGpuMap gpu_atlases;
         std::unordered_map<const void*, AtlasGpuMap> context_gpu_atlases;
-        std::unordered_map<const void*, std::unique_ptr<epochnamespace::openglstate::OpenGL4State>> context_gl_states;
+        std::unordered_map<const void*, std::unique_ptr<epochengine::openglstate::OpenGL4State>> context_gl_states;
         std::unordered_map<u32, NativeRenderTextureGPU> native_render_textures;
         std::mutex gpuMutex;
-        epochnamespace::openglstate::OpenGL4State glState{};
+        epochengine::openglstate::OpenGL4State glState{};
     };
 
     [[nodiscard]] inline const void* platform_context_key(
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& ctx) noexcept
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& ctx) noexcept
     {
 #if defined(_WIN32) || defined(__linux__)
         return ctx.context ? static_cast<const void*>(ctx.context) : nullptr;
@@ -202,8 +201,8 @@ export namespace epochnamespace::opengltextures
     }
 
     inline void bind_platform_state(
-        epochnamespace::openglstate::OpenGL4State& state,
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx,
+        epochengine::openglstate::OpenGL4State& state,
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& platformCtx,
         const core::Context* ctx) noexcept
     {
 #if defined(_WIN32)
@@ -239,9 +238,9 @@ export namespace epochnamespace::opengltextures
         state.height = static_cast<unsigned int>((std::max)(1, height));
     }
 
-    [[nodiscard]] inline epochnamespace::openglstate::OpenGL4State& state_for_platform_context(
+    [[nodiscard]] inline epochengine::openglstate::OpenGL4State& state_for_platform_context(
         BackendData& backend,
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx,
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& platformCtx,
         const core::Context* ctx)
     {
         const void* key = platform_context_key(platformCtx);
@@ -251,12 +250,12 @@ export namespace epochnamespace::opengltextures
             return backend.glState;
         }
 
-        epochnamespace::openglstate::OpenGL4State* state = nullptr;
+        epochengine::openglstate::OpenGL4State* state = nullptr;
         {
             std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
             auto& statePtr = backend.context_gl_states[key];
             if (!statePtr)
-                statePtr = std::make_unique<epochnamespace::openglstate::OpenGL4State>();
+                statePtr = std::make_unique<epochengine::openglstate::OpenGL4State>();
             state = statePtr.get();
         }
 
@@ -266,7 +265,7 @@ export namespace epochnamespace::opengltextures
 
     [[nodiscard]] inline AtlasGpuMap& atlas_map_for_platform_context(
         BackendData& backend,
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx)
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& platformCtx)
     {
         if (const void* key = platform_context_key(platformCtx))
             return backend.context_gpu_atlases[key];
@@ -277,8 +276,8 @@ export namespace epochnamespace::opengltextures
     inline BackendData& get_opengl_backend() {
         BackendData* data = nullptr;
         {
-            std::unique_lock<std::shared_mutex> lock{ epochnamespace::core::g_backendsMutex };
-            auto& backend = epochnamespace::core::g_backends[epochnamespace::core::ContextType::OpenGL];
+            std::unique_lock<std::shared_mutex> lock{ epochengine::core::g_backendsMutex };
+            auto& backend = epochengine::core::g_backends[epochengine::core::ContextType::OpenGL];
             if (!backend.data) {
                 backend.data = {
                     new BackendData(),
@@ -300,7 +299,7 @@ export namespace epochnamespace::opengltextures
 
     [[nodiscard]] inline bool activate_backend_context(
         BackendData& backend,
-        epochnamespace::openglcontext::PlatformGL::ScopedContext& contextGuard,
+        epochengine::openglcontext::PlatformGL::ScopedContext& contextGuard,
         std::string_view tag) noexcept
     {
         const auto platformCtx = detail::to_platform_context(backend.glState);
@@ -348,16 +347,16 @@ export namespace epochnamespace::opengltextures
         gpu.active = false;
     }
 
-    [[nodiscard]] inline epoch::OpenGLFamilyNativeRenderTextureAllocation allocate_native_render_texture(
+    [[nodiscard]] inline epochengine::OpenGLFamilyNativeRenderTextureAllocation allocate_native_render_texture(
         void* user,
-        epoch::RendererBackendKind,
-        const epoch::RenderTextureAssetDesc& desc,
-        const epoch::RenderTextureBackendRequirements& requirements,
+        epochengine::RendererBackendKind,
+        const epochengine::RenderTextureAssetDesc& desc,
+        const epochengine::RenderTextureBackendRequirements& requirements,
         u32 slot)
     {
-        epoch::OpenGLFamilyNativeRenderTextureAllocation allocation{};
+        epochengine::OpenGLFamilyNativeRenderTextureAllocation allocation{};
         BackendData& backend = resolve_backend_data(user);
-        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!activate_backend_context(backend, contextGuard, "allocate render texture"))
             return allocation;
 
@@ -448,11 +447,11 @@ export namespace epochnamespace::opengltextures
 
     inline void destroy_native_render_texture(
         void* user,
-        epoch::RendererBackendKind,
-        const epoch::OpenGLFamilyRenderTextureRecord& record)
+        epochengine::RendererBackendKind,
+        const epochengine::OpenGLFamilyRenderTextureRecord& record)
     {
         BackendData& backend = resolve_backend_data(user);
-        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!activate_backend_context(backend, contextGuard, "destroy render texture"))
             return;
 
@@ -471,12 +470,12 @@ export namespace epochnamespace::opengltextures
 
     [[nodiscard]] inline bool begin_native_render_texture_pass(
         void* user,
-        epoch::RendererBackendKind,
-        const epoch::OpenGLFamilyRenderTextureRecord& record,
-        const epoch::RenderPassDesc& pass)
+        epochengine::RendererBackendKind,
+        const epochengine::OpenGLFamilyRenderTextureRecord& record,
+        const epochengine::RenderPassDesc& pass)
     {
         BackendData& backend = resolve_backend_data(user);
-        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!activate_backend_context(backend, contextGuard, "begin render texture pass"))
             return false;
 
@@ -503,20 +502,20 @@ export namespace epochnamespace::opengltextures
 
     inline void end_native_render_texture_pass(
         void* user,
-        epoch::RendererBackendKind,
-        const epoch::OpenGLFamilyRenderTextureRecord&)
+        epochengine::RendererBackendKind,
+        const epochengine::OpenGLFamilyRenderTextureRecord&)
     {
         BackendData& backend = resolve_backend_data(user);
-        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!activate_backend_context(backend, contextGuard, "end render texture pass"))
             return;
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
-    [[nodiscard]] inline epoch::OpenGLFamilyNativeRenderTextureHooks make_native_render_texture_hooks() noexcept
+    [[nodiscard]] inline epochengine::OpenGLFamilyNativeRenderTextureHooks make_native_render_texture_hooks() noexcept
     {
-        epoch::OpenGLFamilyNativeRenderTextureHooks hooks{};
+        epochengine::OpenGLFamilyNativeRenderTextureHooks hooks{};
         hooks.user = &get_opengl_backend();
         hooks.allocate = &allocate_native_render_texture;
         hooks.destroy = &destroy_native_render_texture;
@@ -563,8 +562,8 @@ export namespace epochnamespace::opengltextures
 
     [[nodiscard]] inline bool upload_atlas_to_gpu_for_context(
         BackendData& backend,
-        epochnamespace::openglstate::OpenGL4State& glState,
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& requestedCtx,
+        epochengine::openglstate::OpenGL4State& glState,
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& requestedCtx,
         const TextureAtlas& atlas)
     {
         if (atlas.pixel_data.empty()) {
@@ -575,7 +574,7 @@ export namespace epochnamespace::opengltextures
         auto platformCtx = requestedCtx.valid()
             ? requestedCtx
             : detail::to_platform_context(glState);
-        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!contextGuard.set(platformCtx)) {
             logger::error("OpenGL.Upload", "Failed to activate GL context for upload.");
             return false;
@@ -687,8 +686,8 @@ export namespace epochnamespace::opengltextures
 
     inline void ensure_uploaded_for_context(
         BackendData& backend,
-        epochnamespace::openglstate::OpenGL4State& glState,
-        const epochnamespace::openglcontext::PlatformGL::PlatformGLContext& platformCtx,
+        epochengine::openglstate::OpenGL4State& glState,
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& platformCtx,
         const TextureAtlas& atlas)
     {
         {
@@ -704,9 +703,9 @@ export namespace epochnamespace::opengltextures
         static_cast<void>(upload_atlas_to_gpu_for_context(backend, glState, platformCtx, atlas));
     }
 
-    inline bool ensure_created_pipeline(epochnamespace::openglstate::OpenGL4State& glState)
+    inline bool ensure_created_pipeline(epochengine::openglstate::OpenGL4State& glState)
     {
-        return epochnamespace::openglquad::ensure_quad_pipeline(glState);
+        return epochengine::openglquad::ensure_quad_pipeline(glState);
     }
 
     inline void clear_gpu_atlases() noexcept
@@ -799,11 +798,11 @@ export namespace epochnamespace::opengltextures
         }
 
         auto& backend = get_opengl_backend();
-        epochnamespace::openglcontext::PlatformGL::ScopedContext contextGuard;
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
 
         auto currentCtx = core::MultiContextManager::GetCurrent();
         auto desired = detail::context_to_platform_context(currentCtx.get());
-        const auto current = epochnamespace::openglcontext::PlatformGL::get_current();
+        const auto current = epochengine::openglcontext::PlatformGL::get_current();
         if (!desired.valid()) {
             desired = detail::to_platform_context(backend.glState);
         }
@@ -890,7 +889,7 @@ export namespace epochnamespace::opengltextures
             return;
         }
 
-        auto& pipe = epochnamespace::openglquad::quad_pipeline_state();
+        auto& pipe = epochengine::openglquad::quad_pipeline_state();
         glUseProgram(pipe.shader);
         glBindVertexArray(pipe.vao);
 
@@ -942,6 +941,6 @@ export namespace epochnamespace::opengltextures
         glDisable(GL_BLEND);
     }
 
-} // namespace epochnamespace::opengltextures
+} // namespace epochengine::opengltextures
 
 #endif // EPOCH_USING_OPENGL

@@ -36,7 +36,7 @@ module platform.context;
 
 import core.error;
 
-namespace epoch::platform
+namespace epochengine::platform
 {
     namespace
     {
@@ -51,7 +51,7 @@ namespace epoch::platform
             [[nodiscard]] core::error::result<void> create_surface(WindowHandle handle) noexcept override
             {
                 if (!handle.valid())
-                    return epoch::unexpected(core::error::invalid_argument("invalid window handle for surface creation"));
+                    return epochengine::unexpected(core::error::invalid_argument("invalid window handle for surface creation"));
 
                 has_surface_ = true;
                 return {}; // ok
@@ -86,7 +86,7 @@ namespace epoch::platform
         case GraphicsBackend::null_backend:
             return std::make_unique<NullGraphicsContext>(desc); // ok (value converts)
         default:
-            return epoch::unexpected(
+            return epochengine::unexpected(
                 core::error::make(
                     { core::error::core_domain::id, core::error::core_domain::unsupported },
                     "graphics backend not available"
@@ -95,4 +95,4 @@ namespace epoch::platform
         }
     }
 
-} // namespace epoch::platform
+} // namespace epochengine::platform

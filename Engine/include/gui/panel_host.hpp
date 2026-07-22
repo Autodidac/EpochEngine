@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string_view>
 
-namespace epochnamespace::gui_lib
+namespace epochengine::gui_lib
 {
     enum class PanelHostMode : std::uint8_t
     {

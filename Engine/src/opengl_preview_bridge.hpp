@@ -32,15 +32,15 @@
 
 #include <memory>
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
     class Context;
 }
 
-namespace epochnamespace::openglbridge
+namespace epochengine::openglbridge
 {
     void render_scene_preview(
-        const std::shared_ptr<epochnamespace::core::Context>& ctx,
+        const std::shared_ptr<epochengine::core::Context>& ctx,
         int framebufferWidth,
         int framebufferHeight);
 }

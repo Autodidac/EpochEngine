@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-namespace epochnamespace::gui_lib
+namespace epochengine::gui_lib
 {
     inline constexpr std::size_t invalid_text_index = (std::numeric_limits<std::size_t>::max)();
 

@@ -45,7 +45,7 @@ module;
 
 module core.path;
 
-namespace epoch::core::path
+namespace epochengine::core::path
 {
     namespace
     {

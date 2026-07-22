@@ -34,7 +34,7 @@ module;
 
 export module core.log;
 
-export namespace epoch::core::log
+export namespace epochengine::core::log
 {
     enum class level : std::uint32_t
     {
@@ -47,8 +47,8 @@ export namespace epoch::core::log
 
     struct kv
     {
-        epoch::string_view key{};
-        epoch::string_view value{};
+        epochengine::string_view key{};
+        epochengine::string_view value{};
     };
 
     // Configuration (process-global, but explicit).
@@ -57,17 +57,17 @@ export namespace epoch::core::log
 
     void enable_console(bool on) noexcept;   // stdout
     void enable_debugger(bool on) noexcept;  // OutputDebugString on Windows, no-op elsewhere
-    bool set_file(epoch::string_view utf8_path) noexcept; // append mode (UTF-8 path)
+    bool set_file(epochengine::string_view utf8_path) noexcept; // append mode (UTF-8 path)
     void close_file() noexcept;
 
     // Log entry points.
-    void write(level lvl, epoch::string_view tag, epoch::string_view msg);
-    void write_kv(level lvl, epoch::string_view tag, epoch::string_view msg, epoch::array_view<const kv> fields);
+    void write(level lvl, epochengine::string_view tag, epochengine::string_view msg);
+    void write_kv(level lvl, epochengine::string_view tag, epochengine::string_view msg, epochengine::array_view<const kv> fields);
 
-    inline void trace(epoch::string_view tag, epoch::string_view msg) { write(level::trace, tag, msg); }
-    inline void info(epoch::string_view tag, epoch::string_view msg) { write(level::info, tag, msg); }
-    inline void warn(epoch::string_view tag, epoch::string_view msg) { write(level::warn, tag, msg); }
-    inline void error(epoch::string_view tag, epoch::string_view msg) { write(level::error, tag, msg); }
+    inline void trace(epochengine::string_view tag, epochengine::string_view msg) { write(level::trace, tag, msg); }
+    inline void info(epochengine::string_view tag, epochengine::string_view msg) { write(level::info, tag, msg); }
+    inline void warn(epochengine::string_view tag, epochengine::string_view msg) { write(level::warn, tag, msg); }
+    inline void error(epochengine::string_view tag, epochengine::string_view msg) { write(level::error, tag, msg); }
 
     // C ABI bridge for non-module translation units (App project, tools, etc.)
     // Implemented in src/core.log.cpp.

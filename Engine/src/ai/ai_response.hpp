@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-namespace epoch::ai {
+namespace epochengine::ai {
 
 struct Candidate {
     std::string text;
@@ -45,4 +45,4 @@ struct EngineAiReply {
     std::vector<Candidate> alternatives;
 };
 
-} // namespace epoch::ai
+} // namespace epochengine::ai

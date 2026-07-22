@@ -44,14 +44,14 @@ import context.commandqueue;
 import core.context;
 import engine.diagnostics;
 
-namespace epochnamespace::noopcontext
+namespace epochengine::noopcontext
 {
 #if defined(EPOCH_USING_NOOP_HEADLESS)
     inline std::atomic_bool running{ false };
 #endif
 }
 
-export namespace epochnamespace::noopcontext
+export namespace epochengine::noopcontext
 {
 #if defined(EPOCH_USING_NOOP_HEADLESS)
     inline void noop_initialize()

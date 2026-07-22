@@ -102,7 +102,7 @@ import raylib.context;
 
 namespace
 {
-    [[nodiscard]] inline epochnamespace::gui::Vec2 client_mouse_position(
+    [[nodiscard]] inline epochengine::gui::Vec2 client_mouse_position(
         HWND hwnd,
         LPARAM lParam,
         bool screenCoordinates = false) noexcept
@@ -122,9 +122,9 @@ namespace
     }
 
     inline void push_gui_mouse_event(
-        const epochnamespace::core::Context* ctx,
+        const epochengine::core::Context* ctx,
         HWND hwnd,
-        epochnamespace::gui::EventType type,
+        epochengine::gui::EventType type,
         LPARAM lParam,
         int wheelDelta = 0,
         bool screenCoordinates = false,
@@ -133,7 +133,7 @@ namespace
         if (!ctx)
             return;
 
-        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
+        epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
             .type = type,
             .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates),
             .mouse_button = mouseButton,
@@ -141,13 +141,13 @@ namespace
         });
     }
 
-    inline void push_gui_key_event(const epochnamespace::core::Context* ctx, int key) noexcept
+    inline void push_gui_key_event(const epochengine::core::Context* ctx, int key) noexcept
     {
         if (!ctx)
             return;
 
-        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
-            .type = epochnamespace::gui::EventType::KeyDown,
+        epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
+            .type = epochengine::gui::EventType::KeyDown,
             .key = key,
             .ctrl_down = (::GetKeyState(VK_CONTROL) & 0x8000) != 0,
             .shift_down = (::GetKeyState(VK_SHIFT) & 0x8000) != 0,
@@ -183,7 +183,7 @@ namespace
         return out;
     }
 
-    inline void push_gui_text_event(const epochnamespace::core::Context* ctx, char32_t codepoint) noexcept
+    inline void push_gui_text_event(const epochengine::core::Context* ctx, char32_t codepoint) noexcept
     {
         if (!ctx)
             return;
@@ -192,30 +192,30 @@ namespace
         if (utf8.empty())
             return;
 
-        epochnamespace::gui::push_input_for_context(ctx, epochnamespace::gui::InputEvent{
-            .type = epochnamespace::gui::EventType::TextInput,
+        epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
+            .type = epochengine::gui::EventType::TextInput,
             .text = utf8
         });
     }
 
-    [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> typed_context(
-        const epochnamespace::core::OpaqueContextHandle& opaque) noexcept
+    [[nodiscard]] inline std::shared_ptr<epochengine::core::Context> typed_context(
+        const epochengine::core::OpaqueContextHandle& opaque) noexcept
     {
         return opaque
-            ? std::reinterpret_pointer_cast<epochnamespace::core::Context>(opaque)
+            ? std::reinterpret_pointer_cast<epochengine::core::Context>(opaque)
             : nullptr;
     }
 
     // TU-owned globals.
     std::unordered_map<HWND, std::thread> g_threads;
     std::mutex g_threadStateMutex;
-    epochnamespace::core::DragState       g_drag;
-    epochnamespace::core::MultiContextManager* g_activeManager = nullptr;
+    epochengine::core::DragState       g_drag;
+    epochengine::core::MultiContextManager* g_activeManager = nullptr;
     struct PendingWindowCleanup
     {
         HWND hwnd{};
         std::thread thread{};
-        std::unique_ptr<epochnamespace::core::WindowData> window{};
+        std::unique_ptr<epochengine::core::WindowData> window{};
     };
     std::vector<PendingWindowCleanup> g_pendingCleanups;
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
@@ -259,10 +259,10 @@ namespace
     }
 
     [[nodiscard]] inline bool should_draw_opengl_startup_placeholder(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return window
-            && window->type == epochnamespace::core::ContextType::OpenGL
+            && window->type == epochengine::core::ContextType::OpenGL
             && !window->firstPresentComplete.load(std::memory_order_acquire);
     }
     // Some Windows SDK setups don't expose WGL_ARB_create_context declarations here.
@@ -615,7 +615,7 @@ namespace
             flags);
     }
 
-    inline void request_routed_panel_redock_close(epochnamespace::core::WindowData* window) noexcept
+    inline void request_routed_panel_redock_close(epochengine::core::WindowData* window) noexcept
     {
         if (!window || window->guiRoute.empty())
             return;
@@ -709,7 +709,7 @@ namespace
         ::PostMessageW(hwnd, WM_EPOCH_LAYOUT, 0, 0);
     }
 
-    [[nodiscard]] inline std::shared_ptr<epochnamespace::core::Context> resolve_gui_context_for_hwnd(HWND hwnd) noexcept
+    [[nodiscard]] inline std::shared_ptr<epochengine::core::Context> resolve_gui_context_for_hwnd(HWND hwnd) noexcept
     {
         auto* mgr = g_activeManager;
         if (!mgr)
@@ -721,7 +721,7 @@ namespace
         return {};
     }
 
-    [[nodiscard]] inline epochnamespace::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
+    [[nodiscard]] inline epochengine::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
     {
         auto* mgr = g_activeManager;
         if (!mgr)
@@ -781,11 +781,11 @@ namespace
     }
 
     [[nodiscard]] inline bool has_proxy_shell_pair(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return window
-            && (window->type == epochnamespace::core::ContextType::SDL
-                || window->type == epochnamespace::core::ContextType::SFML)
+            && (window->type == epochengine::core::ContextType::SDL
+                || window->type == epochengine::core::ContextType::SFML)
             && window->hwndChild
             && window->host_hwnd
             && window->hwndChild != window->host_hwnd
@@ -794,7 +794,7 @@ namespace
     }
 
     [[nodiscard]] inline bool has_proxy_host(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return has_proxy_shell_pair(window)
             && (::GetParent(window->hwndChild) == window->host_hwnd
@@ -802,7 +802,7 @@ namespace
     }
 
     [[nodiscard]] inline bool uses_visible_proxy_host(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return has_proxy_host(window)
             && (::GetParent(window->hwndChild) == window->host_hwnd
@@ -812,7 +812,7 @@ namespace
     inline void apply_child_fill_layout(HWND child, HWND parent, int clientW, int clientH) noexcept;
 
     inline void hide_associated_host_window(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND activeHwnd,
         HWND expectedParent) noexcept
     {
@@ -840,7 +840,7 @@ namespace
     }
 
     inline void restore_associated_host_window(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND parent,
         int desiredScreenX,
         int desiredScreenY,
@@ -850,7 +850,7 @@ namespace
         if (!window)
             return;
 
-        if (window->type == epochnamespace::core::ContextType::SDL
+        if (window->type == epochengine::core::ContextType::SDL
             && uses_visible_proxy_host(window))
         {
             if (!parent
@@ -897,24 +897,24 @@ namespace
     }
 
     [[nodiscard]] inline bool is_sfml_proxy_candidate(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return has_proxy_shell_pair(window);
     }
 
-    [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType type) noexcept
+    [[nodiscard]] inline bool backend_uses_proxy_child(epochengine::core::ContextType type) noexcept
     {
-        return type == epochnamespace::core::ContextType::SDL
-            || type == epochnamespace::core::ContextType::SFML;
+        return type == epochengine::core::ContextType::SDL
+            || type == epochengine::core::ContextType::SFML;
     }
 
-    [[nodiscard]] inline bool backend_adopts_native_child(epochnamespace::core::ContextType type) noexcept
+    [[nodiscard]] inline bool backend_adopts_native_child(epochengine::core::ContextType type) noexcept
     {
-        return type == epochnamespace::core::ContextType::RayLib;
+        return type == epochengine::core::ContextType::RayLib;
     }
 
     [[nodiscard]] inline bool is_proxy_host_hwnd(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND hwnd) noexcept
     {
         return window
@@ -926,7 +926,7 @@ namespace
     }
 
     [[nodiscard]] inline bool is_sfml_proxy_detached(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return has_proxy_shell_pair(window)
             && ::GetParent(window->hwndChild) == window->host_hwnd
@@ -934,7 +934,7 @@ namespace
     }
 
     [[nodiscard]] inline bool is_proxy_child_directly_docked(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND expectedParent = nullptr) noexcept
     {
         if (!has_proxy_shell_pair(window))
@@ -952,14 +952,14 @@ namespace
     }
 
     [[nodiscard]] inline bool uses_hidden_proxy_shell(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return has_proxy_shell_pair(window)
             && ::IsWindowVisible(window->host_hwnd) == FALSE;
     }
 
     [[nodiscard]] inline HWND proxy_drag_frame(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND dockParent,
         HWND fallback) noexcept
     {
@@ -970,7 +970,10 @@ namespace
             return window->host_hwnd ? window->host_hwnd : fallback;
 
         if (is_proxy_child_directly_docked(window, dockParent))
-            return window->hwndChild ? window->hwndChild : fallback;
+        {
+            const HWND child = window->hwndChild.load(std::memory_order_acquire);
+            return child ? child : fallback;
+        }
 
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
             return window->host_hwnd;
@@ -979,12 +982,12 @@ namespace
     }
 
     [[nodiscard]] inline bool proxy_drag_owns_host(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         if (!is_sfml_proxy_candidate(window))
             return false;
 
-        const auto& drag = epochnamespace::core::Drag();
+        const auto& drag = epochengine::core::Drag();
         return drag.dragging
             && (drag.draggedWindow == window->host_hwnd
                 || drag.draggedWindow == window->hwndChild);
@@ -1147,7 +1150,7 @@ namespace
 
         apply_dark_window_chrome(hwnd);
         ::BringWindowToTop(hwnd);
-        const auto& drag = epochnamespace::core::Drag();
+        const auto& drag = epochengine::core::Drag();
         if (drag.dragging && drag.draggedWindow == hwnd)
         {
             ::SetActiveWindow(hwnd);
@@ -1166,13 +1169,13 @@ namespace
         if (::GetCursorPos(&cursor) == FALSE || ::GetWindowRect(hwnd, &hostRect) == FALSE)
             return;
 
-        auto& drag = epochnamespace::core::Drag();
+        auto& drag = epochengine::core::Drag();
         drag.dragWindowOffset.x = cursor.x - hostRect.left;
         drag.dragWindowOffset.y = cursor.y - hostRect.top;
     }
 
     inline void undock_sfml_proxy_window(
-        epochnamespace::core::WindowData* window,
+        epochengine::core::WindowData* window,
         int desiredClientLeft,
         int desiredClientTop,
         int clientW,
@@ -1193,11 +1196,14 @@ namespace
         if (proxy_drag_owns_host(window))
             ::SetFocus(window->host_hwnd);
         else
-            ::SetFocus(window->hwndChild ? window->hwndChild : window->host_hwnd);
+        {
+            const HWND child = window->hwndChild.load(std::memory_order_acquire);
+            ::SetFocus(child ? child : window->host_hwnd);
+        }
     }
 
     inline void redock_sfml_proxy_window(
-        epochnamespace::core::WindowData* window,
+        epochengine::core::WindowData* window,
         HWND parent,
         int desiredScreenX,
         int desiredScreenY,
@@ -1209,8 +1215,8 @@ namespace
 
         window->isFloating = false;
 #if defined(_DEBUG)
-        epochnamespace::logger::get(kLogSys).logf(
-            epochnamespace::logger::LogLevel::INFO,
+        epochengine::logger::get(kLogSys).logf(
+            epochengine::logger::LogLevel::INFO,
             std::source_location::current(),
             "SFML redock begin host={} child={} hostParentBefore={} childParentBefore={} targetParent={}",
             static_cast<void*>(window->host_hwnd),
@@ -1234,7 +1240,10 @@ namespace
             ::ShowWindow(window->hwndChild, SW_SHOWNA);
             window->set_size(clientW, clientH);
             if (proxy_drag_owns_host(window))
-                ::SetFocus(window->hwndChild ? window->hwndChild : window->host_hwnd);
+            {
+                const HWND child = window->hwndChild.load(std::memory_order_acquire);
+                ::SetFocus(child ? child : window->host_hwnd);
+            }
         }
         else
         {
@@ -1265,8 +1274,8 @@ namespace
         }
 
 #if defined(_DEBUG)
-        epochnamespace::logger::get(kLogSys).logf(
-            epochnamespace::logger::LogLevel::INFO,
+        epochengine::logger::get(kLogSys).logf(
+            epochengine::logger::LogLevel::INFO,
             std::source_location::current(),
             "SFML redock end host={} child={} hostParentAfter={} childParentAfter={} hostVisible={}",
             static_cast<void*>(window->host_hwnd),
@@ -1278,7 +1287,7 @@ namespace
     }
 
     inline void post_proxy_host_command(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         ProxyDockCmd command,
         HWND parent,
         int x,
@@ -1289,8 +1298,9 @@ namespace
         if (!is_sfml_proxy_candidate(window))
             return;
 
+        const HWND child = window->hwndChild.load(std::memory_order_acquire);
         auto* request = new (std::nothrow) ProxyDockRequest{
-            .sourceHwnd = window->hwndChild ? window->hwndChild : window->host_hwnd,
+            .sourceHwnd = child ? child : window->host_hwnd,
             .parentHwnd = parent,
             .x = x,
             .y = y,
@@ -1311,8 +1321,8 @@ namespace
 #if defined(_DEBUG)
         else
         {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Posted SFML proxy command={} host={} child={} hostParent={} childParent={} targetParent={}",
                 static_cast<int>(command),
@@ -1326,14 +1336,14 @@ namespace
     }
 
     [[nodiscard]] inline bool backend_requires_owner_thread_dock_commands(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         return window
-            && window->type == epochnamespace::core::ContextType::RayLib;
+            && window->type == epochengine::core::ContextType::RayLib;
     }
 
     [[nodiscard]] inline HWND owner_thread_dock_handle(
-        const epochnamespace::core::WindowData* window) noexcept
+        const epochengine::core::WindowData* window) noexcept
     {
         if (!window)
             return nullptr;
@@ -1348,7 +1358,7 @@ namespace
     }
 
     [[nodiscard]] inline bool post_owner_thread_dock_command(
-        epochnamespace::core::WindowData* window,
+        epochengine::core::WindowData* window,
         ProxyDockCmd command,
         HWND parent,
         int x,
@@ -1419,27 +1429,27 @@ namespace
         case WM_LBUTTONDOWN:
             remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
             break;
         case WM_RBUTTONDOWN:
             remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam, 0, false, 1);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam, 0, false, 1);
             break;
         case WM_MOUSEMOVE:
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseMove, lParam);
             break;
         case WM_LBUTTONUP:
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam);
             break;
         case WM_RBUTTONUP:
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam, 0, false, 1);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam, 0, false, 1);
             break;
         case WM_MOUSEWHEEL:
             push_gui_mouse_event(
                 ctx.get(),
                 hwnd,
-                epochnamespace::gui::EventType::MouseWheel,
+                epochengine::gui::EventType::MouseWheel,
                 lParam,
                 GET_WHEEL_DELTA_WPARAM(wParam),
                 true);
@@ -1492,11 +1502,11 @@ namespace
             if (msg == WM_LBUTTONDOWN || msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP)
             {
                 auto* const window = resolve_window_data_for_hwnd(hwnd);
-                const auto& drag = epochnamespace::core::Drag();
+                const auto& drag = epochengine::core::Drag();
                 const bool backendDockableChild =
                     window
-                    && (window->type == epochnamespace::core::ContextType::SDL
-                        || window->type == epochnamespace::core::ContextType::SFML)
+                    && (window->type == epochengine::core::ContextType::SDL
+                        || window->type == epochengine::core::ContextType::SFML)
                     && hwnd == window->hwndChild;
                 const bool proxyDragStart =
                     backendDockableChild
@@ -1509,7 +1519,7 @@ namespace
                         || drag.draggedWindow == window->host_hwnd);
                 if (proxyDragStart || proxyContinueDrag)
                 {
-                    return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+                    return epochengine::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
                 }
             }
             return DefSubclassProc(hwnd, msg, wp, lp);
@@ -1591,11 +1601,11 @@ namespace
         case WM_LBUTTONUP:
         {
             forward_gui_input_message(hwnd, msg, wp, lp);
-            const auto& dragState = epochnamespace::core::Drag();
+            const auto& dragState = epochengine::core::Drag();
             const bool continueDrag = dragState.dragging && dragState.draggedWindow == hwnd;
             const bool dragStart = (msg == WM_LBUTTONDOWN) && is_dock_drag_hotspot(hwnd, lp);
             if (dragStart || continueDrag)
-                return epochnamespace::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+                return epochengine::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
         }
 
@@ -1666,7 +1676,7 @@ namespace
         return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
     }
 
-    [[nodiscard]] inline epochnamespace::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
+    [[nodiscard]] inline epochengine::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
     {
         auto* mgr = g_activeManager;
         return (mgr && hwnd) ? mgr->findWindowByHWND(hwnd) : nullptr;
@@ -1676,14 +1686,14 @@ namespace
     [[nodiscard]] inline bool pointer_inside_parent_client(HWND, const POINT&) noexcept { return false; }
     [[nodiscard]] inline bool pointer_inside_parent_dock_region(HWND, const POINT&) noexcept { return false; }
     [[nodiscard]] inline bool drag_distance_exceeded(const POINT&, const POINT&, int = 10) noexcept { return false; }
-    [[nodiscard]] inline bool has_proxy_shell_pair(const epochnamespace::core::WindowData*) noexcept { return false; }
-    [[nodiscard]] inline bool is_sfml_proxy_candidate(const epochnamespace::core::WindowData*) noexcept { return false; }
-    [[nodiscard]] inline bool is_proxy_host_hwnd(const epochnamespace::core::WindowData*, HWND) noexcept { return false; }
-    [[nodiscard]] inline bool is_sfml_proxy_detached(const epochnamespace::core::WindowData*) noexcept { return false; }
-    [[nodiscard]] inline bool is_proxy_child_directly_docked(const epochnamespace::core::WindowData*, HWND = nullptr) noexcept { return false; }
-    [[nodiscard]] inline bool backend_uses_proxy_child(epochnamespace::core::ContextType) noexcept { return false; }
-    [[nodiscard]] inline bool backend_adopts_native_child(epochnamespace::core::ContextType) noexcept { return false; }
-    [[nodiscard]] inline HWND proxy_drag_frame(const epochnamespace::core::WindowData*, HWND, HWND fallback) noexcept { return fallback; }
+    [[nodiscard]] inline bool has_proxy_shell_pair(const epochengine::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_sfml_proxy_candidate(const epochengine::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_proxy_host_hwnd(const epochengine::core::WindowData*, HWND) noexcept { return false; }
+    [[nodiscard]] inline bool is_sfml_proxy_detached(const epochengine::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_proxy_child_directly_docked(const epochengine::core::WindowData*, HWND = nullptr) noexcept { return false; }
+    [[nodiscard]] inline bool backend_uses_proxy_child(epochengine::core::ContextType) noexcept { return false; }
+    [[nodiscard]] inline bool backend_adopts_native_child(epochengine::core::ContextType) noexcept { return false; }
+    [[nodiscard]] inline HWND proxy_drag_frame(const epochengine::core::WindowData*, HWND, HWND fallback) noexcept { return fallback; }
 
     [[nodiscard]] inline POINT force_proxy_shell_outside_parent(
         HWND,
@@ -1700,11 +1710,11 @@ namespace
     inline void apply_child_fill_layout(HWND, HWND, int, int) noexcept {}
     inline void move_detached_top_level_shell(HWND, int, int, int, int) noexcept {}
     inline void sync_drag_offset_to_host_window(HWND) noexcept {}
-    inline void hide_associated_host_window(const epochnamespace::core::WindowData*, HWND, HWND) noexcept {}
-    inline void restore_associated_host_window(const epochnamespace::core::WindowData*, HWND, int, int, int, int) noexcept {}
-    inline void undock_sfml_proxy_window(epochnamespace::core::WindowData*, int, int, int, int) noexcept {}
-    inline void redock_sfml_proxy_window(epochnamespace::core::WindowData*, HWND, int, int, int, int) noexcept {}
-    inline void post_proxy_host_command(const epochnamespace::core::WindowData*, ProxyDockCmd, HWND, int, int, int, int) noexcept {}
+    inline void hide_associated_host_window(const epochengine::core::WindowData*, HWND, HWND) noexcept {}
+    inline void restore_associated_host_window(const epochengine::core::WindowData*, HWND, int, int, int, int) noexcept {}
+    inline void undock_sfml_proxy_window(epochengine::core::WindowData*, int, int, int, int) noexcept {}
+    inline void redock_sfml_proxy_window(epochengine::core::WindowData*, HWND, int, int, int, int) noexcept {}
+    inline void post_proxy_host_command(const epochengine::core::WindowData*, ProxyDockCmd, HWND, int, int, int, int) noexcept {}
 
     LRESULT CALLBACK BackendInputProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR)
     {
@@ -1712,7 +1722,7 @@ namespace
     }
 #endif
 
-    inline void cleanup_window_resources(std::unique_ptr<epochnamespace::core::WindowData>& window) noexcept
+    inline void cleanup_window_resources(std::unique_ptr<epochengine::core::WindowData>& window) noexcept
     {
         if (!window)
             return;
@@ -1766,21 +1776,22 @@ namespace
         window->hwndChild = nullptr;
     }
 
-    [[nodiscard]] inline HWND primary_window_handle(const epochnamespace::core::WindowData* window) noexcept
+    [[nodiscard]] inline HWND primary_window_handle(const epochengine::core::WindowData* window) noexcept
     {
         if (!window)
             return nullptr;
 
         if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
             return window->hwnd;
-        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
-            return window->hwndChild;
+        const HWND child = window->hwndChild.load(std::memory_order_acquire);
+        if (child && ::IsWindow(child) != FALSE)
+            return child;
         if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
             return window->host_hwnd;
-        return window->hwnd ? window->hwnd : (window->hwndChild ? window->hwndChild : window->host_hwnd);
+        return window->hwnd ? window->hwnd : (child ? child : window->host_hwnd);
     }
 
-    [[nodiscard]] inline HWND render_thread_key(const epochnamespace::core::WindowData* window) noexcept
+    [[nodiscard]] inline HWND render_thread_key(const epochengine::core::WindowData* window) noexcept
     {
         if (!window)
             return nullptr;
@@ -1788,7 +1799,7 @@ namespace
     }
 
     [[nodiscard]] inline HWND dock_slot_handle(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND dockParent) noexcept
     {
         if (!window || !dockParent || ::IsWindow(dockParent) == FALSE)
@@ -1819,7 +1830,7 @@ namespace
     }
 
     [[nodiscard]] inline bool matches_window_handle(
-        const epochnamespace::core::WindowData* window,
+        const epochengine::core::WindowData* window,
         HWND hwnd) noexcept
     {
         return window
@@ -1871,7 +1882,7 @@ namespace
     };
 
     std::mutex g_nativeTitleFpsMutex;
-    std::unordered_map<const epochnamespace::core::WindowData*, NativeTitleFpsState> g_nativeTitleFps;
+    std::unordered_map<const epochengine::core::WindowData*, NativeTitleFpsState> g_nativeTitleFps;
 
     [[nodiscard]] std::wstring make_native_fps_title(std::wstring_view base, double fps)
     {
@@ -1889,8 +1900,8 @@ namespace
     }
 
     void record_native_title_frame(
-        epochnamespace::core::MultiContextManager* manager,
-        epochnamespace::core::WindowData& window)
+        epochengine::core::MultiContextManager* manager,
+        epochengine::core::WindowData& window)
     {
         const auto now = std::chrono::steady_clock::now();
         std::wstring childTitle{};
@@ -1952,7 +1963,7 @@ namespace
             set_native_title_if_alive(manager->GetParentWindow(), parentTitle);
     }
 
-    void forget_native_title_frame_source(const epochnamespace::core::WindowData* window) noexcept
+    void forget_native_title_frame_source(const epochengine::core::WindowData* window) noexcept
     {
         if (!window)
             return;
@@ -1962,7 +1973,7 @@ namespace
     }
 }
 
-namespace epochnamespace::core
+namespace epochengine::core
 {
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
     // Raylib embeds a real GLFW-created HWND. Re-parenting must be performed on the
@@ -2046,7 +2057,7 @@ namespace epochnamespace::core
 
         std::wstring BuildChildWindowTitle(ContextType type, int index)
         {
-            if (epochnamespace::core::cli::updater_shell_requested
+            if (epochengine::core::cli::updater_shell_requested
                 && type == ContextType::OpenGL
                 && index == 0)
             {
@@ -2287,7 +2298,7 @@ namespace epochnamespace::core
 
         const int clientW = clamp_positive(request.width);
         const int clientH = clamp_positive(request.height);
-        std::wstring title = epochnamespace::text::widen_utf16(request.title);
+        std::wstring title = epochengine::text::widen_utf16(request.title);
         if (title.empty())
             title = L"Epoch Context";
 
@@ -2311,7 +2322,7 @@ namespace epochnamespace::core
 
         if (request.start_docked && delayedPlaceholderVisibility && !hasValidParent)
         {
-            epochnamespace::logger::get(kLogSys).logf(
+            epochengine::logger::get(kLogSys).logf(
                 logger::LogLevel::Error,
                 std::source_location::current(),
                 "Refusing start-docked native-child context '{}' because no valid parent host exists.",
@@ -2445,7 +2456,7 @@ namespace epochnamespace::core
         winPtr->running = true;
         winPtr->context = ctx;
         winPtr->titleWide = title;
-        winPtr->titleNarrow = epochnamespace::text::narrow_utf8(title);
+        winPtr->titleNarrow = epochengine::text::narrow_utf8(title);
         winPtr->guiRoute = request.gui_route;
         winPtr->isFloating = !startDocked;
         winPtr->firstPresentComplete.store(
@@ -2479,7 +2490,7 @@ namespace epochnamespace::core
                     hwnd,
                     std::thread([this, rawWin]()
                     {
-                        epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                        epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                         RenderLoop(*rawWin);
                     }));
             }
@@ -2640,7 +2651,7 @@ namespace epochnamespace::core
         RegisterParentClass(hInst, L"EpochParent");
         RegisterChildClass(hInst, L"EpochChild");
 
-        epochnamespace::core::InitializeAllContexts();
+        epochengine::core::InitializeAllContexts();
 
         // ---------------- Parent (dock container) ----------------
         if (parented)
@@ -2730,8 +2741,8 @@ namespace epochnamespace::core
             {
                 gladInitialized = (gladLoadGL() != 0);
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                epochnamespace::logger::get(kLogSys).log(
-                    epochnamespace::logger::LogLevel::INFO,
+                epochengine::logger::get(kLogSys).log(
+                    epochengine::logger::LogLevel::INFO,
                     "GLAD loaded on dummy context",
                     std::source_location::current());
 #endif
@@ -2756,7 +2767,7 @@ namespace epochnamespace::core
                 for (int i = 0; i < count; ++i)
                 {
                     const std::wstring windowTitle = backend::BuildChildWindowTitle(type, i);
-                    const std::string narrowTitle = epochnamespace::text::narrow_utf8(windowTitle);
+                    const std::string narrowTitle = epochengine::text::narrow_utf8(windowTitle);
                     const bool singleStandaloneWindow = (!parent && totalRequested == 1);
                     const bool updaterStandaloneWindow = singleStandaloneWindow && cli::updater_shell_requested;
                     const int initialWidth = singleStandaloneWindow ? cli::window_width : 1280;
@@ -2876,8 +2887,8 @@ namespace epochnamespace::core
                     auto it = g_backends.find(type);
                     if (it == g_backends.end() || !it->second.master)
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::Error,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
                             std::source_location::current(),
                             "Missing prototype context for backend type {}",
                             static_cast<int>(type));
@@ -2954,7 +2965,7 @@ namespace epochnamespace::core
                     {
                         narrowTitle = (i < createdTitles.size())
                             ? createdTitles[i]
-                            : epochnamespace::text::narrow_utf8(backend::BuildChildWindowTitle(type, static_cast<int>(i)));
+                            : epochengine::text::narrow_utf8(backend::BuildChildWindowTitle(type, static_cast<int>(i)));
                     }
 
                     if (w && w->titleNarrow.empty())
@@ -2968,8 +2979,8 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
                     case ContextType::OpenGL:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring OpenGL init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -2980,8 +2991,8 @@ namespace epochnamespace::core
 
                     case ContextType::Software:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring Software init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -2991,8 +3002,8 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
                     case ContextType::DirectX:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring DirectX init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -3002,8 +3013,8 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     case ContextType::RayLib:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring Raylib init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -3013,8 +3024,8 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
                     case ContextType::SDL:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring SDL init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -3024,8 +3035,8 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
                     case ContextType::Vulkan:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring Vulkan init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -3035,8 +3046,8 @@ namespace epochnamespace::core
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
                     case ContextType::SFML:
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Deferring SFML init to render thread. host={}",
                             static_cast<void*>(hwnd));
@@ -3209,7 +3220,7 @@ namespace epochnamespace::core
                     hwnd,
                     std::thread([this, rawWin]()
                     {
-                        epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                        epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                         RenderLoop(*rawWin);
                     }));
             }
@@ -3332,11 +3343,11 @@ namespace epochnamespace::core
 
             g_threads.emplace(hwnd, std::thread([this, hwnd, startupDelay]()
                 {
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                     if (startupDelay.count() > 0)
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Startup stagger: delaying render thread {} by {} ms.",
                             static_cast<void*>(hwnd),
@@ -3843,8 +3854,8 @@ namespace epochnamespace::core
 #if defined(_DEBUG)
             if (th.joinable())
             {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::INFO,
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
                     std::source_location::current(),
                     "StopAll joining render thread hwnd={} type={} title='{}'",
                     static_cast<void*>(hwnd),
@@ -3854,8 +3865,8 @@ namespace epochnamespace::core
 #endif
             join_thread_with_message_pump(th);
 #if defined(_DEBUG)
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "StopAll joined render thread hwnd={}",
                 static_cast<void*>(hwnd));
@@ -3915,13 +3926,13 @@ namespace epochnamespace::core
         if (ctx->type == ContextType::RayLib)
         {
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Raylib init. host={}",
                 static_cast<void*>(win.hwnd));
 #endif
-            const bool initialized = epochnamespace::raylibcontext::raylib_initialize(
+            const bool initialized = epochengine::raylibcontext::raylib_initialize(
                 ctx,
                 win.hwnd,
                 static_cast<unsigned>(ctx->width),
@@ -3933,7 +3944,7 @@ namespace epochnamespace::core
             {
                 win.running = false;
                 win.set_backend_lifecycle(BackendLifecycleState::failed);
-                epochnamespace::raylibcontext::raylib_cleanup(ctx);
+                epochengine::raylibcontext::raylib_cleanup(ctx);
                 return;
             }
         }
@@ -3959,8 +3970,8 @@ namespace epochnamespace::core
 
         if (ctx->init_failed)
         {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "Backend init failed for {}. Rejecting the replacement window.",
                 ctx->backendName);
@@ -3973,8 +3984,8 @@ namespace epochnamespace::core
 
         if (!ctx->process)
         {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::Error,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::Error,
                 std::source_location::current(),
                 "Backend {} has no frame processor. Rejecting the replacement window.",
                 ctx->backendName);
@@ -3991,29 +4002,29 @@ namespace epochnamespace::core
         const auto publishRenderReady = [&]()
         {
             win.set_backend_lifecycle(BackendLifecycleState::ready);
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Backend {} reached render-ready state for hwnd={}.",
                 ctx->backendName,
                 static_cast<void*>(win.hwnd));
         };
 
-        epoch::perf::frame_limiter coreFrameLimiter{};
+        epochengine::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
         const auto resolveCoreFrameLimit = []() noexcept -> double
         {
-            if (epochnamespace::core::cli::frame_limit_explicit)
-                return epochnamespace::core::cli::frame_limit_fps;
+            if (epochengine::core::cli::frame_limit_explicit)
+                return epochengine::core::cli::frame_limit_fps;
 
             const bool standaloneProject =
-                !epochnamespace::core::cli::parented_mode
-                && !epochnamespace::core::cli::editor_requested
-                && !epochnamespace::core::cli::run_menu_loop;
+                !epochengine::core::cli::parented_mode
+                && !epochengine::core::cli::editor_requested
+                && !epochengine::core::cli::run_menu_loop;
 
-            return epoch::perf::target_fps_for(standaloneProject
-                ? epoch::perf::frame_limit_preset::fps_60
-                : epoch::perf::frame_limit_preset::fps_120);
+            return epochengine::perf::target_fps_for(standaloneProject
+                ? epochengine::perf::frame_limit_preset::fps_60
+                : epochengine::perf::frame_limit_preset::fps_120);
         };
 
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
@@ -4029,8 +4040,8 @@ namespace epochnamespace::core
             }
             catch (const std::exception& e)
             {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::Error,
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::Error,
                     std::source_location::current(),
                     "Backend {} owner-thread command failed: {}",
                     ctx->backendName,
@@ -4059,8 +4070,8 @@ namespace epochnamespace::core
                     && !win.get_should_close()
                     && running.load(std::memory_order_acquire))
                 {
-                    epochnamespace::logger::get(kLogSys).logf(
-                        epochnamespace::logger::LogLevel::Error,
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::Error,
                         std::source_location::current(),
                         "Backend {} stopped before its first successful frame. Rejecting the replacement window.",
                         ctx->backendName);
@@ -4178,8 +4189,8 @@ namespace epochnamespace::core
 
         case WM_CLOSE:
         {
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Parent WM_CLOSE received hwnd={} - beginning orderly child shutdown.",
                 static_cast<void*>(hwnd));
@@ -4237,8 +4248,8 @@ namespace epochnamespace::core
         }
 
         case WM_DESTROY:
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Parent WM_DESTROY received hwnd={} - parent window destroyed cleanly.",
                 static_cast<void*>(hwnd));
@@ -4252,7 +4263,7 @@ namespace epochnamespace::core
     LRESULT CALLBACK MultiContextManager::ChildProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         static DragState& drag = Drag();
-        const auto resolveGuiContext = [hwnd]() -> std::shared_ptr<epochnamespace::core::Context>
+        const auto resolveGuiContext = [hwnd]() -> std::shared_ptr<epochengine::core::Context>
         {
             auto* mgr = s_activeInstance;
             if (!mgr)
@@ -4263,7 +4274,7 @@ namespace epochnamespace::core
 
             return {};
         };
-        const auto resolveWindowData = [hwnd]() noexcept -> epochnamespace::core::WindowData*
+        const auto resolveWindowData = [hwnd]() noexcept -> epochengine::core::WindowData*
         {
             return resolve_window_data_for_hwnd(hwnd);
         };
@@ -4303,13 +4314,13 @@ namespace epochnamespace::core
             remember_gui_input_owner(hwnd);
             ::SetFocus(hwnd);
             const auto ctx = resolveGuiContext();
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam, 0, false, 1);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam, 0, false, 1);
             return 0;
         }
         case WM_RBUTTONUP:
         {
             const auto ctx = resolveGuiContext();
-            push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam, 0, false, 1);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam, 0, false, 1);
             return 0;
         }
         case WM_NCLBUTTONDOWN:
@@ -4337,7 +4348,7 @@ namespace epochnamespace::core
                 remember_gui_input_owner(hwnd);
                 ::SetFocus(hwnd);
                 const auto ctx = resolveGuiContext();
-                push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseDown, lParam);
+                push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
                 if (!is_dock_drag_hotspot(hwnd, lParam))
                     return ::DefWindowProcW(hwnd, msg, wParam, lParam);
             }
@@ -4371,7 +4382,10 @@ namespace epochnamespace::core
             if (!detachedProxyHost && window && is_sfml_proxy_candidate(window))
             {
                 if (is_proxy_child_directly_docked(window, drag.originalParent))
-                    dragFrame = window->hwndChild ? window->hwndChild : hwnd;
+                {
+                    const HWND child = window->hwndChild.load(std::memory_order_acquire);
+                    dragFrame = child ? child : hwnd;
+                }
                 else if (window->host_hwnd)
                     dragFrame = window->host_hwnd;
             }
@@ -4385,8 +4399,8 @@ namespace epochnamespace::core
 #if defined(_DEBUG)
             if (window && is_sfml_proxy_candidate(window))
             {
-                epochnamespace::logger::get(kLogSys).logf(
-                    epochnamespace::logger::LogLevel::INFO,
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
                     std::source_location::current(),
                     "Proxy drag start hwnd={} host={} child={} originalParent={} hostParent={} childParent={} dragFrame={}",
                     static_cast<void*>(hwnd),
@@ -4422,7 +4436,7 @@ namespace epochnamespace::core
             if (msg == WM_MOUSEMOVE)
             {
                 const auto ctx = resolveGuiContext();
-                push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseMove, lParam);
+                push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseMove, lParam);
             }
             const bool proxyChildContinuingHostDrag =
                 drag.dragging
@@ -4626,8 +4640,8 @@ namespace epochnamespace::core
                                 clientW,
                                 clientH);
 #if defined(_DEBUG)
-                            epochnamespace::logger::get(kLogSys).logf(
-                                epochnamespace::logger::LogLevel::INFO,
+                            epochengine::logger::get(kLogSys).logf(
+                                epochengine::logger::LogLevel::INFO,
                                 std::source_location::current(),
                                 "Proxy undock move host={} child={} pt=({}, {}) new=({}, {}) escaped=({}, {}) parent={} hostParentBefore={} childParentBefore={}",
                                 static_cast<void*>(window->host_hwnd),
@@ -4813,8 +4827,8 @@ namespace epochnamespace::core
                 {
                     RECT hostRect{};
                     ::GetWindowRect(window->host_hwnd, &hostRect);
-                    epochnamespace::logger::get(kLogSys).logf(
-                        epochnamespace::logger::LogLevel::INFO,
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::INFO,
                         std::source_location::current(),
                         "Proxy undock applied host={} child={} hostParentAfter={} childParentAfter={} hostRect=({}, {}, {}, {})",
                         static_cast<void*>(window->host_hwnd),
@@ -4828,7 +4842,7 @@ namespace epochnamespace::core
                 }
 #endif
                 {
-                    auto& dragState = epochnamespace::core::Drag();
+                    auto& dragState = epochengine::core::Drag();
                     if (dragState.dragging
                         && window->host_hwnd
                         && (dragState.draggedWindow == window->hwndChild
@@ -4841,9 +4855,10 @@ namespace epochnamespace::core
                         sync_drag_offset_to_host_window(window->host_hwnd);
                         ::SetActiveWindow(window->host_hwnd);
                         ::SetForegroundWindow(window->host_hwnd);
+                        const HWND child = window->hwndChild.load(std::memory_order_acquire);
                         ::SetFocus(
-                            (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
-                            ? window->hwndChild
+                            (child && ::IsWindow(child) != FALSE)
+                            ? child
                             : window->host_hwnd);
                     }
                 }
@@ -4864,8 +4879,8 @@ namespace epochnamespace::core
                 {
                     RECT hostRect{};
                     ::GetWindowRect(window->host_hwnd, &hostRect);
-                    epochnamespace::logger::get(kLogSys).logf(
-                        epochnamespace::logger::LogLevel::INFO,
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::INFO,
                         std::source_location::current(),
                         "Proxy move applied host={} child={} hostParent={} childParent={} hostRect=({}, {}, {}, {})",
                         static_cast<void*>(window->host_hwnd),
@@ -4917,7 +4932,7 @@ namespace epochnamespace::core
             if (msg == WM_LBUTTONUP)
             {
                 const auto ctx = resolveGuiContext();
-                push_gui_mouse_event(ctx.get(), hwnd, epochnamespace::gui::EventType::MouseUp, lParam);
+                push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam);
             }
             const bool proxyChildContinuingHostDrag =
                 drag.dragging
@@ -4975,8 +4990,8 @@ namespace epochnamespace::core
 #if defined(_DEBUG)
                     if (window && is_sfml_proxy_candidate(window))
                     {
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Proxy release host={} child={} detached={} release=({}, {}) parentRect=({}, {}, {}, {}) wndRect=({}, {}, {}, {}) releaseInside={} centerInside={} detachedProxy={} wantsRedock={}",
                             static_cast<void*>(window->host_hwnd),
@@ -5063,8 +5078,8 @@ namespace epochnamespace::core
                             clientW,
                             clientH);
 #if defined(_DEBUG)
-                        epochnamespace::logger::get(kLogSys).logf(
-                            epochnamespace::logger::LogLevel::INFO,
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
                             std::source_location::current(),
                             "Proxy undock release host={} child={} release=({}, {}) escaped=({}, {}) parent={} hostParentBefore={} childParentBefore={}",
                             static_cast<void*>(window->host_hwnd),
@@ -5132,7 +5147,7 @@ namespace epochnamespace::core
             push_gui_mouse_event(
                 ctx.get(),
                 hwnd,
-                epochnamespace::gui::EventType::MouseWheel,
+                epochengine::gui::EventType::MouseWheel,
                 lParam,
                 GET_WHEEL_DELTA_WPARAM(wParam),
                 true);
@@ -5199,8 +5214,8 @@ namespace epochnamespace::core
             return 0;
         }
         case WM_CLOSE:
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Child WM_CLOSE received hwnd={} parent={}",
                 static_cast<void*>(hwnd),
@@ -5220,8 +5235,8 @@ namespace epochnamespace::core
             return 0;
 
         case WM_DESTROY:
-            epochnamespace::logger::get(kLogSys).logf(
-                epochnamespace::logger::LogLevel::INFO,
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
                 "Child WM_DESTROY received hwnd={} parentAfter={}",
                 static_cast<void*>(hwnd),

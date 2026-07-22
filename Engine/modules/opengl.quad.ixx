@@ -1,10 +1,10 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
  // opengl.quad.ixx  (Quad + shader pipeline)
  // QUAD_V3: prints GL/GLSL versions + produces single-line shader errors.
 
@@ -56,7 +55,7 @@ import core.logger;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
-namespace epochnamespace::openglquad
+namespace epochengine::openglquad
 {
     // ---------------------------------------------------------------------
     // Quad VAO wrapper (renderer depends on this type existing)
@@ -129,16 +128,16 @@ namespace epochnamespace::openglquad
     // ---------------------------------------------------------------------
     // Quad shader+VAO pipeline (per-thread/per-context)
     // ---------------------------------------------------------------------
-    using QuadPipelineState = epochnamespace::openglstate::OpenGL4State;
+    using QuadPipelineState = epochengine::openglstate::OpenGL4State;
 
     inline thread_local QuadPipelineState* s_active_pipeline_state =
-        &epochnamespace::openglstate::s_openglstate;
+        &epochengine::openglstate::s_openglstate;
 
     export QuadPipelineState& quad_pipeline_state() noexcept
     {
         return s_active_pipeline_state
             ? *s_active_pipeline_state
-            : epochnamespace::openglstate::s_openglstate;
+            : epochengine::openglstate::s_openglstate;
     }
 
     // ---------------------------------------------------------------------
@@ -424,7 +423,7 @@ void main() {
     }
 
     // Bind the quad pipeline to the backend-managed state for the active GL context.
-    export bool ensure_quad_pipeline(epochnamespace::openglstate::OpenGL4State& state)
+    export bool ensure_quad_pipeline(epochengine::openglstate::OpenGL4State& state)
     {
         s_active_pipeline_state = &state;
 
@@ -443,6 +442,6 @@ void main() {
 
         return build_quad_pipeline(state);
     }
-} // namespace epochnamespace::openglquad
+} // namespace epochengine::openglquad
 
 #endif // EPOCH_USING_OPENGL

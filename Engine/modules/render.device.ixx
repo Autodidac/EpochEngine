@@ -28,11 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Renderer Device Contract
- *
- *   SPDX-License-Identifier: LicenseRef-MIT-NoSell
- **************************************************************/
 module;
 
 #include "../include/epoch.config.hpp"
@@ -43,7 +38,7 @@ export module render.device;
 
 //import <string>;
 
-export namespace epoch
+export namespace epochengine
 {
     enum class RendererBackendKind : u8
     {
@@ -183,7 +178,7 @@ export namespace epoch
     struct VertexLayoutDesc
     {
         u32 stride_bytes = 0;
-        epoch::small_vector<VertexAttributeDesc> attributes{};
+        epochengine::small_vector<VertexAttributeDesc> attributes{};
     };
 
     enum class MaterialTextureSlot : u8
@@ -211,7 +206,7 @@ export namespace epoch
         float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
         bool unlit = false;
         bool alpha_blend = false;
-        epoch::small_vector<MaterialTextureSlotDesc> texture_slots{};
+        epochengine::small_vector<MaterialTextureSlotDesc> texture_slots{};
         const char* debug_name = nullptr;
     };
 
@@ -371,7 +366,7 @@ export namespace epoch
         const char* name = nullptr;
         const char* source_path = nullptr;
         bool static_mesh = true;
-        epoch::small_vector<ModelMeshDesc> meshes{};
+        epochengine::small_vector<ModelMeshDesc> meshes{};
         const char* debug_name = nullptr;
     };
 
@@ -407,20 +402,20 @@ export namespace epoch
 
     struct CommandResourceBindings
     {
-        epoch::small_vector<BufferHandle> read_buffers{};
-        epoch::small_vector<TextureHandle> read_textures{};
-        epoch::small_vector<SamplerHandle> read_samplers{};
-        epoch::small_vector<MaterialHandle> read_materials{};
-        epoch::small_vector<MaterialTextureBinding> read_material_textures{};
-        epoch::small_vector<RenderTargetHandle> read_render_targets{};
-        epoch::small_vector<MeshHandle> read_meshes{};
-        epoch::small_vector<ModelHandle> read_models{};
-        epoch::small_vector<BufferHandle> write_buffers{};
-        epoch::small_vector<TextureHandle> write_textures{};
-        epoch::small_vector<MaterialHandle> write_materials{};
-        epoch::small_vector<RenderTargetHandle> write_render_targets{};
-        epoch::small_vector<MeshHandle> write_meshes{};
-        epoch::small_vector<ModelHandle> write_models{};
+        epochengine::small_vector<BufferHandle> read_buffers{};
+        epochengine::small_vector<TextureHandle> read_textures{};
+        epochengine::small_vector<SamplerHandle> read_samplers{};
+        epochengine::small_vector<MaterialHandle> read_materials{};
+        epochengine::small_vector<MaterialTextureBinding> read_material_textures{};
+        epochengine::small_vector<RenderTargetHandle> read_render_targets{};
+        epochengine::small_vector<MeshHandle> read_meshes{};
+        epochengine::small_vector<ModelHandle> read_models{};
+        epochengine::small_vector<BufferHandle> write_buffers{};
+        epochengine::small_vector<TextureHandle> write_textures{};
+        epochengine::small_vector<MaterialHandle> write_materials{};
+        epochengine::small_vector<RenderTargetHandle> write_render_targets{};
+        epochengine::small_vector<MeshHandle> write_meshes{};
+        epochengine::small_vector<ModelHandle> write_models{};
 
         [[nodiscard]] bool empty() const noexcept
         {

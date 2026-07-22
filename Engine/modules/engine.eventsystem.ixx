@@ -47,7 +47,7 @@ module;
 
 export module engine.eventsystem;
 
-export namespace epochnamespace::events {
+export namespace epochengine::events {
 
     enum class EventType : std::uint8_t {
         MouseButtonClick,
@@ -125,4 +125,4 @@ export namespace epochnamespace::events {
             for (auto& fn : g_callbacks()) fn(e);
     }
 
-} // namespace epochnamespace::events
+} // namespace epochengine::events

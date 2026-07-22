@@ -26,7 +26,7 @@ import core.context;
 import opengl.platform;
 import opengl.state;
 
-namespace epochnamespace::openglcontext::contextdetail
+namespace epochengine::openglcontext::contextdetail
 {
     PlatformGL::PlatformGLContext state_to_platform_context(const openglstate::OpenGL4State& state) noexcept
     {

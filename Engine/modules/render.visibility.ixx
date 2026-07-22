@@ -28,10 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- /**************************************************************
- *   Epoch Engine - Modern Renderer Skeleton (2026)
- *   License: MIT (adapt as needed)
- **************************************************************/
 module;
 
 #include "../include/epoch.config.hpp"
@@ -46,7 +42,7 @@ import render.graph;
 import render.device;
 import platform.budgets;
 
-export namespace epoch
+export namespace epochengine
 {
     struct InstanceData
     {
@@ -88,9 +84,9 @@ export namespace epoch
         visible.debug_name = "visible_instance_ids";
 
         VisibilityResources r{};
-        // Use a non-ambiguous conversion to epoch::string_view:
-        r.instance_buffer = g.create_buffer(epoch::to_view(std::string_view{ "instances" }), instances);
-        r.visible_instance_ids = g.create_buffer(epoch::to_view(std::string_view{ "visible_instance_ids" }), visible);
+        // Use a non-ambiguous conversion to epochengine::string_view:
+        r.instance_buffer = g.create_buffer(epochengine::to_view(std::string_view{ "instances" }), instances);
+        r.visible_instance_ids = g.create_buffer(epochengine::to_view(std::string_view{ "visible_instance_ids" }), visible);
 
         if (p.use_visibility_buffer && cfg.build_visibility_buffer)
         {
@@ -103,7 +99,7 @@ export namespace epoch
             vis.render_target = true;
             vis.debug_name = "visibility_buffer";
 
-            r.visibility_buffer = g.create_texture(epoch::to_view(std::string_view{ "visibility_buffer" }), vis);
+            r.visibility_buffer = g.create_texture(epochengine::to_view(std::string_view{ "visibility_buffer" }), vis);
         }
 
         return r;
@@ -120,9 +116,9 @@ export namespace epoch
             const std::array<GraphResource, 1> writes{ r.visible_instance_ids };
 
             auto pass1 = g.add_pass(
-                epoch::to_view(std::string_view{ "CullInstancesCS" }),
-                epoch::span<const GraphResource>{ reads.data(), reads.size() },
-                epoch::span<const GraphResource>{ writes.data(), writes.size() },
+                epochengine::to_view(std::string_view{ "CullInstancesCS" }),
+                epochengine::span<const GraphResource>{ reads.data(), reads.size() },
+                epochengine::span<const GraphResource>{ writes.data(), writes.size() },
                 [=](ICommandContext& ctx)
                 {
                     (void)p;
@@ -138,9 +134,9 @@ export namespace epoch
             const std::array<GraphResource, 1> writes{ r.visibility_buffer };
 
             auto pass2 = g.add_pass(
-                epoch::to_view(std::string_view{ "VisibilityBufferRaster" }),
-                epoch::span<const GraphResource>{ reads.data(), reads.size() },
-                epoch::span<const GraphResource>{ writes.data(), writes.size() },
+                epochengine::to_view(std::string_view{ "VisibilityBufferRaster" }),
+                epochengine::span<const GraphResource>{ reads.data(), reads.size() },
+                epochengine::span<const GraphResource>{ writes.data(), writes.size() },
                 [=](ICommandContext& ctx)
                 {
                     ctx.debug_marker("TODO: render visibility buffer");

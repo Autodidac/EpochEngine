@@ -67,7 +67,7 @@ import ai.eval;
 import core.log;
 import core.path;
 
-namespace epoch::ai
+namespace epochengine::ai
 {
     namespace
     {
@@ -148,7 +148,7 @@ namespace epoch::ai
 
         static std::string executable_cache_bucket(std::string_view bucket)
         {
-            const auto runtimeRoot = epoch::core::path::runtime_root_dir();
+            const auto runtimeRoot = epochengine::core::path::runtime_root_dir();
             if (!runtimeRoot.empty())
                 return (runtimeRoot / "cache" / std::string{ bucket }).generic_string();
 
@@ -902,7 +902,7 @@ namespace epoch::ai
             {
                 std::string msg = "Model detection failed: ";
                 msg += ex.what();
-                core::log::warn("ai", epoch::string_view{msg.data(), msg.size()});
+                core::log::warn("ai", epochengine::string_view{msg.data(), msg.size()});
                 return {};
             }
         }
@@ -1172,7 +1172,7 @@ namespace epoch::ai
                     {
                         std::string warn = "Local OpenAI-compatible reply contained hidden reasoning without visible assistant content. bytes=";
                         warn += std::to_string(resp.size());
-                        core::log::warn("ai", epoch::string_view{warn.data(), warn.size()});
+                        core::log::warn("ai", epochengine::string_view{warn.data(), warn.size()});
                         return {};
                     }
 
@@ -1183,7 +1183,7 @@ namespace epoch::ai
                     warn += std::to_string(resp.size());
                     warn += " snippet=";
                     warn += snippet;
-                    core::log::warn("ai", epoch::string_view{warn.data(), warn.size()});
+                    core::log::warn("ai", epochengine::string_view{warn.data(), warn.size()});
                 }
 
                 return {};
@@ -1199,7 +1199,7 @@ namespace epoch::ai
                 const std::string error = extract_json_error_message(rawResponse);
                 if (!error.empty())
                 {
-                    core::log::warn("ai", epoch::string_view{error.data(), error.size()});
+                    core::log::warn("ai", epochengine::string_view{error.data(), error.size()});
                     return std::string("Local model API error: ") + error;
                 }
                 if (has_hidden_reasoning_without_visible_content(rawResponse))
@@ -1210,7 +1210,7 @@ namespace epoch::ai
             {
                 std::string msg = "Local OpenAI-compatible request failed: ";
                 msg += ex.what();
-                core::log::error("ai", epoch::string_view{msg.data(), msg.size()});
+                core::log::error("ai", epochengine::string_view{msg.data(), msg.size()});
                 return {};
             }
         }
@@ -1247,7 +1247,7 @@ namespace epoch::ai
         {
             std::string msg = "OS AI model: ";
             msg += m_cfg.model;
-            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
     }
 
@@ -1327,22 +1327,22 @@ namespace epoch::ai
         {
             std::string msg = "AI provider: ";
             msg += active_provider_summary();
-            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
         {
             std::string msg = "AI endpoint: ";
             msg += g_selectedEndpoint;
-            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
         {
             std::string msg = "AI raw capture path: ";
             msg += local_capture_jsonl_path();
-            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
         {
             std::string msg = "AI tool evidence capture path: ";
             msg += local_mcp_capture_jsonl_path();
-            core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+            core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
     }
 
@@ -1356,7 +1356,7 @@ namespace epoch::ai
 
     std::string default_workspace_root()
     {
-        const auto workspace = epoch::core::path::example_console_workspace_dir();
+        const auto workspace = epochengine::core::path::example_console_workspace_dir();
         if (!workspace.empty())
             return workspace.generic_string();
 
@@ -1544,7 +1544,7 @@ namespace epoch::ai
 
         std::string msg = "AI model selected: ";
         msg += selected;
-        core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         return true;
     }
 
@@ -1624,7 +1624,7 @@ namespace epoch::ai
                 loggedCapturePath = true;
                 std::string msg = "AI appended local training capture: ";
                 msg += file.string();
-                core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+                core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
             }
         }
     }
@@ -1651,7 +1651,7 @@ namespace epoch::ai
                 loggedCapturePath = true;
                 std::string msg = "AI appended tool evidence capture: ";
                 msg += file.string();
-                core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+                core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
             }
         }
     }
@@ -1755,7 +1755,7 @@ namespace epoch::ai
 
         std::string msg = "AI staged iteration packet: ";
         msg += packetDir.string();
-        core::log::info("ai", epoch::string_view{msg.data(), msg.size()});
+        core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         return packetDir.string();
     }
 

@@ -46,7 +46,7 @@ module;
 
 export module utility.string_converter;
 
-namespace epochnamespace::text
+namespace epochengine::text
 {
     // -----------------------------------------
     // char8_t helpers
@@ -148,4 +148,4 @@ namespace epochnamespace::text
 #endif
     }
 
-} // namespace epochnamespace::text
+} // namespace epochengine::text

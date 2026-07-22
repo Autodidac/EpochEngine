@@ -45,12 +45,12 @@ module platform.window;
 
 import core.error;
 
-namespace epoch::platform
+namespace epochengine::platform
 {
     namespace
     {
 #ifdef _WIN32
-        static std::wstring widen_utf8(epoch::string_view text)
+        static std::wstring widen_utf8(epochengine::string_view text)
         {
             if (text.data == nullptr || text.size == 0)
                 return {};
@@ -94,7 +94,7 @@ namespace epoch::platform
             [[nodiscard]] core::error::result<WindowHandle> create_window(const WindowDesc& desc) noexcept override
             {
                 if (!ensure_class_registered())
-                    return epoch::unexpected(core::error::failed("failed to register Win32 window class"));
+                    return epochengine::unexpected(core::error::failed("failed to register Win32 window class"));
 
                 DWORD style = WS_OVERLAPPEDWINDOW;
                 if (!desc.resizable)
@@ -118,7 +118,7 @@ namespace epoch::platform
                 );
 
                 if (!hwnd)
-                    return epoch::unexpected(core::error::failed("failed to create Win32 window"));
+                    return epochengine::unexpected(core::error::failed("failed to create Win32 window"));
 
                 if (desc.visible)
                     ::ShowWindow(hwnd, SW_SHOW);
@@ -372,4 +372,4 @@ namespace epoch::platform
         return std::make_unique<NullWindowSystem>();
 #endif
     }
-} // namespace epoch::platform
+} // namespace epochengine::platform

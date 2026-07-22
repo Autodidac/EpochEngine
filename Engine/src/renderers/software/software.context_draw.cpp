@@ -13,7 +13,7 @@ import spritehandle;
 import atlas.texture;
 import software.state;
 
-namespace epochnamespace::anativecontext
+namespace epochengine::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     namespace detail

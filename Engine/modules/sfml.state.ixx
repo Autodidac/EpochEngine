@@ -67,7 +67,7 @@ import engine.platform;
 import context.window;
 import core.timer;
 
-export namespace epochnamespace::sfmlcontext::state
+export namespace epochengine::sfmlcontext::state
 {
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
     struct SFML3State
@@ -81,7 +81,7 @@ export namespace epochnamespace::sfmlcontext::state
             screenHeight = window.height;
         }
 
-        epochnamespace::contextwindow::WindowData window{};
+        epochengine::contextwindow::WindowData window{};
 
         bool shouldClose{ false };
         int screenWidth{ DEFAULT_WINDOW_WIDTH };
@@ -106,8 +106,8 @@ export namespace epochnamespace::sfmlcontext::state
             std::bitset<sf::Keyboard::KeyCount> prevDown;
         } keyboard{};
 
-        epochnamespace::timing::Timer pollTimer = epochnamespace::timing::createTimer(1.0);
-        epochnamespace::timing::Timer fpsTimer = epochnamespace::timing::createTimer(1.0);
+        epochengine::timing::Timer pollTimer = epochengine::timing::createTimer(1.0);
+        epochengine::timing::Timer fpsTimer = epochengine::timing::createTimer(1.0);
         int frameCount = 0;
 
         [[nodiscard]] sf::RenderWindow* get_sfml_window() const noexcept

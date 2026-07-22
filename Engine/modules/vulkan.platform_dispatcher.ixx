@@ -28,7 +28,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
 module;
 
 #include <include/engine.config.hpp>
@@ -53,9 +52,9 @@ module;
 export module vulkan.platform_dispatcher;
 
 #if EPOCH_VULKAN_CUSTOM_LOADER
-import vulkan.platform_loader; // epochnamespace::vulkan::LoadLibrary / LoadFunction wrappers
+import vulkan.platform_loader; // epochengine::vulkan::LoadLibrary / LoadFunction wrappers
 
-export namespace epochnamespace::vulkancontext::platform
+export namespace epochengine::vulkancontext::platform
 {
     // Global function to get vkGetInstanceProcAddr from the Vulkan Loader.
     inline auto getInstanceProcAddr() noexcept -> PFN_vkGetInstanceProcAddr
@@ -64,11 +63,11 @@ export namespace epochnamespace::vulkancontext::platform
         if (!fp)
         {
             // IMPORTANT: qualify the wrapper so we don't hit Win32 LoadLibraryW.
-            void* lib = epochnamespace::vulkan::LoadLibrary();
+            void* lib = epochengine::vulkan::LoadLibrary();
             if (lib)
             {
                 fp = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
-                    epochnamespace::vulkan::LoadFunction(lib, "vkGetInstanceProcAddr"));
+                    epochengine::vulkan::LoadFunction(lib, "vkGetInstanceProcAddr"));
             }
         }
         return fp;
@@ -80,11 +79,11 @@ export namespace epochnamespace::vulkancontext::platform
         static PFN_vkGetDeviceProcAddr fp = nullptr;
         if (!fp)
         {
-            void* lib = epochnamespace::vulkan::LoadLibrary();
+            void* lib = epochengine::vulkan::LoadLibrary();
             if (lib)
             {
                 fp = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
-                    epochnamespace::vulkan::LoadFunction(lib, "vkGetDeviceProcAddr"));
+                    epochengine::vulkan::LoadFunction(lib, "vkGetDeviceProcAddr"));
             }
         }
         return fp;
@@ -135,9 +134,9 @@ export namespace epochnamespace::vulkancontext::platform
             reinterpret_cast<PFN_vkQueueSubmit>(GetDeviceFunction(device, "vkQueueSubmit"));
         return table;
     }
-} // namespace epochnamespace::vulkancontext::platform
+} // namespace epochengine::vulkancontext::platform
 #else
-export namespace epochnamespace::vulkancontext::platform
+export namespace epochengine::vulkancontext::platform
 {
     // Custom loader disabled: no dispatcher entry points are exported.
 }

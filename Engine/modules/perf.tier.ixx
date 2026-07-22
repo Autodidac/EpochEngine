@@ -38,7 +38,7 @@ export module perf.tier;
 import core.env;
 import core.time;
 
-export namespace epoch::perf
+export namespace epochengine::perf
 {
     enum class tier : std::uint8_t
     {
@@ -86,7 +86,7 @@ export namespace epoch::perf
     };
 }
 
-namespace epoch::perf
+namespace epochengine::perf
 {
     namespace
     {
@@ -99,9 +99,9 @@ namespace epoch::perf
 
     tier tier_from_env() noexcept
     {
-        if (auto v = epoch::core::env::get(epoch::string_view{ "EPOCH_TIER" }))
+        if (auto v = epochengine::core::env::get(epochengine::string_view{ "EPOCH_TIER" }))
         {
-            const std::string_view s = epoch::to_std(*v);
+            const std::string_view s = epochengine::to_std(*v);
 
             if (sv_eq(s, "mobile") || sv_eq(s, "30")) return tier::mobile_30;
             if (sv_eq(s, "deck") || sv_eq(s, "40")) return tier::deck_40;
@@ -176,7 +176,7 @@ namespace epoch::perf
         if (target_dt <= 0.0)
             return;
 
-        const double now0 = epoch::core::time::now_seconds();
+        const double now0 = epochengine::core::time::now_seconds();
 
         if (!started)
         {
@@ -188,14 +188,14 @@ namespace epoch::perf
 
         for (;;)
         {
-            const double now = epoch::core::time::now_seconds();
+            const double now = epochengine::core::time::now_seconds();
             const double remaining = next_time - now;
             if (remaining <= 0.0)
                 break;
 
             const double ms = remaining * 1000.0;
             if (ms > 2.0)
-                epoch::core::time::sleep_ms(static_cast<std::uint32_t>(ms - 1.0));
+                epochengine::core::time::sleep_ms(static_cast<std::uint32_t>(ms - 1.0));
         }
     }
 }

@@ -45,7 +45,7 @@ export module image.writer;
 
 import core.logger;
 
-export namespace epochnamespace
+export namespace epochengine
 {
     inline std::vector<std::uint8_t> a_argb32ToRgba8(const std::vector<std::uint32_t>& pixels)
     {

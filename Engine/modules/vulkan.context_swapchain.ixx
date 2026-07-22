@@ -28,8 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-
-// modules/vulkan.context-swapchain.ixx
+ // modules/vulkan.context-swapchain.ixx
 // Partition implementation: vulkan.context:swapchain
 // Swapchain + image views implementation.
 // ============================================================================
@@ -59,7 +58,7 @@ import :shared_vk;
 import core.logger;
 
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     namespace
     {
@@ -361,4 +360,4 @@ namespace epochnamespace::vulkancontext
         }
     }
 
-} // namespace epochnamespace::vulkancontext
+} // namespace epochengine::vulkancontext

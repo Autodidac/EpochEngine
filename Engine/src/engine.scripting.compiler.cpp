@@ -37,7 +37,7 @@
 
 import core.log;
 
-namespace epochnamespace::compiler
+namespace epochengine::compiler
 {
     // Builds a single TU into a shared library (DLL/.so).
     // Returns true on success (exit code == 0).
@@ -98,8 +98,8 @@ namespace epochnamespace::compiler
             cmd.push_back(' ');
         }
 
-        epoch::core::log::core_log_write(
-            static_cast<std::uint32_t>(epoch::core::log::level::info),
+        epochengine::core::log::core_log_write(
+            static_cast<std::uint32_t>(epochengine::core::log::level::info),
             "Compiler",
             cmd.c_str());
 
@@ -107,8 +107,8 @@ namespace epochnamespace::compiler
         if (result != 0)
         {
             const std::string errorMessage = "[compiler] clang failed with code: " + std::to_string(result);
-            epoch::core::log::core_log_write(
-                static_cast<std::uint32_t>(epoch::core::log::level::error),
+            epochengine::core::log::core_log_write(
+                static_cast<std::uint32_t>(epochengine::core::log::level::error),
                 "Compiler",
                 errorMessage.c_str());
             return false;
@@ -116,4 +116,4 @@ namespace epochnamespace::compiler
 
         return true;
     }
-} // namespace epochnamespace::compiler
+} // namespace epochengine::compiler

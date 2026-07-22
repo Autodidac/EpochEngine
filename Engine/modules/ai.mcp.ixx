@@ -4,7 +4,7 @@ module;
 
 export module ai.mcp;
 
-export namespace epoch::ai
+export namespace epochengine::ai
 {
     struct McpCaptureRecord
     {

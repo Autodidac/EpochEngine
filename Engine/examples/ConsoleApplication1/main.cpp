@@ -55,24 +55,24 @@ import core.logger;
 //    epochengine::opengl::s_state.shader = 42;  // Or just read a member
 //}
 inline auto sanity() {
-    return epochnamespace::core::RunEngine();
+    return epochengine::core::RunEngine();
 
 //static void RunEngine() {
     // 🔄 **Cleanup Restart Script on Restart & Old Files on Update**
 //#ifdef LEAVE_NO_FILES_ALWAYS_REDOWNLOAD
 //#if defined(_WIN32)
 //    system("del /F /Q replace_updater.bat >nul 2>&1");
-//    system(("rmdir /s /q \"" + std::string(epochnamespace::updater::REPO.c_str()) + "-main\" >nul 2>&1").c_str());
+//    system(("rmdir /s /q \"" + std::string(epochengine::updater::REPO.c_str()) + "-main\" >nul 2>&1").c_str());
 //#else
 //    system("rm -rf replace_updater");
 //#endif
 //#endif
 //
-//    if (epochnamespace::updater::check_for_updates(urls::version_url)) {
-//        log.log(epochnamespace::logger::LogLevel::INFO,
+//    if (epochengine::updater::check_for_updates(urls::version_url)) {
+//        log.log(epochengine::logger::LogLevel::INFO,
 //            "[Engine] New version available.",
 //            std::source_location::current());
-//        epochnamespace::updater::update_project(urls::version_url, urls::binary_url);
+//        epochengine::updater::update_project(urls::version_url, urls::binary_url);
 //    }
 //    else {
 //        // Clear console before showing "No updates available."
@@ -81,7 +81,7 @@ inline auto sanity() {
 //#else
 //        system("clear");
 //#endif
-//        log.log(epochnamespace::logger::LogLevel::INFO,
+//        log.log(epochengine::logger::LogLevel::INFO,
 //            "[Engine] No updates available.",
 //            std::source_location::current());
 //    }
@@ -94,9 +94,9 @@ inline auto sanity() {
     //TaskScheduler scheduler;
 
     constexpr std::string_view kLogSystem = "Example.ConsoleApp";
-    auto& log = epochnamespace::logger::get(kLogSystem);
+    auto& log = epochengine::logger::get(kLogSystem);
 
-    log.log(epochnamespace::logger::LogLevel::INFO,
+    log.log(epochengine::logger::LogLevel::INFO,
         "[Engine] Starting up...",
         std::source_location::current());
 
@@ -113,8 +113,8 @@ inline auto sanity() {
     /*
     std::string scriptName = "editor_launcher";
 
-    if (!epochnamespace::scripting::load_or_reload_script(scriptName, scheduler)) {
-        log.log(epochnamespace::logger::LogLevel::ERROR,
+    if (!epochengine::scripting::load_or_reload_script(scriptName, scheduler)) {
+        log.log(epochengine::logger::LogLevel::ERROR,
             "[Engine] Initial script load failed.",
             std::source_location::current());
     }
@@ -125,10 +125,10 @@ inline auto sanity() {
     while (true) {
         auto now = std::filesystem::last_write_time("src/scripts/" + scriptName + ".ascript.cpp");
         if (now != lastCheck) {
-            log.log(epochnamespace::logger::LogLevel::INFO,
+            log.log(epochengine::logger::LogLevel::INFO,
                 "[Engine] Detected change in script source, recompiling.",
                 std::source_location::current());
-            epochnamespace::scripting::load_or_reload_script(scriptName, scheduler);
+            epochengine::scripting::load_or_reload_script(scriptName, scheduler);
             lastCheck = now;
         }
 
@@ -136,7 +136,7 @@ inline auto sanity() {
         if (std::chrono::duration_cast<std::chrono::minutes>(std::chrono::steady_clock::now() - start).count() > 10) break;
     }
 */
-    log.log(epochnamespace::logger::LogLevel::INFO,
+    log.log(epochengine::logger::LogLevel::INFO,
         "[Engine] Session ended.",
         std::source_location::current());
     //return 0;

@@ -36,7 +36,7 @@ module;
 
 export module texture;
 
-export namespace epochnamespace
+export namespace epochengine
 {
     // Represents a raw texture asset (typically RGBA8) before GPU upload
     struct Texture

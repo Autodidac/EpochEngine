@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <algorithm>
@@ -13,7 +43,7 @@ export module forest.factory;
 
 import voxel.field;
 
-export namespace epoch::forest
+export namespace epochengine::forest
 {
     inline constexpr std::string_view kForestFactoryPackageId = "engine_forest_factory";
     inline constexpr std::string_view kForestFactoryWorkspace = "Forest Factory";
@@ -141,15 +171,15 @@ export namespace epoch::forest
 
     struct ForestPreviewSegment
     {
-        epoch::voxel::Float3 start{};
-        epoch::voxel::Float3 end{};
+        epochengine::voxel::Float3 start{};
+        epochengine::voxel::Float3 end{};
         float radius{0.08F};
         std::uint32_t depth{};
     };
 
     struct ForestPreviewLeaf
     {
-        epoch::voxel::Float3 position{};
+        epochengine::voxel::Float3 position{};
         float size{0.24F};
         std::uint32_t sourceSegment{};
     };
@@ -165,13 +195,13 @@ export namespace epoch::forest
 
     struct ForestVoxelOccupancySummary
     {
-        epoch::voxel::ChunkDesc chunk{};
-        epoch::voxel::CellSemantic semantics{
-            epoch::voxel::CellSemantic::Geometry |
-            epoch::voxel::CellSemantic::Lighting |
-            epoch::voxel::CellSemantic::Navigation |
-            epoch::voxel::CellSemantic::Visibility |
-            epoch::voxel::CellSemantic::ProceduralVegetation};
+        epochengine::voxel::ChunkDesc chunk{};
+        epochengine::voxel::CellSemantic semantics{
+            epochengine::voxel::CellSemantic::Geometry |
+            epochengine::voxel::CellSemantic::Lighting |
+            epochengine::voxel::CellSemantic::Navigation |
+            epochengine::voxel::CellSemantic::Visibility |
+            epochengine::voxel::CellSemantic::ProceduralVegetation};
         std::array<float, 3> boundsMinMeters{};
         std::array<float, 3> boundsMaxMeters{};
         std::uint64_t trunkCells{};
@@ -192,7 +222,7 @@ export namespace epoch::forest
     {
         ForestGenomeId genome{};
         ForestSeed seed{};
-        epoch::voxel::Float3 position{};
+        epochengine::voxel::Float3 position{};
         float uniformScale{1.0F};
     };
 
@@ -297,17 +327,17 @@ export namespace epoch::forest
         return degrees * 0.017453292519943295769F;
     }
 
-    [[nodiscard]] inline epoch::voxel::Float3 add(epoch::voxel::Float3 lhs, epoch::voxel::Float3 rhs) noexcept
+    [[nodiscard]] inline epochengine::voxel::Float3 add(epochengine::voxel::Float3 lhs, epochengine::voxel::Float3 rhs) noexcept
     {
         return { lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z };
     }
 
-    [[nodiscard]] inline epoch::voxel::Float3 scale(epoch::voxel::Float3 value, float amount) noexcept
+    [[nodiscard]] inline epochengine::voxel::Float3 scale(epochengine::voxel::Float3 value, float amount) noexcept
     {
         return { value.x * amount, value.y * amount, value.z * amount };
     }
 
-    [[nodiscard]] inline epoch::voxel::Float3 normalize(epoch::voxel::Float3 value) noexcept
+    [[nodiscard]] inline epochengine::voxel::Float3 normalize(epochengine::voxel::Float3 value) noexcept
     {
         const float length = std::sqrt(value.x * value.x + value.y * value.y + value.z * value.z);
         if (length <= 0.0001F)
@@ -375,7 +405,7 @@ export namespace epoch::forest
         const std::uint32_t children = (std::max)(1u, profile.branch.childrenPerNode);
         const float trunkHeight = profile.config.targetHeightMeters * 0.36F * growth;
 
-        auto add_segment = [&](epoch::voxel::Float3 start, epoch::voxel::Float3 direction, float length, float radius, std::uint32_t depth) noexcept -> std::size_t
+        auto add_segment = [&](epochengine::voxel::Float3 start, epochengine::voxel::Float3 direction, float length, float radius, std::uint32_t depth) noexcept -> std::size_t
         {
             if (geometry.segmentCount >= geometry.segments.size())
                 return geometry.segmentCount;
@@ -421,7 +451,7 @@ export namespace epoch::forest
                         + profile.branch.twistDegrees * static_cast<float>(depth)
                         + deterministic_jitter(profile.seed, depth, child) * profile.branch.jitterDegrees;
                     const float yaw = degrees_to_radians(yawDegrees);
-                    const epoch::voxel::Float3 direction = normalize({
+                    const epochengine::voxel::Float3 direction = normalize({
                         std::cos(yaw) * outward,
                         upward - profile.branch.sag * depthFactor,
                         std::sin(yaw) * outward
@@ -474,10 +504,10 @@ export namespace epoch::forest
     {
         const float cellSizeMeters = (std::clamp)(requestedCellSizeMeters, 0.05F, 2.0F);
         const float margin = (std::max)(profile.config.trunkRadiusMeters * 4.0F, cellSizeMeters * 2.0F);
-        epoch::voxel::Float3 minPoint{ -margin, 0.0F, -margin };
-        epoch::voxel::Float3 maxPoint{ margin, margin, margin };
+        epochengine::voxel::Float3 minPoint{ -margin, 0.0F, -margin };
+        epochengine::voxel::Float3 maxPoint{ margin, margin, margin };
 
-        auto include_point = [&](epoch::voxel::Float3 point, float radius) noexcept
+        auto include_point = [&](epochengine::voxel::Float3 point, float radius) noexcept
         {
             const float padded = (std::max)(radius, cellSizeMeters);
             minPoint.x = (std::min)(minPoint.x, point.x - padded);
@@ -537,8 +567,8 @@ export namespace epoch::forest
         summary.foliageCells = foliageCells;
         summary.activeCells = (std::min)(
             trunkCells + branchCells + foliageCells,
-            epoch::voxel::dense_cell_count(summary.chunk));
-        summary.denseBytes = epoch::voxel::dense_cell_bytes(summary.chunk);
+            epochengine::voxel::dense_cell_count(summary.chunk));
+        summary.denseBytes = epochengine::voxel::dense_cell_bytes(summary.chunk);
         return summary;
     }
 

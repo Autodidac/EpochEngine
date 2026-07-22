@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -28,21 +28,23 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// not exclusively but this was created as an always-on assertion module for the engine to catch critical errors upon termination.
+// It is not a replacement for exceptions or error handling, but rather a tool to catch programming errors and logic violations during development and debugging.
 module;
 
 #include "../include/_epoch.stl_types.hpp"
 
 export module core.assert;
 
-export namespace epoch::core::asserts
+export namespace epochengine::core::asserts
 {
     // Always-on check. Fails fast (logs then terminates).
     void that(bool condition,
-        epoch::string_view message = {},
+        epochengine::string_view message = {},
         std::source_location where = std::source_location::current());
 
     // Debug-only check: compiled out when NDEBUG is defined.
     void debug(bool condition,
-        epoch::string_view message = {},
+        epochengine::string_view message = {},
         std::source_location where = std::source_location::current());
 }

@@ -1,10 +1,10 @@
 /************************************************
- *  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½+   *
- *  Ã¯Â¿Â½Ã¯Â¿Â½+----+Ã¯Â¿Â½Ã¯Â¿Â½+--Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½+---Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½+----+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
- *  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½++Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½     Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
- *  Ã¯Â¿Â½Ã¯Â¿Â½+--+  Ã¯Â¿Â½Ã¯Â¿Â½+---+ Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½     Ã¯Â¿Â½Ã¯Â¿Â½+--Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
- *  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½     +Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+++Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½+Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½  Ã¯Â¿Â½Ã¯Â¿Â½Ã¯Â¿Â½   *
- *  +------++-+      +-----+  +-----++-+  +-+   *
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -60,19 +60,19 @@ import context.type;
 import core.logger;
 
 
-namespace epochnamespace::atlasmanager
+namespace epochengine::atlasmanager
 {
     inline constexpr std::string_view kLogSys = "Epoch.Atlas";
 
-    using epochnamespace::spritepool::allocate;
+    using epochengine::spritepool::allocate;
 
-    using epochnamespace::SpriteHandle;
-    using epochnamespace::TextureAtlas;
-    using epochnamespace::AtlasConfig;
-    using epochnamespace::Texture;
-    using epochnamespace::u8;
-    using epochnamespace::u32;
-    using epochnamespace::u64;
+    using epochengine::SpriteHandle;
+    using epochengine::TextureAtlas;
+    using epochengine::AtlasConfig;
+    using epochengine::Texture;
+    using epochengine::u8;
+    using epochengine::u32;
+    using epochengine::u64;
 
     export inline SpriteRegistry registry{};
 
@@ -254,10 +254,15 @@ namespace epochnamespace::atlasmanager
             const u64 version = atlas.current_version();
 
             auto [it, inserted] = state.pendingVersions.emplace(&atlas, version);
-            if (!inserted && it->second >= version)
+            if (!inserted)
+            {
+                if (it->second < version)
+                    it->second = version;
                 return;
+            }
 
-            it->second = version;
+            // pendingVersions is the membership set as well as the newest
+            // requested version. One atlas can occupy at most one queue slot.
             state.pending.push(&atlas);
         }
     } // namespace detail
@@ -471,4 +476,4 @@ namespace epochnamespace::atlasmanager
         if (detail::activeBackend && !detail::processingUploads)
             process_pending_uploads(*detail::activeBackend);
     }
-} // namespace epochnamespace::atlasmanager
+} // namespace epochengine::atlasmanager

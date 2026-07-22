@@ -7,7 +7,7 @@
 #include <optional>
 #include <string_view>
 
-namespace epochnamespace::context
+namespace epochengine::context
 {
     enum class PassiveContextBackend : std::uint8_t
     {

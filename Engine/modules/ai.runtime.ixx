@@ -6,7 +6,7 @@ module;
 
 export module ai.runtime;
 
-export namespace epoch::ai
+export namespace epochengine::ai
 {
     enum class ProviderMode : std::uint8_t
     {

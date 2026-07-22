@@ -44,7 +44,7 @@ export module render.device_null;
 import render.device;
 
 
-export namespace epoch
+export namespace epochengine
 {
     class NullCommandContext final : public ICommandContext
     {

@@ -38,20 +38,20 @@ module epoch.systems;
 import core.format;
 import core.log;
 
-namespace epoch::systems
+namespace epochengine::systems
 {
     namespace
     {
         // Use std::string as the key type for unordered_map.
-        // It avoids having to provide std::hash<epoch::string>.
+        // It avoids having to provide std::hash<epochengine::string>.
         using Key = std::string;
 
-        [[nodiscard]] inline Key make_key(epoch::string_view v)
+        [[nodiscard]] inline Key make_key(epochengine::string_view v)
         {
             return Key{ v.data ? v.data : "", v.size };
         }
 
-        [[nodiscard]] inline Key make_key(const epoch::string& s)
+        [[nodiscard]] inline Key make_key(const epochengine::string& s)
         {
             return s.impl;
         }
@@ -70,7 +70,7 @@ namespace epoch::systems
                 }
             };
 
-            epoch::string name{};
+            epochengine::string name{};
             SystemFactory factory{};
             std::unique_ptr<ISystem, Deleter> system{ nullptr, Deleter{} };
         };
@@ -111,7 +111,7 @@ namespace epoch::systems
         if (!created)
             return false;
 
-        epoch::string name{ created->name() };
+        epochengine::string name{ created->name() };
         if (name.empty())
             return false;
 
@@ -128,7 +128,7 @@ namespace epoch::systems
         return true;
     }
 
-    ISystem* Registry::find(epoch::string_view name) noexcept
+    ISystem* Registry::find(epochengine::string_view name) noexcept
     {
         auto& data = state();
         auto it = data.index.find(make_key(name));
@@ -263,4 +263,4 @@ namespace epoch::systems
 
         data.initialized = false;
     }
-} // namespace epoch::systems
+} // namespace epochengine::systems

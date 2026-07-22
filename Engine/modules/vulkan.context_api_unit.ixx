@@ -63,7 +63,7 @@ import spritehandle;
 import context.commandqueue;
 
 
-namespace epochnamespace::vulkancontext
+namespace epochengine::vulkancontext
 {
     inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
 

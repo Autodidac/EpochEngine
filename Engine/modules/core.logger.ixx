@@ -50,7 +50,7 @@ export module core.logger;
 import core.log;
 import core.time;
 
-export namespace epochnamespace::logger
+export namespace epochengine::logger
 {
     enum class LogLevel : int
     {
@@ -118,16 +118,16 @@ export namespace epochnamespace::logger
             return static_cast<int>(msg) >= static_cast<int>(cur);
         }
 
-        [[nodiscard]] constexpr epoch::core::log::level map_level(const LogLevel lvl) noexcept
+        [[nodiscard]] constexpr epochengine::core::log::level map_level(const LogLevel lvl) noexcept
         {
             switch (lvl)
             {
-            case LogLevel::INFO:  return epoch::core::log::level::info;
-            case LogLevel::WARN:  return epoch::core::log::level::warn;
-            case LogLevel::Error: return epoch::core::log::level::error;
-            case LogLevel::OFF:   return epoch::core::log::level::off;
+            case LogLevel::INFO:  return epochengine::core::log::level::info;
+            case LogLevel::WARN:  return epochengine::core::log::level::warn;
+            case LogLevel::Error: return epochengine::core::log::level::error;
+            case LogLevel::OFF:   return epochengine::core::log::level::off;
             }
-            return epoch::core::log::level::info;
+            return epochengine::core::log::level::info;
         }
     }
 
@@ -286,7 +286,7 @@ export namespace epochnamespace::logger
             {
                 file_line = std::format(
                     "{} [{}] [{}] ({}:{}) - {}",
-                    epoch::core::time::system_time_string(),
+                    epochengine::core::time::system_time_string(),
                     detail::level_text(lvl),
                     m_system,
                     file_name,
@@ -303,7 +303,7 @@ export namespace epochnamespace::logger
             {
                 file_line = std::format(
                     "{} [{}] [{}] - {}",
-                    epoch::core::time::system_time_string(),
+                    epochengine::core::time::system_time_string(),
                     detail::level_text(lvl),
                     m_system,
                     message);
@@ -311,7 +311,7 @@ export namespace epochnamespace::logger
 
             if (m_console_enabled.load(std::memory_order_relaxed))
             {
-                epoch::core::log::core_log_write(
+                epochengine::core::log::core_log_write(
                     static_cast<std::uint32_t>(detail::map_level(lvl)),
                     m_system.c_str(),
                     console_message.c_str());
@@ -404,8 +404,8 @@ export namespace epochnamespace::logger
     private:
         void apply_runtime_sink_locked() const
         {
-            epoch::core::log::enable_console(m_cfg.console_enabled);
-            epoch::core::log::set_level(detail::map_level(m_cfg.level));
+            epochengine::core::log::enable_console(m_cfg.console_enabled);
+            epochengine::core::log::set_level(detail::map_level(m_cfg.level));
         }
 
         mutable std::mutex m_mutex{};

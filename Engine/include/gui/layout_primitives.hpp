@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-namespace epochnamespace::gui_lib
+namespace epochengine::gui_lib
 {
     enum class SplitterAxis : std::uint8_t
     {

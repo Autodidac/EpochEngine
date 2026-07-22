@@ -40,7 +40,7 @@ module;
 
 export module platform.capabilities;
 
-export namespace epoch
+export namespace epochengine
 {
     enum class GpuTier : u8 { tier_a_desktop = 3, tier_b_mid = 2, tier_c_mobile = 1 };
 
@@ -63,8 +63,8 @@ export namespace epoch
         u32 max_storage_buffers  = 256;
         u32 max_uniform_buffers  = 256;
 
-        epoch::string device_name{};
-        epoch::string api_name{};
+        epochengine::string device_name{};
+        epochengine::string api_name{};
     };
 
     struct TierKey

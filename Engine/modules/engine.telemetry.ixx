@@ -38,7 +38,7 @@ export module engine.telemetry;
 
 import context.type;
 
-export namespace epochnamespace::telemetry
+export namespace epochengine::telemetry
 {
     struct RendererTelemetryTags
     {

@@ -691,7 +691,7 @@
             {
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                     try
                     {
                         return updater::run_update_command(editor_update_channel(), false, false);
@@ -781,7 +781,7 @@
             {
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                     try
                     {
                         return updater::run_update_command(
@@ -851,7 +851,7 @@
             {
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                     updater::UpdateCommandResult result{};
                     result.update_available = true;
                     result.source_update_available = true;
@@ -927,7 +927,7 @@
             {
                 editor.updateCheckPending.emplace(std::async(std::launch::async, [] {
                     ScopedEditorUpdateOperation updateOperation{};
-                    epoch::systems::threading::ScopedThreadActivity threadActivity{};
+                    epochengine::systems::threading::ScopedThreadActivity threadActivity{};
                     updater::UpdateCommandResult result{};
                     try
                     {

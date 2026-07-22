@@ -55,7 +55,7 @@ import atlas.manager;
 import atlas.texture;
 import core.logger;
 
-namespace epochnamespace::font
+namespace epochengine::font
 {
     namespace
     {
@@ -79,7 +79,7 @@ namespace epochnamespace::font
         }
     }
 
-    epochnamespace::font::FontRenderer::FontRenderer(logger::Logger* log)
+    epochengine::font::FontRenderer::FontRenderer(logger::Logger* log)
         : logger_(log)
     {
     }
@@ -209,7 +209,7 @@ namespace epochnamespace::font
         asset.metrics = metrics;
         asset.kerning_pairs = std::move(kerning_pairs);
 
-        epochnamespace::atlasmanager::ensure_uploaded(atlas);
+        epochengine::atlasmanager::ensure_uploaded(atlas);
 
         loaded_fonts_.emplace(name, std::move(asset));
         return true;

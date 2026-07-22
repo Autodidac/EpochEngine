@@ -131,27 +131,27 @@ int main(int argc, char** argv)
 #endif
     try
     {
-        const auto cli_result = epochnamespace::core::cli::parse(argc, argv);
+        const auto cli_result = epochengine::core::cli::parse(argc, argv);
 
-        if (epochnamespace::core::cli::smoke_requested)
-            (void)epoch::core::env::set("DEMO_SMOKE", "1");
+        if (epochengine::core::cli::smoke_requested)
+            (void)epochengine::core::env::set("DEMO_SMOKE", "1");
 
         if (cli_result.version_requested && !cli_result.update_requested)
             return 0;
 
-        const epochnamespace::updater::UpdateChannel channel{
-            .version_url = epochnamespace::updater::PROJECT_PACKAGED_VERSION_URL(),
-            .binary_url = epochnamespace::updater::PROJECT_BINARY_URL(),
-            .source_url = epochnamespace::updater::PROJECT_SOURCE_URL(),
-            .source_version_url = epochnamespace::updater::PROJECT_SOURCE_VERSION_URL(),
-            .platform_build_status_url = epochnamespace::updater::PROJECT_ACTION_RUNS_API_URL(),
-            .platform_build_job_name = epochnamespace::updater::PROJECT_UPDATE_BUILD_JOB_NAME(),
+        const epochengine::updater::UpdateChannel channel{
+            .version_url = epochengine::updater::PROJECT_PACKAGED_VERSION_URL(),
+            .binary_url = epochengine::updater::PROJECT_BINARY_URL(),
+            .source_url = epochengine::updater::PROJECT_SOURCE_URL(),
+            .source_version_url = epochengine::updater::PROJECT_SOURCE_VERSION_URL(),
+            .platform_build_status_url = epochengine::updater::PROJECT_ACTION_RUNS_API_URL(),
+            .platform_build_job_name = epochengine::updater::PROJECT_UPDATE_BUILD_JOB_NAME(),
         };
 
         if (cli_result.update_requested)
         {
             const auto update_result =
-                epochnamespace::updater::run_update_command(channel, cli_result.force_update);
+                epochengine::updater::run_update_command(channel, cli_result.force_update);
 
             if (update_result.force_required && !cli_result.force_update)
                 return 2;
@@ -169,7 +169,7 @@ int main(int argc, char** argv)
 
         runtime::LaunchOptions launch{};
         launch.editor_requested = cli_result.editor_requested;
-        launch.path = (cli_result.runtime == epochnamespace::core::cli::RuntimePath::Legacy)
+        launch.path = (cli_result.runtime == epochengine::core::cli::RuntimePath::Legacy)
             ? runtime::Path::LegacyParity
             : runtime::Path::EpochNative;
 
@@ -177,8 +177,8 @@ int main(int argc, char** argv)
     }
     catch (const std::exception& ex)
     {
-        epoch::core::log::core_log_write(
-            static_cast<std::uint32_t>(epoch::core::log::level::error),
+        epochengine::core::log::core_log_write(
+            static_cast<std::uint32_t>(epochengine::core::log::level::error),
             "Epoch.Fatal",
             ex.what());
         return -1;

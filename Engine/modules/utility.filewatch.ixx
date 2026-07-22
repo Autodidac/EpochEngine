@@ -38,7 +38,7 @@ module;
 // modules/utility.filewatch.ixx
 export module utility.filewatch;
 
-namespace epochnamespace::filewatch
+namespace epochengine::filewatch
 {
     using file_time = std::filesystem::file_time_type;
 

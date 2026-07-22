@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace epochnamespace::editor_update_modal
+namespace epochengine::editor_update_modal
 {
     struct Vec2
     {

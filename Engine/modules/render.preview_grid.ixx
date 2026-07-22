@@ -1,3 +1,33 @@
+﻿/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
 module;
 
 #include <algorithm>
@@ -18,7 +48,7 @@ export module render.preview_grid;
 
 import engine.visuals;
 
-namespace epochnamespace::previewgrid
+namespace epochengine::previewgrid
 {
     export struct Vec3
     {
@@ -27,7 +57,7 @@ namespace epochnamespace::previewgrid
         float z = 0.0f;
     };
 
-    export [[nodiscard]] constexpr Vec3 visual_rgb(epochnamespace::visuals::Rgb color) noexcept
+    export [[nodiscard]] constexpr Vec3 visual_rgb(epochengine::visuals::Rgb color) noexcept
     {
         return Vec3{ color.r, color.g, color.b };
     }
@@ -67,7 +97,7 @@ namespace epochnamespace::previewgrid
     export struct ObjectMarker
     {
         Vec3 position{};
-        Vec3 color{ visual_rgb(epochnamespace::visuals::object_default()) };
+        Vec3 color{ visual_rgb(epochengine::visuals::object_default()) };
         Vec3 scale{ 1.0f, 1.0f, 1.0f };
         float radius = 0.35f;
         ObjectPreviewPrimitive primitive{ ObjectPreviewPrimitive::Cube };
@@ -76,7 +106,7 @@ namespace epochnamespace::previewgrid
         bool sampledRenderSurface = false;
     };
 
-    export inline constexpr std::array<float, 4> kClearColor = epochnamespace::visuals::scene_background();
+    export inline const std::array<float, 4> kClearColor = epochengine::visuals::scene_background();
 
     export inline constexpr Camera kCamera{};
 
@@ -885,7 +915,7 @@ namespace epochnamespace::previewgrid
             return Vertex{ .position = position, .color = color };
         };
 
-        const Vec3 markerColor = visual_rgb(epochnamespace::visuals::look_marker());
+        const Vec3 markerColor = visual_rgb(epochengine::visuals::look_marker());
 
         out[0] = make_vertex({ hit.x - markerSize, markerHeight, hit.z }, markerColor);
         out[1] = make_vertex({ hit.x + markerSize, markerHeight, hit.z }, markerColor);
@@ -1028,9 +1058,9 @@ namespace epochnamespace::previewgrid
         for (const auto& marker : markers)
         {
             const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
-            Vec3 color = marker.selected ? visual_rgb(epochnamespace::visuals::object_selected()) : marker.color;
+            Vec3 color = marker.selected ? visual_rgb(epochengine::visuals::object_selected()) : marker.color;
             if (marker.editorOnly && !marker.selected)
-                color = scale(color, epochnamespace::visuals::editor_wire_opacity_factor());
+                color = scale(color, epochengine::visuals::editor_wire_opacity_factor());
 
             const Vec3 center{ marker.position.x, (std::max)(0.035f, marker.position.y), marker.position.z };
             Vec3 half{
@@ -1132,7 +1162,7 @@ namespace epochnamespace::previewgrid
                     half.y + 0.055f,
                     half.z + 0.055f
                 };
-                push_box_edges(center, selectedHalf, visual_rgb(epochnamespace::visuals::object_selected_outline()));
+                push_box_edges(center, selectedHalf, visual_rgb(epochengine::visuals::object_selected_outline()));
             }
         }
 
@@ -1218,9 +1248,9 @@ namespace epochnamespace::previewgrid
         for (const auto& marker : markers)
         {
             const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
-            Vec3 color = marker.selected ? visual_rgb(epochnamespace::visuals::object_selected()) : marker.color;
+            Vec3 color = marker.selected ? visual_rgb(epochengine::visuals::object_selected()) : marker.color;
             if (marker.editorOnly && !marker.selected)
-                color = scale(color, epochnamespace::visuals::editor_solid_opacity_factor());
+                color = scale(color, epochengine::visuals::editor_solid_opacity_factor());
 
             const Vec3 center{ marker.position.x, (std::max)(0.035f, marker.position.y), marker.position.z };
             Vec3 half{

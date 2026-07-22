@@ -39,7 +39,7 @@ export module updater.config;
 import engine.platform;
 import engine.version;
 
-namespace epochnamespace::updater
+namespace epochengine::updater
 {
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Installation behavior
@@ -56,11 +56,11 @@ namespace epochnamespace::updater
     export inline constexpr std::string_view BRANCH = "main";
 
     export inline const std::string PROJECT_VERSION =
-        epochnamespace::GetEngineVersionString();
+        epochengine::GetEngineVersionString();
     export inline const std::string PROJECT_SOURCE_VERSION =
-        epochnamespace::GetEngineVersionString();
+        epochengine::GetEngineVersionString();
     export inline const std::string PROJECT_PACKAGED_VERSION =
-        epochnamespace::GetPackagedVersionString();
+        epochengine::GetPackagedVersionString();
 
     export inline constexpr std::string_view WINDOWS_RUNTIME_BINARY_PREFIX =
         "epoch_win10_x64_v";
@@ -179,12 +179,12 @@ namespace epochnamespace::updater
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
     {
-        return std::string{ epoch::platform::policy::source_snapshot_archive_extension() };
+        return std::string{ epochengine::platform::policy::source_snapshot_archive_extension() };
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_LABEL()
     {
-        return std::string{ epoch::platform::policy::source_snapshot_archive_label() };
+        return std::string{ epochengine::platform::policy::source_snapshot_archive_label() };
     }
 
     export inline std::string PACKAGED_BINARY_ASSET_PREFIX()
