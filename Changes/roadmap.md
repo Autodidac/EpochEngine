@@ -23,14 +23,14 @@ disconnected experiments.
   EpochBot, hidden autonomy, learner/watcher language, or silent fallback.
 - Packages, servers, model weights, and generated projects are opt-in,
   reviewable, license-aware, cache-local, and never hidden bypass channels.
-- The published `v0.87.69` runtime and updater are sealed. Source missions do
+- The published `v0.88.69` runtime and updater are sealed. Source missions do
   not edit updater/release code, scripts, packaging, tags, or assets unless the
   operator explicitly reopens that gate.
 
 ## Current Working Contract
 
 The hot path is renderer-resource truth plus reusable source-library growth.
-The published runtime stays at `v0.87.69`; development source may advance
+The published runtime stays at `v0.88.69`; development source may advance
 independently without reopening or changing the sealed updater/release lane.
 
 The current source shape is:
@@ -106,7 +106,7 @@ Release/updater validation remains dormant while that baseline is sealed.
 
 Current split lanes:
 
-- updater/release: sealed at `v0.87.69`; documentation reference only until the
+- updater/release: sealed at `v0.88.69`; documentation reference only until the
   operator explicitly reopens it
 - GUI: `EpochGui` portable controllers, `engine.gui` adapter rendering/input,
   themes, modal/menu/top-layer behavior, docking/floating hosts

@@ -8,5 +8,5 @@ namespace epochengine::gui_lib
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 88;
     inline constexpr int version_revision = 1;
-    inline constexpr std::string_view version_string = "0.88.02";
+    inline constexpr std::string_view version_string = "0.88.69";
 }

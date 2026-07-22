@@ -82,7 +82,7 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- The published `v0.87.69` runtime release and its updater implementation are a
+- The published `v0.88.69` runtime release and its updater implementation are a
   sealed baseline. Do not edit updater code, updater UI, handoff/build scripts,
   packaging, release metadata, tags, or release assets unless the operator
   explicitly reopens that gate. Normal source-version advancement is allowed

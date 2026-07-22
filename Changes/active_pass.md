@@ -6,7 +6,7 @@ Backend-native sampled render-to-texture for OpenGL-derived contexts.
 
 ## Sealed Baseline
 
-The published `v0.87.69` runtime release and updater are accepted and frozen.
+The published `v0.88.69` runtime release and updater are accepted and frozen.
 This pass must not edit updater behavior, updater UI, worker/handoff scripts,
 packaging, release metadata, tags, or release assets unless the operator
 explicitly reopens that gate. Development-source version metadata may advance
@@ -139,7 +139,7 @@ contracts instead of drift.
   non-empty Raylib surface before first-present readiness. MSVC Debug and
   Release editor builds plus both build-safe contract runs pass; focused
   operator Raylib visibility and repeated Release switching remain the runtime
-  acceptance gate. The `v0.88.02` source additionally keeps GUI/session state
+  acceptance gate. The `v0.88.69` source additionally keeps GUI/session state
   alive until renderer retirement is proven, makes native retirement
   notification one-shot, and synchronously joins the old renderer during a
   whole-editor replacement before the new backend is constructed. A
@@ -351,7 +351,7 @@ keeps the integration path and final build proof.
 - Unrelated source-shape cleanup
 - Documentation-only pass
 - Updater/release code, UI, scripts, packaging, tags, or assets unless the
-  operator explicitly reopens the sealed `v0.87.69` baseline
+  operator explicitly reopens the sealed `v0.88.69` baseline
 
 ## Acceptance
 

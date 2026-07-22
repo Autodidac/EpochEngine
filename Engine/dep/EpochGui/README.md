@@ -1,8 +1,8 @@
 # EpochGui
 
 EpochGui is the C++23 module/static-library surface for the reusable Epoch GUI
-layout library. The current mirror metadata tracks the EpochEngine `v0.87.69`
-stable release and `v0.88.02` source line. The canonical EpochEngine source
+layout library. The current mirror metadata tracks the EpochEngine `v0.88.69`
+stable release and `v0.88.69` source line. The canonical EpochEngine source
 still lives in the engine tree:
 
 - `Engine/dep/EpochGui/modules/epoch.gui.ixx`
@@ -26,7 +26,7 @@ geometry and layout helpers exported by `epoch.gui`:
 - `gui/text_control.hpp` plus `src/epochgui/text_control.cpp`
 - `tests/text_control_tests.cpp` for portable edit/navigation/scroll and
   segmented-selection geometry contracts
-- `epoch.gui` for the library name and `0.88.02` version constants
+- `epoch.gui` for the library name and `0.88.69` version constants
 
 The public namespace is `epochnamespace::gui_lib`. New integrations should
 prefer:

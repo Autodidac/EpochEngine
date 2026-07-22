@@ -31,8 +31,8 @@ namespace
         int height = 0;
         int format = 0;
         bool valid = false;
-        epochengine::raylib_api::Color marker{};
-        epochengine::raylib_api::Color markerMirrored{};
+        epochengine::raylib_api::Color sample{};
+        epochengine::raylib_api::Color sampleMirrored{};
         epochengine::raylib_api::Color center{};
     };
 
@@ -64,8 +64,8 @@ namespace
     }
 
     [[nodiscard]] RaylibFrameProbe capture_raylib_frame_probe(
-        int markerX,
-        int markerY) noexcept
+        int sampleX,
+        int sampleY) noexcept
     {
         RaylibFrameProbe probe{};
         epochengine::raylib_api::flush_render_batch();
@@ -79,11 +79,11 @@ namespace
             && image.format == epochengine::raylib_api::pixelformat_rgba8;
         if (probe.valid)
         {
-            probe.marker = sample_probe_pixel(image, markerX, markerY);
-            probe.markerMirrored = sample_probe_pixel(
+            probe.sample = sample_probe_pixel(image, sampleX, sampleY);
+            probe.sampleMirrored = sample_probe_pixel(
                 image,
-                markerX,
-                image.height - markerY - 1);
+                sampleX,
+                image.height - sampleY - 1);
             probe.center = sample_probe_pixel(image, image.width / 2, image.height / 2);
         }
         if (image.data)
@@ -288,26 +288,17 @@ namespace epochengine::core::detail
                 reportedFirstContentFrame = true;
 
 
-            constexpr int kMarkerX = 8;
-            constexpr int kMarkerY = 8;
-            constexpr int kMarkerSize = 48;
-            if (st.frameActive && diagnosticFrame <= 240u)
-            {
-                epochengine::raylib_api::draw_rectangle_rec(
-                    {
-                        static_cast<float>(kMarkerX),
-                        static_cast<float>(kMarkerY),
-                        static_cast<float>(kMarkerSize),
-                        static_cast<float>(kMarkerSize)
-                    },
-                    { 255u, 0u, 255u, 255u });
-            }
-
             if (diagnosticMilestone)
             {
+                const int sampleX = viewport.valid()
+                    ? viewport.x + (viewport.width / 2)
+                    : epochengine::raylib_api::get_render_width() / 2;
+                const int sampleY = viewport.valid()
+                    ? viewport.y + (viewport.height / 2)
+                    : epochengine::raylib_api::get_render_height() / 2;
                 const RaylibFrameProbe probe = capture_raylib_frame_probe(
-                    kMarkerX + (kMarkerSize / 2),
-                    kMarkerY + (kMarkerSize / 2));
+                    sampleX,
+                    sampleY);
                 std::ostringstream message;
                 const auto appendColor = [&message](const epochengine::raylib_api::Color color)
                 {
@@ -325,10 +316,10 @@ namespace epochengine::core::detail
                     << " readbackValid=" << probe.valid
                     << " image=" << probe.width << 'x' << probe.height
                     << " format=" << probe.format
-                    << " marker=";
-                appendColor(probe.marker);
-                message << " markerMirror=";
-                appendColor(probe.markerMirrored);
+                    << " sample=";
+                appendColor(probe.sample);
+                message << " sampleMirror=";
+                appendColor(probe.sampleMirrored);
                 message << " center=";
                 appendColor(probe.center);
                 message

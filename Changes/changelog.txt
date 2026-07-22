@@ -1,5 +1,17 @@
 # Epoch Changelog
 
+## [v0.88.69] - Perfect multicontext runtime release
+
+- Restore visible Raylib presentation across standalone, editor context
+  switching, and multicontext operation by explicitly owning the buffer swap
+  and event pump required by Raylib custom frame control.
+- Remove the temporary magenta frame marker while retaining nonvisual
+  center-pixel diagnostics for future renderer evidence.
+- Preserve deterministic renderer retirement, editor session state, GUI
+  docking ownership, and the complete epochengine namespace migration.
+- Publish matched Windows x64 and Linux x64 runtime packages from this
+  source checkpoint.
+
 ## [v0.88.02] - Raylib custom-frame-control presentation repair
 
 - Own Raylib presentation explicitly when the vcpkg build enables

@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -34,7 +34,7 @@ export module render.lighting;
 
 export namespace epochengine::lighting
 {
-    export void AmbientLighting();
-    export void DiffuseLighting();
-    export void SpecularLighting();
+    void AmbientLighting();
+    void DiffuseLighting();
+    void SpecularLighting();
 }
