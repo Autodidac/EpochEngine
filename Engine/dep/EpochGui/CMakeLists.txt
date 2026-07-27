@@ -1,10 +1,8 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
 project(EpochGui VERSION 0.88.70 LANGUAGES CXX)
-
-option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
 
 set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/gui and src/epochgui.")
 
@@ -36,7 +34,8 @@ if(NOT _epochgui_resolved_source_root)
 endif()
 
 set(EPOCHGUI_SOURCE_ROOT "${_epochgui_resolved_source_root}" CACHE PATH "Directory containing include/gui and src/epochgui." FORCE)
-set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory containing EpochGui module interfaces." FORCE)
+
+set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory containing modules/epoch.gui.ixx." FORCE)
 
 set(EPOCHGUI_MODULES
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.ixx"
@@ -62,15 +61,6 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_control.cpp"
 )
 
-if(EPOCHGUI_ENABLE_ROUNDED_RECT)
-    list(APPEND EPOCHGUI_MODULES
-        "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.rounded_rect.ixx"
-    )
-    list(APPEND EPOCHGUI_SOURCES
-        "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/rounded_rect.cpp"
-    )
-endif()
-
 add_library(EpochGui STATIC
     ${EPOCHGUI_PUBLIC_HEADERS}
     ${EPOCHGUI_SOURCES}
@@ -87,10 +77,6 @@ add_library(Autodidac::EpochGui ALIAS EpochGui)
 
 target_include_directories(EpochGui PUBLIC
     "$<BUILD_INTERFACE:${EPOCHGUI_SOURCE_ROOT}/include>"
-)
-
-target_compile_definitions(EpochGui PUBLIC
-    EPOCHGUI_ENABLE_ROUNDED_RECT=$<BOOL:${EPOCHGUI_ENABLE_ROUNDED_RECT}>
 )
 
 target_compile_features(EpochGui PUBLIC cxx_std_23)
