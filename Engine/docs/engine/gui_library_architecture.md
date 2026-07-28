@@ -411,7 +411,7 @@ not a second editor shell, and not the context-selection UI. Its contract is:
 - The session loop refreshes GUI/font upload state for the routed context before
   its first routed panel frame. Font corruption after spawning a pane means the
   route did not receive an isolated atlas upload and must fail validation.
-- Backend selection remains in the editor toolbar combobox. A floating GUI
+- Backend selection remains in Editor Settings. A floating GUI
   panel or route may display the active renderer as evidence, but it does not
   own backend switching.
 

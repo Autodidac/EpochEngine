@@ -171,6 +171,45 @@ namespace epochengine::previewgrid
         };
     }
 
+    export [[nodiscard]] constexpr bool clockwise_solid_triangle_faces_camera(
+        Vec3 a,
+        Vec3 b,
+        Vec3 c,
+        Vec3 cameraEye) noexcept
+    {
+        const Vec3 edgeAB{ b.x - a.x, b.y - a.y, b.z - a.z };
+        const Vec3 edgeAC{ c.x - a.x, c.y - a.y, c.z - a.z };
+        const Vec3 windingNormal{
+            edgeAB.y * edgeAC.z - edgeAB.z * edgeAC.y,
+            edgeAB.z * edgeAC.x - edgeAB.x * edgeAC.z,
+            edgeAB.x * edgeAC.y - edgeAB.y * edgeAC.x
+        };
+        const Vec3 center{
+            (a.x + b.x + c.x) / 3.0f,
+            (a.y + b.y + c.y) / 3.0f,
+            (a.z + b.z + c.z) / 3.0f
+        };
+        const Vec3 toCamera{
+            cameraEye.x - center.x,
+            cameraEye.y - center.y,
+            cameraEye.z - center.z
+        };
+
+        return windingNormal.x * toCamera.x
+            + windingNormal.y * toCamera.y
+            + windingNormal.z * toCamera.z < -1.0e-6f;
+    }
+
+    static_assert(clockwise_solid_triangle_faces_camera(
+        { -1.0f, 1.0f, -1.0f },
+        { 1.0f, 1.0f, -1.0f },
+        { 1.0f, 1.0f, 1.0f },
+        { 0.0f, 2.0f, 0.0f }));
+    static_assert(!clockwise_solid_triangle_faces_camera(
+        { -1.0f, -1.0f, -1.0f },
+        { -1.0f, -1.0f, 1.0f },
+        { 1.0f, -1.0f, 1.0f },
+        { 0.0f, 2.0f, 0.0f }));
     export [[nodiscard]] inline Vec3 normalize(Vec3 value) noexcept
     {
         const float lengthSq = dot(value, value);

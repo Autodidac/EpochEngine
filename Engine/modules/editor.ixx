@@ -90,6 +90,16 @@ namespace epochengine
         bool close_current_context_after_command{ false };
     };
 
+    export [[nodiscard]] constexpr bool editor_context_selection_allowed(
+        bool target_selectable,
+        bool target_already_active,
+        bool replacement_in_progress) noexcept
+    {
+        return target_selectable
+            && !target_already_active
+            && !replacement_in_progress;
+    }
+
     export struct EditorProjectProfile
     {
         EditorProjectKind kind{ EditorProjectKind::Game };

@@ -251,6 +251,14 @@ namespace epochengine::anativecontext::detail
         const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(&ctx);
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
+            if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
+                    solidVertices[i].position,
+                    solidVertices[i + 1].position,
+                    solidVertices[i + 2].position,
+                    camera.eye))
+            {
+                continue;
+            }
             float ax = 0.0f;
             float ay = 0.0f;
             float bx = 0.0f;

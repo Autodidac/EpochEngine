@@ -345,7 +345,8 @@ namespace epochengine::vulkancontext
         rasterizer.depthClampEnable = VK_FALSE;
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = vk::PolygonMode::eFill;
-        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+        rasterizer.cullMode = vk::CullModeFlagBits::eBack;
+        // The shared clockwise-outward stream becomes counter-clockwise after Vulkan's Y flip.
         rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
         rasterizer.depthBiasEnable = VK_FALSE;
         rasterizer.lineWidth = 1.0f;
@@ -403,6 +404,7 @@ namespace epochengine::vulkancontext
         solidGraphicsPipeline = std::move(solidPipeline.value);
 
         inputAssembly.topology = vk::PrimitiveTopology::eLineList;
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
         depthStencil.depthWriteEnable = VK_FALSE;
         depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
         auto linePipeline = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);

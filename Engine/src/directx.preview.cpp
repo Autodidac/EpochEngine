@@ -197,6 +197,14 @@ namespace epochengine::directxcontext::detail
         const auto solidVertices = previewgrid::object_solid_vertices_for(&ctx);
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
+            if (!previewgrid::clockwise_solid_triangle_faces_camera(
+                    solidVertices[i].position,
+                    solidVertices[i + 1].position,
+                    solidVertices[i + 2].position,
+                    camera.eye))
+            {
+                continue;
+            }
             (void)append_clip_triangle(
                 solid,
                 mvp,

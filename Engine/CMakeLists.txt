@@ -1130,6 +1130,11 @@ if(BUILD_TESTING)
     set_tests_properties(epoch_engine_contract PROPERTIES
         WORKING_DIRECTORY "$<TARGET_FILE_DIR:epoch>"
     )
+    if(UNIX)
+        set_property(TEST epoch_engine_contract PROPERTY
+            ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY="
+        )
+    endif()
 endif()
 
 target_compile_definitions(epoch PRIVATE

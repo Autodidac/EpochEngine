@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux
-runtime baseline is `v0.88.69`; active development source is `v0.88.71`.
+runtime baseline is `v0.88.69`; active development source is `v0.88.72`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.

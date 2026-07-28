@@ -81,6 +81,7 @@ import core.path;
 import core.time;
 import context.commandqueue;
 import context.type;
+import context.multiplexer;
 import engine.input;
 import engine.cli;
 import capability.profile;
@@ -504,8 +505,7 @@ namespace epochengine
                 .floating = { .open = false },
                 .visible = false
             };
-            std::string detachedPanelHostStatus{ "Pane popouts are routed context panels; context selection stays in the editor toolbar." };
-            core::ContextType selectedContextBackend{ core::ContextType::None };
+            std::string detachedPanelHostStatus{ "Pane popouts are routed context panels; whole-editor backend selection stays in Settings." };
             std::string contextSelectionStatus{ "Context follows the active editor window." };
             std::string passiveContextScoreStatus{ "Passive context scoring is waiting for single-context editor timing." };
             std::string passiveContextRecommendation{ "No recommended editor context yet." };
@@ -625,7 +625,7 @@ namespace epochengine
                 .visible = false
             };
             editor.detachedPanelHostStatus = "Layout reset. Pane popouts remain separate from context selection.";
-            editor.selectedContextBackend = core::ContextType::None;
+
             editor.contextSelectionStatus = "Context follows the active editor window.";
             editor.passiveContextScoreStatus = "Passive context scoring is waiting for single-context editor timing.";
             editor.passiveContextRecommendation = "No recommended editor context yet.";
@@ -2930,6 +2930,15 @@ namespace epochengine
             }
         }
 
+        [[nodiscard]] bool editor_context_replacement_in_progress() noexcept
+        {
+#if defined(_WIN32)
+            if (const auto* manager = core::GetActiveMultiContextManager())
+                return manager->ContextReplacementInProgress();
+#endif
+            return false;
+        }
+
         [[nodiscard]] int context_driver_sort_key(core::ContextType type) noexcept
         {
             switch (type)
@@ -2949,24 +2958,49 @@ namespace epochengine
         {
             core::ContextType type{ core::ContextType::None };
             std::string label{};
+            bool compiled{};
+            bool selectable{};
+            std::string unavailable_reason{};
         };
 
         [[nodiscard]] std::vector<ContextBackendOption> available_context_backend_options()
         {
             core::InitializeAllContexts();
 
+            static constexpr std::array kKnownBackends{
+                core::ContextType::DirectX,
+                core::ContextType::OpenGL,
+                core::ContextType::SDL,
+                core::ContextType::SFML,
+                core::ContextType::RayLib,
+                core::ContextType::Vulkan,
+                core::ContextType::Software
+            };
+
             std::vector<ContextBackendOption> options;
+            options.reserve(kKnownBackends.size());
             {
                 std::shared_lock lock(core::g_backendsMutex);
-                options.reserve(core::g_backends.size());
-                for (const auto& [type, backend] : core::g_backends)
+                for (const auto type : kKnownBackends)
                 {
-                    if (!backend.master || !is_context_driver_candidate(type))
-                        continue;
+                    const auto backend = core::g_backends.find(type);
+                    const bool compiled = backend != core::g_backends.end() && backend->second.master;
+#if defined(_WIN32)
+                    const bool hostSupportsReplacement = true;
+#else
+                    const bool hostSupportsReplacement = false;
+#endif
 
                     options.push_back(ContextBackendOption{
                         .type = type,
-                        .label = renderer_name(type)
+                        .label = renderer_name(type),
+                        .compiled = compiled,
+                        .selectable = compiled && hostSupportsReplacement,
+                        .unavailable_reason = !compiled
+                            ? std::string{ "not compiled" }
+                            : (!hostSupportsReplacement
+                                ? std::string{ "whole-editor replacement is unavailable on this host" }
+                                : std::string{})
                     });
                 }
             }
@@ -2990,11 +3024,33 @@ namespace epochengine
             std::string summary;
             for (const auto& option : options)
             {
+                if (!option.compiled)
+                    continue;
                 if (!summary.empty())
                     summary += " | ";
                 summary += option.label;
             }
-            return summary;
+            return summary.empty() ? std::string{ "none registered" } : summary;
+        }
+
+        [[nodiscard]] std::string disabled_context_backend_summary(
+            const std::vector<ContextBackendOption>& options)
+        {
+            std::string summary;
+            for (const auto& option : options)
+            {
+                if (option.selectable)
+                    continue;
+                if (!summary.empty())
+                    summary += " | ";
+                summary += option.label;
+                summary += " (";
+                summary += option.unavailable_reason.empty()
+                    ? std::string{ "unavailable" }
+                    : option.unavailable_reason;
+                summary += ")";
+            }
+            return summary.empty() ? std::string{ "none" } : summary;
         }
 
         struct PassiveContextObservation
@@ -6096,7 +6152,7 @@ namespace epochengine
             gui::property_row("GUI", "EpochGui primitives through editor adapter", 132.0f);
             const auto availableBackends = available_context_backend_options();
             gui::property_row("Available", context_backend_summary(availableBackends), 132.0f);
-            gui::property_row("Context picker", "Editor toolbar combobox", 132.0f);
+            gui::property_row("Context picker", "Editor Settings", 132.0f);
         }
 
         const float buttonWidth = (std::max)(112.0f, (std::min)(180.0f, contentWidth * 0.46f));
@@ -6420,11 +6476,39 @@ namespace epochengine
         auto request_context_backend_selection = [&](const ContextBackendOption& option)
         {
             editor.openMenu = TopMenu::None;
-            editor.selectedContextBackend = option.type;
+            const bool targetAlreadyActive = ctx && option.type == ctx->type;
+            const bool replacementInProgress = editor_context_replacement_in_progress();
+            if (!editor_context_selection_allowed(
+                    option.selectable,
+                    targetAlreadyActive,
+                    replacementInProgress))
+            {
+                if (!option.selectable)
+                {
+                    editor.contextSelectionStatus =
+                        option.label + " is unavailable: "
+                        + (option.unavailable_reason.empty()
+                            ? std::string{ "this build cannot replace the editor with that backend." }
+                            : option.unavailable_reason + ".");
+                }
+                else if (targetAlreadyActive)
+                {
+                    editor.contextSelectionStatus =
+                        option.label + " is already the active editor backend.";
+                }
+                else
+                {
+                    editor.contextSelectionStatus =
+                        "A backend replacement is already in progress. Wait for the restored editor frame before choosing another backend.";
+                }
+                push_editor_log(editor, "[context] " + editor.contextSelectionStatus);
+                return;
+            }
+
             editor.contextSelectionStatus =
                 "Requested " + option.label + " for this editor session.";
             emit_command(EditorCommand::SwitchContext, option.label, option.type);
-            push_editor_log(editor, "[context] Requested " + option.label + " from the editor toolbar.");
+            push_editor_log(editor, "[context] Requested " + option.label + " from Editor Settings.");
         };
 
         auto submit_ai_prompt = [&](std::string prompt, std::string_view logLine)
@@ -6856,12 +6940,12 @@ namespace epochengine
 
                 gui::label(currentlyDocked ? "Docked GUI" : "Floating GUI");
                 gui::wrapped_label(
-                    "This panel is backed by the reusable EpochGui dockable-window state model. Dock and Float now move through the same GUI library path; backend context selection stays in the toolbar.",
+                    "This panel is backed by the reusable EpochGui dockable-window state model. Dock and Float now move through the same GUI library path; whole-editor backend selection stays in Settings.",
                     contentWidth);
                 gui::property_row("Renderer", renderer_name(ctx), 112.0f);
                 gui::property_row("Module", "epoch.gui", 112.0f);
                 gui::property_row("Mode", currentlyDocked ? "Docked GUI panel" : "Floating GUI panel", 112.0f);
-                gui::property_row("Context", "Toolbar combobox owns backend selection", 112.0f);
+                gui::property_row("Context", "Editor Settings owns backend selection", 112.0f);
 
                 const std::array actions{
                     gui::InlineButtonSpec{ .label = "System Info", .width = 112.0f },
@@ -6974,43 +7058,6 @@ namespace epochengine
             gui::block_input_until_clear();
         }
 
-        const auto toolbarContextOptions = available_context_backend_options();
-        if (ctx)
-            editor.selectedContextBackend = ctx->type;
-
-        std::vector<std::string_view> toolbarContextLabels;
-        toolbarContextLabels.reserve(toolbarContextOptions.size());
-        std::string selectedContextLabel = ctx ? renderer_name(ctx) : std::string{ "Unknown" };
-        for (const auto& option : toolbarContextOptions)
-        {
-            toolbarContextLabels.emplace_back(option.label);
-            if (option.type == editor.selectedContextBackend)
-                selectedContextLabel = option.label;
-        }
-
-        if (!toolbarContextOptions.empty())
-        {
-            constexpr float context_select_w = 188.0f;
-            gui::set_cursor({ toolbar_x, toolbar_button_y });
-            const auto contextSelect = gui::select_box(gui::SelectBoxOptions{
-                .id = "editor-toolbar-context-select",
-                .placeholder = "Context",
-                .selected = selectedContextLabel,
-                .options = std::span<const std::string_view>{ toolbarContextLabels.data(), toolbarContextLabels.size() },
-                .size = { context_select_w, toolbar_button_h },
-                .row_height = 24.0f,
-                .max_visible_options = 7
-            });
-            if (contextSelect.changed
-                && !toolbarControlsBlockedByMenu
-                && contextSelect.selected_index
-                && *contextSelect.selected_index < toolbarContextOptions.size())
-            {
-                request_context_backend_selection(toolbarContextOptions[*contextSelect.selected_index]);
-                selectedContextLabel = toolbarContextOptions[*contextSelect.selected_index].label;
-            }
-            toolbar_x += context_select_w + 8.0f;
-        }
 
         const float run_button_w = 108.0f;
         const float run_button_x = (std::max)(toolbar_x + 12.0f, viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
@@ -7066,7 +7113,7 @@ namespace epochengine
             + "  |  " + epochengine::GetEngineBuildTagString()
             + "  |  Threads " + std::to_string(toolbarThreadCount)
             + "/" + std::to_string(toolbarCpuThreadCount)
-            + "  |  Context " + selectedContextLabel
+            + "  |  Context " + (ctx ? renderer_name(ctx) : std::string{ "Unknown" })
             + "  |  Zoom " + preview_zoom_text(ctx),
             (std::max)(180.0f, w - status_x - 12.0f));
 
@@ -9567,20 +9614,71 @@ namespace epochengine
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
             gui::wrapped_label("Editor defaults and active project runtime policy.", contentWidth);
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 34.0f });
-            gui::property_row("Renderer", renderer_name(ctx), 116.0f);
+            gui::property_row("Active backend", renderer_name(ctx), 116.0f);
+
+            const auto settingsContextOptions = available_context_backend_options();
+            const bool contextReplacementInProgress = editor_context_replacement_in_progress();
+            std::vector<const ContextBackendOption*> settingsSelectableContexts;
+            std::vector<std::string_view> settingsContextLabels;
+            settingsSelectableContexts.reserve(settingsContextOptions.size());
+            settingsContextLabels.reserve(settingsContextOptions.size());
+            for (const auto& option : settingsContextOptions)
+            {
+                if (!option.selectable)
+                    continue;
+                settingsSelectableContexts.push_back(&option);
+                settingsContextLabels.emplace_back(option.label);
+            }
+
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 58.0f });
-            gui::property_row("Capability", renderer_capability_profile_summary(ctx), 116.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 82.0f });
-            gui::property_row("Project", editor.projectName, 116.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 106.0f });
-            gui::property_row("Workspace", std::string(main_surface_title(editor.mainSurface)), 116.0f);
+            if (contextReplacementInProgress)
+            {
+                gui::property_row("Backend selection", "Replacement in progress", 132.0f);
+            }
+            else if (!settingsSelectableContexts.empty())
+            {
+                const auto settingsContextSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "editor-settings-context-select",
+                    .placeholder = "Editor backend",
+                    .selected = renderer_name(ctx),
+                    .options = std::span<const std::string_view>{ settingsContextLabels.data(), settingsContextLabels.size() },
+                    .size = { 300.0f, 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 7
+                });
+                if (settingsContextSelect.changed
+                    && settingsContextSelect.selected_index
+                    && *settingsContextSelect.selected_index < settingsSelectableContexts.size())
+                {
+                    request_context_backend_selection(
+                        *settingsSelectableContexts[*settingsContextSelect.selected_index]);
+                }
+            }
+            else
+            {
+                gui::property_row("Backend selection", "Unavailable on this host", 132.0f);
+            }
+            if (modalSize.x >= 620.0f)
+            {
+                gui::set_cursor({ contentPos.x + 326.0f, contentY + 62.0f });
+                gui::property_row("Capability", renderer_capability_profile_summary(ctx), 96.0f);
+            }
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 94.0f });
+            gui::property_row("Compiled", context_backend_summary(settingsContextOptions), 116.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 118.0f });
+            const std::string disabledBackends = disabled_context_backend_summary(settingsContextOptions);
+            gui::wrapped_label(
+                disabledBackends == "none"
+                    ? editor.contextSelectionStatus
+                    : std::string{ "Disabled: " } + disabledBackends + ". " + editor.contextSelectionStatus,
+                contentWidth - 16.0f);
 
             const auto settingsThemeChoices = gui::theme_preference_choices();
             std::vector<std::string_view> settingsThemeLabels;
             settingsThemeLabels.reserve(settingsThemeChoices.size());
             for (const auto& choice : settingsThemeChoices)
                 settingsThemeLabels.emplace_back(choice.label);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 140.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 164.0f });
             const auto settingsThemeSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-theme-select",
                 .placeholder = "Theme",
@@ -9597,7 +9695,7 @@ namespace epochengine
             }
             if (modalSize.x >= 620.0f)
             {
-                gui::set_cursor({ contentPos.x + 326.0f, contentY + 144.0f });
+                gui::set_cursor({ contentPos.x + 326.0f, contentY + 168.0f });
                 gui::property_row("Theme", std::string(gui::theme_preference_label(editor.themePreference)), 96.0f);
             }
 
@@ -9606,7 +9704,7 @@ namespace epochengine
             settingsInputLabels.reserve(settingsInputChoices.size());
             for (const auto& choice : settingsInputChoices)
                 settingsInputLabels.emplace_back(choice.label);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 186.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 210.0f });
             const auto settingsInputSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-input-profile-select",
                 .placeholder = "Input profile",
@@ -9624,7 +9722,7 @@ namespace epochengine
             }
             if (modalSize.x >= 620.0f)
             {
-                gui::set_cursor({ contentPos.x + 326.0f, contentY + 190.0f });
+                gui::set_cursor({ contentPos.x + 326.0f, contentY + 214.0f });
                 gui::property_row("Input", std::string(input_profile_label(editor.inputProfilePreset)), 96.0f);
             }
 
@@ -9633,7 +9731,7 @@ namespace epochengine
             settingsLimitLabels.reserve(settingsLimitChoices.size());
             for (const auto& choice : settingsLimitChoices)
                 settingsLimitLabels.emplace_back(choice.label);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 232.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 256.0f });
             const auto settingsEditorLimitSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-core-frame-limit-select",
                 .placeholder = "Editor frame limit",
@@ -9652,11 +9750,11 @@ namespace epochengine
             }
             if (modalSize.x >= 560.0f)
             {
-                gui::set_cursor({ contentPos.x + 276.0f, contentY + 236.0f });
+                gui::set_cursor({ contentPos.x + 276.0f, contentY + 260.0f });
                 gui::property_row("Editor FPS", std::string(frame_limit_label(editor.editorFrameLimitFps)), 104.0f);
             }
 
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 278.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 302.0f });
             const auto settingsProjectLimitSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "settings-project-frame-limit-select",
                 .placeholder = "Project frame limit",
@@ -9673,7 +9771,7 @@ namespace epochengine
             }
             if (modalSize.x >= 560.0f)
             {
-                gui::set_cursor({ contentPos.x + 276.0f, contentY + 282.0f });
+                gui::set_cursor({ contentPos.x + 276.0f, contentY + 306.0f });
                 gui::property_row("Project FPS", std::string(frame_limit_label(editor.projectRunFrameLimitFps)), 104.0f);
             }
 
@@ -9682,7 +9780,7 @@ namespace epochengine
             settingsCameraLabels.reserve(settingsCameraChoices.size());
             for (const auto& choice : settingsCameraChoices)
                 settingsCameraLabels.emplace_back(choice.label);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 324.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 348.0f });
             const auto settingsCameraSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "settings-project-camera-select",
                 .placeholder = "Camera style",
@@ -9703,7 +9801,7 @@ namespace epochengine
             }
 
             const float previewControlWidth = (std::min)(146.0f, (contentWidth - 20.0f) / 3.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 374.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 398.0f });
             if (gui::button(editor.previewMode == core::ScenePreviewMode::Editor ? "Disable Preview" : "Enable Preview", { previewControlWidth, 30.0f }))
             {
                 editor.previewMode = editor.previewMode == core::ScenePreviewMode::Editor
@@ -9712,20 +9810,20 @@ namespace epochengine
                 if (ctx)
                     ctx->set_scene_preview_mode(editor.previewMode);
             }
-            gui::set_cursor({ contentPos.x + 18.0f + previewControlWidth, contentY + 374.0f });
+            gui::set_cursor({ contentPos.x + 18.0f + previewControlWidth, contentY + 398.0f });
             if (gui::button(editor.helpersVisible ? "Hide Helpers" : "Show Helpers", { previewControlWidth, 30.0f }))
                 handle_scene_tool(editor, ctx.get(), "toggle_helpers");
-            gui::set_cursor({ contentPos.x + 28.0f + previewControlWidth * 2.0f, contentY + 374.0f });
+            gui::set_cursor({ contentPos.x + 28.0f + previewControlWidth * 2.0f, contentY + 398.0f });
             if (gui::button("Reset Camera", { previewControlWidth, 30.0f }))
                 handle_scene_tool(editor, ctx.get(), "reset_camera");
 
-            if (modalSize.y >= 580.0f)
+            if (modalSize.y >= 620.0f)
             {
-                gui::set_cursor({ contentPos.x + 8.0f, contentY + 418.0f });
+                gui::set_cursor({ contentPos.x + 8.0f, contentY + 446.0f });
                 gui::property_row("Preview", std::string(preview_mode_name(editor.previewMode)), 104.0f);
-                gui::set_cursor({ contentPos.x + 8.0f, contentY + 442.0f });
+                gui::set_cursor({ contentPos.x + 8.0f, contentY + 470.0f });
                 gui::property_row("Camera", std::string(project_camera_label(editor.projectCameraMode)), 104.0f);
-                gui::set_cursor({ contentPos.x + 8.0f, contentY + 466.0f });
+                gui::set_cursor({ contentPos.x + 8.0f, contentY + 494.0f });
                 gui::property_row("Helpers", editor.helpersVisible ? "Visible" : "Hidden", 104.0f);
             }
 

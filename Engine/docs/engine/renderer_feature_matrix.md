@@ -42,11 +42,11 @@ features must be individually capability-gated.
 | CPU/software | T0 reference, headless, safe fallback | Deterministic contracts and fallback paths exist | Production 2D raster parity and physical output remain bounded work |
 | OpenGL | First `T1-GL` desktop presentation and portable technique proof | Context, editor scene, GUI composition, sampled RTT preview, and basic resources exist | Complete Canvas2D/resource/material/settings proof |
 | OpenGL ES | T1-GLES mobile target contract | Profile/limits are represented | No production GLES runtime/presentation proof yet |
-| SDL3 | OpenGL-derived context/tool adapter | Window, input, presentation, GUI, and sampled RTT work exist | Registered editor adapter remains wireframe-only in current operator evidence; solids are `Partial` |
-| SFML3 | OpenGL-derived context/tool adapter | Window, presentation, GUI, and runtime-gated RTT contracts exist | Registered editor adapter remains wireframe-only; safe complete-triangle fill and eye proof are missing |
+| SDL3 | OpenGL-derived context/tool adapter | Window, input, presentation, GUI, sampled RTT, and filled editor triangles have operator evidence | Outward-face correction awaits final eye proof; solids remain `Partial` |
+| SFML3 | OpenGL-derived context/tool adapter | Window, presentation, GUI, runtime-gated RTT, and filled complete-triangle presentation have operator evidence | Outward-face correction awaits final eye proof; solids remain `Partial` |
 | Raylib3 | Specialized OpenGL-derived context | Context, editor preview, ownership repairs, and operator-proven scene rendering exist | Keep single/multicontext lifecycle and presentation regression coverage |
-| Vulkan | Explicit backend and future `T2-VK` provider | Context, swapchain, line scene, GUI subpass, descriptors, and buffers exist | Scene geometry is line-list only; separate solid pipeline/depth/invalidation work is missing |
-| DirectX | Active Windows-native D3D11 lane | Context, swapchain, clear/present, shaders, preview triangles/lines, GUI replay, and clipping exist | Formal resource parity, depth/material growth; this does not prove D3D12 |
+| Vulkan | Explicit backend and future `T2-VK` provider | Context, swapchain, lines, depth-tested scene-solid pipeline, GUI subpass, descriptors, buffers, and filled-triangle operator evidence exist | Corrected solid culling awaits final eye proof and broader resource parity |
+| DirectX | Active Windows-native D3D11 lane | Context, swapchain, clear/present, shaders, preview triangles/lines, GUI replay, clipping, and CPU outward-face filtering exist | Corrected orientation awaits eye proof; formal resource parity and depth/material growth remain; this does not prove D3D12 |
 | DirectX 12 | Future `T2-DX` family | Capability vocabulary only | Device, queues, resources, pipelines, and runtime proof are missing |
 
 Normal editor operation owns one backend. Multicontext is diagnostic and does
@@ -60,7 +60,7 @@ not prove production performance or feed passive provider selection.
 | Window/context bootstrap | Present | OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, software, and noop/headless paths exist. Runtime evidence remains backend-specific. |
 | Frame clear/present | Partial | Core paths exist; resize, GUI replay, modal ordering, and repeated replacement remain regression-sensitive. |
 | Editor scene lines/helpers | Present | Grid, markers, camera, and helper geometry exist across active editor lanes. |
-| Editor scene solids | Partial | OpenGL, Raylib, and DirectX have solid preview paths. SDL3/SFML registered adapters are wireframe-only in current evidence. Vulkan builds line geometry and a line-list scene pipeline. Candidate code does not change status until build and eye proof. |
+| Editor scene solids | Partial | OpenGL and Raylib are the orientation references. SDL3, SFML3, Vulkan, DirectX, and Software now have filled paths plus an outward-face correction candidate. Status remains Partial until build and operator eye proof. |
 | Canvas2D camera/mode | Partial | Orthographic preview state and editor mode exist. A complete offscreen compose, sprite batch, scaling, tilemap, and built-project loop are active work. |
 | Renderer resource spine | Partial | `render.device`/`render.graph` describe logical buffers, textures, samplers, shaders, pipelines, materials, meshes/models, render targets, bindings, commands, passes, and graph dependencies. Native parity is incomplete. |
 | Sampled render-to-texture | Partial | Descriptor and graph proof exist. OpenGL editor presentation and a live SDL target-texture lane exist. Other backends require their own allocation/presentation evidence. Engine Arcade remains the proof consumer. |
@@ -95,29 +95,22 @@ layer separate.
 
 ## Scene-Solid Repair Contract
 
-SDL3 and SFML3 module implementations already demonstrate filled-triangle
-shapes, but the registered editor adapters need safe integration.
+The current candidate consumes the shared `object_solid_vertices_for()` stream
+without changing queue, GUI replay, or present order.
 
-Requirements:
+- OpenGL and Raylib remain the known-good orientation references.
+- Shared preview geometry defines the clockwise-outward object convention and
+  carries compile-time exterior/opposite-face checks.
+- SDL3, SFML3, DirectX, and Software filter camera-facing back sides before
+  projected fill; SFML still preserves complete three-vertex groups and SDL
+  reports geometry failures.
+- Vulkan uses back-face culling only in its depth-tested scene-solid pipeline;
+  line and GUI pipelines remain uncullled.
+- Near-plane clipping, native material parity, and deeper depth/resource work
+  remain backend-specific follow-up.
 
-- request the shared `object_solid_vertices_for()` stream;
-- draw fills between grid and sampled-surface/marker work;
-- preserve queue, top-layer GUI, and present order;
-- project and append SFML vertices three at a time so one rejected vertex cannot
-  corrupt later triangle alignment;
-- report SDL geometry failures and mark the frame faulted;
-- keep near-plane limitations visible until proper clipping exists.
-
-Vulkan requires a separate scene-solid path:
-
-- triangle-list pipeline in the scene subpass, not the GUI subpass;
-- solid vertex storage/count separate from line-list indices;
-- depth test/write for solids, then line helpers with appropriate depth policy;
-- `preview_geometry_revision_for()` invalidation so object/light changes rebuild;
-- safe rebuild only after fences protecting shared buffers have completed;
-- no change to GUI subpass, queue submission, or presentation order.
-
-Status remains `Partial` until Debug/Release build and operator visual proof.
+Status remains `Partial` until Debug/Release build and corrected operator visual
+proof. Filled-triangle evidence alone does not prove orientation.
 
 ## Baseline 2D Renderer Gate
 

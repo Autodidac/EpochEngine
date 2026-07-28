@@ -128,7 +128,6 @@ namespace epochengine::core
 
 #if defined(EPOCH_USING_SFML)
         sf::RenderWindow* sfml_window = nullptr;
-        sf::Context       sfml_context{};
 #endif
 
         OpaqueContextHandle          context{};

@@ -156,7 +156,7 @@ the same engine-owned path.
   its classic steel palette while the editor stays on the darker neutral tool
   palette, and any future theme selector should preserve that separation rather
   than forcing one skin across both shells
-- backend ownership stays explicit: the editor toolbar selector reports the
+- backend ownership stays explicit: the Editor Settings backend selector reports the
   active backend each frame. When the selected backend is compiled but not
   live, the Windows single-window host captures editor state, retires and fully
   cleans the old native backend, creates one docked replacement in the same
@@ -179,7 +179,7 @@ the same engine-owned path.
   restoration and its acknowledged frame. The replacement
   is never a second editor shell, and unavailable or failed targets remain
   visible failures rather than persisted fake selections.
-- the dropdown transaction, not the generic multicontext scan, owns replacement
+- the Settings selection transaction, not the generic multicontext scan, owns replacement
   session adoption. Only that exact target is gated and excluded from generic
   enumeration until its first successful frame. It then enters the normal
   session path while remaining transaction-owned and commits only after editor
@@ -585,17 +585,18 @@ the same engine-owned path.
   owns show/hide/reset and emergency source-pane restore; it is not the primary
   detach surface. Optional low-level routes such as `floating.gui` remain host
   infrastructure, not the current user-facing feature. Backend selection stays
-  in the editor toolbar combobox. Additional GUI containers must use visible
+  in Editor Settings. Additional GUI containers must use visible
   request/status paths with focus ownership, teardown, and evidence logging.
   Games, mobile apps, console targets, and headless tools may omit native host
   routes entirely while still using the portable `EpochGui` layout library.
   True drag/drop redock behavior remains a later native-host movement feature.
 - editor context selection is an in-process handoff, not a process restart. The
-  toolbar combobox focuses/restores an existing live backend context and parks
-  duplicate editor sessions back to the launcher/menu. If no live target exists,
-  it fails closed with visible status instead of opening the wrong shell,
-  restarting the engine, or changing only the label. This is still a desktop
-  editor/tool host workflow, not a requirement for game/mobile products.
+  Editor Settings selector starts one state-preserving whole-editor replacement
+  transaction. While the manager owns retirement, creation, restoration, and the
+  restored-frame acknowledgement, the selector becomes a visible non-interactive
+  status and cannot emit another request. Unsupported hosts fail closed without
+  opening another shell or changing only the label. This remains a desktop
+  editor/tool-host workflow, not a requirement for game/mobile products.
 - time diagnostics should show the shared simulation clock state: pause/resume,
   scale, fixed-step cadence, accumulator, and simulated time
 - time diagnostics should also show the current frame step budget and the
@@ -610,7 +611,7 @@ the same engine-owned path.
 
 The editor has two separate ideas that must stay separate in code and UI:
 
-1. **Backend/context selection**: the editor toolbar combobox chooses the
+1. **Backend/context selection**: the Editor Settings combobox chooses the
    renderer/context family for the editor session.
 2. **Floating/routed GUI containers**: pane title-bar drag/release gestures
    present existing editor panes in their own cloned native/context windows.

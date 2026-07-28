@@ -1,5 +1,27 @@
 # Epoch Changelog
 
+## [v0.88.72] - Serialized context selection and outward scene solids
+
+- Move whole-editor backend selection from the main toolbar into Editor Settings,
+  list only compiled host-supported targets as selectable, and keep unavailable
+  hosts/backends visible with reasons.
+- Gate every selection against the authoritative manager replacement hold so
+  rapid choices cannot overlap retirement, backend creation, state restoration,
+  or the first restored-frame acknowledgement; active targets remain no-ops.
+- Define and contract-check the shared clockwise-outward preview convention.
+  SDL3, SFML3, DirectX, and Software reject camera-facing back sides before
+  projected fill; Vulkan enables back-face culling only for scene solids while
+  preserving uncullled line and GUI pipelines. OpenGL and Raylib remain the
+  orientation references.
+- Remove the unused eager `sf::Context` from shared `WindowData`, keeping native
+  SFML contexts backend-owned and preventing pure engine contracts from opening
+  X11 during static initialization.
+- Force the Unix engine CTest to run with empty display variables so hidden native
+  window/context startup becomes a permanent headless regression failure.
+- Advance development source metadata to `v0.88.72` while preserving the sealed
+  `v0.88.69` packaged runtime defaults.
+- Verify MSVC Debug/Release editor builds and engine contracts, the managed Clang
+  22 full-engine Release build, and all 4/4 Linux CTests with no display.
 ## [v0.88.71] - Capability and authoring foundation
 
 - Define `T0-CPU` as the CPU/headless correctness floor and begin presentation

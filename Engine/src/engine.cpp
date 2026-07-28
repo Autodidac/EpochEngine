@@ -1891,6 +1891,12 @@ namespace epochengine::core
             && !editor_restored_frame_acknowledged(true, 3, 2)
             && editor_restored_frame_acknowledged(true, 3, 3)
             && editor_restored_frame_acknowledged(true, 3, 4));
+        check(
+            "context.settings_selection_serialization",
+            epochengine::editor_context_selection_allowed(true, false, false)
+            && !epochengine::editor_context_selection_allowed(false, false, false)
+            && !epochengine::editor_context_selection_allowed(true, true, false)
+            && !epochengine::editor_context_selection_allowed(true, false, true));
 
         auto forestProfile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;

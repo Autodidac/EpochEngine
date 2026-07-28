@@ -22,11 +22,11 @@ This is the current high-level status of the context and renderer stack.
 
 | Path | Status | Notes |
 | --- | --- | --- |
-| Editor toolbar combobox | Active first pass | Reflects the current backend and emits explicit `SwitchContext` requests. Explicit unavailable backends must fail closed instead of falling back to another backend. |
-| Live backend focus/restore | Active first pass | The session loop can focus an already-live context of the selected backend and restore the captured editor snapshot. Snapshot capture/restore failure must log visibly. |
-| New editor context request | Windows first pass | Windows can post a detached context request for a new editor context and later restore state when the target enters the session loop. Posted request, created window, session entry, snapshot restore, and present are separate evidence states. |
-| Linux/WSL create-from-combobox | Unsupported today | The Linux detached-context request path currently returns false; WSL proof remains single-context OpenGL unless explicitly changed. |
-| Mobile/console/headless create-from-combobox | Excluded by product policy | These targets may use portable `EpochGui` controls but should hide or reject native popout/context-create routes unless a product host implements them. |
+| Editor Settings backend selector | Active first pass | Reflects the current backend and emits one explicit `SwitchContext` request only when the target is compiled, supported by the host, different from the active backend, and no replacement transaction is running. |
+| Whole-editor replacement | Windows first pass | The stable host captures editor state, retires the source backend, creates the exact selected backend, restores state, and holds selection closed until a restored frame is acknowledged. Snapshot or backend failure remains visible and falls back through the transaction. |
+| Replacement serialization | Active first pass | Manager transaction ownership is the authoritative selection gate. Rapid choices cannot overlap retirement, creation, restoration, or restored-frame acknowledgement; current and unavailable targets are no-ops with visible status. |
+| Linux/WSL Settings replacement | Unsupported today | The Linux replacement host currently returns false, so Settings reports compiled backends but keeps replacement unavailable. WSL proof remains single-context OpenGL unless explicitly changed. |
+| Mobile/console/headless replacement | Excluded by product policy | These targets may use portable `EpochGui` controls while omitting native popout and whole-editor replacement hosts. |
 
 ## Practical guidance
 

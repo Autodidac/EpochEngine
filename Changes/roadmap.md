@@ -233,8 +233,9 @@ claim runtime success without visual evidence.
   family and must not be inferred from that implementation.
 - Software remains the deterministic/headless and safe fallback.
 
-SDL3, SFML3, and Vulkan solids remain `Partial` until build and eye proof. Their
-repair is valuable, but the 2D acceptance project does not require every editor
+SDL3, SFML3, Vulkan, DirectX, and Software solid orientation remains `Partial`
+until the outward-face correction has build and eye proof. This parity work is
+valuable, but the 2D acceptance project does not require every editor
 backend to become a production renderer in the same eight weeks.
 
 ## Settings And Editor Controls
@@ -252,7 +253,7 @@ Each subsystem pass includes:
 Near-term controls include:
 
 - project profile and fallback policy;
-- backend/evidence display;
+- backend selection and evidence display;
 - Canvas2D resolution, scaling, sampling, blend, and batch budgets;
 - texture history, compile, residency, and cache budgets;
 - tilemap grid/chunk/collision controls;

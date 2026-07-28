@@ -68,9 +68,10 @@ The working tree contains these current or in-progress foundations:
 
 These facts are contracts, not blanket runtime claims. Current checkpoint proof
 includes MSVC Debug/Release editor builds and contracts, the managed Clang 22
-full-engine Release build, 4/4 Linux engine CTests, and 5/5 standalone EpochGui
-feature tests. SDL/SFML/Vulkan scene-solid presentation remains `Partial` until
-operator visual evidence exists.
+full-engine Release build, no-display Linux engine CTests, and 5/5 standalone
+EpochGui feature tests. Operator evidence now proves filled scene triangles in
+SDL/SFML/Vulkan, while corrected outward-face orientation across every
+non-reference backend remains `Partial` until the candidate receives eye proof.
 
 ## Immediate Implementation Order
 
@@ -90,17 +91,19 @@ operator visual evidence exists.
 
 ## Backend Repair Within This Gate
 
-SDL3, SFML3, and Vulkan currently show editor scene solids as wireframe-only in
-operator evidence.
+Operator evidence proves that SDL3, SFML3, and Vulkan now consume filled editor
+scene triangles, and it exposed a common inside-out orientation fault outside the
+OpenGL/Raylib references.
 
-- SDL3 and SFML3 adapter work may consume the existing shared solid triangle
-  stream while preserving queue, GUI replay, and present order.
-- SFML projection must preserve complete three-vertex triangle groups.
-- SDL render failures must report evidence and fail the frame visibly.
-- Vulkan needs a separate scene-solid triangle path, correct depth policy, and
-  preview-geometry invalidation; its GUI triangle pipeline is not scene proof.
-- These lanes remain `Partial` until build and operator visual proof passes.
-- They must not delay the `T1-GL` 2D product unless shared contracts regress.
+- shared preview geometry defines the clockwise-outward object convention;
+- SDL3, SFML3, DirectX, and Software reject camera-facing back sides before
+  projected fill;
+- Vulkan culls back faces in its scene-solid pipeline while leaving line and GUI
+  pipelines uncullled;
+- queue, GUI replay, depth, and present order remain unchanged;
+- all corrected lanes remain `Partial` until build and operator eye proof passes;
+- this parity work must not delay the `T1-GL` 2D product unless shared contracts
+  regress.
 
 ## Settings And Control Rule
 
@@ -162,7 +165,7 @@ The active gate is accepted when:
    and Run/Build use the same project-owned state.
 7. Canvas2D contracts prove deterministic ordering, scaling, blend/sampling,
    offscreen compose, and cache recreation.
-8. Renderer docs keep SDL/SFML/Vulkan solids `Partial` until build and eye proof.
+8. Renderer docs keep corrected non-reference solid orientation `Partial` until build and eye proof.
 9. No updater, release, generated cache, or unrelated operator file is staged.
 
 ## Next Gate
