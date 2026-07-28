@@ -16,6 +16,14 @@ option(EPOCH_STRICT_WARNINGS "Enable stricter compiler warnings for Epoch target
 option(EPOCH_WARNINGS_AS_ERRORS "Treat warnings as errors when strict warnings are enabled." OFF)
 option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible compilers." OFF)
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+option(EPOCH_ENABLE_AUTHORING_PLATFORM "Gate the shared Epoch authoring-document and editor foundation as implementation units land." ON)
+option(EPOCH_ENABLE_TEXTURE_EDITOR "Gate texture painting, compositing, and texture-node authoring implementation units." ON)
+option(EPOCH_ENABLE_MODEL_EDITOR "Gate mesh editing, procedural modeling, and sculpt implementation units." ON)
+option(EPOCH_ENABLE_NODE_EDITOR "Gate the shared typed node-graph editor and evaluator implementation units." ON)
+option(EPOCH_ENABLE_MATERIAL_EDITOR "Gate material graph authoring and preview implementation units." ON)
+option(EPOCH_ENABLE_ANIMATION_EDITOR "Gate animation graph and timeline authoring implementation units." ON)
+option(EPOCH_ENABLE_AUTHORING_COLLABORATION "Gate branch sharing, review, and collaborative authoring implementation units." OFF)
+option(EPOCH_ENABLE_AUTHORING_METRICS "Gate document, history, cache, GPU, and evaluation metrics implementation units." ON)
 option(EPOCH_ALLOW_GCC_MODULE_ENGINE "Opt into the experimental full-engine GCC modules build on Linux." OFF)
 set(EPOCH_GLAD_PROVIDER "auto" CACHE STRING "Select the OpenGL loader provider: auto, vcpkg, or bundled.")
 set_property(CACHE EPOCH_GLAD_PROVIDER PROPERTY STRINGS auto vcpkg bundled)
@@ -161,6 +169,10 @@ function(epoch_print_build_summary)
     message(STATUS "  Warnings as errors: ${EPOCH_WARNINGS_AS_ERRORS}")
     message(STATUS "  Sanitizers: ${EPOCH_ENABLE_SANITIZERS}")
     message(STATUS "  CI/headless-only: ${EPOCH_CI_HEADLESS_ONLY}")
+    message(STATUS "  Authoring platform: ${EPOCH_ENABLE_AUTHORING_PLATFORM}")
+    message(STATUS "  Authoring editors: texture=${EPOCH_ENABLE_TEXTURE_EDITOR}; model=${EPOCH_ENABLE_MODEL_EDITOR}; node=${EPOCH_ENABLE_NODE_EDITOR}; material=${EPOCH_ENABLE_MATERIAL_EDITOR}; animation=${EPOCH_ENABLE_ANIMATION_EDITOR}")
+    message(STATUS "  Authoring collaboration: ${EPOCH_ENABLE_AUTHORING_COLLABORATION}")
+    message(STATUS "  Authoring metrics: ${EPOCH_ENABLE_AUTHORING_METRICS}")
     message(STATUS "  GCC full-engine module opt-in: ${EPOCH_ALLOW_GCC_MODULE_ENGINE}")
     message(STATUS "  GLAD provider requested: ${EPOCH_GLAD_PROVIDER}")
     if(DEFINED EPOCH_GLAD_RESOLVED_PROVIDER)
@@ -280,6 +292,8 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override pac
 
 set(EPOCH_SOURCES
     src/engine.cpp
+    src/audio/audio.manager.cpp
+    src/physics/physics.manager.cpp
     src/renderers/core/context.command_queue.cpp
     src/renderers/core/engine.context.cpp
     src/renderers/directx/context_directx.cpp
@@ -345,6 +359,12 @@ if(WIN32)
 elseif(UNIX AND NOT APPLE)
     list(APPEND EPOCH_SOURCES
         src/renderers/host/engine.context.host.linux.cpp
+    )
+endif()
+
+if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
+    list(APPEND EPOCH_SOURCES
+        src/authoring/texture/texture.document.cpp
     )
 endif()
 
@@ -993,6 +1013,10 @@ endif()
 
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
 
+if(NOT EPOCH_ENABLE_AUTHORING_PLATFORM OR NOT EPOCH_ENABLE_TEXTURE_EDITOR)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])authoring\.texture\.ixx$]])
+endif()
+
 if(NOT EPOCH_OPENGL_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])opengl\.]])
 endif()
@@ -1048,9 +1072,76 @@ target_sources(epoch PRIVATE
         BASE_DIRS ${EPOCH_MODULE_DIR}
         FILES ${EPOCH_ACTIVE_MODULE_FILES}
 )
+if(BUILD_TESTING)
+    add_executable(epoch_physics_manager_contract
+        src/physics/physics.manager.cpp
+        src/physics/physics.manager.contract.cpp
+    )
+    target_sources(epoch_physics_manager_contract PRIVATE
+        FILE_SET epoch_physics_manager_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/physics.manager.ixx
+    )
+    target_include_directories(epoch_physics_manager_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_physics_manager_contract PRIVATE
+        EPOCH_PHYSICS_MANAGER_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_physics_manager_contract)
+    epoch_apply_warnings(epoch_physics_manager_contract)
+    epoch_apply_sanitizers(epoch_physics_manager_contract)
+    add_test(
+        NAME epoch_physics_manager_contract
+        COMMAND epoch_physics_manager_contract
+    )
+    if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
+        add_executable(epoch_authoring_texture_contract
+            src/authoring/texture/texture.document.cpp
+            src/authoring/texture/texture.contract.cpp
+        )
+        target_sources(epoch_authoring_texture_contract PRIVATE
+            FILE_SET epoch_authoring_texture_modules TYPE CXX_MODULES
+                BASE_DIRS ${EPOCH_MODULE_DIR}
+                FILES ${EPOCH_MODULE_DIR}/authoring.texture.ixx
+        )
+        target_include_directories(epoch_authoring_texture_contract PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        target_compile_definitions(epoch_authoring_texture_contract PRIVATE
+            EPOCH_AUTHORING_TEXTURE_CONTRACT_MAIN=1
+        )
+        epoch_apply_cxx_dialect(epoch_authoring_texture_contract)
+        epoch_apply_warnings(epoch_authoring_texture_contract)
+        epoch_apply_sanitizers(epoch_authoring_texture_contract)
+        add_test(
+            NAME epoch_authoring_texture_contract
+            COMMAND epoch_authoring_texture_contract
+        )
+    endif()
+    add_test(
+        NAME epoch_engine_contract
+        COMMAND $<TARGET_FILE:epoch> --engine-contract-self-test
+    )
+    set_tests_properties(epoch_engine_contract PROPERTIES
+        WORKING_DIRECTORY "$<TARGET_FILE_DIR:epoch>"
+    )
+endif()
 
 target_compile_definitions(epoch PRIVATE
     $<$<BOOL:${EPOCH_UPDATER_SHELL_BUILD}>:EPOCH_UPDATER_SHELL_BUILD=1>
+    EPOCH_ENABLE_AUTHORING_PLATFORM=$<BOOL:${EPOCH_ENABLE_AUTHORING_PLATFORM}>
+    EPOCH_ENABLE_TEXTURE_EDITOR=$<BOOL:${EPOCH_ENABLE_TEXTURE_EDITOR}>
+    EPOCH_ENABLE_MODEL_EDITOR=$<BOOL:${EPOCH_ENABLE_MODEL_EDITOR}>
+    EPOCH_ENABLE_NODE_EDITOR=$<BOOL:${EPOCH_ENABLE_NODE_EDITOR}>
+    EPOCH_ENABLE_MATERIAL_EDITOR=$<BOOL:${EPOCH_ENABLE_MATERIAL_EDITOR}>
+    EPOCH_ENABLE_ANIMATION_EDITOR=$<BOOL:${EPOCH_ENABLE_ANIMATION_EDITOR}>
+    EPOCH_ENABLE_AUTHORING_COLLABORATION=$<BOOL:${EPOCH_ENABLE_AUTHORING_COLLABORATION}>
+    EPOCH_ENABLE_AUTHORING_METRICS=$<BOOL:${EPOCH_ENABLE_AUTHORING_METRICS}>
     $<$<BOOL:${EPOCH_RAYLIB_ACTIVE}>:EPOCH_FORCE_ENABLE_RAYLIB>
     $<$<NOT:$<BOOL:${EPOCH_RAYLIB_ACTIVE}>>:EPOCH_FORCE_DISABLE_RAYLIB>
     $<$<BOOL:${EPOCH_SDL_ACTIVE}>:EPOCH_FORCE_ENABLE_SDL>

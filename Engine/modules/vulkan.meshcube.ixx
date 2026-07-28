@@ -77,41 +77,31 @@ namespace epochengine::vulkancontext
         const epochengine::core::Context* ctx)
     {
         std::vector<Vertex> out{};
+        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
         const auto source = epochengine::previewgrid::grid_vertices();
         const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
         const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
-        out.reserve(source.size() + markerCount + objectVertices.size());
+        out.reserve(solidVertices.size() + source.size() + markerCount + objectVertices.size());
 
+        const auto append_vertex = [&](const epochengine::previewgrid::Vertex& vertex)
+        {
+            const auto color = preview_color_to_vulkan(vertex.color);
+            out.push_back(Vertex{
+                { vertex.position.x, vertex.position.y, vertex.position.z },
+                { color[0], color[1], color[2] },
+                { 0.0f, 0.0f }
+            });
+        };
+
+        for (const auto& vertex : solidVertices)
+            append_vertex(vertex);
         for (const auto& vertex : source)
-        {
-            const auto color = preview_color_to_vulkan(vertex.color);
-            out.push_back(Vertex{
-                { vertex.position.x, vertex.position.y, vertex.position.z },
-                { color[0], color[1], color[2] },
-                { 0.0f, 0.0f }
-            });
-        }
-
+            append_vertex(vertex);
         for (std::size_t i = 0; i < markerCount; ++i)
-        {
-            const auto color = preview_color_to_vulkan(markerVertices[i].color);
-            out.push_back(Vertex{
-                { markerVertices[i].position.x, markerVertices[i].position.y, markerVertices[i].position.z },
-                { color[0], color[1], color[2] },
-                { 0.0f, 0.0f }
-            });
-        }
-
+            append_vertex(markerVertices[i]);
         for (const auto& vertex : objectVertices)
-        {
-            const auto color = preview_color_to_vulkan(vertex.color);
-            out.push_back(Vertex{
-                { vertex.position.x, vertex.position.y, vertex.position.z },
-                { color[0], color[1], color[2] },
-                { 0.0f, 0.0f }
-            });
-        }
+            append_vertex(vertex);
 
         return out;
     }
@@ -120,27 +110,30 @@ namespace epochengine::vulkancontext
         const epochengine::core::Context* ctx)
     {
         std::vector<std::uint16_t> out{};
-        const auto source = epochengine::previewgrid::grid_indices();
+        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
+        const auto sourceVertices = epochengine::previewgrid::grid_vertices();
+        const auto sourceIndices = epochengine::previewgrid::grid_indices();
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
         const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
-        out.reserve(source.size() + markerCount + objectVertices.size());
+        out.reserve(solidVertices.size() + sourceIndices.size() + markerCount + objectVertices.size());
 
-        for (const auto index : source)
-            out.push_back(static_cast<std::uint16_t>(index));
+        for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(solidVertices.size()); ++i)
+            out.push_back(i);
 
-        const std::uint16_t baseVertex =
-            static_cast<std::uint16_t>(epochengine::previewgrid::grid_vertices().size());
+        const std::uint16_t lineBase = static_cast<std::uint16_t>(solidVertices.size());
+        for (const auto index : sourceIndices)
+            out.push_back(static_cast<std::uint16_t>(lineBase + index));
+
+        const std::uint16_t markerBase = static_cast<std::uint16_t>(lineBase + sourceVertices.size());
         for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(markerCount); ++i)
-            out.push_back(static_cast<std::uint16_t>(baseVertex + i));
+            out.push_back(static_cast<std::uint16_t>(markerBase + i));
 
-        const std::uint16_t objectBase =
-            static_cast<std::uint16_t>(baseVertex + markerCount);
+        const std::uint16_t objectBase = static_cast<std::uint16_t>(markerBase + markerCount);
         for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(objectVertices.size()); ++i)
             out.push_back(static_cast<std::uint16_t>(objectBase + i));
 
         return out;
     }
-
     export std::vector<Vertex> preview_vertices_for(const epochengine::core::Context* ctx)
     {
         return build_preview_vertices(ctx);
@@ -149,5 +142,9 @@ namespace epochengine::vulkancontext
     export std::vector<std::uint16_t> preview_indices_for(const epochengine::core::Context* ctx)
     {
         return build_preview_indices(ctx);
+    }
+    export std::uint32_t preview_solid_index_count_for(const epochengine::core::Context* ctx)
+    {
+        return static_cast<std::uint32_t>(epochengine::previewgrid::object_solid_vertices_for(ctx).size());
     }
 }

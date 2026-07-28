@@ -2,398 +2,172 @@
 
 ## Gate
 
-Backend-native sampled render-to-texture for OpenGL-derived contexts.
+Consolidate the capability model and land the first baseline 2D vertical slice:
+project requirements, honest backend evidence, temporal texture documents,
+physical texture-residency plans, Canvas2D composition contracts, and settings
+that expose only what the active build can prove.
+
+This is the first gate in the two-month playable-2D critical path defined by
+`Engine/docs/engine/capability_tier_architecture.md`.
 
 ## Sealed Baseline
 
-The published `v0.88.69` runtime release and updater are accepted and frozen.
-This pass must not edit updater behavior, updater UI, worker/handoff scripts,
-packaging, release metadata, tags, or release assets unless the operator
-explicitly reopens that gate. Development-source version metadata may advance
-without changing the packaged baseline.
+The published `v0.88.69` runtime and updater remain accepted and frozen. Do not
+edit updater code or UI, handoff/build scripts, packaging, release metadata,
+tags, or release assets unless the operator explicitly reopens that lane.
+Development-source version metadata may advance independently.
 
-## Why This Gate Matters
+Preserve these accepted source contracts:
 
-This is the first vertical proof of Epoch's renderer-resource spine. It
-validates shared descriptors, backend-native allocation, render-target
-ownership, material texture binding, graph pass execution, and the Engine
-Arcade screen path without turning the arcade package into the whole mission.
+- normal editor operation owns one live backend; multicontext is diagnostic;
+- whole-editor context replacement preserves editor state and retires the old
+  backend instead of opening another editor;
+- Engine Arcade owns the sampled render-to-texture graph proof and procedural
+  fallback;
+- renderer capability reporting separates descriptors, graph build, native
+  allocation, presentation, benchmark, and production evidence;
+- reusable GUI state belongs in EpochGui while native hosts and backend drawing
+  remain engine adapter responsibilities.
 
-## Current Spine Goal
+## Current Source Truth
 
-Build a truthful renderer spine where every modern OpenGL feature lands as a
-reusable engine feature family, proves itself in OpenGL first, reports
-capability truth per backend, and leaves Vulkan/DirectX with clean equivalent
-contracts instead of drift.
+The working tree contains these current or in-progress foundations:
 
-## Current Evidence
+- `capability.profile` extends existing capability, budget, `perf.tier`, and
+  render-device vocabulary with backend-neutral tiers, feature/evidence states,
+  per-subsystem profiles, project requirements, deterministic selection, and
+  build-safe no-overclaim checks;
+- `render.math` owns shared renderer-neutral vectors and linear color;
+- `render.lighting` owns generation-checked light identity, bounded registries,
+  immutable frames, environment state, metrics, and reference raster lighting;
+- editor and project preview map scene lights through the shared lighting frame
+  while retaining truthful reference-solid output until native shading lands;
+- `render.ray` owns validated CPU AABB, sphere, triangle, scene, and voxel-DDA
+  queries; editor selection uses it and Focus changes the preview camera;
+- `physics.manager` owns stable bodies, bounded deterministic commands,
+  fixed-step commit boundaries, snapshots, restoration, and metrics, but not a
+  solver;
+- `audio.manager` owns clips, sources, buses, listener/spatial state, temporal
+  scheduling, mix plans, and metrics, but not physical output;
+- `voxel.storage` and `water.system` own deterministic sparse/reference state
+  without claiming native rendering;
+- `scene.tier0` and terrain foundations establish reusable default-scene data;
+- `authoring.texture` is the first four-layer authoring vertical slice: stable
+  document meaning, semantic history, compiled artifact, and disposable
+  standalone/atlas/bindless/sparse residency plan;
+- `package.registry` owns fail-closed extension evidence policy, not download,
+  verification, or native activation;
+- EpochEngineExtensions now owns the manifest-backed capability technique
+  gallery: labeled context/tier scene stations describe required features,
+  evidence, fallbacks, and scene intent without importing a second renderer
+  spine or claiming unproved native effects;
+- Engine Arcade now validates its canonical cabinet/screen scene nodes, sampled
+  render-surface material binding, geometry storage, and built-in scene catalog;
+- EpochGui dependency work adds portable font, image, input, rounded-rectangle,
+  text, layout, docking, popup, panel, and floating-window primitives.
 
-- OpenGL owns the first real native sampled-RTT hook factory for FBO/color
-  texture/depth renderbuffer/sampler allocation.
-- The engine contract harness now imports that real hook factory, installs it
-  on the OpenGL-family device, and verifies the shared `engine_arcade.screen`
-  descriptor/handle/work-order path can allocate and destroy records without
-  claiming live GPU allocation when no GL context is registered.
-- `render.graph` now rejects `MaterialTextureSlot::render_surface` bindings
-  unless the referenced texture is owned by a sampled render-texture asset with
-  a sampler. Plain texture handles no longer count as arcade/runtime screen
-  surfaces.
-- Sampled render-texture samplers are now first-class graph resources. The graph
-  maps `engine_arcade.screen` color texture, sampler, and render target handles
-  together, and skips ordinary sampler teardown because the RTT asset owns native
-  destruction.
-- `render_surface` material slots now carry an explicit sampler resource. The
-  graph binds the sampled RTT only when that sampler matches the owning
-  render-texture asset sampler, and the harness proves mismatched samplers are
-  rejected instead of silently sampling the wrong surface state.
-- `render.arcade` now makes `engine_arcade.screen` a real two-pass proof shape:
-  the populate pass targets the sampled render texture with a tiny scene model,
-  and the cabinet pass samples that render surface through a material slot.
-- Engine Arcade now stages an actual cabinet preview assembly in both the
-  editor package preview and generated game-shell scene files instead of a
-  single placeholder box: base/body/control deck plus screen/marquee entities.
-- SDL3 now owns the first live non-OpenGL sampled-RTT presentation path: its
-  registered renderer allocates an SDL target texture, renders the deterministic
-  Engine Arcade attract pass into it, then samples it onto the staged screen
-  marker. The no-renderer path still fails closed, so SDL3 remains `Partial`
-  rather than claiming unconditional support. SFML3 and Raylib remain
-  runtime-availability-gated without equivalent presentation proof.
-- Raylib3 now keeps its logical backend identity inside the shared
-  OpenGL-family device, so the build-only `engine_arcade.screen` graph,
-  cabinet material/model, fake-native hook, and descriptor/work-order contracts
-  cover OpenGL, SDL3-over-GL, SFML-over-GL, and Raylib-over-GL without claiming
-  live native allocation.
-- OpenGL editor preview now consumes sampled render-surface markers for Engine
-  Arcade: it owns a native texture/FBO/depth target, paints a deterministic
-  attract pass into that target, and samples the color texture onto the staged
-  `EngineArcadeScreen` panel as the first visible presentation proof.
-- The build-safe arcade RTT contract now covers OpenGL-family, SDL3, SFML3, and
-  Raylib cabinet graph submission honestly. OpenGL-family command contexts keep
-  post-frame render-target evidence after the pass closes, SDL3/SFML3/Raylib
-  cabinet checks require sampled bindings only when a live native runtime exists,
-  and otherwise prove fail-closed no-runtime behavior without claiming allocation.
-- Raylib's render device now owns CPU-side resource records for graph buffers,
-  materials, meshes, models, binding sets, and submitted model evidence, so the
-  Engine Arcade cabinet graph can prove model submission in the Raylib lane while
-  native RTT allocation remains runtime-availability-gated.
-- System Info and the contract harness now report sampled RTT as layered
-  evidence instead of a single support claim: descriptor contract, graph proof,
-  hook/adaptor readiness, live native allocation, presentation proof, and the
-  sampled-RTT rollup are distinct. SDL3 presentation is now `Partial`; SFML3
-  and Raylib remain `Missing` until a live allocation and display path is proven.
-- EpochGui now owns a backend-neutral `TextControlController` with UTF-8-safe
-  caret boundaries, ranged selection, multiline and word navigation,
-  insert/delete/copy/cut/paste intent, read-only behavior, and measured scroll
-  visibility. Native clipboard access, glyph measurement, rendering, and input
-  translation remain engine-adapter responsibilities.
-- The editor toolbar now exposes 3D scene construction and 2D game/UI
-  construction through an EpochGui-backed segmented scene-mode control, so
-  Canvas2D work is an explicit compact mode switch instead of a second wide tab
-  or a transient dropdown.
-- Windows source now performs editor context selection as an exclusive
-  replacement transaction: capture state, retire and clean the source backend,
-  create one docked replacement in the same host, adopt and restore its editor
-  session, and hold the transaction until native backend readiness. Failed targets retire and
-  recover through the source backend; SDL/SFML/Raylib thread ownership and
-  backend-child shutdown stay tied to the stable host, manager-host destruction
-  waits for renderer cleanup, and Linux partial initialization is cleaned before
-  fallback. The operator accepted SDL, SFML, OpenGL, Vulkan, DirectX, and
-  software replacement behavior from the `v0.87.71` build. The `v0.87.72`
-  source makes Raylib readiness depend on a successful owner-thread GL bind and
-  completed first present. The `v0.87.73` source additionally routes adopted
-  GLFW child layout through Raylib's render-thread queue to remove the remaining
-  click-time UI/render lock inversion. The `v0.87.74` post-readiness session
-  gate was too broad and stalled threaded hardware replacements while Software
-  continued to work. The `v0.87.75` source makes the dropdown transaction adopt
-  the exact context returned by the multicontext manager, restores editor state
-  before normal backend activation, and excludes only that target from generic
-  multicontext enumeration until render-ready. Operator testing showed that
-  `v0.87.75` still retired the source backend inside the editor frame using it,
-  so first switches could work while a second switch stopped during source
-  close; it also released hardware replacements before the manager finalized
-  the transaction. The `v0.87.76` source queues retirement to the next manager
-  frame boundary, but a fresh operator trace proved its replacement-only render
-  pause could deadlock after native readiness and its manual session restore
-  still overlapped backend initialization. The `v0.87.77` source removed that
-  pause, but fresh all-backend traces showed the generic session loop could
-  observe readiness later in the same frame and race the still-active
-  transaction. The `v0.87.78` source publishes readiness only after a successful
-  backend frame, keeps the exact replacement excluded until then, and retains
-  transaction ownership through normal-path state restoration and a
-  render-thread acknowledgement of the first restored editor frame. A failed
-  frame or restore retires the replacement before fallback, repeat requests are
-  rejected while adoption is active, and routed/floating or non-ready contexts
-  cannot be mistaken for the whole editor. Focused all-backend repeated-switch
-  testing remains required before runtime acceptance. The same source line now
-  serializes active-window, render-thread, and deferred-cleanup ownership so a
-  Win32 surface remains alive until its renderer has released native resources
-  and joined. Raylib resize no longer overwrites the grid-assigned child
-  position, its destroyed GLFW context is explicitly cleared during teardown,
-  and adopted backend children forward keyboard/text events into EpochGui.
-  Fresh Release traces then exposed two remaining native lifecycle gaps:
-  backend initialization/cleanup exceptions could escape `noexcept`, and a
-  backend-owned HWND procedure could erase active context storage from its
-  renderer thread. The current source catches and reports lifecycle exceptions,
-  marshals that ownership transfer to the manager UI thread, synchronously
-  docks Raylib on its GLFW owner thread, and requires a visible, parented,
-  non-empty Raylib surface before first-present readiness. MSVC Debug and
-  Release editor builds plus both build-safe contract runs pass; focused
-  operator Raylib visibility and repeated Release switching remain the runtime
-  acceptance gate. The `v0.88.70` source additionally keeps GUI/session state
-  alive until renderer retirement is proven, makes native retirement
-  notification one-shot, and synchronously joins the old renderer during a
-  whole-editor replacement before the new backend is constructed. A
-  switch-specific Raylib surface synchronization experiment was removed after
-  the live multicontext lane showed Raylib falling to 16 FPS while the other
-  contexts held near 120 FPS; shared Raylib drawing remains unchanged.
-  The current repair separates Raylib native owner-thread work from its draw
-  queue, so GLFW docking and resize mutations finish before `BeginDrawing`.
-  Raylib now exposes one stable backend resize callback rather than installing
-  a runtime closure into reusable context state and tracks logical window and
-  live framebuffer dimensions separately. Successful `EndDrawing()` is again the
-  first-present boundary: native visibility and parenting heuristics cannot
-  leave the editor session uninitialized after Raylib has presented a frame,
-  and no-op resize requests are filtered before reaching GLFW. The docked
-  placeholder remains hidden until the GLFW child takes over, adoption publishes
-  the complete HWND/DC/GL-context bundle, and the frame loop leaves viewport and
-  projection rebuilds to Raylib's framebuffer callback. Raylib texture lookup
-  copies the descriptor while atlas
-  storage is locked, and the optimized core log bridge no longer writes through
-  `std::println` or a raw `FILE*` during replacement. These changes preserve the
-  existing frame and queue order while repairing the two concrete failures from
-  the latest operator traces. Whole-editor
-  replacement also destroys the retired
-  GUI/font/chat/scene session immediately after renderer join and never stores
-  the retired source pointer in the restore record. MSVC Debug/Release editor
-  and StaticLib builds plus both build-safe contract runs pass. Focused operator
-  Raylib visibility, multicontext rendering, and repeated optimized switching
-  remain the runtime acceptance gate.
-- Hosted `v0.87.77` full-engine Clang proof exposed an LLVM 22.1.8 CGSCC crash
-  in `core.commandline.ixx` at the previous source-local `-O1` workaround. The
-  `v0.87.78` lane compiles only `core.commandline.ixx` and `net.ixx` at `-O0`;
-  renderer and other engine Release code remain at `-O3`.
-- Release checkpoint: `v0.87.32` keeps launcher-initiated updates in the
-  launcher window until packaged handoff is staged or source worker handoff
-  evidence is ready. Packaged runtime installs can still distinguish stable
-  release parity from newer main-source availability after the follow-up source
-  bump.
-- Source checkpoint: `main` is advanced to v0.87.33 after the v0.87.32
-  Windows/Linux updater release so packaged installs can intentionally continue
-  from release parity into a main-source rebuild.
-- Release checkpoint: `v0.87.34` keeps nested package resolution in the updater
-  and stages Windows release archives with the runtime payload at archive root
-  so older packaged updaters can install the repaired line.
-- Source checkpoint: `main` is advanced to v0.87.35 after the v0.87.34
-  packaged-updater release while the published stable runtime remains v0.87.34.
-- Release checkpoint: `v0.87.36` fixes GUI-host updater child-process stdio so
-  hidden downloader, extractor, staged handoff, and source rebuild workers do
-  not inherit invalid descriptors from launcher/editor windows.
-- Source checkpoint: `main` is advanced to v0.87.37 after the v0.87.36 updater
-  stdio release while the published stable runtime remains v0.87.36.
-- Release checkpoint: `v0.87.38` routes editor source-only update confirmation
-  directly to the detached source worker and reports guarded failures instead
-  of leaving the modal at the early install progress band.
-- Source checkpoint: `main` is advanced to v0.87.39 after the v0.87.38 editor
-  source-update handoff release while the published stable runtime remains
-  v0.87.38.
-- Release checkpoint: `v0.87.42` restores updater restart countdown/progress
-  behavior, gives the launcher a dedicated update progress/cancel/restart
-  surface, foregrounds restarted Windows runtimes from the handoff scripts, and
-  moves GUI/context implementation ownership to `src/epochgui` and
-  per-backend `src/renderers/...` folders.
-- Release repair checkpoint: `v0.87.42` now also clears stale updater cancel,
-  source, and handoff logs before spawning the detached source worker, refuses
-  uncleared source snapshot roots, repairs nested GitHub archive roots only when
-  they contain `Engine/vcpkg.json`, and drives launcher/editor loading states
-  through the reusable EpochGui loading-screen primitive. The retry path also
-  redownloads same-URL packaged archives, isolates source rebuild
-  downloads/extraction in per-run work roots, lets Cancel clear the active
-  disposable source cache, and removes fake launcher update actions while
-  preserving restart-only completion evidence.
-- Repair evidence: the refreshed `v0.87.42` release candidate passed MSVC
-  Debug and Release `ConsoleApplication1`, Debug and Release
-  `--engine-contract-self-test`, staged Windows package `EpochEditor.exe
-  --version`, Windows package unzip verification, Linux Clang Release
-  no-manifest OpenGL/software build, Linux CTest, Linux `epoch --version`,
-  Linux tarball executable verification, and refreshed Windows/Linux checksums.
-  The WSL manifest/vcpkg lane is blocked in this environment until
-  `python3.10-venv` is available for the `libsystemd` port, so the package lane
-  used the already-supported no-vcpkg Clang path instead of shipping stale bits.
-- Source checkpoint: `main` is advanced to v0.87.43 after the refreshed
-  v0.87.42 Windows/Linux packaged-updater release while the published stable
-  runtime remains v0.87.42.
-- Release checkpoint: `v0.87.44` hardens updater cancel/retry behavior after
-  the same-session crash reports: recent source-update cancellation now blocks
-  launcher mode switches, active source rebuilds are reported as source attempts
-  to editor state machines, launcher/editor source-worker evidence pumps catch
-  log/filesystem exceptions into visible update failure states, and the legacy
-  CWD-relative `REPO-main` cleanup path is disabled in favor of executable-local
-  tokenized update work roots.
-- Source checkpoint: `main` is advanced to v0.87.45 after the v0.87.44
-  Windows/Linux updater crash repair release while the published stable runtime
-  remains v0.87.44.
-- Release checkpoint: `v0.87.48` restores the Linux/WSL vcpkg source-update
-  lane. Linux `build.sh` now validates stale vcpkg baselines, resolves
-  `clang-scan-deps`, rejects unsupported full-engine Unix Makefiles early,
-  keeps SDL3/SFML/Raylib vcpkg feature sets release-safe without making vcpkg
-  Windows-only, and repairs static Raylib GLAD/cgltf ownership plus SDL module
-  backend registration.
-- Source checkpoint: `main` is advanced to v0.87.49 after the v0.87.48
-  Windows/Linux updater release while the published stable runtime remains
-  v0.87.48.
-- Release checkpoint: `v0.87.50` repairs the Linux Raylib atlas lane by moving
-  Raylib texture backend storage out of `Context::native_drawable`, uploading
-  from immutable atlas pixel snapshots, making the Raylib context atlas hook
-  perform a real upload instead of returning a synthetic handle, marking the
-  Raylib frame active before queued GUI uploads drain, and packaging the
-  tracked GUI font from `Engine/assets/fonts` into the Linux release payload.
-- Source checkpoint: `main` is advanced to `v0.87.51` after the refreshed
-  `v0.87.50` Windows/Linux Raylib atlas release while the published stable
-  runtime remains `v0.87.50`.
-- Release checkpoint: `v0.87.52` serializes Linux GLAD initialization before
-  render threads can use its process-global loader state. The current static
-  Raylib package exports an incompatible GLAD ABI, so Linux release/source
-  builds leave Raylib disabled while retaining vcpkg-backed OpenGL, SDL, and
-  software lanes. The package includes the tracked `assets/fonts/Roboto-Regular.ttf`
-  and passed bounded isolated editor startup checks for every active Linux lane.
-- Release repair checkpoint: the refreshed `v0.87.52` source-update lane now
-  resolves or bootstraps vcpkg on Linux, passes its exact vcpkg root and policy
-  overlay to `build.sh`, and uses the supported Clang full-engine path without
-  falling back to GCC modules. The tracked Linux manifest now uses a public
-  baseline shared by the Windows and Linux toolchains, keeps incompatible
-  Linux Vulkan/SFML/Raylib packages out of the install, and preserves the
-  operator-verified Linux SDL, OpenGL, and software context policy.
-- Source checkpoint: `main` is advanced to `v0.87.53` after the `v0.87.52`
-  stable Windows/Linux release so packaged installs can exercise source-update
-  detection while published stable remains `v0.87.52`.
-- Build evidence: MSVC Debug and Release x64 `ConsoleApplication1`, Windows
-  CMake/MSVC Debug build plus CTest, Linux Clang Release engine build plus
-  CTest, and Linux `ninja-clang-debug` build plus CTest passed for the v0.87.30
-  updater checkpoint. The local MSVC Debug `ConsoleApplication1` target now
-  passes for the v0.87.32 launcher-update status/handoff fix, and
-  build-safe contract tests now pass after the Raylib/OpenGL-family/SDL/SFML
-  arcade RTT contract and capability-layer updates. The hosted
-  `linux-clang-engine` lane caught module-sensitive include gaps in the
-  EpochGui implementation translation units; the source now includes
-  `<cstdint>` explicitly before relying on `std::uint32_t` or
-  `std::uint64_t`, `opengl.textures` now includes the Linux X11 `Window`
-  declaration before binding GLX drawable state, and `engine.gui` imports the
-  `epoch.gui` module rather than including its headers in the global module
-  fragment. Keep the Linux Clang full-engine job green before calling a
-  checkpoint sealed, because the
-  portable Linux Clang, GCC, and Windows lanes can pass while this full-engine
-  lane still catches C++23 module/header hygiene regressions.
+These facts are contracts, not blanket runtime claims. Current checkpoint proof
+includes MSVC Debug/Release editor builds and contracts, the managed Clang 22
+full-engine Release build, 4/4 Linux engine CTests, and 5/5 standalone EpochGui
+feature tests. SDL/SFML/Vulkan scene-solid presentation remains `Partial` until
+operator visual evidence exists.
 
-## Allowed Source Areas
+## Immediate Implementation Order
 
-- `Engine/modules/render.device.ixx`
-- `Engine/modules/render.graph.ixx`
-- `Engine/modules/render.arcade.ixx`
-- `Engine/src/epoch.render.graph.cpp`
-- OpenGL backend resource/context/render files
-- SDL3 OpenGL-backed context/resource files
-- SFML3 OpenGL-backed context/resource files
-- Raylib3 OpenGL-backed context/resource files
-- `package.registry` only if the Engine Arcade render asset contract needs a
-  small correction
-- System Info renderer capability reporting if existing code supports it
-- `Engine/docs/engine/renderer_feature_matrix.md`
-- `Changes/roadmap.md`
+1. Integrate `capability.profile` once through the existing capability/budget
+   owners, project profiles, System Info, and settings. Do not add another tier
+   registry.
+2. Finish editor ray selection, Focus, default ground/light/spawn behavior, and
+   Run/Build persistence for a Tier-0 scene.
+3. Finish the texture document contract and connect logical texture artifacts
+   to bounded physical residency plans.
+4. Add the renderer-neutral Canvas2D compose, sprite material/batch, tile-layer,
+   deterministic sorting, sampling, alpha, scaling, and diagnostics contracts.
+5. Prove `T0-CPU` reference behavior and `T1-GL` presentation before broadening
+   portable or explicit backend claims.
+6. Extend settings and controls in the same pass as each capability so users can
+   select project policy, inspect evidence, and tune budgets without stale UI.
 
-## Source Slice Ownership
+## Backend Repair Within This Gate
 
-High-output work on this gate should land buildable code slices, not stop at
-inventory. Split work by ownership when using subagents:
+SDL3, SFML3, and Vulkan currently show editor scene solids as wireframe-only in
+operator evidence.
 
-- descriptor/resource contract slice:
-  `render.device` handles/descriptors, backend requirements, sampled RTT
-  ownership records, and destroy/allocation contracts
-- graph/binding slice:
-  `render.graph` compile/bind validation, render-pass read/write resolution,
-  sampler/material slot correctness, and contract harness assertions
-- proof consumer slice:
-  `render.arcade` and `package.registry` declarations for
-  `engine_arcade.screen`, cabinet graph passes, and package-visible resource
-  requirements
-- OpenGL-family native slice:
-  OpenGL FBO/texture/sampler/depth hooks plus SDL3/SFML3/Raylib runtime-gated
-  native resource adapters, each kept in its backend-owned files
-- capability/status slice:
-  System Info and renderer matrix truth so `Present` is never claimed from
-  descriptor-only or no-runtime code
-  - promote capability reporting beyond booleans: distinguish descriptor
-    contract, build-only graph proof, hook readiness, live native allocation
-    readiness, and presentation proof
-  - DirectX/Vulkan sampled-RTT rows stay `Partial`/`Missing` until real
-    `render.device_*` native implementations exist
-  - OpenGL-family rows must separate hook factory readiness from allocation in
-    a live context
-  - SDL3/SFML3/Raylib rows must keep no-runtime refusal separate from live
-    runtime allocation support
-- build/metadata slice:
-  CMake, MSVC project/filter, and focused docs/changelog updates after the code
-  builds
+- SDL3 and SFML3 adapter work may consume the existing shared solid triangle
+  stream while preserving queue, GUI replay, and present order.
+- SFML projection must preserve complete three-vertex triangle groups.
+- SDL render failures must report evidence and fail the frame visibly.
+- Vulkan needs a separate scene-solid triangle path, correct depth policy, and
+  preview-geometry invalidation; its GUI triangle pipeline is not scene proof.
+- These lanes remain `Partial` until build and operator visual proof passes.
+- They must not delay the `T1-GL` 2D product unless shared contracts regress.
 
-Run subagents only on disjoint slices with clear file ownership. The main agent
-keeps the integration path and final build proof.
+## Settings And Control Rule
 
-## Forbidden Source Areas
+Every maturing system must update its settings, controls, diagnostics, and
+persistence scope with the implementation:
 
-- Software renderer parity
-- Shadows
-- Deferred rendering
-- Skeletal animation
-- Particles
-- D3D12
-- Broad GUI redesign
-- Broad Package Manager redesign
-- OS AI/model/tooling changes
-- Unrelated source-shape cleanup
-- Documentation-only pass
-- Updater/release code, UI, scripts, packaging, tags, or assets unless the
-  operator explicitly reopens the sealed `v0.88.69` baseline
+- unavailable options are absent or disabled with a reason;
+- partial capabilities are labeled experimental;
+- defaults come from project profile, measured limits, and budgets;
+- advanced controls use progressive disclosure;
+- EpochGui owns portable control state and layout;
+- engine adapters own backend input/drawing, project state, native hosts, and
+  evidence;
+- mobile/game/headless profiles can omit floating and docking hosts.
+
+## Selective Reference Intake
+
+`Autodidac/tiered_gfx_OpenGL_modular_context_demo` is a technique lab. Only
+license-audited, surgically translated ideas may enter Epoch:
+
+- capability/quality controls;
+- material and view descriptors;
+- RTT/final composition;
+- OpenGL techniques behind Epoch render-device/graph contracts;
+- manifest-backed CC0 diagnostic assets.
+
+Do not import its alternate resource spine, platform scaffolding, vendored GUI,
+hard-coded scenes, raw GL ownership outside the OpenGL adapter, or capability
+claims. Advanced effects follow the playable 2D loop.
+
+## Forbidden Expansion
+
+Do not use this gate to:
+
+- edit the sealed updater/release lane;
+- claim native PBR, shadows, water, collision solving, physical audio, hardware
+  ray query, or RT pipelines without implementation and proof;
+- start multiplayer, persistent unscripted AI, planetary terrain, or a broad 3D
+  authoring campaign;
+- add a second capability registry, renderer resource spine, texture identity,
+  node framework, or GUI library;
+- make atlases, descriptors, GPU buffers, pipelines, previews, or caches
+  canonical authoring state;
+- copy unreviewed code/assets from the OpenGL demo or `addons/`.
 
 ## Acceptance
 
-- OpenGL-derived contexts allocate real native texture, sampler,
-  framebuffer/render-target, and optional depth/stencil objects from shared
-  descriptors.
-- Render graph compilation resolves the sampled render texture into readable
-  texture/sampler bindings and writable render-target bindings.
-- A render pass can target the render texture.
-- A later pass/material can sample the render texture through
-  `MaterialTextureSlot::render_surface`.
-- Engine Arcade declares and uses `engine_arcade.screen` as a proof surface.
-- Capability reporting says present only for actually implemented behavior;
-  otherwise partial/missing/deferred.
-- Build/check passes using the safest command allowed by `AGENTS.md`.
+The active gate is accepted when:
 
-## Stop Conditions
+1. CMake and MSVC metadata contain each new module/source exactly once.
+2. Debug and Release `ConsoleApplication1` build.
+3. Debug and Release `--engine-contract-self-test` pass.
+4. Capability selection proves CPU-only, GLES baseline, OpenGL compute,
+   equivalent explicit tiers, deterministic fallback, project matching, and
+   no-overclaim behavior.
+5. Texture tests prove deterministic revisions, sparse boundedness, semantic
+   undo/redo, reproducible compilation, and physical-plan independence.
+6. Tier-0 scene tests prove selection, Focus, ground, light, spawn, save/reopen,
+   and Run/Build use the same project-owned state.
+7. Canvas2D contracts prove deterministic ordering, scaling, blend/sampling,
+   offscreen compose, and cache recreation.
+8. Renderer docs keep SDL/SFML/Vulkan solids `Partial` until build and eye proof.
+9. No updater, release, generated cache, or unrelated operator file is staged.
 
-Stop and report partial progress if:
+## Next Gate
 
-- backend context ownership prevents safe resource creation,
-- handle mapping needs a new backend registry,
-- existing capability reporting has no present/partial/missing/deferred model,
-- build fails twice on the same issue.
-
-Do not broaden scope to compensate.
-
-## Mission Cache Pointer
-
-Durable cross-pass mission memory lives in `Changes/mission_cache.md`. Keep this
-file focused on the current gate; do not widen a source pass because the cache
-contains broader roadmap work.
-
-## Temporal Architecture Boundary
-
-`Engine/docs/engine/temporal_engine_architecture.md` and the temporal mission in
-`Changes/mission_cache.md` define the next foundational campaign. They do not
-widen this sampled-render-target pass. Temporal source work begins in a named
-future pass at `TimePoint`, stable IDs, immutable event serialization, atomic
-transactions, and exact replay tests; it must not begin with networking,
-unscripted AI, full physics, or speculative editor UI.
-
-Renderer work in this pass must remain compatible with that direction: renderers
-consume time-addressed observations, temporal histories are explicitly keyed and
-disposable, and no backend becomes the authoritative owner of simulation time.
+Add sprite/tilemap runtime artifacts, configurable input, deterministic 2D
+physics, physical audio, and the editor tools needed to author the acceptance
+project. The canonical schedule is `Changes/roadmap.md`; durable follow-up is
+`Changes/mission_cache.md`.

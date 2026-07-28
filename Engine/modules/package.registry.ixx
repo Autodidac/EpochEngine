@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -90,11 +90,76 @@ export namespace epochengine::package_registry
         std::size_t networkSensitiveCount{};
         std::size_t duplicateIdCount{};
     };
+    enum class PayloadRole : std::uint8_t
+    {
+        CoreOnly,
+        OptionalExtension,
+        RequiredExtension
+    };
+
+    enum class PayloadRejectReason : std::uint8_t
+    {
+        None,
+        UnknownPackage,
+        MissingEvidence,
+        PackageMismatch,
+        RepositoryMismatch,
+        MissingImmutableRevision,
+        InvalidImmutableRevision,
+        UnverifiedImmutableRevision,
+        MissingContentHash,
+        InvalidContentHash,
+        UnverifiedContentHash,
+        MissingLicenseEvidence,
+        UnverifiedLicenseEvidence,
+        MissingBuildTestEvidence,
+        UnverifiedBuildTestEvidence,
+        HumanApprovalRequired,
+        ApprovalIdentityMismatch,
+        NativeCodeNotAllowed,
+        NativeCodeApprovalRequired
+    };
+
+    struct PackagePayloadRequirement final
+    {
+        std::string_view packageId{};
+        PayloadRole role{PayloadRole::CoreOnly};
+        std::string_view sourceRepo{};
+        bool coreFallbackAvailable{};
+        bool requiresBuildTestEvidence{};
+        bool nativeCodeAllowed{};
+    };
+
+    struct PackagePayloadEvidence final
+    {
+        std::string_view packageId{};
+        std::string_view sourceRepo{};
+        std::string_view immutableRevision{};
+        std::string_view contentHash{};
+        std::string_view licenseEvidence{};
+        std::string_view buildTestEvidence{};
+        std::string_view approvedContentHash{};
+        bool immutableRevisionVerified{};
+        bool contentHashVerified{};
+        bool licenseEvidenceVerified{};
+        bool buildTestEvidenceVerified{};
+        bool humanApproved{};
+        bool containsNativeCode{};
+        bool nativeCodeApproved{};
+    };
+
+    struct PayloadActivationDecision final
+    {
+        bool payloadAllowed{};
+        bool coreFallbackAvailable{};
+        PayloadRejectReason reason{PayloadRejectReason::None};
+    };
 
     inline constexpr std::string_view kEpochEngineExtensionsRepo = "https://github.com/Autodidac/EpochEngineExtensions";
     inline constexpr std::string_view kForestFactoryReferenceRepo = epochengine::forest::kForestFactoryReferenceRepo;
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
+    inline constexpr std::string_view kEngineArcadeOptionalAssetRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadeSceneId = "engine_arcade_scene";
     inline constexpr std::string_view kEngineArcadeDefaultSceneId = "snake";
     inline constexpr std::string_view kEngineArcadeSceneIds =
@@ -358,6 +423,192 @@ export namespace epochengine::package_registry
     {
         const auto* package = find(id);
         return package != nullptr ? package->externalSourceRepo : std::string_view{};
+    }
+    [[nodiscard]] constexpr PackagePayloadRequirement payload_requirement(
+        std::string_view id) noexcept
+    {
+        const PackageDescriptor* package = find(id);
+        if (package == nullptr)
+        {
+            return {};
+        }
+
+        if (id == kEngineArcadePackageId)
+        {
+            return {
+                id,
+                PayloadRole::OptionalExtension,
+                kEngineArcadeOptionalAssetRepo,
+                true,
+                true,
+                false
+            };
+        }
+
+        if (id == kEngineForestFactoryPackageId)
+        {
+            return {
+                id,
+                PayloadRole::OptionalExtension,
+                kForestFactoryPackageSourceRepo,
+                true,
+                true,
+                true
+            };
+        }
+
+        if (package->kind == PackageKind::ResearchPrototype ||
+            package->kind == PackageKind::DownloadableSource)
+        {
+            return {
+                id,
+                PayloadRole::RequiredExtension,
+                package->externalSourceRepo,
+                false,
+                true,
+                true
+            };
+        }
+
+        if (!package->externalSourceRepo.empty())
+        {
+            return {
+                id,
+                PayloadRole::RequiredExtension,
+                package->externalSourceRepo,
+                false,
+                package->kind != PackageKind::ModelAsset,
+                false
+            };
+        }
+
+        return {id, PayloadRole::CoreOnly, {}, package->shipsInCore, false, false};
+    }
+
+    [[nodiscard]] constexpr bool hexadecimal_digest(
+        std::string_view value,
+        std::size_t digits) noexcept
+    {
+        if (value.size() != digits)
+        {
+            return false;
+        }
+        for (const char character : value)
+        {
+            const bool digit = character >= '0' && character <= '9';
+            const bool lower = character >= 'a' && character <= 'f';
+            const bool upper = character >= 'A' && character <= 'F';
+            if (!digit && !lower && !upper)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [[nodiscard]] constexpr bool immutable_revision_identity(
+        std::string_view value) noexcept
+    {
+        return hexadecimal_digest(value, 40) || hexadecimal_digest(value, 64);
+    }
+
+    [[nodiscard]] constexpr bool content_hash_identity(
+        std::string_view value) noexcept
+    {
+        constexpr std::string_view prefix = "sha256:";
+        return value.starts_with(prefix) &&
+               hexadecimal_digest(value.substr(prefix.size()), 64);
+    }
+
+    [[nodiscard]] constexpr PayloadActivationDecision evaluate_payload_activation(
+        const PackagePayloadRequirement& requirement,
+        const PackagePayloadEvidence& evidence) noexcept
+    {
+        if (requirement.packageId.empty())
+        {
+            return {false, false, PayloadRejectReason::UnknownPackage};
+        }
+        if (requirement.role == PayloadRole::CoreOnly)
+        {
+            return {true, requirement.coreFallbackAvailable, PayloadRejectReason::None};
+        }
+        if (evidence.packageId.empty())
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::MissingEvidence};
+        }
+        if (evidence.packageId != requirement.packageId)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::PackageMismatch};
+        }
+        if (evidence.sourceRepo != requirement.sourceRepo)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::RepositoryMismatch};
+        }
+        if (evidence.immutableRevision.empty())
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::MissingImmutableRevision};
+        }
+        if (!immutable_revision_identity(evidence.immutableRevision))
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::InvalidImmutableRevision};
+        }
+        if (!evidence.immutableRevisionVerified)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::UnverifiedImmutableRevision};
+        }
+        if (evidence.contentHash.empty())
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::MissingContentHash};
+        }
+        if (!content_hash_identity(evidence.contentHash))
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::InvalidContentHash};
+        }
+        if (!evidence.contentHashVerified)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::UnverifiedContentHash};
+        }
+        if (evidence.licenseEvidence.empty())
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::MissingLicenseEvidence};
+        }
+        if (!evidence.licenseEvidenceVerified)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::UnverifiedLicenseEvidence};
+        }
+        if (requirement.requiresBuildTestEvidence && evidence.buildTestEvidence.empty())
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::MissingBuildTestEvidence};
+        }
+        if (requirement.requiresBuildTestEvidence && !evidence.buildTestEvidenceVerified)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::UnverifiedBuildTestEvidence};
+        }
+        if (!evidence.humanApproved)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::HumanApprovalRequired};
+        }
+        if (evidence.approvedContentHash != evidence.contentHash)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::ApprovalIdentityMismatch};
+        }
+        if (evidence.containsNativeCode && !requirement.nativeCodeAllowed)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::NativeCodeNotAllowed};
+        }
+        if (evidence.containsNativeCode && !evidence.nativeCodeApproved)
+        {
+            return {false, requirement.coreFallbackAvailable, PayloadRejectReason::NativeCodeApprovalRequired};
+        }
+        return {true, requirement.coreFallbackAvailable, PayloadRejectReason::None};
+    }
+
+
+    [[nodiscard]] constexpr PayloadActivationDecision evaluate_payload_activation(
+        std::string_view packageId,
+        const PackagePayloadEvidence& evidence) noexcept
+    {
+        return evaluate_payload_activation(payload_requirement(packageId), evidence);
     }
 
     [[nodiscard]] constexpr std::string_view recommended_local_image_model_id() noexcept

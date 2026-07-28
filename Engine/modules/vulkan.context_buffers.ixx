@@ -128,5 +128,7 @@ namespace epochengine::vulkancontext
         indexBuffer = std::move(ib);
         indexBufferMemory = std::move(ibMem);
         indexCount = static_cast<std::uint32_t>(indices.size());
+        solidIndexCount = preview_solid_index_count_for(bound_context());
+        lineIndexCount = indexCount >= solidIndexCount ? indexCount - solidIndexCount : 0u;
     }
 }

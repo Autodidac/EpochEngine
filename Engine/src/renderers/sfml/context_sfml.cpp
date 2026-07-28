@@ -208,6 +208,35 @@ namespace
         if (lines.getVertexCount() > 0)
             s_window->draw(lines, renderStates);
 
+        sf::VertexArray solids(sf::PrimitiveType::Triangles);
+        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
+        for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+        {
+            sf::Vector2f a{};
+            sf::Vector2f b{};
+            sf::Vector2f c{};
+            if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, a)
+                || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, b)
+                || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, c))
+            {
+                continue;
+            }
+
+            a.x -= static_cast<float>(viewport.x);
+            a.y -= static_cast<float>(viewport.y);
+            b.x -= static_cast<float>(viewport.x);
+            b.y -= static_cast<float>(viewport.y);
+            c.x -= static_cast<float>(viewport.x);
+            c.y -= static_cast<float>(viewport.y);
+
+            const auto color = to_sfml_color(solidVertices[i].color);
+            solids.append(sf::Vertex(a, color));
+            solids.append(sf::Vertex(b, color));
+            solids.append(sf::Vertex(c, color));
+        }
+        if (solids.getVertexCount() > 0)
+            s_window->draw(solids, renderStates);
+
         const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
         if (markerCount > 0)

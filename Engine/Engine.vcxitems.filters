@@ -1120,4 +1120,85 @@
       <Filter>Resource Files</Filter>
     </ResourceCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Module Files\epoch\capability">
+      <UniqueIdentifier>{9b1c1c96-1787-45de-949a-5127d4057361}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module Files\epoch\authoring">
+      <UniqueIdentifier>{7a56a0a3-c219-44ec-b364-7d2f07869dc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module Files\epoch\terrain">
+      <UniqueIdentifier>{e7f08d55-5db3-48f5-a203-3af0774e71be}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module Files\epoch\audio">
+      <UniqueIdentifier>{3f5ffbf2-ae2f-4bd4-99fd-6cbe36b88e1e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module Files\epoch\physics">
+      <UniqueIdentifier>{a8f7644e-8168-49b8-8370-96e121131cef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Module Files\epoch\water">
+      <UniqueIdentifier>{df775d90-916b-47b0-9b19-0835b260c3da}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\audio">
+      <UniqueIdentifier>{745f96ec-b916-43ec-b8ca-df164463c19d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\physics">
+      <UniqueIdentifier>{943352a1-3c42-477b-9e60-c6157ea58d6b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\authoring">
+      <UniqueIdentifier>{4e5e0878-b307-48f5-ad7d-66633a33083d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\authoring\texture">
+      <UniqueIdentifier>{0304862f-2d95-4308-b1a6-4d29bc847130}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\capability.profile.ixx">
+      <Filter>Module Files\epoch\capability</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx">
+      <Filter>Module Files\epoch\terrain</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.tier0.ixx">
+      <Filter>Module Files\epoch\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.math.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx">
+      <Filter>Module Files\epoch\voxel</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx">
+      <Filter>Module Files\epoch\water</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx">
+      <Filter>Module Files\epoch\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx">
+      <Filter>Module Files\epoch\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx">
+      <Filter>Module Files\epoch\physics</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp">
+      <Filter>Source Files\epochengine\physics</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.document.cpp">
+      <Filter>Source Files\epochengine\authoring\texture</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.contract.cpp">
+      <Filter>Source Files\epochengine\physics</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.contract.cpp">
+      <Filter>Source Files\epochengine\authoring\texture</Filter>
+    </None>
+  </ItemGroup>
 </Project>

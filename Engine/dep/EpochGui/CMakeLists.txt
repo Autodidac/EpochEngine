@@ -2,7 +2,10 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.88.70 LANGUAGES CXX)
+project(EpochGui VERSION 0.88.71 LANGUAGES CXX)
+
+option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
+option(EPOCHGUI_ENABLE_INPUT "Build the optional EpochGui fallback input adapter module." OFF)
 
 set(EPOCHGUI_SOURCE_ROOT "" CACHE PATH "Directory containing include/gui and src/epochgui.")
 
@@ -34,11 +37,12 @@ if(NOT _epochgui_resolved_source_root)
 endif()
 
 set(EPOCHGUI_SOURCE_ROOT "${_epochgui_resolved_source_root}" CACHE PATH "Directory containing include/gui and src/epochgui." FORCE)
-
-set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory containing modules/epoch.gui.ixx." FORCE)
+set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory containing EpochGui module interfaces." FORCE)
 
 set(EPOCHGUI_MODULES
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.ixx"
+    "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.font.ixx"
+    "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.image.ixx"
 )
 
 set(EPOCHGUI_PUBLIC_HEADERS
@@ -56,10 +60,29 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/dockable_window.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/dock_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/floating_window.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/image.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/panel_host.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_control.cpp"
 )
+
+if(EPOCHGUI_ENABLE_ROUNDED_RECT)
+    list(APPEND EPOCHGUI_MODULES
+        "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.rounded_rect.ixx"
+    )
+    list(APPEND EPOCHGUI_SOURCES
+        "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/rounded_rect.cpp"
+    )
+endif()
+
+if(EPOCHGUI_ENABLE_INPUT)
+    list(APPEND EPOCHGUI_MODULES
+        "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.input.ixx"
+    )
+    list(APPEND EPOCHGUI_SOURCES
+        "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/input.cpp"
+    )
+endif()
 
 add_library(EpochGui STATIC
     ${EPOCHGUI_PUBLIC_HEADERS}
@@ -77,6 +100,11 @@ add_library(Autodidac::EpochGui ALIAS EpochGui)
 
 target_include_directories(EpochGui PUBLIC
     "$<BUILD_INTERFACE:${EPOCHGUI_SOURCE_ROOT}/include>"
+)
+
+target_compile_definitions(EpochGui PUBLIC
+    EPOCHGUI_ENABLE_ROUNDED_RECT=$<BOOL:${EPOCHGUI_ENABLE_ROUNDED_RECT}>
+    EPOCHGUI_ENABLE_INPUT=$<BOOL:${EPOCHGUI_ENABLE_INPUT}>
 )
 
 target_compile_features(EpochGui PUBLIC cxx_std_23)
@@ -110,4 +138,56 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
     )
     add_test(NAME EpochGui.TextControl COMMAND EpochGuiTextControlTests)
+
+    add_executable(EpochGuiFontTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/font_tests.cpp"
+    )
+    target_link_libraries(EpochGuiFontTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiFontTests PRIVATE cxx_std_23)
+    set_target_properties(EpochGuiFontTests PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    add_test(NAME EpochGui.Font COMMAND EpochGuiFontTests)
+
+    add_executable(EpochGuiImageTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/image_tests.cpp"
+    )
+    target_link_libraries(EpochGuiImageTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiImageTests PRIVATE cxx_std_23)
+    set_target_properties(EpochGuiImageTests PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    add_test(NAME EpochGui.Image COMMAND EpochGuiImageTests)
+
+    if(EPOCHGUI_ENABLE_ROUNDED_RECT)
+        add_executable(EpochGuiRoundedRectTests
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/rounded_rect_tests.cpp"
+        )
+        target_link_libraries(EpochGuiRoundedRectTests PRIVATE EpochGui)
+        target_compile_features(EpochGuiRoundedRectTests PRIVATE cxx_std_23)
+        set_target_properties(EpochGuiRoundedRectTests PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
+        add_test(NAME EpochGui.RoundedRect COMMAND EpochGuiRoundedRectTests)
+    endif()
+
+    if(EPOCHGUI_ENABLE_INPUT)
+        add_executable(EpochGuiInputTests
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/input_tests.cpp"
+        )
+        target_link_libraries(EpochGuiInputTests PRIVATE EpochGui)
+        target_compile_features(EpochGuiInputTests PRIVATE cxx_std_23)
+        set_target_properties(EpochGuiInputTests PROPERTIES
+            CXX_STANDARD 23
+            CXX_STANDARD_REQUIRED ON
+            CXX_EXTENSIONS OFF
+        )
+        add_test(NAME EpochGui.Input COMMAND EpochGuiInputTests)
+    endif()
 endif()

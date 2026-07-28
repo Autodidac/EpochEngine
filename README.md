@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.70-1F7A4C?style=for-the-badge" alt="Current development source v0.88.70" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.71-1F7A4C?style=for-the-badge" alt="Current development source v0.88.71" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.88.69-2C6A8A?style=for-the-badge" alt="Published stable release v0.88.69" />
 </p>
 
@@ -75,146 +75,65 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Current source is `v0.88.70`; the latest published stable runtime release is
-  `v0.88.69`.
-- Windows and Linux runtime packages use the production package
-  layout: one editor/runtime executable, a root `assets/` folder, and public
-  README/LICENSE files. Generated atlases, source-shaped `Engine/` folders,
-  headless smoke binaries, and duplicated compatibility output folders are not
-  part of the public runtime payload.
-- Windows and Linux packaged runtime assets now use versioned names such as
-  `epoch_win10_x64_v*.zip` and `epoch_linux_x64_v*.tar.gz`.
-- MSVC Debug/Release multicontext editor builds use the dynamic-vcpkg
-  `x64-windows` lane so Raylib, SFML, SDL3, GLAD, OpenGL, Vulkan, and DirectX can
-  coexist without static duplicate-symbol collisions. DLLs beside the debug
-  executable are expected runtime dependencies for that editor lane.
-- Bootstrap updater-shell releases are separate from the main runtime package
-  and are meant to update into the current runtime release, then fall through
-  to source only when packaged parity is already reached.
-- Update/install policy is binary-first across install types: packaged Windows
-  installs use the newest matching `.zip`, packaged Linux/WSL installs use the
-  newest matching `.tar.gz`, and source checkouts rebuild from source only after
-  packaged-runtime parity or when no newer packaged runtime exists.
-- The packaged release updater accepts both flat and nested runtime payloads,
-  stages replacement evidence before restart, and keeps failed update work
-  visible in package logs instead of looking like a sudden shutdown. Launcher
-  update behavior is tracked separately from the packaged-release lane.
-- Source updates now clear stale handoff/cancel evidence before launching a new
-  worker and verify `Engine/vcpkg.json` after extraction before vcpkg/MSBuild is
-  allowed to run.
-
-<p align="center">
-  <a href="Images/readme/update-storage-footprint-v08764.png"><img src="Images/readme/update-storage-footprint-v08764.png" alt="Epoch v0.87.64 updater and source-build storage footprint" width="1200" /></a>
-</p>
-
-- Phase 1 and Phase 2 of the active roadmap are complete. Current work is
-  concentrated in systems tooling, time ownership, AI sandbox/capture, and UI
-  maturity.
-- Release checkpoint: `v0.87.54` repairs the Linux Raylib/GLAD loader ABI,
-  removes build-machine RPATH leakage, packages Vulkan and SFML runtimes, and
-  requires an isolated OpenGL editor startup smoke before release staging.
-- Release checkpoint: `v0.87.56` prevents stale installed vcpkg registries from
-  poisoning Linux source updates. Updater builds select the manifest-compatible
-  managed registry and regenerate policy overlays from that exact checkout.
-- Release checkpoint: `v0.87.58` restores Linux subprocess output capture so
-  managed vcpkg snapshots can resolve their local registry revision and remain
-  pinned through the source build.
-- Release checkpoint: `v0.87.60` makes the Linux in-process updater cancellable,
-  reports live source/registry/build evidence, validates its managed tool cache,
-  and avoids the hosted Clang 22 command-line-module optimizer crash.
-- Release checkpoint: `v0.87.64` preserves isolated Linux update runs and
-  managed dependencies while repairing clean Clang 22 module compilation for
-  the source updater.
-- Release checkpoint: `v0.88.69` carries SDL3 sampled render-to-texture,
-  repairs the Windows source-updater build after that integration, and adds the
-  first portable EpochGui text-control slice without changing Linux updater
-  ownership.
-- The `v0.88.69` runtime/updater is now a sealed baseline. Current development
-  does not modify updater behavior, packaging, tags, or release assets unless
-  that gate is explicitly reopened.
-- The editor has a toolbar scene-mode selector for 3D scene construction versus
-  2D game/UI construction, launcher/editor handoff and update progress use the
-  shared EpochGui loading-screen primitive, OpenGL owns the first visible
-  sampled render-surface preview proof for Engine Arcade, SDL3 now owns a live
-  target-texture presentation path, EpochGui owns portable UTF-8 text-edit state,
-  SDL context handoff stays docked in the parent grid, and the Linux/Clang
-  full-engine lane remains the module-sensitive CI lane that must stay green
-  before calling a source checkpoint sealed.
-
-OS AI model, tooling, and evidence rules live with the AI assets in
-`Engine/ai/README.md` and the engine policy docs.
+- Active development source is `v0.88.71`; the published Windows/Linux runtime
+  baseline remains `v0.88.69`.
+- The runtime release and updater are sealed. Source development advances
+  independently without changing packaged-version defaults, release assets, or
+  update behavior.
+- Epoch now has one forward plan:
+  [the capability-tier architecture](Engine/docs/engine/capability_tier_architecture.md).
+  It selects implementations per subsystem and operation from `T0-CPU` through
+  proven GLES, OpenGL, Vulkan, DirectX, and future ray tiers.
+- The immediate product target is a playable baseline 2D project that can be
+  authored, saved, reopened, run, and built through the normal project workflow.
+- Current source includes renderer-neutral math, bounded lighting, CPU ray
+  queries, temporal texture-document contracts, deterministic physics/audio
+  managers, sparse voxel and water foundations, a canonical Tier-0 scene, and
+  capability/evidence reporting in Settings and System Info.
+- SDL3, SFML3, and Vulkan scene-solid work remains `Partial` until operator
+  visual proof. Backend status is recorded in the
+  [renderer feature matrix](Engine/docs/engine/renderer_feature_matrix.md), not
+  inferred from API names or build success alone.
 
 ## In Action
 
-Epoch's visual proof comes from asset-bearing editor outputs, not stripped
-bootstrap shells. The current public gallery is below; the top proof shows the
-Windows multicontext editor carrying every active backend lane.
+The image below demonstrates Epoch's multicontext diagnostic shell. Normal
+editor work owns one active backend; multicontext remains a comparison and
+validation tool rather than the runtime selection model.
 
 <p align="center">
-  <img src="Images/readme/windows-multicontext-editor-v08709.png" alt="Epoch Windows multicontext editor proof" />
+  <img src="Images/readme/windows-multicontext-editor-v08709.png" alt="Epoch multicontext editor diagnostic" />
 </p>
 
 ## What Epoch Provides Right Now
 
-- Project-centric editor/runtime flow: launcher, generated project shells,
-  single-context project runs, and an engine-shaped self-iteration lane.
-- Workspaces: `3D Scene`, `2D Scene/UI`, `Assets`, `Plant Lab`, `Video`,
-  `Project`, `Intelligence`, and `System Info`, with Console Dock kept as
-  compact status evidence instead of a duplicate control surface.
-- Rendering spine: Raylib, SDL3, SFML, Vulkan, OpenGL, DirectX, software, and
-  headless/noop lanes are orchestrated by the same project/editor contracts,
-  with render-graph material, mesh, model, and render-target bindings now
-  flowing through the shared device contract.
-- GUI spine: shared C++23 controls for windows, tabs, select boxes, scroll
-  panels, progress bars, modals, text editing, theme preferences, and future
-  popout/docking work.
-- Time and input spine: core time, timeline/video sequencing, streaming-save
-  contracts, frame-limit presets, and universal input profiles are engine data,
-  not scattered per-backend behavior.
-- Package spine: local runtime minis, Forest Factory/voxel/ocean research
-  gates, model assets, and future downloadable source packages route through
-  executable-local `cache/packages/` and human-approved build/install gates.
-- OS AI spine: Qwen/Nemotron coding lanes plus Bonsai, Wan, TRELLIS, and FLUX
-  creative model lanes are on-demand external model assets under `cache/models/`
-  with license/notice and evidence gates.
-- Validation spine: headless contract tests, project-shell self-tests, CI lanes,
-  asset-bearing runtime proof, and visible editor notes keep promoted behavior
-  tied to evidence.
+- A project-centric launcher/editor/runtime flow with project-owned scene data,
+  generated project shells, single-context runs, and build-safe contract tests.
+- A canonical Tier-0 default scene with camera, ground, directional light,
+  spawn, starter object, ray-based selection, and working Focus behavior.
+- Backend-neutral capability profiles, budgets, proof stages, and deterministic
+  per-subsystem fallback selection; settings expose current evidence instead of
+  unsupported feature switches.
+- A shared renderer/resource spine used by OpenGL, DirectX, Vulkan, Raylib,
+  SDL3, SFML3, software, and headless paths without making any API authoritative
+  engine state.
+- C++23 EpochGui controls for windows, tabs, selection, text, font/image/input,
+  layouts, rounded rectangles, popups, panels, docking, and optional desktop
+  floating-window hosts.
+- Temporal world and authoring contracts that separate stable documents and
+  semantic history from compiled artifacts and disposable physical caches.
+- Package and extension gates for optional terrain, voxel, ocean, networking,
+  and technique-gallery work in
+  [EpochEngineExtensions](https://github.com/Autodidac/EpochEngineExtensions).
 
-## Visual Proof Gallery
+## Evidence
 
-These proof images come from asset-bearing outputs, not stripped updater-shell
-builds.
-
-- A valid Windows six-context proof must visibly show `Raylib`, `SDL`, `SFML`,
-  `Vulkan`, `OpenGL`, and `DirectX`.
-- Floating-window proof is archived in `Images/readme/`; the active README
-  gallery now favors the current `v0.87.10` multicontext editor capture so old
-  promoted-window screenshots do not look like current UI proof.
-- The Linux proof comes from an asset-bearing WSL build output, not a source
-  tree launched without runtime assets.
-
-Current Windows per-backend startup proofs from the same `v0.87.10` capture
-round:
-
-<p align="center">
-  <a href="Images/readme/windows-raylib-v08709.png"><img src="Images/readme/windows-raylib-v08709.png" alt="Epoch Windows Raylib editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sdl-v08709.png"><img src="Images/readme/windows-sdl-v08709.png" alt="Epoch Windows SDL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-sfml-v08709.png"><img src="Images/readme/windows-sfml-v08709.png" alt="Epoch Windows SFML editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-vulkan-v08709.png"><img src="Images/readme/windows-vulkan-v08709.png" alt="Epoch Windows Vulkan editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-opengl-v08709.png"><img src="Images/readme/windows-opengl-v08709.png" alt="Epoch Windows OpenGL editor proof" width="15.6%" /></a>
-  <a href="Images/readme/windows-directx-v08709.png"><img src="Images/readme/windows-directx-v08709.png" alt="Epoch Windows DirectX editor proof" width="15.6%" /></a>
-</p>
-
-WSL/Linux editor proof, latest asset-bearing visual capture:
-
-<p align="center">
-  <img src="Images/readme/linux-opengl-v08438.png" alt="Epoch Linux WSL OpenGL editor proof" width="960" />
-</p>
-
-`v0.84.38` WSL Clang build/headless validation is green with DirectX disabled,
-and WSL/OpenGL visual proof is current for the single-context Linux path.
-
+Current capability truth lives in the
+[renderer feature matrix](Engine/docs/engine/renderer_feature_matrix.md).
+Architecture and delivery state live in
+[Engine/docs/README.md](Engine/docs/README.md) and `Changes/`. Images under
+`Images/readme/` are retained as visual evidence archives; version-specific
+release chronology belongs in [Changes/changelog.txt](Changes/changelog.txt).
 ## Quick Start
 
 ### Run the local Windows build
@@ -277,9 +196,9 @@ cmake --preset ninja-clang-debug
 cmake --build --preset ninja-clang-debug
 ```
 
-Linux/GCC currently uses the headless validation presets by default because
-GCC 14 can ICE while writing full-engine C++ module BMIs. Use
-`ninja-gcc-debug` for headless validation, use Clang for full Linux engine
+Linux/GCC 16 uses the headless validation presets by default while the
+full-engine GNU C++ module lane remains experimental. Use `ninja-gcc-debug`
+for headless validation, use the current Clang toolchain for full Linux engine
 builds, or explicitly opt into the experimental GCC module path with
 `-DEPOCH_ALLOW_GCC_MODULE_ENGINE=ON`.
 
@@ -317,7 +236,7 @@ If you're new:
 
 If you're digging into engine behavior:
 
-- [Engine/docs/engine/current_engine_architecture.md](Engine/docs/engine/current_engine_architecture.md)
+- [Engine/docs/engine/capability_tier_architecture.md](Engine/docs/engine/capability_tier_architecture.md)`n- [Engine/docs/engine/temporal_engine_architecture.md](Engine/docs/engine/temporal_engine_architecture.md)`n- [Engine/docs/engine/temporal_authoring_platform.md](Engine/docs/engine/temporal_authoring_platform.md)
 - [Engine/docs/engine/backend_context_status.md](Engine/docs/engine/backend_context_status.md)
 - [Engine/docs/engine/backend_menu_overlay_status.md](Engine/docs/engine/backend_menu_overlay_status.md)
 - [Engine/docs/engine/os_ai_tooling_and_evidence_policy.md](Engine/docs/engine/os_ai_tooling_and_evidence_policy.md)
@@ -331,19 +250,21 @@ Project planning and release history:
 
 ## Roadmap Direction
 
-The current roadmap is focused on:
+The next eight weeks are focused on one acceptance loop:
 
-1. Tightening the 3D Scene, 2D Scene/UI, Plant Lab, Video, Intelligence, and
-   System Info workspaces into professional docked editor surfaces.
-2. Carrying the renderer-resource spine into backend-native mesh/model,
-   render-to-texture, material, and import paths.
-3. Tightening the OS-model capture, review, and promotion loop with a
-   separate self-iteration sandbox and watchable scene/tool evidence tasks.
-4. Improving UI/editor maturity without regressing the honest project-centric
-   runtime flow.
+```text
+capability/project profile
+-> temporal textures and residency
+-> Canvas2D compose and sprite batches
+-> tilemap and scene authoring
+-> input, deterministic 2D physics, audio, and animation
+-> Play, Run, Build, save, reopen, and cache regeneration
+```
 
-See [Changes/roadmap.md](Changes/roadmap.md) for the full phase-by-phase plan.
-
+The canonical architecture is
+[Engine/docs/engine/capability_tier_architecture.md](Engine/docs/engine/capability_tier_architecture.md).
+The bounded current gate is [Changes/active_pass.md](Changes/active_pass.md), and
+[Changes/roadmap.md](Changes/roadmap.md) owns the delivery schedule.
 ## License
 
 ```text

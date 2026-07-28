@@ -83,6 +83,7 @@ import context.commandqueue;
 import context.type;
 import engine.input;
 import engine.cli;
+import capability.profile;
 import scripting.system;
 import epoch.ai;
 import epoch.systems;
@@ -91,6 +92,9 @@ import forest.factory;
 import package.registry;
 import perf.tier;
 import render.device;
+import render.lighting;
+import render.math;
+import render.ray;
 import render.preview_grid;
 import saveload.system;
 import timeline.system;
@@ -452,6 +456,9 @@ namespace epochengine
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
             std::vector<EditorEntity> entities{};
+            lighting::LightManager sceneLighting{ 128 };
+            std::vector<lighting::LightHandle> sceneLightHandles{};
+            bool sceneLightingDirty{ true };
             std::size_t selectedEntity{ 0 };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
@@ -1674,6 +1681,7 @@ namespace epochengine
             }
 
             (void)load_editor_scene_snapshot(state);
+            state.sceneLightingDirty = true;
 
             state.selectedEntity = state.entities.empty() ? 0u : (std::min)(state.selectedEntity, state.entities.size() - 1u);
             if (writeLog)
@@ -1728,7 +1736,14 @@ namespace epochengine
                 entity.category = "Gameplay";
                 entity.position = next_entity_position(state, 0.5f);
             }
-            else if (archetype == "light")
+            else if (archetype == "ground")
+            {
+                entity.name = make_entity_name(state, "GroundPlatform");
+                entity.type = "Ground";
+                entity.category = "World";
+                entity.position = { 0.0f, -0.25f, 0.0f };
+                entity.scale = { 12.0f, 0.5f, 12.0f };
+            }            else if (archetype == "light")
             {
                 entity.name = make_entity_name(state, "PointLight");
                 entity.type = "Light";
@@ -1756,6 +1771,7 @@ namespace epochengine
             }
 
             state.entities.push_back(std::move(entity));
+            state.sceneLightingDirty = true;
             state.selectedEntity = state.entities.empty() ? 0u : (state.entities.size() - 1u);
             push_editor_log(
                 state,
@@ -2184,13 +2200,61 @@ namespace epochengine
             return count;
         }
 
-        void publish_editor_preview_markers(const core::Context* ctx, const EditorState& state)
+        [[nodiscard]] epochengine::lighting::Vec3 light_direction_from_editor_rotation(
+            const std::array<float, 3>& rotation) noexcept
+        {
+            return epochengine::lighting::direction_from_euler_degrees({
+                rotation[0],
+                rotation[1],
+                rotation[2]
+            });
+        }
+        void rebuild_editor_lighting(EditorState& state)
+        {
+            if (!state.sceneLightingDirty)
+                return;
+
+            state.sceneLighting = epochengine::lighting::LightManager{ 128 };
+            state.sceneLighting.set_environment({ { 0.16f, 0.18f, 0.22f } });
+            state.sceneLightHandles.assign(state.entities.size(), {});
+
+            for (std::size_t index = 0; index < state.entities.size(); ++index)
+            {
+                const EditorEntity& entity = state.entities[index];
+                if (!entity.visible || entity.type != "Light")
+                    continue;
+
+                const bool pointLight = entity.name.contains("Point") || entity.name.contains("Lamp");
+                epochengine::lighting::LightDesc desc{};
+                desc.kind = pointLight
+                    ? epochengine::lighting::LightKind::Point
+                    : epochengine::lighting::LightKind::Directional;
+                desc.color = pointLight
+                    ? epochengine::lighting::Color3{ 1.0f, 0.78f, 0.56f }
+                    : epochengine::lighting::Color3{ 1.0f, 0.95f, 0.84f };
+                desc.intensity = pointLight ? 24.0f : 1.35f;
+                desc.position = { entity.position[0], entity.position[1], entity.position[2] };
+                desc.direction = light_direction_from_editor_rotation(entity.rotation);
+                desc.range = pointLight
+                    ? (std::max)(12.0f, (std::max)({ entity.scale[0], entity.scale[1], entity.scale[2] }) * 12.0f)
+                    : 1.0f;
+                state.sceneLightHandles[index] = state.sceneLighting.create(desc);
+            }
+
+            state.sceneLightingDirty = false;
+        }
+
+        void publish_editor_preview_markers(const core::Context* ctx, EditorState& state)
         {
             if (!ctx || state.previewMode != core::ScenePreviewMode::Editor)
             {
                 epochengine::previewgrid::clear_object_markers(ctx);
+                epochengine::previewgrid::clear_lighting_frame(ctx);
                 return;
             }
+
+            rebuild_editor_lighting(state);
+            epochengine::previewgrid::set_lighting_frame(ctx, state.sceneLighting.build_frame());
 
             std::vector<epochengine::previewgrid::ObjectMarker> markers{};
             markers.reserve(state.entities.size());
@@ -2238,6 +2302,7 @@ namespace epochengine
             duplicate.position[0] += 0.85f;
             duplicate.position[2] -= 0.55f;
             state.entities.push_back(std::move(duplicate));
+            state.sceneLightingDirty = true;
             state.selectedEntity = state.entities.size() - 1u;
             push_editor_log(state, std::string("[entity] Duplicated ") + state.entities[selectedIndex].name + ".");
         }
@@ -2253,6 +2318,7 @@ namespace epochengine
             const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
             const std::string name = state.entities[selectedIndex].name;
             state.entities.erase(state.entities.begin() + static_cast<std::ptrdiff_t>(selectedIndex));
+            state.sceneLightingDirty = true;
 
             if (state.entities.empty())
                 state.selectedEntity = 0u;
@@ -2264,47 +2330,72 @@ namespace epochengine
             push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
         }
 
-        [[nodiscard]] bool project_editor_entity_to_screen(
+        [[nodiscard]] std::optional<epochengine::ray::RayDesc> screen_point_to_world_ray(
             const core::Context* ctx,
-            const EditorEntity& entity,
             const gui::WidgetBounds& viewport,
-            gui::Vec2& out) noexcept
+            const gui::Vec2& mouse) noexcept
         {
             if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
-                return false;
+                return std::nullopt;
 
-            const auto camera = epochengine::previewgrid::camera_for(ctx);
+            const float localX = (mouse.x - viewport.position.x) / viewport.size.x;
+            const float localY = (mouse.y - viewport.position.y) / viewport.size.y;
+            if (!std::isfinite(localX) || !std::isfinite(localY)
+                || localX < 0.0f || localX > 1.0f || localY < 0.0f || localY > 1.0f)
+            {
+                return std::nullopt;
+            }
+
+            const float ndcX = (localX * 2.0f) - 1.0f;
+            const float ndcY = 1.0f - (localY * 2.0f);
             const float aspect = viewport.size.x / viewport.size.y;
-            const auto projection = epochengine::previewgrid::projection_for(ctx, aspect, camera);
-            const auto view = epochengine::previewgrid::look_at(
-                camera.eye,
-                camera.target,
-                camera.up);
-            const auto mvp = epochengine::previewgrid::multiply(projection, view);
-            const auto clip = epochengine::previewgrid::transform_point(
-                mvp,
-                epochengine::previewgrid::Vec3{
-                    entity.position[0],
-                    entity.position[1],
-                    entity.position[2]
-                });
+            const auto camera = epochengine::previewgrid::camera_for(ctx);
+            const epochengine::render_math::Float3 eye{ camera.eye.x, camera.eye.y, camera.eye.z };
+            const epochengine::render_math::Float3 target{ camera.target.x, camera.target.y, camera.target.z };
+            const epochengine::render_math::Float3 cameraUp{ camera.up.x, camera.up.y, camera.up.z };
+            const auto forward = epochengine::render_math::normalize(
+                epochengine::render_math::subtract(target, eye),
+                { 0.0f, -0.35f, -1.0f });
+            const auto right = epochengine::render_math::normalize(
+                epochengine::render_math::cross(forward, cameraUp),
+                { 1.0f, 0.0f, 0.0f });
+            const auto up = epochengine::render_math::normalize(
+                epochengine::render_math::cross(right, forward),
+                { 0.0f, 1.0f, 0.0f });
 
-            if (clip.w <= 1.0e-4f)
-                return false;
+            epochengine::ray::RayDesc ray{};
+            ray.origin = eye;
+            ray.minimumDistance = camera.nearPlane;
+            ray.maximumDistance = camera.farPlane;
+            ray.visibilityMask = 1u;
 
-            const float invW = 1.0f / clip.w;
-            const float ndcX = clip.x * invW;
-            const float ndcY = clip.y * invW;
-            if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
-                return false;
+            if (epochengine::previewgrid::camera_mode_for(ctx) == epochengine::previewgrid::CameraMode::Canvas2D)
+            {
+                const float distance = epochengine::render_math::length(epochengine::render_math::subtract(eye, target));
+                const float halfHeight = (std::max)(2.0f, distance * 0.42f);
+                const float halfWidth = halfHeight * (std::max)(0.001f, aspect);
+                ray.origin = epochengine::render_math::add(
+                    eye,
+                    epochengine::render_math::add(
+                        epochengine::render_math::scale(right, ndcX * halfWidth),
+                        epochengine::render_math::scale(up, ndcY * halfHeight)));
+                ray.direction = forward;
+            }
+            else
+            {
+                const float tanHalfFov = std::tan(camera.fovRadians * 0.5f);
+                ray.direction = epochengine::render_math::normalize(
+                    epochengine::render_math::add(
+                        forward,
+                        epochengine::render_math::add(
+                            epochengine::render_math::scale(right, ndcX * aspect * tanHalfFov),
+                            epochengine::render_math::scale(up, ndcY * tanHalfFov))),
+                    forward);
+            }
 
-            // Keep slightly off-center objects selectable while the preview matures.
-            if (ndcX < -1.35f || ndcX > 1.35f || ndcY < -1.35f || ndcY > 1.35f)
-                return false;
-
-            out.x = viewport.position.x + ((ndcX * 0.5f) + 0.5f) * viewport.size.x;
-            out.y = viewport.position.y + ((-ndcY * 0.5f) + 0.5f) * viewport.size.y;
-            return true;
+            return epochengine::ray::validate(ray).valid
+                ? std::optional<epochengine::ray::RayDesc>{ ray }
+                : std::nullopt;
         }
 
         [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> screen_point_to_world_plane(
@@ -2313,53 +2404,20 @@ namespace epochengine
             const gui::Vec2& mouse,
             float planeY) noexcept
         {
-            if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
+            const auto ray = screen_point_to_world_ray(ctx, viewport, mouse);
+            if (!ray || std::abs(ray->direction.y) <= 1.0e-5f || !std::isfinite(planeY))
                 return std::nullopt;
 
-            const float localX = (mouse.x - viewport.position.x) / viewport.size.x;
-            const float localY = (mouse.y - viewport.position.y) / viewport.size.y;
-            if (!std::isfinite(localX) || !std::isfinite(localY))
+            const float hitDistance = (planeY - ray->origin.y) / ray->direction.y;
+            if (!std::isfinite(hitDistance)
+                || hitDistance < ray->minimumDistance
+                || hitDistance > ray->maximumDistance)
+            {
                 return std::nullopt;
+            }
 
-            const float ndcX = (localX * 2.0f) - 1.0f;
-            const float ndcY = 1.0f - (localY * 2.0f);
-            const float aspect = viewport.size.x / viewport.size.y;
-
-            const auto camera = epochengine::previewgrid::camera_for(ctx);
-            auto forward = epochengine::previewgrid::normalize(
-                epochengine::previewgrid::subtract(camera.target, camera.eye));
-            if (epochengine::previewgrid::dot(forward, forward) <= 1.0e-6f)
-                forward = { 0.0f, -0.35f, -1.0f };
-
-            auto right = epochengine::previewgrid::normalize(
-                epochengine::previewgrid::cross(forward, camera.up));
-            if (epochengine::previewgrid::dot(right, right) <= 1.0e-6f)
-                right = { 1.0f, 0.0f, 0.0f };
-
-            auto up = epochengine::previewgrid::normalize(
-                epochengine::previewgrid::cross(right, forward));
-            if (epochengine::previewgrid::dot(up, up) <= 1.0e-6f)
-                up = { 0.0f, 1.0f, 0.0f };
-
-            const float tanHalfFov = std::tan(camera.fovRadians * 0.5f);
-            auto ray = epochengine::previewgrid::add(
-                forward,
-                epochengine::previewgrid::add(
-                    epochengine::previewgrid::scale(right, ndcX * aspect * tanHalfFov),
-                    epochengine::previewgrid::scale(up, ndcY * tanHalfFov)));
-            ray = epochengine::previewgrid::normalize(ray);
-            if (!std::isfinite(ray.x) || !std::isfinite(ray.y) || !std::isfinite(ray.z))
-                return std::nullopt;
-            if (std::abs(ray.y) <= 1.0e-4f)
-                return std::nullopt;
-
-            const float hitDistance = (planeY - camera.eye.y) / ray.y;
-            if (!std::isfinite(hitDistance) || hitDistance <= 0.0f)
-                return std::nullopt;
-
-            return epochengine::previewgrid::add(
-                camera.eye,
-                epochengine::previewgrid::scale(ray, hitDistance));
+            const auto hit = epochengine::render_math::point_at(ray->origin, ray->direction, hitDistance);
+            return epochengine::previewgrid::Vec3{ hit.x, hit.y, hit.z };
         }
 
         [[nodiscard]] std::optional<std::size_t> pick_editor_scene_entity(
@@ -2368,34 +2426,57 @@ namespace epochengine
             const gui::WidgetBounds& viewport,
             const gui::Vec2& mouse) noexcept
         {
-            std::optional<std::size_t> best{};
-            float bestDistanceSq = 1.0e12f;
+            const auto queryRay = screen_point_to_world_ray(ctx, viewport, mouse);
+            if (!queryRay)
+                return std::nullopt;
 
-            for (std::size_t i = 0; i < state.entities.size(); ++i)
+            epochengine::ray::RayScene scene{};
+            for (std::size_t index = 0; index < state.entities.size(); ++index)
             {
-                const auto& entity = state.entities[i];
+                const EditorEntity& entity = state.entities[index];
                 if (!entity.visible)
                     continue;
 
-                gui::Vec2 screen{};
-                if (!project_editor_entity_to_screen(ctx, entity, viewport, screen))
-                    continue;
-
-                const float dx = mouse.x - screen.x;
-                const float dy = mouse.y - screen.y;
-                const float distanceSq = (dx * dx) + (dy * dy);
-                const float pickRadius = (std::clamp)(30.0f + marker_radius_for_entity(entity) * 18.0f, 34.0f, 72.0f);
-                const float pickRadiusSq = pickRadius * pickRadius;
-                if (distanceSq <= pickRadiusSq && distanceSq < bestDistanceSq)
+                const float fallback = (std::max)(0.16f, marker_radius_for_entity(entity) * 0.45f);
+                const auto axis = [fallback](float value) noexcept
                 {
-                    best = i;
-                    bestDistanceSq = distanceSq;
-                }
+                    return (std::max)(std::abs(value) * 0.5f, fallback);
+                };
+                const epochengine::render_math::Float3 center{
+                    entity.position[0],
+                    entity.position[1],
+                    entity.position[2]
+                };
+                const epochengine::render_math::Float3 half{
+                    axis(entity.scale[0]),
+                    axis(entity.scale[1]),
+                    axis(entity.scale[2])
+                };
+
+                epochengine::ray::PrimitiveDesc primitive{};
+                primitive.kind = epochengine::ray::PrimitiveKind::Aabb;
+                primitive.aabb = {
+                    epochengine::render_math::subtract(center, half),
+                    epochengine::render_math::add(center, half)
+                };
+                primitive.visibilityMask = 1u;
+                primitive.object = {
+                    static_cast<std::uint64_t>(index + 1u),
+                    1u
+                };
+                primitive.primitiveIndex = static_cast<std::uint32_t>(index);
+                primitive.enabled = true;
+                (void)scene.create(primitive);
             }
 
-            return best;
+            const auto result = scene.trace(*queryRay, epochengine::ray::QueryMode::Closest);
+            if (result.status != epochengine::ray::QueryStatus::Hit
+                || result.hit.primitiveIndex >= state.entities.size())
+            {
+                return std::nullopt;
+            }
+            return static_cast<std::size_t>(result.hit.primitiveIndex);
         }
-
         void update_scene_object_interaction(
             const std::shared_ptr<core::Context>& ctx,
             EditorState& editor,
@@ -2489,6 +2570,7 @@ namespace epochengine
                     {
                         entity.position[0] = editor.sceneDragStartPosition[0] + (currentHit->x - editor.sceneDragStartHit[0]);
                         entity.position[2] = editor.sceneDragStartPosition[2] + (currentHit->z - editor.sceneDragStartHit[2]);
+                        editor.sceneLightingDirty = true;
                     }
                 }
                 else
@@ -2514,6 +2596,7 @@ namespace epochengine
                         epochengine::previewgrid::scale(forward, -dy * dragScale));
                     entity.position[0] = editor.sceneDragStartPosition[0] + delta.x;
                     entity.position[2] = editor.sceneDragStartPosition[2] + delta.z;
+                    editor.sceneLightingDirty = true;
                 }
             }
 
@@ -2521,6 +2604,7 @@ namespace epochengine
             {
                 if (editor.sceneDragEntity < editor.entities.size())
                     push_editor_log(editor, "[scene] Moved " + editor.entities[editor.sceneDragEntity].name + ".");
+                editor.sceneLightingDirty = true;
                 editor.sceneDragActive = false;
                 editor.sceneDragHasPlaneHit = false;
             }
@@ -2578,15 +2662,36 @@ namespace epochengine
                 state.activeScript);
         }
 
-        void handle_scene_tool(EditorState& state, std::string_view toolId)
+        void handle_scene_tool(
+            EditorState& state,
+            const core::Context* ctx,
+            std::string_view toolId)
         {
             if (toolId == "focus_selection")
             {
-                if (!state.entities.empty())
+                if (state.entities.empty() || !ctx)
                 {
-                    const auto index = (std::min)(state.selectedEntity, state.entities.size() - 1u);
-                    push_editor_log(state, std::string("[scene] Focused ") + state.entities[index].name + ".");
+                    push_editor_log(state, "[scene] Nothing selected to focus.");
+                    return;
                 }
+
+                const auto index = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+                const EditorEntity& entity = state.entities[index];
+                const float radius = (std::max)({
+                    std::abs(entity.scale[0]),
+                    std::abs(entity.scale[1]),
+                    std::abs(entity.scale[2]),
+                    marker_radius_for_entity(entity) * 2.0f
+                }) * 0.5f;
+                const bool focused = epochengine::previewgrid::focus_camera(
+                    ctx,
+                    { entity.position[0], entity.position[1], entity.position[2] },
+                    radius);
+                push_editor_log(
+                    state,
+                    focused
+                        ? std::string("[scene] Focused ") + entity.name + "."
+                        : std::string("[scene] Could not focus ") + entity.name + ".");
                 return;
             }
 
@@ -2600,6 +2705,8 @@ namespace epochengine
                         entity.rotation = { 0.0f, 0.0f, 0.0f };
                     }
                 }
+                if (ctx)
+                    epochengine::previewgrid::reset_camera(ctx);
                 push_editor_log(state, "[scene] Camera rigs reset.");
                 return;
             }
@@ -2610,6 +2717,7 @@ namespace epochengine
                 for (auto& entity : state.entities)
                     if (entity.editorOnly || entity.category == "Editor")
                         entity.visible = state.helpersVisible;
+                state.sceneLightingDirty = true;
                 push_editor_log(state, std::string("[scene] Helpers ") + (state.helpersVisible ? "shown." : "hidden."));
                 return;
             }
@@ -3074,6 +3182,80 @@ namespace epochengine
             case core::ContextType::Software: return epochengine::RendererBackendKind::software;
             default: return epochengine::RendererBackendKind::null;
             }
+        }
+
+        [[nodiscard]] constexpr epochengine::capability::Tier renderer_capability_tier(
+            const epochengine::RendererBackendKind kind) noexcept
+        {
+            switch (kind)
+            {
+            case epochengine::RendererBackendKind::vulkan:
+            case epochengine::RendererBackendKind::directx:
+                return epochengine::capability::Tier::explicit_api;
+            case epochengine::RendererBackendKind::opengl:
+            case epochengine::RendererBackendKind::sdl3:
+            case epochengine::RendererBackendKind::sfml3:
+            case epochengine::RendererBackendKind::raylib3:
+                return epochengine::capability::Tier::portable_graphics;
+            case epochengine::RendererBackendKind::software:
+            case epochengine::RendererBackendKind::null:
+            default:
+                return epochengine::capability::Tier::headless;
+            }
+        }
+
+        [[nodiscard]] epochengine::capability::EvidenceMask renderer_capability_evidence(
+            const epochengine::RendererCapabilityReport& report) noexcept
+        {
+            using epochengine::RendererCapabilityStatus;
+            using epochengine::capability::Evidence;
+
+            auto evidence = epochengine::capability::evidence_bit(Evidence::declared_contract);
+            if (report.build_graph_proof == RendererCapabilityStatus::partial
+                || report.build_graph_proof == RendererCapabilityStatus::present)
+            {
+                evidence |= epochengine::capability::evidence_bit(Evidence::build_contract);
+            }
+            if (report.presentation_proof == RendererCapabilityStatus::present)
+                evidence |= epochengine::capability::evidence_bit(Evidence::presentation_probe);
+            return evidence;
+        }
+
+        [[nodiscard]] epochengine::capability::Profile renderer_capability_profile(
+            const std::shared_ptr<core::Context>& ctx) noexcept
+        {
+            const auto kind = renderer_backend_kind(ctx);
+            if (kind == epochengine::RendererBackendKind::null)
+                return epochengine::capability::cpu_reference_profile();
+
+            const auto capabilities = epochengine::renderer_capabilities_for(kind);
+            const auto report = epochengine::renderer_capability_report_for(kind);
+            const auto evidence = renderer_capability_evidence(report);
+            if (kind == epochengine::RendererBackendKind::software)
+            {
+                return epochengine::capability::software_profile(
+                    report.build_graph_proof,
+                    evidence);
+            }
+            return epochengine::capability::adapt_renderer_capabilities(
+                capabilities,
+                report,
+                renderer_capability_tier(kind),
+                evidence);
+        }
+
+        [[nodiscard]] std::string renderer_capability_profile_summary(
+            const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto profile = renderer_capability_profile(ctx);
+            const auto report = epochengine::renderer_capability_report_for(
+                renderer_backend_kind(ctx));
+            return std::format(
+                "{}-{} | profile {} | presentation {}",
+                epochengine::capability::tier_code(profile.tier),
+                epochengine::capability::backend_code(profile.backend),
+                epochengine::renderer_capability_status_label(profile.status),
+                epochengine::renderer_capability_status_label(report.presentation_proof));
         }
 
         [[nodiscard]] std::string renderer_resource_spine_summary(const std::shared_ptr<core::Context>& ctx)
@@ -3570,6 +3752,7 @@ namespace epochengine
                 return false;
 
             state.entities = std::move(loaded);
+            state.sceneLightingDirty = true;
             state.selectedEntity = (std::min)(state.selectedEntity, state.entities.size() - 1u);
             return true;
         }
@@ -5634,6 +5817,7 @@ namespace epochengine
             : (std::min)(snapshot.selected_entity, editor.entities.size() - 1u);
         editor.logLines = snapshot.log_lines;
         editor.helpersVisible = snapshot.helpers_visible;
+        editor.sceneLightingDirty = true;
         editor.sceneDragActive = false;
         editor.sceneLeftWasHeld = false;
         editor.timeSnapshot = snapshot.time_snapshot;
@@ -7183,20 +7367,32 @@ namespace epochengine
         gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
         gui::property_row("[outliner] Scene file", file_ready_summary(editor.projectScenePath), 104.0f);
 
-        const std::array outlinerAddButtons{
+        const std::array outlinerWorldButtons{
             gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f },
-            gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f },
-            gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f },
-            gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f }
+            gui::InlineButtonSpec{ .label = "+ Ground", .width = 86.0f },
+            gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f }
         };
-        if (const auto action = gui::inline_button_row(outlinerAddButtons, 26.0f, 5.0f))
+        if (const auto action = gui::inline_button_row(outlinerWorldButtons, 26.0f, 5.0f))
         {
             switch (*action)
             {
             case 0: add_entity(editor, "cube"); break;
-            case 1: add_entity(editor, "light"); break;
-            case 2: add_entity(editor, "spawn"); break;
-            case 3: add_entity(editor, "camera"); break;
+            case 1: add_entity(editor, "ground"); break;
+            case 2: add_entity(editor, "light"); break;
+            default: break;
+            }
+        }
+
+        const std::array outlinerRuntimeButtons{
+            gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f },
+            gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f }
+        };
+        if (const auto action = gui::inline_button_row(outlinerRuntimeButtons, 26.0f, 5.0f))
+        {
+            switch (*action)
+            {
+            case 0: add_entity(editor, "spawn"); break;
+            case 1: add_entity(editor, "camera"); break;
             default: break;
             }
         }
@@ -7212,7 +7408,7 @@ namespace epochengine
             {
             case 0: duplicate_selected_entity(editor); break;
             case 1: delete_selected_entity(editor); break;
-            case 2: handle_scene_tool(editor, "focus_selection"); break;
+            case 2: handle_scene_tool(editor, ctx.get(), "focus_selection"); break;
             default: break;
             }
         }
@@ -8555,6 +8751,7 @@ namespace epochengine
 
                 gui::label("System Info");
                 gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
+                gui::property_row("[system] Capability", renderer_capability_profile_summary(ctx), 112.0f);
                 gui::property_row("[system] Platform", epochengine::GetEngineBuildTagString(), 112.0f);
                 gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
                 gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
@@ -9217,14 +9414,14 @@ namespace epochengine
         open_dropdown("Edit", TopMenu::Edit, dropdown_window_size(192.0f, 3), [&](gui::Vec2 pos)
         {
             menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
-                handle_scene_tool(editor, "focus_selection");
+                handle_scene_tool(editor, ctx.get(), "focus_selection");
             });
             menu_item("Reset Camera", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
-                handle_scene_tool(editor, "reset_camera");
+                handle_scene_tool(editor, ctx.get(), "reset_camera");
                 epochengine::previewgrid::reset_camera(ctx.get());
             });
             menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
-                handle_scene_tool(editor, "toggle_helpers");
+                handle_scene_tool(editor, ctx.get(), "toggle_helpers");
             });
         });
 
@@ -9349,7 +9546,10 @@ namespace epochengine
         if (editor.showSettingsModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 600.0f, 462.0f };
+            const gui::Vec2 modalSize{
+                (std::max)(420.0f, (std::min)(700.0f, w - 24.0f)),
+                (std::max)(520.0f, (std::min)(620.0f, h - 24.0f))
+            };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -9365,31 +9565,28 @@ namespace epochengine
             const gui::Vec2 contentPos = gui::cursor_position();
             const float contentY = contentPos.y;
             gui::set_cursor({ contentPos.x + 8.0f, contentY });
-            gui::wrapped_label(
-                "Runtime-safe editor settings live here first. Layout, workspace, preview, and OS AI controls stay visible and reviewable instead of hidden in console output.",
-                contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 54.0f });
-            gui::property_row("[settings] Renderer", renderer_name(ctx), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 78.0f });
-            gui::property_row("[settings] Project", editor.projectName, 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 102.0f });
-            gui::property_row("[settings] Workspace", std::string(main_surface_title(editor.mainSurface)), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 126.0f });
-            gui::property_row("[settings] Preview", std::string(preview_mode_name(editor.previewMode)), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 150.0f });
-            gui::property_row("[settings] AI model", epochengine::ai::active_model_name().empty() ? "(none selected)" : epochengine::ai::active_model_name(), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 176.0f });
+            gui::wrapped_label("Editor defaults and active project runtime policy.", contentWidth);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 34.0f });
+            gui::property_row("Renderer", renderer_name(ctx), 116.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 58.0f });
+            gui::property_row("Capability", renderer_capability_profile_summary(ctx), 116.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 82.0f });
+            gui::property_row("Project", editor.projectName, 116.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 106.0f });
+            gui::property_row("Workspace", std::string(main_surface_title(editor.mainSurface)), 116.0f);
+
             const auto settingsThemeChoices = gui::theme_preference_choices();
             std::vector<std::string_view> settingsThemeLabels;
             settingsThemeLabels.reserve(settingsThemeChoices.size());
             for (const auto& choice : settingsThemeChoices)
                 settingsThemeLabels.emplace_back(choice.label);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 140.0f });
             const auto settingsThemeSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-theme-select",
-                .placeholder = "Choose editor theme",
+                .placeholder = "Theme",
                 .selected = gui::theme_preference_label(editor.themePreference),
                 .options = std::span<const std::string_view>{ settingsThemeLabels.data(), settingsThemeLabels.size() },
-                .size = { 260.0f, 30.0f },
+                .size = { 300.0f, 30.0f },
                 .row_height = 28.0f,
                 .max_visible_options = 3
             });
@@ -9398,20 +9595,24 @@ namespace epochengine
                 editor.themePreference = settingsThemeChoices[*settingsThemeSelect.selected_index].preference;
                 push_editor_log(editor, std::string("[settings] Theme set to ") + std::string(gui::theme_preference_label(editor.themePreference)) + ".");
             }
-            gui::set_cursor({ contentPos.x + 286.0f, contentY + 180.0f });
-            gui::property_row("[settings] Theme", std::string(gui::theme_preference_label(editor.themePreference)), 108.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 222.0f });
+            if (modalSize.x >= 620.0f)
+            {
+                gui::set_cursor({ contentPos.x + 326.0f, contentY + 144.0f });
+                gui::property_row("Theme", std::string(gui::theme_preference_label(editor.themePreference)), 96.0f);
+            }
+
             const auto settingsInputChoices = input_profile_choices();
             std::vector<std::string_view> settingsInputLabels;
             settingsInputLabels.reserve(settingsInputChoices.size());
             for (const auto& choice : settingsInputChoices)
                 settingsInputLabels.emplace_back(choice.label);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 186.0f });
             const auto settingsInputSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-input-profile-select",
-                .placeholder = "Choose shared input profile",
+                .placeholder = "Input profile",
                 .selected = input_profile_label(editor.inputProfilePreset),
                 .options = std::span<const std::string_view>{ settingsInputLabels.data(), settingsInputLabels.size() },
-                .size = { 260.0f, 30.0f },
+                .size = { 300.0f, 30.0f },
                 .row_height = 28.0f,
                 .max_visible_options = 4
             });
@@ -9421,50 +9622,131 @@ namespace epochengine
                 input::set_active_profile(editor.inputProfilePreset);
                 push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
             }
-            gui::set_cursor({ contentPos.x + 286.0f, contentY + 226.0f });
-            gui::property_row("[settings] Input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 264.0f });
+            if (modalSize.x >= 620.0f)
+            {
+                gui::set_cursor({ contentPos.x + 326.0f, contentY + 190.0f });
+                gui::property_row("Input", std::string(input_profile_label(editor.inputProfilePreset)), 96.0f);
+            }
+
             const auto settingsLimitChoices = frame_limit_choices();
             std::vector<std::string_view> settingsLimitLabels;
             settingsLimitLabels.reserve(settingsLimitChoices.size());
             for (const auto& choice : settingsLimitChoices)
                 settingsLimitLabels.emplace_back(choice.label);
-            const auto settingsLimitSelect = gui::select_box(gui::SelectBoxOptions{
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 232.0f });
+            const auto settingsEditorLimitSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-core-frame-limit-select",
-                .placeholder = "Choose editor frame limit",
+                .placeholder = "Editor frame limit",
                 .selected = frame_limit_label(editor.editorFrameLimitFps),
                 .options = std::span<const std::string_view>{ settingsLimitLabels.data(), settingsLimitLabels.size() },
-                .size = { 240.0f, 30.0f },
+                .size = { 250.0f, 30.0f },
                 .row_height = 28.0f,
                 .max_visible_options = 3
             });
-            if (settingsLimitSelect.changed && settingsLimitSelect.selected_index && *settingsLimitSelect.selected_index < settingsLimitChoices.size())
+            if (settingsEditorLimitSelect.changed && settingsEditorLimitSelect.selected_index && *settingsEditorLimitSelect.selected_index < settingsLimitChoices.size())
             {
-                editor.editorFrameLimitFps = settingsLimitChoices[*settingsLimitSelect.selected_index].fps;
+                editor.editorFrameLimitFps = settingsLimitChoices[*settingsEditorLimitSelect.selected_index].fps;
                 core::cli::frame_limit_explicit = true;
                 core::cli::frame_limit_fps = editor.editorFrameLimitFps;
-                push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(settingsLimitChoices[*settingsLimitSelect.selected_index].label) + ".");
+                push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(settingsLimitChoices[*settingsEditorLimitSelect.selected_index].label) + ".");
             }
-            gui::set_cursor({ contentPos.x + 286.0f, contentY + 268.0f });
-            gui::property_row("[settings] Frame limit", std::string(frame_limit_label(editor.editorFrameLimitFps)), 148.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 332.0f });
+            if (modalSize.x >= 560.0f)
+            {
+                gui::set_cursor({ contentPos.x + 276.0f, contentY + 236.0f });
+                gui::property_row("Editor FPS", std::string(frame_limit_label(editor.editorFrameLimitFps)), 104.0f);
+            }
+
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 278.0f });
+            const auto settingsProjectLimitSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "settings-project-frame-limit-select",
+                .placeholder = "Project frame limit",
+                .selected = frame_limit_label(editor.projectRunFrameLimitFps),
+                .options = std::span<const std::string_view>{ settingsLimitLabels.data(), settingsLimitLabels.size() },
+                .size = { 250.0f, 30.0f },
+                .row_height = 28.0f,
+                .max_visible_options = 3
+            });
+            if (settingsProjectLimitSelect.changed && settingsProjectLimitSelect.selected_index && *settingsProjectLimitSelect.selected_index < settingsLimitChoices.size())
+            {
+                editor.projectRunFrameLimitFps = settingsLimitChoices[*settingsProjectLimitSelect.selected_index].fps;
+                push_editor_log(editor, std::string("[project] Project frame limit set to ") + std::string(settingsLimitChoices[*settingsProjectLimitSelect.selected_index].label) + ".");
+            }
+            if (modalSize.x >= 560.0f)
+            {
+                gui::set_cursor({ contentPos.x + 276.0f, contentY + 282.0f });
+                gui::property_row("Project FPS", std::string(frame_limit_label(editor.projectRunFrameLimitFps)), 104.0f);
+            }
+
+            const auto settingsCameraChoices = project_camera_choices();
+            std::vector<std::string_view> settingsCameraLabels;
+            settingsCameraLabels.reserve(settingsCameraChoices.size());
+            for (const auto& choice : settingsCameraChoices)
+                settingsCameraLabels.emplace_back(choice.label);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 324.0f });
+            const auto settingsCameraSelect = gui::select_box(gui::SelectBoxOptions{
+                .id = "settings-project-camera-select",
+                .placeholder = "Camera style",
+                .selected = project_camera_label(editor.projectCameraMode),
+                .options = std::span<const std::string_view>{ settingsCameraLabels.data(), settingsCameraLabels.size() },
+                .size = { 320.0f, 30.0f },
+                .row_height = 28.0f,
+                .max_visible_options = 3
+            });
+            if (settingsCameraSelect.changed && settingsCameraSelect.selected_index && *settingsCameraSelect.selected_index < settingsCameraChoices.size())
+            {
+                editor.projectCameraMode = settingsCameraChoices[*settingsCameraSelect.selected_index].mode;
+                if (ctx)
+                    previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
+                if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
+                    ensure_2d_canvas_entity(editor);
+                push_editor_log(editor, std::string("[project] Camera style set to ") + std::string(settingsCameraChoices[*settingsCameraSelect.selected_index].label) + ".");
+            }
+
+            const float previewControlWidth = (std::min)(146.0f, (contentWidth - 20.0f) / 3.0f);
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 374.0f });
+            if (gui::button(editor.previewMode == core::ScenePreviewMode::Editor ? "Disable Preview" : "Enable Preview", { previewControlWidth, 30.0f }))
+            {
+                editor.previewMode = editor.previewMode == core::ScenePreviewMode::Editor
+                    ? core::ScenePreviewMode::None
+                    : core::ScenePreviewMode::Editor;
+                if (ctx)
+                    ctx->set_scene_preview_mode(editor.previewMode);
+            }
+            gui::set_cursor({ contentPos.x + 18.0f + previewControlWidth, contentY + 374.0f });
+            if (gui::button(editor.helpersVisible ? "Hide Helpers" : "Show Helpers", { previewControlWidth, 30.0f }))
+                handle_scene_tool(editor, ctx.get(), "toggle_helpers");
+            gui::set_cursor({ contentPos.x + 28.0f + previewControlWidth * 2.0f, contentY + 374.0f });
+            if (gui::button("Reset Camera", { previewControlWidth, 30.0f }))
+                handle_scene_tool(editor, ctx.get(), "reset_camera");
+
+            if (modalSize.y >= 580.0f)
+            {
+                gui::set_cursor({ contentPos.x + 8.0f, contentY + 418.0f });
+                gui::property_row("Preview", std::string(preview_mode_name(editor.previewMode)), 104.0f);
+                gui::set_cursor({ contentPos.x + 8.0f, contentY + 442.0f });
+                gui::property_row("Camera", std::string(project_camera_label(editor.projectCameraMode)), 104.0f);
+                gui::set_cursor({ contentPos.x + 8.0f, contentY + 466.0f });
+                gui::property_row("Helpers", editor.helpersVisible ? "Visible" : "Hidden", 104.0f);
+            }
+
+            const float actionY = contentY + modalSize.y - 78.0f;
+            gui::set_cursor({ contentPos.x + 8.0f, actionY });
             if (gui::button("Reset Layout", { 132.0f, 30.0f }))
             {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[settings] Editor layout reset.");
             }
-            gui::set_cursor({ contentPos.x + 150.0f, contentY + 332.0f });
-            if (gui::button("Open OS AI", { 150.0f, 30.0f }))
+            gui::set_cursor({ contentPos.x + 150.0f, actionY });
+            if (gui::button("Open OS AI", { 132.0f, 30.0f }))
             {
                 open_editor_surface(EditorMainSurface::AISandbox, "settings");
                 editor.showSettingsModal = false;
             }
-            gui::set_cursor({ contentPos.x + 308.0f, contentY + 332.0f });
+            gui::set_cursor({ contentPos.x + modalSize.x - 126.0f, actionY });
             if (gui::button("Close", { 88.0f, 30.0f }))
                 editor.showSettingsModal = false;
             gui::end_modal_window();
         }
-
         if (editor.showPackageManagerModal)
         {
             editor.openMenu = TopMenu::None;

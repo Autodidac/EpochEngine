@@ -396,9 +396,19 @@ namespace epochengine::vulkancontext
         pipelineInfo.renderPass = *renderPass;
         pipelineInfo.subpass = 0;
 
-        auto gp = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
-        if (gp.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createGraphicsPipelineUnique failed.");
-        graphicsPipeline = std::move(gp.value);
+        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+        auto solidPipeline = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
+        if (solidPipeline.result != vk::Result::eSuccess)
+            throw std::runtime_error("[ Vulkan ] - createGraphicsPipelineUnique(solid) failed.");
+        solidGraphicsPipeline = std::move(solidPipeline.value);
+
+        inputAssembly.topology = vk::PrimitiveTopology::eLineList;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
+        auto linePipeline = device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
+        if (linePipeline.result != vk::Result::eSuccess)
+            throw std::runtime_error("[ Vulkan ] - createGraphicsPipelineUnique(lines) failed.");
+        graphicsPipeline = std::move(linePipeline.value);
     }
 
     void Application::createGuiPipeline()

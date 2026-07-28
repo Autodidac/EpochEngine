@@ -489,7 +489,7 @@ namespace epochengine::vulkancontext
 
         if (!commandBuffers.empty() && commandPool && device)
         {
-            device->resetCommandPool(*commandPool);
+            (void)device->resetCommandPool(*commandPool);
             commandBuffers.clear();
         }
 

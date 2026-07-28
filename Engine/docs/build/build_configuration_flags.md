@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.87.68`
+Current source version: `v0.88.71`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -20,6 +20,22 @@ building during the migration.
 | `EPOCH_ENABLE_DIRECTX` | On on Windows, off elsewhere | Enable the first-pass Windows DirectX/D3D11 renderer path. Keep this off on Linux/WSL. |
 | `EPOCH_GLAD_PROVIDER` | `auto` | Select the OpenGL loader owner: `auto`, `vcpkg`, or `bundled`. |
 | `EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES` | Off | Turn missing optional backend deps into configure errors. |
+| `EPOCH_ENABLE_AUTHORING_PLATFORM` | On | Declare and compile the shared authoring-document/editor foundation as implementation units land. |
+| `EPOCH_ENABLE_TEXTURE_EDITOR` | On | Gate future texture painting, compositing, and texture-node implementation units. |
+| `EPOCH_ENABLE_MODEL_EDITOR` | On | Gate future mesh editing, procedural modeling, and sculpt implementation units. |
+| `EPOCH_ENABLE_NODE_EDITOR` | On | Gate the future shared typed node-graph editor and evaluator. |
+| `EPOCH_ENABLE_MATERIAL_EDITOR` | On | Gate future material graph authoring and preview units. |
+| `EPOCH_ENABLE_ANIMATION_EDITOR` | On | Gate future animation graph and timeline authoring units. |
+| `EPOCH_ENABLE_AUTHORING_COLLABORATION` | Off | Gate future branch sharing, review, and collaboration contracts. Network/server activation remains separately human-gated. |
+| `EPOCH_ENABLE_AUTHORING_METRICS` | On | Gate future document, history, cache, GPU, and evaluation metrics. |
+
+`EPOCH_ENABLE_AUTHORING_PLATFORM` and `EPOCH_ENABLE_TEXTURE_EDITOR` now gate the
+`authoring.texture` module, implementation, engine contract, and standalone
+texture contract target. Turning either off removes that authoring slice from a
+CMake product build while compiled texture artifacts remain a separate runtime
+concern. The model, node, material, animation, collaboration, and metrics options
+reserve stable build vocabulary until their implementation units land; they must
+not be advertised as reducing a product build yet.
 
 ## Entry points
 
@@ -142,53 +158,8 @@ override them locally in `engine.config.hpp`.
   all-backend support needs owned or isolated GLAD/STB/math providers before it
   can be promoted as the default app lane.
 
-## Current release note
+## History
 
-- The current Linux/updater line keeps Linux and WSL on the vcpkg-backed
-  build/update path, pins current CMake/LLVM/Ninja tools with hashes and
-  provenance, requires a matching Clang module scanner, and builds every
-  non-DirectX context dependency through the shared manifest.
-- `v0.84.57` kept the focused editor GUI and Forest Factory stabilization pass.
-  It preserved the protected OpenGL draw model while fixing the Asset
-  command-menu hit region, clipping Package Manager details inside a shared GUI
-  scroll area, making Forest Factory scene-backed, and preserving current editor
-  entities during explicit project evidence repair.
-- `v0.84.55` was the source line for the focused GUI/script/OS-AI polish
-  pass. Dropdown/select boxes now close on outside click, anchor near the
-  selected value when opened, and keep scroll input inside active clips; built-in
-  script assets use ASCII headers for the current source preview; generated
-  project scripts are described as starters; and the OS-AI chat lane no longer
-  carries a fake placeholder scorer.
-- `v0.84.54` kept the input-profile bug sweep. Editor Default and Left-Handed
-  profiles keep movement keys separate from arrow look keys, and Arrow Pilot is
-  an alternate movement profile instead of a movement/look overlap. Editor and
-  project runtime camera movement still route through named input actions,
-  `Home` maps to camera reset, and project launch payloads carry the selected
-  camera style and input profile into Play In Editor plus single-context child
-  runs. Built child launches now pass `--standalone --window-mode standalone`,
-  and Software is no longer part of the default backend count unless requested
-  explicitly.
-- `v0.84.52` kept the OpenGL overlay/project-run
-  stabilization pass. OpenGL menu/modal frames now drain normal GUI after the
-  scene so command windows and project runtime panels stay above the active
-  viewport instead of flip-flopping with scene composition.
-- `v0.84.51` kept live engine-thread accounting and
-  backend frame-cap cleanup. The toolbar and Systems workspace now show live
-  engine-spawned thread counts alongside detected CPU thread capacity, while
-  DirectX no longer adds a backend sync cap over the core limiter.
-- `v0.84.50` kept the toolbar/menu selected-state
-  cleanup. Top menu buttons and main editor workspace buttons now use the shared
-  `engine.gui` selected-button primitive so active/open state stays visually
-  deliberate instead of flickering through transient hover/press states.
-- `v0.84.48` kept the Console Dock status cleanup aligned.
-  Bottom Dock > Project, Assets, AI, and Systems now use compact selectable text
-  panels matching Output while controls stay in central workspaces or the
-  Inspector.
-- `v0.84.47` is the source line for the project runtime/profile cleanup,
-  selectable project camera styles, MSVC vcpkg linkage clarification, and the
-  centered Run route that launches normal generated projects through the
-  selected single-context child backend while keeping engine self-iteration
-  in-editor.
-- Normal desktop/runtime builds should stay on the main runtime path by default.
-- `EPOCH_UPDATER_SHELL_BUILD` is now an explicit bootstrap-mode switch, not the
-  default identity for packaged Linux or Windows releases.
+Version-specific build and release chronology belongs in
+[`Changes/changelog.txt`](../../../Changes/changelog.txt). This document records
+only current build controls and supported toolchain policy.

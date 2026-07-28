@@ -1,5 +1,38 @@
 # Epoch Changelog
 
+## [v0.88.71] - Capability and authoring foundation
+
+- Define `T0-CPU` as the CPU/headless correctness floor and begin presentation
+  at `T1-GLES`/`T1-GL`; keep portable compute, storage, indirect work, explicit
+  APIs, and ray features individually capability- and evidence-gated.
+- Add backend-neutral capability profiles, project requirements, deterministic
+  provider selection, budgets, evidence states, and truthful Settings/System
+  Info summaries without exposing a nonfunctional tier selector.
+- Connect the canonical default scene to shared lights, ray-based selection,
+  working Focus camera behavior, ground/light/spawn creation, project seed
+  state, and Run/FPS camera behavior.
+- Add complete scene-solid triangle consumption to SDL3 and SFML3 and a
+  dedicated depth-tested Vulkan solid pipeline. These adapters remain Partial
+  until operator visual proof.
+- Add the first temporal texture document implementation with stable handles,
+  semantic layer/tile/stroke operations, bounded history, checkpoints,
+  deterministic artifacts, and standalone/atlas/bindless/sparse physical
+  residency plans behind the authoring feature gates.
+- Repair Engine Arcade's canonical cabinet/screen scene graph and add contracts
+  for its built-in scene catalog, sampled render-surface binding, transforms,
+  and geometry storage.
+- Sync the embedded EpochGui C++23 library with reusable font, image, input,
+  rounded-rectangle, text, layout, docking, popup, panel, and floating-window
+  primitives and focused tests.
+- Add the companion EpochEngineExtensions capability technique gallery with
+  labeled context/tier stations, required features, evidence, dependencies,
+  fallbacks, and deterministic package validation.
+- Consolidate active architecture and scheduling around the two-month playable
+  2D critical path while preserving historical chronology in `Changes`.
+- Verify MSVC Debug/Release editor builds and contracts, the managed Clang 22
+  full-engine Release build, 4/4 Linux CTests, and 5/5 standalone EpochGui
+  feature tests.
+
 ## [v0.88.70] - Post-release source advancement
 
 - Advance the active development source after the validated v0.88.69
@@ -9,6 +42,26 @@
   major, minor, and revision values instead of a hard-coded release series.
 - Adopt the persistent, reversible temporal-engine architecture as a durable
   mission and reorder roadmap dependencies around its first production slice.
+- Add shared `render.math`, generation-safe bounded light management and named
+  reference raster evaluation, explicit CPU ray-query results/intersections,
+  and deterministic voxel DDA contracts.
+- Add build-safe physics and audio managers for fixed-boundary body commands,
+  snapshots/restoration, logical clip/source/bus scheduling, spatial/listener
+  state, temporal seek/reverse policy, and immutable mix plans without claiming
+  a solver or physical audio output.
+- Add deterministic budgeted sparse voxel storage, descriptor-aware snapshots,
+  atomic batch writes and metrics, explicit-time body-specific water queries, and
+  bounded disposable voxel-water projection.
+- Add a fail-closed extension evidence preflight requiring verified immutable
+  revision, content hash, license and build/test records plus artifact-bound human
+  and native-code approval, while leaving verification/quarantine/activation as
+  explicit follow-up gates and preserving truthful core fallbacks.
+- Add the temporal authoring platform architecture, CMake editor-domain feature
+  gates, and updated mission/roadmap/capability truth for shared documents,
+  semantic history, compiled artifacts, disposable caches, and one typed node
+  graph foundation.
+- Verify MSVC Debug and Release editor builds and the complete build-safe engine
+  contract suite in both configurations.
 
 ## [v0.88.69] - Perfect multicontext runtime release
 

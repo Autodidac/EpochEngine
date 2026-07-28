@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -88,6 +88,8 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -101,6 +103,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\capability.profile.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.math.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.tier0.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.ray.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api.ixx" />
@@ -284,7 +291,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx" />
@@ -445,6 +457,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\epoch.platform.context.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.platform.window.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.render.graph.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.document.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\main.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>

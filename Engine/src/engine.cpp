@@ -120,8 +120,21 @@ import core.path;
 import core.time;
 import core.timer;
 
+import audio.manager;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+import authoring.texture;
+#endif
+import capability.profile;
 import forest.factory;
 import package.registry;
+import physics.manager;
+import render.lighting;
+import render.ray;
+import scene.tier0;
+import terrain.foundation;
+import voxel.field;
+import voxel.storage;
+import water.system;
 import saveload.system;
 import scenesnapshot;
 import sceneserializer;
@@ -1935,6 +1948,445 @@ namespace epochengine::core
             epochengine::package_registry::requires_explicit_network_approval(epochengine::package_registry::kEngineAuthoritativeServerPackageId)
             && epochengine::package_registry::can_create_server_or_listener_after_approval(epochengine::package_registry::kEngineListenServerPackageId)
             && epochengine::package_registry::must_use_human_build_gate("missing_package"));
+        const auto arcadePayloadRequirement =
+            epochengine::package_registry::payload_requirement(
+                epochengine::package_registry::kEngineArcadePackageId);
+        const auto arcadeMissingEvidence =
+            epochengine::package_registry::evaluate_payload_activation(
+                arcadePayloadRequirement,
+                {});
+        const epochengine::package_registry::PackagePayloadEvidence arcadePayloadEvidence{
+            .packageId = epochengine::package_registry::kEngineArcadePackageId,
+            .sourceRepo = epochengine::package_registry::kEngineArcadeOptionalAssetRepo,
+            .immutableRevision = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            .contentHash = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            .licenseEvidence = "THIRD_PARTY_NOTICES.txt",
+            .buildTestEvidence = "engine-contract-self-test",
+            .approvedContentHash = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            .immutableRevisionVerified = true,
+            .contentHashVerified = true,
+            .licenseEvidenceVerified = true,
+            .buildTestEvidenceVerified = true,
+            .humanApproved = true,
+            .containsNativeCode = false,
+            .nativeCodeApproved = false
+        };
+        const auto arcadeVerifiedPayload =
+            epochengine::package_registry::evaluate_payload_activation(
+                arcadePayloadRequirement,
+                arcadePayloadEvidence);
+        check(
+            "package.extension_payload_evidence",
+            !arcadeMissingEvidence.payloadAllowed
+            && arcadeMissingEvidence.coreFallbackAvailable
+            && arcadeMissingEvidence.reason ==
+                epochengine::package_registry::PayloadRejectReason::MissingEvidence
+            && arcadeVerifiedPayload.payloadAllowed
+            && arcadeVerifiedPayload.coreFallbackAvailable);
+
+        epochengine::lighting::LightManager lightManager{2};
+        lightManager.set_environment({{0.10f, 0.10f, 0.10f}});
+        const auto invalidLight = lightManager.create({.intensity = -1.0f});
+        const auto invalidKindLight = lightManager.create({
+            .kind = static_cast<epochengine::lighting::LightKind>(255)
+        });
+        const auto directionalLight = lightManager.create({
+            .kind = epochengine::lighting::LightKind::Directional,
+            .color = {1.0f, 0.8f, 0.6f},
+            .intensity = 2.0f,
+            .direction = {0.0f, -1.0f, 0.0f}
+        });
+        const auto pointLight = lightManager.create({
+            .kind = epochengine::lighting::LightKind::Point,
+            .color = {0.2f, 0.4f, 1.0f},
+            .intensity = 4.0f,
+            .position = {0.0f, 2.0f, 0.0f},
+            .range = 8.0f
+        });
+        const auto rejectedLight = lightManager.create({});
+        const auto lightingFrame = lightManager.build_frame();
+        const auto lightingTerms =
+            epochengine::lighting::evaluate_reference_raster_lighting(
+                lightingFrame,
+                {
+                    .position = {},
+                    .normal = {0.0f, 1.0f, 0.0f},
+                    .viewDirection = {0.0f, 1.0f, 1.0f},
+                    .albedo = {0.8f, 0.7f, 0.6f},
+                    .specularColor = {0.5f, 0.5f, 0.5f},
+                    .shininess = 32.0f
+                });
+        const bool destroyedDirectional = lightManager.destroy(directionalLight);
+        const auto replacementLight = lightManager.create({});
+        lightManager.set_environment({{
+            (std::numeric_limits<float>::infinity)(),
+            -1.0f,
+            0.25f
+        }});
+        const auto sanitizedEnvironment = lightManager.environment();
+        check(
+            "render.lighting.registry_generation",
+            !invalidLight.valid()
+            && !invalidKindLight.valid()
+            && directionalLight.valid()
+            && pointLight.valid()
+            && !rejectedLight.valid()
+            && lightingFrame.lights.size() == 2u
+            && destroyedDirectional
+            && !lightManager.contains(directionalLight)
+            && replacementLight.valid()
+            && replacementLight.index == directionalLight.index
+            && replacementLight.generation != directionalLight.generation
+            && sanitizedEnvironment.ambient.r == 0.0f
+            && sanitizedEnvironment.ambient.g == 0.0f
+            && sanitizedEnvironment.ambient.b == 0.25f);
+        check(
+            "render.lighting.reference_terms",
+            lightingTerms.evaluatedLights == 2u
+            && lightingTerms.ambient.r > 0.0f
+            && lightingTerms.diffuse.r > 0.0f
+            && lightingTerms.combined.r >= lightingTerms.ambient.r);
+
+        epochengine::ray::RayScene rayScene{};
+        const auto spherePrimitive = rayScene.create({
+            .kind = epochengine::ray::PrimitiveKind::Sphere,
+            .sphere = {{0.0f, 0.0f, 5.0f}, 1.0f},
+            .object = {42u, 1u},
+            .primitiveIndex = 7u,
+            .materialId = 9u
+        });
+        const auto rayHit = rayScene.trace({
+            .origin = {},
+            .direction = {0.0f, 0.0f, 1.0f},
+            .minimumDistance = 0.0f,
+            .maximumDistance = 100.0f
+        });
+        const auto rayMiss = rayScene.trace({
+            .origin = {},
+            .direction = {0.0f, 1.0f, 0.0f},
+            .minimumDistance = 0.0f,
+            .maximumDistance = 100.0f
+        });
+        const auto rayInvalid = rayScene.trace({.direction = {}});
+        const auto insideAabbHit = epochengine::ray::intersect(
+            {
+                .origin = {},
+                .direction = {1.0f, 0.0f, 0.0f},
+                .minimumDistance = 0.0f,
+                .maximumDistance = 10.0f
+            },
+            epochengine::ray::Aabb{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}});
+        const auto triangleHit = epochengine::ray::intersect(
+            {
+                .origin = {0.0f, 0.0f, -1.0f},
+                .direction = {0.0f, 0.0f, 1.0f},
+                .minimumDistance = 0.0f,
+                .maximumDistance = 10.0f
+            },
+            epochengine::ray::Triangle{
+                {-1.0f, -1.0f, 0.0f},
+                {1.0f, -1.0f, 0.0f},
+                {0.0f, 1.0f, 0.0f}
+            });
+        const auto voxelHit = epochengine::ray::trace_voxels(
+            {
+                .origin = {0.5f, 0.5f, 0.5f},
+                .direction = {1.0f, 0.0f, 0.0f},
+                .minimumDistance = 0.0f,
+                .maximumDistance = 10.0f
+            },
+            {.cellSize = 1.0f, .maximumSteps = 32u},
+            [](epochengine::ray::VoxelCoord cell)
+            {
+                return cell.x == 2 && cell.y == 0 && cell.z == 0;
+            });
+        const auto diagonalVoxelHit = epochengine::ray::trace_voxels(
+            {
+                .origin = {0.5f, 0.5f, 0.5f},
+                .direction = {1.0f, 1.0f, 0.0f},
+                .minimumDistance = 0.0f,
+                .maximumDistance = 10.0f
+            },
+            {.cellSize = 1.0f, .maximumSteps = 32u},
+            [](epochengine::ray::VoxelCoord cell)
+            {
+                return (cell.x == 1 && cell.y == 0 && cell.z == 0) ||
+                       (cell.x == 1 && cell.y == 1 && cell.z == 0);
+            });
+        const auto boundedVoxelMiss = epochengine::ray::trace_voxels(
+            {
+                .origin = {0.5f, 0.5f, 0.5f},
+                .direction = {1.0f, 0.0f, 0.0f},
+                .minimumDistance = 0.0f,
+                .maximumDistance = 0.1f
+            },
+            {.cellSize = 1.0f, .maximumSteps = 32u},
+            [](epochengine::ray::VoxelCoord) { return false; });
+        const auto outOfRangeVoxel = epochengine::ray::trace_voxels(
+            {
+                .origin = {(std::numeric_limits<float>::max)(), 0.0f, 0.0f},
+                .direction = {1.0f, 0.0f, 0.0f},
+                .minimumDistance = 0.0f,
+                .maximumDistance = 1.0f
+            },
+            {.cellSize = 0.001f, .maximumSteps = 32u},
+            [](epochengine::ray::VoxelCoord) { return false; });
+        const bool destroyedSphere = rayScene.destroy(spherePrimitive);
+        check(
+            "render.ray.query_status_and_identity",
+            spherePrimitive.valid()
+            && rayHit.status == epochengine::ray::QueryStatus::Hit
+            && rayHit.hit.object == epochengine::ray::QueryObjectId{42u, 1u}
+            && rayHit.hit.primitiveIndex == 7u
+            && rayHit.hit.materialId == 9u
+            && std::abs(rayHit.hit.distance - 4.0f) < 0.001f
+            && rayMiss.status == epochengine::ray::QueryStatus::Miss
+            && rayInvalid.status == epochengine::ray::QueryStatus::Invalid
+            && insideAabbHit.has_value()
+            && std::abs(insideAabbHit->distance - 1.0f) < 0.001f
+            && insideAabbHit->geometricNormal == epochengine::ray::Vec3{1.0f, 0.0f, 0.0f}
+            && triangleHit.has_value()
+            && std::abs(triangleHit->distance - 1.0f) < 0.001f
+            && destroyedSphere
+            && !rayScene.get(spherePrimitive).has_value());
+        check(
+            "render.ray.voxel_dda",
+            voxelHit.hit
+            && voxelHit.cell == epochengine::ray::VoxelCoord{2, 0, 0}
+            && voxelHit.distance >= 1.0f
+            && voxelHit.steps <= 4u
+            && diagonalVoxelHit.hit
+            && diagonalVoxelHit.cell == epochengine::ray::VoxelCoord{1, 1, 0}
+            && !boundedVoxelMiss.hit
+            && boundedVoxelMiss.steps == 1u
+            && !outOfRangeVoxel.hit
+            && outOfRangeVoxel.steps == 0u);
+
+        epochengine::voxel::SparseVoxelField voxelField{{4u, 4u, 4u, 1.0f, 0u}};
+        const epochengine::voxel::CellCoord negativeVoxel{-1, 0, 0};
+        const bool voxelWrite = voxelField.write(
+            negativeVoxel,
+            {
+                .density = 1.0f,
+                .material = 7u,
+                .semantics = epochengine::voxel::CellSemantic::Geometry
+            });
+        const auto voxelSnapshot = voxelField.snapshot();
+        const auto voxelMetrics = voxelField.metrics();
+        check(
+            "voxel.sparse_storage",
+            voxelWrite
+            && voxelField.occupied(negativeVoxel)
+            && voxelField.read(negativeVoxel)->material == 7u
+            && voxelSnapshot.cells.size() == 1u
+            && voxelSnapshot.contentHash != 0u
+            && voxelMetrics.allocatedChunkCount == 1u
+            && voxelMetrics.storedCellCount == 1u
+            && voxelMetrics.denseEquivalentCellCount == 64u);
+
+        epochengine::voxel::SparseVoxelField boundedVoxelField(
+            {2u, 2u, 2u, 1.0f, 0u},
+            {.maximumChunks = 1u, .maximumStoredCells = 1u, .maximumApproximateBytes = 4'096u});
+        const epochengine::voxel::VoxelCell boundedCell{
+            .density = 1.0f,
+            .material = 3u,
+            .semantics = epochengine::voxel::CellSemantic::Geometry
+        };
+        const auto firstBoundedWrite = boundedVoxelField.write_status({0, 0, 0}, boundedCell);
+        const std::uint64_t boundedRevision = boundedVoxelField.revision();
+        const auto unchangedBoundedWrite = boundedVoxelField.write_status({0, 0, 0}, boundedCell);
+        const auto rejectedBoundedWrite = boundedVoxelField.write_status({2, 0, 0}, boundedCell);
+        const epochengine::voxel::SparseVoxelField differentLayoutVoxelField{
+            {8u, 2u, 2u, 0.5f, 1u}};
+        check(
+            "voxel.bounds_and_content_identity",
+            !epochengine::voxel::valid(epochengine::voxel::ChunkDesc{0x80000000u, 2u, 2u, 1.0f, 0u})
+            && firstBoundedWrite == epochengine::voxel::VoxelWriteStatus::Applied
+            && unchangedBoundedWrite == epochengine::voxel::VoxelWriteStatus::Unchanged
+            && rejectedBoundedWrite == epochengine::voxel::VoxelWriteStatus::BudgetExceeded
+            && boundedVoxelField.revision() == boundedRevision
+            && boundedVoxelField.metrics().storedCellCount == 1u
+            && epochengine::voxel::SparseVoxelField{}.snapshot().contentHash !=
+                differentLayoutVoxelField.snapshot().contentHash);
+
+        epochengine::water::WaterManager waterManager{};
+        const auto waterBody = waterManager.create({
+            .kind = epochengine::water::WaterBodyKind::BoxVolume,
+            .center = {},
+            .halfExtents = {2.0f, 2.0f, 2.0f},
+            .surfaceHeight = 0.5f,
+            .waveAmplitude = 0.0f,
+            .material = 11u
+        });
+        const auto waterSample = waterManager.sample(waterBody, {
+            .position = {0.0f, 0.0f, 0.0f},
+            .simulationTimeSeconds = 4.0
+        });
+        const auto overlappingWaterBody = waterManager.create({
+            .kind = epochengine::water::WaterBodyKind::BoxVolume,
+            .center = {},
+            .halfExtents = {2.0f, 2.0f, 2.0f},
+            .surfaceHeight = 1.0f,
+            .waveAmplitude = 0.0f,
+            .material = 12u
+        });
+        epochengine::voxel::SparseVoxelField waterField{{4u, 4u, 4u, 1.0f, 0u}};
+        const auto waterStamp = epochengine::water::stamp_voxel_water(
+            waterManager,
+            {
+                .body = waterBody,
+                .minimum = {-1, -1, -1},
+                .maximum = {1, 0, 1},
+                .simulationTimeSeconds = 4.0,
+                .maximumCells = 64u
+            },
+            waterField);
+        check(
+            "water.temporal_query_and_voxel_coupling",
+            waterBody.valid()
+            && overlappingWaterBody.valid()
+            && waterSample.found
+            && waterSample.submerged
+            && std::abs(waterSample.surfaceHeight - 0.5f) < 0.001f
+            && waterStamp.applied
+            && waterStamp.bounded
+            && waterStamp.waterCells > 0u
+            && waterField.metrics().waterCellCount == waterStamp.waterCells);
+
+        epochengine::physics::PhysicsManager physicsManager{};
+        const auto physicsTime = physicsManager.current_time();
+        const auto physicsBody = physicsManager.create_body(
+            {
+                .motion = epochengine::physics::BodyMotionType::dynamic_body,
+                .mass_kilograms = 2.0,
+                .stable_user_id = 9001u
+            },
+            {},
+            physicsTime);
+        auto physicsNext = physicsTime;
+        ++physicsNext.tick;
+        const auto physicsCommand = physicsManager.enqueue_set_linear_velocity(
+            physicsBody.body,
+            {1.0, 2.0, 3.0},
+            physicsNext);
+        const auto physicsAdvance = physicsManager.advance({
+            .from = physicsTime,
+            .to = physicsNext,
+            .direction = epochengine::physics::TemporalDirection::forward
+        });
+        const auto physicsSnapshot = physicsManager.snapshot();
+        auto malformedPhysicsSnapshot = physicsSnapshot;
+        auto malformedPhysicsTime = physicsNext;
+        ++malformedPhysicsTime.tick;
+        malformedPhysicsSnapshot.pending_commands.push_back({
+            .kind = epochengine::physics::BodyCommandKind::set_linear_velocity,
+            .body = physicsBody.body,
+            .execute_at = malformedPhysicsTime,
+            .vector = {(std::numeric_limits<double>::quiet_NaN)(), 0.0, 0.0},
+            .sequence = malformedPhysicsSnapshot.next_command_sequence
+        });
+        ++malformedPhysicsSnapshot.next_command_sequence;
+        const auto malformedPhysicsRestore =
+            physicsManager.restore(malformedPhysicsSnapshot);
+        check(
+            "physics.manager_fixed_boundary",
+            static_cast<bool>(physicsBody)
+            && static_cast<bool>(physicsCommand)
+            && static_cast<bool>(physicsAdvance)
+            && physicsAdvance.steps_committed == 1u
+            && malformedPhysicsRestore == epochengine::physics::ResultCode::invalid_snapshot
+            && physicsSnapshot.body_slots.size() == 1u
+            && physicsSnapshot.body_slots.front().state.linear_velocity ==
+                epochengine::physics::Vector3{1.0, 2.0, 3.0});
+
+        const auto audioContract =
+            epochengine::audio::run_audio_manager_contract_tests();
+        check(
+            "audio.manager_logical_contract",
+            audioContract.passed
+            && audioContract.checks_completed >= 6u
+            && audioContract.failure == epochengine::audio::AudioContractFailure::none);
+        const auto capabilityContract =
+            epochengine::capability::run_contract_checks();
+        check(
+            "capability.profile_selection",
+            capabilityContract.passed()
+            && capabilityContract.executed >= 10u);
+
+        const auto tier0Build = epochengine::scene_tier0::make_default_scene();
+        const auto tier0Run = tier0Build
+            ? epochengine::scene_tier0::make_run_request(tier0Build.scene)
+            : std::nullopt;
+        check(
+            "scene.tier0_default_project",
+            static_cast<bool>(tier0Build)
+            && static_cast<bool>(epochengine::scene_tier0::validate(tier0Build.scene))
+            && tier0Run.has_value());
+
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+        const bool textureDocumentReady = []
+        {
+            using namespace epochengine::authoring::texture;
+
+            CanvasDescriptor canvas{};
+            canvas.width = 32u;
+            canvas.height = 32u;
+            canvas.tile_extent = 16u;
+            canvas.mip_count = 1u;
+            const BranchIdentity branch{ 1u, 1u };
+            TextureDocument document{
+                DocumentHandle{ 71u, 1u },
+                branch,
+                canvas
+            };
+            const MutationResult created = document.create_layer(
+                LayerDescriptor{ .name = "Tier1 Canvas" },
+                0u,
+                TemporalPoint{ branch, 1 });
+            if (!document.valid() || !created || !created.layer)
+                return false;
+
+            StrokeDescriptor stroke{};
+            stroke.target = created.layer;
+            stroke.color = PixelRgba8{ 32u, 160u, 255u, 255u };
+            stroke.radius_subpixels = 256u;
+            stroke.samples.push_back(StrokeSample{
+                .x_subpixels = 8 * 256 + 128,
+                .y_subpixels = 8 * 256 + 128
+            });
+            const MutationResult painted = document.apply_stroke(
+                std::move(stroke),
+                TemporalPoint{ branch, 2 });
+            if (!painted || !document.can_undo())
+                return false;
+
+            const MutationResult undone = document.undo(
+                TemporalPoint{ branch, 3 });
+            const MutationResult redone = document.redo(
+                TemporalPoint{ branch, 4 });
+            if (!undone || !redone)
+                return false;
+
+            const auto artifact = document.compiled_artifact_identity({});
+            PhysicalResidencyCapabilities capabilities{};
+            PhysicalResidencyPolicy policy{};
+            policy.preferred = PhysicalResidencyKind::atlas_region;
+            const auto residency = plan_physical_residency(
+                artifact,
+                capabilities,
+                policy);
+            const auto metrics = document.metrics();
+            return static_cast<bool>(artifact)
+                && static_cast<bool>(residency)
+                && metrics.active_layers == 1u
+                && metrics.sparse_tile_count > 0u
+                && document.pixel(created.layer, 0u, 8u, 8u).a > 0u;
+        }();
+        check("authoring.texture_document", textureDocumentReady);
+#endif
+
+        const auto arcadeContract = epochengine::render_arcade::run_contract_checks();
+        check("render.arcade_scene_contract", arcadeContract.passed());
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
         check("render.render_surface_requires_rtt_asset", render_surface_requires_render_texture_asset_contract_ready());
         check("render.render_surface_rejects_mismatched_sampler", render_surface_rejects_mismatched_sampler_contract_ready());
@@ -4733,6 +5185,55 @@ namespace epochengine::core
             return count;
         }
 
+        [[nodiscard]] epochengine::lighting::LightingFrame build_project_play_lighting(
+            std::span<const ProjectRuntimeEntity> entities)
+        {
+            epochengine::lighting::LightManager manager{ 128 };
+            manager.set_environment({ { 0.16f, 0.18f, 0.22f } });
+            for (const ProjectRuntimeEntity& entity : entities)
+            {
+                if (!entity.visible || entity.type != "Light")
+                    continue;
+
+                const bool pointLight = entity.name.contains("Point") || entity.name.contains("Lamp");
+                epochengine::lighting::LightDesc desc{};
+                desc.kind = pointLight
+                    ? epochengine::lighting::LightKind::Point
+                    : epochengine::lighting::LightKind::Directional;
+                desc.color = pointLight
+                    ? epochengine::lighting::Color3{ 1.0f, 0.78f, 0.56f }
+                    : epochengine::lighting::Color3{ 1.0f, 0.95f, 0.84f };
+                desc.intensity = pointLight ? 24.0f : 1.35f;
+                desc.position = { entity.position[0], entity.position[1], entity.position[2] };
+                desc.direction = epochengine::lighting::direction_from_euler_degrees({
+                    entity.rotation[0],
+                    entity.rotation[1],
+                    entity.rotation[2]
+                });
+                desc.range = pointLight
+                    ? (std::max)(12.0f, (std::max)({ entity.scale[0], entity.scale[1], entity.scale[2] }) * 12.0f)
+                    : 1.0f;
+                (void)manager.create(desc);
+            }
+            return manager.build_frame();
+        }
+
+        [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> project_spawn_position(
+            std::span<const ProjectRuntimeEntity> entities) noexcept
+        {
+            for (const ProjectRuntimeEntity& entity : entities)
+            {
+                if (entity.visible && !entity.editor_only && entity.type == "Spawn")
+                {
+                    return epochengine::previewgrid::Vec3{
+                        entity.position[0],
+                        entity.position[1] + 1.65f,
+                        entity.position[2]
+                    };
+                }
+            }
+            return std::nullopt;
+        }
         void publish_project_play_markers(
             const epochengine::core::Context* ctx,
             std::span<const ProjectRuntimeEntity> entities)
@@ -4791,6 +5292,8 @@ namespace epochengine::core
                 m_entities = load_project_runtime_entities(
                     m_scenePath,
                     std::span<const epochengine::EditorSceneSeedEntity>{ seedEntities.data(), seedEntities.size() });
+                m_lightingFrame = build_project_play_lighting(
+                    std::span<const ProjectRuntimeEntity>{ m_entities.data(), m_entities.size() });
             }
 
             void load() override
@@ -4806,6 +5309,7 @@ namespace epochengine::core
                 if (input::action_pressed(input::Action::Cancel))
                 {
                     epochengine::previewgrid::clear_object_markers(ctx.get());
+                    epochengine::previewgrid::clear_lighting_frame(ctx.get());
                     return false;
                 }
 
@@ -4839,6 +5343,14 @@ namespace epochengine::core
                 if (!m_cameraApplied.contains(ctx.get()))
                 {
                     epochengine::previewgrid::set_camera_mode(ctx.get(), m_cameraMode);
+                    if (m_cameraMode == epochengine::previewgrid::CameraMode::FPS)
+                    {
+                        if (const auto spawn = project_spawn_position(
+                            std::span<const ProjectRuntimeEntity>{ m_entities.data(), m_entities.size() }))
+                        {
+                            (void)epochengine::previewgrid::focus_camera(ctx.get(), *spawn, 0.0f);
+                        }
+                    }
                     m_cameraApplied[ctx.get()] = true;
                 }
                 ctx->set_scene_viewport({ 0, 0, width, height });
@@ -4846,6 +5358,7 @@ namespace epochengine::core
                     m_entities.data(),
                     m_entities.size()
                 });
+                epochengine::previewgrid::set_lighting_frame(ctx.get(), m_lightingFrame);
 
                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
 
@@ -4943,6 +5456,7 @@ namespace epochengine::core
             std::string m_description{};
             epochengine::EditorProjectModelSummary m_modelSummary{};
             std::vector<ProjectRuntimeEntity> m_entities{};
+            epochengine::lighting::LightingFrame m_lightingFrame{};
             timing::Clock::time_point m_lastFrame{};
             bool m_hasLastFrame{ false };
             epochengine::previewgrid::CameraMode m_cameraMode{ epochengine::previewgrid::CameraMode::Editor };

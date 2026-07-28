@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -42,11 +42,13 @@ module;
 #include <span>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 export module render.preview_grid;
 
 import engine.visuals;
+import render.lighting;
 
 namespace epochengine::previewgrid
 {
@@ -309,8 +311,28 @@ namespace epochengine::previewgrid
         export inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
         export inline std::unordered_map<const void*, Vec3, PtrHash> g_lastMarkerHits{};
         export inline std::unordered_map<const void*, std::vector<ObjectMarker>, PtrHash> g_objectMarkers{};
+        export inline std::unordered_map<const void*, epochengine::lighting::LightingFrame, PtrHash> g_lightingFrames{};
+        export inline std::unordered_map<const void*, std::uint64_t, PtrHash> g_geometryRevisions{};
         inline std::shared_mutex g_cameraRigMutex{};
         inline std::shared_mutex g_objectMarkerMutex{};
+        inline std::shared_mutex g_lightingFrameMutex{};
+        inline std::shared_mutex g_geometryRevisionMutex{};
+
+        inline void touch_geometry(const void* ctxKey) noexcept
+        {
+            std::unique_lock lock(g_geometryRevisionMutex);
+            auto& revision = g_geometryRevisions[ctxKey];
+            revision = revision == (std::numeric_limits<std::uint64_t>::max)() ? 1u : revision + 1u;
+        }
+
+        [[nodiscard]] inline bool same_marker(const ObjectMarker& lhs, const ObjectMarker& rhs) noexcept
+        {
+            return lhs.position.x == rhs.position.x && lhs.position.y == rhs.position.y && lhs.position.z == rhs.position.z
+                && lhs.color.x == rhs.color.x && lhs.color.y == rhs.color.y && lhs.color.z == rhs.color.z
+                && lhs.scale.x == rhs.scale.x && lhs.scale.y == rhs.scale.y && lhs.scale.z == rhs.scale.z
+                && lhs.radius == rhs.radius && lhs.primitive == rhs.primitive && lhs.selected == rhs.selected
+                && lhs.editorOnly == rhs.editorOnly && lhs.sampledRenderSurface == rhs.sampledRenderSurface;
+        }
 
         [[nodiscard]] inline const void* normalize_camera_key(const void* ctxKey) noexcept
         {
@@ -626,6 +648,35 @@ namespace epochengine::previewgrid
         detail::touch_rig(rig);
     }
 
+    export inline bool focus_camera(
+        const void* ctxKey,
+        Vec3 focus,
+        float framingRadius = 1.0f) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey || !std::isfinite(focus.x) || !std::isfinite(focus.y) || !std::isfinite(focus.z)
+            || !std::isfinite(framingRadius) || framingRadius < 0.0f)
+        {
+            return false;
+        }
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(rigKey);
+        if (rig.mode == CameraMode::FPS)
+        {
+            rig.position = focus;
+        }
+        else
+        {
+            rig.focus = focus;
+            const float minimumDistance = rig.mode == CameraMode::Canvas2D ? 6.0f : 2.5f;
+            const float maximumDistance = rig.mode == CameraMode::Canvas2D ? 64.0f : 48.0f;
+            const float framingDistance = (std::max)(minimumDistance, framingRadius * 3.25f);
+            rig.distance = (std::clamp)(framingDistance, minimumDistance, maximumDistance);
+        }
+        detail::touch_rig(rig);
+        return true;
+    }
     export [[nodiscard]] inline float camera_distance_for(const void* ctxKey) noexcept
     {
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
@@ -667,6 +718,18 @@ namespace epochengine::previewgrid
         std::shared_lock lock(detail::g_cameraRigMutex);
         const auto it = detail::g_cameraRigs.find(rigKey);
         return it != detail::g_cameraRigs.end() ? it->second.revision : 0;
+    }
+    export [[nodiscard]] inline std::uint64_t preview_geometry_revision_for(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return 0;
+
+        const std::uint64_t cameraRevision = camera_revision_for(rigKey);
+        std::shared_lock lock(detail::g_geometryRevisionMutex);
+        const auto it = detail::g_geometryRevisions.find(rigKey);
+        const std::uint64_t geometryRevision = it != detail::g_geometryRevisions.end() ? it->second : 0u;
+        return (cameraRevision * 1099511628211ull) ^ geometryRevision;
     }
 
     export inline void pan_camera_drag(
@@ -712,6 +775,14 @@ namespace epochengine::previewgrid
         {
             std::unique_lock lock(detail::g_cameraRigMutex);
             detail::g_cameraRigs.erase(rigKey);
+        }
+        {
+            std::unique_lock lock(detail::g_lightingFrameMutex);
+            detail::g_lightingFrames.erase(rigKey);
+        }
+        {
+            std::unique_lock lock(detail::g_geometryRevisionMutex);
+            detail::g_geometryRevisions.erase(rigKey);
         }
     }
 
@@ -939,20 +1010,91 @@ namespace epochengine::previewgrid
         return 0u;
     }
 
+    export inline void set_lighting_frame(
+        const void* ctxKey,
+        epochengine::lighting::LightingFrame frame)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return;
+
+        bool changed = true;
+        {
+            std::unique_lock lock(detail::g_lightingFrameMutex);
+            if (const auto it = detail::g_lightingFrames.find(rigKey); it != detail::g_lightingFrames.end())
+            {
+                changed = it->second.revision != frame.revision
+                    || it->second.lights.size() != frame.lights.size()
+                    || it->second.environment.ambient.r != frame.environment.ambient.r
+                    || it->second.environment.ambient.g != frame.environment.ambient.g
+                    || it->second.environment.ambient.b != frame.environment.ambient.b;
+            }
+            detail::g_lightingFrames[rigKey] = std::move(frame);
+        }
+        if (changed)
+            detail::touch_geometry(rigKey);
+    }
+
+    export inline void clear_lighting_frame(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return;
+
+        bool changed = false;
+        {
+            std::unique_lock lock(detail::g_lightingFrameMutex);
+            changed = detail::g_lightingFrames.erase(rigKey) > 0u;
+        }
+        if (changed)
+            detail::touch_geometry(rigKey);
+    }
+
+    export [[nodiscard]] inline epochengine::lighting::LightingFrame lighting_frame_for(const void* ctxKey)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+
+        std::shared_lock lock(detail::g_lightingFrameMutex);
+        if (const auto it = detail::g_lightingFrames.find(rigKey); it != detail::g_lightingFrames.end())
+            return it->second;
+        return {};
+    }
     export inline void set_object_markers(const void* ctxKey, std::span<const ObjectMarker> markers)
     {
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
         if (!rigKey)
             return;
 
-        std::unique_lock lock(detail::g_objectMarkerMutex);
-        if (markers.empty())
+        bool changed = false;
         {
-            detail::g_objectMarkers.erase(rigKey);
-            return;
+            std::unique_lock lock(detail::g_objectMarkerMutex);
+            if (markers.empty())
+            {
+                changed = detail::g_objectMarkers.erase(rigKey) > 0u;
+            }
+            else
+            {
+                const auto it = detail::g_objectMarkers.find(rigKey);
+                changed = it == detail::g_objectMarkers.end() || it->second.size() != markers.size();
+                if (!changed)
+                {
+                    for (std::size_t index = 0; index < markers.size(); ++index)
+                    {
+                        if (!detail::same_marker(it->second[index], markers[index]))
+                        {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+                if (changed)
+                    detail::g_objectMarkers[rigKey] = std::vector<ObjectMarker>{ markers.begin(), markers.end() };
+            }
         }
-
-        detail::g_objectMarkers[rigKey] = std::vector<ObjectMarker>{ markers.begin(), markers.end() };
+        if (changed)
+            detail::touch_geometry(rigKey);
     }
 
     export inline void clear_object_markers(const void* ctxKey) noexcept
@@ -961,8 +1103,13 @@ namespace epochengine::previewgrid
         if (!rigKey)
             return;
 
-        std::unique_lock lock(detail::g_objectMarkerMutex);
-        detail::g_objectMarkers.erase(rigKey);
+        bool changed = false;
+        {
+            std::unique_lock lock(detail::g_objectMarkerMutex);
+            changed = detail::g_objectMarkers.erase(rigKey) > 0u;
+        }
+        if (changed)
+            detail::touch_geometry(rigKey);
     }
 
     export [[nodiscard]] inline std::vector<Vertex> object_marker_vertices_for(const void* ctxKey)
@@ -1184,6 +1331,9 @@ namespace epochengine::previewgrid
             markers = it->second;
         }
 
+        const epochengine::lighting::LightingFrame lightingFrame = lighting_frame_for(rigKey);
+        const Camera camera = camera_for(rigKey);
+
         std::vector<Vertex> out{};
         out.reserve(markers.size() * 36u);
         const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
@@ -1203,16 +1353,50 @@ namespace epochengine::previewgrid
                 (std::clamp)(color.z * factor + 0.08f, 0.0f, 1.0f)
             };
         };
+        const auto shade_surface = [&](Vec3 position, Vec3 normal, Vec3 albedo) noexcept
+        {
+            if (lightingFrame.revision == 0u && lightingFrame.lights.empty())
+            {
+                const float facing = 0.70f + (std::max)(0.0f, normal.y) * 0.46f;
+                return lit(albedo, facing);
+            }
+
+            const auto result = epochengine::lighting::evaluate_reference_raster_lighting(
+                lightingFrame,
+                epochengine::lighting::SurfaceSample{
+                    .position{ position.x, position.y, position.z },
+                    .normal{ normal.x, normal.y, normal.z },
+                    .viewDirection{
+                        camera.eye.x - position.x,
+                        camera.eye.y - position.y,
+                        camera.eye.z - position.z
+                    },
+                    .albedo{ albedo.x, albedo.y, albedo.z },
+                    .specularColor{ 0.18f, 0.18f, 0.18f },
+                    .shininess = 24.0f
+                });
+            return Vec3{
+                (std::clamp)(result.combined.r, 0.0f, 1.0f),
+                (std::clamp)(result.combined.g, 0.0f, 1.0f),
+                (std::clamp)(result.combined.b, 0.0f, 1.0f)
+            };
+        };
         auto push_tri = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 color)
         {
             out.push_back(make_vertex(a, color));
             out.push_back(make_vertex(b, color));
             out.push_back(make_vertex(c, color));
         };
-        auto push_face = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 color)
+        auto push_face = [&](Vec3 a, Vec3 b, Vec3 c, Vec3 d, Vec3 normal, Vec3 color)
         {
-            push_tri(a, b, c, color);
-            push_tri(a, c, d, color);
+            const Vec3 center{
+                (a.x + b.x + c.x + d.x) * 0.25f,
+                (a.y + b.y + c.y + d.y) * 0.25f,
+                (a.z + b.z + c.z + d.z) * 0.25f
+            };
+            const Vec3 shaded = shade_surface(center, normal, color);
+            push_tri(a, b, c, shaded);
+            push_tri(a, c, d, shaded);
         };
         auto push_box = [&](Vec3 center, Vec3 half, Vec3 color)
         {
@@ -1225,12 +1409,12 @@ namespace epochengine::previewgrid
             const Vec3 c110{ center.x + half.x, center.y + half.y, center.z - half.z };
             const Vec3 c111{ center.x + half.x, center.y + half.y, center.z + half.z };
 
-            push_face(c010, c110, c111, c011, lit(color, 1.16f));
-            push_face(c000, c001, c101, c100, lit(color, 0.54f));
-            push_face(c001, c011, c111, c101, lit(color, 0.88f));
-            push_face(c100, c110, c010, c000, lit(color, 0.78f));
-            push_face(c000, c010, c011, c001, lit(color, 0.70f));
-            push_face(c101, c111, c110, c100, lit(color, 0.96f));
+            push_face(c010, c110, c111, c011, { 0.0f, 1.0f, 0.0f }, color);
+            push_face(c000, c001, c101, c100, { 0.0f, -1.0f, 0.0f }, color);
+            push_face(c001, c011, c111, c101, { 0.0f, 0.0f, 1.0f }, color);
+            push_face(c100, c110, c010, c000, { 1.0f, 0.0f, 0.0f }, color);
+            push_face(c000, c010, c011, c001, { -1.0f, 0.0f, 0.0f }, color);
+            push_face(c101, c111, c110, c100, { 0.0f, 0.0f, -1.0f }, color);
         };
         auto push_leaf_cluster = [&](Vec3 center, Vec3 half, Vec3 color)
         {

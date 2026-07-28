@@ -1,99 +1,95 @@
-# Epoch Documentation Index
+# Epoch Documentation
 
-This folder is now grouped by purpose so Linux setup notes stop competing with
-engine architecture docs.
+## Start Here
 
-## Quick orientation
+Epoch has one forward architecture:
 
-- `../CMakePresets.json` - build presets for Windows, Linux, and macOS
-- `../../Engine.sln` - Visual Studio / MSBuild entry point
-- `../../x64/Debug/` - primary local MSVC runtime output
-- `../../x64/Release/` - release local MSVC runtime output
+- `engine/capability_tier_architecture.md` - canonical product, capability,
+  renderer, resource, authoring, temporal, settings, and delivery architecture.
 
-## If you are new to the repo
+Its focused subordinate contracts are:
 
-Start here first:
+- `engine/renderer_feature_matrix.md` - current backend evidence only;
+- `engine/temporal_engine_architecture.md` - authoritative world time, events,
+  branches, observations, persistence, and replay;
+- `engine/temporal_authoring_platform.md` - documents, semantic history,
+  compiled artifacts, physical caches, and authoring services.
 
-- `build/cmake_presets_and_builds.md` - preset names and first build commands
-- `build/local_build_scripts_and_release_packaging.md` - helper scripts, local
-  validation, and packaging rules
-- `engine/runtime_and_editor_workflows.md` - how launcher, editor, projects,
-  scripts, systems, and runtime are supposed to behave
-- `../ai/README.md` - live OS AI sandbox, helper-model, safety, and
-  evidence-loop contract for the repo-safe AI assets under `Engine/ai/`
+Do not treat another engine document as a competing roadmap. Historical passes,
+release chronology, abandoned approaches, and durable mission memory live under
+`../../Changes/`.
 
-## Build and packaging docs
+## Current Delivery
 
-- `build/build_configuration_flags.md` - build/config macros, support status,
-  and cautions
-- `build/cmake_presets_and_builds.md` - CMake preset names and baseline build
-  commands
-- `build/developer_tools_and_dependencies.md` - required and optional local
-  tooling
-- `build/local_build_scripts_and_release_packaging.md` - shell scripts,
-  validation flow, and release packaging discipline
+The active objective is a playable baseline 2D project within two months:
 
-Build-system reality to keep in mind:
+```text
+capability/project profile
+-> temporal texture document and residency
+-> Canvas2D compose and sprite batch
+-> tilemap and scene authoring
+-> input, 2D physics, audio, animation
+-> Play, Run, Build, save, and reopen
+```
 
-- the repo-root `CMakeLists.txt` is a thin wrapper for CI/simple configure
-  entry, not a replacement for the `Engine/` preset workflow
-- the wrapper keeps the older `3.22.1` entry explicit, but the current
-  module-aware engine path still requires newer CMake and says so on purpose
-- GitHub workflows should stay build-only; GUI smoke and screenshot proof still
-  belong to asset-bearing local runtime outputs
+Read:
 
-## Engine and runtime docs
+- `../../Changes/active_pass.md` for the current bounded gate;
+- `../../Changes/roadmap.md` for the eight-week schedule;
+- `../../Changes/mission_cache.md` for durable follow-up;
+- `../../Changes/changelog.txt` for implementation/release history.
 
-- `engine/current_engine_architecture.md` - current architecture snapshot,
-  strengths, cautions, and priorities
-- `engine/temporal_engine_architecture.md` - target persistent, reversible,
-  event-driven spacetime architecture, invariants, phased campaign, and first
-  production slice
-- `engine/runtime_and_editor_workflows.md` - project-centric runtime, editor,
-  scripting, systems, and updater behavior
-- `engine/gui_library_architecture.md` - shared engine GUI primitives, layout,
-  docking, theme/rendering, and editor-composition ownership rules
-- `engine/forest_factory_package_contract.md` - Forest Factory core/package
-  boundary, Plant Lab provenance, activation gates, and generated-project policy
-- `engine/backend_context_status.md` - backend/context inventory and practical
-  guidance
-- `engine/backend_menu_overlay_status.md` - backend GUI parity and caution
-  notes
-- `engine/renderer_feature_matrix.md` - OpenGL/Vulkan/Direct3D feature-family
-  map with existing coverage separated from renderer backlog work
-- `engine/voxel_planetary_package_track.md` - voxel-first planetary terrain,
-  procedural vegetation, and package-gated research import direction
-- `engine/renderer_regression_smoke_plan.md` - repeatable backend smoke
-  expectations
-- `engine/smoke_capture_and_screenshot_workflow.md` - capture discipline for
-  proofs and README screenshots
-- `engine/diagnostics/2026-05-17-gui-regression/README.md` - current GUI
-  regression screenshot evidence for missing panes, duplicate dock controls,
-  and scrollbar/extents artifacts
-- `engine/os_ai_tooling_and_evidence_policy.md` - OS AI model/tooling storage,
-  evidence capture, iteration, and promotion rules
-- `engine/source_shape_audit.md` - current source/header/module organization
-  checkpoint and safe cleanup gates
-- `../ai/README.md` - live OS AI content map and self-iteration sandbox controls
-- `engine/research_import_and_promotion.md` - staged research intake and
-  promotion path
-- `engine/repository_layout_reference.txt` - high-level repo layout
-- `engine/module_inventory_reference.txt` - active module/header inventory
-- `engine/legacy_feature_map.md` - retired legacy surfaces mapped to current
-  replacements
+## Build
 
-## Platform-specific docs
+- `../CMakePresets.json` - engine CMake presets;
+- `../../Engine.sln` - Visual Studio/MSBuild entry point;
+- `build/build_configuration_flags.md` - feature/build configuration;
+- `build/cmake_presets_and_builds.md` - baseline configure/build commands;
+- `build/developer_tools_and_dependencies.md` - toolchain dependencies;
+- `build/local_build_scripts_and_release_packaging.md` - local scripts and
+  packaging discipline;
+- `platform/linux/linux_wsl_build_setup.md` - Linux/WSL setup;
+- `platform/android/android_bringup_plan.md` - deferred mobile bring-up.
 
-- `platform/android/android_bringup_plan.md` - honest Android-first mobile
-  bring-up scope and acceptance criteria
-- `platform/linux/linux_wsl_build_setup.md` - WSL/Linux setup and build notes
+The repo-root CMake file is a thin wrapper. The module-aware `Engine/` presets
+and supported toolchains define production builds. Hosted CI confirms faithful
+local proof; GUI and presentation claims still need asset-bearing runtime and
+operator visual evidence.
 
-## Planning and history
+## Operational References
 
-These do not live in `Engine/docs/`, but they are the companion references for
-the active tree:
+These documents describe current subsystem operation or focused policy. They do
+not set independent product priorities:
 
-- `../../Changes/roadmap.md`
-- `../../Changes/changelog.txt`
-- `../../Changes/cpp.md`
-- `../../Changes/engine_history_and_release_archive.md`
+- `engine/runtime_and_editor_workflows.md`
+- `engine/gui_library_architecture.md`
+- `engine/backend_context_status.md`
+- `engine/backend_menu_overlay_status.md`
+- `engine/renderer_regression_smoke_plan.md`
+- `engine/smoke_capture_and_screenshot_workflow.md`
+- `engine/forest_factory_package_contract.md`
+- `engine/voxel_planetary_package_track.md`
+- `engine/os_ai_tooling_and_evidence_policy.md`
+- `engine/research_import_and_promotion.md`
+- `engine/source_shape_audit.md`
+- `../ai/README.md`
+
+Inventory/reference files:
+
+- `engine/repository_layout_reference.txt`
+- `engine/module_inventory_reference.txt`
+- `engine/legacy_feature_map.md`
+
+When an operational reference conflicts with the capability-tier architecture or
+the active gate, update or archive the stale reference instead of adding another
+plan.
+
+## Documentation Rules
+
+- Architecture states current contracts and durable invariants.
+- The renderer matrix states evidence, not aspiration.
+- Settings and controls are documented with the subsystem that owns them.
+- `Present` requires implementation and validation evidence.
+- Generated caches, local runtime output, and transient diagnostics are not
+  documentation.
+- Release history and old debugging detail belong under `Changes/`.

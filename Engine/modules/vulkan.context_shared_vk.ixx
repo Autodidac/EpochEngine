@@ -175,6 +175,8 @@ namespace epochengine::vulkancontext
                 vk::MemoryPropertyFlags properties);
 
         std::uint32_t indexCount = 0;
+        std::uint32_t solidIndexCount = 0;
+        std::uint32_t lineIndexCount = 0;
 
     private:
         std::weak_ptr<epochengine::core::Context> context;
@@ -206,6 +208,7 @@ namespace epochengine::vulkancontext
         vk::UniqueDescriptorSetLayout descriptorSetLayout;
         vk::UniquePipelineLayout pipelineLayout;
         vk::UniquePipeline graphicsPipeline;
+        vk::UniquePipeline solidGraphicsPipeline;
 
         std::vector<vk::UniqueFramebuffer> framebuffers;
 
@@ -396,6 +399,7 @@ namespace epochengine::vulkancontext
 
     export std::vector<Application::Vertex> preview_vertices_for(const epochengine::core::Context* ctx);
     export std::vector<std::uint16_t>       preview_indices_for(const epochengine::core::Context* ctx);
+    export std::uint32_t                    preview_solid_index_count_for(const epochengine::core::Context* ctx);
 
     export Application& bind_vulkan_app(const std::shared_ptr<epochengine::core::Context>& ctx);
     export Application* try_get_vulkan_app(const epochengine::core::Context* ctx) noexcept;

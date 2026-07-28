@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -32,6 +32,7 @@ module;
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include "../include/_epoch.stl_types.hpp"
 
@@ -131,11 +132,33 @@ export namespace epochengine::voxel
 
     [[nodiscard]] constexpr bool valid(const ChunkDesc& desc) noexcept
     {
-        return desc.cellsX > 0u && desc.cellsY > 0u && desc.cellsZ > 0u && desc.cellSizeMeters > 0.0F;
+        constexpr std::uint64_t maximumIndexedCells =
+            static_cast<std::uint64_t>((std::numeric_limits<std::uint32_t>::max)());
+        constexpr std::uint32_t maximumSignedDimension =
+            static_cast<std::uint32_t>((std::numeric_limits<std::int32_t>::max)());
+
+        if (desc.cellsX == 0u || desc.cellsY == 0u || desc.cellsZ == 0u ||
+            desc.cellsX > maximumSignedDimension ||
+            desc.cellsY > maximumSignedDimension ||
+            desc.cellsZ > maximumSignedDimension ||
+            !(desc.cellSizeMeters > 0.0F) ||
+            desc.cellSizeMeters > (std::numeric_limits<float>::max)())
+        {
+            return false;
+        }
+
+        const std::uint64_t plane =
+            static_cast<std::uint64_t>(desc.cellsX) * desc.cellsY;
+        return plane <= maximumIndexedCells &&
+               desc.cellsZ <= maximumIndexedCells / plane;
     }
 
     [[nodiscard]] constexpr std::uint64_t dense_cell_count(const ChunkDesc& desc) noexcept
     {
+        if (!valid(desc))
+        {
+            return 0;
+        }
         return static_cast<std::uint64_t>(desc.cellsX) *
                static_cast<std::uint64_t>(desc.cellsY) *
                static_cast<std::uint64_t>(desc.cellsZ);

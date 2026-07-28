@@ -163,7 +163,7 @@ namespace epochengine::vulkancontext
         if (renderScenePreview && ctx)
         {
             const std::uint64_t previewRevision =
-                epochengine::previewgrid::camera_revision_for(ctx);
+                epochengine::previewgrid::preview_geometry_revision_for(ctx);
             if (previewRevision != previewGeometryRevision)
             {
                 createVertexBuffer();
@@ -174,8 +174,6 @@ namespace epochengine::vulkancontext
 
         if (renderScenePreview)
         {
-            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
-
             const vk::Buffer vb[] = { *vertexBuffer };
             const vk::DeviceSize offsets[] = { 0 };
             cmd.bindVertexBuffers(0, 1, vb, offsets);
@@ -225,7 +223,16 @@ namespace epochengine::vulkancontext
             sceneRect.layerCount = 1;
             cmd.clearAttachments(1, &sceneAttachment, 1, &sceneRect);
 #endif
-            cmd.drawIndexed(indexCount, 1, 0, 0, 0);
+            if (solidIndexCount > 0u)
+            {
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *solidGraphicsPipeline);
+                cmd.drawIndexed(solidIndexCount, 1, 0, 0, 0);
+            }
+            if (lineIndexCount > 0u)
+            {
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
+                cmd.drawIndexed(lineIndexCount, 1, solidIndexCount, 0, 0);
+            }
         }
 
         cmd.nextSubpass(vk::SubpassContents::eInline);

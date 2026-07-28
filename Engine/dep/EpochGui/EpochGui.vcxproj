@@ -68,7 +68,10 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Label="UserMacros">
+    <EpochGuiEnableRoundedRect Condition="'$(EpochGuiEnableRoundedRect)'==''">false</EpochGuiEnableRoundedRect>
+    <EpochGuiEnableInput Condition="'$(EpochGuiEnableInput)'==''">false</EpochGuiEnableInput>
+  </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnableManifest>false</VcpkgEnableManifest>
     <VcpkgManifestInstall>false</VcpkgManifestInstall>
@@ -82,8 +85,8 @@
     <OutDir Condition="'$(SolutionPath)'=='' or '$(SolutionPath)'=='*Undefined*'">$(ProjectDir)build\msvc\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
   <PropertyGroup Label="EpochGuiSourceRoot">
-    <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)..\..\include\gui\floating_window.hpp')">$(ProjectDir)..\..\</EpochGuiSourceRoot>
     <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)include\gui\floating_window.hpp')">$(ProjectDir)</EpochGuiSourceRoot>
+    <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)..\..\include\gui\floating_window.hpp')">$(ProjectDir)..\..\</EpochGuiSourceRoot>
   </PropertyGroup>
   <PropertyGroup Label="EpochGuiModuleRoot">
     <EpochGuiModuleRoot Condition="'$(EpochGuiModuleRoot)'=='' and Exists('$(ProjectDir)modules\epoch.gui.ixx')">$(ProjectDir)</EpochGuiModuleRoot>
@@ -152,14 +155,35 @@
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(EpochGuiEnableRoundedRect)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>EPOCHGUI_ENABLE_ROUNDED_RECT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(EpochGuiEnableInput)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>EPOCHGUI_ENABLE_INPUT=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.ixx" />
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.font.ixx" />
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.image.ixx" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dockable_window.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\image.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_control.cpp" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(EpochGuiEnableRoundedRect)'=='true'">
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.rounded_rect.ixx" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\rounded_rect.cpp" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(EpochGuiEnableInput)'=='true'">
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.input.ixx" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\input.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\dockable_window.hpp" />

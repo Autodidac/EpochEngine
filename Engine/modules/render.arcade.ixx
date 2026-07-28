@@ -46,6 +46,90 @@ import render.graph;
 
 export namespace epochengine::render_arcade
 {
+    struct ArcadeSceneNodeContract final
+    {
+        std::string_view name{};
+        std::string_view type{};
+        std::array<float, 3> position{};
+        std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
+        bool sampled_render_surface{};
+    };
+
+    inline constexpr std::array<std::string_view, 11> kRuntimeSceneIds{
+        "snake",
+        "tetris",
+        "pacman",
+        "frogger",
+        "sokoban",
+        "match3",
+        "sliding",
+        "minesweeper",
+        "2048",
+        "sandsim",
+        "cellular"
+    };
+
+    inline constexpr ArcadeSceneNodeContract kCabinetBodySceneNode{
+        .name = "EngineArcadeCabinetBody",
+        .type = "StaticMesh",
+        .position = { 0.0f, 0.92f, 0.24f },
+        .scale = { 1.38f, 1.30f, 0.54f },
+        .sampled_render_surface = false
+    };
+
+    inline constexpr ArcadeSceneNodeContract kScreenSceneNode{
+        .name = "EngineArcadeScreen",
+        .type = "Canvas2D",
+        .position = { 0.0f, 1.78f, -0.42f },
+        .scale = { 2.22f, 1.22f, 0.06f },
+        .sampled_render_surface = true
+    };
+
+    [[nodiscard]] constexpr bool is_runtime_scene_id(std::string_view scene_id) noexcept
+    {
+        for (const std::string_view candidate : kRuntimeSceneIds)
+        {
+            if (candidate == scene_id)
+                return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] constexpr bool package_scene_catalog_matches() noexcept
+    {
+        std::string_view remaining = package_registry::engine_arcade_scene_ids();
+        for (std::size_t index = 0; index < kRuntimeSceneIds.size(); ++index)
+        {
+            const std::size_t separator = remaining.find(',');
+            const std::string_view scene =
+                separator == std::string_view::npos ? remaining : remaining.substr(0u, separator);
+            if (scene != kRuntimeSceneIds[index])
+                return false;
+
+            if (index + 1u == kRuntimeSceneIds.size())
+                return separator == std::string_view::npos;
+            if (separator == std::string_view::npos)
+                return false;
+            remaining.remove_prefix(separator + 1u);
+        }
+        return remaining.empty();
+    }
+
+    inline void apply_scene_transform(
+        GraphModelMeshSlot& slot,
+        const ArcadeSceneNodeContract& scene_node) noexcept
+    {
+        for (float& value : slot.transform)
+            value = 0.0f;
+
+        slot.transform[0] = scene_node.scale[0];
+        slot.transform[5] = scene_node.scale[1];
+        slot.transform[10] = scene_node.scale[2];
+        slot.transform[12] = scene_node.position[0];
+        slot.transform[13] = scene_node.position[1];
+        slot.transform[14] = scene_node.position[2];
+        slot.transform[15] = 1.0f;
+    }
     struct ArcadeScreenGraphBuild
     {
         GraphRenderTextureAsset screen{};
@@ -277,6 +361,7 @@ export namespace epochengine::render_arcade
     {
         const std::string_view screenNameStd = package_registry::engine_arcade_render_texture_name();
         const epochengine::string_view screenName{ screenNameStd.data(), screenNameStd.size() };
+        const std::string_view defaultScene = package_registry::engine_arcade_default_scene_id();
 
         ArcadeScreenGraphBuild build{};
         build.screen = builder.create_render_texture_asset(
@@ -302,7 +387,7 @@ export namespace epochengine::render_arcade
         GraphModelMeshSlot modelSlot{};
         modelSlot.mesh = build.mesh;
         modelSlot.material = build.material;
-        modelSlot.node_name = "arcade_screen_scene_attract_grid";
+        modelSlot.node_name = epochengine::string{ epochengine::to_view(defaultScene) };
         const std::array<GraphModelMeshSlot, 1> modelSlots{ modelSlot };
         build.model = builder.create_model(
             "engine_arcade.screen_scene.model",
@@ -381,12 +466,14 @@ export namespace epochengine::render_arcade
         GraphModelMeshSlot bodySlot{};
         bodySlot.mesh = build.body_mesh;
         bodySlot.material = build.body_material;
-        bodySlot.node_name = "arcade_cabinet_body";
+        bodySlot.node_name = epochengine::string{ epochengine::to_view(kCabinetBodySceneNode.name) };
+        apply_scene_transform(bodySlot, kCabinetBodySceneNode);
 
         GraphModelMeshSlot screenSlot{};
         screenSlot.mesh = build.mesh;
         screenSlot.material = build.material;
-        screenSlot.node_name = "arcade_rtt_screen_panel";
+        screenSlot.node_name = epochengine::string{ epochengine::to_view(kScreenSceneNode.name) };
+        apply_scene_transform(screenSlot, kScreenSceneNode);
         const std::array<GraphModelMeshSlot, 2> modelSlots{ bodySlot, screenSlot };
 
         build.model = builder.create_model(
@@ -407,4 +494,98 @@ export namespace epochengine::render_arcade
 
         return build;
     }
+
+    struct ArcadeContractChecks final
+    {
+        bool default_scene_registered{};
+        bool package_catalog_exact{};
+        bool sampled_render_texture{};
+        bool required_render_surface_binding{};
+        bool geometry_storage_consistent{};
+        bool scene_integration_consistent{};
+
+        [[nodiscard]] constexpr bool passed() const noexcept
+        {
+            return default_scene_registered
+                && package_catalog_exact
+                && sampled_render_texture
+                && required_render_surface_binding
+                && geometry_storage_consistent
+                && scene_integration_consistent;
+        }
+    };
+
+    [[nodiscard]] inline ArcadeContractChecks run_contract_checks()
+    {
+        const RenderTextureAssetDesc screen = make_screen_render_texture_desc();
+        const MaterialDesc screenMaterial = make_cabinet_material_desc();
+        const MeshDesc screenSceneMesh = make_screen_scene_mesh_desc();
+        const MeshDesc cabinetScreenMesh = make_screen_mesh_desc();
+        const MeshDesc cabinetBodyMesh = make_cabinet_body_mesh_desc();
+        GraphModelMeshSlot bodySceneSlot{};
+        GraphModelMeshSlot screenSceneSlot{};
+        apply_scene_transform(bodySceneSlot, kCabinetBodySceneNode);
+        apply_scene_transform(screenSceneSlot, kScreenSceneNode);
+
+        const auto vertex_storage_matches = [](const BufferDesc& buffer, const MeshDesc& mesh) noexcept
+        {
+            return mesh.vertex_count > 0u
+                && mesh.vertex_layout.stride_bytes > 0u
+                && buffer.size_bytes
+                    == static_cast<std::uint64_t>(mesh.vertex_count)
+                        * static_cast<std::uint64_t>(mesh.vertex_layout.stride_bytes);
+        };
+        const auto index_storage_matches = [](const BufferDesc& buffer, const MeshDesc& mesh) noexcept
+        {
+            const std::uint64_t indexSize =
+                mesh.index_format == IndexFormat::uint16 ? sizeof(std::uint16_t)
+                : mesh.index_format == IndexFormat::uint32 ? sizeof(std::uint32_t)
+                : 0u;
+            return mesh.index_count > 0u
+                && indexSize > 0u
+                && buffer.size_bytes == static_cast<std::uint64_t>(mesh.index_count) * indexSize;
+        };
+
+        const bool requiredRenderSurface =
+            screenMaterial.texture_slots.size() == 1u
+            && screenMaterial.texture_slots.front().slot == MaterialTextureSlot::render_surface
+            && screenMaterial.texture_slots.front().required
+            && screenMaterial.texture_slots.front().expected_format == TextureFormat::rgba8_unorm;
+
+        return ArcadeContractChecks{
+            .default_scene_registered =
+                is_runtime_scene_id(package_registry::engine_arcade_default_scene_id()),
+            .package_catalog_exact = package_scene_catalog_matches(),
+            .sampled_render_texture =
+                screen.width == package_registry::engine_arcade_render_texture_width()
+                && screen.height == package_registry::engine_arcade_render_texture_height()
+                && screen.color_format == TextureFormat::rgba8_unorm
+                && screen.sampled_after_render
+                && screen.usage == RenderTextureUsage::arcade_cabinet,
+            .required_render_surface_binding = requiredRenderSurface,
+            .geometry_storage_consistent =
+                vertex_storage_matches(make_screen_scene_vertex_buffer_desc(), screenSceneMesh)
+                && index_storage_matches(make_screen_scene_index_buffer_desc(), screenSceneMesh)
+                && vertex_storage_matches(make_screen_vertex_buffer_desc(), cabinetScreenMesh)
+                && index_storage_matches(make_screen_index_buffer_desc(), cabinetScreenMesh)
+                && vertex_storage_matches(make_cabinet_body_vertex_buffer_desc(), cabinetBodyMesh)
+                && index_storage_matches(make_cabinet_body_index_buffer_desc(), cabinetBodyMesh),
+            .scene_integration_consistent =
+                kCabinetBodySceneNode.name.compare("EngineArcadeCabinetBody") == 0
+                && kCabinetBodySceneNode.type.compare("StaticMesh") == 0
+                && !kCabinetBodySceneNode.sampled_render_surface
+                && kScreenSceneNode.name.compare("EngineArcadeScreen") == 0
+                && kScreenSceneNode.type.compare("Canvas2D") == 0
+                && kScreenSceneNode.sampled_render_surface
+                && bodySceneSlot.transform[5] == kCabinetBodySceneNode.scale[1]
+                && bodySceneSlot.transform[13] == kCabinetBodySceneNode.position[1]
+                && screenSceneSlot.transform[0] == kScreenSceneNode.scale[0]
+                && screenSceneSlot.transform[12] == kScreenSceneNode.position[0]
+                && screenSceneSlot.transform[13] == kScreenSceneNode.position[1]
+                && screenSceneSlot.transform[14] == kScreenSceneNode.position[2]
+        };
+    }
+
+    static_assert(is_runtime_scene_id(package_registry::engine_arcade_default_scene_id()));
+    static_assert(package_scene_catalog_matches());
 }

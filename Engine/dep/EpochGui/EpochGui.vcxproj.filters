@@ -18,6 +18,18 @@
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.ixx">
       <Filter>Module Files</Filter>
     </ClCompile>
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.font.ixx">
+      <Filter>Module Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.image.ixx">
+      <Filter>Module Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.rounded_rect.ixx">
+      <Filter>Module Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.input.ixx">
+      <Filter>Module Files</Filter>
+    </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -27,10 +39,19 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\image.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\input.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\rounded_rect.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_control.cpp">

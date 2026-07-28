@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -120,6 +120,7 @@ module editor;
 import core.logger;
 import core.path;
 import package.registry;
+import scene.tier0;
 
 namespace
 {
@@ -1635,9 +1636,12 @@ namespace
     [[nodiscard]] std::vector<EditorSceneSeedEntity> sandbox_seed_entities()
     {
         return {
-            { "PersistentLevel", "Level", "World" },
-            { "EditorCamera", "Camera", "Editor", { 0.0f, 1.5f, 5.0f } },
-            { "DirectionalLight", "Light", "Lighting", { 2.0f, 4.0f, 1.0f }, { -35.0f, 45.0f, 0.0f } }
+            { "PersistentLevel", "Level", "World", { 0.0f, -0.32f, 0.0f }, {}, { 14.0f, 0.20f, 14.0f } },
+            { "GroundPlatform", "Ground", "World", { 0.0f, -0.25f, 0.0f }, {}, { 12.0f, 0.5f, 12.0f } },
+            { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
+            { "PlayerStart", "Spawn", "Gameplay", { -2.5f, 0.0f, 2.5f } },
+            { "EditorCamera", "Camera", "Editor", { 0.0f, 4.8f, 8.5f }, { -28.0f, 0.0f, 0.0f } },
+            { "DirectionalLight", "Light", "Lighting", { 2.0f, 5.5f, 2.0f }, { -48.0f, 35.0f, 0.0f } }
         };
     }
 
@@ -1668,16 +1672,76 @@ namespace
 
     [[nodiscard]] std::vector<EditorSceneSeedEntity> project_launcher_seed_entities()
     {
-        return {
-            { "OverviewCamera", "Camera", "Editor", { 0.0f, 6.0f, 9.0f }, { -34.0f, 0.0f, 0.0f } },
-            { "KeyLight", "Light", "Lighting", { 1.5f, 5.5f, 2.0f }, { -40.0f, 25.0f, 0.0f } }
-        };
+        const auto built = epochengine::scene_tier0::make_default_scene();
+        if (!built)
+        {
+            return {
+                { "Ground", "Ground", "World", { 0.0f, -0.25f, 0.0f }, {}, { 16.0f, 0.5f, 16.0f } },
+                { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
+                { "PlayerSpawn", "Spawn", "Gameplay", { -2.5f, 0.05f, 2.5f } },
+                { "PrimaryCamera", "Camera", "Editor", { 7.0f, 5.5f, 8.0f }, { -24.0f, -139.0f, 0.0f } },
+                { "Sun", "Light", "Lighting", { 0.0f, 6.0f, 0.0f }, { -50.0f, -35.0f, 0.0f } }
+            };
+        }
+
+        std::vector<EditorSceneSeedEntity> entities{};
+        entities.reserve(built.scene.objects.size() + 1u);
+        for (const auto& object : built.scene.objects)
+        {
+            EditorSceneSeedEntity entity{};
+            entity.name = object.canonicalName;
+            entity.position = {
+                object.transform.position.x,
+                object.transform.position.y,
+                object.transform.position.z
+            };
+            entity.rotation = {
+                object.transform.rotationDegrees.x,
+                object.transform.rotationDegrees.y,
+                object.transform.rotationDegrees.z
+            };
+            entity.scale = {
+                object.transform.scale.x,
+                object.transform.scale.y,
+                object.transform.scale.z
+            };
+
+            switch (object.kind)
+            {
+            case epochengine::scene_tier0::ObjectKind::camera:
+                entity.type = "Camera";
+                entity.category = "Editor";
+                break;
+            case epochengine::scene_tier0::ObjectKind::ground:
+                entity.type = "Ground";
+                entity.category = "World";
+                entity.position[1] -= 0.25f;
+                entity.scale = {
+                    built.scene.groundTerrain.descriptor.sampleSpacing,
+                    0.5f,
+                    built.scene.groundTerrain.descriptor.sampleSpacing
+                };
+                break;
+            case epochengine::scene_tier0::ObjectKind::directional_light:
+                entity.type = "Light";
+                entity.category = "Lighting";
+                break;
+            case epochengine::scene_tier0::ObjectKind::spawn_point:
+                entity.type = "Spawn";
+                entity.category = "Gameplay";
+                break;
+            }
+            entities.push_back(std::move(entity));
+        }
+        entities.push_back({ "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } });
+        return entities;
     }
 
     [[nodiscard]] std::vector<EditorSceneSeedEntity> engine_arcade_seed_entities()
     {
         return {
-            { "PersistentLevel", "Level", "World" },
+            { "PersistentLevel", "Level", "World", { 0.0f, -0.32f, 0.0f }, {}, { 12.0f, 0.20f, 12.0f } },
+            { "GroundPlatform", "Ground", "World", { 0.0f, -0.25f, 0.0f }, {}, { 10.0f, 0.5f, 10.0f } },
             { "OverviewCamera", "Camera", "Editor", { 0.0f, 4.2f, 7.2f }, { -28.0f, 0.0f, 0.0f } },
             { "KeyLight", "Light", "Lighting", { 0.0f, 5.2f, -1.2f }, { -42.0f, 0.0f, 0.0f } },
             { "EngineArcadeCabinetBase", "StaticMesh", "EngineArcade", { 0.0f, 0.22f, 0.36f }, { 0.0f, 0.0f, 0.0f }, { 1.70f, 0.44f, 0.82f } },
@@ -1989,13 +2053,18 @@ namespace
             out << "    engine_asset_package \"engine_arcade\"\n";
         out << "}\n";
 
+        std::vector<EditorSceneSeedEntity> entities{};
         if (include_engine_arcade_package)
-        {
-            const auto entities = engine_arcade_seed_entities();
-            out << "epoch_editor_entities 1\n";
-            append_scene_entity_rows(out, std::span<const EditorSceneSeedEntity>{ entities.data(), entities.size() });
-        }
+            entities = engine_arcade_seed_entities();
+        else if (spec.project_id == "projectlauncher")
+            entities = project_launcher_seed_entities();
+        else if (spec.kind == EditorProjectKind::Tool)
+            entities = software_seed_entities();
+        else
+            entities = sandbox_seed_entities();
 
+        out << "epoch_editor_entities 1\n";
+        append_scene_entity_rows(out, std::span<const EditorSceneSeedEntity>{ entities.data(), entities.size() });
         return out.str();
     }
 
