@@ -211,8 +211,8 @@ Exit gate:
 
 Parallel work is allowed only when it does not collide with the critical path:
 
-- SDL3/SFML scene-solid adapter repair;
-- Vulkan scene-solid pipeline and invalidation repair;
+- Raylib/Vulkan scene-solid orientation eye proof;
+- Vulkan repeated-replacement retirement proof;
 - EpochGui portable primitive integration and tests;
 - renderer-neutral material/view/post-process descriptors;
 - documentation and build metadata kept synchronized with proven source;
@@ -224,19 +224,21 @@ claim runtime success without visual evidence.
 ## Backend Truth And Repair Queue
 
 - OpenGL remains the first T1 desktop presentation lane.
-- SDL3 and SFML3 registered adapters need safe filled-triangle consumption.
-- Vulkan needs a scene-solid triangle pipeline separate from GUI triangles,
-  correct depth behavior, and preview-geometry revision invalidation.
+- SDL3, SFML3, DirectX, and Software have operator-accepted current solid
+  orientation.
+- Vulkan has a dedicated scene-solid pipeline; its corrected front face and
+  retirement ownership now need repeated-switch eye proof.
 - Raylib remains a specialized OpenGL-derived context with its own ownership and
   presentation evidence.
 - DirectX currently means the active D3D11 lane; D3D12 is a planned capability
   family and must not be inferred from that implementation.
 - Software remains the deterministic/headless and safe fallback.
 
-SDL3, SFML3, Vulkan, DirectX, and Software solid orientation remains `Partial`
-until the outward-face correction has build and eye proof. This parity work is
-valuable, but the 2D acceptance project does not require every editor
-backend to become a production renderer in the same eight weeks.
+Raylib and Vulkan solid orientation remains `Partial` until the correction has
+eye proof. Vulkan retirement also needs repeated switch-away proof, especially
+to Software. This parity work is valuable, but the 2D acceptance project does
+not require every editor backend to become a production renderer in the same
+eight weeks.
 
 ## Settings And Editor Controls
 

@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux
-runtime baseline is `v0.88.69`; active development source is `v0.88.72`.
+runtime baseline is `v0.88.69`; active development source is `v0.88.73`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -23,6 +23,10 @@ ship.
   captures session state, retires the old renderer/native resources, creates one
   replacement in the same dock host, and restores state. Multicontext is an
   explicit diagnostic mode rather than the normal editor model.
+- **Vulkan retirement ownership**: the application registry lends shared
+  lifetime to callbacks and atomically transfers the final owner to retirement.
+  Device idle precedes GUI, pipeline, swapchain, and device destruction; every
+  scene pipeline is reset before the logical device.
 - **Raylib custom frame control**: Epoch flushes Raylib drawing, swaps the native
   buffer, and polls input events when the vcpkg build enables custom frame
   control. Renderer retirement remains owner-thread and teardown ordered.

@@ -69,9 +69,9 @@ The working tree contains these current or in-progress foundations:
 These facts are contracts, not blanket runtime claims. Current checkpoint proof
 includes MSVC Debug/Release editor builds and contracts, the managed Clang 22
 full-engine Release build, no-display Linux engine CTests, and 5/5 standalone
-EpochGui feature tests. Operator evidence now proves filled scene triangles in
-SDL/SFML/Vulkan, while corrected outward-face orientation across every
-non-reference backend remains `Partial` until the candidate receives eye proof.
+EpochGui feature tests. Operator evidence now proves correct filled scene
+orientation in SDL3, SFML3, DirectX, and Software. Raylib and Vulkan orientation plus repeated Vulkan
+replacement remain `Partial` until the `v0.88.73` candidate receives eye proof.
 
 ## Immediate Implementation Order
 
@@ -91,17 +91,21 @@ non-reference backend remains `Partial` until the candidate receives eye proof.
 
 ## Backend Repair Within This Gate
 
-Operator evidence proves that SDL3, SFML3, and Vulkan now consume filled editor
-scene triangles, and it exposed a common inside-out orientation fault outside the
-OpenGL/Raylib references.
+Operator evidence proves correct filled editor scene orientation in SDL3, SFML3,
+DirectX, and Software. Raylib and Vulkan remained inside-out, and logs prove
+Vulkan retirement stopped after native-child destruction but before replacement
+creation.
 
 - shared preview geometry defines the clockwise-outward object convention;
-- SDL3, SFML3, DirectX, and Software reject camera-facing back sides before
-  projected fill;
-- Vulkan culls back faces in its scene-solid pipeline while leaving line and GUI
-  pipelines uncullled;
+- SDL3, SFML3, DirectX, and Software are accepted orientation references for
+  their current projected/native paths;
+- Raylib rejects camera-facing back sides before projected fill;
+- Vulkan selects the corrected scene-solid front face while leaving line and
+  GUI pipelines uncullled;
+- Vulkan retirement atomically owns the application through device-idle cleanup
+  and destroys both graphics pipelines before the logical device;
 - queue, GUI replay, depth, and present order remain unchanged;
-- all corrected lanes remain `Partial` until build and operator eye proof passes;
+- Raylib/Vulkan remain `Partial` until build and operator eye proof passes;
 - this parity work must not delay the `T1-GL` 2D product unless shared contracts
   regress.
 
@@ -165,7 +169,8 @@ The active gate is accepted when:
    and Run/Build use the same project-owned state.
 7. Canvas2D contracts prove deterministic ordering, scaling, blend/sampling,
    offscreen compose, and cache recreation.
-8. Renderer docs keep corrected non-reference solid orientation `Partial` until build and eye proof.
+8. Renderer docs keep Raylib/Vulkan orientation and Vulkan repeated replacement
+   `Partial` until build and eye proof.
 9. No updater, release, generated cache, or unrelated operator file is staged.
 
 ## Next Gate

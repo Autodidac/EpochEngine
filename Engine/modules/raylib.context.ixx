@@ -546,6 +546,15 @@ namespace epochengine::raylibcontext
             const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
             for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
             {
+                if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
+                        solidVertices[i].position,
+                        solidVertices[i + 1].position,
+                        solidVertices[i + 2].position,
+                        camera.eye))
+                {
+                    continue;
+                }
+
                 epochengine::raylib_api::Vector2 a{};
                 epochengine::raylib_api::Vector2 b{};
                 epochengine::raylib_api::Vector2 c{};

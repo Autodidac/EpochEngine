@@ -109,13 +109,15 @@ release history belong in the changelog/archive, not architecture docs.
   editor clones.
 - Redocking ultimately needs visible professional guide zones and a dock control;
   games/mobile/headless products can compile native popout hosts out.
-- SDL3, SFML3, and Vulkan now have filled scene-solid candidates. Operator proof
-  exposed inverted/back-facing presentation, so corrected winding/culling across
-  SDL3, SFML3, Vulkan, DirectX, and Software remains `Partial` until eye proof.
+- Operator proof accepts SDL3, SFML3, DirectX, and Software scene-solid
+  orientation. Raylib and Vulkan remain `Partial` until their current correction
+  candidate receives eye proof.
 - Fill adapters preserve complete triangles, report failures, and must match the
-  OpenGL/Raylib outward-face reference without changing GUI/present order.
+  shared clockwise-outward contract without changing GUI/present order.
 - Vulkan keeps its scene-solid triangle pipeline and culling separate from line
-  and GUI pipelines, with correct depth and safe preview invalidation.
+  and GUI pipelines, with correct depth and safe preview invalidation. Retirement
+  must remove registry ownership atomically, retain callback lifetime, wait for
+  device idle, and destroy every pipeline before destroying the device.
 - Raylib3 retains specialized owner-thread/OpenGL/context behavior and must be
   tested in single-context and diagnostic multicontext lanes.
 - Whole-editor repeated-switch, font, focus, state, redock/close, and no-stale-

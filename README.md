@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.72-1F7A4C?style=for-the-badge" alt="Current development source v0.88.72" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.73-1F7A4C?style=for-the-badge" alt="Current development source v0.88.73" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.88.69-2C6A8A?style=for-the-badge" alt="Published stable release v0.88.69" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.88.72`; the published Windows/Linux runtime
+- Active development source is `v0.88.73`; the published Windows/Linux runtime
   baseline remains `v0.88.69`.
 - The runtime release and updater are sealed. Source development advances
   independently without changing packaged-version defaults, release assets, or
@@ -90,8 +90,10 @@ For engine/tooling developers:
   queries, temporal texture-document contracts, deterministic physics/audio
   managers, sparse voxel and water foundations, a canonical Tier-0 scene, and
   capability/evidence reporting in Settings and System Info.
-- SDL3, SFML3, and Vulkan scene-solid work remains `Partial` until operator
-  visual proof. Backend status is recorded in the
+- Operator proof accepts SDL3, SFML3, DirectX, and Software solid orientation.
+  Raylib and Vulkan correction plus Vulkan replacement teardown remain `Partial`
+  until the `v0.88.73` candidate receives visual and repeated-switch proof.
+  Backend status is recorded in the
   [renderer feature matrix](Engine/docs/engine/renderer_feature_matrix.md), not
   inferred from API names or build success alone.
 

@@ -346,8 +346,7 @@ namespace epochengine::vulkancontext
         rasterizer.rasterizerDiscardEnable = VK_FALSE;
         rasterizer.polygonMode = vk::PolygonMode::eFill;
         rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-        // The shared clockwise-outward stream becomes counter-clockwise after Vulkan's Y flip.
-        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+        rasterizer.frontFace = vk::FrontFace::eClockwise;
         rasterizer.depthBiasEnable = VK_FALSE;
         rasterizer.lineWidth = 1.0f;
 

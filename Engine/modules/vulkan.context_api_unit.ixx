@@ -79,7 +79,7 @@ namespace epochengine::vulkancontext
         if (!ctx)
             return;
 
-        if (auto* app = try_get_vulkan_app(ctx.get()))
+        if (auto app = try_get_vulkan_app(ctx.get()))
             app->enqueue_gui_draw(ctx.get(), sprite, atlases, x, y, w, h);
     }
 
@@ -90,7 +90,7 @@ namespace epochengine::vulkancontext
         if (!ctx)
             return 0;
 
-        if (auto* app = try_get_vulkan_app(ctx.get()))
+        if (auto app = try_get_vulkan_app(ctx.get()))
             return app->get_framebuffer_width();
 
         return 0;
@@ -102,7 +102,7 @@ namespace epochengine::vulkancontext
         if (!ctx)
             return 0;
 
-        if (auto* app = try_get_vulkan_app(ctx.get()))
+        if (auto app = try_get_vulkan_app(ctx.get()))
             return app->get_framebuffer_height();
 
         return 0;
@@ -141,7 +141,7 @@ namespace epochengine::vulkancontext
         {
             if (auto ctxStrong = ctxWeak.lock())
             {
-                if (auto* app = try_get_vulkan_app(ctxStrong.get()))
+                if (auto app = try_get_vulkan_app(ctxStrong.get()))
                     app->set_framebuffer_size(nw, nh);
 
                 ctxStrong->framebufferWidth = nw;
@@ -178,7 +178,7 @@ namespace epochengine::vulkancontext
 
         diagnostics::FrameTiming frameTimer{ core::ContextType::Vulkan, windowId, "Vulkan" };
 
-        auto* app = try_get_vulkan_app(ctx.get());
+        auto app = try_get_vulkan_app(ctx.get());
         if (!app)
             return false;
 
@@ -228,13 +228,18 @@ namespace epochengine::vulkancontext
         if (!ctx)
             return;
 
-        if (auto* app = try_get_vulkan_app(ctx.get()))
+        if (auto app = take_vulkan_app(ctx.get()))
         {
-            app->cleanup_gui_context(ctx.get());
+            logger::get(kLogSys).log(
+                logger::LogLevel::INFO,
+                "Retirement detached Vulkan application ownership; waiting for the device before resource destruction.",
+                std::source_location::current());
             app->cleanup();
+            logger::get(kLogSys).log(
+                logger::LogLevel::INFO,
+                "Vulkan application resources retired successfully.",
+                std::source_location::current());
         }
-
-        (void)release_vulkan_app(ctx.get());
 
         if (!has_vulkan_apps())
             atlasmanager::unregister_backend_uploader(core::ContextType::Vulkan);

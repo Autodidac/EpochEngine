@@ -515,6 +515,7 @@ namespace epochengine::vulkancontext
         textureImageMemory.reset();
 
         pipelineLayout.reset();
+        solidGraphicsPipeline.reset();
         graphicsPipeline.reset();
         descriptorSetLayout.reset();
         renderPass.reset();

@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.88.73] - Vulkan retirement and remaining solid-orientation repair
+
+- Repair the repeated-switch crash exposed specifically when retiring Vulkan:
+  atomically transfer application ownership out of the registry, retain shared
+  lifetime for in-flight callbacks, wait for the device before GUI teardown,
+  and destroy the scene-solid pipeline before the Vulkan device.
+- Correct Vulkan's scene-solid front-face selection without changing line, GUI,
+  queue-drain, or presentation order.
+- Filter Raylib's projected scene-solid triangles against the shared
+  clockwise-outward camera-facing contract before its two-sided raster call.
+- Record operator proof that SDL3, SFML3, DirectX, and Software orientation is
+  correct; Raylib/Vulkan visual parity and repeated Vulkan replacement remain
+  `Partial` until this candidate is eye-tested.
+- Advance development source metadata to `v0.88.73` while preserving the sealed
+  `v0.88.69` runtime/updater baseline.
+- Verify MSVC Debug/Release editor builds and both build-safe engine contract
+  runs.
+
 ## [v0.88.72] - Serialized context selection and outward scene solids
 
 - Move whole-editor backend selection from the main toolbar into Editor Settings,

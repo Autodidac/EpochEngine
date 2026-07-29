@@ -90,27 +90,33 @@ export namespace epochengine::vulkancontext
                 std::unique_lock lock{ mutex_ };
                 auto& slot = apps_[ctx.get()];
                 if (!slot)
-                    slot = std::make_unique<Application>();
+                    slot = std::make_shared<Application>();
                 return *slot;
             }
 
-            Application* get(const core::Context* ctx) noexcept
+            std::shared_ptr<Application> get(const core::Context* ctx) noexcept
             {
                 if (!ctx)
-                    return nullptr;
+                    return {};
 
                 std::shared_lock lock{ mutex_ };
                 auto it = apps_.find(ctx);
-                return (it != apps_.end() && it->second) ? it->second.get() : nullptr;
+                return it != apps_.end() ? it->second : std::shared_ptr<Application>{};
             }
 
-            bool release(const core::Context* ctx) noexcept
+            std::shared_ptr<Application> take(const core::Context* ctx) noexcept
             {
                 if (!ctx)
-                    return false;
+                    return {};
 
                 std::unique_lock lock{ mutex_ };
-                return apps_.erase(ctx) > 0;
+                auto it = apps_.find(ctx);
+                if (it == apps_.end())
+                    return {};
+
+                auto app = std::move(it->second);
+                apps_.erase(it);
+                return app;
             }
 
             bool any() const noexcept
@@ -121,7 +127,7 @@ export namespace epochengine::vulkancontext
 
         private:
             mutable std::shared_mutex mutex_{};
-            std::unordered_map<const core::Context*, std::unique_ptr<Application>> apps_{};
+            std::unordered_map<const core::Context*, std::shared_ptr<Application>> apps_{};
         };
 
         ApplicationRegistry& application_registry() noexcept
@@ -136,14 +142,14 @@ export namespace epochengine::vulkancontext
         return appreg::application_registry().bind(ctx);
     }
 
-    Application* try_get_vulkan_app(const core::Context* ctx) noexcept
+    std::shared_ptr<Application> try_get_vulkan_app(const core::Context* ctx) noexcept
     {
         return appreg::application_registry().get(ctx);
     }
 
-    bool release_vulkan_app(const core::Context* ctx) noexcept
+    std::shared_ptr<Application> take_vulkan_app(const core::Context* ctx) noexcept
     {
-        return appreg::application_registry().release(ctx);
+        return appreg::application_registry().take(ctx);
     }
 
     bool has_vulkan_apps() noexcept

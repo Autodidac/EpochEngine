@@ -402,7 +402,7 @@ namespace epochengine::vulkancontext
     export std::uint32_t                    preview_solid_index_count_for(const epochengine::core::Context* ctx);
 
     export Application& bind_vulkan_app(const std::shared_ptr<epochengine::core::Context>& ctx);
-    export Application* try_get_vulkan_app(const epochengine::core::Context* ctx) noexcept;
-    export bool release_vulkan_app(const epochengine::core::Context* ctx) noexcept;
+    export std::shared_ptr<Application> try_get_vulkan_app(const epochengine::core::Context* ctx) noexcept;
+    export std::shared_ptr<Application> take_vulkan_app(const epochengine::core::Context* ctx) noexcept;
     export bool has_vulkan_apps() noexcept;
 }

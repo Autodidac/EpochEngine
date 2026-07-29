@@ -296,6 +296,7 @@ namespace epochengine::vulkancontext
         depthImage.reset();
         depthImageMemory.reset();
 
+        solidGraphicsPipeline.reset();
         graphicsPipeline.reset();
         pipelineLayout.reset();
         renderPass.reset();
