@@ -65,6 +65,13 @@ namespace epochengine
         EngineSelfIteration
     };
 
+    export enum class EditorLaunchWorkspace : unsigned char
+    {
+        Standard = 0,
+        ForestFactory,
+        GuiEditor
+    };
+
     export enum class EditorCommand : unsigned char
     {
         None = 0,
@@ -245,6 +252,7 @@ namespace epochengine
         std::uint8_t project_camera_mode{ 0 };
         std::uint8_t input_profile_preset{ 0 };
         gui::ThemePreference theme_preference{ gui::ThemePreference::FollowSystemDark };
+        bool rounded_rectangles{ false };
         double editor_frame_limit_fps{ 120.0 };
         std::string selected_project_file{};
         std::string selected_asset_path{};
@@ -278,6 +286,10 @@ namespace epochengine
     export EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
     export EditorFrameResult editor_run_context_panel(const std::shared_ptr<core::Context>& ctx, std::string_view route_id);
     export void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
+    export void editor_load_workspace(
+        const std::shared_ptr<core::Context>& ctx,
+        std::string_view project_id,
+        EditorLaunchWorkspace workspace);
     export void editor_suppress_startup_update_check(const std::shared_ptr<core::Context>& ctx);
     export void editor_reset_transient_ui(const core::Context* ctx);
     export bool editor_run_script(const core::Context* ctx, std::string_view script_name);

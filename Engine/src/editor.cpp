@@ -591,7 +591,7 @@ namespace epochengine
             case EditorMainSurface::Project:
                 return "Project";
             case EditorMainSurface::ForestFactory:
-                return "Plant Lab";
+                return "Forest Factory";
             case EditorMainSurface::Timeline:
                 return "Video";
             case EditorMainSurface::AISandbox:
@@ -2072,7 +2072,7 @@ namespace epochengine
                 push_editor_log(
                     state,
                     std::format(
-                        "[forest] Rebuilt temporal graph Plant Lab preview: {} segments, {} canopy markers.",
+                        "[forest] Rebuilt temporal graph Forest Factory preview: {} segments, {} canopy markers.",
                         geometry.segmentCount,
                         canopyBudget));
             }
@@ -4987,7 +4987,7 @@ namespace epochengine
         {
             if (editor.projectRoot.empty())
             {
-                editor.packageInstallStatus = "No active project root for Plant Lab package activation.";
+                editor.packageInstallStatus = "No active project root for Forest Factory package activation.";
                 editor.packageInstallProgress = 0.0f;
                 return false;
             }
@@ -5003,7 +5003,7 @@ namespace epochengine
             std::filesystem::create_directories(forestDir, ec);
             if (ec)
             {
-                editor.packageInstallStatus = "Could not create Plant Lab package directory.";
+                editor.packageInstallStatus = "Could not create Forest Factory package directory.";
                 editor.packageInstallProgress = 0.0f;
                 return false;
             }
@@ -5018,7 +5018,7 @@ namespace epochengine
                 std::ofstream out(manifestPath, std::ios::binary | std::ios::trunc);
                 if (!out)
                 {
-                    editor.packageInstallStatus = "Could not write Plant Lab package manifest.";
+                    editor.packageInstallStatus = "Could not write Forest Factory package manifest.";
                     editor.packageInstallProgress = 0.0f;
                     return false;
                 }
@@ -5031,7 +5031,7 @@ namespace epochengine
                     << "  \"type\": \"core_opt_in\",\n"
                     << "  \"source_repo\": \"" << sourceRepo << "\",\n"
                     << "  \"reference_repo\": \"" << referenceRepo << "\",\n"
-                    << "  \"editor_workspace\": \"Plant Lab\",\n"
+                    << "  \"editor_workspace\": \"Forest Factory\",\n"
                     << "  \"activation\": \"main_scene_use_or_explicit_package_install\",\n"
                     << "  \"project_payload_policy\": \"emit descriptors/assets only after visible package activation\",\n"
                     << "  \"default_profile\": \"" << profileFile << "\",\n"
@@ -5045,7 +5045,7 @@ namespace epochengine
                 std::ofstream out(profilePath, std::ios::binary | std::ios::trunc);
                 if (!out)
                 {
-                    editor.packageInstallStatus = "Could not write Plant Lab default profile.";
+                    editor.packageInstallStatus = "Could not write Forest Factory default profile.";
                     editor.packageInstallProgress = 0.0f;
                     return false;
                 }
@@ -5070,14 +5070,14 @@ namespace epochengine
                     << "}\n";
             }
 
-            editor.packageInstallStatus = "Plant Lab package staged; project payload waits for scene-use approval.";
+            editor.packageInstallStatus = "Forest Factory package staged; project payload waits for scene-use approval.";
             editor.packageInstallProgress = 0.65f;
             append_project_note(
                 editor,
-                "Stage Plant Lab Package",
-                "Staged the core Plant Lab package manifest and default deterministic profile.",
-                "Plant Lab is built into the editor, package payloads route through EpochEngineExtensions, and the Forest Factory descriptor lane remains the core engine contract.");
-            push_editor_log(editor, "[package] Wrote Plant Lab package manifest: " + display_project_path(manifestPath));
+                "Stage Forest Factory Package",
+                "Staged the core Forest Factory package manifest and default deterministic profile.",
+                "Forest Factory is built into the editor, package payloads route through EpochEngineExtensions, and the Forest Factory descriptor lane remains the core engine contract.");
+            push_editor_log(editor, "[package] Wrote Forest Factory package manifest: " + display_project_path(manifestPath));
             return true;
         }
 
@@ -5650,6 +5650,54 @@ namespace epochengine
         auto& editor = editor_state_for(ctx);
         set_project(editor, project_id, true);
         epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+        epochengine::previewgrid::reset_camera(ctx.get());
+    }
+
+    void editor_load_workspace(
+        const std::shared_ptr<core::Context>& ctx,
+        std::string_view project_id,
+        EditorLaunchWorkspace workspace)
+    {
+        if (!ctx)
+            return;
+
+        editor_load_project(ctx, project_id);
+        auto& editor = editor_state_for(ctx);
+        editor.showOutliner = true;
+        editor.showInspector = true;
+        editor.showConsoleDock = true;
+        editor.showAiChat = true;
+        editor.previewMode = core::ScenePreviewMode::Editor;
+        editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 2);
+
+        switch (workspace)
+        {
+        case EditorLaunchWorkspace::ForestFactory:
+            editor.mainSurface = EditorMainSurface::ForestFactory;
+            editor.workspaceTab = EditorWorkspaceTab::Assets;
+            editor.projectCameraMode = previewgrid::CameraMode::Editor;
+            ensure_forest_factory_preview_entities(editor);
+            epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+            push_editor_log(editor, "[forest] Forest Factory workspace opened from the project launcher.");
+            break;
+        case EditorLaunchWorkspace::GuiEditor:
+            editor.mainSurface = EditorMainSurface::Game2D;
+            editor.workspaceTab = EditorWorkspaceTab::Project;
+            editor.projectCameraMode = previewgrid::CameraMode::Canvas2D;
+            ensure_2d_canvas_entity(editor);
+            epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Canvas2D);
+            push_editor_log(editor, "[gui] GUI Editor workspace opened from the project launcher.");
+            break;
+        case EditorLaunchWorkspace::Standard:
+        default:
+            editor.mainSurface = EditorMainSurface::Scene;
+            editor.workspaceTab = EditorWorkspaceTab::Output;
+            editor.projectCameraMode = previewgrid::CameraMode::Editor;
+            epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+            push_editor_log(editor, "[editor] Standard editor workspace opened from the project launcher.");
+            break;
+        }
+
         epochengine::previewgrid::reset_camera(ctx.get());
     }
 
@@ -6801,7 +6849,7 @@ namespace epochengine
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
                     epochengine::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[forest] Plant Lab opened with the scene-backed Forest Factory preview.");
+                push_editor_log(editor, "[forest] Forest Factory opened with the scene-backed Forest Factory preview.");
                 break;
             case EditorMainSurface::Timeline:
                 editor.showInspector = true;
@@ -7123,7 +7171,7 @@ namespace epochengine
         float tab_x = 16.0f;
 
         const std::string assets_tab = "Assets";
-        const std::string forest_tab = "Plant Lab";
+        const std::string forest_tab = "Forest Factory";
         const std::string timeline_tab = "Video";
         const std::string project_tab = "Project";
         const std::string ai_control_tab = "AI";
@@ -7155,10 +7203,10 @@ namespace epochengine
         tab_x += 104.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(forest_tab, { 116.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory)
+        if (gui::button_selected(forest_tab, { 136.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory)
             && !toolbarControlsBlockedByMenu)
             open_editor_surface(EditorMainSurface::ForestFactory, "toolbar");
-        tab_x += 116.0f + tab_gap;
+        tab_x += 136.0f + tab_gap;
 
         gui::set_cursor({ tab_x, tab_y });
         if (gui::button_selected(timeline_tab, { 92.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline)
@@ -8282,9 +8330,9 @@ namespace epochengine
                 const bool manifestReady = std::filesystem::exists(manifestPath);
                 const bool profileReady = std::filesystem::exists(profilePath);
 
-                gui::label("Plant Lab");
+                gui::label("Forest Factory");
                 gui::wrapped_label(
-                    "Core temporal graph / parametric L-system vegetation lab. Plant Lab owns a live editor scene preview; generated projects receive assets only after package activation or main-scene use approval.",
+                    "Core temporal graph / parametric L-system vegetation lab. Forest Factory owns a live editor scene preview; generated projects receive assets only after package activation or main-scene use approval.",
                     centerWidth);
                 gui::property_row("[forest] Editor name", std::string(epochengine::forest::kForestFactoryWorkspace), 148.0f);
                 gui::property_row("[forest] Technique", std::string(epochengine::forest::kForestFactoryTechnique), 148.0f);
@@ -8323,7 +8371,7 @@ namespace epochengine
                         voxelSummary.foliageCells),
                     148.0f);
                 gui::wrapped_label(
-                    "Scene preview: Plant Lab now emits deterministic temporal graph segments, foliage clusters, and a voxel occupancy summary for future LOD, hit detection, navigation, lighting, and path-trace queries. Package activation emits reusable project assets only after an explicit install/stage gate.",
+                    "Scene preview: Forest Factory now emits deterministic temporal graph segments, foliage clusters, and a voxel occupancy summary for future LOD, hit detection, navigation, lighting, and path-trace queries. Package activation emits reusable project assets only after an explicit install/stage gate.",
                     centerWidth);
                 std::array<gui::InlineButtonSpec, 3> forestActions{ {
                     { "Regenerate Temporal Graph", 228.0f },
@@ -8349,7 +8397,7 @@ namespace epochengine
                         if (selected != editor.entities.end())
                         {
                             editor.selectedEntity = static_cast<std::size_t>(std::distance(editor.entities.begin(), selected));
-                            push_editor_log(editor, "[forest] Selected the first visible Plant Lab lead tip.");
+                            push_editor_log(editor, "[forest] Selected the first visible Forest Factory lead tip.");
                         }
                         else
                         {
@@ -8358,7 +8406,7 @@ namespace epochengine
                     }
                     else if (*clicked == 2)
                     {
-                        editor.packageInstallStatus = "Plant Lab data reset is staged behind package activation; current preview primitives remain editor-only.";
+                        editor.packageInstallStatus = "Forest Factory data reset is staged behind package activation; current preview primitives remain editor-only.";
                         push_editor_log(editor, "[forest] Reset requested; package-backed data reset remains gated.");
                     }
                 }
@@ -8367,16 +8415,16 @@ namespace epochengine
                     editor.showPackageManagerModal = true;
                     editor.selectedPackageId = std::string(epochengine::package_registry::kEngineForestFactoryPackageId);
                     editor.packageInstallStatus = manifestReady && profileReady
-                        ? "Plant Lab project package is already staged."
-                        : "Select Install to stage the Plant Lab project package.";
-                    push_editor_log(editor, "[forest] Package Manager opened for Plant Lab.");
+                        ? "Forest Factory project package is already staged."
+                        : "Select Install to stage the Forest Factory project package.";
+                    push_editor_log(editor, "[forest] Package Manager opened for Forest Factory.");
                 }
-                if (gui::button("Stage Plant Lab Package", { 240.0f, 30.0f }))
+                if (gui::button("Stage Forest Factory Package", { 240.0f, 30.0f }))
                 {
                     if (forestPackage != epochengine::package_registry::kKnownPackages.end())
                         (void)stage_forest_factory_package_opt_in(editor, *forestPackage);
                     else
-                        editor.packageInstallStatus = "Plant Lab package registry entry is missing.";
+                        editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
                 }
                 break;
             }
@@ -10024,7 +10072,7 @@ namespace epochengine
                     (void)std::filesystem::remove(forestFactoryPackage, ec);
                     ec.clear();
                     (void)std::filesystem::remove(forestFactoryProfile, ec);
-                    editor.packageInstallStatus = "Plant Lab project manifest/profile removed; core editor workspace remains available.";
+                    editor.packageInstallStatus = "Forest Factory project manifest/profile removed; core editor workspace remains available.";
                     editor.packageInstallProgress = 0.0f;
                     push_editor_log(editor, "[package] Removed forest_factory project-local package files.");
                     return;
@@ -10134,11 +10182,11 @@ namespace epochengine
             }
             else if (selectedPackage && selectedPackage->id == epochengine::package_registry::kEngineForestFactoryPackageId)
             {
-                gui::property_row("Workspace", "Plant Lab", 104.0f);
+                gui::property_row("Workspace", "Forest Factory", 104.0f);
                 gui::property_row("Manifest", path_exists(forestFactoryPackage) ? "staged" : "missing", 104.0f);
                 gui::property_row("Profile", path_exists(forestFactoryProfile) ? "staged" : "missing", 104.0f);
                 gui::wrapped_label(
-                    "Plant Lab is the editor-facing Forest Factory workspace. Installing stages the project manifest/profile; generated project assets still require visible scene-use approval.",
+                    "Forest Factory is the editor-facing Forest Factory workspace. Installing stages the project manifest/profile; generated project assets still require visible scene-use approval.",
                     contentWidth - 20.0f);
             }
             else if (selectedPackage && selectedPackage->requiresExplicitNetworkApproval)

@@ -38,6 +38,7 @@ module; // REQUIRED global module fragment
 #include <memory>
 #include <optional>
 #include <source_location>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -100,7 +101,8 @@ export namespace epochengine::menu
         UpdatePanelDismiss,
         UpdatePanelRestart,
         OpenEditor,
-        ProjectTwoDStudio,
+        OpenForestFactory,
+        OpenGuiEditor,
         Snake, Tetris, Pacman, Frogger, Sokoban,
         Minesweep, Puzzle, Bejeweled, Fourty,
         Sandsim, Cellular, Settings, About, Exit
@@ -176,13 +178,15 @@ export namespace epochengine::menu
         float layoutHeight = 0.0f;
         std::string statusLine{};
         LauncherUpdatePanelState updatePanel{};
+        std::vector<core::ContextType> launchContextOptions{};
+        core::ContextType selectedLaunchContext{ core::ContextType::None };
 
         static constexpr std::array kLauncherChoices = {
-            ChoiceDescriptor{ Choice::ProjectTwoDStudio, "2D Studio", { 220.0f, 74.0f } },
-            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 220.0f, 74.0f } },
-            ChoiceDescriptor{ Choice::Settings, "Switch Context", { 220.0f, 74.0f } },
-            ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch", { 220.0f, 74.0f } },
-            ChoiceDescriptor{ Choice::Exit, "Quit", { 220.0f, 74.0f } }
+            ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 220.0f, 68.0f } },
+            ChoiceDescriptor{ Choice::OpenForestFactory, "Forest Factory", { 220.0f, 68.0f } },
+            ChoiceDescriptor{ Choice::OpenGuiEditor, "GUI Editor", { 220.0f, 68.0f } },
+            ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch Engine", { 220.0f, 68.0f } },
+            ChoiceDescriptor{ Choice::Exit, "Quit", { 220.0f, 68.0f } }
         };
 
         static constexpr std::array kUpdaterShellChoices = {
@@ -229,7 +233,23 @@ export namespace epochengine::menu
 
         static constexpr std::string_view launcher_hint() noexcept
         {
-            return "Open project demos directly, preload a project, jump into a clean editor workspace, switch to another live renderer context, or run updates without the old layered game/puzzle shell.";
+            return "Choose an editor workspace and live render context. Updates and exit remain separate launcher actions.";
+        }
+
+        [[nodiscard]] static constexpr std::string_view context_label(
+            core::ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case core::ContextType::DirectX: return "DirectX";
+            case core::ContextType::OpenGL: return "OpenGL";
+            case core::ContextType::SDL: return "SDL";
+            case core::ContextType::SFML: return "SFML";
+            case core::ContextType::RayLib: return "Raylib";
+            case core::ContextType::Vulkan: return "Vulkan";
+            case core::ContextType::Software: return "Software";
+            default: return "Unavailable";
+            }
         }
 
         void refresh_launcher_descriptors()
@@ -241,6 +261,47 @@ export namespace epochengine::menu
 
             cachedWidth = -1;
             cachedHeight = -1;
+        }
+
+        void set_launch_context_options(
+            std::span<const core::ContextType> options,
+            core::ContextType activeContext)
+        {
+            std::vector<core::ContextType> resolved;
+            resolved.reserve(options.size());
+            for (const auto type : options)
+            {
+                if (type == core::ContextType::None
+                    || std::find(resolved.begin(), resolved.end(), type) != resolved.end())
+                {
+                    continue;
+                }
+                resolved.push_back(type);
+            }
+
+            if (resolved.empty() && activeContext != core::ContextType::None)
+                resolved.push_back(activeContext);
+
+            const bool selectionStillAvailable =
+                std::find(resolved.begin(), resolved.end(), selectedLaunchContext) != resolved.end();
+            launchContextOptions = std::move(resolved);
+            if (selectionStillAvailable)
+                return;
+
+            const auto active = std::find(
+                launchContextOptions.begin(),
+                launchContextOptions.end(),
+                activeContext);
+            selectedLaunchContext = active != launchContextOptions.end()
+                ? *active
+                : (launchContextOptions.empty()
+                    ? core::ContextType::None
+                    : launchContextOptions.front());
+        }
+
+        [[nodiscard]] core::ContextType selected_launch_context() const noexcept
+        {
+            return selectedLaunchContext;
         }
 
         void set_status(std::string status)
@@ -376,7 +437,10 @@ export namespace epochengine::menu
         {
             if (initialized) return;
 
-            set_max_columns(core::cli::updater_shell_requested ? 1 : core::cli::menu_columns);
+            set_max_columns(
+                core::cli::updater_shell_requested
+                    ? 1
+                    : (std::min)(3, core::cli::menu_columns));
             autoCommandConsumed = false;
             guard_next_input_frames();
 
@@ -497,7 +561,7 @@ export namespace epochengine::menu
                     windowSize,
                     clampToWindow);
 
-            constexpr float kHeaderOffsetY = 166.0f;
+            constexpr float kHeaderOffsetY = 246.0f;
 
             std::ignore = win;
             std::ignore = dt;
@@ -509,8 +573,10 @@ export namespace epochengine::menu
             if (currentWidth <= 0) currentWidth = 1;
             if (currentHeight <= 0) currentHeight = 1;
 
-            if (currentWidth != cachedWidth || currentHeight != cachedHeight)
-                recompute_layout(ctx, currentWidth, (std::max)(1, currentHeight - static_cast<int>(kHeaderOffsetY)));
+            const int launcherContentHeight =
+                (std::max)(1, currentHeight - static_cast<int>(kHeaderOffsetY));
+            if (currentWidth != cachedWidth || launcherContentHeight != cachedHeight)
+                recompute_layout(ctx, currentWidth, launcherContentHeight);
 
             const bool inputGuarded = inputGuardFrames > 0u;
             if (inputGuardFrames > 0u)
@@ -678,6 +744,39 @@ export namespace epochengine::menu
             {
                 gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 122.0f });
                 gui::wrapped_label(statusLine, frameSize.x - 32.0f);
+            }
+
+            gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 154.0f });
+            gui::label("Launch Settings");
+            gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 176.0f });
+            gui::property_row("Context", context_label(selectedLaunchContext), 84.0f);
+
+            if (!launchContextOptions.empty())
+            {
+                std::vector<gui::SegmentedButtonSpec> contextButtons;
+                contextButtons.reserve(launchContextOptions.size());
+                const float availableWidth = (std::max)(220.0f, frameSize.x - 32.0f);
+                const float gap = 4.0f;
+                const float buttonWidth = std::clamp(
+                    (availableWidth - gap * static_cast<float>(launchContextOptions.size() - 1))
+                        / static_cast<float>(launchContextOptions.size()),
+                    76.0f,
+                    112.0f);
+                for (const auto type : launchContextOptions)
+                {
+                    contextButtons.push_back(gui::SegmentedButtonSpec{
+                        context_label(type),
+                        buttonWidth,
+                        type == selectedLaunchContext
+                    });
+                }
+
+                gui::set_cursor({ framePosition.x + 16.0f, framePosition.y + 202.0f });
+                if (const auto selected = gui::segmented_button_row(contextButtons, 30.0f, gap);
+                    selected && *selected < launchContextOptions.size())
+                {
+                    selectedLaunchContext = launchContextOptions[*selected];
+                }
             }
 
             std::optional<Choice> chosen{};

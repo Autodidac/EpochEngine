@@ -4783,6 +4783,7 @@ namespace epochengine::core
             epochengine::core::time::simulation_clock simulation{};
             bool routed_gui_upload_refreshed{ false };
             std::optional<std::string> pending_editor_project_id{};
+            EditorLaunchWorkspace pending_editor_workspace{ EditorLaunchWorkspace::Standard };
             std::uint32_t launcher_loading_frames{ 0 };
             std::uint32_t launcher_loading_total_frames{ 0 };
         };
@@ -5542,7 +5543,8 @@ namespace epochengine::core
             case Choice::Cellular: return "cellular";
             case Choice::Settings:
             case Choice::OpenEditor:
-            case Choice::ProjectTwoDStudio:
+            case Choice::OpenForestFactory:
+            case Choice::OpenGuiEditor:
             case Choice::About:
             case Choice::CheckUpdates:
             case Choice::UpdateLatest:
@@ -5561,8 +5563,34 @@ namespace epochengine::core
 
             switch (choice)
             {
-            case Choice::ProjectTwoDStudio: return "twodstudio";
+            case Choice::OpenEditor: return "projectlauncher";
+            case Choice::OpenForestFactory: return "projectlauncher";
+            case Choice::OpenGuiEditor: return "twodstudio";
             default: return {};
+            }
+        }
+
+        [[nodiscard]] EditorLaunchWorkspace workspace_from_choice(
+            epochengine::menu::Choice choice) noexcept
+        {
+            using Choice = epochengine::menu::Choice;
+            switch (choice)
+            {
+            case Choice::OpenForestFactory: return EditorLaunchWorkspace::ForestFactory;
+            case Choice::OpenGuiEditor: return EditorLaunchWorkspace::GuiEditor;
+            case Choice::OpenEditor:
+            default: return EditorLaunchWorkspace::Standard;
+            }
+        }
+
+        [[nodiscard]] std::string_view workspace_label(EditorLaunchWorkspace workspace) noexcept
+        {
+            switch (workspace)
+            {
+            case EditorLaunchWorkspace::ForestFactory: return "Forest Factory";
+            case EditorLaunchWorkspace::GuiEditor: return "GUI Editor";
+            case EditorLaunchWorkspace::Standard:
+            default: return "Epoch Editor";
             }
         }
 
@@ -6243,7 +6271,7 @@ namespace epochengine::core
 
                     epochengine::editor_suppress_startup_update_check(targetCtx);
                     if (!project_id.empty())
-                        epochengine::editor_load_project(targetCtx, project_id);
+                        epochengine::editor_load_workspace(targetCtx, project_id, workspace);
                     else
                         epochengine::editor_reset_transient_ui(targetCtx.get());
 
@@ -6277,7 +6305,7 @@ namespace epochengine::core
                     }
                 };
 
-                auto switch_launcher_context = [&](const std::shared_ptr<Context>& sourceCtx)
+                auto live_launcher_contexts = [&]()
                 {
                     constexpr std::array contextOrder{
                         epochengine::core::ContextType::DirectX,
@@ -6291,91 +6319,46 @@ namespace epochengine::core
 
                     std::vector<std::shared_ptr<Context>> liveContexts;
                     liveContexts.reserve(snapshot.size());
-
-                    auto append_live_contexts = [&](epochengine::core::ContextType desiredType)
+                    auto append = [&](epochengine::core::ContextType desiredType)
                     {
                         for (auto& [candidateType, contexts] : snapshot)
                         {
                             if (candidateType != desiredType)
                                 continue;
-
-                            for (auto& candidateCtx : contexts)
+                            for (auto& candidate : contexts)
                             {
-                                if (candidateCtx && mgr.findWindowByContext(candidateCtx))
-                                    liveContexts.push_back(candidateCtx);
+                                if (candidate && mgr.findWindowByContext(candidate))
+                                    liveContexts.push_back(candidate);
                             }
                             break;
                         }
                     };
 
-                    for (const auto typeInOrder : contextOrder)
-                        append_live_contexts(typeInOrder);
-
+                    for (const auto type : contextOrder)
+                        append(type);
                     for (auto& [candidateType, contexts] : snapshot)
                     {
                         if (std::ranges::find(contextOrder, candidateType) != contextOrder.end())
                             continue;
-
-                        for (auto& candidateCtx : contexts)
+                        for (auto& candidate : contexts)
                         {
-                            if (candidateCtx && mgr.findWindowByContext(candidateCtx))
-                                liveContexts.push_back(candidateCtx);
+                            if (candidate && mgr.findWindowByContext(candidate))
+                                liveContexts.push_back(candidate);
                         }
                     }
-
-                    if (liveContexts.size() <= 1)
-                    {
-                        logger::get(kEditorLog).log(
-                            logger::LogLevel::INFO,
-                            "Launcher context switch skipped because no alternate live docked context exists.",
-                            std::source_location::current());
-                        return;
-                    }
-
-                    auto sourceIt = std::ranges::find_if(liveContexts, [&](const std::shared_ptr<Context>& candidate)
-                    {
-                        return sourceCtx && candidate && candidate.get() == sourceCtx.get();
-                    });
-
-                    std::shared_ptr<Context> targetCtx;
-                    if (sourceIt == liveContexts.end())
-                    {
-                        targetCtx = liveContexts.front();
-                    }
-                    else
-                    {
-                        const auto sourceIndex = static_cast<std::size_t>(std::distance(liveContexts.begin(), sourceIt));
-                        for (std::size_t offset = 1; offset < liveContexts.size(); ++offset)
-                        {
-                            auto& candidate = liveContexts[(sourceIndex + offset) % liveContexts.size()];
-                            if (candidate && candidate.get() != sourceCtx.get())
-                            {
-                                targetCtx = candidate;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (!targetCtx)
-                        return;
-
-                    auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
-                    auto& targetSession = targetIt->second;
-                    if (insertedForTarget)
-                    {
-                        targetSession.menu.set_max_columns(epochengine::core::cli::menu_columns);
-                        ensure_menu_initialized(targetSession, targetCtx);
-                    }
-
-                    focus_context_window(targetCtx);
-
-                    logger::get(kEditorLog).logf(
-                        logger::LogLevel::INFO,
-                        std::source_location::current(),
-                        "Launcher context switch focused the live {} context.",
-                        context_type_label(targetCtx->type));
+                    return liveContexts;
                 };
 
+                auto resolve_launcher_context = [&](const std::shared_ptr<Context>& sourceCtx,
+                    epochengine::core::ContextType requestedType)
+                {
+                    for (auto& candidate : live_launcher_contexts())
+                    {
+                        if (candidate && candidate->type == requestedType)
+                            return candidate;
+                    }
+                    return sourceCtx;
+                };
                 auto switch_editor_context = [&](const std::shared_ptr<Context>& sourceCtx,
                     epochengine::core::ContextType requestedType)
                 {
@@ -7511,6 +7494,7 @@ namespace epochengine::core
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             std::optional<epochengine::menu::Choice> choice{};
                             std::optional<std::string> pendingEditorProject{};
+                            EditorLaunchWorkspace pendingEditorWorkspace = session.pending_editor_workspace;
                             const int transitionWidth = (std::max)(1, ctx ? ctx->get_width_safe() : (win ? win->width : 1));
                             const int transitionHeight = (std::max)(1, ctx ? ctx->get_height_safe() : (win ? win->height : 1));
                             if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
@@ -7527,8 +7511,8 @@ namespace epochengine::core
                             {
                                 const bool loadingEditor = session.pending_editor_project_id.has_value();
                                 const std::string projectLabel = loadingEditor
-                                    ? *session.pending_editor_project_id
-                                    : std::string{ "projectlauncher" };
+                                    ? std::string{ workspace_label(session.pending_editor_workspace) }
+                                    : std::string{ "project launcher" };
                                 const std::string transitionTitle = loadingEditor ? "Loading Editor" : "Loading Launcher";
                                 const std::string transitionMessage = loadingEditor
                                     ? std::string{ "Preparing editor workspace for " } + projectLabel + "."
@@ -7586,11 +7570,28 @@ namespace epochengine::core
                                 if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
                                 {
                                     pendingEditorProject = std::move(session.pending_editor_project_id);
+                                    pendingEditorWorkspace = session.pending_editor_workspace;
                                     session.pending_editor_project_id.reset();
+                                    session.pending_editor_workspace = EditorLaunchWorkspace::Standard;
                                 }
                             }
                             else
                             {
+                                const auto liveContexts = live_launcher_contexts();
+                                std::vector<epochengine::core::ContextType> liveContextTypes;
+                                liveContextTypes.reserve(liveContexts.size());
+                                for (const auto& liveContext : liveContexts)
+                                {
+                                    if (liveContext
+                                        && std::find(
+                                            liveContextTypes.begin(),
+                                            liveContextTypes.end(),
+                                            liveContext->type) == liveContextTypes.end())
+                                    {
+                                        liveContextTypes.push_back(liveContext->type);
+                                    }
+                                }
+                                session.menu.set_launch_context_options(liveContextTypes, ctx->type);
                                 choice = session.menu.update_and_draw(
                                     ctx,
                                     win,
@@ -7608,7 +7609,7 @@ namespace epochengine::core
                                 if (ctx_running)
                                     ctx->present_safe();
                                 if (pendingEditorProject)
-                                    switch_session_to_editor(session, ctx, *pendingEditorProject);
+                                    switch_session_to_editor(session, ctx, *pendingEditorProject, pendingEditorWorkspace);
                                 break;
                             }
 
@@ -7779,33 +7780,30 @@ namespace epochengine::core
                                         publish_current_launcher_update_status();
                                     }
                                 }
-                                else if (*choice == epochengine::menu::Choice::OpenEditor)
-                                {
-                                    if (!launcher_update_blocks_mode_switch())
-                                    {
-                                        launcherUpdate.clear_inactive_surface();
-                                        session.menu.set_update_panel_state({});
-                                        session.pending_editor_project_id = "projectlauncher";
-                                        session.launcher_loading_frames = 18;
-                                        session.launcher_loading_total_frames = 18;
-                                        session.menu.guard_next_input_frames(3u);
-                                    }
-                                }
                                 else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
                                 {
                                     if (!launcher_update_blocks_mode_switch())
                                     {
                                         launcherUpdate.clear_inactive_surface();
                                         session.menu.set_update_panel_state({});
-                                        session.pending_editor_project_id = project_id;
-                                        session.launcher_loading_frames = 18;
-                                        session.launcher_loading_total_frames = 18;
-                                        session.menu.guard_next_input_frames(3u);
+
+                                        const auto selectedType = session.menu.selected_launch_context();
+                                        auto targetCtx = resolve_launcher_context(ctx, selectedType);
+                                        auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
+                                        auto& targetSession = targetIt->second;
+                                        if (insertedForTarget)
+                                        {
+                                            targetSession.menu.set_max_columns(epochengine::core::cli::menu_columns);
+                                            ensure_menu_initialized(targetSession, targetCtx);
+                                        }
+
+                                        targetSession.pending_editor_project_id = project_id;
+                                        targetSession.pending_editor_workspace = workspace_from_choice(*choice);
+                                        targetSession.launcher_loading_frames = 18;
+                                        targetSession.launcher_loading_total_frames = 18;
+                                        targetSession.menu.guard_next_input_frames(3u);
+                                        focus_context_window(targetCtx);
                                     }
-                                }
-                                else if (*choice == epochengine::menu::Choice::Settings)
-                                {
-                                    switch_launcher_context(ctx);
                                 }
                                 else if (*choice == epochengine::menu::Choice::About)
                                 {

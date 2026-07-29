@@ -997,7 +997,7 @@ namespace
         {
             EditorProjectKind::Game,
             "twodstudio",
-            "TwoDStudio",
+            "GUI Editor",
             "Projects/TwoDStudio",
             "Projects/TwoDStudio/worlds/twod.epoch",
             "TwoD_Main",
@@ -1005,7 +1005,7 @@ namespace
             "Projects/TwoDStudio/project.epoch.json",
             "game-2d-project",
             "project_demo_bootstrap",
-            "2D-focused game profile for side-scrollers, top-down prototypes, UI-driven games, and the six-month 2D priority track.",
+            "GUI-authoring and 2D game workspace for interfaces, side-scrollers, top-down prototypes, and the playable-2D priority track.",
             "embedded-static-include or duplicated-source",
             "Engine/include",
             ""
