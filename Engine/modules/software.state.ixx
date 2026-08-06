@@ -65,6 +65,23 @@ import core.timer;
 
 export namespace epochengine::anativecontext
 {
+    struct SoftwareArcadeScreenSurface final
+    {
+        std::vector<std::uint32_t> pixels{};
+        int width{};
+        int height{};
+        std::uint64_t frame{};
+        bool preparedThisFrame{};
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return width > 0
+                && height > 0
+                && pixels.size()
+                    == static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+        }
+    };
+
     struct SoftRendState
     {
 #ifdef EPOCH_USING_WINMAIN
@@ -81,6 +98,7 @@ export namespace epochengine::anativecontext
         bool running{ false };
         std::vector<std::uint32_t> framebuffer{};
         std::vector<std::uint32_t> sceneFramebuffer{};
+        SoftwareArcadeScreenSurface arcadeScreen{};
         bool frameValid{ false };
         std::uint64_t lastGuiGeneration{ 0 };
         std::uint64_t lastCameraRevision{ 0 };

@@ -78,7 +78,6 @@
 #include <format>
 #include <future>
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -119,8 +118,10 @@ import core.logger;
 import core.path;
 import core.time;
 import core.timer;
+import epoch.ecs;
 
 import audio.manager;
+import authoring.document;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
 import authoring.texture;
 #endif
@@ -130,6 +131,10 @@ import package.registry;
 import physics.manager;
 import render.lighting;
 import render.ray;
+import scene.document;
+import scene.interaction;
+import scene.persistence;
+import scene.runtime;
 import scene.tier0;
 import terrain.foundation;
 import voxel.field;
@@ -138,6 +143,7 @@ import water.system;
 import saveload.system;
 import scenesnapshot;
 import sceneserializer;
+import temporal.request;
 import timeline.system;
 
 import engine.gui;
@@ -148,8 +154,14 @@ import render.device;
 import render.device_null;
 import render.device_opengl_family;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+import opengl.canvas2d;
 import opengl.textures;
 #endif
+import render.canvas2d;
+import render.canvas2d.cpu;
+import render.canvas2d.presentation;
+import render.texture.residency;
+import render.texture.artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
 #endif
@@ -1118,9 +1130,15 @@ namespace epochengine::core
                 .sampledRenderSurface = false
             },
             epochengine::previewgrid::ObjectMarker{
-                .position = { 0.0f, 1.78f, -0.42f },
+                .position = {
+                    epochengine::render_arcade::kScreenSceneNode.position[0],
+                    epochengine::render_arcade::kScreenSceneNode.position[1],
+                    epochengine::render_arcade::kScreenSceneNode.position[2] },
                 .color = { 0.08f, 0.92f, 0.64f },
-                .scale = { 2.22f, 1.22f, 0.06f },
+                .scale = {
+                    epochengine::render_arcade::kScreenSceneNode.scale[0],
+                    epochengine::render_arcade::kScreenSceneNode.scale[1],
+                    epochengine::render_arcade::kScreenSceneNode.scale[2] },
                 .primitive = epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen,
                 .editorOnly = false,
                 .sampledRenderSurface = true
@@ -1138,9 +1156,14 @@ namespace epochengine::core
         const epochengine::previewgrid::ObjectMarker& screen = sampledMarkers.front();
         return screen.primitive == epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen
             && screen.sampledRenderSurface
-            && std::abs(screen.position.y - 1.78f) < 0.001f
-            && std::abs(screen.scale.x - 2.22f) < 0.001f
-            && std::abs(screen.scale.y - 1.22f) < 0.001f;
+            && std::abs(screen.position.x - epochengine::render_arcade::kScreenSceneNode.position[0]) < 0.001f
+            && std::abs(screen.position.y - epochengine::render_arcade::kScreenSceneNode.position[1]) < 0.001f
+            && std::abs(screen.position.z - epochengine::render_arcade::kScreenSceneNode.position[2]) < 0.001f
+            && std::abs(screen.scale.x - epochengine::render_arcade::kScreenSceneNode.scale[0]) < 0.001f
+            && std::abs(screen.scale.y - epochengine::render_arcade::kScreenSceneNode.scale[1]) < 0.001f
+            && std::abs(screen.scale.z - epochengine::render_arcade::kScreenSceneNode.scale[2]) < 0.001f
+            && epochengine::render_arcade::screen_sample_plane_z(screen.position.z, screen.scale.z)
+                < screen.position.z;
     }
 
     [[nodiscard]] inline bool renderer_capability_report_contract_ready()
@@ -1164,7 +1187,8 @@ namespace epochengine::core
             && opengl.hook_readiness == present
             && opengl.live_native_allocation == partial
             && opengl.presentation_proof == partial
-            && opengl.sampled_render_targets == partial;
+            && opengl.sampled_render_targets == partial
+            && opengl.scene_sampled_surface == partial;
 
         const auto sdlLivePathReady = [present, partial](const epochengine::RendererCapabilityReport& report) noexcept
         {
@@ -1173,7 +1197,8 @@ namespace epochengine::core
                 && report.hook_readiness == present
                 && report.live_native_allocation == partial
                 && report.presentation_proof == partial
-                && report.sampled_render_targets == partial;
+                && report.sampled_render_targets == partial
+                && report.scene_sampled_surface == partial;
         };
 
         const auto runtimeGuardedReady = [present, partial, missing](const epochengine::RendererCapabilityReport& report) noexcept
@@ -1183,7 +1208,8 @@ namespace epochengine::core
                 && report.hook_readiness == partial
                 && report.live_native_allocation == partial
                 && report.presentation_proof == missing
-                && report.sampled_render_targets == partial;
+                && report.sampled_render_targets == partial
+                && report.scene_sampled_surface == partial;
         };
 
         const auto futureNativeReady = [partial, missing](const epochengine::RendererCapabilityReport& report) noexcept
@@ -1193,7 +1219,8 @@ namespace epochengine::core
                 && report.hook_readiness == missing
                 && report.live_native_allocation == missing
                 && report.presentation_proof == missing
-                && report.sampled_render_targets == partial;
+                && report.sampled_render_targets == partial
+                && report.scene_sampled_surface == partial;
         };
 
         const auto softwareReady =
@@ -1202,7 +1229,8 @@ namespace epochengine::core
             && software.hook_readiness == deferred
             && software.live_native_allocation == deferred
             && software.presentation_proof == deferred
-            && software.sampled_render_targets == deferred;
+            && software.sampled_render_targets == deferred
+            && software.scene_sampled_surface == partial;
 
         epochengine::OpenGLFamilyRenderDevice openGlNoHooks{ epochengine::RendererBackendKind::opengl };
         const epochengine::RendererCapabilities openGlNoHookCaps = openGlNoHooks.capabilities();
@@ -1276,6 +1304,48 @@ namespace epochengine::core
             && softwareReady
             && openGlCapsReady
             && runtimeGuardCapsReady;
+    }
+
+    [[nodiscard]] inline bool opengl_real_native_texture_hook_contract_ready()
+    {
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        epochengine::OpenGLFamilyRenderDevice device{epochengine::RendererBackendKind::opengl};
+        device.set_native_texture_hooks(
+            epochengine::opengltextures::make_native_texture_hooks());
+        if (!device.native_texture_hooks_ready())
+            return false;
+
+        epochengine::TextureDesc desc{};
+        desc.width = 2;
+        desc.height = 2;
+        desc.mip_levels = 1;
+        desc.format = epochengine::TextureFormat::rgba8_unorm;
+        desc.sampled = true;
+        desc.debug_name = "OpenGL.NativeTextureHookContract";
+        const epochengine::TextureHandle texture = device.create_texture(desc);
+        const epochengine::OpenGLFamilyTextureRecord* const record =
+            device.resolve_texture(texture);
+
+        std::array<std::uint8_t, 16> pixels{};
+        epochengine::TextureUploadDesc upload{};
+        upload.width = 2;
+        upload.height = 2;
+        upload.row_pitch_bytes = 8;
+        upload.format = epochengine::TextureFormat::rgba8_unorm;
+        upload.data = pixels.data();
+        upload.size_bytes = pixels.size();
+        const bool ready = texture
+            && record != nullptr
+            && record->active
+            && !record->native_allocation_ready
+            && record->texture_object == 0u
+            && !device.texture_ready(texture)
+            && !device.upload_texture(texture, upload);
+        device.destroy(texture);
+        return ready && device.resolve_texture(texture) == nullptr;
+#else
+        return true;
+#endif
     }
 
     [[nodiscard]] inline bool opengl_real_native_rtt_hook_contract_ready()
@@ -1898,6 +1968,54 @@ namespace epochengine::core
             && !epochengine::editor_context_selection_allowed(true, true, false)
             && !epochengine::editor_context_selection_allowed(true, false, true));
 
+        const auto temporalRequestContract = epochengine::temporal::run_request_contract();
+        check(
+            "temporal.request_mapping",
+            temporalRequestContract.mapping
+            && temporalRequestContract.reverse
+            && temporalRequestContract.frozen);
+        check(
+            "temporal.request_history",
+            temporalRequestContract.exact
+            && temporalRequestContract.bracket
+            && temporalRequestContract.nearest
+            && temporalRequestContract.clamped
+            && temporalRequestContract.bounded
+            && temporalRequestContract.stale_handle
+            && temporalRequestContract.metrics);
+
+        const auto standardScene = epochengine::make_standard_editor_scene();
+        const auto plantLabApplicationScene = epochengine::make_plant_lab_editor_scene();
+        const auto guiApplicationScene = epochengine::make_gui_editor_scene();
+        const auto& standardApplication = epochengine::standard_editor_application();
+        const auto& plantLabApplication = epochengine::plant_lab_editor_application();
+        const auto& guiApplication = epochengine::gui_editor_application();
+        check(
+            "editor.application_scenes",
+            epochengine::validate_editor_application(standardApplication, standardScene)
+            && epochengine::validate_editor_application(plantLabApplication, plantLabApplicationScene)
+            && epochengine::validate_editor_application(guiApplication, guiApplicationScene));
+        check(
+            "editor.application_ownership",
+            epochengine::editor_application_for_project("projectlauncher") == &standardApplication
+            && epochengine::editor_application_for_project("plantlab") == &plantLabApplication
+            && epochengine::editor_application_for_project("twodstudio") == &guiApplication
+            && epochengine::editor_application_supports_surface(
+                standardApplication, epochengine::EditorApplicationSurface::ForestFactory)
+            && epochengine::editor_application_supports_surface(
+                standardApplication, epochengine::EditorApplicationSurface::Game2D)
+            && epochengine::editor_application_supports_surface(
+                plantLabApplication, epochengine::EditorApplicationSurface::PlantLab)
+            && !epochengine::editor_application_supports_surface(
+                plantLabApplication, epochengine::EditorApplicationSurface::ForestFactory)
+            && !epochengine::editor_application_supports_surface(
+                plantLabApplication, epochengine::EditorApplicationSurface::AISandbox)
+            && epochengine::editor_application_supports_surface(
+                guiApplication, epochengine::EditorApplicationSurface::Game2D)
+            && !epochengine::editor_application_supports_surface(
+                guiApplication, epochengine::EditorApplicationSurface::Scene)
+            && epochengine::editor_application_for_project("forestfactory") == &plantLabApplication);
+
         auto forestProfile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
         const auto forestEstimate = epochengine::forest::estimate_preview_stats(forestProfile);
@@ -2155,6 +2273,60 @@ namespace epochengine::core
             && std::abs(triangleHit->distance - 1.0f) < 0.001f
             && destroyedSphere
             && !rayScene.get(spherePrimitive).has_value());
+
+        epochengine::ecs::world lifetimeWorld{
+            epochengine::ecs::world_desc{ .max_entities = 2u, .allow_growth = false }};
+        const epochengine::ecs::entity firstLifetime = lifetimeWorld.create();
+        lifetimeWorld.destroy(firstLifetime);
+        const epochengine::ecs::entity replacementLifetime = lifetimeWorld.create();
+        check(
+            "ecs.generation_checked_lifetime",
+            firstLifetime.valid()
+            && firstLifetime.generation != 0u
+            && !lifetimeWorld.alive(firstLifetime)
+            && replacementLifetime.index == firstLifetime.index
+            && replacementLifetime.generation != 0u
+            && replacementLifetime.generation != firstLifetime.generation
+            && lifetimeWorld.alive(replacementLifetime));
+
+        constexpr epochengine::authoring::DocumentHandle authoringHandle{7u, 1u};
+        constexpr epochengine::authoring::ContentHash authoringHash =
+            epochengine::authoring::deterministic_content_hash("epoch.scene.tier0.contract");
+        constexpr epochengine::authoring::DocumentRevision authoringRevision{
+            .content = authoringHash,
+            .sequence = 1u };
+        constexpr epochengine::authoring::HistoryPolicy authoringHistory{};
+        check(
+            "authoring.document.identity_revision_history",
+            epochengine::authoring::validate(authoringHandle)
+            && epochengine::authoring::validate(epochengine::authoring::DocumentKind::scene)
+            && epochengine::authoring::validate(authoringRevision)
+            && epochengine::authoring::validate(authoringHistory)
+            && epochengine::authoring::content_hash_from_hex(
+                epochengine::authoring::content_hash_hex(authoringHash).data()) == authoringHash);
+        const auto sceneInteractionContract =
+            epochengine::scene_interaction::run_scene_interaction_contract_checks();
+        check("scene.interaction.persistent_identity_and_revision",
+            static_cast<bool>(sceneInteractionContract));
+        const auto sceneDocumentBuild =
+            epochengine::authoring::scene::SceneDocument::make_default_tier0();
+        const auto sceneDocumentProjection = sceneDocumentBuild
+            ? sceneDocumentBuild.value.project_snapshot()
+            : epochengine::authoring::scene::SnapshotProjectionResult{};
+        check(
+            "scene.document.tier0_projection",
+            sceneDocumentBuild
+            && sceneDocumentProjection
+            && sceneDocumentProjection.snapshot.objects.size() == 4u
+            && sceneDocumentProjection.snapshot.primary_camera != epochengine::scene::kInvalidSceneObjectId
+            && sceneDocumentProjection.snapshot.primary_spawn != epochengine::scene::kInvalidSceneObjectId
+            && epochengine::scene::validate_scene_document(
+                sceneDocumentProjection.snapshot,
+                epochengine::scene::SceneDocumentRequirement::runnable));
+        check("scene.persistence.validation_and_atomic_plan",
+            epochengine::scene::persistence::scene_persistence_contract_checks().all_passed());
+        check("scene.runtime.compiled_projection",
+            static_cast<bool>(epochengine::scene_runtime::run_scene_runtime_contract_checks()));
         check(
             "render.ray.voxel_dda",
             voxelHit.hit
@@ -2314,10 +2486,32 @@ namespace epochengine::core
             && audioContract.failure == epochengine::audio::AudioContractFailure::none);
         const auto capabilityContract =
             epochengine::capability::run_contract_checks();
+        constexpr std::uint32_t expectedCapabilityChecks = (1u << 17u) - 1u;
         check(
             "capability.profile_selection",
             capabilityContract.passed()
-            && capabilityContract.executed >= 10u);
+            && capabilityContract.executed == expectedCapabilityChecks);
+
+        const auto portablePolicy =
+            epochengine::editor_project_capability_policy("portable");
+        const auto strictPolicy =
+            epochengine::editor_project_capability_policy("portable-strict");
+        const auto unknownPolicy =
+            epochengine::editor_project_capability_policy("unknown-policy");
+        check(
+            "editor.project_capability_policy",
+            portablePolicy.has_value()
+            && strictPolicy.has_value()
+            && !unknownPolicy.has_value()
+            && portablePolicy->allow_experimental
+            && portablePolicy->allow_software_fallback
+            && !strictPolicy->allow_experimental
+            && !strictPolicy->allow_software_fallback
+            && portablePolicy->renderer_requirement.minimum_tier
+                == epochengine::capability::Tier::portable_graphics);
+        check(
+            "editor.project_manifest_capability",
+            epochengine::editor_project_manifest_capability_contract());
 
         const auto tier0Build = epochengine::scene_tier0::make_default_scene();
         const auto tier0Run = tier0Build
@@ -2392,7 +2586,40 @@ namespace epochengine::core
 #endif
 
         const auto arcadeContract = epochengine::render_arcade::run_contract_checks();
+        const auto arcadePreviewRouting =
+            epochengine::previewgrid::run_arcade_preview_routing_contract();
         check("render.arcade_scene_contract", arcadeContract.passed());
+        check(
+            "render.arcade_attract_pattern",
+            epochengine::render_arcade::arcade_attract_pattern_contract());
+        check("render.arcade_preview_routing", arcadePreviewRouting.passed());
+        check("render.canvas2d.core", epochengine::canvas2d::canvas2d_runtime_contract());
+        const auto cpuCanvasContract =
+            epochengine::canvas2d::cpu::canvas2d_cpu_runtime_contract_failure();
+        check(
+            std::string{"render.canvas2d.cpu."}
+                + epochengine::canvas2d::cpu::cpu_contract_failure_name(cpuCanvasContract),
+            cpuCanvasContract == epochengine::canvas2d::cpu::CpuContractFailure::none);
+        const auto canvasPresentationContract =
+            epochengine::canvas2d::presentation::canvas2d_presentation_runtime_contract_failure();
+        check(
+            std::string{"render.canvas2d.presentation."}
+                + epochengine::canvas2d::presentation::presentation_contract_failure_name(canvasPresentationContract),
+            canvasPresentationContract == epochengine::canvas2d::presentation::PresentationContractFailure::none);
+        const auto textureResidencyContract =
+            epochengine::texture_residency::texture_residency_runtime_contract_failure();
+        check(
+            std::string{"render.texture.residency."}
+                + epochengine::texture_residency::residency_contract_failure_name(textureResidencyContract),
+            textureResidencyContract == epochengine::texture_residency::ResidencyContractFailure::none);
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+        const auto textureArtifactBridgeContract =
+            epochengine::texture_artifact::texture_artifact_bridge_runtime_contract_failure();
+        check(
+            std::string{"render.texture.artifact."}
+                + epochengine::texture_artifact::bridge_contract_failure_name(textureArtifactBridgeContract),
+            textureArtifactBridgeContract == epochengine::texture_artifact::BridgeContractFailure::none);
+#endif
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
         check("render.render_surface_requires_rtt_asset", render_surface_requires_render_texture_asset_contract_ready());
         check("render.render_surface_rejects_mismatched_sampler", render_surface_rejects_mismatched_sampler_contract_ready());
@@ -2400,9 +2627,20 @@ namespace epochengine::core
         check("render.opengl_family_arcade_cabinet_graph", opengl_family_arcade_cabinet_graph_contract_ready());
         check("render.opengl_family_arcade_native_requirements", opengl_family_arcade_native_requirements_contract_ready());
         check("render.opengl_family_arcade_fake_native_rtt", opengl_family_arcade_fake_native_rtt_contract_ready());
+        const auto openGLFamilyTextureContract =
+            epochengine::opengl_family_texture_runtime_contract_failure();
+        check(
+            std::string{"render.opengl_family_texture."}
+                + epochengine::opengl_family_texture_contract_failure_name(openGLFamilyTextureContract),
+            openGLFamilyTextureContract == epochengine::OpenGLFamilyTextureContractFailure::none);
         check("render.sampled_surface_preview_marker", sampled_render_surface_preview_marker_contract_ready());
         check("render.capability_report_layers", renderer_capability_report_contract_ready());
         check("render.opengl_real_native_rtt_hook", opengl_real_native_rtt_hook_contract_ready());
+        check("render.opengl_real_native_texture_hook", opengl_real_native_texture_hook_contract_ready());
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        check("render.opengl_canvas2d_no_context_refusal",
+            epochengine::openglcanvas2d::no_context_runtime_contract());
+#endif
         check("render.sdl_native_render_texture_device", sdl_native_render_texture_device_contract_ready());
         check("render.sfml_native_render_texture_device", sfml_native_render_texture_device_contract_ready());
         check("render.raylib_native_render_texture_device", raylib_native_render_texture_device_contract_ready());
@@ -2618,6 +2856,12 @@ namespace epochengine::core
         const std::string snapshotText = epochengine::scene::serialize_snapshot_text(snapshot);
         const std::string snapshotSummary = epochengine::scene::snapshot_summary(snapshot);
         const auto parsedSnapshot = epochengine::scene::parse_snapshot_text(snapshotText);
+        const auto migratedLegacyScene = epochengine::scene::parse_legacy_editor_scene_text(
+            "scene \"legacy.scene\"\n"
+            "project \"legacy.project\"\n"
+            "epoch_editor_entities 1\n"
+            "entity \"Camera\" \"Camera\" \"Editor\" pos 0 2 5 rot 0 0 0 scale 1 1 1 visible 1 editor_only 0\n"
+            "entity \"Spawn\" \"Spawn\" \"Gameplay\" pos 0 0 0 rot 0 0 0 scale 1 1 1 visible 1 editor_only 0\n");
         const auto checkpointRecord = epochengine::saveload::make_checkpoint_record(
             saveConfig,
             saveStatus,
@@ -2659,11 +2903,18 @@ namespace epochengine::core
             && snapshot.timeline_keys.front().frame_index == 60u);
         check(
             "snapshot.serialize",
-            snapshotText.find("epoch_snapshot 1") != std::string::npos
+            snapshotText.find("epoch_snapshot 2") != std::string::npos
             && snapshotText.find("timeline \\\"contract\\\"") != std::string::npos
             && snapshotText.find("Persistent\\nLevel") != std::string::npos
             && snapshotText.find("payload\\tvalue") != std::string::npos
             && snapshotSummary.find("objects 1") != std::string::npos);
+        check(
+            "snapshot.legacy_editor_migration",
+            migratedLegacyScene.ok
+            && migratedLegacyScene.snapshot.project_id == "legacy.project"
+            && migratedLegacyScene.snapshot.objects.size() == 2u
+            && migratedLegacyScene.snapshot.primary_camera != epochengine::scene::kInvalidSceneObjectId
+            && migratedLegacyScene.snapshot.primary_spawn != epochengine::scene::kInvalidSceneObjectId);
 
         bool parsedHasEscapedPayload = false;
         bool parsedHasCameraCut = false;
@@ -4783,7 +5034,7 @@ namespace epochengine::core
             epochengine::core::time::simulation_clock simulation{};
             bool routed_gui_upload_refreshed{ false };
             std::optional<std::string> pending_editor_project_id{};
-            EditorLaunchWorkspace pending_editor_workspace{ EditorLaunchWorkspace::Standard };
+            EditorApplicationKind pending_editor_application{ EditorApplicationKind::Standard };
             std::uint32_t launcher_loading_frames{ 0 };
             std::uint32_t launcher_loading_total_frames{ 0 };
         };
@@ -5025,26 +5276,26 @@ namespace epochengine::core
 #endif
         }
 
-        struct ProjectRuntimeEntity
-        {
-            std::string name{};
-            std::string type{};
-            std::string category{};
-            std::array<float, 3> position{ 0.0f, 0.0f, 0.0f };
-            std::array<float, 3> rotation{ 0.0f, 0.0f, 0.0f };
-            std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
-            bool visible{ true };
-            bool editor_only{ false };
-        };
+        using ProjectRuntimeEntity = epochengine::scene_runtime::RuntimeEntity;
 
-        [[nodiscard]] std::vector<ProjectRuntimeEntity> project_runtime_entities_from_seeds(
+        [[nodiscard]] epochengine::scene::SceneSnapshot project_runtime_snapshot_from_seeds(
+            std::string_view project_id,
+            std::string_view runtime_scene_id,
+            std::string_view world_name,
             std::span<const epochengine::EditorSceneSeedEntity> seeds)
         {
-            std::vector<ProjectRuntimeEntity> entities{};
-            entities.reserve(seeds.size());
+            epochengine::scene::SceneSnapshot snapshot{};
+            snapshot.project_id = project_id;
+            snapshot.scene_id = runtime_scene_id;
+            snapshot.world_name = world_name;
+            snapshot.document_kind = "game";
+            snapshot.support_tier = "tier0";
+            snapshot.revision = 1u;
+            snapshot.objects.reserve(seeds.size());
             for (const auto& seed : seeds)
             {
-                entities.push_back(ProjectRuntimeEntity{
+                snapshot.objects.push_back(epochengine::scene::SceneObjectSnapshot{
+                    .id = epochengine::scene::stable_scene_object_id(runtime_scene_id, seed.name),
                     .name = std::string(seed.name),
                     .type = std::string(seed.type),
                     .category = std::string(seed.category),
@@ -5055,7 +5306,8 @@ namespace epochengine::core
                     .editor_only = seed.editor_only
                 });
             }
-            return entities;
+            epochengine::scene::normalize_scene_document(snapshot);
+            return snapshot;
         }
 
         [[nodiscard]] std::filesystem::path engine_runtime_root()
@@ -5076,11 +5328,18 @@ namespace epochengine::core
             return (engine_runtime_root() / path).lexically_normal();
         }
 
-        [[nodiscard]] std::vector<ProjectRuntimeEntity> load_project_runtime_entities(
+        [[nodiscard]] epochengine::scene::SceneSnapshot load_project_runtime_snapshot(
             std::string_view scene_path,
+            std::string_view project_id,
+            std::string_view runtime_scene_id,
+            std::string_view world_name,
             std::span<const epochengine::EditorSceneSeedEntity> fallback_seeds)
         {
-            auto fallback = project_runtime_entities_from_seeds(fallback_seeds);
+            auto fallback = project_runtime_snapshot_from_seeds(
+                project_id,
+                runtime_scene_id,
+                world_name,
+                fallback_seeds);
             if (scene_path.empty())
                 return fallback;
 
@@ -5088,46 +5347,30 @@ namespace epochengine::core
             if (!in)
                 return fallback;
 
-            std::vector<ProjectRuntimeEntity> loaded{};
-            std::string line;
-            while (std::getline(in, line))
-            {
-                std::istringstream row(line);
-                std::string tag;
-                row >> tag;
-                if (tag != "entity")
-                    continue;
+            std::ostringstream text{};
+            text << in.rdbuf();
+            if (!in.good() && !in.eof())
+                return fallback;
 
-                ProjectRuntimeEntity entity{};
-                std::string posTag;
-                std::string rotTag;
-                std::string scaleTag;
-                std::string visibleTag;
-                std::string editorOnlyTag;
-                int visible = 1;
-                int editorOnly = 0;
-                if (!(row
-                    >> std::quoted(entity.name)
-                    >> std::quoted(entity.type)
-                    >> std::quoted(entity.category)
-                    >> posTag >> entity.position[0] >> entity.position[1] >> entity.position[2]
-                    >> rotTag >> entity.rotation[0] >> entity.rotation[1] >> entity.rotation[2]
-                    >> scaleTag >> entity.scale[0] >> entity.scale[1] >> entity.scale[2]
-                    >> visibleTag >> visible
-                    >> editorOnlyTag >> editorOnly))
-                {
-                    continue;
-                }
+            const std::string payload = text.str();
+            auto parsed = epochengine::scene::parse_snapshot_text(payload);
+            if (!parsed.ok)
+                parsed = epochengine::scene::parse_legacy_editor_scene_text(payload);
+            if (!parsed.ok)
+                return fallback;
+            if (parsed.snapshot.project_id.empty())
+                parsed.snapshot.project_id = project_id;
+            if (parsed.snapshot.scene_id.empty())
+                parsed.snapshot.scene_id = runtime_scene_id;
+            if (parsed.snapshot.world_name.empty())
+                parsed.snapshot.world_name = world_name;
+            epochengine::scene::normalize_scene_document(parsed.snapshot);
+            if (!epochengine::scene::validate_scene_document(
+                    parsed.snapshot,
+                    epochengine::scene::SceneDocumentRequirement::runnable))
+                return fallback;
 
-                if (posTag != "pos" || rotTag != "rot" || scaleTag != "scale" || visibleTag != "visible" || editorOnlyTag != "editor_only")
-                    continue;
-
-                entity.visible = visible != 0;
-                entity.editor_only = editorOnly != 0;
-                loaded.push_back(std::move(entity));
-            }
-
-            return loaded.empty() ? fallback : loaded;
+            return parsed.snapshot;
         }
 
         [[nodiscard]] epochengine::previewgrid::Vec3 runtime_marker_color_for_entity(
@@ -5136,7 +5379,7 @@ namespace epochengine::core
         {
             if (selected)
                 return { 1.00f, 0.86f, 0.24f };
-            if (entity.editor_only || entity.category == "Editor")
+            if (entity.editor_only() || entity.category == "Editor")
                 return { 0.44f, 0.62f, 0.90f };
             if (entity.type == "Light")
                 return { 1.00f, 0.82f, 0.30f };
@@ -5153,7 +5396,9 @@ namespace epochengine::core
 
         [[nodiscard]] float runtime_marker_radius_for_entity(const ProjectRuntimeEntity& entity) noexcept
         {
-            const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
+            const float scaleMax = (std::max)(
+                entity.transform.scale[0],
+                (std::max)(entity.transform.scale[1], entity.transform.scale[2]));
             if (entity.type == "Light")
                 return 0.42f;
             if (entity.type == "Spawn")
@@ -5187,7 +5432,7 @@ namespace epochengine::core
         {
             std::size_t count = 0;
             for (const auto& entity : entities)
-                if (entity.visible)
+                if (entity.visible())
                     ++count;
             return count;
         }
@@ -5199,7 +5444,7 @@ namespace epochengine::core
             manager.set_environment({ { 0.16f, 0.18f, 0.22f } });
             for (const ProjectRuntimeEntity& entity : entities)
             {
-                if (!entity.visible || entity.type != "Light")
+                if (!entity.visible() || entity.type != "Light")
                     continue;
 
                 const bool pointLight = entity.name.contains("Point") || entity.name.contains("Lamp");
@@ -5211,14 +5456,14 @@ namespace epochengine::core
                     ? epochengine::lighting::Color3{ 1.0f, 0.78f, 0.56f }
                     : epochengine::lighting::Color3{ 1.0f, 0.95f, 0.84f };
                 desc.intensity = pointLight ? 24.0f : 1.35f;
-                desc.position = { entity.position[0], entity.position[1], entity.position[2] };
+                desc.position = { entity.transform.position[0], entity.transform.position[1], entity.transform.position[2] };
                 desc.direction = epochengine::lighting::direction_from_euler_degrees({
-                    entity.rotation[0],
-                    entity.rotation[1],
-                    entity.rotation[2]
+                    entity.transform.rotation[0],
+                    entity.transform.rotation[1],
+                    entity.transform.rotation[2]
                 });
                 desc.range = pointLight
-                    ? (std::max)(12.0f, (std::max)({ entity.scale[0], entity.scale[1], entity.scale[2] }) * 12.0f)
+                    ? (std::max)(12.0f, (std::max)({ entity.transform.scale[0], entity.transform.scale[1], entity.transform.scale[2] }) * 12.0f)
                     : 1.0f;
                 (void)manager.create(desc);
             }
@@ -5230,12 +5475,12 @@ namespace epochengine::core
         {
             for (const ProjectRuntimeEntity& entity : entities)
             {
-                if (entity.visible && !entity.editor_only && entity.type == "Spawn")
+                if (entity.visible() && !entity.editor_only() && entity.type == "Spawn")
                 {
                     return epochengine::previewgrid::Vec3{
-                        entity.position[0],
-                        entity.position[1] + 1.65f,
-                        entity.position[2]
+                        entity.transform.position[0],
+                        entity.transform.position[1] + 1.65f,
+                        entity.transform.position[2]
                     };
                 }
             }
@@ -5253,17 +5498,17 @@ namespace epochengine::core
             for (std::size_t i = 0; i < entities.size(); ++i)
             {
                 const auto& entity = entities[i];
-                if (!entity.visible)
+                if (!entity.visible())
                     continue;
 
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
-                    .position{ entity.position[0], entity.position[1], entity.position[2] },
+                    .position{ entity.transform.position[0], entity.transform.position[1], entity.transform.position[2] },
                     .color = runtime_marker_color_for_entity(entity, i == 0u),
-                    .scale{ entity.scale[0], entity.scale[1], entity.scale[2] },
+                    .scale{ entity.transform.scale[0], entity.transform.scale[1], entity.transform.scale[2] },
                     .radius = runtime_marker_radius_for_entity(entity),
                     .primitive = runtime_preview_primitive_for_entity(entity),
                     .selected = i == 0u,
-                    .editorOnly = entity.editor_only || entity.category == "Editor",
+                    .editorOnly = entity.editor_only() || entity.category == "Editor",
                     .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen"
                 });
             }
@@ -5296,9 +5541,23 @@ namespace epochengine::core
                 m_description = std::string(profile->description);
                 m_modelSummary = epochengine::editor_project_model_summary(m_projectId);
                 const auto seedEntities = epochengine::editor_seed_entities_for_project(m_projectId);
-                m_entities = load_project_runtime_entities(
+                const auto sourceSnapshot = load_project_runtime_snapshot(
                     m_scenePath,
+                    profile->id,
+                    profile->runtime_scene_id,
+                    profile->world_name,
                     std::span<const epochengine::EditorSceneSeedEntity>{ seedEntities.data(), seedEntities.size() });
+                const auto compileReport = m_sceneRuntime.replace(
+                    sourceSnapshot,
+                    epochengine::scene_runtime::RuntimeScenePolicy{
+                        .include_hidden_objects = false,
+                        .include_editor_only_objects = true
+                    });
+                if (compileReport.committed())
+                {
+                    const auto compiled = m_sceneRuntime.projection()->entities();
+                    m_entities.assign(compiled.begin(), compiled.end());
+                }
                 m_lightingFrame = build_project_play_lighting(
                     std::span<const ProjectRuntimeEntity>{ m_entities.data(), m_entities.size() });
             }
@@ -5462,6 +5721,7 @@ namespace epochengine::core
             std::string m_scriptName{};
             std::string m_description{};
             epochengine::EditorProjectModelSummary m_modelSummary{};
+            epochengine::scene_runtime::SceneRuntime m_sceneRuntime{};
             std::vector<ProjectRuntimeEntity> m_entities{};
             epochengine::lighting::LightingFrame m_lightingFrame{};
             timing::Clock::time_point m_lastFrame{};
@@ -5543,7 +5803,7 @@ namespace epochengine::core
             case Choice::Cellular: return "cellular";
             case Choice::Settings:
             case Choice::OpenEditor:
-            case Choice::OpenForestFactory:
+            case Choice::OpenPlantLab:
             case Choice::OpenGuiEditor:
             case Choice::About:
             case Choice::CheckUpdates:
@@ -5564,34 +5824,28 @@ namespace epochengine::core
             switch (choice)
             {
             case Choice::OpenEditor: return "projectlauncher";
-            case Choice::OpenForestFactory: return "projectlauncher";
+            case Choice::OpenPlantLab: return "plantlab";
             case Choice::OpenGuiEditor: return "twodstudio";
             default: return {};
             }
         }
 
-        [[nodiscard]] EditorLaunchWorkspace workspace_from_choice(
+        [[nodiscard]] EditorApplicationKind application_from_choice(
             epochengine::menu::Choice choice) noexcept
         {
             using Choice = epochengine::menu::Choice;
             switch (choice)
             {
-            case Choice::OpenForestFactory: return EditorLaunchWorkspace::ForestFactory;
-            case Choice::OpenGuiEditor: return EditorLaunchWorkspace::GuiEditor;
+            case Choice::OpenPlantLab: return EditorApplicationKind::PlantLab;
+            case Choice::OpenGuiEditor: return EditorApplicationKind::GuiEditor;
             case Choice::OpenEditor:
-            default: return EditorLaunchWorkspace::Standard;
+            default: return EditorApplicationKind::Standard;
             }
         }
 
-        [[nodiscard]] std::string_view workspace_label(EditorLaunchWorkspace workspace) noexcept
+        [[nodiscard]] std::string_view application_label(EditorApplicationKind application) noexcept
         {
-            switch (workspace)
-            {
-            case EditorLaunchWorkspace::ForestFactory: return "Forest Factory";
-            case EditorLaunchWorkspace::GuiEditor: return "GUI Editor";
-            case EditorLaunchWorkspace::Standard:
-            default: return "Epoch Editor";
-            }
+            return editor_application_profile(application).display_name;
         }
 
         [[nodiscard]] epochengine::updater::UpdateChannel default_update_channel()
@@ -6003,7 +6257,8 @@ namespace epochengine::core
                                 .gui_route = {},
                                 .width = replacement.width,
                                 .height = replacement.height,
-                                .start_docked = true
+                                .start_docked = true,
+                                .pinned_to_parent = true
                             },
                             &createdContext))
                         {
@@ -6255,7 +6510,7 @@ namespace epochengine::core
                 auto switch_session_to_editor = [&](
                     ContextSession& targetSession,
                     const std::shared_ptr<Context>& targetCtx,
-                    std::string_view project_id)
+                    EditorApplicationKind application)
                 {
                     if (!targetCtx)
                         return;
@@ -6270,10 +6525,7 @@ namespace epochengine::core
                     targetSession.return_mode = SessionMode::Menu;
 
                     epochengine::editor_suppress_startup_update_check(targetCtx);
-                    if (!project_id.empty())
-                        epochengine::editor_load_workspace(targetCtx, project_id, workspace);
-                    else
-                        epochengine::editor_reset_transient_ui(targetCtx.get());
+                    epochengine::editor_load_application(targetCtx, application);
 
                     targetCtx->clear_scene_viewport();
                     targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
@@ -6509,6 +6761,26 @@ namespace epochengine::core
 #endif
                     }
 
+                    std::optional<epochengine::EditorContextSnapshot> targetSnapshot{};
+                    if (sourceCtx && targetCtx.get() != sourceCtx.get())
+                    {
+                        auto capturedSnapshot = epochengine::editor_capture_context_snapshot(sourceCtx.get());
+                        if (!capturedSnapshot.valid)
+                        {
+                            epochengine::editor_set_context_selection_status(
+                                sourceCtx.get(),
+                                std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
+                                    + " failed: editor state capture did not produce a restorable snapshot.");
+                            logger::get(kEditorLog).logf(
+                                logger::LogLevel::Error,
+                                std::source_location::current(),
+                                "Context selector could not capture editor state before promoting live {}.",
+                                context_type_label(targetType));
+                            return;
+                        }
+                        targetSnapshot = std::move(capturedSnapshot);
+                    }
+
                     auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
                     auto& targetSession = targetIt->second;
                     if (insertedForTarget)
@@ -6519,47 +6791,50 @@ namespace epochengine::core
                     targetSession.mode = SessionMode::Editor;
                     targetSession.return_mode = SessionMode::Menu;
 
-                    if (sourceCtx && targetCtx.get() != sourceCtx.get())
+                    if (targetSnapshot)
                     {
-                        const auto editorSnapshot = epochengine::editor_capture_context_snapshot(sourceCtx.get());
-                        if (editorSnapshot.valid)
+                        if (!epochengine::editor_restore_context_snapshot(targetCtx.get(), *targetSnapshot))
                         {
-                            const bool restored = epochengine::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot);
-                            if (restored)
-                            {
-                                logger::get(kEditorLog).logf(
-                                    logger::LogLevel::INFO,
-                                    std::source_location::current(),
-                                    "Context selector restored editor state into the live {} context.",
-                                    context_type_label(targetType));
-                            }
-                            else
-                            {
-                                epochengine::editor_set_context_selection_status(
-                                    sourceCtx.get(),
-                                    std::string{ "Focused live " } + std::string{ context_type_label(targetType) }
-                                        + " context, but editor state restore failed.");
-                                logger::get(kEditorLog).logf(
-                                    logger::LogLevel::Error,
-                                    std::source_location::current(),
-                                    "Context selector focused the live {} context but editor state restore failed.",
-                                    context_type_label(targetType));
-                            }
-                        }
-                        else
-                        {
+                            reset_to_menu(targetSession, targetCtx);
                             epochengine::editor_set_context_selection_status(
                                 sourceCtx.get(),
-                                std::string{ "Focused live " } + std::string{ context_type_label(targetType) }
-                                    + " context, but editor state capture failed.");
+                                std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
+                                    + " failed: editor state restore was rejected; the current context stayed primary.");
                             logger::get(kEditorLog).logf(
                                 logger::LogLevel::Error,
                                 std::source_location::current(),
-                                "Context selector focused the live {} context but editor state capture failed.",
+                                "Context selector rejected live {} promotion because editor state restore failed.",
                                 context_type_label(targetType));
+                            return;
                         }
+
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Context selector restored editor state into the live {} context.",
+                            context_type_label(targetType));
                     }
 
+                    bool primarySurfaceReady = true;
+#if defined(_WIN32)
+                    if (mgr.GetParentWindow())
+                        primarySurfaceReady = mgr.PromotePrimaryWindow(targetCtx);
+#endif
+                    if (!primarySurfaceReady)
+                    {
+                        if (targetSnapshot)
+                            reset_to_menu(targetSession, targetCtx);
+                        epochengine::editor_set_context_selection_status(
+                            sourceCtx ? sourceCtx.get() : targetCtx.get(),
+                            std::string{ "Context switch to " } + std::string{ context_type_label(targetType) }
+                                + " failed: the backend could not acquire the baked primary surface.");
+                        logger::get(kEditorLog).logf(
+                            logger::LogLevel::Error,
+                            std::source_location::current(),
+                            "Context selector could not promote live {} to the baked primary surface.",
+                            context_type_label(targetType));
+                        return;
+                    }
                     for (auto& [_, contexts] : snapshot)
                     {
                         for (auto& candidateCtx : contexts)
@@ -7494,7 +7769,7 @@ namespace epochengine::core
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             std::optional<epochengine::menu::Choice> choice{};
                             std::optional<std::string> pendingEditorProject{};
-                            EditorLaunchWorkspace pendingEditorWorkspace = session.pending_editor_workspace;
+                            EditorApplicationKind pendingEditorApplication = session.pending_editor_application;
                             const int transitionWidth = (std::max)(1, ctx ? ctx->get_width_safe() : (win ? win->width : 1));
                             const int transitionHeight = (std::max)(1, ctx ? ctx->get_height_safe() : (win ? win->height : 1));
                             if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
@@ -7511,7 +7786,7 @@ namespace epochengine::core
                             {
                                 const bool loadingEditor = session.pending_editor_project_id.has_value();
                                 const std::string projectLabel = loadingEditor
-                                    ? std::string{ workspace_label(session.pending_editor_workspace) }
+                                    ? std::string{ application_label(session.pending_editor_application) }
                                     : std::string{ "project launcher" };
                                 const std::string transitionTitle = loadingEditor ? "Loading Editor" : "Loading Launcher";
                                 const std::string transitionMessage = loadingEditor
@@ -7570,9 +7845,9 @@ namespace epochengine::core
                                 if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
                                 {
                                     pendingEditorProject = std::move(session.pending_editor_project_id);
-                                    pendingEditorWorkspace = session.pending_editor_workspace;
+                                    pendingEditorApplication = session.pending_editor_application;
                                     session.pending_editor_project_id.reset();
-                                    session.pending_editor_workspace = EditorLaunchWorkspace::Standard;
+                                    session.pending_editor_application = EditorApplicationKind::Standard;
                                 }
                             }
                             else
@@ -7609,7 +7884,7 @@ namespace epochengine::core
                                 if (ctx_running)
                                     ctx->present_safe();
                                 if (pendingEditorProject)
-                                    switch_session_to_editor(session, ctx, *pendingEditorProject, pendingEditorWorkspace);
+                                    switch_session_to_editor(session, ctx, pendingEditorApplication);
                                 break;
                             }
 
@@ -7789,6 +8064,10 @@ namespace epochengine::core
 
                                         const auto selectedType = session.menu.selected_launch_context();
                                         auto targetCtx = resolve_launcher_context(ctx, selectedType);
+#if defined(_WIN32)
+                                        if (mgr.GetParentWindow())
+                                            static_cast<void>(mgr.PromotePrimaryWindow(targetCtx));
+#endif
                                         auto [targetIt, insertedForTarget] = sessions.try_emplace(targetCtx.get());
                                         auto& targetSession = targetIt->second;
                                         if (insertedForTarget)
@@ -7798,7 +8077,7 @@ namespace epochengine::core
                                         }
 
                                         targetSession.pending_editor_project_id = project_id;
-                                        targetSession.pending_editor_workspace = workspace_from_choice(*choice);
+                                        targetSession.pending_editor_application = application_from_choice(*choice);
                                         targetSession.launcher_loading_frames = 18;
                                         targetSession.launcher_loading_total_frames = 18;
                                         targetSession.menu.guard_next_input_frames(3u);

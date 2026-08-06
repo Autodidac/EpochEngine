@@ -61,11 +61,11 @@ not prove production performance or feed passive provider selection.
 | Frame clear/present | Partial | Core paths exist; resize, GUI replay, modal ordering, and repeated replacement remain regression-sensitive. |
 | Editor scene lines/helpers | Present | Grid, markers, camera, and helper geometry exist across active editor lanes. |
 | Editor scene solids | Partial | OpenGL, SDL3, SFML3, DirectX, and Software have accepted current orientation. Raylib and Vulkan have correction candidates awaiting operator eye proof. |
-| Canvas2D camera/mode | Partial | Orthographic preview state and editor mode exist. A complete offscreen compose, sprite batch, scaling, tilemap, and built-project loop are active work. |
-| Renderer resource spine | Partial | `render.device`/`render.graph` describe logical buffers, textures, samplers, shaders, pipelines, materials, meshes/models, render targets, bindings, commands, passes, and graph dependencies. Native parity is incomplete. |
-| Sampled render-to-texture | Partial | Descriptor and graph proof exist. OpenGL editor presentation and a live SDL target-texture lane exist. Other backends require their own allocation/presentation evidence. Engine Arcade remains the proof consumer. |
-| Texture mapping and residency | Partial | GUI/font atlases, uploads, backend texture modules, logical texture work, and a temporal texture/residency foundation exist. Unified sampler, standalone/atlas/bindless/sparse selection, Canvas2D use, and evidence are incomplete. |
-| Material semantics | Partial | Material handles and named logical texture slots flow through graph/device contracts. Alpha mode, PBR factors, color-space intent, normal/ORM slots, and portable sprite material need consolidation. |
+| Canvas2D planning/runtime | Partial | `render.canvas2d` proves project settings, camera/viewport mapping, logical sprite materials, deterministic quad batching, tile descriptors, immutable submissions, offscreen/final-compose plans, diagnostics, and editor policy persistence. `render.canvas2d.cpu` proves deterministic RGBA8 reference output. `render.canvas2d.presentation` proves full-frame identity, byte-derived artifact keys, bounded residency, explicit image/surface packets, and staged native dispatch. The primary `opengl.canvas2d` compositor compiles with confined viewport/scissor and state restoration, but live editor-slot pixels, project-authored texture binding, GL share-group adapters, and the built-project loop remain unproved. |
+| Renderer resource spine | Partial | `render.device`/`render.graph` describe logical buffers, textures, validated upload regions, samplers, shaders, pipelines, materials, meshes/models, render targets, bindings, commands, passes, and graph dependencies. `render.texture.residency` proves bounded generation-checked logical-artifact reuse, eviction, pinning, upload budgets, stale-handle refusal, backend epochs, recreation, and metrics. Native parity is incomplete. |
+| Sampled render-to-texture | Partial | Engine Arcade uses one shared content contract with backend-owned scene surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software. Build contracts pass; visual presentation and generic device-spine parity remain incomplete. |
+| Texture mapping and residency | Partial | `authoring.texture` produces validated dense RGBA8 artifacts and deterministic payload hashes through the always-built `authoring.texture.artifact` schema/validator. A standalone Clang contract proves that runtime boundary with authoring and texture-editor features disabled. `render.texture.artifact` contract-maps one-time sealed RGBA8-linear mip 0 into the existing standalone residency cache using synthetic-device proof. Immutable source ownership, plan-then-commit miss eviction, transactional recreation, bounded transient replacement, forward-only backend epochs, upload accounting, and stale-handle rejection are build-proven. Serialized artifact reading, production asset resolution, capability-derived admission and budgets, sRGB native consumption, live Canvas2D binding, atlas, bindless, sparse, streaming, and mip-chain residency remain incomplete. |
+| Material semantics | Partial | Material handles and named logical texture slots flow through graph/device contracts. Portable sprite material, sampler, alpha, cutout, and color-space declarations exist; backend shader/blend consumption and broader PBR/normal/ORM semantics remain incomplete. |
 | Camera and transforms | Present | Perspective and Canvas2D cameras, preview rigs, transforms, and editor controls exist. Shared math adoption should continue as touched. |
 | Lighting | Partial | `render.lighting` owns stable directional/point/spot lights, bounded frames, environment state, metrics, Euler conversion, and reference raster evaluation. Editor/runtime preview wiring is in progress. Native buffers, shaders, PBR, and shadows are Missing. |
 | CPU ray/spatial queries | Partial | `render.ray` owns validated AABB, sphere, triangle, scene, and voxel-DDA reference queries with explicit status/metrics. Editor selection integration is in progress. Hardware ray query/RT are Missing. |
@@ -78,20 +78,26 @@ not prove production performance or feed passive provider selection.
 
 ## Sampled RTT Evidence
 
-| Backend lane | Descriptor | Graph | Native adapter | Live allocation | Presentation | Overall |
-| --- | --- | --- | --- | --- | --- | --- |
-| OpenGL | Present | Present | Present | Partial | Partial | Partial |
-| SDL3 | Present | Present | Present | Partial | Partial | Partial |
-| SFML3 | Present | Present | Partial | Partial | Missing | Partial |
-| Raylib3 | Present | Present | Partial | Partial | Missing | Partial |
-| Vulkan | Partial | Partial | Missing | Missing | Missing | Partial |
-| DirectX/D3D11 | Partial | Partial | Missing | Missing | Missing | Partial |
-| CPU/software | Deferred | Deferred | Deferred | Deferred | Deferred | Deferred |
+| Backend lane | Descriptor | Graph | Native adapter | Live allocation | Presentation | Scene surface | Overall |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| OpenGL | Present | Present | Present | Partial | Partial | Partial | Partial |
+| SDL3 | Present | Present | Present | Partial | Partial | Partial | Partial |
+| SFML3 | Present | Present | Partial | Partial | Missing | Partial | Partial |
+| Raylib3 | Present | Present | Partial | Partial | Missing | Partial | Partial |
+| Vulkan | Partial | Partial | Missing | Missing | Missing | Partial | Partial |
+| DirectX/D3D11 | Partial | Partial | Missing | Missing | Missing | Partial | Partial |
+| CPU/software | Deferred | Deferred | Deferred | Deferred | Deferred | Partial | Deferred |
 
-OpenGL's logical device can prove hook/work-order behavior without a live GL
-context, but live allocation requires a registered context. SDL/SFML/Raylib
-no-runtime refusal proves the guard only. System Info must keep every evidence
-layer separate.
+OpenGL's logical device now proves texture hook/work-order behavior without a
+live GL context, and the native adapter implements context-guarded allocation,
+upload, readiness, and destruction. The renderer-neutral presenter and primary
+OpenGL compositor are compiled and contract-proven, including safe no-context
+refusal, but the compositor is not yet routed through the live editor scene
+slot. Live allocation, drawing, and Canvas2D pixel presentation
+still require registered-context runtime evidence. SDL/SFML/Raylib no-runtime
+refusal proves the generic-device guard only. `Scene surface` records the
+backend-owned Engine Arcade path and stays `Partial` until visual proof.
+System Info must keep every evidence layer separate.
 
 ## Scene-Solid Repair Contract
 
@@ -100,6 +106,9 @@ without changing queue, GUI replay, or present order.
 
 - OpenGL, SDL3, SFML3, DirectX, and Software have operator-accepted current
   orientation.
+- The Arcade sampled screen uses one shared front-plane calculation in every
+  backend adapter; compilation and graph contracts pass, while the actual
+  presentation remains `Partial` pending operator eye proof.
 - Shared preview geometry defines the clockwise-outward object convention and
   carries compile-time exterior/opposite-face checks.
 - Raylib filters camera-facing back sides before projected fill.

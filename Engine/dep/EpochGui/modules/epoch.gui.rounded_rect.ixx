@@ -11,6 +11,13 @@ export import epoch.gui;
 
 export namespace epochengine::gui_lib::rounded_rect
 {
+    struct RoundedRectStyle
+    {
+        bool enabled{};
+        float control_radius{ 6.0f };
+        std::uint32_t segments_per_corner{ 4 };
+    };
+
     struct CornerRadii
     {
         float top_left{};
@@ -60,6 +67,11 @@ export namespace epochengine::gui_lib::rounded_rect
         }
     };
 
+    [[nodiscard]] RoundedRectStyle normalize_rounded_rect_style(RoundedRectStyle style) noexcept;
+    [[nodiscard]] RoundedRectOptions make_styled_rounded_rect_options(
+        Rect bounds,
+        const RoundedRectStyle& style,
+        float border_width = 0.0f) noexcept;
     [[nodiscard]] CornerRadii normalize_corner_radii(Rect bounds, CornerRadii radii) noexcept;
     [[nodiscard]] RoundedRectMesh make_rounded_rect_mesh(const RoundedRectOptions& options);
 }

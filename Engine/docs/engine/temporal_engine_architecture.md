@@ -73,6 +73,85 @@ The immediate 2D product uses explicit fixed physics time, animation time, audio
 scheduling, and editor/play state. It does not wait for the complete persistent
 world.
 
+## Implemented Request Mapping Foundation
+
+`temporal.request` is the current bounded observation foundation. It names each
+quantity instead of passing unrelated raw seconds through one generic scalar:
+
+```cpp
+GlobalTime
+SampleTime
+Duration
+TemporalRate
+TemporalAnchor
+TemporalMapping
+```
+
+The mapping is explicit:
+
+```text
+sample_time =
+    anchor.sample
+    + (global_time - anchor.global)
+    * rate.sample_seconds_per_global_second
+```
+
+Positive rates observe forward, zero freezes the sample coordinate, and
+negative rates observe backward. Inverse mapping is available only for finite,
+nonzero rates.
+
+`RequestDrivenHistory<State>` owns generation-checked subjects and bounded,
+time-ordered samples. Requests choose:
+
+- exact lookup;
+- nearest retained sample;
+- a lower/upper bracket with interpolation weight;
+- optional bounded edge clamping.
+
+Every result carries status, requested/lower/upper sample times, exact/nearest/
+clamped flags, declared truth class, and whether exact reconstruction is still
+required. An exact channel sampled through nearest, bracket, or boundary clamp
+does not silently become exact truth.
+
+Retention rejects invalid, stale, older-sequence, and already-evicted samples.
+Lifetime append/replacement/eviction/rejection metrics survive subject
+retirement while live subject/sample/capacity metrics remain separate. Borrowed
+sample spans are mutation-scoped; retained consumers request a copy.
+
+This module does not yet provide immutable events, transactions, world pages,
+branches, dependency invalidation, or authoritative reconstruction. Those
+remain later layers over the request contract.
+
+`Autodidac/VoxelRayBenchmark` is an external evidence laboratory for the
+request-driven voxel/ray design. Epoch may ingest immutable result packets,
+licensed algorithmic findings, and reproducible command/configuration metadata.
+A repository label, bootstrap document, or one local result does not prove a
+production capability. Concurrent multicontext measurements are excluded from
+automatic editor-backend selection because they measure contention rather than
+the normal one-backend editor path.
+
+## Implemented Scene Foundation
+
+The first bounded persistent scene slice is now real without claiming the full
+temporal world:
+
+- `authoring.document` owns generation-checked document handles, deterministic
+  content revisions, and history policy;
+- `scene.document` owns stable scene object handles, typed components, semantic
+  operations, transactions, undo/redo, and deterministic snapshot projection;
+- `scene.interaction` resolves ray hits, drag ownership, and Focus through stable
+  object identity;
+- `scenesnapshot` and `sceneserializer` own canonical `epoch_snapshot 2` text;
+- `scene.persistence` validates, verifies, and atomically replaces scene files,
+  while old v1/editor text is accepted only as migration input;
+- `scene.runtime` compiles a validated snapshot revision into a deterministic,
+  renderer-neutral runtime projection.
+
+Explicit editor Save, Play, Build, and Run paths must commit valid scene evidence
+before continuing. The live editor entity collection still adapts existing UI
+code and is not yet the canonical mutation owner. The next integration step is
+to route those mutations through `SceneDocument` semantic commands.
+
 ## Events And Transactions
 
 Authoritative mutations are immutable typed events. Events include stable

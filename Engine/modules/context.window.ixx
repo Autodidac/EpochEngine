@@ -152,6 +152,7 @@ namespace epochengine::core
         std::atomic_bool should_close{ false };
         std::atomic<BackendLifecycleState> backendLifecycle{ BackendLifecycleState::pending };
         bool isFloating = false;
+        std::atomic_bool pinnedToParent{ false };
         std::atomic_bool routedRedockRequested = false;
         std::atomic_bool retirementQueued = false;
         std::atomic_bool firstPresentComplete = false;

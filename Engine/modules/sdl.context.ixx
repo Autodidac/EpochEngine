@@ -91,6 +91,7 @@ import core.logger;
 import image.writer;
 import engine.diagnostics;
 import engine.telemetry;
+import render.arcade;
 import render.preview_grid;
 import package.registry;
 
@@ -341,43 +342,26 @@ export namespace epochengine::sdlcontext
             const int height = target.height;
             (void)SDL_SetRenderDrawColor(renderer, 4u, 6u, 11u, 255u);
             (void)SDL_RenderClear(renderer);
-            fill_arcade_preview_rect(renderer, 18, 18, width - 36, height - 36, 6u, 19u, 23u);
-            fill_arcade_preview_rect(renderer, 24, 24, width - 48, 6, 18u, 242u, 158u);
-            fill_arcade_preview_rect(renderer, 24, height - 30, width - 48, 6, 18u, 242u, 158u);
-            fill_arcade_preview_rect(renderer, 24, 24, 6, height - 48, 18u, 242u, 158u);
-            fill_arcade_preview_rect(renderer, width - 30, 24, 6, height - 48, 18u, 242u, 158u);
-
-            for (int y = 52; y < height - 52; y += 32)
-            {
-                const Uint8 tone = ((y / 32) % 2 == 0) ? 13u : 9u;
-                fill_arcade_preview_rect(renderer, 44, y, width - 88, 3, tone, static_cast<Uint8>(tone + 9u), static_cast<Uint8>(tone + 17u));
-            }
-
-            const int cell = (std::max)(14, width / 24);
-            const int playLeft = 72;
-            const int playBottom = 92;
-            const int playWidth = width - 144;
-            const int playHeight = height - 184;
-            const int frame = static_cast<int>(target.frame++ % 240u);
-            const int phase = frame / 12;
-            const int headColumn = phase % (std::max)(1, playWidth / cell);
-            const int lane = (phase / 5) % 6;
-            const int headY = playBottom + lane * cell;
-            for (int i = 0; i < 9; ++i)
-            {
-                const int segment = (std::max)(0, headColumn - i);
-                const int sx = playLeft + segment * cell;
-                const int sy = headY - ((i / 5) * cell);
-                const Uint8 green = static_cast<Uint8>((std::max)(51, 230 - i * 17));
-                fill_arcade_preview_rect(renderer, sx, sy, cell - 3, cell - 3, 20u, green, 122u);
-            }
-            const int fruitX = playLeft + ((phase * 5 + 7) % (std::max)(1, playWidth / cell)) * cell;
-            const int fruitY = playBottom + ((phase * 3 + 2) % (std::max)(1, playHeight / cell)) * cell;
-            fill_arcade_preview_rect(renderer, fruitX, fruitY, cell, cell, 245u, 71u, 51u);
-            fill_arcade_preview_rect(renderer, fruitX + 3, fruitY + 3, cell - 6, cell - 6, 255u, 209u, 64u);
-            const int pulse = 16 + (frame % 48);
-            fill_arcade_preview_rect(renderer, width / 2 - 112, height - 82, 224, 10, 26u, 89u, 184u);
-            fill_arcade_preview_rect(renderer, width / 2 - 112, height - 82, (std::min)(224, pulse * 5), 10, 66u, 209u, 255u);
+            epochengine::render_arcade::emit_arcade_attract_pattern(
+                width,
+                height,
+                target.frame++,
+                [&](const epochengine::render_arcade::ArcadePreviewRect& rect)
+                {
+                    const auto channel = [](float value) noexcept
+                    {
+                        return static_cast<Uint8>((std::clamp)(value, 0.0f, 1.0f) * 255.0f + 0.5f);
+                    };
+                    fill_arcade_preview_rect(
+                        renderer,
+                        rect.x,
+                        rect.y,
+                        rect.width,
+                        rect.height,
+                        channel(rect.color[0]),
+                        channel(rect.color[1]),
+                        channel(rect.color[2]));
+                });
 
             if (!SDL_SetRenderTarget(renderer, previousTarget))
             {
@@ -405,7 +389,9 @@ export namespace epochengine::sdlcontext
             {
                 const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
                 const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
-                const float z = marker.position.z - (std::max)(std::abs(marker.scale.z) * 0.5f, 0.018f) - 0.012f;
+                const float z =
+                    epochengine::render_arcade::screen_sample_plane_z(
+                        marker.position.z, marker.scale.z);
                 const epochengine::previewgrid::Vec3 world[4]{
                     { marker.position.x - halfX, marker.position.y - halfY, z },
                     { marker.position.x + halfX, marker.position.y - halfY, z },

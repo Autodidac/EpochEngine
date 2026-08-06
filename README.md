@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.73-1F7A4C?style=for-the-badge" alt="Current development source v0.88.73" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.84-1F7A4C?style=for-the-badge" alt="Current development source v0.88.84" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.88.69-2C6A8A?style=for-the-badge" alt="Published stable release v0.88.69" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.88.73`; the published Windows/Linux runtime
+- Active development source is `v0.88.84`; the published Windows/Linux runtime
   baseline remains `v0.88.69`.
 - The runtime release and updater are sealed. Source development advances
   independently without changing packaged-version defaults, release assets, or
@@ -87,12 +87,49 @@ For engine/tooling developers:
 - The immediate product target is a playable baseline 2D project that can be
   authored, saved, reopened, run, and built through the normal project workflow.
 - Current source includes renderer-neutral math, bounded lighting, CPU ray
-  queries, temporal texture-document contracts, deterministic physics/audio
-  managers, sparse voxel and water foundations, a canonical Tier-0 scene, and
-  capability/evidence reporting in Settings and System Info.
+  queries, explicit request-driven temporal mapping/history, temporal texture
+  documents, deterministic physics/audio managers, sparse voxel and water
+  foundations, a canonical Tier-0 scene, and capability/evidence reporting.
+- `render.canvas2d` now owns validated project policy, pixel-aware camera and
+  viewport plans, generation-checked sprite identity, logical texture/material
+  declarations, deterministic quad batching, tile descriptors, immutable frame
+  submissions, final-compose plans, bounded diagnostics, contract tests, and a
+  deterministic `T0-CPU` reference raster with texture/clip bindings, fixed-point
+  coverage, sampling/blend policy, final composition, metrics, and image hashes.
+  `render.canvas2d.presentation` now validates full-frame identity, derives
+  content digests from actual pixel bytes, resolves CPU raster output through
+  `render.texture.residency`, and dispatches an explicit native presentation
+  packet without making physical state canonical. The cache resolves stable
+  logical artifacts into bounded, generation-checked, disposable physical
+  textures with reuse, eviction, pinning, upload budgets, backend reset,
+  metrics, and cache-recreation proof. The compiled artifact schema, stable
+  hashing, and integrity validator are runtime-owned and pass a standalone
+  Clang contract with authoring and texture-editor features disabled; authoring
+  imports that same canonical artifact boundary when producing source content.
+  The primary OpenGL adapter compiles a scoped, viewport-confined final
+  compositor with context-owned texture checks and complete GL state restoration.
+  Live editor-slot integration, operator-visible pixels, and SDL3/SFML3/Raylib3
+  share-group adapters remain the next proof gate.
+- The launcher directly opens three application profiles after a prelaunch
+  context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
+  services and one shell implementation but own separate source files, scene
+  seeds, surfaces, camera policy, panes, and run/authoring permissions.
+- Plant Lab is the dedicated vegetation authoring application. Forest Factory
+  remains a standard-editor surface/tool that consumes Plant Lab outputs for
+  vegetation browsing, scene/object import, and placement. GUI Editor owns its
+  canonical Canvas2D scene without legacy transform rewriting.
+- One renderer owns the baked primary surface; secondary diagnostic contexts
+  and application-compatible routed panes keep optional popout/redock.
+- Engine Arcade now uses a validated cabinet silhouette with screen and control
+  details instead of overlapping boxes. Its screen uses one shared attract
+  pattern rendered into backend-owned sampled surfaces in OpenGL, SDL3, SFML3,
+  Raylib3, Vulkan, DirectX, and Software. Every adapter now samples the shared
+  front-facing cabinet plane instead of the reversed rear face. Rounded GUI
+  controls are an opt-in EpochGui style in Editor Settings and remain off by default.
 - Operator proof accepts SDL3, SFML3, DirectX, and Software solid orientation.
-  Raylib and Vulkan correction plus Vulkan replacement teardown remain `Partial`
-  until the `v0.88.73` candidate receives visual and repeated-switch proof.
+  Raylib and Vulkan solid correction, Vulkan replacement teardown, and every
+  Arcade scene-surface path remain `Partial` until they receive visual and
+  repeated-switch proof.
   Backend status is recorded in the
   [renderer feature matrix](Engine/docs/engine/renderer_feature_matrix.md), not
   inferred from API names or build success alone.
@@ -124,6 +161,10 @@ validation tool rather than the runtime selection model.
   floating-window hosts.
 - Temporal world and authoring contracts that separate stable documents and
   semantic history from compiled artifacts and disposable physical caches.
+- Temporal texture documents now compile deterministic owning RGBA8 mip
+  artifacts, validate byte/content identity, and cross one renderer-neutral
+  adapter into the bounded standalone residency cache without making GPU
+  handles or physical placement canonical authoring state.
 - Package and extension gates for optional terrain, voxel, ocean, networking,
   and technique-gallery work in
   [EpochEngineExtensions](https://github.com/Autodidac/EpochEngineExtensions).

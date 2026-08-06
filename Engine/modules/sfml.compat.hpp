@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 #include <SFML/Config.hpp>
@@ -83,6 +85,133 @@ namespace epochengine::sfml_compat
         return target.create(width, height);
 #endif
     }
+
+    class ArcadePreviewSurface final
+    {
+    public:
+        [[nodiscard]] bool ensure(
+            sf::RenderWindow& owner,
+            unsigned int width,
+            unsigned int height)
+        {
+            if (m_target && m_width == width && m_height == height)
+                return true;
+            if (width == 0u || height == 0u)
+                return false;
+
+            reset(&owner);
+            (void)owner.setActive(false);
+
+            auto target = std::make_unique<sf::RenderTexture>();
+            const bool ready = resize_render_texture(*target, width, height);
+            (void)target->setActive(false);
+            (void)owner.setActive(true);
+            if (!ready)
+                return false;
+
+            m_target = std::move(target);
+            m_width = width;
+            m_height = height;
+            m_frame = 0u;
+            return true;
+        }
+
+        [[nodiscard]] bool begin_update(sf::RenderWindow& owner)
+        {
+            if (!m_target || m_updating)
+                return false;
+
+            (void)owner.setActive(false);
+            if (!m_target->setActive(true))
+            {
+                (void)owner.setActive(true);
+                return false;
+            }
+
+            m_target->clear(sf::Color(4u, 6u, 11u, 255u));
+            m_updating = true;
+            return true;
+        }
+
+        void fill(
+            int x,
+            int y,
+            int width,
+            int height,
+            const std::array<float, 4>& color)
+        {
+            if (!m_target || !m_updating || width <= 0 || height <= 0)
+                return;
+
+            sf::RectangleShape rectangle{};
+            rectangle.setPosition(sf::Vector2f(static_cast<float>(x), static_cast<float>(y)));
+            rectangle.setSize(sf::Vector2f(static_cast<float>(width), static_cast<float>(height)));
+            rectangle.setFillColor(sf::Color(
+                to_channel(color[0]),
+                to_channel(color[1]),
+                to_channel(color[2]),
+                to_channel(color[3])));
+            m_target->draw(rectangle);
+        }
+
+        [[nodiscard]] bool end_update(sf::RenderWindow& owner)
+        {
+            if (!m_target || !m_updating)
+                return false;
+
+            m_target->display();
+            (void)m_target->setActive(false);
+            m_updating = false;
+            ++m_frame;
+
+            const bool owner_restored = owner.setActive(true);
+            if (owner_restored)
+                owner.resetGLStates();
+            return owner_restored;
+        }
+
+        void reset(sf::RenderWindow* owner = nullptr) noexcept
+        {
+            if (owner)
+                (void)owner->setActive(false);
+            if (m_target)
+                (void)m_target->setActive(false);
+
+            m_target.reset();
+            m_width = 0u;
+            m_height = 0u;
+            m_frame = 0u;
+            m_updating = false;
+
+            if (owner)
+                (void)owner->setActive(true);
+        }
+
+        [[nodiscard]] const sf::Texture* texture() const noexcept
+        {
+            return m_target ? &m_target->getTexture() : nullptr;
+        }
+
+        [[nodiscard]] unsigned int width() const noexcept { return m_width; }
+        [[nodiscard]] unsigned int height() const noexcept { return m_height; }
+        [[nodiscard]] std::uint64_t frame_number() const noexcept { return m_frame; }
+
+    private:
+        [[nodiscard]] static std::uint8_t to_channel(float value) noexcept
+        {
+            if (value <= 0.0f)
+                return 0u;
+            if (value >= 1.0f)
+                return 255u;
+            return static_cast<std::uint8_t>(value * 255.0f + 0.5f);
+        }
+
+        std::unique_ptr<sf::RenderTexture> m_target{};
+        unsigned int m_width = 0u;
+        unsigned int m_height = 0u;
+        std::uint64_t m_frame = 0u;
+        bool m_updating = false;
+    };
 
     inline void resize_image(
         sf::Image& image,

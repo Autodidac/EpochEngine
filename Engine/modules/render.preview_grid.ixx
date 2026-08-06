@@ -48,6 +48,7 @@ module;
 export module render.preview_grid;
 
 import engine.visuals;
+import render.arcade;
 import render.lighting;
 
 namespace epochengine::previewgrid
@@ -83,8 +84,75 @@ namespace epochengine::previewgrid
         EngineArcadeScreen,
         ForestTrunk,
         ForestBranch,
-        ForestLeafCluster
+        ForestLeafCluster,
+        EngineArcadeCabinet
     };
+
+    export struct ObjectPreviewGeometryRoute final
+    {
+        bool solid_scene{};
+        bool marker_wire{};
+        bool sampled_surface{};
+    };
+
+    export [[nodiscard]] constexpr ObjectPreviewGeometryRoute object_preview_geometry_route(
+        ObjectPreviewPrimitive primitive) noexcept
+    {
+        switch (primitive)
+        {
+        case ObjectPreviewPrimitive::EngineArcadeScreen:
+            return ObjectPreviewGeometryRoute{
+                .solid_scene = false,
+                .marker_wire = render_arcade::kScreenSceneNode.diagnostic_overlay,
+                .sampled_surface = render_arcade::kScreenSceneNode.sampled_render_surface
+            };
+        case ObjectPreviewPrimitive::EngineArcadeCabinet:
+            return ObjectPreviewGeometryRoute{
+                .solid_scene = true,
+                .marker_wire = render_arcade::kCabinetBodySceneNode.diagnostic_overlay,
+                .sampled_surface = render_arcade::kCabinetBodySceneNode.sampled_render_surface
+            };
+        default:
+            return ObjectPreviewGeometryRoute{
+                .solid_scene = true,
+                .marker_wire = true,
+                .sampled_surface = false
+            };
+        }
+    }
+
+    export struct ArcadePreviewRoutingContract final
+    {
+        bool cabinet_is_scene_geometry{};
+        bool cabinet_excludes_marker_overlay{};
+        bool screen_is_sampled_surface{};
+        bool screen_excludes_marker_overlay{};
+
+        [[nodiscard]] constexpr bool passed() const noexcept
+        {
+            return cabinet_is_scene_geometry
+                && cabinet_excludes_marker_overlay
+                && screen_is_sampled_surface
+                && screen_excludes_marker_overlay;
+        }
+    };
+
+    export [[nodiscard]] constexpr ArcadePreviewRoutingContract
+        run_arcade_preview_routing_contract() noexcept
+    {
+        const ObjectPreviewGeometryRoute cabinet =
+            object_preview_geometry_route(ObjectPreviewPrimitive::EngineArcadeCabinet);
+        const ObjectPreviewGeometryRoute screen =
+            object_preview_geometry_route(ObjectPreviewPrimitive::EngineArcadeScreen);
+        return ArcadePreviewRoutingContract{
+            .cabinet_is_scene_geometry = cabinet.solid_scene && !cabinet.sampled_surface,
+            .cabinet_excludes_marker_overlay = !cabinet.marker_wire,
+            .screen_is_sampled_surface = !screen.solid_scene && screen.sampled_surface,
+            .screen_excludes_marker_overlay = !screen.marker_wire
+        };
+    }
+
+    static_assert(run_arcade_preview_routing_contract().passed());
 
     export struct Camera
     {
@@ -1167,7 +1235,7 @@ namespace epochengine::previewgrid
         }
 
         std::vector<Vertex> out{};
-        out.reserve(markers.size() * 32u);
+        out.reserve(markers.size() * 96u);
         const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
         {
             return Vertex{ .position = position, .color = color };
@@ -1255,41 +1323,42 @@ namespace epochengine::previewgrid
                 safe_axis(marker.scale.z * 0.5f, radius * 0.45f)
             };
 
-            switch (marker.primitive)
+            if (object_preview_geometry_route(marker.primitive).marker_wire)
             {
-            case ObjectPreviewPrimitive::Light:
-                half = { radius * 0.32f, radius * 0.32f, radius * 0.32f };
-                push_box_edges(center, half, color);
-                push_line({ center.x - radius, center.y, center.z }, { center.x + radius, center.y, center.z }, lit(color, 1.2f));
-                push_line({ center.x, center.y - radius, center.z }, { center.x, center.y + radius, center.z }, lit(color, 1.2f));
-                push_line({ center.x, center.y, center.z - radius }, { center.x, center.y, center.z + radius }, lit(color, 1.2f));
-                break;
-            case ObjectPreviewPrimitive::Spawn:
-                half.y = (std::max)(0.08f, radius * 0.12f);
-                push_box_edges(center, half, color);
-                push_line(center, { center.x, center.y + radius * 1.4f, center.z }, lit(color, 1.05f));
-                break;
-            case ObjectPreviewPrimitive::Camera:
-                half = { radius * 0.56f, radius * 0.34f, radius * 0.42f };
-                push_box_edges(center, half, color);
-                push_line(
-                    { center.x - half.x, center.y, center.z - half.z },
-                    { center.x - half.x - radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
-                    lit(color, 1.0f));
-                push_line(
-                    { center.x + half.x, center.y, center.z - half.z },
-                    { center.x + half.x + radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
-                    lit(color, 1.0f));
-                break;
-            case ObjectPreviewPrimitive::Level:
-                half.y = (std::max)(0.05f, radius * 0.08f);
-                push_box_edges(center, half, color);
-                break;
-            case ObjectPreviewPrimitive::Canvas2D:
-            case ObjectPreviewPrimitive::EngineArcadeScreen:
-                half.z = (std::max)(0.025f, radius * 0.04f);
-                push_box_edges(center, half, color);
-                break;
+                switch (marker.primitive)
+                {
+                case ObjectPreviewPrimitive::Light:
+                    half = { radius * 0.32f, radius * 0.32f, radius * 0.32f };
+                    push_box_edges(center, half, color);
+                    push_line({ center.x - radius, center.y, center.z }, { center.x + radius, center.y, center.z }, lit(color, 1.2f));
+                    push_line({ center.x, center.y - radius, center.z }, { center.x, center.y + radius, center.z }, lit(color, 1.2f));
+                    push_line({ center.x, center.y, center.z - radius }, { center.x, center.y, center.z + radius }, lit(color, 1.2f));
+                    break;
+                case ObjectPreviewPrimitive::Spawn:
+                    half.y = (std::max)(0.08f, radius * 0.12f);
+                    push_box_edges(center, half, color);
+                    push_line(center, { center.x, center.y + radius * 1.4f, center.z }, lit(color, 1.05f));
+                    break;
+                case ObjectPreviewPrimitive::Camera:
+                    half = { radius * 0.56f, radius * 0.34f, radius * 0.42f };
+                    push_box_edges(center, half, color);
+                    push_line(
+                        { center.x - half.x, center.y, center.z - half.z },
+                        { center.x - half.x - radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
+                        lit(color, 1.0f));
+                    push_line(
+                        { center.x + half.x, center.y, center.z - half.z },
+                        { center.x + half.x + radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
+                        lit(color, 1.0f));
+                    break;
+                case ObjectPreviewPrimitive::Level:
+                    half.y = (std::max)(0.05f, radius * 0.08f);
+                    push_box_edges(center, half, color);
+                    break;
+                case ObjectPreviewPrimitive::Canvas2D:
+                    half.z = (std::max)(0.025f, radius * 0.04f);
+                    push_box_edges(center, half, color);
+                    break;
             case ObjectPreviewPrimitive::ForestTrunk:
             {
                 const Vec3 baseHalf{
@@ -1340,6 +1409,7 @@ namespace epochengine::previewgrid
                 push_box_edges(center, half, color);
                 break;
             }
+            }
 
             if (marker.selected)
             {
@@ -1374,7 +1444,7 @@ namespace epochengine::previewgrid
         const Camera camera = camera_for(rigKey);
 
         std::vector<Vertex> out{};
-        out.reserve(markers.size() * 36u);
+        out.reserve(markers.size() * 96u);
         const auto make_vertex = [](Vec3 position, Vec3 color) noexcept
         {
             return Vertex{ .position = position, .color = color };
@@ -1470,6 +1540,9 @@ namespace epochengine::previewgrid
 
         for (const auto& marker : markers)
         {
+            if (!object_preview_geometry_route(marker.primitive).solid_scene)
+                continue;
+
             const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
             Vec3 color = marker.selected ? visual_rgb(epochengine::visuals::object_selected()) : marker.color;
             if (marker.editorOnly && !marker.selected)
@@ -1504,8 +1577,38 @@ namespace epochengine::previewgrid
                 half.z = (std::max)(0.025f, radius * 0.04f);
                 push_box(center, half, color);
                 break;
-            case ObjectPreviewPrimitive::EngineArcadeScreen:
+            case ObjectPreviewPrimitive::EngineArcadeCabinet:
+            {
+                std::array<Vec3, render_arcade::kCabinetBodyVertexCount> vertices{};
+                for (std::size_t index = 0; index < vertices.size(); ++index)
+                {
+                    const auto& local = render_arcade::kCabinetBodyVertices[index].position;
+                    vertices[index] = {
+                        center.x + local[0] * marker.scale.x,
+                        center.y + local[1] * marker.scale.y,
+                        center.z + local[2] * marker.scale.z
+                    };
+                }
+
+                for (std::size_t index = 0; index + 2u < render_arcade::kCabinetBodyIndices.size(); index += 3u)
+                {
+                    const Vec3 a = vertices[render_arcade::kCabinetBodyIndices[index]];
+                    const Vec3 b = vertices[render_arcade::kCabinetBodyIndices[index + 1u]];
+                    const Vec3 c = vertices[render_arcade::kCabinetBodyIndices[index + 2u]];
+                    if (!clockwise_solid_triangle_faces_camera(a, b, c, camera.eye))
+                        continue;
+
+                    const Vec3 inward = cross(subtract(b, a), subtract(c, a));
+                    const Vec3 outward = normalize(scale(inward, -1.0f));
+                    const Vec3 surfaceCenter{
+                        (a.x + b.x + c.x) / 3.0f,
+                        (a.y + b.y + c.y) / 3.0f,
+                        (a.z + b.z + c.z) / 3.0f
+                    };
+                    push_tri(a, b, c, shade_surface(surfaceCenter, outward, color));
+                }
                 break;
+            }
             case ObjectPreviewPrimitive::ForestTrunk:
             {
                 const Vec3 baseHalf{
@@ -1564,7 +1667,9 @@ namespace epochengine::previewgrid
             markers,
             [](const ObjectMarker& marker) noexcept
             {
-                return !marker.sampledRenderSurface;
+                const ObjectPreviewGeometryRoute route =
+                    object_preview_geometry_route(marker.primitive);
+                return !marker.sampledRenderSurface || !route.sampled_surface;
             });
         return markers;
     }

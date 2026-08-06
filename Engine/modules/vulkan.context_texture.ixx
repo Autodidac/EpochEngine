@@ -60,6 +60,7 @@ import engine.cli;
 import utility.string_converter;
 import image.loader;
 import atlas.texture;
+import render.arcade;
 
 export namespace epochengine::vulkantextures
 {
@@ -427,6 +428,171 @@ namespace epochengine::vulkancontext
             vk::ImageLayout::eShaderReadOnlyOptimal);
 
         log_info("upload complete", loc);
+    }
+
+    void Application::destroyArcadeRenderTarget() noexcept
+    {
+        arcadeDescriptorSets.clear();
+        arcadeDescriptorPool.reset();
+        arcadeRenderFramebuffer.reset();
+        arcadeRenderSampler.reset();
+        arcadeRenderImageView.reset();
+        arcadeRenderImage.reset();
+        arcadeRenderImageMemory.reset();
+        arcadeRenderPass.reset();
+        arcadeRenderExtent = vk::Extent2D{};
+        arcadePreviewFrame = 0u;
+    }
+
+    void Application::createArcadeRenderTarget()
+    {
+        destroyArcadeRenderTarget();
+
+        const auto desc = epochengine::render_arcade::make_screen_render_texture_desc();
+        constexpr std::uint32_t kMaximumArcadeTargetAxis = 2048u;
+        if (desc.width == 0u || desc.height == 0u
+            || desc.width > kMaximumArcadeTargetAxis
+            || desc.height > kMaximumArcadeTargetAxis)
+        {
+            throw std::runtime_error("[ Vulkan ] - Invalid bounded Engine Arcade render-target extent.");
+        }
+
+        arcadeRenderExtent = vk::Extent2D{ desc.width, desc.height };
+        constexpr vk::Format kArcadeFormat = vk::Format::eR8G8B8A8Unorm;
+
+        try
+        {
+            vk::AttachmentDescription colorAttachment{};
+            colorAttachment.format = kArcadeFormat;
+            colorAttachment.samples = vk::SampleCountFlagBits::e1;
+            colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+            colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+            colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+            colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+            colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
+            colorAttachment.finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+            vk::AttachmentReference colorReference{};
+            colorReference.attachment = 0u;
+            colorReference.layout = vk::ImageLayout::eColorAttachmentOptimal;
+
+            vk::SubpassDescription subpass{};
+            subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
+            subpass.colorAttachmentCount = 1u;
+            subpass.pColorAttachments = &colorReference;
+
+            std::array<vk::SubpassDependency, 2> dependencies{};
+            dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+            dependencies[0].dstSubpass = 0u;
+            dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eTopOfPipe;
+            dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            dependencies[0].srcAccessMask = {};
+            dependencies[0].dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            dependencies[0].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+            dependencies[1].srcSubpass = 0u;
+            dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+            dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+            dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+            dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+            dependencies[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            dependencies[1].dependencyFlags = vk::DependencyFlagBits::eByRegion;
+
+            vk::RenderPassCreateInfo renderPassInfo{};
+            renderPassInfo.attachmentCount = 1u;
+            renderPassInfo.pAttachments = &colorAttachment;
+            renderPassInfo.subpassCount = 1u;
+            renderPassInfo.pSubpasses = &subpass;
+            renderPassInfo.dependencyCount = static_cast<std::uint32_t>(dependencies.size());
+            renderPassInfo.pDependencies = dependencies.data();
+
+            auto [renderPassResult, renderPass] = device->createRenderPassUnique(renderPassInfo);
+            if (renderPassResult != vk::Result::eSuccess)
+                throw std::runtime_error("[ Vulkan ] - Failed to create Engine Arcade render pass.");
+            arcadeRenderPass = std::move(renderPass);
+
+            vk::ImageCreateInfo imageInfo{};
+            imageInfo.imageType = vk::ImageType::e2D;
+            imageInfo.format = kArcadeFormat;
+            imageInfo.extent = vk::Extent3D{ desc.width, desc.height, 1u };
+            imageInfo.mipLevels = 1u;
+            imageInfo.arrayLayers = 1u;
+            imageInfo.samples = vk::SampleCountFlagBits::e1;
+            imageInfo.tiling = vk::ImageTiling::eOptimal;
+            imageInfo.usage = vk::ImageUsageFlagBits::eColorAttachment
+                | vk::ImageUsageFlagBits::eSampled;
+            imageInfo.sharingMode = vk::SharingMode::eExclusive;
+            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+
+            auto [imageResult, image] = device->createImageUnique(imageInfo);
+            if (imageResult != vk::Result::eSuccess)
+                throw std::runtime_error("[ Vulkan ] - Failed to create Engine Arcade color image.");
+            arcadeRenderImage = std::move(image);
+
+            const vk::MemoryRequirements requirements =
+                device->getImageMemoryRequirements(*arcadeRenderImage);
+            vk::MemoryAllocateInfo allocationInfo{};
+            allocationInfo.allocationSize = requirements.size;
+            allocationInfo.memoryTypeIndex = findMemoryType(
+                requirements.memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+            auto [memoryResult, memory] = device->allocateMemoryUnique(allocationInfo);
+            if (memoryResult != vk::Result::eSuccess)
+                throw std::runtime_error("[ Vulkan ] - Failed to allocate Engine Arcade image memory.");
+            arcadeRenderImageMemory = std::move(memory);
+
+            if (device->bindImageMemory(
+                    *arcadeRenderImage,
+                    *arcadeRenderImageMemory,
+                    0u) != vk::Result::eSuccess)
+            {
+                throw std::runtime_error("[ Vulkan ] - Failed to bind Engine Arcade image memory.");
+            }
+
+            arcadeRenderImageView = createImageViewUnique(
+                *arcadeRenderImage,
+                kArcadeFormat,
+                vk::ImageAspectFlagBits::eColor);
+
+            vk::SamplerCreateInfo samplerInfo{};
+            samplerInfo.magFilter = vk::Filter::eNearest;
+            samplerInfo.minFilter = vk::Filter::eNearest;
+            samplerInfo.mipmapMode = vk::SamplerMipmapMode::eNearest;
+            samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+            samplerInfo.anisotropyEnable = VK_FALSE;
+            samplerInfo.compareEnable = VK_FALSE;
+            samplerInfo.minLod = 0.0f;
+            samplerInfo.maxLod = 0.0f;
+            samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+            samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+            auto [samplerResult, sampler] = device->createSamplerUnique(samplerInfo);
+            if (samplerResult != vk::Result::eSuccess)
+                throw std::runtime_error("[ Vulkan ] - Failed to create Engine Arcade sampler.");
+            arcadeRenderSampler = std::move(sampler);
+
+            const vk::ImageView attachment = *arcadeRenderImageView;
+            vk::FramebufferCreateInfo framebufferInfo{};
+            framebufferInfo.renderPass = *arcadeRenderPass;
+            framebufferInfo.attachmentCount = 1u;
+            framebufferInfo.pAttachments = &attachment;
+            framebufferInfo.width = arcadeRenderExtent.width;
+            framebufferInfo.height = arcadeRenderExtent.height;
+            framebufferInfo.layers = 1u;
+
+            auto [framebufferResult, framebuffer] =
+                device->createFramebufferUnique(framebufferInfo);
+            if (framebufferResult != vk::Result::eSuccess)
+                throw std::runtime_error("[ Vulkan ] - Failed to create Engine Arcade framebuffer.");
+            arcadeRenderFramebuffer = std::move(framebuffer);
+        }
+        catch (...)
+        {
+            destroyArcadeRenderTarget();
+            throw;
+        }
     }
 
     void Application::ensure_gui_atlas(const TextureAtlas& atlas)

@@ -1183,6 +1183,8 @@ namespace
     {
         if (!is_sfml_proxy_candidate(window))
             return;
+        if (window->pinnedToParent.load(std::memory_order_acquire))
+            return;
 
         window->isFloating = true;
         position_top_level_shell(
@@ -1372,6 +1374,11 @@ namespace
         const HWND target = owner_thread_dock_handle(window);
         if (!target)
             return false;
+        if (window->pinnedToParent.load(std::memory_order_acquire)
+            && (command == ProxyDockCmd::Undock || command == ProxyDockCmd::MoveDetached))
+        {
+            return false;
+        }
 
         if (command == ProxyDockCmd::Redock
             && (!parent || ::IsWindow(parent) == FALSE))
@@ -1551,6 +1558,12 @@ namespace
         {
             if (static_cast<DockCmd>(wp) == DockCmd::Undock)
             {
+                if (auto* window = resolve_window_data_for_hwnd(hwnd);
+                    window && window->pinnedToParent.load(std::memory_order_acquire))
+                {
+                    return 0;
+                }
+
                 // Convert to a top-level window, preserving client size.
                 RECT clientRect{};
                 ::GetClientRect(hwnd, &clientRect);
@@ -2118,6 +2131,44 @@ namespace epochengine::core
         return (it != windows.end()) ? it->get() : nullptr;
     }
 
+    bool MultiContextManager::PromotePrimaryWindow(const std::shared_ptr<Context>& context)
+    {
+        if (!context || !parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        {
+            std::scoped_lock lock(windowsMutex);
+            const auto targetIt = std::find_if(
+                windows.begin(),
+                windows.end(),
+                [&](const std::unique_ptr<WindowData>& window)
+                {
+                    return window
+                        && window->context
+                        && window->context.get() == static_cast<void*>(context.get());
+                });
+            if (targetIt == windows.end())
+                return false;
+
+            auto* const target = targetIt->get();
+            if (!target
+                || !target->guiRoute.empty()
+                || target->isFloating
+                || !target->running.load(std::memory_order_acquire)
+                || target->get_should_close()
+                || target->backend_lifecycle() != BackendLifecycleState::ready)
+            {
+                return false;
+            }
+
+            for (auto& window : windows)
+                window->pinnedToParent.store(window.get() == target, std::memory_order_release);
+        }
+
+        ArrangeDockedWindowsGrid();
+        return true;
+    }
+
     // ------------------------------------------------------------
     // MultiContextManager (public helpers)
     // ------------------------------------------------------------
@@ -2265,6 +2316,7 @@ namespace epochengine::core
 
         DetachedContextWindowRequest dockedRequest = request;
         dockedRequest.start_docked = true;
+        dockedRequest.pinned_to_parent = true;
         return CreateDetachedContextWindowOnOwnerThread(dockedRequest, createdContext);
     }
 
@@ -2459,6 +2511,7 @@ namespace epochengine::core
         winPtr->titleNarrow = epochengine::text::narrow_utf8(title);
         winPtr->guiRoute = request.gui_route;
         winPtr->isFloating = !startDocked;
+        winPtr->pinnedToParent.store(request.pinned_to_parent && startDocked, std::memory_order_release);
         winPtr->firstPresentComplete.store(
             request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
             std::memory_order_release);
@@ -2869,6 +2922,7 @@ namespace epochengine::core
 
                     {
                         std::scoped_lock lock(windowsMutex);
+                        winPtr->pinnedToParent.store(parent && windows.empty(), std::memory_order_release);
                         windows.emplace_back(std::move(winPtr));
                     }
 
@@ -3600,6 +3654,9 @@ namespace epochengine::core
 
         const auto dock_order = [](const WindowData* win) noexcept
         {
+            if (win && win->pinnedToParent.load(std::memory_order_acquire))
+                return -1;
+
             const auto liveContext = (win && win->context) ? typed_context(win->context) : nullptr;
             const auto type = liveContext ? liveContext->type : ContextType::None;
             switch (type)
@@ -4327,6 +4384,18 @@ namespace epochengine::core
         case WM_LBUTTONDOWN:
         {
             auto* const window = resolve_window_data_for_hwnd(hwnd);
+            if (window && window->pinnedToParent.load(std::memory_order_acquire))
+            {
+                if (msg == WM_LBUTTONDOWN)
+                {
+                    remember_gui_input_owner(hwnd);
+                    ::SetFocus(hwnd);
+                    const auto ctx = resolveGuiContext();
+                    push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
+                }
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+
             const bool detachedProxyHost =
                 window
                 && is_proxy_host_hwnd(window, hwnd)
@@ -4812,8 +4881,14 @@ namespace epochengine::core
                 request && request->sourceHwnd ? request->sourceHwnd : hwnd);
             if (!request || !is_sfml_proxy_candidate(window))
                 return 0;
+            const auto command = static_cast<ProxyDockCmd>(wParam);
+            if (window->pinnedToParent.load(std::memory_order_acquire)
+                && command != ProxyDockCmd::Redock)
+            {
+                return 0;
+            }
 
-            switch (static_cast<ProxyDockCmd>(wParam))
+            switch (command)
             {
             case ProxyDockCmd::Undock:
                 undock_sfml_proxy_window(

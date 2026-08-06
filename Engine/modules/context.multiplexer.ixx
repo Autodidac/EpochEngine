@@ -102,6 +102,7 @@ namespace epochengine::core
         int width{ 720 };
         int height{ 440 };
         bool start_docked{ false };
+        bool pinned_to_parent{ false };
     };
 
 #if defined(_WIN32)
@@ -164,6 +165,7 @@ namespace epochengine::core
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
         bool OpenReplacementContextWindow(const DetachedContextWindowRequest& request, std::shared_ptr<Context>* createdContext = nullptr);
+        bool PromotePrimaryWindow(const std::shared_ptr<Context>& context);
         void BeginContextReplacement() noexcept;
         void EndContextReplacement() noexcept;
         [[nodiscard]] bool ContextReplacementInProgress() const noexcept;
@@ -258,6 +260,7 @@ namespace epochengine::core
                 createdContext->reset();
             return false;
         }
+        bool PromotePrimaryWindow(const std::shared_ptr<Context>&) { return false; }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -329,6 +332,7 @@ namespace epochengine::core
                 createdContext->reset();
             return false;
         }
+        bool PromotePrimaryWindow(const std::shared_ptr<Context>&) { return false; }
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return s_emptyWindows; }

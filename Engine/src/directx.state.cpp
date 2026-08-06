@@ -23,6 +23,7 @@ module directx.context;
 import core.context;
 import core.logger;
 import atlas.texture;
+import package.registry;
 import spritehandle;
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
@@ -62,6 +63,101 @@ namespace epochengine::directxcontext::detail
         safe_release(state.renderTarget);
     }
 
+    void release_arcade_screen_target(DirectXState& state) noexcept
+    {
+        safe_release(state.arcadeScreen.sampleVertexBuffer);
+        safe_release(state.arcadeScreen.shaderView);
+        safe_release(state.arcadeScreen.renderTarget);
+        safe_release(state.arcadeScreen.texture);
+        state.arcadeScreen = {};
+    }
+
+    bool ensure_arcade_screen_target(DirectXState& state)
+    {
+        constexpr std::uint32_t kMaximumDimension = 2048u;
+        constexpr std::uint64_t kMaximumPixels =
+            static_cast<std::uint64_t>(kMaximumDimension) * kMaximumDimension;
+        static_assert(package_registry::engine_arcade_render_texture_width() > 0u);
+        static_assert(package_registry::engine_arcade_render_texture_height() > 0u);
+        static_assert(
+            package_registry::engine_arcade_render_texture_width() <= kMaximumDimension);
+        static_assert(
+            package_registry::engine_arcade_render_texture_height() <= kMaximumDimension);
+
+        if (!state.device)
+            return false;
+
+        const std::uint32_t width = package_registry::engine_arcade_render_texture_width();
+        const std::uint32_t height = package_registry::engine_arcade_render_texture_height();
+        const std::uint64_t pixels = static_cast<std::uint64_t>(width) * height;
+        if (width == 0u || height == 0u
+            || width > kMaximumDimension || height > kMaximumDimension
+            || pixels > kMaximumPixels)
+        {
+            return false;
+        }
+
+        if (state.arcadeScreen.ready()
+            && state.arcadeScreen.width == width
+            && state.arcadeScreen.height == height)
+        {
+            return true;
+        }
+
+        release_arcade_screen_target(state);
+
+        D3D11_TEXTURE2D_DESC textureDesc{};
+        textureDesc.Width = width;
+        textureDesc.Height = height;
+        textureDesc.MipLevels = 1;
+        textureDesc.ArraySize = 1;
+        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.Usage = D3D11_USAGE_DEFAULT;
+        textureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+        HRESULT hr = state.device->CreateTexture2D(
+            &textureDesc,
+            nullptr,
+            &state.arcadeScreen.texture);
+        if (!succeeded(hr) || !state.arcadeScreen.texture)
+        {
+            log_failure("ID3D11Device::CreateTexture2D(engine_arcade.screen)", hr);
+            release_arcade_screen_target(state);
+            return false;
+        }
+
+        hr = state.device->CreateRenderTargetView(
+            state.arcadeScreen.texture,
+            nullptr,
+            &state.arcadeScreen.renderTarget);
+        if (!succeeded(hr) || !state.arcadeScreen.renderTarget)
+        {
+            log_failure("ID3D11Device::CreateRenderTargetView(engine_arcade.screen)", hr);
+            release_arcade_screen_target(state);
+            return false;
+        }
+
+        D3D11_SHADER_RESOURCE_VIEW_DESC viewDesc{};
+        viewDesc.Format = textureDesc.Format;
+        viewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        viewDesc.Texture2D.MipLevels = 1;
+        hr = state.device->CreateShaderResourceView(
+            state.arcadeScreen.texture,
+            &viewDesc,
+            &state.arcadeScreen.shaderView);
+        if (!succeeded(hr) || !state.arcadeScreen.shaderView)
+        {
+            log_failure("ID3D11Device::CreateShaderResourceView(engine_arcade.screen)", hr);
+            release_arcade_screen_target(state);
+            return false;
+        }
+
+        state.arcadeScreen.width = width;
+        state.arcadeScreen.height = height;
+        return true;
+    }
+
     bool create_render_target(DirectXState& state)
     {
         if (!state.swapchain || !state.device)
@@ -97,6 +193,7 @@ namespace epochengine::directxcontext::detail
             safe_release(gpu.texture);
         }
         state.guiAtlases.clear();
+        release_arcade_screen_target(state);
         release_render_target(state);
         safe_release(state.spriteVertexBuffer);
         safe_release(state.vertexBuffer);

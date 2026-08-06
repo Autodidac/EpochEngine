@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
 #include <cstdint>
+#include <cstring>
 #include <string>
 #include <string_view>
 
@@ -12,16 +13,30 @@ namespace epochengine::authoring::texture::contract
 {
     namespace
     {
+        template <typename LeftBytes, typename RightBytes>
+        [[nodiscard]] bool equal_bytes(
+            const LeftBytes& left,
+            const RightBytes& right) noexcept
+        {
+            return left.size() == right.size()
+                && (left.empty()
+                    || std::memcmp(left.data(), right.data(), left.size()) == 0);
+        }
+
         [[nodiscard]] TextureDocument make_document(
             DocumentHandle handle = { 7, 1 },
             HistoryPolicy history = {},
-            DocumentLimits limits = {})
+            DocumentLimits limits = {},
+            PixelFormat format = PixelFormat::rgba8_srgb,
+            ColorSpace color_space = ColorSpace::srgb)
         {
             CanvasDescriptor canvas{};
             canvas.width = 64;
             canvas.height = 64;
             canvas.tile_extent = 16;
             canvas.mip_count = 3;
+            canvas.format = format;
+            canvas.color_space = color_space;
             return TextureDocument{
                 handle,
                 BranchIdentity{ 9, 4 },
@@ -296,6 +311,7 @@ namespace epochengine::authoring::texture::contract
         atlasCapabilities.atlas_regions = true;
         PhysicalResidencyPolicy atlasPolicy{};
         atlasPolicy.preferred = PhysicalResidencyKind::atlas_region;
+        atlasPolicy.allow_atlas_for_small_textures = true;
         const PhysicalResidencyPlan atlasPlan =
             plan_physical_residency(
                 artifact,
@@ -422,6 +438,127 @@ namespace epochengine::authoring::texture::contract
                 atlasPolicy).status != ResidencyPlanStatus::invalid_artifact)
         {
             return 26;
+        }
+
+        TextureCompileProfile rasterProfile{};
+        rasterProfile.compiler_schema_version = 4;
+        const CompiledTextureArtifact compiled =
+            first.compile_artifact(rasterProfile);
+        const CompiledTextureArtifact repeatedCompiled =
+            first.compile_artifact(rasterProfile);
+        if (!compiled
+            || !repeatedCompiled
+            || compiled.mips.empty()
+            || repeatedCompiled.mips.empty())
+        {
+            return 27;
+        }
+        const std::size_t paintedOffset =
+            static_cast<std::size_t>(15u * compiled.mips[0].row_pitch_bytes)
+            + 15u * 4u;
+        if (!validate_compiled_artifact(compiled)
+            || !validate_compiled_artifact(repeatedCompiled)
+            || compiled.identity.compilation_required
+            || repeatedCompiled.identity.compilation_required
+            || compiled.identity.key != repeatedCompiled.identity.key
+            || compiled.payload_content != repeatedCompiled.payload_content
+            || compiled.mips.size() != 3u
+            || !equal_bytes(
+                compiled.mips[0].texels, repeatedCompiled.mips[0].texels)
+            || compiled.identity.estimated_artifact_bytes != 21'504u
+            || paintedOffset + 3u >= compiled.mips[0].texels.size()
+            || std::to_integer<std::uint8_t>(
+                compiled.mips[0].texels[paintedOffset + 3u]) == 0u
+            || first.revision() != beforeCompile)
+        {
+            return 27;
+        }
+
+        TextureDocument linearDocument = make_document(
+            { 11, 1 },
+            {},
+            {},
+            PixelFormat::rgba8_unorm,
+            ColorSpace::linear);
+        TextureCompileProfile generatedProfile{};
+        generatedProfile.format = ArtifactFormat::rgba8_unorm;
+        generatedProfile.color_space = ColorSpace::linear;
+        generatedProfile.mipmaps = MipmapPolicy::generate_box_filter;
+        const CompiledTextureArtifact generated =
+            linearDocument.compile_artifact(generatedProfile);
+        if (!generated
+            || generated.mips.size() != 7u
+            || generated.mips.back().width != 1u
+            || generated.mips.back().height != 1u
+            || !generated.mips.back().valid())
+        {
+            return 28;
+        }
+
+        ArtifactCompilationLimits tinyCompileBudget{};
+        tinyCompileBudget.maximum_output_bytes = 64u;
+        if (first.compile_artifact(
+                rasterProfile,
+                tinyCompileBudget).status
+                != ArtifactCompilationStatus::output_budget_exceeded)
+        {
+            return 29;
+        }
+        if (first.compile_artifact(compileProfile).status
+                != ArtifactCompilationStatus::unsupported_format)
+        {
+            return 30;
+        }
+        TextureCompileProfile normalProfile = rasterProfile;
+        normalProfile.mipmaps = MipmapPolicy::generate_normal_renormalized;
+        if (first.compile_artifact(normalProfile).status
+                != ArtifactCompilationStatus::unsupported_mipmap_policy)
+        {
+            return 31;
+        }
+        TextureCompileProfile srgbGeneratedProfile = rasterProfile;
+        srgbGeneratedProfile.mipmaps = MipmapPolicy::generate_box_filter;
+        if (first.compile_artifact(srgbGeneratedProfile).status
+                != ArtifactCompilationStatus::unsupported_mipmap_policy)
+        {
+            return 31;
+        }
+        TextureCompileProfile conversionProfile = rasterProfile;
+        conversionProfile.format = ArtifactFormat::rgba8_unorm;
+        conversionProfile.color_space = ColorSpace::linear;
+        if (first.compile_artifact(conversionProfile).status
+                != ArtifactCompilationStatus::unsupported_color_conversion
+            || std::string_view{ artifact_compilation_status_name(
+                    ArtifactCompilationStatus::ready) } != "ready")
+        {
+            return 32;
+        }
+
+        CompiledTextureArtifact corruptedCompiled = compiled;
+        corruptedCompiled.mips[0].texels[paintedOffset] ^= std::byte{ 0x1 };
+        if (validate_compiled_artifact(corruptedCompiled)
+            || !validate_compiled_artifact(compiled))
+        {
+            return 33;
+        }
+
+        TextureDocument mismatchedStorage = make_document(
+            { 12, 1 },
+            {},
+            {},
+            PixelFormat::rgba8_srgb,
+            ColorSpace::linear);
+        if (mismatchedStorage.compile_artifact(generatedProfile).status
+                != ArtifactCompilationStatus::unsupported_color_conversion)
+        {
+            return 34;
+        }
+        TextureCompileProfile invalidMipmap = generatedProfile;
+        invalidMipmap.mipmaps = static_cast<MipmapPolicy>(255);
+        if (linearDocument.compile_artifact(invalidMipmap).status
+                != ArtifactCompilationStatus::unsupported_mipmap_policy)
+        {
+            return 35;
         }
 
         return 0;

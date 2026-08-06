@@ -1,5 +1,6 @@
 module;
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -15,7 +16,7 @@ export namespace epochengine::gui_lib
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 88;
     inline constexpr int version_revision = 71;
-    inline constexpr std::string_view version_string = "0.88.71";
+    inline constexpr std::string_view version_string = "0.88.74";
 
     struct Vec2
     {
@@ -279,6 +280,21 @@ export namespace epochengine::gui_lib
         bool valid{};
     };
 
+    struct ToggleSwitchLayoutOptions
+    {
+        Rect bounds{};
+        bool value{};
+        float padding{ 3.0f };
+    };
+
+    struct ToggleSwitchLayout
+    {
+        Rect track{};
+        Rect thumb{};
+        bool value{};
+        bool valid{};
+    };
+
     class SelectionControlController final : public LayoutController
     {
     public:
@@ -344,6 +360,34 @@ export namespace epochengine::gui_lib
             }
             return invalid_selectable_row_index;
         }
+
+        [[nodiscard]] ToggleSwitchLayout make_toggle_switch(
+            const ToggleSwitchLayoutOptions& options) const noexcept
+        {
+            const float width = options.bounds.size.x > 1.0f
+                ? options.bounds.size.x
+                : 1.0f;
+            const float height = options.bounds.size.y > 1.0f
+                ? options.bounds.size.y
+                : 1.0f;
+            const float padding = options.padding > 0.0f
+                ? (std::min)(options.padding, height * 0.25f)
+                : 0.0f;
+            const float thumb_extent = (std::max)(1.0f, height - padding * 2.0f);
+            const float thumb_x = options.value
+                ? options.bounds.position.x + width - padding - thumb_extent
+                : options.bounds.position.x + padding;
+
+            return ToggleSwitchLayout{
+                .track = Rect{ options.bounds.position, Vec2{ width, height } },
+                .thumb = Rect{
+                    Vec2{ thumb_x, options.bounds.position.y + padding },
+                    Vec2{ thumb_extent, thumb_extent }
+                },
+                .value = options.value,
+                .valid = width >= height && height >= 8.0f
+            };
+        }
     };
 
     [[nodiscard]] inline const SelectionControlController& selection_control_controller() noexcept
@@ -370,6 +414,12 @@ export namespace epochengine::gui_lib
         Vec2 point) noexcept
     {
         return selection_control_controller().segmented_item_at(options, point);
+    }
+
+    [[nodiscard]] inline ToggleSwitchLayout make_toggle_switch_layout(
+        const ToggleSwitchLayoutOptions& options) noexcept
+    {
+        return selection_control_controller().make_toggle_switch(options);
     }
 
     enum class PopupPlacement : std::uint8_t

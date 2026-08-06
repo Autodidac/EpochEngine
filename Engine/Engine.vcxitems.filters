@@ -452,6 +452,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.renderer.ixx">
       <Filter>Module Files\epoch\core\context\backends\opengl</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.canvas2d.ixx">
+      <Filter>Module Files\epoch\core\context\backends\opengl</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.textures.ixx">
       <Filter>Module Files\epoch\core\context\backends\opengl</Filter>
     </ClCompile>
@@ -552,6 +555,18 @@
       <Filter>Module Files\epoch\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.ixx">
+      <Filter>Module Files\epoch\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.document.ixx">
+      <Filter>Module Files\epoch\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.interaction.ixx">
+      <Filter>Module Files\epoch\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.persistence.ixx">
+      <Filter>Module Files\epoch\scene</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.runtime.ixx">
       <Filter>Module Files\epoch\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sceneserializer.ixx">
@@ -701,8 +716,14 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
       <Filter>Module Files\epoch\events</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.application.ixx">
+      <Filter>Module Files\epoch\gui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ixx">
       <Filter>Module Files\epoch\gui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\temporal.request.ixx">
+      <Filter>Module Files\epoch\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.quad.ixx">
       <Filter>Module Files\epoch\core\context\backends\vulkan\geometry</Filter>
@@ -824,6 +845,15 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.scene.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.standard.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.plant_lab.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp">
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </ClCompile>
@@ -932,6 +962,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx">
       <Filter>Header Files\gui</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx">
+      <Filter>Module Files\epoch\gui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx">
       <Filter>Module Files\epoch\debug</Filter>
     </ClCompile>
@@ -975,6 +1008,9 @@
       <Filter>Module Files\epoch\core\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx">
+      <Filter>Module Files\epoch\core\platform</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.filesystem.ixx">
       <Filter>Module Files\epoch\core\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx">
@@ -1031,6 +1067,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.gui.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
@@ -1071,6 +1110,21 @@
       <Filter>Module Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.cpu.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.presentation.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.artifact.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.residency.ixx">
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.streaming_feedback.ixx">
@@ -1151,10 +1205,22 @@
     <Filter Include="Source Files\epochengine\authoring\texture">
       <UniqueIdentifier>{0304862f-2d95-4308-b1a6-4d29bc847130}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\epochengine\assets">
+      <UniqueIdentifier>{ccfacdae-e3be-4458-9677-d2fb1b86b08e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\assets\texture">
+      <UniqueIdentifier>{61ae8cf2-2baa-4f61-88c5-0e5e651cbe69}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\capability.profile.ixx">
       <Filter>Module Files\epoch\capability</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.document.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.artifact.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
       <Filter>Module Files\epoch\authoring</Filter>
@@ -1189,6 +1255,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp">
       <Filter>Source Files\epochengine\physics</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\texture.artifact.cpp">
+      <Filter>Source Files\epochengine\assets\texture</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.document.cpp">
       <Filter>Source Files\epochengine\authoring\texture</Filter>
     </ClCompile>
@@ -1196,6 +1265,9 @@
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.contract.cpp">
       <Filter>Source Files\epochengine\physics</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\assets\texture\texture.artifact.contract.cpp">
+      <Filter>Source Files\epochengine\assets\texture</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.contract.cpp">
       <Filter>Source Files\epochengine\authoring\texture</Filter>

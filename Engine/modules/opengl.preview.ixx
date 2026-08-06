@@ -52,6 +52,7 @@ export module opengl.preview;
 import core.context;
 import opengl.state;
 import package.registry;
+import render.arcade;
 import render.preview_grid;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -438,7 +439,9 @@ void main() {
                 safe_axis(marker.scale.y * 0.5f, 0.18f),
                 safe_axis(marker.scale.z * 0.5f, 0.018f)
             };
-            const float z = marker.position.z - half.z - 0.012f;
+            const float z =
+                epochengine::render_arcade::screen_sample_plane_z(
+                    marker.position.z, marker.scale.z);
             const float left = marker.position.x - half.x;
             const float right = marker.position.x + half.x;
             const float bottom = marker.position.y - half.y;
@@ -494,47 +497,24 @@ void main() {
             glClearColor(0.015f, 0.025f, 0.045f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            clear_arcade_rect(18, 18, width - 36, height - 36, width, height, 0.025f, 0.075f, 0.090f, 1.0f);
-            clear_arcade_rect(24, 24, width - 48, 6, width, height, 0.07f, 0.95f, 0.62f, 1.0f);
-            clear_arcade_rect(24, height - 30, width - 48, 6, width, height, 0.07f, 0.95f, 0.62f, 1.0f);
-            clear_arcade_rect(24, 24, 6, height - 48, width, height, 0.07f, 0.95f, 0.62f, 1.0f);
-            clear_arcade_rect(width - 30, 24, 6, height - 48, width, height, 0.07f, 0.95f, 0.62f, 1.0f);
-
-            for (int y = 52; y < height - 52; y += 32)
-            {
-                const float tone = (y / 32) % 2 == 0 ? 0.050f : 0.035f;
-                clear_arcade_rect(44, y, width - 88, 3, width, height, tone, tone + 0.035f, tone + 0.065f, 1.0f);
-            }
-
-            const int cell = (std::max)(14, width / 24);
-            const int playLeft = 72;
-            const int playBottom = 92;
-            const int playWidth = width - 144;
-            const int playHeight = height - 184;
-            const int frame = static_cast<int>(state.arcadeScreenFrame++ % 240u);
-            const int phase = frame / 12;
-            const int headColumn = phase % (std::max)(1, playWidth / cell);
-            const int lane = (phase / 5) % 6;
-            const int headX = playLeft + headColumn * cell;
-            const int headY = playBottom + lane * cell;
-
-            for (int i = 0; i < 9; ++i)
-            {
-                const int segment = (std::max)(0, headColumn - i);
-                const int sx = playLeft + segment * cell;
-                const int sy = headY - ((i / 5) * cell);
-                const float g = (std::max)(0.20f, 0.90f - i * 0.065f);
-                clear_arcade_rect(sx, sy, cell - 3, cell - 3, width, height, 0.08f, g, 0.48f, 1.0f);
-            }
-
-            const int fruitX = playLeft + ((phase * 5 + 7) % (std::max)(1, playWidth / cell)) * cell;
-            const int fruitY = playBottom + ((phase * 3 + 2) % (std::max)(1, playHeight / cell)) * cell;
-            clear_arcade_rect(fruitX, fruitY, cell, cell, width, height, 0.96f, 0.28f, 0.20f, 1.0f);
-            clear_arcade_rect(fruitX + 3, fruitY + 3, cell - 6, cell - 6, width, height, 1.0f, 0.82f, 0.25f, 1.0f);
-
-            const int pulse = 16 + (frame % 48);
-            clear_arcade_rect(width / 2 - 112, height - 82, 224, 10, width, height, 0.10f, 0.35f, 0.72f, 1.0f);
-            clear_arcade_rect(width / 2 - 112, height - 82, (std::min)(224, pulse * 5), 10, width, height, 0.26f, 0.82f, 1.0f, 1.0f);
+            epochengine::render_arcade::emit_arcade_attract_pattern(
+                width,
+                height,
+                state.arcadeScreenFrame++,
+                [&](const epochengine::render_arcade::ArcadePreviewRect& rect)
+                {
+                    clear_arcade_rect(
+                        rect.x,
+                        rect.y,
+                        rect.width,
+                        rect.height,
+                        width,
+                        height,
+                        rect.color[0],
+                        rect.color[1],
+                        rect.color[2],
+                        rect.color[3]);
+                });
         }
     }
 

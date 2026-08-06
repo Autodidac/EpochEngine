@@ -60,6 +60,7 @@ module;
 module engine.gui;
 
 import epoch.gui;
+import epoch.gui.rounded_rect;
 
 import context.type;
 import core.context;
@@ -180,6 +181,23 @@ namespace epochengine::gui
             const font::Glyph* fallbackGlyph = nullptr;
         };
 
+        struct RoundedCorners
+        {
+            SpriteHandle topLeft{};
+            SpriteHandle topRight{};
+            SpriteHandle bottomRight{};
+            SpriteHandle bottomLeft{};
+            float sourceRadius{ 6.0f };
+
+            [[nodiscard]] bool valid() const noexcept
+            {
+                return topLeft.is_valid()
+                    && topRight.is_valid()
+                    && bottomRight.is_valid()
+                    && bottomLeft.is_valid();
+            }
+        };
+
         struct GuiResources
         {
             struct PaletteSprites
@@ -209,6 +227,7 @@ namespace epochengine::gui
             PaletteSprites auroraSteel{};
             GuiFontCache font{};
             font::FontRenderer fontRenderer{};
+            std::unordered_map<SpriteHandle, RoundedCorners, SpriteHandleHash> roundedControls{};
         };
 
         struct CachedRuntimeSurface
@@ -477,12 +496,14 @@ namespace epochengine::gui
             float caretTimer = 0.0f;
             bool caretVisible = true;
             ThemeVariant activeTheme = ThemeVariant::DefaultDark;
+            gui_lib::rounded_rect::RoundedRectStyle roundedRectStyle{};
 
             std::vector<InputEvent> events{};
             std::vector<QueuedSpriteDraw> queuedDraws{};
             std::vector<QueuedSpriteDraw> topLayerDraws{};
             std::vector<PendingSelectPopup> pendingSelectPopups{};
             std::vector<ThemeVariant> themeStack{};
+            std::vector<gui_lib::rounded_rect::RoundedRectStyle> roundedRectStyleStack{};
             int topLayerDepth = 0;
         };
 
@@ -1034,6 +1055,148 @@ namespace epochengine::gui
             return handle;
         }
 
+        [[nodiscard]] static bool point_in_triangle(
+            gui_lib::Vec2 point,
+            gui_lib::Vec2 a,
+            gui_lib::Vec2 b,
+            gui_lib::Vec2 c) noexcept
+        {
+            const auto edge = [](gui_lib::Vec2 first, gui_lib::Vec2 second, gui_lib::Vec2 sample) noexcept
+            {
+                return (sample.x - second.x) * (first.y - second.y)
+                    - (first.x - second.x) * (sample.y - second.y);
+            };
+
+            const float ab = edge(a, b, point);
+            const float bc = edge(b, c, point);
+            const float ca = edge(c, a, point);
+            const bool hasNegative = ab < 0.0f || bc < 0.0f || ca < 0.0f;
+            const bool hasPositive = ab > 0.0f || bc > 0.0f || ca > 0.0f;
+            return !(hasNegative && hasPositive);
+        }
+
+        [[nodiscard]] static std::vector<std::uint8_t> make_rounded_rect_pixels(
+            Color color,
+            std::uint32_t radius)
+        {
+            const std::uint32_t extent = radius * 2U;
+            std::vector<std::uint8_t> pixels(
+                static_cast<std::size_t>(extent) * extent * 4U,
+                0U);
+            if (radius == 0U)
+                return pixels;
+
+            const auto mesh = gui_lib::rounded_rect::make_rounded_rect_mesh({
+                .bounds = { { 0.0f, 0.0f }, { static_cast<float>(extent), static_cast<float>(extent) } },
+                .radii = {
+                    static_cast<float>(radius),
+                    static_cast<float>(radius),
+                    static_cast<float>(radius),
+                    static_cast<float>(radius)
+                },
+                .segments_per_corner = 8U
+            });
+            if (!mesh.valid)
+                return pixels;
+
+            for (std::uint32_t y = 0; y < extent; ++y)
+            {
+                for (std::uint32_t x = 0; x < extent; ++x)
+                {
+                    const gui_lib::Vec2 sample{
+                        static_cast<float>(x) + 0.5f,
+                        static_cast<float>(y) + 0.5f
+                    };
+                    bool covered = false;
+                    for (std::size_t index = 0; index + 2U < mesh.fill_indices.size(); index += 3U)
+                    {
+                        if (point_in_triangle(
+                            sample,
+                            mesh.vertices[mesh.fill_indices[index]],
+                            mesh.vertices[mesh.fill_indices[index + 1U]],
+                            mesh.vertices[mesh.fill_indices[index + 2U]]))
+                        {
+                            covered = true;
+                            break;
+                        }
+                    }
+                    if (!covered)
+                        continue;
+
+                    const std::size_t pixel = (static_cast<std::size_t>(y) * extent + x) * 4U;
+                    pixels[pixel + 0U] = color.r;
+                    pixels[pixel + 1U] = color.g;
+                    pixels[pixel + 2U] = color.b;
+                    pixels[pixel + 3U] = color.a;
+                }
+            }
+            return pixels;
+        }
+
+        [[nodiscard]] static std::vector<std::uint8_t> extract_corner_pixels(
+            std::span<const std::uint8_t> source,
+            std::uint32_t radius,
+            std::uint32_t sourceX,
+            std::uint32_t sourceY)
+        {
+            const std::uint32_t sourceExtent = radius * 2U;
+            std::vector<std::uint8_t> corner(
+                static_cast<std::size_t>(radius) * radius * 4U,
+                0U);
+            for (std::uint32_t y = 0; y < radius; ++y)
+            {
+                for (std::uint32_t x = 0; x < radius; ++x)
+                {
+                    const std::size_t sourcePixel =
+                        (static_cast<std::size_t>(sourceY + y) * sourceExtent + sourceX + x) * 4U;
+                    const std::size_t targetPixel =
+                        (static_cast<std::size_t>(y) * radius + x) * 4U;
+                    std::copy_n(source.data() + sourcePixel, 4U, corner.data() + targetPixel);
+                }
+            }
+            return corner;
+        }
+
+        static void register_rounded_control(
+            TextureAtlas& atlas,
+            SpriteHandle fill,
+            std::string_view name,
+            Color color)
+        {
+            constexpr std::uint32_t radius = 6U;
+            const auto pixels = make_rounded_rect_pixels(color, radius);
+            const std::string base{ name };
+            RoundedCorners corners{
+                .topLeft = add_sprite(
+                    atlas,
+                    base + "/top_left",
+                    extract_corner_pixels(pixels, radius, 0U, 0U),
+                    radius,
+                    radius),
+                .topRight = add_sprite(
+                    atlas,
+                    base + "/top_right",
+                    extract_corner_pixels(pixels, radius, radius, 0U),
+                    radius,
+                    radius),
+                .bottomRight = add_sprite(
+                    atlas,
+                    base + "/bottom_right",
+                    extract_corner_pixels(pixels, radius, radius, radius),
+                    radius,
+                    radius),
+                .bottomLeft = add_sprite(
+                    atlas,
+                    base + "/bottom_left",
+                    extract_corner_pixels(pixels, radius, 0U, radius),
+                    radius,
+                    radius),
+                .sourceRadius = static_cast<float>(radius)
+            };
+            if (fill.is_valid() && corners.valid())
+                g_resources.roundedControls.insert_or_assign(fill, std::move(corners));
+        }
+
         [[nodiscard]] static TextureAtlas* ensure_runtime_surface_atlas_locked()
         {
             if (g_resources.runtimeSurfaceAtlas)
@@ -1393,6 +1556,47 @@ namespace epochengine::gui
                 g_resources.auroraSteel.modalScrim = add_sprite(atlas, "__agui_aurora/modal_scrim",
                     make_solid_pixels(0x04, 0x06, 0x08, 0xBE, 8, 8), 8, 8);
 
+                const auto registerPaletteControls = [&atlas](
+                    GuiResources::PaletteSprites& palette,
+                    std::string_view prefix,
+                    const std::array<Color, 5>& colors)
+                {
+                    register_rounded_control(atlas, palette.buttonNormal, std::string(prefix) + "/button_normal", colors[0]);
+                    register_rounded_control(atlas, palette.buttonHover, std::string(prefix) + "/button_hover", colors[1]);
+                    register_rounded_control(atlas, palette.buttonActive, std::string(prefix) + "/button_active", colors[2]);
+                    register_rounded_control(atlas, palette.textField, std::string(prefix) + "/text_field", colors[3]);
+                    register_rounded_control(atlas, palette.textFieldActive, std::string(prefix) + "/text_field_active", colors[4]);
+                };
+
+                registerPaletteControls(g_resources.defaultDark, "__agui_round/dark", {{
+                    { 0x31, 0x36, 0x3F }, { 0x3C, 0x43, 0x4E }, { 0x48, 0x52, 0x60 },
+                    { 0x21, 0x26, 0x2E }, { 0x2A, 0x31, 0x3B }
+                }});
+                registerPaletteControls(g_resources.defaultLight, "__agui_round/light", {{
+                    { 0x78, 0x80, 0x8B }, { 0x8B, 0x95, 0xA1 }, { 0x5E, 0x75, 0x94 },
+                    { 0x61, 0x67, 0x70 }, { 0x53, 0x68, 0x82 }
+                }});
+                registerPaletteControls(g_resources.classicLauncher, "__agui_round/classic", {{
+                    { 0x5B, 0x5F, 0x66 }, { 0x6C, 0x71, 0x7A }, { 0x4C, 0x52, 0x5C },
+                    { 0x2B, 0x2E, 0x33 }, { 0x3A, 0x3E, 0x45 }
+                }});
+                registerPaletteControls(g_resources.midnightBlue, "__agui_round/midnight", {{
+                    { 0x1D, 0x2E, 0x4A }, { 0x28, 0x42, 0x66 }, { 0x36, 0x5F, 0x91 },
+                    { 0x0D, 0x14, 0x22 }, { 0x16, 0x25, 0x3D }
+                }});
+                registerPaletteControls(g_resources.emberForge, "__agui_round/ember", {{
+                    { 0x3E, 0x2A, 0x22 }, { 0x55, 0x37, 0x28 }, { 0x70, 0x45, 0x2D },
+                    { 0x1B, 0x14, 0x12 }, { 0x32, 0x22, 0x1C }
+                }});
+                registerPaletteControls(g_resources.forestTerminal, "__agui_round/forest", {{
+                    { 0x24, 0x3D, 0x31 }, { 0x30, 0x55, 0x40 }, { 0x3E, 0x72, 0x52 },
+                    { 0x0D, 0x17, 0x14 }, { 0x1D, 0x34, 0x29 }
+                }});
+                registerPaletteControls(g_resources.auroraSteel, "__agui_round/aurora", {{
+                    { 0x34, 0x3F, 0x4A }, { 0x41, 0x55, 0x61 }, { 0x53, 0x72, 0x7B },
+                    { 0x18, 0x1E, 0x24 }, { 0x2A, 0x36, 0x3F }
+                }});
+
                 g_resources.atlasBuilt = true;
             }
 
@@ -1489,7 +1693,7 @@ namespace epochengine::gui
             perform_backend_upload(ctx);
         }
 
-        static void draw_sprite(const SpriteHandle& handle, float x, float y, float w, float h)
+        static void draw_sprite_raw(const SpriteHandle& handle, float x, float y, float w, float h)
         {
             if (!handle.is_valid())
                 return;
@@ -1546,6 +1750,51 @@ namespace epochengine::gui
             auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
             std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
             ctx->draw_sprite_safe(handle, span, x, y, w, h);
+        }
+
+        static void draw_rounded_sprite(
+            const SpriteHandle& handle,
+            float x,
+            float y,
+            float w,
+            float h,
+            const gui_lib::rounded_rect::RoundedRectStyle& requestedStyle)
+        {
+            const auto style = gui_lib::rounded_rect::normalize_rounded_rect_style(requestedStyle);
+            const auto cornersIt = g_resources.roundedControls.find(handle);
+            if (!style.enabled
+                || cornersIt == g_resources.roundedControls.end()
+                || !cornersIt->second.valid()
+                || (std::min)(w, h) < 8.0f)
+            {
+                draw_sprite_raw(handle, x, y, w, h);
+                return;
+            }
+
+            const RoundedCorners& corners = cornersIt->second;
+            const float radius = (std::min)({
+                style.control_radius,
+                w * 0.5f,
+                h * 0.5f
+            });
+            if (radius < 1.0f)
+            {
+                draw_sprite_raw(handle, x, y, w, h);
+                return;
+            }
+
+            draw_sprite_raw(handle, x + radius, y, w - radius * 2.0f, h);
+            draw_sprite_raw(handle, x, y + radius, radius, h - radius * 2.0f);
+            draw_sprite_raw(handle, x + w - radius, y + radius, radius, h - radius * 2.0f);
+            draw_sprite_raw(corners.topLeft, x, y, radius, radius);
+            draw_sprite_raw(corners.topRight, x + w - radius, y, radius, radius);
+            draw_sprite_raw(corners.bottomRight, x + w - radius, y + h - radius, radius, radius);
+            draw_sprite_raw(corners.bottomLeft, x, y + h - radius, radius, radius);
+        }
+
+        static void draw_sprite(const SpriteHandle& handle, float x, float y, float w, float h)
+        {
+            draw_rounded_sprite(handle, x, y, w, h, g_frame.roundedRectStyle);
         }
 
         [[nodiscard]] static bool point_in_rect(Vec2 p, float x, float y, float w, float h) noexcept
@@ -2484,7 +2733,9 @@ namespace epochengine::gui
             g_frame.rightPressConsumed = false;
             g_frame.rightReleaseConsumed = false;
             g_frame.activeTheme = ThemeVariant::DefaultDark;
+            g_frame.roundedRectStyle = {};
             g_frame.themeStack.clear();
+            g_frame.roundedRectStyleStack.clear();
             g_frame.pendingSelectPopups.clear();
             g_scrollAreaStack.clear();
             g_floatingWindowTopLayerStack.clear();
@@ -3023,6 +3274,45 @@ namespace epochengine::gui
         {
             g_frame.activeTheme = ThemeVariant::DefaultDark;
         }
+    }
+
+    bool rounded_rectangles_enabled() noexcept
+    {
+        return g_frame.roundedRectStyle.enabled;
+    }
+
+    void push_rounded_rectangles(bool enabled) noexcept
+    {
+        g_frame.roundedRectStyleStack.push_back(g_frame.roundedRectStyle);
+        g_frame.roundedRectStyle = gui_lib::rounded_rect::normalize_rounded_rect_style({
+            .enabled = enabled,
+            .control_radius = 6.0f,
+            .segments_per_corner = 4U
+        });
+    }
+
+    void pop_rounded_rectangles() noexcept
+    {
+        if (!g_frame.roundedRectStyleStack.empty())
+        {
+            g_frame.roundedRectStyle = g_frame.roundedRectStyleStack.back();
+            g_frame.roundedRectStyleStack.pop_back();
+        }
+        else
+        {
+            g_frame.roundedRectStyle = {};
+        }
+    }
+
+    ScopedRoundedRectangles::ScopedRoundedRectangles(bool enabled) noexcept
+    {
+        push_rounded_rectangles(enabled);
+    }
+
+    ScopedRoundedRectangles::~ScopedRoundedRectangles() noexcept
+    {
+        if (active_)
+            pop_rounded_rectangles();
     }
 
     ScopedTheme::ScopedTheme(ThemeVariant theme) noexcept
@@ -3635,6 +3925,88 @@ namespace epochengine::gui
     bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept
     {
         return button_with_state(label, size, selected);
+    }
+
+    bool toggle_switch(std::string_view label, bool& value, Vec2 size) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return false;
+
+        const Vec2 pos = g_frame.cursor;
+        const float baseHeight = base_line_height(kFontScale);
+        const float width = (std::max)(size.x, 96.0f);
+        const float height = (std::max)(size.y, 28.0f);
+        const float trackWidth = (std::min)(48.0f, height * 1.9f);
+        const float trackHeight = (std::min)(24.0f, height - 4.0f);
+        const float trackX = pos.x + width - trackWidth;
+        const float trackY = pos.y + (height - trackHeight) * 0.5f;
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+        const std::size_t pressKey = widget_press_key(label, pos, { width, height });
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        if (hovered && left_press_available())
+        {
+            pressedKey = pressKey;
+            consume_left_press();
+        }
+
+        const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
+        if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (hovered)
+                consume_left_release();
+            pressedKey = 0;
+        }
+        if (clicked)
+            value = !value;
+
+        const auto layout = gui_lib::make_toggle_switch_layout({
+            .bounds = {
+                { trackX, trackY },
+                { trackWidth, trackHeight }
+            },
+            .value = value,
+            .padding = 3.0f
+        });
+        const auto& palette = active_palette();
+        const auto pillStyle = gui_lib::rounded_rect::RoundedRectStyle{
+            .enabled = true,
+            .control_radius = trackHeight * 0.5f,
+            .segments_per_corner = 8U
+        };
+        const SpriteHandle track = value
+            ? palette.buttonActive
+            : hovered ? palette.buttonHover : palette.buttonNormal;
+        draw_rounded_sprite(
+            track,
+            layout.track.position.x,
+            layout.track.position.y,
+            layout.track.size.x,
+            layout.track.size.y,
+            pillStyle);
+        draw_rounded_sprite(
+            value ? palette.buttonHover : palette.textFieldActive,
+            layout.thumb.position.x,
+            layout.thumb.position.y,
+            layout.thumb.size.x,
+            layout.thumb.size.y,
+            gui_lib::rounded_rect::RoundedRectStyle{
+                .enabled = true,
+                .control_radius = layout.thumb.size.y * 0.5f,
+                .segments_per_corner = 8U
+            });
+
+        const float labelWidth = (std::max)(1.0f, width - trackWidth - 10.0f);
+        const std::string fittedLabel = fit_text_to_width(label, labelWidth, kFontScale);
+        const std::string_view displayLabel = fittedLabel.empty()
+            ? label
+            : std::string_view{ fittedLabel };
+        const float textY = pos.y + std::floor((std::max)(0.0f, (height - baseHeight) * 0.5f)) + 1.0f;
+        draw_text_line(displayLabel, pos.x, textY, kFontScale);
+
+        g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
+        advance_cursor({ 0.0f, height + kContentPadding });
+        return clicked;
     }
 
     bool text_link(std::string_view label, Vec2 size, bool selected) noexcept

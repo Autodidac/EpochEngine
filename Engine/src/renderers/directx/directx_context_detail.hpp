@@ -76,6 +76,23 @@ namespace epochengine::directxcontext::detail
         std::uint32_t height{};
     };
 
+    struct DirectXArcadeScreenTarget
+    {
+        ID3D11Texture2D* texture{};
+        ID3D11RenderTargetView* renderTarget{};
+        ID3D11ShaderResourceView* shaderView{};
+        ID3D11Buffer* sampleVertexBuffer{};
+        std::size_t sampleVertexCapacity{};
+        std::uint32_t width{};
+        std::uint32_t height{};
+        std::uint64_t frame{};
+
+        [[nodiscard]] inline bool ready() const noexcept
+        {
+            return texture && renderTarget && shaderView && width > 0u && height > 0u;
+        }
+    };
+
     struct DirectXState
     {
         HWND hwnd{};
@@ -102,6 +119,7 @@ namespace epochengine::directxcontext::detail
         ID3D11Buffer* spriteVertexBuffer{};
         std::size_t spriteVertexCapacity{};
         std::unordered_map<const TextureAtlas*, DirectXAtlasGPU> guiAtlases{};
+        DirectXArcadeScreenTarget arcadeScreen{};
     };
 
     extern std::recursive_mutex g_directxMutex;
@@ -115,6 +133,8 @@ namespace epochengine::directxcontext::detail
     void release_state(DirectXState& state) noexcept;
     bool create_device(DirectXState& state);
     bool update_size(core::Context& ctx, DirectXState& state);
+    void release_arcade_screen_target(DirectXState& state) noexcept;
+    bool ensure_arcade_screen_target(DirectXState& state);
 
     D3D11_VIEWPORT full_window_viewport(const DirectXState& state) noexcept;
     D3D11_VIEWPORT scene_viewport_for(const core::Context& ctx, const DirectXState& state) noexcept;
@@ -124,6 +144,10 @@ namespace epochengine::directxcontext::detail
         const DirectXState& state,
         std::vector<DirectXVertex>& solid,
         std::vector<DirectXVertex>& lines);
+
+    void render_engine_arcade_sampled_surface_preview(
+        const core::Context& ctx,
+        DirectXState& state) noexcept;
 
     void draw_vertices(
         DirectXState& state,

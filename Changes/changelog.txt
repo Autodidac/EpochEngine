@@ -1,5 +1,265 @@
 # Epoch Changelog
 
+## [v0.88.84] - Stable scene document and runtime projection
+
+- Add shared generation-checked authoring document identity, deterministic
+  content revisions, and bounded history policy without exposing physical
+  renderer or cache identity as canonical state.
+- Add `scene.document` with stable scene object handles, typed components,
+  semantic operations, atomic transactions, undo/redo, Tier-0 construction,
+  and deterministic snapshot projection.
+- Add `scene.interaction` so ray selection, drag ownership, and Focus resolve
+  persistent scene object IDs instead of depending on mutable vector offsets.
+- Promote scene persistence to canonical `epoch_snapshot 2` serialization with
+  bounded validation, migration-only readers for older scene text, verified
+  temporary writes, and atomic replacement through platform-owned filesystem
+  operations.
+- Add `scene.runtime` as the renderer-neutral compiled projection consumed by
+  project preview. Save, Play, Build, and Run now fail closed unless the exact
+  project scene revision is durably committed and accepted by the runtime lane.
+- Keep the live editor entity collection as an explicit transitional view
+  adapter; routing every edit through `SceneDocument` commands remains the next
+  authoring integration step.
+- Move the Engine Arcade screen and sampled plane to the cabinet's canonical
+  positive-Z front face and lock that relationship with a build-safe contract.
+- Extend build-safe engine contracts for document identity, scene operations,
+  stable interaction, persistence round-trip/migration, runtime projection,
+  stale handles, and Arcade front-facing placement.
+- Advance development source metadata to `v0.88.84`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.83] - Project capability admission and budget ownership
+
+- Move performance-tier budget recommendations into `platform.budgets` while
+  preserving the established `epochengine::platform` API; capability profiles
+  no longer import the high-level runtime module.
+- Add one renderer adapter from existing render-device capability reports into
+  typed capability/subsystem profiles. Recommended limits remain policy while
+  measured implementation costs remain unknown until evidence exists.
+- Add typed headless, portable, portable-strict, explicit, and explicit-strict
+  project policies with explicit experimental and software-fallback rules.
+- Add generated-manifest `capability_profile` ownership. Legacy manifests with
+  no field use the portable default without regeneration; duplicate, wrong-type,
+  malformed, unknown, and mismatched values fail closed.
+- Show separate active-editor and selected project-run admission in Project,
+  System Info, Settings, and status diagnostics, including the recommended
+  resolution/frame/memory budget without claiming measured cost.
+- Extend build-safe contracts through all 17 capability checks plus project
+  policy and manifest parsing. Verify MSVC Debug/Release editor builds and
+  contracts, managed Clang 22 Release, and all five CTests.
+- Advance development source metadata to `v0.88.83`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.82] - Runtime texture artifact boundary and Arcade facing repair
+
+- Extract compiled texture identity, profile, mip payload, stable hash protocol,
+  integrity validation, and status naming into the always-built
+  `authoring.texture.artifact` module and runtime asset implementation.
+  `authoring.texture` re-exports and consumes that same canonical boundary so
+  authoring and runtime cannot drift onto different artifact protocols.
+- Add a standalone runtime artifact contract with deterministic payload and
+  corruption checks. A clean managed Clang 22 headless configuration builds and
+  passes it with both the authoring platform and texture editor disabled.
+- Keep `render.texture.artifact` available independently of authoring documents;
+  its authoring fixture remains feature-gated while the engine consumes the
+  runtime schema unconditionally.
+- Repair the Engine Arcade screen orientation at the shared scene contract and
+  route OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software sampled
+  surfaces through one front-plane calculation. Build contracts pass; live
+  visual presentation remains `Partial` pending operator eye proof.
+- Verify MSVC Debug and Release editor builds, the Release engine contract, the
+  authoring-disabled runtime artifact contract, and the managed Clang 22 full
+  Release engine with all five CTest targets passing.
+- Advance development source metadata to `v0.88.82`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.81] - Temporal texture artifact and residency bridge
+
+- Extend `authoring.texture` from identity-only compilation planning to an
+  owning deterministic RGBA8 artifact payload with explicit mip records,
+  storage-domain layer composition, alpha-aware box-filter generation,
+  output/mip budgets, and fail-closed format, color-space, and mip-policy
+  status.
+- Add full compiled-artifact integrity validation that recomputes identity,
+  dimensions, per-mip content, total bytes, and the aggregate payload digest;
+  mutated or incomplete artifacts cannot cross into renderer state.
+- Add `render.texture.artifact` as the renderer-neutral integration boundary.
+  Project-owned logical asset identity remains separate from authoring content
+  identity while a one-time validated, immutable artifact seal maps linear
+  RGBA8 mip 0 into the existing standalone `render.texture.residency` cache.
+- Add build-safe document-to-compile-to-upload contracts covering synchronous
+  payload ownership, exact cache reuse, backend-not-ready recreation, backend
+  epoch reset, stale handles, revision mismatch, payload mutation, and explicit
+  sRGB rejection.
+- Make backend-not-ready recreation transactional: allocation, upload, and
+  readiness failure preserve the prior cache entry and handle generation; only
+  a complete replacement retires the old physical texture. Preserve accumulated
+  priority, pinning, and non-evictable policy across that recreation.
+- Make ordinary cache-miss eviction transactional as well: plan deterministic
+  victims and reserve host capacity before native allocation, then create,
+  upload, and verify the new texture before committing any retirement. Failed
+  uploads preserve all prior handles, entries, byte gauges, and eviction metrics.
+  Bound and report temporary replacement bytes instead of hiding double
+  residency during atomic swaps.
+- Harden texture residency so backend epochs move forward only and stale
+  `resolve`, `touch`, `set_pinned`, and `release` operations cannot disturb a
+  replacement resource or release metrics. Charge successful upload bytes
+  before readiness checks, and keep artifact copy/move allocation inside the
+  immutable seal's fail-closed exception boundary.
+- Keep project-registry/Canvas2D resource binding, sRGB-native storage,
+  compressed formats, whole mip-chain upload, atlas, bindless, sparse, and
+  streaming execution as explicit follow-up work. Runtime artifact schema/read
+  ownership without authoring UI and capability-derived admission also remain
+  required before a game-only consumption claim.
+- Advance development source metadata to `v0.88.81`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.80] - Canvas2D presentation boundary and OpenGL compositor
+
+- Add `render.canvas2d.presentation` as the renderer-neutral bridge from a
+  complete deterministic CPU raster to physical texture residency and an
+  explicit native final-compose packet. Validate frame identity, surface bounds,
+  pixel origin/color/alpha semantics, full byte-derived artifact digests, and
+  fail-closed presentation destinations.
+- Harden `render.texture.residency` so exact ready hits reuse without retained
+  upload payloads or fresh upload budget, backend-epoch reset clears frame
+  watermarks, transient outputs remain evictable, and hook replacement retires
+  old physical state before accepting a new backend epoch.
+- Harden OpenGL texture ownership with context-plus-object keys, synchronous
+  upload-state isolation including PBO/row/skip/swap state, GL error evidence,
+  stale-record retirement, and explicit native-context identity.
+- Add `opengl.canvas2d` as the primary-context native compositor. It confines
+  clear/draw work to the supplied scene viewport, converts top-left image and
+  surface coordinates once, gates sampler-object use, and restores program,
+  vertex/buffer, texture/sampler, framebuffer, viewport/scissor, blend/depth/
+  cull/stencil/rasterizer, write-mask, polygon, and clear state.
+- Keep live editor scene-slot hookup, operator-visible pixel comparison,
+  SDL3/SFML3/Raylib3 GL share-group adapters, and non-OpenGL presentation
+  adapters explicitly `Partial`; the no-display contract proves safe refusal,
+  not live GL drawing.
+- Verify MSVC Debug/Release editor builds and contracts, then rebuild the full
+  managed Linux Clang 22 engine and pass all four no-display CTest targets.
+- Advance development source metadata to `v0.88.80`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.79] - Bounded texture residency and OpenGL upload hooks
+
+- Extend `render.device` with validated texture-upload regions, row-pitch and
+  byte-size checks, optional upload/readiness operations, and overflow-safe
+  format accounting.
+- Add `render.texture.residency` as a bounded generation-checked physical cache
+  keyed by stable compiled artifact identity, with deterministic reuse,
+  priority/LRU eviction, pinning, upload/entry/byte budgets, stale-handle
+  rejection, backend epochs, recreation, metrics, and staged failure proof.
+- Extend the OpenGL-family device with native texture work-order hooks and add
+  context-guarded OpenGL allocation, base-mip upload, readiness, destruction,
+  format mapping, pixel-store restoration, and lifetime retirement.
+- Prove fake OpenGL-family hook behavior for OpenGL, SDL3, SFML3, and Raylib3,
+  plus safe real-hook refusal without an active GL context. This does not claim
+  native Canvas2D presentation or non-OpenGL backend texture parity.
+- Verify MSVC Debug/Release editor builds and engine contracts, then rebuild the
+  managed Linux Clang 22 full-engine lane and pass all four CTest targets.
+- Make the CMake module glob configuration-dependent so incremental build trees
+  discover newly added named-module interfaces without a manual reconfigure.
+- Advance development source metadata to `v0.88.79`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.78] - Deterministic Canvas2D CPU reference
+
+- Add `render.canvas2d.cpu` as the renderer-neutral `T0-CPU` reference raster
+  with validated RGBA8 texture and clip bindings, fixed-point triangle coverage,
+  nearest/linear sampling, explicit color/alpha encoding, sprite alpha modes,
+  offscreen-to-presentation composition, bounded metrics, and deterministic
+  image hashes.
+- Reject invalid or partial frame plans by default, unresolved tile execution,
+  unsupported mip/anisotropy policy, duplicate/invalid bindings, missing clips,
+  capacity overflow, and unavailable texture resources without publishing false
+  image evidence.
+- Add staged CPU contract diagnostics and prove deterministic solid, textured,
+  missing-resource, and limit behavior through the engine contract on MSVC Debug,
+  MSVC Release, and managed Linux Clang 22.
+- Repair a Clang 22 named-module code-generation crash by giving dynamically
+  initialized `core.commandline` strings/path ordinary exported module ownership
+  instead of redundant inline-variable COMDAT ownership.
+- Advance development source metadata to `v0.88.78`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
+## [v0.88.77] - Canvas2D project and submission spine
+
+- Add `render.canvas2d` as the renderer-neutral C++23 contract for logical
+  canvas extent, pixel-aware camera mapping, resize/letterbox/integer/fractional/
+  fill/stretch viewport policy, and offscreen final-composition planning.
+- Add generation-checked sprite identity, logical texture references, validated
+  material/sampler/alpha declarations, deterministic sort keys, compiled quads,
+  bounded batching, and explicit rejection diagnostics.
+- Add tileset, tile-layer, and tile-chunk validation plus one immutable
+  `Canvas2DSubmission` compiler that produces sprite, tile, camera, viewport,
+  render-target, and final-compose plans without exposing backend cache state.
+- Persist Canvas2D project policy through editor context snapshots and expose
+  logical resolution, scale, sampling, pixels-per-unit, batch, tile-chunk, and
+  pixel-snap controls on the Canvas2D Project surface.
+- Add build-safe Canvas2D contract coverage and architecture documentation while
+  keeping native CPU raster and OpenGL presentation evidence explicitly pending.
+- Advance development source metadata to `v0.88.77`; keep `v0.88.69` sealed.
+
+## [v0.88.76] - All-context Arcade surfaces and application ownership
+
+- Centralize Engine Arcade's deterministic attract pattern and route it through
+  backend-owned sampled scene surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
+  DirectX/D3D11, and Software without replacing each backend's native ownership.
+- Replace the Arcade preview's overlapping box stack with one cabinet mesh,
+  preserve selection bounds, and remove the sampled screen from generic
+  diagnostic wire replay so no stray HUD wire object is emitted.
+- Keep standard Editor, Plant Lab, and GUI Editor as separate C++23 application
+  implementations behind `editor.application`. Plant Lab owns vegetation
+  authoring; Forest Factory remains the standard-editor browse/import/place
+  workflow that consumes Plant Lab and package outputs.
+- Separate generic render-device maturity from build-proven scene sampled-surface
+  evidence in Settings, System Info, contracts, and the renderer matrix.
+- Advance development source metadata to `v0.88.76`; keep `v0.88.69` sealed.
+
+## [v0.88.75] - Request-driven time and modular editor applications
+
+- Add `temporal.request` with explicit global/sample time, anchors, rates,
+  forward/reverse/frozen mapping, truth classes, bounded observation requests,
+  exact/nearest/bracket policies, reconstruction evidence, cumulative metrics,
+  and generation-checked subject retirement.
+- Replace the dead ECS history stub with a typed facade over the shared bounded
+  request-driven history contract.
+- Split standard Editor, Plant Lab, and GUI Editor profiles and canonical
+  scenes into `editor.standard.cpp`, `editor.plant_lab.cpp`, and
+  `editor.gui.cpp` behind one `editor.application` registry and shared shell.
+- Make application profiles own surface availability, initial dock, camera,
+  pane visibility, entity authoring, project execution, and floating-pane
+  policy; specialized project IDs can no longer load under the wrong editor.
+- Keep GUI scene transforms application-owned, centralize Forest preview
+  generation, preserve Arcade package seed priority, and reject detached panes
+  that the active application does not own.
+- Add build-safe contracts for all three application scenes, cross-application
+  surface exclusion, temporal mapping, bounded retention, reconstruction, and
+  stale-handle behavior.
+- Verify MSVC Debug/Release editor builds and engine contracts.
+- Advance development source metadata to `v0.88.75` while preserving the sealed
+  `v0.88.69` packaged runtime and updater baseline.
+
+## [v0.88.74] - Dedicated launcher workspaces and baked primary context
+
+- Replace the block-stack Engine Arcade preview with a canonical extruded
+  cabinet mesh, recessed screen, control deck, joystick, buttons, coin door,
+  compile-time geometry checks, and camera-facing solid culling.
+- Reorganize the launcher around Open Editor, Forest Factory, GUI Editor,
+  Update Epoch Engine, Quit, and a prelaunch live-context selector.
+- Keep Forest Factory as the canonical vegetation editor name and route GUI
+  Editor into the dedicated 2D/UI authoring workspace.
+- Integrate EpochGui rounded-rectangle styling, a reusable toggle-switch
+  primitive, engine-adapter rendering, context snapshot preservation, and an
+  opt-in Settings toggle that remains disabled by default.
+- Elect exactly one baked primary renderer surface in the Windows parent host.
+  The first context and successful editor/backend promotions cannot undock;
+  secondary diagnostic contexts and routed pane windows retain popout/redock.
+- Advance development source metadata to `v0.88.74` while preserving the sealed
+  `v0.88.69` packaged runtime and updater baseline.
+
 ## [v0.88.73] - Vulkan retirement and remaining solid-orientation repair
 
 - Repair the repeated-switch crash exposed specifically when retiring Vulkan:

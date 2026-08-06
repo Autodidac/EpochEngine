@@ -290,12 +290,15 @@ namespace epochengine::vulkancontext
             commandBuffers.clear();
         }
 
+        destroyArcadeRenderTarget();
+
         framebuffers.clear();
 
         depthImageView.reset();
         depthImage.reset();
         depthImageMemory.reset();
 
+        arcadeScreenPipeline.reset();
         solidGraphicsPipeline.reset();
         graphicsPipeline.reset();
         pipelineLayout.reset();
@@ -348,10 +351,12 @@ namespace epochengine::vulkancontext
             createGuiPipeline();
             createDepthResources();
             createFramebuffers();
+            createArcadeRenderTarget();
             createUniformBuffers();
             createGuiUniformBuffers();
             createDescriptorPool();
             createDescriptorSets();
+            createArcadeDescriptorSets();
             createCommandBuffers();
             set_framebuffer_resize_intent(false);
         }

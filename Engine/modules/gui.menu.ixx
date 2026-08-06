@@ -101,7 +101,7 @@ export namespace epochengine::menu
         UpdatePanelDismiss,
         UpdatePanelRestart,
         OpenEditor,
-        OpenForestFactory,
+        OpenPlantLab,
         OpenGuiEditor,
         Snake, Tetris, Pacman, Frogger, Sokoban,
         Minesweep, Puzzle, Bejeweled, Fourty,
@@ -167,7 +167,7 @@ export namespace epochengine::menu
         int rows = 0;
         std::size_t inputGuardFrames = 0;
 
-        static constexpr int ExpectedColumns = 4;
+        static constexpr int ExpectedColumns = 3;
         static constexpr float LayoutSpacing = 24.f;
 
         int maxColumns = ExpectedColumns;
@@ -183,7 +183,7 @@ export namespace epochengine::menu
 
         static constexpr std::array kLauncherChoices = {
             ChoiceDescriptor{ Choice::OpenEditor, "Open Editor", { 220.0f, 68.0f } },
-            ChoiceDescriptor{ Choice::OpenForestFactory, "Forest Factory", { 220.0f, 68.0f } },
+            ChoiceDescriptor{ Choice::OpenPlantLab, "Plant Lab", { 220.0f, 68.0f } },
             ChoiceDescriptor{ Choice::OpenGuiEditor, "GUI Editor", { 220.0f, 68.0f } },
             ChoiceDescriptor{ Choice::UpdateLatest, "Update Epoch Engine", { 220.0f, 68.0f } },
             ChoiceDescriptor{ Choice::Exit, "Quit", { 220.0f, 68.0f } }

@@ -47,12 +47,17 @@ module;
 export module vulkan.context:meshcube;
 
 import :shared_vk;
+import render.arcade;
 import render.preview_grid;
 
 
 namespace epochengine::vulkancontext
 {
     using Vertex = Application::Vertex;
+
+    inline constexpr std::uint32_t kArcadeScreenVertexCount = 4u;
+    inline constexpr std::uint32_t kArcadeScreenIndexCount = 6u;
+    static_assert(kArcadeScreenVertexCount == 4u && kArcadeScreenIndexCount == 6u);
 
     namespace
     {
@@ -82,7 +87,10 @@ namespace epochengine::vulkancontext
         const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
         const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
-        out.reserve(solidVertices.size() + source.size() + markerCount + objectVertices.size());
+        const auto sampledSurfaces = epochengine::previewgrid::sampled_render_surface_markers_for(ctx);
+        const bool hasArcadeScreen = !sampledSurfaces.empty();
+        out.reserve(solidVertices.size() + (hasArcadeScreen ? kArcadeScreenVertexCount : 0u)
+            + source.size() + markerCount + objectVertices.size());
 
         const auto append_vertex = [&](const epochengine::previewgrid::Vertex& vertex)
         {
@@ -96,6 +104,36 @@ namespace epochengine::vulkancontext
 
         for (const auto& vertex : solidVertices)
             append_vertex(vertex);
+
+        if (hasArcadeScreen)
+        {
+            const auto& marker = sampledSurfaces.front();
+            const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
+            const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
+            const float z =
+                epochengine::render_arcade::screen_sample_plane_z(
+                    marker.position.z, marker.scale.z);
+            const std::array<epochengine::previewgrid::Vec3, kArcadeScreenVertexCount> positions{
+                epochengine::previewgrid::Vec3{ marker.position.x - halfX, marker.position.y - halfY, z },
+                epochengine::previewgrid::Vec3{ marker.position.x + halfX, marker.position.y - halfY, z },
+                epochengine::previewgrid::Vec3{ marker.position.x + halfX, marker.position.y + halfY, z },
+                epochengine::previewgrid::Vec3{ marker.position.x - halfX, marker.position.y + halfY, z }
+            };
+            const std::array<std::array<float, 2>, kArcadeScreenVertexCount> uvs{
+                std::array<float, 2>{ 0.0f, 1.0f },
+                std::array<float, 2>{ 1.0f, 1.0f },
+                std::array<float, 2>{ 1.0f, 0.0f },
+                std::array<float, 2>{ 0.0f, 0.0f }
+            };
+            for (std::size_t index = 0; index < positions.size(); ++index)
+            {
+                out.push_back(Vertex{
+                    { positions[index].x, positions[index].y, positions[index].z },
+                    { 1.0f, 1.0f, 1.0f },
+                    { uvs[index][0], uvs[index][1] }
+                });
+            }
+        }
         for (const auto& vertex : source)
             append_vertex(vertex);
         for (std::size_t i = 0; i < markerCount; ++i)
@@ -115,12 +153,26 @@ namespace epochengine::vulkancontext
         const auto sourceIndices = epochengine::previewgrid::grid_indices();
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
         const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
-        out.reserve(solidVertices.size() + sourceIndices.size() + markerCount + objectVertices.size());
+        const bool hasArcadeScreen =
+            !epochengine::previewgrid::sampled_render_surface_markers_for(ctx).empty();
+        out.reserve(solidVertices.size() + (hasArcadeScreen ? kArcadeScreenIndexCount : 0u)
+            + sourceIndices.size() + markerCount + objectVertices.size());
 
         for (std::uint16_t i = 0; i < static_cast<std::uint16_t>(solidVertices.size()); ++i)
             out.push_back(i);
 
-        const std::uint16_t lineBase = static_cast<std::uint16_t>(solidVertices.size());
+        const std::uint16_t screenBase = static_cast<std::uint16_t>(solidVertices.size());
+        if (hasArcadeScreen)
+        {
+            constexpr std::array<std::uint16_t, kArcadeScreenIndexCount> screenIndices{
+                0u, 1u, 2u, 0u, 2u, 3u
+            };
+            for (const std::uint16_t index : screenIndices)
+                out.push_back(static_cast<std::uint16_t>(screenBase + index));
+        }
+
+        const std::uint16_t lineBase = static_cast<std::uint16_t>(
+            screenBase + (hasArcadeScreen ? kArcadeScreenVertexCount : 0u));
         for (const auto index : sourceIndices)
             out.push_back(static_cast<std::uint16_t>(lineBase + index));
 
@@ -146,5 +198,11 @@ namespace epochengine::vulkancontext
     export std::uint32_t preview_solid_index_count_for(const epochengine::core::Context* ctx)
     {
         return static_cast<std::uint32_t>(epochengine::previewgrid::object_solid_vertices_for(ctx).size());
+    }
+    export std::uint32_t preview_arcade_screen_index_count_for(const epochengine::core::Context* ctx)
+    {
+        return epochengine::previewgrid::sampled_render_surface_markers_for(ctx).empty()
+            ? 0u
+            : kArcadeScreenIndexCount;
     }
 }

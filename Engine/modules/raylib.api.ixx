@@ -234,6 +234,14 @@ export namespace epochengine::raylib_api
         float rotation,
         Color tint);
 
+    void draw_texture_quad(
+        const Texture2D& tex,
+        Vector2 top_left,
+        Vector2 bottom_left,
+        Vector2 bottom_right,
+        Vector2 top_right,
+        Color tint);
+
     int load_model(const char* path);
     bool has_model(int model_id);
     void draw_model(int model_id);

@@ -241,6 +241,32 @@ if(BUILD_TESTING)
         NAME epoch_ci_headless
         COMMAND epoch_ci_headless ${CMAKE_SOURCE_DIR}
     )
+
+    add_executable(epoch_texture_artifact_contract
+        src/assets/texture/texture.artifact.cpp
+        src/assets/texture/texture.artifact.contract.cpp
+    )
+    target_sources(epoch_texture_artifact_contract PRIVATE
+        FILE_SET epoch_texture_artifact_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.texture.artifact.ixx
+    )
+    target_include_directories(epoch_texture_artifact_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_texture_artifact_contract PRIVATE
+        EPOCH_TEXTURE_ARTIFACT_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_texture_artifact_contract)
+    epoch_apply_warnings(epoch_texture_artifact_contract)
+    epoch_apply_sanitizers(epoch_texture_artifact_contract)
+    add_test(
+        NAME epoch_texture_artifact_contract
+        COMMAND epoch_texture_artifact_contract
+    )
 endif()
 
 if(EPOCH_CI_HEADLESS_ONLY)
@@ -255,6 +281,7 @@ if(EPOCH_CI_HEADLESS_ONLY)
 endif()
 
 add_library(epoch_gui STATIC
+    dep/EpochGui/src/epochgui/rounded_rect.cpp
     src/epochgui/dockable_window.cpp
     src/epochgui/dock_layout.cpp
     src/epochgui/floating_window.cpp
@@ -266,7 +293,9 @@ add_library(epoch_gui STATIC
 target_sources(epoch_gui PUBLIC
     FILE_SET epoch_gui_modules TYPE CXX_MODULES
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
-        FILES ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx
+        FILES
+            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx
+            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.rounded_rect.ixx
 )
 
 target_include_directories(epoch_gui PUBLIC
@@ -328,8 +357,12 @@ set(EPOCH_SOURCES
     src/engine.scripting.compiler.cpp
     src/editor.cpp
     src/editor.scene.cpp
+    src/editor/editor.standard.cpp
+    src/editor/editor.plant_lab.cpp
+    src/editor/editor.gui.cpp
     src/filewatch.cpp
     src/font.renderer.cpp
+    src/assets/texture/texture.artifact.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp
@@ -539,7 +572,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
 endif()
-file(GLOB EPOCH_MODULE_FILES ${EPOCH_MODULE_DIR}/*.ixx)
+file(GLOB EPOCH_MODULE_FILES CONFIGURE_DEPENDS ${EPOCH_MODULE_DIR}/*.ixx)
 list(SORT EPOCH_MODULE_FILES)
 
 target_include_directories(epoch PRIVATE
@@ -1099,13 +1132,16 @@ if(BUILD_TESTING)
     )
     if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
         add_executable(epoch_authoring_texture_contract
+            src/assets/texture/texture.artifact.cpp
             src/authoring/texture/texture.document.cpp
             src/authoring/texture/texture.contract.cpp
         )
         target_sources(epoch_authoring_texture_contract PRIVATE
             FILE_SET epoch_authoring_texture_modules TYPE CXX_MODULES
                 BASE_DIRS ${EPOCH_MODULE_DIR}
-                FILES ${EPOCH_MODULE_DIR}/authoring.texture.ixx
+                FILES
+                    ${EPOCH_MODULE_DIR}/authoring.texture.artifact.ixx
+                    ${EPOCH_MODULE_DIR}/authoring.texture.ixx
         )
         target_include_directories(epoch_authoring_texture_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}

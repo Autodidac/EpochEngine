@@ -82,9 +82,14 @@ namespace epochengine::anativecontext
         const std::uint64_t guiGeneration = epochengine::gui::deferred_batch_generation(&ctx);
         const std::int64_t commandDepth = static_cast<std::int64_t>(queue.depth());
         const bool hasPendingCommands = commandDepth != 0;
+        sr.arcadeScreen.preparedThisFrame = false;
+        const bool sampledPreviewActive =
+            previewMode == core::ScenePreviewMode::Editor
+            && !epochengine::previewgrid::sampled_render_surface_markers_for(&ctx).empty();
         const bool sceneDirty =
             !sr.frameValid
             || hasPendingCommands
+            || sampledPreviewActive
             || !detail::same_viewport(viewport, sr.lastSceneViewport)
             || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode
             || cameraRevision != sr.lastCameraRevision;

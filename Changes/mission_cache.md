@@ -31,6 +31,15 @@ release history belong in the changelog/archive, not architecture docs.
 - Vendor-specific features are capability packs, not fictional higher tiers.
 - Extend existing `Capabilities`, `Budgets`, `perf.tier`, runtime profiles, and
   render-device evidence. Never create a parallel global tier registry.
+- `platform.budgets` owns performance-tier recommendations; implementation cost
+  remains unknown until measured or explicitly estimated. Never copy available
+  VRAM/upload budgets into cost fields.
+- Project profiles own typed headless/portable/explicit requirements plus
+  experimental and software-fallback policy. Diagnostics distinguish the active
+  editor backend from the independently selected project-run backend.
+- Generated manifests persist `capability_profile`; a missing legacy field maps
+  to portable without regeneration, while malformed, duplicate, wrong-type,
+  unknown, or mismatched policy fails closed.
 - `Present` requires implementation plus validation evidence. Descriptors,
   safe refusal, API version, and build success alone do not prove presentation.
 - Passive provider scoring may use comparable single-context evidence only.
@@ -40,12 +49,27 @@ release history belong in the changelog/archive, not architecture docs.
 ## Baseline 2D Mission
 
 - Build Canvas2D as a real project/runtime path, not a decorative editor mode.
-- Add orthographic/pixel-aware camera, offscreen target, final compose, resize,
-  letterbox, integer scaling, alpha, cutout, and nearest/linear sampling.
-- Build one renderer-neutral sprite material and batch contract with stable draw
-  order, layers, animation frames, culling, metrics, and cache recreation.
-- Build tile palette, tileset, tile layer/chunk, object, collision, and compiled
-  runtime artifact contracts.
+- `render.canvas2d` now owns renderer-neutral pixel-aware camera/viewport policy,
+  offscreen/final-compose planning, sprite material/alpha/sampler declarations,
+  stable ordering, bounded quad batches, tile set/layer/chunk validation,
+  immutable submissions, diagnostics, and project settings.
+- `render.canvas2d.cpu` now owns deterministic `T0-CPU` reference raster,
+  explicit RGBA8 texture/clip bindings, fixed-point triangle coverage,
+  nearest/linear sampling, alpha composition, final presentation compose,
+  bounded metrics, image hashes, and staged failure diagnostics.
+- `render.texture.residency` now owns bounded generation-checked physical
+  records, logical-artifact reuse, priority/LRU eviction, pinning, upload
+  budgets, backend epochs, recreation, metrics, and staged failure proof.
+- `render.canvas2d.presentation` now connects complete CPU canvas output to that
+  cache and an explicit backend-owned presentation packet; the primary OpenGL
+  compositor is compiled and build-proven.
+- Connect compiled project texture artifacts to that boundary, route the
+  compositor through the protected editor scene-content slot, and compare live
+  native pixels to the CPU oracle.
+- Extend the current tile descriptors with palettes, map objects, collision,
+  visible-chunk culling, project persistence, and compiled runtime artifacts.
+- Add animation-frame selection and sprite culling without weakening stable draw
+  order or exposing physical cache identity as authoring state.
 - Add configurable input actions and keyboard/controller bindings.
 - Add a deterministic fixed-step 2D solver adapter behind `physics.manager`.
 - Add a physical audio adapter behind `audio.manager` with buses and clean device
@@ -65,10 +89,32 @@ release history belong in the changelog/archive, not architecture docs.
 - Texture documents use stable identity/revision, sparse tiles, layers, semantic
   operations, deterministic brushes where applicable, undo/redo, checkpoints,
   bounded history, dependencies, diagnostics, and deterministic compilation.
+  The first compiler produces owning RGBA8 mip payloads and validates their
+  complete identity/content chain; unsupported conversions and compression fail
+  closed rather than relabeling bytes.
 - Logical texture identity never contains descriptor slots, atlas coordinates,
   sparse mappings, GPU handles, upload state, or preview targets.
+- Project asset identity is supplied separately from compiled content identity.
+  `render.texture.artifact` maps an explicit linear RGBA8 mip into the shared
+  standalone residency cache and preserves backend epochs as disposable state.
+- Compiled artifact schema, stable hashing, and integrity validation are now
+  runtime-owned so game,
+  mobile, console, server, and headless products can consume compiled output
+  while excluding authoring UI and history. A standalone Clang contract proves
+  this lane with authoring and texture-editor features disabled; product asset
+  registry and serialized artifact reading remain the next consumption gate.
 - Standalone, atlas, bindless, and sparse representations are physical residency
   plans chosen by capability, budget, format, update rate, and workload.
+- The first physical cache contract supports sampled color resources through a
+  standalone base-mip upload. Atlas, bindless, sparse, streaming, and mip-aware
+  paths extend that same identity/budget boundary instead of replacing it.
+- Canvas2D presentation passes complete raster identity, pixel semantics, stable
+  artifact identity, and scene-surface bounds across one renderer-neutral
+  boundary. Backend adapters consume the packet without exposing native handles
+  to authoring state.
+- Native presentation evidence is context-specific. A primary OpenGL compositor
+  does not imply SDL3, SFML3, or Raylib3 share-group compatibility, and a
+  no-context refusal test does not imply visible pixel proof.
 - Atlases remain useful compatibility and batching caches; they are not canonical
   or universally modern/obsolete.
 - Source and meaningful history are portable. Library output and cache variants
@@ -92,16 +138,25 @@ release history belong in the changelog/archive, not architecture docs.
 - Preserve scene, GUI replay, top-layer, queue-drain, and present order unless a
   bounded draw-model mission explicitly proves a replacement.
 - Sampled RTT truth remains layered: descriptor, graph, hook/adapter, live
-  allocation, presentation, benchmark, and production evidence.
+  allocation, scene-surface path, presentation, benchmark, and production
+  evidence.
 - Engine Arcade remains the kernel-owned sampled-RTT consumer and procedural
-  cabinet fallback. Optional reviewed cabinet assets stay extension-owned.
+  cabinet fallback. Its shared content contract must feed backend-owned sampled
+  scene surfaces in every compiled context without leaking one API's ownership
+  model into another. Optional reviewed cabinet assets stay extension-owned.
 
 ## Backend Parity And Contexts
 
-- Normal editor use owns one live backend. Context selection is a state-preserving
-  whole-editor replacement transaction, not a second editor or fake dropdown.
-- Multicontext is diagnostic and never the normal runtime or passive benchmark
-  source.
+- Normal editor use owns one primary backend surface. Context selection is a
+  state-preserving whole-editor replacement or live-context promotion, not a
+  second editor or fake dropdown.
+- In a parented multicontext diagnostic host, exactly one context is the baked
+  primary surface and cannot undock. Secondary diagnostic contexts and routed
+  pane windows may pop out/redock; multicontext is never passive benchmark data.
+- Launcher context selection is prelaunch configuration for three application
+  profiles: standard Editor, Plant Lab, and GUI Editor. They share one
+  shell/service spine but own separate source files, scenes, surface masks,
+  camera/dock defaults, panes, and authoring/run policy.
 - A switch captures state, retires/cleans the source, creates the exact selected
   backend in the stable host, restores state, proves a frame, and fails closed.
 - No retired renderer continues in the background wasting resources.
@@ -139,10 +194,18 @@ release history belong in the changelog/archive, not architecture docs.
 - Themes include system light/dark, explicit light, and explicit dark. Future
   professional styling is separate from those functional choices.
 - Settings use progressive disclosure and match active capability evidence.
+  Rounded GUI controls are an opt-in EpochGui-owned style policy, disabled by
+  default and preserved across editor context handoff.
 - The Console dock reports evidence/status; it is not a substitute for actual
   workspace controls.
 - Package Manager needs real rows, action/status, transfer/build progress,
   license/source/cache evidence, and cancellation without fake progress.
+- Plant Lab is the dedicated launcher application for procedural vegetation
+  authoring. Forest Factory remains a standard-editor surface/tool that consumes
+  Plant Lab outputs for vegetation browsing, scene/object import, placement,
+  package activation, and project-visible asset use.
+- GUI Editor similarly authors reusable GUI documents/assets; the standard
+  editor consumes those results without duplicating the dedicated designer.
 
 ## Shared Scene Systems
 
@@ -185,9 +248,26 @@ release history belong in the changelog/archive, not architecture docs.
 - Backward rendering keys history by timeline, branch, sample time, direction,
   and camera.
 - External side effects cross an explicit gateway and cannot be rewound.
-- The 2D objective uses only the narrow temporal value it needs now: semantic
-  asset/scene history, save/reopen, explicit physics time, and deterministic
-  animation. The full world campaign follows later.
+- The 2D objective uses only the narrow temporal value it needs now:
+  semantic asset/scene history, save/reopen, explicit physics time, and
+  deterministic animation. The full world campaign follows later.
+- `temporal.request` is the first shared runtime foundation: `GlobalTime`,
+  `SampleTime`, `Duration`, `TemporalRate`, and `TemporalAnchor` explicitly map
+  `sample = anchor.sample + (global - anchor.global) * rate`. Negative, zero,
+  and positive rates represent reverse, frozen, and forward observation.
+- Request-driven history is generation-checked and bounded. Exact, nearest,
+  bracket, and boundary-clamped observations carry truth and reconstruction
+  evidence; physical observation caches are disposable and never canonical
+  authoring/world state.
+- Store metrics retain lifetime append/replacement/eviction/rejection evidence
+  after subjects retire while separately reporting live subjects and retained
+  sample capacity.
+- `Autodidac/VoxelRayBenchmark` is an external evidence laboratory for
+  request-driven voxel/ray techniques. Epoch may ingest immutable benchmark
+  result packets and licensed algorithmic findings after publication, but a
+  repository name, bootstrap README, or local run is not production evidence.
+  Multi-context runtime measurements remain excluded from automatic backend
+  selection because concurrent contexts distort normal editor cost.
 
 ## Temporal Authoring
 

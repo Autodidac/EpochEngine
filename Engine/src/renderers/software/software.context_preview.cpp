@@ -10,6 +10,8 @@ module software.context;
 
 import core.context;
 import software.state;
+import package.registry;
+import render.arcade;
 import render.preview_grid;
 
 namespace epochengine::anativecontext::detail
@@ -170,6 +172,163 @@ namespace epochengine::anativecontext::detail
         }
     }
 
+    struct SoftwareTextureVertex final
+    {
+        float x{};
+        float y{};
+        float u{};
+        float v{};
+    };
+
+    [[nodiscard]] bool ensure_arcade_screen_surface() noexcept
+    {
+        constexpr int kMaximumDimension = 2048;
+        constexpr std::size_t kMaximumPixels =
+            static_cast<std::size_t>(kMaximumDimension) * kMaximumDimension;
+        static_assert(package_registry::engine_arcade_render_texture_width() > 0u);
+        static_assert(package_registry::engine_arcade_render_texture_height() > 0u);
+        static_assert(
+            package_registry::engine_arcade_render_texture_width() <= kMaximumDimension);
+        static_assert(
+            package_registry::engine_arcade_render_texture_height() <= kMaximumDimension);
+
+        auto& target = s_softrendererstate.arcadeScreen;
+        const int width = static_cast<int>(package_registry::engine_arcade_render_texture_width());
+        const int height = static_cast<int>(package_registry::engine_arcade_render_texture_height());
+        if (width <= 0 || height <= 0
+            || width > kMaximumDimension || height > kMaximumDimension
+            || static_cast<std::size_t>(width) * static_cast<std::size_t>(height) > kMaximumPixels)
+        {
+            return false;
+        }
+        if (target.ready() && target.width == width && target.height == height)
+            return true;
+
+        target = {};
+        try
+        {
+            target.pixels.assign(
+                static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
+                0xff04060bu);
+        }
+        catch (...)
+        {
+            target = {};
+            return false;
+        }
+        target.width = width;
+        target.height = height;
+        return true;
+    }
+
+    void fill_arcade_surface_rect(
+        const render_arcade::ArcadePreviewRect& rect) noexcept
+    {
+        auto& target = s_softrendererstate.arcadeScreen;
+        if (!target.ready() || rect.width <= 0 || rect.height <= 0)
+            return;
+
+        const int x0 = (std::clamp)(rect.x, 0, target.width);
+        const int y0 = (std::clamp)(rect.y, 0, target.height);
+        const int x1 = (std::clamp)(rect.x + rect.width, 0, target.width);
+        const int y1 = (std::clamp)(rect.y + rect.height, 0, target.height);
+        if (x0 >= x1 || y0 >= y1)
+            return;
+
+        const std::uint32_t color = pack_color(
+            rect.color[0], rect.color[1], rect.color[2], rect.color[3]);
+        for (int y = y0; y < y1; ++y)
+        {
+            auto* row = target.pixels.data()
+                + static_cast<std::size_t>(y) * static_cast<std::size_t>(target.width)
+                + static_cast<std::size_t>(x0);
+            std::fill_n(row, static_cast<std::size_t>(x1 - x0), color);
+        }
+    }
+
+    [[nodiscard]] bool prepare_arcade_screen_surface() noexcept
+    {
+        auto& target = s_softrendererstate.arcadeScreen;
+        if (!ensure_arcade_screen_surface())
+            return false;
+        if (target.preparedThisFrame)
+            return true;
+
+        std::fill(target.pixels.begin(), target.pixels.end(), 0xff04060bu);
+        render_arcade::emit_arcade_attract_pattern(
+            target.width,
+            target.height,
+            target.frame++,
+            [](const render_arcade::ArcadePreviewRect& rect) noexcept
+            {
+                fill_arcade_surface_rect(rect);
+            });
+        target.preparedThisFrame = true;
+        return true;
+    }
+
+    void draw_textured_triangle(
+        const SoftwareTextureVertex& a,
+        const SoftwareTextureVertex& b,
+        const SoftwareTextureVertex& c,
+        const core::RenderViewport& viewport) noexcept
+    {
+        auto& sr = s_softrendererstate;
+        const auto& target = sr.arcadeScreen;
+        if (sr.framebuffer.empty() || !target.ready())
+            return;
+
+        const auto edge = [](float px, float py, const SoftwareTextureVertex& v0, const SoftwareTextureVertex& v1) noexcept
+        {
+            return ((px - v0.x) * (v1.y - v0.y)) - ((py - v0.y) * (v1.x - v0.x));
+        };
+        const float area = edge(a.x, a.y, b, c);
+        if (std::abs(area) <= 1.0e-4f)
+            return;
+
+        const int x0 = (std::max)(viewport.x, static_cast<int>(std::floor((std::min)({ a.x, b.x, c.x }))));
+        const int x1 = (std::min)(viewport.x + viewport.width - 1, static_cast<int>(std::ceil((std::max)({ a.x, b.x, c.x }))));
+        const int y0 = (std::max)(viewport.y, static_cast<int>(std::floor((std::min)({ a.y, b.y, c.y }))));
+        const int y1 = (std::min)(viewport.y + viewport.height - 1, static_cast<int>(std::ceil((std::max)({ a.y, b.y, c.y }))));
+        if (x0 > x1 || y0 > y1)
+            return;
+
+        const bool positive = area > 0.0f;
+        const float invArea = 1.0f / area;
+        for (int y = y0; y <= y1; ++y)
+        {
+            for (int x = x0; x <= x1; ++x)
+            {
+                const float sampleX = static_cast<float>(x) + 0.5f;
+                const float sampleY = static_cast<float>(y) + 0.5f;
+                const float wa = edge(sampleX, sampleY, b, c);
+                const float wb = edge(sampleX, sampleY, c, a);
+                const float wc = edge(sampleX, sampleY, a, b);
+                if (!(positive ? (wa >= 0.0f && wb >= 0.0f && wc >= 0.0f)
+                    : (wa <= 0.0f && wb <= 0.0f && wc <= 0.0f)))
+                {
+                    continue;
+                }
+
+                const float u = (std::clamp)((wa * a.u + wb * b.u + wc * c.u) * invArea, 0.0f, 1.0f);
+                const float v = (std::clamp)((wa * a.v + wb * b.v + wc * c.v) * invArea, 0.0f, 1.0f);
+                const int sourceX = (std::clamp)(
+                    static_cast<int>(std::lround(u * static_cast<float>(target.width - 1))),
+                    0,
+                    target.width - 1);
+                const int sourceY = (std::clamp)(
+                    static_cast<int>(std::lround(v * static_cast<float>(target.height - 1))),
+                    0,
+                    target.height - 1);
+                sr.framebuffer[
+                    static_cast<std::size_t>(y) * static_cast<std::size_t>(sr.width)
+                    + static_cast<std::size_t>(x)] = target.pixels[
+                        static_cast<std::size_t>(sourceY) * static_cast<std::size_t>(target.width)
+                        + static_cast<std::size_t>(sourceX)];
+            }
+        }
+    }
+
     bool project_preview_vertex(
         const epochengine::previewgrid::Mat4& mvp,
         const epochengine::previewgrid::Vec3& position,
@@ -192,6 +351,56 @@ namespace epochengine::anativecontext::detail
         outY = static_cast<float>(viewport.y)
             + ((-ndcY * 0.5f) + 0.5f) * static_cast<float>(viewport.height);
         return true;
+    }
+
+    void render_engine_arcade_sampled_surface_preview(
+        const core::Context& ctx,
+        const previewgrid::Mat4& mvp,
+        const core::RenderViewport& viewport) noexcept
+    {
+        const auto markers = previewgrid::sampled_render_surface_markers_for(&ctx);
+        if (markers.empty() || !prepare_arcade_screen_surface())
+            return;
+
+        for (const auto& marker : markers)
+        {
+            const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
+            const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
+            const float z =
+                render_arcade::screen_sample_plane_z(
+                    marker.position.z, marker.scale.z);
+            const previewgrid::Vec3 world[4]{
+                { marker.position.x - halfX, marker.position.y - halfY, z },
+                { marker.position.x + halfX, marker.position.y - halfY, z },
+                { marker.position.x + halfX, marker.position.y + halfY, z },
+                { marker.position.x - halfX, marker.position.y + halfY, z }
+            };
+            SoftwareTextureVertex quad[4]{
+                { 0.0f, 0.0f, 0.0f, 1.0f },
+                { 0.0f, 0.0f, 1.0f, 1.0f },
+                { 0.0f, 0.0f, 1.0f, 0.0f },
+                { 0.0f, 0.0f, 0.0f, 0.0f }
+            };
+            bool visible = true;
+            for (std::size_t index = 0; index < 4u; ++index)
+            {
+                if (!project_preview_vertex(
+                        mvp,
+                        world[index],
+                        viewport,
+                        quad[index].x,
+                        quad[index].y))
+                {
+                    visible = false;
+                    break;
+                }
+            }
+            if (!visible)
+                continue;
+
+            draw_textured_triangle(quad[0], quad[1], quad[2], viewport);
+            draw_textured_triangle(quad[0], quad[2], quad[3], viewport);
+        }
     }
 
     void render_scene_preview(const core::Context& ctx) noexcept
@@ -283,6 +492,8 @@ namespace epochengine::anativecontext::detail
                 pack_color(color.x, color.y, color.z, 1.0f),
                 viewport);
         }
+
+        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
 
         const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(&ctx);
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(&ctx);

@@ -37,6 +37,7 @@ import context.commandqueue;
 import context.type;
 import core.logger;
 import image.loader;
+import render.arcade;
 import render.preview_grid;
 import package.registry;
 import sdl.renderer;
@@ -254,7 +255,9 @@ namespace
         {
             const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
             const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
-            const float z = marker.position.z - (std::max)(std::abs(marker.scale.z) * 0.5f, 0.018f) - 0.012f;
+            const float z =
+                epochengine::render_arcade::screen_sample_plane_z(
+                    marker.position.z, marker.scale.z);
             const epochengine::previewgrid::Vec3 world[4]{
                 { marker.position.x - halfX, marker.position.y - halfY, z },
                 { marker.position.x + halfX, marker.position.y - halfY, z },

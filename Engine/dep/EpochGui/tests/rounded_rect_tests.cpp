@@ -88,5 +88,43 @@ int main()
     }
 
     const auto empty = rounded::make_rounded_rect_mesh(cases.back());
-    return empty.valid ? 10 : 0;
+    if (empty.valid)
+        return 10;
+
+    const auto disabledStyle = rounded::normalize_rounded_rect_style({});
+    if (disabledStyle.enabled || disabledStyle.control_radius != 6.0f)
+        return 11;
+
+    const auto enabledOptions = rounded::make_styled_rounded_rect_options(
+        { { 0.0f, 0.0f }, { 120.0f, 32.0f } },
+        rounded::RoundedRectStyle{
+            .enabled = true,
+            .control_radius = 7.0f,
+            .segments_per_corner = 5
+        });
+    if (enabledOptions.radii.top_left != 7.0f
+        || enabledOptions.radii.bottom_right != 7.0f)
+    {
+        return 12;
+    }
+
+    const auto toggleOff = gui::make_toggle_switch_layout({
+        .bounds = { { 10.0f, 20.0f }, { 44.0f, 24.0f } },
+        .value = false,
+        .padding = 3.0f
+    });
+    const auto toggleOn = gui::make_toggle_switch_layout({
+        .bounds = { { 10.0f, 20.0f }, { 44.0f, 24.0f } },
+        .value = true,
+        .padding = 3.0f
+    });
+    if (!toggleOff.valid
+        || !toggleOn.valid
+        || toggleOff.thumb.position.x >= toggleOn.thumb.position.x
+        || toggleOff.thumb.size.x != toggleOn.thumb.size.x)
+    {
+        return 13;
+    }
+
+    return 0;
 }

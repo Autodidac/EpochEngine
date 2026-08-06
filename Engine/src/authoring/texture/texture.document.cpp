@@ -93,7 +93,11 @@ namespace epochengine::authoring::texture
                     {
                         add_byte(static_cast<std::uint8_t>(
                             bits & static_cast<Unsigned>(0xff)));
-                        bits >>= 8;
+                        if constexpr (sizeof(Unsigned) > 1)
+                        {
+                            if (index + 1u < sizeof(Unsigned))
+                                bits = static_cast<Unsigned>(bits >> 8u);
+                        }
                     }
                 }
             }
@@ -820,6 +824,256 @@ namespace epochengine::authoring::texture
             }
             return result;
         }
+
+        [[nodiscard]] CompiledTextureArtifactIdentity make_artifact_identity(
+            const CanvasDescriptor& canvas,
+            const DocumentRevision& revision,
+            TextureCompileProfile profile) noexcept
+        {
+            return build_compiled_texture_artifact_identity(
+                revision,
+                profile,
+                canvas.width,
+                canvas.height,
+                canvas.mip_count);
+        }
+
+        [[nodiscard]] constexpr bool supported_uncompressed_profile(
+            const TextureCompileProfile& profile) noexcept
+        {
+            return (profile.format == ArtifactFormat::rgba8_unorm
+                    && profile.color_space == ColorSpace::linear)
+                || (profile.format == ArtifactFormat::rgba8_srgb
+                    && profile.color_space == ColorSpace::srgb);
+        }
+
+        [[nodiscard]] constexpr std::uint8_t byte_at(
+            const std::vector<std::byte>& bytes,
+            std::size_t offset) noexcept
+        {
+            return std::to_integer<std::uint8_t>(bytes[offset]);
+        }
+
+        void write_pixel(
+            std::vector<std::byte>& bytes,
+            std::size_t offset,
+            PixelRgba8 pixel) noexcept
+        {
+            bytes[offset + 0] = static_cast<std::byte>(pixel.r);
+            bytes[offset + 1] = static_cast<std::byte>(pixel.g);
+            bytes[offset + 2] = static_cast<std::byte>(pixel.b);
+            bytes[offset + 3] = static_cast<std::byte>(pixel.a);
+        }
+
+        [[nodiscard]] PixelRgba8 read_pixel(
+            const std::vector<std::byte>& bytes,
+            std::size_t offset) noexcept
+        {
+            return PixelRgba8{
+                byte_at(bytes, offset + 0),
+                byte_at(bytes, offset + 1),
+                byte_at(bytes, offset + 2),
+                byte_at(bytes, offset + 3)
+            };
+        }
+
+        [[nodiscard]] std::uint8_t blend_mode_channel(
+            BlendMode mode,
+            std::uint8_t destination,
+            std::uint8_t source) noexcept
+        {
+            switch (mode)
+            {
+            case BlendMode::normal:
+                return source;
+            case BlendMode::multiply:
+                return static_cast<std::uint8_t>(
+                    (static_cast<std::uint32_t>(destination) * source + 127u)
+                    / 255u);
+            case BlendMode::screen:
+                return static_cast<std::uint8_t>(255u
+                    - ((255u - destination) * (255u - source) + 127u)
+                        / 255u);
+            case BlendMode::add:
+                return static_cast<std::uint8_t>((std::min)(
+                    255u,
+                    static_cast<std::uint32_t>(destination) + source));
+            case BlendMode::subtract:
+                return static_cast<std::uint8_t>(
+                    destination > source ? destination - source : 0u);
+            }
+            return source;
+        }
+
+        [[nodiscard]] PixelRgba8 composite_pixel(
+            PixelRgba8 destination,
+            PixelRgba8 source,
+            BlendMode mode,
+            std::uint16_t layerOpacity) noexcept
+        {
+            const std::uint32_t sourceAlpha =
+                (static_cast<std::uint32_t>(source.a) * layerOpacity + 32'767u)
+                / 65'535u;
+            if (sourceAlpha == 0)
+                return destination;
+            const std::uint32_t destinationAlpha = destination.a;
+            const std::uint32_t inverseSource = 255u - sourceAlpha;
+            const std::uint32_t outputAlpha = sourceAlpha
+                + (destinationAlpha * inverseSource + 127u) / 255u;
+            if (outputAlpha == 0)
+                return {};
+
+            const auto channel = [&](std::uint8_t before, std::uint8_t incoming)
+            {
+                const std::uint32_t blended = blend_mode_channel(
+                    mode,
+                    before,
+                    incoming);
+                const std::uint32_t retained =
+                    (static_cast<std::uint32_t>(before)
+                        * destinationAlpha * inverseSource + 127u)
+                    / 255u;
+                return static_cast<std::uint8_t>((std::min)(
+                    255u,
+                    (blended * sourceAlpha + retained + outputAlpha / 2u)
+                        / outputAlpha));
+            };
+            return PixelRgba8{
+                channel(destination.r, source.r),
+                channel(destination.g, source.g),
+                channel(destination.b, source.b),
+                static_cast<std::uint8_t>(outputAlpha)
+            };
+        }
+
+        [[nodiscard]] ContentHash compiled_mip_hash(
+            const CompiledTextureMip& mip) noexcept
+        {
+            return compiled_texture_mip_content(mip);
+        }
+
+        [[nodiscard]] bool composite_authored_mip(
+            const CanvasDescriptor& canvas,
+            const DocumentState& state,
+            std::uint8_t mipLevel,
+            CompiledTextureMip& output)
+        {
+            output = {};
+            output.width = mip_dimension(canvas.width, mipLevel);
+            output.height = mip_dimension(canvas.height, mipLevel);
+            output.row_pitch_bytes = output.width * 4u;
+            output.texels.resize(
+                static_cast<std::size_t>(output.row_pitch_bytes)
+                * output.height);
+
+            for (const std::uint32_t slotIndex : state.order)
+            {
+                if (slotIndex >= state.slots.size())
+                    return false;
+                const LayerSlot& slot = state.slots[slotIndex];
+                if (!slot.active || !slot.descriptor.visible
+                    || slot.descriptor.opacity == 0)
+                {
+                    continue;
+                }
+                for (const auto& [coordinate, tile] : slot.tiles)
+                {
+                    if (coordinate.mip != mipLevel)
+                        continue;
+                    if (!valid_coordinate(canvas, coordinate)
+                        || tile.width != tile_width(canvas, coordinate)
+                        || tile.height != tile_height(canvas, coordinate)
+                        || tile.texels.size()
+                            != static_cast<std::uint64_t>(tile.width)
+                                * tile.height * 4ull)
+                    {
+                        return false;
+                    }
+                    const std::uint32_t originX = coordinate.x * canvas.tile_extent;
+                    const std::uint32_t originY = coordinate.y * canvas.tile_extent;
+                    for (std::uint32_t y = 0; y < tile.height; ++y)
+                    {
+                        for (std::uint32_t x = 0; x < tile.width; ++x)
+                        {
+                            const std::size_t sourceOffset =
+                                (static_cast<std::size_t>(y) * tile.width + x) * 4u;
+                            const std::size_t destinationOffset =
+                                static_cast<std::size_t>(originY + y)
+                                    * output.row_pitch_bytes
+                                + static_cast<std::size_t>(originX + x) * 4u;
+                            write_pixel(
+                                output.texels,
+                                destinationOffset,
+                                composite_pixel(
+                                    read_pixel(output.texels, destinationOffset),
+                                    read_pixel(tile.texels, sourceOffset),
+                                    slot.descriptor.blend,
+                                    slot.descriptor.opacity));
+                        }
+                    }
+                }
+            }
+            output.content = compiled_mip_hash(output);
+            return true;
+        }
+
+        [[nodiscard]] CompiledTextureMip downsample_box(
+            const CompiledTextureMip& source)
+        {
+            CompiledTextureMip output{};
+            output.width = (std::max)(1u, source.width / 2u);
+            output.height = (std::max)(1u, source.height / 2u);
+            output.row_pitch_bytes = output.width * 4u;
+            output.texels.resize(
+                static_cast<std::size_t>(output.row_pitch_bytes)
+                * output.height);
+            for (std::uint32_t y = 0; y < output.height; ++y)
+            {
+                for (std::uint32_t x = 0; x < output.width; ++x)
+                {
+                    std::uint64_t alphaSum{};
+                    std::array<std::uint64_t, 3> premultiplied{};
+                    std::uint32_t samples{};
+                    for (std::uint32_t sampleY = 0; sampleY < 2; ++sampleY)
+                    {
+                        const std::uint32_t sourceY = y * 2u + sampleY;
+                        if (sourceY >= source.height)
+                            continue;
+                        for (std::uint32_t sampleX = 0; sampleX < 2; ++sampleX)
+                        {
+                            const std::uint32_t sourceX = x * 2u + sampleX;
+                            if (sourceX >= source.width)
+                                continue;
+                            const PixelRgba8 pixel = read_pixel(
+                                source.texels,
+                                static_cast<std::size_t>(sourceY)
+                                    * source.row_pitch_bytes
+                                    + static_cast<std::size_t>(sourceX) * 4u);
+                            alphaSum += pixel.a;
+                            premultiplied[0] += static_cast<std::uint64_t>(pixel.r) * pixel.a;
+                            premultiplied[1] += static_cast<std::uint64_t>(pixel.g) * pixel.a;
+                            premultiplied[2] += static_cast<std::uint64_t>(pixel.b) * pixel.a;
+                            ++samples;
+                        }
+                    }
+                    PixelRgba8 pixel{};
+                    if (samples != 0 && alphaSum != 0)
+                    {
+                        pixel.r = static_cast<std::uint8_t>((premultiplied[0] + alphaSum / 2u) / alphaSum);
+                        pixel.g = static_cast<std::uint8_t>((premultiplied[1] + alphaSum / 2u) / alphaSum);
+                        pixel.b = static_cast<std::uint8_t>((premultiplied[2] + alphaSum / 2u) / alphaSum);
+                        pixel.a = static_cast<std::uint8_t>((alphaSum + samples / 2u) / samples);
+                    }
+                    write_pixel(
+                        output.texels,
+                        static_cast<std::size_t>(y) * output.row_pitch_bytes
+                            + static_cast<std::size_t>(x) * 4u,
+                        pixel);
+                }
+            }
+            output.content = compiled_mip_hash(output);
+            return output;
+        }
     }
 
     struct TextureDocument::Impl final
@@ -1167,22 +1421,6 @@ namespace epochengine::authoring::texture
             return result;
         }
     };
-
-    std::string content_hash_hex(const ContentHash& hash)
-    {
-        constexpr char digits[] = "0123456789abcdef";
-        std::string result(64, '0');
-        std::size_t cursor{};
-        for (const std::uint64_t word : hash.words)
-        {
-            for (int shift = 60; shift >= 0; shift -= 4)
-            {
-                result[cursor++] =
-                    digits[(word >> shift) & 0x0full];
-            }
-        }
-        return result;
-    }
 
     TextureDocument::TextureDocument(
         DocumentHandle handle,
@@ -2374,46 +2612,149 @@ namespace epochengine::authoring::texture
             return {};
         }
         const std::scoped_lock lock{ impl_->mutex };
-        const std::uint8_t mipCount =
-            profile.mipmaps == MipmapPolicy::preserve_authored
-                ? impl_->canvas.mip_count
-                : full_mip_count(
-                    impl_->canvas.width,
-                    impl_->canvas.height);
-        std::uint64_t bytes{};
-        for (std::uint8_t mip = 0; mip < mipCount; ++mip)
+        return make_artifact_identity(
+            impl_->canvas,
+            impl_->revision,
+            profile);
+    }
+
+    CompiledTextureArtifact TextureDocument::compile_artifact(
+        TextureCompileProfile profile,
+        ArtifactCompilationLimits limits) const noexcept
+    {
+        CompiledTextureArtifact output{};
+        if (!impl_ || !impl_->initialized)
+            return output;
+        if (profile.compiler_schema_version == 0
+            || limits.maximum_output_bytes == 0
+            || limits.maximum_mip_count == 0)
         {
-            bool overflow{};
-            const std::uint64_t mipBytes = format_mip_bytes(
-                profile.format,
-                mip_dimension(impl_->canvas.width, mip),
-                mip_dimension(impl_->canvas.height, mip),
-                overflow);
-            if (overflow || !checked_add(bytes, mipBytes, bytes))
-                return {};
+            output.status = ArtifactCompilationStatus::invalid_profile;
+            return output;
+        }
+        if (!supported_uncompressed_profile(profile))
+        {
+            output.status = profile.format == ArtifactFormat::rgba8_unorm
+                    || profile.format == ArtifactFormat::rgba8_srgb
+                ? ArtifactCompilationStatus::invalid_profile
+                : ArtifactCompilationStatus::unsupported_format;
+            return output;
+        }
+        if (profile.mipmaps != MipmapPolicy::preserve_authored
+            && profile.mipmaps != MipmapPolicy::generate_box_filter)
+        {
+            output.status = ArtifactCompilationStatus::unsupported_mipmap_policy;
+            return output;
+        }
+        if (profile.mipmaps == MipmapPolicy::generate_box_filter
+            && profile.color_space == ColorSpace::srgb)
+        {
+            output.status = ArtifactCompilationStatus::unsupported_mipmap_policy;
+            return output;
         }
 
-        StableHash hash{};
-        hash.add_string("epoch.texture.artifact.v1");
-        hash.add_hash(impl_->revision.content);
-        hash.add_integral(profile.format);
-        hash.add_integral(profile.color_space);
-        hash.add_integral(profile.mipmaps);
-        hash.add_integral(profile.compiler_schema_version);
-        hash.add_integral(profile.quality_tier);
-        hash.add_integral(impl_->canvas.width);
-        hash.add_integral(impl_->canvas.height);
-        hash.add_integral(mipCount);
-        return CompiledTextureArtifactIdentity{
-            .key = hash.finish(),
-            .source_revision = impl_->revision,
-            .profile = profile,
-            .width = impl_->canvas.width,
-            .height = impl_->canvas.height,
-            .mip_count = mipCount,
-            .estimated_artifact_bytes = bytes,
-            .compilation_required = true
-        };
+        const std::scoped_lock lock{ impl_->mutex };
+        if (impl_->canvas.color_space != profile.color_space)
+        {
+            output.status = ArtifactCompilationStatus::unsupported_color_conversion;
+            return output;
+        }
+        const bool matchingStorageFormat =
+            (impl_->canvas.format == PixelFormat::rgba8_srgb
+                && profile.format == ArtifactFormat::rgba8_srgb)
+            || (impl_->canvas.format == PixelFormat::rgba8_unorm
+                && profile.format == ArtifactFormat::rgba8_unorm);
+        if (!matchingStorageFormat)
+        {
+            output.status = ArtifactCompilationStatus::unsupported_color_conversion;
+            return output;
+        }
+        output.identity = make_artifact_identity(
+            impl_->canvas,
+            impl_->revision,
+            profile);
+        if (!output.identity)
+        {
+            output.status = ArtifactCompilationStatus::arithmetic_overflow;
+            return output;
+        }
+        if (output.identity.mip_count > limits.maximum_mip_count
+            || output.identity.estimated_artifact_bytes > limits.maximum_output_bytes)
+        {
+            output.status = ArtifactCompilationStatus::output_budget_exceeded;
+            return output;
+        }
+
+        try
+        {
+            output.mips.reserve(output.identity.mip_count);
+            CompiledTextureMip base{};
+            if (!composite_authored_mip(impl_->canvas, impl_->state, 0, base))
+            {
+                output.status = ArtifactCompilationStatus::malformed_source_state;
+                output.mips.clear();
+                return output;
+            }
+            output.mips.push_back(std::move(base));
+            if (profile.mipmaps == MipmapPolicy::preserve_authored)
+            {
+                for (std::uint8_t mip = 1; mip < output.identity.mip_count; ++mip)
+                {
+                    CompiledTextureMip compiled{};
+                    if (!composite_authored_mip(
+                            impl_->canvas,
+                            impl_->state,
+                            mip,
+                            compiled))
+                    {
+                        output.status = ArtifactCompilationStatus::malformed_source_state;
+                        output.mips.clear();
+                        return output;
+                    }
+                    output.mips.push_back(std::move(compiled));
+                }
+            }
+            else
+            {
+                while (output.mips.size() < output.identity.mip_count)
+                    output.mips.push_back(downsample_box(output.mips.back()));
+            }
+
+            std::uint64_t actualBytes{};
+            for (const CompiledTextureMip& mip : output.mips)
+            {
+                if (!mip.valid()
+                    || !checked_add(actualBytes, mip.texels.size(), actualBytes))
+                {
+                    output.status = ArtifactCompilationStatus::arithmetic_overflow;
+                    output.mips.clear();
+                    return output;
+                }
+            }
+            if (actualBytes != output.identity.estimated_artifact_bytes)
+            {
+                output.status = ArtifactCompilationStatus::malformed_source_state;
+                output.mips.clear();
+                return output;
+            }
+            output.identity.compilation_required = false;
+            output.payload_content = compiled_texture_payload_content(
+                output.identity, output.mips);
+            output.status = ArtifactCompilationStatus::ready;
+            return output;
+        }
+        catch (const std::bad_alloc&)
+        {
+            output.status = ArtifactCompilationStatus::allocation_failed;
+            output.mips.clear();
+            return output;
+        }
+        catch (...)
+        {
+            output.status = ArtifactCompilationStatus::allocation_failed;
+            output.mips.clear();
+            return output;
+        }
     }
 
     PhysicalResidencyPlan plan_physical_residency(

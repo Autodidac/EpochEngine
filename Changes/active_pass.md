@@ -37,6 +37,16 @@ The working tree contains these current or in-progress foundations:
   render-device vocabulary with backend-neutral tiers, feature/evidence states,
   per-subsystem profiles, project requirements, deterministic selection, and
   build-safe no-overclaim checks;
+- `platform.budgets` now owns the single performance-tier recommendation
+  function consumed by runtime and capability adapters. Project profiles carry
+  typed renderer requirements and explicit experimental/software-fallback
+  policy; recommended budgets remain distinct from unknown measured cost;
+- generated manifests persist `capability_profile`. Missing legacy fields map
+  to the portable default without rewriting project files, while duplicate,
+  wrong-type, malformed, unknown, and profile-mismatched values fail closed;
+- Project, System Info, Settings, and the status dock distinguish active-editor
+  admission from selected project-run admission instead of certifying one
+  backend with another backend's evidence;
 - `render.math` owns shared renderer-neutral vectors and linear color;
 - `render.lighting` owns generation-checked light identity, bounded registries,
   immutable frames, environment state, metrics, and reference raster lighting;
@@ -52,9 +62,34 @@ The working tree contains these current or in-progress foundations:
 - `voxel.storage` and `water.system` own deterministic sparse/reference state
   without claiming native rendering;
 - `scene.tier0` and terrain foundations establish reusable default-scene data;
+- `authoring.document` owns shared generation-checked document identity,
+  deterministic content revisions, and bounded history policy;
+- `scene.document` owns stable scene object identity, typed scene components,
+  semantic operations, atomic transactions, undo/redo, Tier-0 construction,
+  and deterministic snapshot projection. The current live editor entity vector
+  is a transitional view adapter, not the final canonical mutation surface;
+- `scene.interaction` resolves ray selection, drag ownership, and Focus through
+  persistent scene object IDs rather than mutable vector positions;
+- `scenesnapshot`, `sceneserializer`, and `scene.persistence` own canonical
+  `epoch_snapshot 2`, bounded validation, migration-only legacy readers,
+  verified temporary writes, and atomic replacement. `scene.runtime` compiles
+  that exact revision into the renderer-neutral project-preview projection;
+- explicit Save, Play, Build, and Run paths fail closed when durable scene
+  evidence cannot be committed or accepted by the runtime projection;
 - `authoring.texture` is the first four-layer authoring vertical slice: stable
-  document meaning, semantic history, compiled artifact, and disposable
-  standalone/atlas/bindless/sparse residency plan;
+  document meaning, semantic history, deterministic owning RGBA8 mip artifacts,
+  integrity validation, and disposable standalone/atlas/bindless/sparse
+  residency planning. Planning is advisory, defaults to standalone-only, and
+  does not count atlas/bindless/sparse choices as runtime capability evidence.
+  Compressed and color-conversion lanes fail closed;
+- `render.texture.artifact` accepts project-owned logical identity and maps one
+  one-time sealed linear RGBA8 mip-0 artifact into the existing standalone
+  residency cache without exposing physical state to authoring. Current proof
+  uses a synthetic device contract, not production asset-registry admission;
+- `authoring.texture.artifact` now owns the always-built artifact schema, stable
+  hash protocol, and integrity validator. The authoring compiler re-exports and
+  consumes it, while a standalone Clang contract proves artifact consumption
+  with the authoring platform and texture editor disabled;
 - `package.registry` owns fail-closed extension evidence policy, not download,
   verification, or native activation;
 - EpochEngineExtensions now owns the manifest-backed capability technique
@@ -64,29 +99,96 @@ The working tree contains these current or in-progress foundations:
 - Engine Arcade now validates its canonical cabinet/screen scene nodes, sampled
   render-surface material binding, geometry storage, and built-in scene catalog;
 - EpochGui dependency work adds portable font, image, input, rounded-rectangle,
-  text, layout, docking, popup, panel, and floating-window primitives.
+  toggle, text, layout, docking, popup, panel, and floating-window primitives;
+  the editor adapter exposes rounded controls as an opt-in Settings policy;
+- Engine Arcade now uses one validated cabinet mesh with screen/control details
+  and camera-facing solid culling instead of overlapping preview boxes;
+- one shared Arcade attract-pattern contract now drives backend-owned sampled
+  scene surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software;
+  build-safe contracts prove routing and ownership while visual presentation
+  remains `Partial` pending the operator eye test. Every adapter uses the shared
+  front-facing cabinet plane rather than independently offsetting the screen to
+  the rear face;
+- `editor.application` is the shared application registry. Standard Editor,
+  Plant Lab, and GUI Editor own separate C++23 implementation units, canonical
+  scene seeds, surface masks, camera/dock defaults, pane policy, and
+  run/authoring permissions while reusing one editor shell and service spine;
+- Plant Lab owns dedicated vegetation authoring, while Forest Factory remains
+  available inside the standard editor for generated-plant browsing,
+  scene/object import, and placement;
+- `temporal.request` owns explicit global/sample time mapping, rates, anchors,
+  forward/reverse/frozen direction, bounded exact/nearest/bracket observation,
+  truth/reconstruction evidence, retained-history metrics, and
+  generation-checked subject retirement; `ecs.entityhistory` is its typed ECS
+  facade rather than a dead private history implementation;
+- `render.canvas2d` owns validated project settings, camera/viewport scaling,
+  generation-checked sprites, logical texture/material declarations,
+  deterministic quad batching, tile descriptors, immutable frame submissions,
+  final-compose plans, diagnostics, and build-safe contracts; editor snapshots
+  and the Canvas2D Project surface preserve and expose its core policy;
+- `render.texture.residency` owns bounded, generation-checked physical texture
+  records keyed by stable compiled artifact identity, with deterministic reuse,
+  priority/LRU eviction, pinning, upload/entry/byte budgets, stale-handle
+  rejection, forward-only backend epochs, plan-then-commit miss eviction,
+  transactional recreation, explicit transient-replacement limits, upload
+  accounting, metrics, and staged fake-device proof. Failed allocation, upload,
+  or readiness cannot retire an existing entry;
+- `render.device` validates explicit texture upload regions/row pitches, while
+  the OpenGL-family device and `opengl.textures` provide context-guarded native
+  allocation, base-mip upload, readiness, and destruction hooks without moving
+  backend handles into authoring or Canvas2D state;
+- `render.canvas2d.presentation` validates complete frame/raster identity,
+  derives artifact digests from actual pixel bytes, acquires disposable output
+  through the residency cache, and emits an explicit surface/image/native
+  packet; `opengl.canvas2d` implements the primary-context final compositor with
+  viewport-confined clears, top-left coordinate conversion, context-owned
+  texture validation, and scoped GL state restoration, but is not yet connected
+  to the protected live editor scene-content slot;
+- the launcher opens the three editor applications, selects a live context
+  before launch, and keeps update/exit actions direct;
+- the Windows parent host elects exactly one baked primary renderer surface. The
+  first context and successful promotions cannot undock, while secondary
+  diagnostic contexts and routed pane windows retain popout/redock.
 
 These facts are contracts, not blanket runtime claims. Current checkpoint proof
 includes MSVC Debug/Release editor builds and contracts, the managed Clang 22
 full-engine Release build, no-display Linux engine CTests, and 5/5 standalone
-EpochGui feature tests. Operator evidence now proves correct filled scene
-orientation in SDL3, SFML3, DirectX, and Software. Raylib and Vulkan orientation plus repeated Vulkan
-replacement remain `Partial` until the `v0.88.73` candidate receives eye proof.
+EpochGui feature tests. Operator evidence proves correct filled scene orientation
+in SDL3, SFML3, DirectX, and Software. Raylib/Vulkan orientation and repeated
+Vulkan replacement remain `Partial`. The seven Arcade sampled scene-surface
+implementations compile and pass build-safe contracts but remain `Partial` until
+the current source candidate receives visual and switch-cycle proof. Canvas2D
+has deterministic `T0-CPU` reference raster and image-hash proof on MSVC and
+Clang. Renderer-neutral residency, cache recreation, OpenGL-family hook routing,
+presentation packet staging, the compiled primary OpenGL compositor, and
+real-hook no-context refusal are build-proven on MSVC and managed Clang 22.
+MSVC contracts also prove deterministic temporal texture payload compilation,
+artifact-integrity rejection, project logical-identity mapping, cache reuse,
+backend recreation/reset, stale-handle rejection, and synchronous upload copy.
+A clean authoring-disabled managed Clang configuration independently proves the
+runtime artifact schema, hashing, and validator without authoring document/UI
+linkage. Live OpenGL allocation/drawing, editor scene-slot integration, operator-visible
+pixels, project-registry/Canvas2D authored-texture binding, and secondary GL share-group adapters remain `Partial`.
+
+## Completed Capability Checkpoint
+
+`v0.88.84` adds the bounded document/scene/persistence/runtime spine to the
+existing capability checkpoint. It does not claim the complete temporal world,
+native renderer presentation, or measured implementation cost.
 
 ## Immediate Implementation Order
 
-1. Integrate `capability.profile` once through the existing capability/budget
-   owners, project profiles, System Info, and settings. Do not add another tier
-   registry.
-2. Finish editor ray selection, Focus, default ground/light/spawn behavior, and
-   Run/Build persistence for a Tier-0 scene.
-3. Finish the texture document contract and connect logical texture artifacts
-   to bounded physical residency plans.
-4. Add the renderer-neutral Canvas2D compose, sprite material/batch, tile-layer,
-   deterministic sorting, sampling, alpha, scaling, and diagnostics contracts.
-5. Prove `T0-CPU` reference behavior and `T1-GL` presentation before broadening
-   portable or explicit backend claims.
-6. Extend settings and controls in the same pass as each capability so users can
+1. Route live editor create/delete/transform/property mutations through
+   `SceneDocument` semantic commands and reduce the transitional entity-vector
+   adapter to projection/UI responsibilities.
+2. Issue stable logical texture references from the project asset registry and
+   bind validated compiled base mips into Canvas2D resource sets through the
+   proven artifact/residency bridge.
+3. Route the primary OpenGL compositor through the existing protected editor
+   scene-content slot without changing GUI replay or present order.
+4. Compare live `T1-GL` output against the `T0-CPU` reference, then add explicit
+   SDL3/SFML3/Raylib3 share-group adapters before broadening backend claims.
+5. Extend settings and controls in the same pass as each capability so users can
    select project policy, inspect evidence, and tune budgets without stale UI.
 
 ## Backend Repair Within This Gate
@@ -168,14 +270,31 @@ The active gate is accepted when:
 6. Tier-0 scene tests prove selection, Focus, ground, light, spawn, save/reopen,
    and Run/Build use the same project-owned state.
 7. Canvas2D contracts prove deterministic ordering, scaling, blend/sampling,
-   offscreen compose, and cache recreation.
+   offscreen-compose planning, resource-binding validation, and bounded failure.
 8. Renderer docs keep Raylib/Vulkan orientation and Vulkan repeated replacement
    `Partial` until build and eye proof.
-9. No updater, release, generated cache, or unrelated operator file is staged.
+9. Engine Arcade geometry is nondegenerate, camera-facing culling removes rear
+   solids, and the sampled screen remains bound to the cabinet scene contract.
+10. Launcher actions open the standard editor, Plant Lab, and GUI Editor
+    with prelaunch context policy and without duplicate editor shells.
+11. The parent host maintains exactly one non-detachable primary surface while
+    secondary diagnostic/routed windows retain popout and redock.
+12. Each editor application validates one canonical scene/camera, rejects
+    cross-application surfaces, and enforces pane/run/entity policy through the
+    shared shell. The standard editor retains Forest Factory import/placement;
+    Plant Lab owns the dedicated plant-authoring scene.
+13. Temporal request tests prove forward/reverse/frozen mapping, exact,
+    nearest, bracket, boundary clamp, bounded retention, reconstruction flags,
+    cumulative metrics, and stale-handle rejection.
+14. Texture residency tests prove reuse, bounded eviction, pinning, stale-handle
+    rejection, upload refusal, backend reset, and deterministic recreation;
+    OpenGL hooks fail safely without an active native context.
+15. No updater, release, generated cache, or unrelated operator file is staged.
 
 ## Next Gate
 
-Add sprite/tilemap runtime artifacts, configurable input, deterministic 2D
-physics, physical audio, and the editor tools needed to author the acceptance
-project. The canonical schedule is `Changes/roadmap.md`; durable follow-up is
+Promote the sprite/tile descriptor foundation into executable runtime artifacts,
+then add configurable input, deterministic 2D physics, physical audio, and the
+editor tools needed to author the acceptance project. The canonical schedule is
+`Changes/roadmap.md`; durable follow-up is
 `Changes/mission_cache.md`.

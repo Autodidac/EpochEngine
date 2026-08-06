@@ -41,7 +41,6 @@ module;
 #include <filesystem>
 #include <functional>
 #include <fstream>
-#include <iomanip>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -120,7 +119,9 @@ module editor;
 import core.logger;
 import core.path;
 import package.registry;
-import scene.tier0;
+import render.arcade;
+import sceneserializer;
+import scenesnapshot;
 
 namespace
 {
@@ -961,86 +962,108 @@ namespace
     using epochengine::EditorScriptBuildResult;
     using epochengine::EditorScriptProfile;
 
-    constexpr std::array<EditorProjectProfile, 5> kProjectProfiles{{
+    constexpr std::array<EditorProjectProfile, 6> kProjectProfiles{{
         {
-            EditorProjectKind::EngineSelfIteration,
-            "sandbox",
-            "EpochEngine",
-            "Projects/Sandbox",
-            "Projects/Sandbox/scene.epoch",
-            "PersistentLevel",
-            "project:sandbox",
-            "Projects/Sandbox/project.epoch.json",
-            "engine-self-iteration-sandbox",
-            "engine_self_iteration_harness",
-            "AI and engine self-iteration lane for manipulating, building, and testing Epoch itself.",
-            "repo-local engine self-iteration child build for manipulation/testing only",
-            "Engine/include",
-            ""
+            .kind = EditorProjectKind::EngineSelfIteration,
+            .id = "sandbox",
+            .display_name = "EpochEngine",
+            .root_path = "Projects/Sandbox",
+            .scene_path = "Projects/Sandbox/scene.epoch",
+            .world_name = "PersistentLevel",
+            .runtime_scene_id = "project:sandbox",
+            .manifest_path = "Projects/Sandbox/project.epoch.json",
+            .template_family = "engine-self-iteration-sandbox",
+            .default_script = "engine_self_iteration_harness",
+            .description = "AI and engine self-iteration lane for manipulating, building, and testing Epoch itself.",
+            .engine_integration_mode = "repo-local engine self-iteration child build for manipulation/testing only",
+            .public_include_root = "Engine/include",
+            .demo_model_asset = "",
+            .renderer_capability = epochengine::editor_portable_capability_policy()
         },
         {
-            EditorProjectKind::Game,
-            "platformer",
-            "PlatformerDemo",
-            "Projects/PlatformerDemo",
-            "Projects/PlatformerDemo/worlds/platformer.epoch",
-            "Platformer_Main",
-            "project:platformer",
-            "Projects/PlatformerDemo/project.epoch.json",
-            "game-project",
-            "project_demo_bootstrap",
-            "Gameplay test profile for movement, camera tuning, and encounter scripting.",
-            "embedded-static-include or duplicated-source",
-            "Engine/include",
-            ""
+            .kind = EditorProjectKind::Game,
+            .id = "platformer",
+            .display_name = "PlatformerDemo",
+            .root_path = "Projects/PlatformerDemo",
+            .scene_path = "Projects/PlatformerDemo/worlds/platformer.epoch",
+            .world_name = "Platformer_Main",
+            .runtime_scene_id = "project:platformer",
+            .manifest_path = "Projects/PlatformerDemo/project.epoch.json",
+            .template_family = "game-project",
+            .default_script = "project_demo_bootstrap",
+            .description = "Gameplay test profile for movement, camera tuning, and encounter scripting.",
+            .engine_integration_mode = "embedded-static-include or duplicated-source",
+            .public_include_root = "Engine/include",
+            .demo_model_asset = "",
+            .renderer_capability = epochengine::editor_portable_capability_policy()
         },
         {
-            EditorProjectKind::Game,
-            "twodstudio",
-            "GUI Editor",
-            "Projects/TwoDStudio",
-            "Projects/TwoDStudio/worlds/twod.epoch",
-            "TwoD_Main",
-            "project:twodstudio",
-            "Projects/TwoDStudio/project.epoch.json",
-            "game-2d-project",
-            "project_demo_bootstrap",
-            "GUI-authoring and 2D game workspace for interfaces, side-scrollers, top-down prototypes, and the playable-2D priority track.",
-            "embedded-static-include or duplicated-source",
-            "Engine/include",
-            ""
+            .kind = EditorProjectKind::Game,
+            .id = "twodstudio",
+            .display_name = "GUI Editor",
+            .root_path = "Projects/TwoDStudio",
+            .scene_path = "Projects/TwoDStudio/worlds/twod.epoch",
+            .world_name = "TwoD_Main",
+            .runtime_scene_id = "project:twodstudio",
+            .manifest_path = "Projects/TwoDStudio/project.epoch.json",
+            .template_family = "game-2d-project",
+            .default_script = "project_demo_bootstrap",
+            .description = "GUI-authoring and 2D game workspace for interfaces, side-scrollers, top-down prototypes, and the playable-2D priority track.",
+            .engine_integration_mode = "embedded-static-include or duplicated-source",
+            .public_include_root = "Engine/include",
+            .demo_model_asset = "",
+            .renderer_capability = epochengine::editor_portable_capability_policy()
         },
         {
-            EditorProjectKind::Tool,
-            "projectlauncher",
-            "Project Hub",
-            "Projects/ProjectLauncher",
-            "Projects/ProjectLauncher/worlds/launcher.epoch",
-            "LauncherWorkspace",
-            "project:projectlauncher",
-            "Projects/ProjectLauncher/project.epoch.json",
-            "tool-project",
-            "editor_launcher",
-            "Editor-facing project hub profile for project selection, context setup, settings, and future engine automation. Compatibility id/path remain projectlauncher/Projects/ProjectLauncher until the generated-project migration is safe.",
-            "embedded-static-include or duplicated-source",
-            "Engine/include",
-            "Engine/assets/demo/minisponza/mini_sponza_v2.gltf"
+            .kind = EditorProjectKind::Tool,
+            .id = "plantlab",
+            .display_name = "Plant Lab",
+            .root_path = "Projects/PlantLab",
+            .scene_path = "Projects/PlantLab/worlds/plant_lab.epoch",
+            .world_name = "PlantLabWorkspace",
+            .runtime_scene_id = "editor:plant_lab",
+            .manifest_path = "Projects/PlantLab/project.epoch.json",
+            .template_family = "plant-authoring-project",
+            .default_script = "project_demo_bootstrap",
+            .description = "Dedicated procedural plant design, temporal growth, preview, and Forest Factory asset-output application.",
+            .engine_integration_mode = "embedded-static-include or duplicated-source",
+            .public_include_root = "Engine/include",
+            .demo_model_asset = "",
+            .renderer_capability = epochengine::editor_portable_capability_policy()
         },
         {
-            EditorProjectKind::Tool,
-            "softwarestudio",
-            "SoftwareStudio",
-            "Projects/SoftwareStudio",
-            "Projects/SoftwareStudio/worlds/tool.epoch",
-            "ToolWorkspace",
-            "project:softwarestudio",
-            "Projects/SoftwareStudio/project.epoch.json",
-            "tool-project",
-            "tool_bootstrap",
-            "Software and tool development profile for workflow automation, dashboards, and editor-facing utilities.",
-            "embedded-static-include or duplicated-source",
-            "Engine/include",
-            ""
+            .kind = EditorProjectKind::Tool,
+            .id = "projectlauncher",
+            .display_name = "Project Hub",
+            .root_path = "Projects/ProjectLauncher",
+            .scene_path = "Projects/ProjectLauncher/worlds/launcher.epoch",
+            .world_name = "LauncherWorkspace",
+            .runtime_scene_id = "project:projectlauncher",
+            .manifest_path = "Projects/ProjectLauncher/project.epoch.json",
+            .template_family = "tool-project",
+            .default_script = "editor_launcher",
+            .description = "Editor-facing project hub profile for project selection, context setup, settings, and future engine automation. Compatibility id/path remain projectlauncher/Projects/ProjectLauncher until the generated-project migration is safe.",
+            .engine_integration_mode = "embedded-static-include or duplicated-source",
+            .public_include_root = "Engine/include",
+            .demo_model_asset = "Engine/assets/demo/minisponza/mini_sponza_v2.gltf",
+            .renderer_capability = epochengine::editor_portable_capability_policy()
+        },
+        {
+            .kind = EditorProjectKind::Tool,
+            .id = "softwarestudio",
+            .display_name = "SoftwareStudio",
+            .root_path = "Projects/SoftwareStudio",
+            .scene_path = "Projects/SoftwareStudio/worlds/tool.epoch",
+            .world_name = "ToolWorkspace",
+            .runtime_scene_id = "project:softwarestudio",
+            .manifest_path = "Projects/SoftwareStudio/project.epoch.json",
+            .template_family = "tool-project",
+            .default_script = "tool_bootstrap",
+            .description = "Software and tool development profile for workflow automation, dashboards, and editor-facing utilities.",
+            .engine_integration_mode = "embedded-static-include or duplicated-source",
+            .public_include_root = "Engine/include",
+            .demo_model_asset = "",
+            .renderer_capability = epochengine::editor_portable_capability_policy()
         }
     }};
 
@@ -1117,24 +1140,26 @@ namespace
         std::string engine_integration_mode{};
         std::string public_include_root{};
         std::string demo_model_asset{};
+        epochengine::EditorProjectCapabilityPolicy renderer_capability{};
 
         [[nodiscard]] EditorProjectProfile view() const noexcept
         {
             return {
-                kind,
-                id,
-                display_name,
-                root_path,
-                scene_path,
-                world_name,
-                runtime_scene_id,
-                manifest_path,
-                template_family,
-                default_script,
-                description,
-                engine_integration_mode,
-                public_include_root,
-                demo_model_asset
+                .kind = kind,
+                .id = id,
+                .display_name = display_name,
+                .root_path = root_path,
+                .scene_path = scene_path,
+                .world_name = world_name,
+                .runtime_scene_id = runtime_scene_id,
+                .manifest_path = manifest_path,
+                .template_family = template_family,
+                .default_script = default_script,
+                .description = description,
+                .engine_integration_mode = engine_integration_mode,
+                .public_include_root = public_include_root,
+                .demo_model_asset = demo_model_asset,
+                .renderer_capability = renderer_capability
             };
         }
     };
@@ -1426,22 +1451,44 @@ namespace
             + "-" + joined.substr(20, 12);
     }
 
-    [[nodiscard]] static std::optional<std::string> extract_json_string_field(
+    enum class JsonStringFieldState : std::uint8_t
+    {
+        missing,
+        present,
+        malformed
+    };
+
+    struct JsonStringFieldResult
+    {
+        JsonStringFieldState state{ JsonStringFieldState::missing };
+        std::string value{};
+    };
+
+    [[nodiscard]] static JsonStringFieldResult inspect_json_string_field(
         std::string_view text,
         std::string_view key)
     {
         const std::string needle = "\"" + std::string(key) + "\"";
         const std::size_t keyPos = text.find(needle);
         if (keyPos == std::string_view::npos)
-            return std::nullopt;
+            return {};
+        if (text.find(needle, keyPos + needle.size()) != std::string_view::npos)
+            return { JsonStringFieldState::malformed, {} };
 
         const std::size_t colonPos = text.find(':', keyPos + needle.size());
         if (colonPos == std::string_view::npos)
-            return std::nullopt;
+            return { JsonStringFieldState::malformed, {} };
 
-        const std::size_t firstQuote = text.find('"', colonPos + 1);
-        if (firstQuote == std::string_view::npos)
-            return std::nullopt;
+        std::size_t firstQuote = colonPos + 1u;
+        while (firstQuote < text.size())
+        {
+            const char c = text[firstQuote];
+            if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
+                break;
+            ++firstQuote;
+        }
+        if (firstQuote >= text.size() || text[firstQuote] != '"')
+            return { JsonStringFieldState::malformed, {} };
 
         std::string value{};
         bool escaped = false;
@@ -1468,12 +1515,22 @@ namespace
             }
 
             if (c == '"')
-                return value;
+                return { JsonStringFieldState::present, std::move(value) };
 
             value.push_back(c);
         }
 
-        return std::nullopt;
+        return { JsonStringFieldState::malformed, {} };
+    }
+
+    [[nodiscard]] static std::optional<std::string> extract_json_string_field(
+        std::string_view text,
+        std::string_view key)
+    {
+        JsonStringFieldResult result = inspect_json_string_field(text, key);
+        if (result.state != JsonStringFieldState::present)
+            return std::nullopt;
+        return std::move(result.value);
     }
 
     [[nodiscard]] static std::string default_world_name(EditorProjectKind kind)
@@ -1555,6 +1612,18 @@ namespace
             .value_or("Engine/include");
         profile.demo_model_asset = extract_json_string_field(manifestText, "demo_model_asset")
             .value_or("");
+        const JsonStringFieldResult capabilityField =
+            inspect_json_string_field(manifestText, "capability_profile");
+        if (capabilityField.state == JsonStringFieldState::malformed)
+            return std::nullopt;
+        if (capabilityField.state == JsonStringFieldState::present)
+        {
+            const auto capabilityPolicy =
+                epochengine::editor_project_capability_policy(capabilityField.value);
+            if (!capabilityPolicy)
+                return std::nullopt;
+            profile.renderer_capability = *capabilityPolicy;
+        }
         profile.description =
             "Generated "
             + std::string(profile.kind == EditorProjectKind::EngineSelfIteration
@@ -1658,83 +1727,19 @@ namespace
         };
     }
 
-    [[nodiscard]] std::vector<EditorSceneSeedEntity> twod_seed_entities()
+    [[nodiscard]] EditorSceneSeedEntity arcade_scene_seed(
+        const epochengine::render_arcade::ArcadeSceneNodeContract& node)
     {
-        return {
-            { "TwoDLevel", "Level", "World" },
-            { "Camera2D", "Camera", "Gameplay", { 0.0f, 7.5f, 0.0f }, { -90.0f, 0.0f, 0.0f } },
-            { "KeyLight", "Light", "Lighting", { 0.0f, 6.0f, 2.0f }, { -45.0f, 0.0f, 0.0f } },
-            { "TileLayer", "TileMap", "Gameplay", { 0.0f, 0.0f, 0.0f } },
-            { "PlayerSpawn", "Spawn", "Gameplay", { -4.0f, 0.0f, 0.0f } },
-            { "ParallaxRoot", "LayerRoot", "Gameplay", { 0.0f, 0.0f, -2.0f } }
+        return EditorSceneSeedEntity{
+            .name = std::string(node.name),
+            .type = std::string(node.type),
+            .category = "EngineArcade",
+            .position = node.position,
+            .rotation = { 0.0f, 0.0f, 0.0f },
+            .scale = node.scale,
+            .visible = true,
+            .editor_only = false
         };
-    }
-
-    [[nodiscard]] std::vector<EditorSceneSeedEntity> project_launcher_seed_entities()
-    {
-        const auto built = epochengine::scene_tier0::make_default_scene();
-        if (!built)
-        {
-            return {
-                { "Ground", "Ground", "World", { 0.0f, -0.25f, 0.0f }, {}, { 16.0f, 0.5f, 16.0f } },
-                { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
-                { "PlayerSpawn", "Spawn", "Gameplay", { -2.5f, 0.05f, 2.5f } },
-                { "PrimaryCamera", "Camera", "Editor", { 7.0f, 5.5f, 8.0f }, { -24.0f, -139.0f, 0.0f } },
-                { "Sun", "Light", "Lighting", { 0.0f, 6.0f, 0.0f }, { -50.0f, -35.0f, 0.0f } }
-            };
-        }
-
-        std::vector<EditorSceneSeedEntity> entities{};
-        entities.reserve(built.scene.objects.size() + 1u);
-        for (const auto& object : built.scene.objects)
-        {
-            EditorSceneSeedEntity entity{};
-            entity.name = object.canonicalName;
-            entity.position = {
-                object.transform.position.x,
-                object.transform.position.y,
-                object.transform.position.z
-            };
-            entity.rotation = {
-                object.transform.rotationDegrees.x,
-                object.transform.rotationDegrees.y,
-                object.transform.rotationDegrees.z
-            };
-            entity.scale = {
-                object.transform.scale.x,
-                object.transform.scale.y,
-                object.transform.scale.z
-            };
-
-            switch (object.kind)
-            {
-            case epochengine::scene_tier0::ObjectKind::camera:
-                entity.type = "Camera";
-                entity.category = "Editor";
-                break;
-            case epochengine::scene_tier0::ObjectKind::ground:
-                entity.type = "Ground";
-                entity.category = "World";
-                entity.position[1] -= 0.25f;
-                entity.scale = {
-                    built.scene.groundTerrain.descriptor.sampleSpacing,
-                    0.5f,
-                    built.scene.groundTerrain.descriptor.sampleSpacing
-                };
-                break;
-            case epochengine::scene_tier0::ObjectKind::directional_light:
-                entity.type = "Light";
-                entity.category = "Lighting";
-                break;
-            case epochengine::scene_tier0::ObjectKind::spawn_point:
-                entity.type = "Spawn";
-                entity.category = "Gameplay";
-                break;
-            }
-            entities.push_back(std::move(entity));
-        }
-        entities.push_back({ "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } });
-        return entities;
     }
 
     [[nodiscard]] std::vector<EditorSceneSeedEntity> engine_arcade_seed_entities()
@@ -1744,11 +1749,8 @@ namespace
             { "GroundPlatform", "Ground", "World", { 0.0f, -0.25f, 0.0f }, {}, { 10.0f, 0.5f, 10.0f } },
             { "OverviewCamera", "Camera", "Editor", { 0.0f, 4.2f, 7.2f }, { -28.0f, 0.0f, 0.0f } },
             { "KeyLight", "Light", "Lighting", { 0.0f, 5.2f, -1.2f }, { -42.0f, 0.0f, 0.0f } },
-            { "EngineArcadeCabinetBase", "StaticMesh", "EngineArcade", { 0.0f, 0.22f, 0.36f }, { 0.0f, 0.0f, 0.0f }, { 1.70f, 0.44f, 0.82f } },
-            { "EngineArcadeCabinetBody", "StaticMesh", "EngineArcade", { 0.0f, 0.92f, 0.24f }, { 0.0f, 0.0f, 0.0f }, { 1.38f, 1.30f, 0.54f } },
-            { "EngineArcadeControlDeck", "StaticMesh", "EngineArcade", { 0.0f, 1.18f, -0.30f }, { -8.0f, 0.0f, 0.0f }, { 1.56f, 0.20f, 0.70f } },
-            { "EngineArcadeScreen", "Canvas2D", "EngineArcade", { 0.0f, 1.78f, -0.42f }, { 0.0f, 0.0f, 0.0f }, { 2.22f, 1.22f, 0.06f } },
-            { "EngineArcadeMarquee", "Canvas2D", "EngineArcade", { 0.0f, 2.46f, -0.34f }, { 0.0f, 0.0f, 0.0f }, { 2.10f, 0.42f, 0.05f } },
+            arcade_scene_seed(epochengine::render_arcade::kCabinetBodySceneNode),
+            arcade_scene_seed(epochengine::render_arcade::kScreenSceneNode),
             { "PlayerStart", "Spawn", "Gameplay", { 0.0f, 0.0f, -2.4f } }
         };
     }
@@ -2016,56 +2018,60 @@ namespace
         std::string script_id{};
         std::string description{};
         std::string demo_model_asset{};
+        std::string capability_profile{ "portable" };
         bool include_engine_arcade_package{ false };
         bool overwrite_existing{ true };
     };
-
-    static void append_scene_entity_rows(std::ostringstream& out, std::span<const EditorSceneSeedEntity> entities)
-    {
-        for (const auto& entity : entities)
-        {
-            out << "entity "
-                << std::quoted(std::string(entity.name)) << ' '
-                << std::quoted(std::string(entity.type)) << ' '
-                << std::quoted(std::string(entity.category)) << ' '
-                << "pos " << entity.position[0] << ' ' << entity.position[1] << ' ' << entity.position[2] << ' '
-                << "rot " << entity.rotation[0] << ' ' << entity.rotation[1] << ' ' << entity.rotation[2] << ' '
-                << "scale " << entity.scale[0] << ' ' << entity.scale[1] << ' ' << entity.scale[2] << ' '
-                << "visible " << (entity.visible ? 1 : 0) << ' '
-                << "editor_only " << (entity.editor_only ? 1 : 0)
-                << '\n';
-        }
-    }
 
     [[nodiscard]] static std::string make_project_world_scene_text(
         const ProjectShellSpec& spec,
         std::string_view kind_text,
         bool include_engine_arcade_package)
     {
-        std::ostringstream out{};
-        out << std::setprecision(6);
-        out << "scene " << std::quoted(spec.world_name) << '\n';
-        out << "project " << std::quoted(spec.project_id) << '\n';
-        out << "{\n";
-        out << "    kind " << std::quoted(std::string(kind_text)) << '\n';
-        out << "    support_tier \"baseline\"\n";
-        if (include_engine_arcade_package)
-            out << "    engine_asset_package \"engine_arcade\"\n";
-        out << "}\n";
-
         std::vector<EditorSceneSeedEntity> entities{};
         if (include_engine_arcade_package)
             entities = engine_arcade_seed_entities();
-        else if (spec.project_id == "projectlauncher")
-            entities = project_launcher_seed_entities();
+        else if (const auto* application = epochengine::editor_application_for_project(spec.project_id))
+        {
+            entities = epochengine::make_editor_application_scene(application->kind).entities;
+        }
         else if (spec.kind == EditorProjectKind::Tool)
             entities = software_seed_entities();
         else
             entities = sandbox_seed_entities();
 
-        out << "epoch_editor_entities 1\n";
-        append_scene_entity_rows(out, std::span<const EditorSceneSeedEntity>{ entities.data(), entities.size() });
-        return out.str();
+        scene::SceneSnapshot snapshot{};
+        snapshot.scene_id = "project:" + spec.project_id;
+        snapshot.project_id = spec.project_id;
+        snapshot.world_name = spec.world_name;
+        snapshot.document_kind = std::string{kind_text};
+        snapshot.support_tier = "baseline";
+        snapshot.revision = 1u;
+        if (include_engine_arcade_package)
+            snapshot.packages.emplace_back("engine_arcade");
+        snapshot.objects.reserve(entities.size());
+
+        for (const EditorSceneSeedEntity& entity : entities)
+        {
+            scene::SceneObjectSnapshot object{};
+            object.id = scene::stable_scene_object_id(snapshot.scene_id, entity.name);
+            object.name = entity.name;
+            object.type = entity.type;
+            object.category = entity.category;
+            object.position = entity.position;
+            object.rotation = entity.rotation;
+            object.scale = entity.scale;
+            object.visible = entity.visible;
+            object.editor_only = entity.editor_only;
+            if (snapshot.primary_camera == scene::kInvalidSceneObjectId && object.type == "Camera")
+                snapshot.primary_camera = object.id;
+            if (snapshot.primary_spawn == scene::kInvalidSceneObjectId && object.type == "Spawn")
+                snapshot.primary_spawn = object.id;
+            snapshot.objects.emplace_back(std::move(object));
+        }
+
+        scene::normalize_scene_document(snapshot);
+        return scene::serialize_snapshot_text(snapshot);
     }
 
     [[nodiscard]] static constexpr std::string_view engine_arcade_scene_ids() noexcept
@@ -2403,6 +2409,7 @@ namespace
             + packageManifestLine
             + "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
             "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
+            "  \"capability_profile\": \"" + json_escape(spec.capability_profile) + "\",\n"
             "  \"engine_module_root\": \"Engine/modules\",\n"
             "  \"engine_source_root\": \"Engine/src\",\n"
             "  \"engine_script_root\": \"Engine/src/scripts\",\n"
@@ -2425,6 +2432,7 @@ namespace
             + readmePackageLine
             + "- Engine integration: " + integrationMode + "\n"
             "- Public include root: " + publicIncludeRoot + "\n"
+            "- Capability profile: " + spec.capability_profile + "\n"
             "- Engine module root: Engine/modules\n"
             "- Engine source root: Engine/src\n"
             "- Engine script root: Engine/src/scripts\n"
@@ -2890,12 +2898,10 @@ namespace epochengine
 
     std::vector<EditorSceneSeedEntity> editor_seed_entities_for_project(std::string_view project_id)
     {
+        if (const auto* application = editor_application_for_project(project_id))
+            return make_editor_application_scene(application->kind).entities;
         if (project_id == "platformer")
             return platformer_seed_entities();
-        if (project_id == "twodstudio")
-            return twod_seed_entities();
-        if (project_id == "projectlauncher")
-            return project_launcher_seed_entities();
         if (project_id == "softwarestudio")
             return software_seed_entities();
         if (const auto* profile = editor_find_project_profile(project_id))
@@ -3001,6 +3007,42 @@ namespace epochengine
 #endif
     }
 
+    bool editor_project_manifest_capability_contract() noexcept
+    {
+        const JsonStringFieldResult missing =
+            inspect_json_string_field(R"({"id":"legacy"})", "capability_profile");
+        const JsonStringFieldResult valid =
+            inspect_json_string_field(
+                R"({"capability_profile":"portable"})",
+                "capability_profile");
+        const JsonStringFieldResult unknown =
+            inspect_json_string_field(
+                R"({"capability_profile":"future-tier"})",
+                "capability_profile");
+        const JsonStringFieldResult duplicate =
+            inspect_json_string_field(
+                R"({"capability_profile":"portable","capability_profile":"explicit"})",
+                "capability_profile");
+        const JsonStringFieldResult wrongType =
+            inspect_json_string_field(
+                R"({"capability_profile":42})",
+                "capability_profile");
+        const JsonStringFieldResult unterminated =
+            inspect_json_string_field(
+                R"({"capability_profile":"portable})",
+                "capability_profile");
+
+        return missing.state == JsonStringFieldState::missing
+            && valid.state == JsonStringFieldState::present
+            && valid.value == "portable"
+            && editor_project_capability_policy(valid.value).has_value()
+            && unknown.state == JsonStringFieldState::present
+            && !editor_project_capability_policy(unknown.value).has_value()
+            && duplicate.state == JsonStringFieldState::malformed
+            && wrongType.state == JsonStringFieldState::malformed
+            && unterminated.state == JsonStringFieldState::malformed;
+    }
+
     EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)
     {
         const std::string projectName = next_generated_project_name(kind);
@@ -3067,6 +3109,37 @@ namespace epochengine
             const auto manifestTemplate = extract_json_string_field(manifestText, "template_family");
             const auto manifestDisplayName = extract_json_string_field(manifestText, "display_name");
             const auto manifestWindowsProject = extract_json_string_field(manifestText, "windows_project");
+            const JsonStringFieldResult capabilityField =
+                inspect_json_string_field(manifestText, "capability_profile");
+            if (capabilityField.state == JsonStringFieldState::malformed)
+            {
+                return EditorProjectCreationResult{
+                    .succeeded = false,
+                    .project_id = std::string(profile->id),
+                    .root_path = root.generic_string(),
+                    .manifest_path = manifest.generic_string(),
+                    .summary = "Project manifest capability_profile must be one unique JSON string.",
+                    .engine_integration_mode = std::string(profile->engine_integration_mode),
+                    .public_include_root = std::string(profile->public_include_root)
+                };
+            }
+            if (capabilityField.state == JsonStringFieldState::present)
+            {
+                const auto parsedPolicy =
+                    epochengine::editor_project_capability_policy(capabilityField.value);
+                if (!parsedPolicy || parsedPolicy->id != profile->renderer_capability.id)
+                {
+                    return EditorProjectCreationResult{
+                        .succeeded = false,
+                        .project_id = std::string(profile->id),
+                        .root_path = root.generic_string(),
+                        .manifest_path = manifest.generic_string(),
+                        .summary = "Project manifest capability_profile is unknown or does not match the selected project profile.",
+                        .engine_integration_mode = std::string(profile->engine_integration_mode),
+                        .public_include_root = std::string(profile->public_include_root)
+                    };
+                }
+            }
             const std::string expectedKind = profile->id == "sandbox"
                 ? "engine-self-iteration-sandbox"
                 : std::string(profile->kind == EditorProjectKind::Tool ? "tool" : "game");
@@ -3097,6 +3170,7 @@ namespace epochengine
                     .script_id = std::string(profile->default_script),
                     .description = std::string(profile->description),
                     .demo_model_asset = std::string(profile->demo_model_asset),
+                    .capability_profile = std::string(profile->renderer_capability.id),
                     .include_engine_arcade_package = profile->kind == EditorProjectKind::Game && profile->id != "sandbox",
                     .overwrite_existing = true
                 });
@@ -3143,6 +3217,7 @@ namespace epochengine
             .script_id = std::string(profile->default_script),
             .description = std::string(profile->description),
             .demo_model_asset = std::string(profile->demo_model_asset),
+            .capability_profile = std::string(profile->renderer_capability.id),
             .include_engine_arcade_package = profile->kind == EditorProjectKind::Game && profile->id != "sandbox",
             .overwrite_existing = false
         });

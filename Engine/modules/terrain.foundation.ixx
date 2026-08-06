@@ -108,6 +108,10 @@ export namespace epochengine::terrain
         std::uint64_t maximumApproximateBytes{4ull * 1024ull * 1024ull};
         float maximumWorldSpan{16384.0f};
         float maximumAbsoluteHeight{8192.0f};
+
+        friend constexpr bool operator==(
+            const TerrainLimits&,
+            const TerrainLimits&) noexcept = default;
     };
 
     enum class TerrainStatus : std::uint8_t

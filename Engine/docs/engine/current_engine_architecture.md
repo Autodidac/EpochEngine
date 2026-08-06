@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux
-runtime baseline is `v0.88.69`; active development source is `v0.88.73`.
+runtime baseline is `v0.88.69`; active development source is `v0.88.81`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -19,10 +19,11 @@ ship.
 - **Renderer contexts**: DirectX/D3D11, OpenGL, Vulkan, SDL, SFML, Raylib, and
   Software have engine-owned context paths. Backend feature depth still follows
   `renderer_feature_matrix.md`; context availability does not imply feature parity.
-- **Exclusive editor switching**: normal editor operation owns one live backend,
-  captures session state, retires the old renderer/native resources, creates one
-  replacement in the same dock host, and restores state. Multicontext is an
-  explicit diagnostic mode rather than the normal editor model.
+- **Primary editor surface**: the Windows parent host elects exactly one baked
+  renderer surface. The first context owns it; launcher preselection or a live
+  context switch transfers it only after state restoration, while missing
+  targets use serialized replacement in the same slot. The primary cannot
+  undock; secondary diagnostic contexts and routed panes retain popout/redock.
 - **Vulkan retirement ownership**: the application registry lends shared
   lifetime to callbacks and atomically transfers the final owner to retirement.
   Device idle precedes GUI, pipeline, swapchain, and device destruction; every
@@ -32,14 +33,68 @@ ship.
   control. Renderer retirement remains owner-thread and teardown ordered.
 - **Reusable GUI boundary**: public primitives live under `Engine/include/gui`,
   implementation under `Engine/src/epochgui`, and module/build metadata under
-  `Engine/dep/EpochGui`. Editor surfaces compose the library through the engine
-  adapter; engine/render contexts do not own GUI feature logic.
-- **Project/editor split**: launcher, editor, project generation, package review,
-  scene preview, build output, and OS AI evidence are distinct workflows. Generated
-  child builds have non-GUI validation paths and serialized build ownership.
+  `Engine/dep/EpochGui`. EpochGui now owns rounded style and toggle layout; the
+  engine adapter renders it and Editor Settings keeps rounded controls opt-in.
+  Engine/render contexts do not own GUI feature logic.
+- **Application/editor split**: the launcher directly opens standard Editor,
+  Plant Lab, or GUI Editor after launch-context selection.
+  `editor.application` centralizes shared profile/scene validation while
+  `editor.standard.cpp`, `editor.plant_lab.cpp`, and `editor.gui.cpp` own
+  separate canonical scenes and policy. The shared shell enforces each
+  application's surfaces, camera/dock defaults, panes, floating routes,
+  authoring, and Run/Build availability. Project generation, package review,
+  scene preview, build output, and OS AI evidence remain distinct workflows.
+- **Plant ownership split**: Plant Lab is the dedicated plant-authoring
+  application. Forest Factory remains in the standard editor as the
+  vegetation-import and placement workflow that activates and consumes Plant
+  Lab/package outputs in project scenes.
 - **Renderer resource spine**: shared resource handles, graph binding, sampled
-  render-target descriptors, capability truth, and backend-native allocation
-  are growing from OpenGL-family proof into explicit backend contracts.
+  render-target descriptors, capability truth, validated base-mip texture
+  uploads, and backend-native allocation are growing from OpenGL-family proof
+  into explicit backend contracts. `render.texture.residency` owns bounded,
+  generation-checked logical-artifact reuse, priority/LRU eviction, pinning,
+  upload budgets, backend epochs, recreation, and metrics without making
+  physical handles canonical state.
+- **Project capability admission**: `capability.profile` adapts existing
+  render-device evidence once. `platform.budgets` owns recommendations; runtime
+  cost stays unknown until measured. Project profiles and generated manifests
+  own headless/portable/explicit policy with explicit experimental and software
+  fallback rules. Project, System Info, Settings, and status diagnostics report
+  active-editor and selected project-run admission separately. Missing legacy
+  manifest policy defaults to portable without regeneration; invalid policy
+  fails closed.
+- **Temporal texture compilation boundary**: `authoring.texture` compiles sparse
+  layer documents into deterministic owning RGBA8 mip artifacts and validates
+  identity, dimensions, per-mip content, aggregate bytes, and payload digest.
+  `authoring.texture.artifact` owns the always-built artifact schema and
+  validator; `render.texture.artifact` receives stable project logical identity
+  and maps a one-time sealed linear RGBA8 mip 0 into the shared standalone
+  residency cache. Runtime artifact reading is build-proven with authoring
+  disabled. Project-registry authentication and capability-derived admission remain
+  required. sRGB-native storage, compression, whole mip-chain upload, atlas,
+  bindless, sparse, and streaming execution remain fail-closed or planned.
+- **Canvas2D planning spine**: `render.canvas2d` validates project policy,
+  pixel-aware camera/viewport mapping, stable sprite identity, logical texture
+  materials, deterministic batching, tile descriptors, immutable submissions,
+  offscreen targets, final composition, and bounded diagnostics.
+  `render.canvas2d.cpu` provides the deterministic `T0-CPU` reference path with
+  RGBA8 resources, clip bindings, fixed-point coverage, nearest/linear sampling,
+  alpha modes, presentation composition, metrics, hashes, and staged contract
+  diagnostics. OpenGL now supplies context-guarded native texture allocate,
+  upload, readiness, and destruction hooks. `render.canvas2d.presentation`
+  verifies complete raster/frame identity, full byte-derived content identity,
+  residency acquisition, explicit image semantics, and native surface bounds.
+  `opengl.canvas2d` provides a compiled primary-context final compositor with
+  context-owned texture validation, viewport-confined clear/draw work,
+  top-left-to-GL coordinate conversion, and scoped GL state restoration.
+  Build-safe family, staged-presentation, and no-context refusal contracts pass;
+  protected editor scene-slot integration, operator-visible pixels, secondary
+  GL share-group adapters, authoring, and the built-project loop remain active
+  gates.
+- **Arcade scene-surface proof**: one shared attract-pattern contract feeds
+  backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
+  DirectX, and Software. Build contracts prove ownership/routing; visual and
+  repeated-switch evidence remains `Partial` until operator validation.
 - **Path and cache ownership**: runtime assets and disposable cache resolve from
   executable-local roots. Updates, packages, models, atlases, and logs retain
   separate cache/storage boundaries.
@@ -70,7 +125,13 @@ requires:
 - signed branch packages, quarantined foreign content, and server-owned authority
 - a side-effect gateway for actions that timeline rewind cannot reverse
 
-The first implementation path is deliberately smaller:
+The first implementation path is deliberately smaller. `temporal.request`
+already provides explicit global/sample mapping, rates, anchors,
+forward/reverse/frozen direction, generation-checked subjects, bounded
+exact/nearest/bracket observation, reconstruction evidence, and metrics. It is
+a request/retention foundation, not the immutable event/page/branch world.
+
+The larger implementation path remains:
 
 `TimePoint -> event journal -> transaction -> page checkpoint -> branch overlay
 -> reversible transform -> arbitrary-time observation -> sparse motion ->
@@ -88,7 +149,7 @@ storage growth are proven.
   contracts, not the immutable event/page/branch temporal database.
 - Renderer context coverage is broader than renderer feature parity. Vulkan and
   DirectX remain partial feature paths, and Software parity is a continuing goal.
-- Professional docking, text controls, decoded asset previews, project browser
+- Professional docking guide zones, text controls, decoded asset previews, project browser
   operations, and independently routed GUI windows remain incomplete.
 - Package installation, active downloaded content, servers/listeners, and native
   extensions remain explicit human-gated capabilities.
@@ -97,17 +158,19 @@ storage growth are proven.
 
 ## Current Priorities
 
-1. Finish the active sampled render-to-texture/resource-truth gate without
-   regressing the accepted context, GUI composition, or release baseline.
-2. Begin the temporal production slice at stable time/identity primitives,
-   canonical immutable events, atomic transactions, and exact replay tests.
-3. Connect immutable pages and branch overlays to real project-owned scene
-   loading, saving, reversible edits, and arbitrary-time observation.
-4. Let Video/timeline GUI consume temporal state only after the data spine owns
-   branch, checkpoint, direction, scrub, undo, and redo semantics.
-5. Continue EpochGui, renderer capability truth, Software reference parity,
-   package boundaries, generated-project parity, and Android bring-up as scoped
-   source missions with explicit validation.
+1. Complete the playable baseline 2D path: Canvas2D compose, sprite/runtime
+   artifacts, tilemap authoring, input, deterministic 2D physics, physical audio,
+   save/reopen, Play/Stop, Run, and Build.
+2. Keep capability selection, settings, diagnostics, and project requirements
+   aligned with proven T0-CPU and T1-GL behavior before broadening claims.
+3. Connect project asset-registry logical references and Canvas2D bindings to
+   the proven temporal-artifact/standalone-cache bridge, then extend that same
+   boundary through sRGB, compression, mip-chain, atlas, bindless, sparse, and
+   streaming policies only as capability evidence permits.
+4. Continue EpochGui controls and desktop docking without making floating hosts
+   mandatory for game, mobile, console, or headless products.
+5. Preserve the sealed runtime/updater baseline while Debug, Release, Clang, and
+   build-safe contracts prove each source checkpoint.
 
 ## Canonical References
 

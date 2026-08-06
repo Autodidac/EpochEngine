@@ -262,13 +262,13 @@ namespace epochengine::core::cli
     export inline bool frame_limit_explicit = false;
     export inline double frame_limit_fps = 0.0;
     export inline std::uint32_t capture_warmup_frames = 12;
-    export inline std::string scene_name{};
-    export inline std::string smoke_context_switch_backend{};
-    export inline std::filesystem::path exe_path;
+    export std::string scene_name{};
+    export std::string smoke_context_switch_backend{};
+    export std::filesystem::path exe_path;
 
     export inline RuntimePath runtime_path = RuntimePath::Epoch;
     export inline WindowMode window_mode = WindowMode::Auto;
-    export inline bool parented_mode = detail::default_parented_mode();
+    export bool parented_mode = detail::default_parented_mode();
 
     export inline int raylib_window_count = 1;
     export inline int sdl_window_count = 1;

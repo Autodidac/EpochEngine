@@ -176,6 +176,8 @@ namespace epochengine::vulkancontext
 
         std::uint32_t indexCount = 0;
         std::uint32_t solidIndexCount = 0;
+        std::uint32_t arcadeScreenIndexOffset = 0;
+        std::uint32_t arcadeScreenIndexCount = 0;
         std::uint32_t lineIndexCount = 0;
 
     private:
@@ -209,6 +211,7 @@ namespace epochengine::vulkancontext
         vk::UniquePipelineLayout pipelineLayout;
         vk::UniquePipeline graphicsPipeline;
         vk::UniquePipeline solidGraphicsPipeline;
+        vk::UniquePipeline arcadeScreenPipeline;
 
         std::vector<vk::UniqueFramebuffer> framebuffers;
 
@@ -239,6 +242,17 @@ namespace epochengine::vulkancontext
         vk::UniqueDeviceMemory textureImageMemory;
         vk::UniqueImageView textureImageView;
         vk::UniqueSampler textureSampler;
+
+        vk::Extent2D arcadeRenderExtent{};
+        vk::UniqueRenderPass arcadeRenderPass;
+        vk::UniqueImage arcadeRenderImage;
+        vk::UniqueDeviceMemory arcadeRenderImageMemory;
+        vk::UniqueImageView arcadeRenderImageView;
+        vk::UniqueSampler arcadeRenderSampler;
+        vk::UniqueFramebuffer arcadeRenderFramebuffer;
+        vk::UniqueDescriptorPool arcadeDescriptorPool;
+        std::vector<vk::UniqueDescriptorSet> arcadeDescriptorSets;
+        std::uint64_t arcadePreviewFrame = 0;
 
         bool validationLayersEnabled = false;
 
@@ -298,6 +312,10 @@ namespace epochengine::vulkancontext
             std::uint32_t width, std::uint32_t height);
         void createTextureImageView();
         void createTextureSampler();
+        void createArcadeRenderTarget();
+        void destroyArcadeRenderTarget() noexcept;
+        void createArcadeDescriptorSets();
+        void recordArcadeRenderTexturePass(vk::CommandBuffer commandBuffer);
 
         std::uint32_t findMemoryType(std::uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
@@ -400,6 +418,7 @@ namespace epochengine::vulkancontext
     export std::vector<Application::Vertex> preview_vertices_for(const epochengine::core::Context* ctx);
     export std::vector<std::uint16_t>       preview_indices_for(const epochengine::core::Context* ctx);
     export std::uint32_t                    preview_solid_index_count_for(const epochengine::core::Context* ctx);
+    export std::uint32_t                    preview_arcade_screen_index_count_for(const epochengine::core::Context* ctx);
 
     export Application& bind_vulkan_app(const std::shared_ptr<epochengine::core::Context>& ctx);
     export std::shared_ptr<Application> try_get_vulkan_app(const epochengine::core::Context* ctx) noexcept;

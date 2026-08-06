@@ -37,6 +37,8 @@ import atlas.texture;
 import context.commandqueue;
 import core.logger;
 import image.loader;
+import package.registry;
+import render.arcade;
 import render.preview_grid;
 import sfml.state;
 import sfml.textures;
@@ -44,6 +46,7 @@ import sfml.textures;
 namespace
 {
     std::unique_ptr<sf::RenderWindow> s_window{};
+    epochengine::sfml_compat::ArcadePreviewSurface s_arcadePreviewSurface{};
     int s_width = 0;
     int s_height = 0;
     bool s_logged_activate_failure = false;
@@ -118,6 +121,113 @@ namespace
         out.y = static_cast<float>(viewport.y)
             + ((-ndcY * 0.5f) + 0.5f) * static_cast<float>(viewport.height);
         return true;
+    }
+
+    [[nodiscard]] constexpr bool sfml_arcade_sampled_preview_contract() noexcept
+    {
+        constexpr auto route = epochengine::previewgrid::object_preview_geometry_route(
+            epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen);
+        return route.sampled_surface
+            && !route.solid_scene
+            && !route.marker_wire
+            && epochengine::render_arcade::kScreenSceneNode.sampled_render_surface
+            && !epochengine::render_arcade::kScreenSceneNode.diagnostic_overlay
+            && epochengine::package_registry::engine_arcade_render_texture_width() > 0u
+            && epochengine::package_registry::engine_arcade_render_texture_height() > 0u;
+    }
+
+    static_assert(sfml_arcade_sampled_preview_contract());
+
+    [[nodiscard]] bool update_arcade_preview_surface() noexcept
+    {
+        if (!s_window)
+            return false;
+
+        const auto descriptor = epochengine::render_arcade::make_screen_render_texture_desc();
+        if (!s_arcadePreviewSurface.ensure(*s_window, descriptor.width, descriptor.height)
+            || !s_arcadePreviewSurface.begin_update(*s_window))
+        {
+            return false;
+        }
+
+        epochengine::render_arcade::emit_arcade_attract_pattern(
+            static_cast<int>(descriptor.width),
+            static_cast<int>(descriptor.height),
+            s_arcadePreviewSurface.frame_number(),
+            [](const epochengine::render_arcade::ArcadePreviewRect& rect)
+            {
+                s_arcadePreviewSurface.fill(
+                    rect.x,
+                    rect.y,
+                    rect.width,
+                    rect.height,
+                    rect.color);
+            });
+        return s_arcadePreviewSurface.end_update(*s_window);
+    }
+
+    void render_engine_arcade_sampled_surface_preview(
+        const std::shared_ptr<epochengine::core::Context>& ctx,
+        const epochengine::previewgrid::Mat4& mvp,
+        const epochengine::core::RenderViewport& viewport)
+    {
+        if (!ctx || !s_window)
+            return;
+
+        const auto markers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
+        if (markers.empty() || !update_arcade_preview_surface())
+            return;
+
+        const sf::Texture* const texture = s_arcadePreviewSurface.texture();
+        if (!texture)
+            return;
+
+        for (const auto& marker : markers)
+        {
+            if (marker.primitive != epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen)
+                continue;
+
+            const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
+            const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
+            const float z =
+                epochengine::render_arcade::screen_sample_plane_z(
+                    marker.position.z, marker.scale.z);
+            const epochengine::previewgrid::Vec3 world[4]{
+                { marker.position.x - halfX, marker.position.y - halfY, z },
+                { marker.position.x + halfX, marker.position.y - halfY, z },
+                { marker.position.x + halfX, marker.position.y + halfY, z },
+                { marker.position.x - halfX, marker.position.y + halfY, z }
+            };
+            sf::Vector2f projected[4]{};
+            bool visible = true;
+            for (std::size_t i = 0; i < 4u; ++i)
+            {
+                if (!project_preview_vertex(mvp, world[i], viewport, projected[i]))
+                {
+                    visible = false;
+                    break;
+                }
+                projected[i].x -= static_cast<float>(viewport.x);
+                projected[i].y -= static_cast<float>(viewport.y);
+            }
+            if (!visible)
+                continue;
+
+            const float width = static_cast<float>(s_arcadePreviewSurface.width());
+            const float height = static_cast<float>(s_arcadePreviewSurface.height());
+            const sf::Color white(255u, 255u, 255u, 255u);
+            sf::VertexArray surface(sf::PrimitiveType::Triangles);
+            surface.append(sf::Vertex(projected[0], white, sf::Vector2f(0.0f, height)));
+            surface.append(sf::Vertex(projected[1], white, sf::Vector2f(width, height)));
+            surface.append(sf::Vertex(projected[2], white, sf::Vector2f(width, 0.0f)));
+            surface.append(sf::Vertex(projected[0], white, sf::Vector2f(0.0f, height)));
+            surface.append(sf::Vertex(projected[2], white, sf::Vector2f(width, 0.0f)));
+            surface.append(sf::Vertex(projected[3], white, sf::Vector2f(0.0f, 0.0f)));
+
+            sf::RenderStates sampledStates{};
+            sampledStates.texture = texture;
+            s_window->draw(surface, sampledStates);
+        }
     }
 
     void render_scene_preview(const std::shared_ptr<epochengine::core::Context>& ctx)
@@ -244,6 +354,8 @@ namespace
         }
         if (solids.getVertexCount() > 0)
             s_window->draw(solids, renderStates);
+
+        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
 
         const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
@@ -585,6 +697,10 @@ namespace
     void sfml_cleanup_adapter()
     {
         epochengine::atlasmanager::unregister_backend_uploader(epochengine::core::ContextType::SFML);
+        if (s_window && s_window->isOpen())
+            s_arcadePreviewSurface.reset(s_window.get());
+        else
+            s_arcadePreviewSurface.reset();
         epochengine::sfmlcontext::clear_gpu_atlases();
 
         auto& state = epochengine::sfmlcontext::state::s_sfmlstate;

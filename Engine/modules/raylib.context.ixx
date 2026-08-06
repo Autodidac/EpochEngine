@@ -40,6 +40,7 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #if !defined(_WIN32)
 #include <thread>
@@ -80,6 +81,8 @@ import context.multiplexer;
 import engine.diagnostics;
 import atlas.manager;
 import image.writer;
+import package.registry;
+import render.arcade;
 import render.preview_grid;
 
 import raylib.state;
@@ -411,8 +414,162 @@ namespace epochengine::raylibcontext
             return true;
         }
 
+        struct RaylibArcadePreviewTarget final
+        {
+            epochengine::raylib_api::RenderTexture2D target{};
+            int width = 0;
+            int height = 0;
+            std::uint64_t frame = 0u;
+        };
+
+        [[nodiscard]] inline RaylibArcadePreviewTarget& arcade_preview_target() noexcept
+        {
+            static RaylibArcadePreviewTarget target{};
+            return target;
+        }
+
+        [[nodiscard]] constexpr bool raylib_arcade_sampled_preview_contract() noexcept
+        {
+            constexpr auto route = epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen);
+            return route.sampled_surface
+                && !route.solid_scene
+                && !route.marker_wire
+                && epochengine::render_arcade::kScreenSceneNode.sampled_render_surface
+                && !epochengine::render_arcade::kScreenSceneNode.diagnostic_overlay
+                && epochengine::package_registry::engine_arcade_render_texture_width() > 0u
+                && epochengine::package_registry::engine_arcade_render_texture_height() > 0u;
+        }
+
+        static_assert(raylib_arcade_sampled_preview_contract());
+
+        inline void destroy_arcade_preview_target() noexcept
+        {
+            auto& preview = arcade_preview_target();
+            if (preview.target.id != 0u)
+                epochengine::raylib_api::unload_render_texture(preview.target);
+            preview = {};
+        }
+
+        [[nodiscard]] inline bool ensure_arcade_preview_target() noexcept
+        {
+            auto& preview = arcade_preview_target();
+            const auto descriptor = epochengine::render_arcade::make_screen_render_texture_desc();
+            const int width = static_cast<int>(descriptor.width);
+            const int height = static_cast<int>(descriptor.height);
+            if (width <= 0 || height <= 0)
+                return false;
+
+            if (preview.target.id != 0u
+                && preview.target.texture.id != 0u
+                && preview.width == width
+                && preview.height == height)
+            {
+                return true;
+            }
+
+            destroy_arcade_preview_target();
+            preview.target = epochengine::raylib_api::load_render_texture(width, height);
+            if (preview.target.id == 0u || preview.target.texture.id == 0u)
+            {
+                preview = {};
+                return false;
+            }
+
+            preview.width = width;
+            preview.height = height;
+            return true;
+        }
+
+        [[nodiscard]] inline bool update_arcade_preview_target() noexcept
+        {
+            if (!ensure_arcade_preview_target())
+                return false;
+
+            auto& preview = arcade_preview_target();
+            epochengine::raylib_api::begin_texture_mode(preview.target);
+            epochengine::raylib_api::clear_background(
+                epochengine::raylib_api::Color{ 4u, 6u, 11u, 255u });
+            epochengine::render_arcade::emit_arcade_attract_pattern(
+                preview.width,
+                preview.height,
+                preview.frame++,
+                [](const epochengine::render_arcade::ArcadePreviewRect& rect)
+                {
+                    const auto to_channel = [](float value) noexcept -> std::uint8_t
+                    {
+                        return static_cast<std::uint8_t>(
+                            (std::clamp)(value, 0.0f, 1.0f) * 255.0f + 0.5f);
+                    };
+                    epochengine::raylib_api::draw_rectangle_rec(
+                        epochengine::raylib_api::Rectangle{
+                            static_cast<float>(rect.x),
+                            static_cast<float>(rect.y),
+                            static_cast<float>(rect.width),
+                            static_cast<float>(rect.height)
+                        },
+                        epochengine::raylib_api::Color{
+                            to_channel(rect.color[0]),
+                            to_channel(rect.color[1]),
+                            to_channel(rect.color[2]),
+                            to_channel(rect.color[3])
+                        });
+                });
+            epochengine::raylib_api::end_texture_mode();
+            return true;
+        }
+
+        inline void render_engine_arcade_sampled_surface_preview(
+            const std::vector<epochengine::previewgrid::ObjectMarker>& markers,
+            const epochengine::previewgrid::Mat4& mvp,
+            const core::RenderViewport& viewport) noexcept
+        {
+            const auto& preview = arcade_preview_target();
+            if (preview.target.texture.id == 0u)
+                return;
+
+            for (const auto& marker : markers)
+            {
+                if (marker.primitive != epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen)
+                    continue;
+
+                const float halfX = (std::max)(std::abs(marker.scale.x) * 0.5f, 0.25f);
+                const float halfY = (std::max)(std::abs(marker.scale.y) * 0.5f, 0.18f);
+                const float z =
+                    epochengine::render_arcade::screen_sample_plane_z(
+                        marker.position.z, marker.scale.z);
+                const epochengine::previewgrid::Vec3 world[4]{
+                    { marker.position.x - halfX, marker.position.y - halfY, z },
+                    { marker.position.x + halfX, marker.position.y - halfY, z },
+                    { marker.position.x + halfX, marker.position.y + halfY, z },
+                    { marker.position.x - halfX, marker.position.y + halfY, z }
+                };
+                epochengine::raylib_api::Vector2 projected[4]{};
+                bool visible = true;
+                for (std::size_t i = 0; i < 4u; ++i)
+                {
+                    if (!project_preview_vertex(mvp, world[i], viewport, projected[i]))
+                    {
+                        visible = false;
+                        break;
+                    }
+                }
+                if (!visible)
+                    continue;
+
+                epochengine::raylib_api::draw_texture_quad(
+                    preview.target.texture,
+                    projected[3],
+                    projected[0],
+                    projected[1],
+                    projected[2],
+                    epochengine::raylib_api::white);
+            }
+        }
+
         inline void raylib_stop_rendering_backend(epochengine::raylibstate::RaylibState& st)
         {
+            destroy_arcade_preview_target();
             if (!st.renderingActive)
                 return;
 
@@ -457,6 +614,11 @@ namespace epochengine::raylibcontext
             const auto viewport = ctx->scene_viewport();
             if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
                 return;
+
+            const auto sampledSurfaceMarkers =
+                epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
+            const bool arcadePreviewReady =
+                !sampledSurfaceMarkers.empty() && update_arcade_preview_target();
 
             const auto clearColor = epochengine::previewgrid::kClearColor;
             epochengine::raylib_api::begin_scissor_mode(
@@ -505,6 +667,16 @@ namespace epochengine::raylibcontext
                 epochengine::raylib_api::draw_loaded_models();
                 epochengine::raylib_api::end_mode_3d();
                 epochengine::raylib_api::set_viewport(0, 0, renderWidth, renderHeight);
+
+                const float aspect = viewport.height > 0
+                    ? (viewport.width / static_cast<float>(viewport.height))
+                    : 1.0f;
+                const auto mvp = epochengine::previewgrid::multiply(
+                    epochengine::previewgrid::projection_for(ctx.get(), aspect, camera),
+                    epochengine::previewgrid::look_at(camera.eye, camera.target, camera.up));
+                if (arcadePreviewReady)
+                    render_engine_arcade_sampled_surface_preview(
+                        sampledSurfaceMarkers, mvp, viewport);
                 epochengine::raylib_api::end_scissor_mode();
                 return;
             }
@@ -569,6 +741,10 @@ namespace epochengine::raylibcontext
                 epochengine::raylib_api::draw_triangle(a, b, c, color);
                 epochengine::raylib_api::draw_triangle(c, b, a, color);
             }
+
+            if (arcadePreviewReady)
+                render_engine_arcade_sampled_surface_preview(
+                    sampledSurfaceMarkers, mvp, viewport);
 
             const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
             const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());

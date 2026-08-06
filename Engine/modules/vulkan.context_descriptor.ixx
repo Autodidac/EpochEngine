@@ -153,6 +153,76 @@ namespace epochengine::vulkancontext
         }
     }
 
+    void Application::createArcadeDescriptorSets()
+    {
+        arcadeDescriptorSets.clear();
+        arcadeDescriptorPool.reset();
+
+        const std::uint32_t count = static_cast<std::uint32_t>(swapChainImages.size());
+        if (count == 0u
+            || !arcadeRenderImageView
+            || !arcadeRenderSampler
+            || uniformBuffers.size() != count)
+        {
+            throw std::runtime_error(
+                "[ Vulkan ] - Engine Arcade descriptors require a complete sampled target and scene uniforms.");
+        }
+
+        std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+        poolSizes[0].descriptorCount = count;
+        poolSizes[1].type = vk::DescriptorType::eCombinedImageSampler;
+        poolSizes[1].descriptorCount = count;
+
+        vk::DescriptorPoolCreateInfo poolInfo{};
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+        poolInfo.maxSets = count;
+        poolInfo.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+
+        auto [poolResult, pool] = device->createDescriptorPoolUnique(poolInfo);
+        if (poolResult != vk::Result::eSuccess)
+            throw std::runtime_error("[ Vulkan ] - Failed to create Engine Arcade descriptor pool.");
+        arcadeDescriptorPool = std::move(pool);
+
+        std::vector<vk::DescriptorSetLayout> layouts(count, *descriptorSetLayout);
+        vk::DescriptorSetAllocateInfo allocationInfo{};
+        allocationInfo.descriptorPool = *arcadeDescriptorPool;
+        allocationInfo.descriptorSetCount = count;
+        allocationInfo.pSetLayouts = layouts.data();
+
+        auto [setResult, sets] = device->allocateDescriptorSetsUnique(allocationInfo);
+        if (setResult != vk::Result::eSuccess)
+            throw std::runtime_error("[ Vulkan ] - Failed to allocate Engine Arcade descriptor sets.");
+        arcadeDescriptorSets = std::move(sets);
+
+        for (std::uint32_t index = 0u; index < count; ++index)
+        {
+            vk::DescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = *uniformBuffers[index];
+            bufferInfo.offset = 0u;
+            bufferInfo.range = sizeof(UniformBufferObject);
+
+            vk::DescriptorImageInfo imageInfo{};
+            imageInfo.sampler = *arcadeRenderSampler;
+            imageInfo.imageView = *arcadeRenderImageView;
+            imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+            std::array<vk::WriteDescriptorSet, 2> writes{};
+            writes[0].dstSet = *arcadeDescriptorSets[index];
+            writes[0].dstBinding = 0u;
+            writes[0].descriptorCount = 1u;
+            writes[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+            writes[0].pBufferInfo = &bufferInfo;
+            writes[1].dstSet = *arcadeDescriptorSets[index];
+            writes[1].dstBinding = 1u;
+            writes[1].descriptorCount = 1u;
+            writes[1].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writes[1].pImageInfo = &imageInfo;
+            device->updateDescriptorSets(writes, {});
+        }
+    }
+
     void Application::createUniformBuffers()
     {
         const std::size_t n = swapChainImages.size();

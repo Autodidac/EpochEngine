@@ -13,7 +13,10 @@ Its focused subordinate contracts are:
 - `engine/temporal_engine_architecture.md` - authoritative world time, events,
   branches, observations, persistence, and replay;
 - `engine/temporal_authoring_platform.md` - documents, semantic history,
-  compiled artifacts, physical caches, and authoring services.
+  compiled artifacts, physical caches, and authoring services;
+- `engine/canvas2d_architecture.md` - renderer-neutral 2D camera, viewport,
+  sprite/material batching, tile layers, composition, persistence, metrics,
+  and baseline `T0-CPU`/`T1-GL` delivery contract.
 
 Do not treat another engine document as a competing roadmap. Historical passes,
 release chronology, abandoned approaches, and durable mission memory live under

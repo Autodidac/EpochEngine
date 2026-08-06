@@ -34,6 +34,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -41,10 +42,14 @@ module;
 
 export module editor;
 
+import capability.profile;
 import context.type;
 import core.context;
 import engine.gui;
 import render.preview_grid;
+import scenesnapshot;
+
+export import editor.application;
 
 namespace epochengine
 {
@@ -63,13 +68,6 @@ namespace epochengine
         Game = 0,
         Tool,
         EngineSelfIteration
-    };
-
-    export enum class EditorLaunchWorkspace : unsigned char
-    {
-        Standard = 0,
-        ForestFactory,
-        GuiEditor
     };
 
     export enum class EditorCommand : unsigned char
@@ -107,6 +105,65 @@ namespace epochengine
             && !replacement_in_progress;
     }
 
+    export struct EditorProjectCapabilityPolicy
+    {
+        std::string_view id{ "portable" };
+        capability::Requirement renderer_requirement{
+            capability::portable_rendering_requirement() };
+        bool allow_experimental{ true };
+        bool allow_software_fallback{ true };
+    };
+
+    export [[nodiscard]] constexpr EditorProjectCapabilityPolicy
+        editor_portable_capability_policy() noexcept
+    {
+        return EditorProjectCapabilityPolicy{};
+    }
+
+    export [[nodiscard]] constexpr std::optional<EditorProjectCapabilityPolicy>
+        editor_project_capability_policy(std::string_view id) noexcept
+    {
+        if (id == "headless")
+        {
+            return EditorProjectCapabilityPolicy{
+                .id = "headless",
+                .renderer_requirement = capability::headless_rendering_requirement(),
+                .allow_experimental = false,
+                .allow_software_fallback = true
+            };
+        }
+        if (id == "portable")
+            return editor_portable_capability_policy();
+        if (id == "portable-strict")
+        {
+            return EditorProjectCapabilityPolicy{
+                .id = "portable-strict",
+                .renderer_requirement = capability::portable_rendering_requirement(),
+                .allow_experimental = false,
+                .allow_software_fallback = false
+            };
+        }
+        if (id == "explicit")
+        {
+            return EditorProjectCapabilityPolicy{
+                .id = "explicit",
+                .renderer_requirement = capability::explicit_rendering_requirement(),
+                .allow_experimental = true,
+                .allow_software_fallback = false
+            };
+        }
+        if (id == "explicit-strict")
+        {
+            return EditorProjectCapabilityPolicy{
+                .id = "explicit-strict",
+                .renderer_requirement = capability::explicit_rendering_requirement(),
+                .allow_experimental = false,
+                .allow_software_fallback = false
+            };
+        }
+        return std::nullopt;
+    }
+
     export struct EditorProjectProfile
     {
         EditorProjectKind kind{ EditorProjectKind::Game };
@@ -123,6 +180,7 @@ namespace epochengine
         std::string_view engine_integration_mode{};
         std::string_view public_include_root{};
         std::string_view demo_model_asset{};
+        EditorProjectCapabilityPolicy renderer_capability{};
     };
 
     export struct EditorScriptProfile
@@ -179,18 +237,6 @@ namespace epochengine
         std::string summary{};
     };
 
-    export struct EditorSceneSeedEntity
-    {
-        std::string_view name{};
-        std::string_view type{};
-        std::string_view category{};
-        std::array<float, 3> position{ 0.0f, 0.0f, 0.0f };
-        std::array<float, 3> rotation{ 0.0f, 0.0f, 0.0f };
-        std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
-        bool visible{ true };
-        bool editor_only{ false };
-    };
-
     export struct EditorTimeSnapshot
     {
         std::uint64_t frame_index = 0;
@@ -217,6 +263,7 @@ namespace epochengine
 
     export struct EditorContextSnapshotEntity
     {
+        std::uint64_t scene_object_id{ 0u };
         std::string name{};
         std::string type{};
         std::string category{};
@@ -225,6 +272,19 @@ namespace epochengine
         std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
         bool visible{ true };
         bool editor_only{ false };
+    };
+
+    export struct EditorCanvas2DProjectSnapshot
+    {
+        std::uint32_t logical_width{ 1280 };
+        std::uint32_t logical_height{ 720 };
+        float pixels_per_world_unit{ 100.0f };
+        std::uint8_t scale_policy{ 0 };
+        std::uint8_t sampling_policy{ 0 };
+        std::uint32_t maximum_sprites_per_batch{ 2048 };
+        std::uint32_t maximum_batches{ 256 };
+        std::uint32_t tile_chunk_extent{ 32 };
+        bool pixel_snapping{ true };
     };
 
     export struct EditorContextSnapshot
@@ -250,6 +310,7 @@ namespace epochengine
         std::string project_run_backend{ "opengl" };
         double project_run_frame_limit_fps{ 60.0 };
         std::uint8_t project_camera_mode{ 0 };
+        EditorCanvas2DProjectSnapshot canvas2d_project{};
         std::uint8_t input_profile_preset{ 0 };
         gui::ThemePreference theme_preference{ gui::ThemePreference::FollowSystemDark };
         bool rounded_rectangles{ false };
@@ -258,6 +319,8 @@ namespace epochengine
         std::string selected_asset_path{};
         std::vector<EditorContextSnapshotEntity> entities{};
         std::size_t selected_entity{ 0 };
+        std::uint64_t selected_entity_id{ 0u };
+        scene::SceneSnapshot scene_document{};
         std::vector<std::string> log_lines{};
         bool helpers_visible{ true };
         EditorTimeSnapshot time_snapshot{};
@@ -276,6 +339,7 @@ namespace epochengine
         bool show_ai_chat{ true };
         bool project_notes_visible{ false };
         std::uint8_t ai_workspace_domain{ 0 };
+        EditorApplicationKind application_kind{ EditorApplicationKind::Standard };
         float systems_render_zoom{ 1.15f };
         float systems_task_zoom{ 1.15f };
         int systems_render_pan{ 0 };
@@ -286,10 +350,9 @@ namespace epochengine
     export EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
     export EditorFrameResult editor_run_context_panel(const std::shared_ptr<core::Context>& ctx, std::string_view route_id);
     export void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
-    export void editor_load_workspace(
+    export void editor_load_application(
         const std::shared_ptr<core::Context>& ctx,
-        std::string_view project_id,
-        EditorLaunchWorkspace workspace);
+        EditorApplicationKind application);
     export void editor_suppress_startup_update_check(const std::shared_ptr<core::Context>& ctx);
     export void editor_reset_transient_ui(const core::Context* ctx);
     export bool editor_run_script(const core::Context* ctx, std::string_view script_name);
@@ -301,6 +364,7 @@ namespace epochengine
     export [[nodiscard]] std::string_view editor_runtime_scene_for_project(std::string_view project_id) noexcept;
     export [[nodiscard]] std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
+    export [[nodiscard]] bool editor_project_manifest_capability_contract() noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
     export [[nodiscard]] EditorProjectBuildResult editor_build_project(std::string_view project_root);

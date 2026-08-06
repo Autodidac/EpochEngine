@@ -33,6 +33,8 @@ module;
 #include "../include/engine.config.hpp"
 #include "../include/epoch.config.hpp"
 #include "../src/epoch.common.hpp"
+#include <algorithm>
+#include <array>
 #include <string>
 #include <vector>
 
@@ -110,6 +112,55 @@ export namespace epochengine
         [[nodiscard]] bool ready() const noexcept
         {
             return allocate != nullptr && destroy != nullptr && begin_pass != nullptr && end_pass != nullptr;
+        }
+    };
+
+    struct OpenGLFamilyTextureRecord
+    {
+        TextureDesc desc{};
+        u32 texture_object = 0;
+        const void* native_context_key = nullptr;
+        bool native_allocation_ready = false;
+        bool active = false;
+
+        [[nodiscard]] bool native_work_order_ready() const noexcept
+        {
+            return active && native_allocation_ready && texture_object != 0u;
+        }
+    };
+
+    struct OpenGLFamilyNativeTextureAllocation
+    {
+        u32 texture_object = 0;
+        bool ready = false;
+        const void* context_key = nullptr;
+    };
+
+    struct OpenGLFamilyNativeTextureHooks
+    {
+        using AllocateFn = OpenGLFamilyNativeTextureAllocation (*)(
+            void* user,
+            RendererBackendKind backend,
+            const TextureDesc& desc,
+            u32 slot);
+        using UploadFn = bool (*)(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyTextureRecord& record,
+            const TextureUploadDesc& upload);
+        using DestroyFn = void (*)(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyTextureRecord& record);
+
+        void* user = nullptr;
+        AllocateFn allocate = nullptr;
+        UploadFn upload = nullptr;
+        DestroyFn destroy = nullptr;
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return allocate != nullptr && upload != nullptr && destroy != nullptr;
         }
     };
 
@@ -260,6 +311,25 @@ export namespace epochengine
             m_context.set_native_render_texture_hooks(m_backend, &m_native_hooks);
         }
 
+        ~OpenGLFamilyRenderDevice() override
+        {
+            for (u32 index = 0; index < static_cast<u32>(m_textures.size()); ++index)
+            {
+                if (m_textures[index].active)
+                    destroy(TextureHandle{index + 1u});
+            }
+            for (u32 index = 0; index < static_cast<u32>(m_render_textures.size()); ++index)
+            {
+                if (!m_render_textures[index].active)
+                    continue;
+                const u32 value = index + 1u;
+                destroy(RenderTextureAssetHandles{
+                    TextureHandle{value},
+                    SamplerHandle{value},
+                    RenderTargetHandle{value} });
+            }
+        }
+
         std::string backend_name() const override
         {
             switch (m_backend)
@@ -300,7 +370,76 @@ export namespace epochengine
         }
 
         BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
-        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+        TextureHandle create_texture(const TextureDesc& desc) override
+        {
+            if (desc.width == 0u || desc.height == 0u || desc.mip_levels == 0u
+                || desc.mip_levels > 32u
+                || texture_format_bytes_per_texel(desc.format) == 0u
+                || desc.depth_stencil)
+            {
+                return {};
+            }
+
+            const u32 slot = allocate_texture_slot();
+            OpenGLFamilyTextureRecord& record = m_textures[slot];
+            record = {};
+            record.desc = desc;
+            record.active = true;
+            record.desc.debug_name = nullptr;
+
+            if (m_native_texture_hooks.allocate)
+            {
+                const OpenGLFamilyNativeTextureAllocation allocation =
+                    m_native_texture_hooks.allocate(
+                        m_native_texture_hooks.user,
+                        m_backend,
+                        desc,
+                        slot + 1u);
+                if (allocation.ready && allocation.texture_object != 0u)
+                {
+                    record.texture_object = allocation.texture_object;
+                    record.native_context_key = allocation.context_key;
+                    record.native_allocation_ready = true;
+                }
+            }
+
+            return TextureHandle{slot + 1u};
+        }
+
+        bool upload_texture(
+            TextureHandle handle,
+            const TextureUploadDesc& upload) override
+        {
+            OpenGLFamilyTextureRecord* const record = resolve_texture_mutable(handle);
+            if (!record || !record->native_work_order_ready()
+                || !m_native_texture_hooks.upload || !epochengine::valid(upload)
+                || upload.format != record->desc.format
+                || upload.mip_level >= record->desc.mip_levels)
+            {
+                return false;
+            }
+
+            const u32 mipWidth = (std::max)(1u, record->desc.width >> upload.mip_level);
+            const u32 mipHeight = (std::max)(1u, record->desc.height >> upload.mip_level);
+            if (upload.width > mipWidth || upload.height > mipHeight
+                || upload.x > mipWidth - upload.width
+                || upload.y > mipHeight - upload.height)
+            {
+                return false;
+            }
+
+            return m_native_texture_hooks.upload(
+                m_native_texture_hooks.user,
+                m_backend,
+                *record,
+                upload);
+        }
+
+        bool texture_ready(TextureHandle handle) const noexcept override
+        {
+            const OpenGLFamilyTextureRecord* const record = resolve_texture(handle);
+            return record && record->native_work_order_ready();
+        }
         SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
         ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
         PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
@@ -341,6 +480,7 @@ export namespace epochengine
             const RenderTextureAssetPlan plan = make_render_texture_asset_plan(desc);
             record.desc = desc;
             record.backend_requirements = plan.backend_requirements;
+            record.desc.debug_name = nullptr;
             record.width = desc.width == 0u ? 1u : desc.width;
             record.height = desc.height == 0u ? 1u : desc.height;
             record.color_object = slot + 1u;
@@ -377,7 +517,18 @@ export namespace epochengine
         }
 
         void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
-        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+        void destroy(TextureHandle handle) noexcept override
+        {
+            if (!handle || handle.value > m_textures.size())
+                return;
+
+            OpenGLFamilyTextureRecord& record = m_textures[handle.value - 1u];
+            if (!record.active)
+                return;
+            if (record.native_allocation_ready && m_native_texture_hooks.destroy)
+                m_native_texture_hooks.destroy(m_native_texture_hooks.user, m_backend, record);
+            record = {};
+        }
         void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
         void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
         void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
@@ -439,6 +590,25 @@ export namespace epochengine
         [[nodiscard]] std::size_t model_count() const noexcept { return m_models.size(); }
         [[nodiscard]] RendererBackendKind backend() const noexcept { return m_backend; }
         [[nodiscard]] const OpenGLFamilyCommandContext& graphics_context() const noexcept { return m_context; }
+        void set_native_texture_hooks(OpenGLFamilyNativeTextureHooks hooks) noexcept
+        {
+            m_native_texture_hooks = hooks;
+        }
+
+        [[nodiscard]] bool native_texture_hooks_ready() const noexcept
+        {
+            return m_native_texture_hooks.ready();
+        }
+
+        [[nodiscard]] const OpenGLFamilyTextureRecord* resolve_texture(
+            TextureHandle handle) const noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            const OpenGLFamilyTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active ? &record : nullptr;
+        }
+
         void set_native_render_texture_hooks(OpenGLFamilyNativeRenderTextureHooks hooks) noexcept
         {
             m_native_hooks = hooks;
@@ -497,6 +667,27 @@ export namespace epochengine
                 records[index] = {};
         }
 
+        [[nodiscard]] OpenGLFamilyTextureRecord* resolve_texture_mutable(
+            TextureHandle handle) noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            OpenGLFamilyTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active ? &record : nullptr;
+        }
+
+        [[nodiscard]] u32 allocate_texture_slot()
+        {
+            for (u32 index = 0; index < static_cast<u32>(m_textures.size()); ++index)
+            {
+                if (!m_textures[index].active)
+                    return index;
+            }
+
+            m_textures.push_back({});
+            return static_cast<u32>(m_textures.size() - 1u);
+        }
+
         [[nodiscard]] u32 allocate_render_texture_slot()
         {
             for (u32 i = 0; i < static_cast<u32>(m_render_textures.size()); ++i)
@@ -547,13 +738,14 @@ export namespace epochengine
 
         RendererBackendKind m_backend = RendererBackendKind::opengl;
         OpenGLFamilyNativeRenderTextureHooks m_native_hooks{};
+        OpenGLFamilyNativeTextureHooks m_native_texture_hooks{};
         OpenGLFamilyCommandContext m_context{};
         std::vector<OpenGLFamilyRenderTextureRecord> m_render_textures{};
         std::vector<OpenGLFamilyBindingSetRecord> m_binding_sets{};
         std::vector<OpenGLFamilyMeshRecord> m_meshes{};
         std::vector<OpenGLFamilyModelRecord> m_models{};
         std::vector<SlotRecord> m_buffers{};
-        std::vector<SlotRecord> m_textures{};
+        std::vector<OpenGLFamilyTextureRecord> m_textures{};
         std::vector<SlotRecord> m_samplers{};
         std::vector<SlotRecord> m_shaders{};
         std::vector<SlotRecord> m_pipelines{};
@@ -561,4 +753,181 @@ export namespace epochengine
         std::vector<SlotRecord> m_render_targets{};
         std::vector<SlotRecord> m_command_lists{};
     };
+
+    enum class OpenGLFamilyTextureContractFailure : u8
+    {
+        none,
+        hook_readiness,
+        logical_without_hooks,
+        native_allocation,
+        upload,
+        bounds_rejection,
+        destruction
+    };
+
+    [[nodiscard]] constexpr const char* opengl_family_texture_contract_failure_name(
+        OpenGLFamilyTextureContractFailure failure) noexcept
+    {
+        switch (failure)
+        {
+        case OpenGLFamilyTextureContractFailure::none: return "pass";
+        case OpenGLFamilyTextureContractFailure::hook_readiness: return "hook_readiness";
+        case OpenGLFamilyTextureContractFailure::logical_without_hooks: return "logical_without_hooks";
+        case OpenGLFamilyTextureContractFailure::native_allocation: return "native_allocation";
+        case OpenGLFamilyTextureContractFailure::upload: return "upload";
+        case OpenGLFamilyTextureContractFailure::bounds_rejection: return "bounds_rejection";
+        case OpenGLFamilyTextureContractFailure::destruction: return "destruction";
+        }
+        return "unknown";
+    }
+
+    namespace detail
+    {
+        struct OpenGLFamilyTextureContractState final
+        {
+            RendererBackendKind backend{RendererBackendKind::null};
+            u32 allocation_count{};
+            u32 upload_count{};
+            u32 destroy_count{};
+            u32 width{};
+            u32 height{};
+            u64 uploaded_bytes{};
+        };
+
+        [[nodiscard]] inline OpenGLFamilyNativeTextureAllocation
+            allocate_contract_texture(
+                void* user,
+                RendererBackendKind backend,
+                const TextureDesc& desc,
+                u32 slot)
+        {
+            auto* const state = static_cast<OpenGLFamilyTextureContractState*>(user);
+            if (!state || desc.width == 0u || desc.height == 0u
+                || texture_format_bytes_per_texel(desc.format) == 0u)
+            {
+                return {};
+            }
+            state->backend = backend;
+            state->width = desc.width;
+            state->height = desc.height;
+            ++state->allocation_count;
+            return OpenGLFamilyNativeTextureAllocation{5000u + slot, true};
+        }
+
+        [[nodiscard]] inline bool upload_contract_texture(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyTextureRecord& record,
+            const TextureUploadDesc& upload)
+        {
+            auto* const state = static_cast<OpenGLFamilyTextureContractState*>(user);
+            if (!state || backend != state->backend
+                || !record.native_work_order_ready()
+                || !epochengine::valid(upload))
+            {
+                return false;
+            }
+            ++state->upload_count;
+            state->uploaded_bytes += minimum_texture_upload_bytes(upload);
+            return true;
+        }
+
+        inline void destroy_contract_texture(
+            void* user,
+            RendererBackendKind backend,
+            const OpenGLFamilyTextureRecord& record)
+        {
+            auto* const state = static_cast<OpenGLFamilyTextureContractState*>(user);
+            if (state && backend == state->backend && record.native_work_order_ready())
+                ++state->destroy_count;
+        }
+    }
+
+    [[nodiscard]] OpenGLFamilyTextureContractFailure
+        opengl_family_texture_runtime_contract_failure()
+    {
+        constexpr std::array<RendererBackendKind, 4> backends{{
+            RendererBackendKind::opengl,
+            RendererBackendKind::sdl3,
+            RendererBackendKind::sfml3,
+            RendererBackendKind::raylib3
+        }};
+        std::array<u8, 16> pixels{};
+        TextureDesc desc{};
+        desc.width = 2;
+        desc.height = 2;
+        desc.mip_levels = 1;
+        desc.format = TextureFormat::rgba8_unorm;
+        desc.sampled = true;
+        desc.debug_name = "OpenGLFamily.TextureContract";
+
+        TextureUploadDesc upload{};
+        upload.width = 2;
+        upload.height = 2;
+        upload.row_pitch_bytes = 8;
+        upload.format = TextureFormat::rgba8_unorm;
+        upload.data = pixels.data();
+        upload.size_bytes = pixels.size();
+
+        for (RendererBackendKind backend : backends)
+        {
+            OpenGLFamilyRenderDevice logicalDevice{backend};
+            const TextureHandle logical = logicalDevice.create_texture(desc);
+            if (!logical || logicalDevice.texture_ready(logical)
+                || logicalDevice.upload_texture(logical, upload))
+            {
+                return OpenGLFamilyTextureContractFailure::logical_without_hooks;
+            }
+            logicalDevice.destroy(logical);
+            if (logicalDevice.resolve_texture(logical))
+                return OpenGLFamilyTextureContractFailure::logical_without_hooks;
+
+            detail::OpenGLFamilyTextureContractState state{};
+            OpenGLFamilyRenderDevice nativeDevice{backend};
+            nativeDevice.set_native_texture_hooks(OpenGLFamilyNativeTextureHooks{
+                .user = &state,
+                .allocate = detail::allocate_contract_texture,
+                .upload = detail::upload_contract_texture,
+                .destroy = detail::destroy_contract_texture
+            });
+            if (!nativeDevice.native_texture_hooks_ready())
+                return OpenGLFamilyTextureContractFailure::hook_readiness;
+
+            const TextureHandle texture = nativeDevice.create_texture(desc);
+            const OpenGLFamilyTextureRecord* const record =
+                nativeDevice.resolve_texture(texture);
+            if (!texture || !record || !record->native_work_order_ready()
+                || record->texture_object == 0u || !nativeDevice.texture_ready(texture)
+                || state.allocation_count != 1u || state.width != 2u || state.height != 2u
+                || state.backend != backend)
+            {
+                return OpenGLFamilyTextureContractFailure::native_allocation;
+            }
+
+            if (!nativeDevice.upload_texture(texture, upload)
+                || state.upload_count != 1u || state.uploaded_bytes != pixels.size())
+            {
+                return OpenGLFamilyTextureContractFailure::upload;
+            }
+
+            TextureUploadDesc outOfBounds = upload;
+            outOfBounds.x = 1;
+            outOfBounds.width = 2;
+            if (nativeDevice.upload_texture(texture, outOfBounds)
+                || state.upload_count != 1u)
+            {
+                return OpenGLFamilyTextureContractFailure::bounds_rejection;
+            }
+
+            nativeDevice.destroy(texture);
+            if (state.destroy_count != 1u || nativeDevice.resolve_texture(texture)
+                || nativeDevice.texture_ready(texture))
+            {
+                return OpenGLFamilyTextureContractFailure::destruction;
+            }
+        }
+
+        return OpenGLFamilyTextureContractFailure::none;
+    }
+
 }

@@ -51,7 +51,6 @@ module;
 #include <format>
 #include <fstream>
 #include <future>
-#include <iomanip>
 #include <initializer_list>
 #include <iterator>
 #include <mutex>
@@ -63,6 +62,7 @@ module;
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -92,12 +92,19 @@ import voxel.field;
 import forest.factory;
 import package.registry;
 import perf.tier;
+import render.arcade;
+import render.canvas2d;
 import render.device;
 import render.lighting;
 import render.math;
 import render.ray;
 import render.preview_grid;
 import saveload.system;
+import scene.document;
+import scene.interaction;
+import scene.persistence;
+import scene.tier0;
+import scenesnapshot;
 import timeline.system;
 import updater.config;
 import updater.system;
@@ -157,17 +164,7 @@ namespace epochengine
             Workspace
         };
 
-        enum class EditorMainSurface : unsigned char
-        {
-            Scene = 0,
-            Game2D,
-            Assets,
-            Project,
-            ForestFactory,
-            Timeline,
-            AISandbox,
-            Systems
-        };
+        using EditorMainSurface = EditorApplicationSurface;
 
         struct SystemsSurfaceState
         {
@@ -354,6 +351,7 @@ namespace epochengine
 
         struct EditorEntity
         {
+            scene::SceneObjectId sceneObjectId{ scene::kInvalidSceneObjectId };
             std::string name{};
             std::string type{};
             std::string category{};
@@ -449,23 +447,31 @@ namespace epochengine
             previewgrid::CameraMode projectBuildRunCameraMode{ previewgrid::CameraMode::Editor };
             input::ProfilePreset projectBuildRunInputProfile{ input::ProfilePreset::EditorDefault };
             std::string projectRunBackend{ "opengl" };
+            EditorCanvas2DProjectSnapshot canvas2dProject{};
             double projectRunFrameLimitFps{ 60.0 };
             previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
             input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
             gui::ThemePreference themePreference{ gui::ThemePreference::FollowSystemDark };
+            bool roundedRectangles{ false };
             double editorFrameLimitFps{ 120.0 };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
             std::vector<EditorEntity> entities{};
+            authoring::scene::SceneDocument sceneDocument{};
             lighting::LightManager sceneLighting{ 128 };
             std::vector<lighting::LightHandle> sceneLightHandles{};
             bool sceneLightingDirty{ true };
+            scene_interaction::SceneInteractionQuery sceneInteraction{};
+            bool sceneInteractionDirty{ true };
             std::size_t selectedEntity{ 0 };
+            scene::SceneObjectId selectedEntityId{ scene::kInvalidSceneObjectId };
+            std::uint64_t sceneDocumentRevision{ 1u };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
             bool sceneDragActive{ false };
             bool sceneLeftWasHeld{ false };
             std::size_t sceneDragEntity{ 0 };
+            scene::SceneObjectId sceneDragEntityId{ scene::kInvalidSceneObjectId };
             gui::Vec2 sceneDragStartMouse{};
             std::array<float, 3> sceneDragStartPosition{ 0.0f, 0.0f, 0.0f };
             std::array<float, 3> sceneDragStartHit{ 0.0f, 0.0f, 0.0f };
@@ -478,6 +484,7 @@ namespace epochengine
             epochengine::timeline::TimelineState timelineState{};
             std::vector<epochengine::timeline::TimelineTrack> timelineTracks{};
             std::vector<epochengine::timeline::TimelineEvent> timelineEvents{};
+            EditorApplicationKind applicationKind{ EditorApplicationKind::Standard };
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
@@ -551,8 +558,209 @@ namespace epochengine
             std::size_t aiToolHarnessRunCount{ 0 };
         };
 
+        [[nodiscard]] std::string_view editor_scene_identity(const EditorState& state) noexcept
+        {
+            if (!state.activeRuntimeScene.empty())
+                return state.activeRuntimeScene;
+            if (!state.projectId.empty())
+                return state.projectId;
+            if (!state.activeWorld.empty())
+                return state.activeWorld;
+            return "epoch.editor.scene";
+        }
+
+        [[nodiscard]] std::optional<std::size_t> editor_entity_index(
+            const EditorState& state,
+            scene::SceneObjectId id) noexcept
+        {
+            if (id == scene::kInvalidSceneObjectId)
+                return std::nullopt;
+
+            const auto found = std::find_if(
+                state.entities.begin(),
+                state.entities.end(),
+                [id](const EditorEntity& entity)
+                {
+                    return entity.sceneObjectId == id;
+                });
+            if (found == state.entities.end())
+                return std::nullopt;
+            return static_cast<std::size_t>(std::distance(state.entities.begin(), found));
+        }
+
+        void normalize_editor_entity_ids(EditorState& state)
+        {
+            std::unordered_set<scene::SceneObjectId> occupied{};
+            occupied.reserve(state.entities.size());
+            const std::string sceneIdentity{ editor_scene_identity(state) };
+
+            for (std::size_t index = 0; index < state.entities.size(); ++index)
+            {
+                EditorEntity& entity = state.entities[index];
+                scene::SceneObjectId candidate = entity.sceneObjectId;
+                if (candidate == scene::kInvalidSceneObjectId || occupied.contains(candidate))
+                {
+                    candidate = scene::stable_scene_object_id(sceneIdentity, entity.name);
+                    std::uint64_t salt = static_cast<std::uint64_t>(index) + 1u;
+                    while (candidate == scene::kInvalidSceneObjectId || occupied.contains(candidate))
+                    {
+                        candidate ^= 0x9e3779b97f4a7c15ull
+                            + salt
+                            + (candidate << 6u)
+                            + (candidate >> 2u);
+                        ++salt;
+                    }
+                    entity.sceneObjectId = candidate;
+                }
+                occupied.insert(entity.sceneObjectId);
+            }
+        }
+
+        void select_editor_entity(EditorState& state, std::size_t index) noexcept
+        {
+            if (state.entities.empty())
+            {
+                state.selectedEntity = 0u;
+                state.selectedEntityId = scene::kInvalidSceneObjectId;
+                return;
+            }
+
+            state.selectedEntity = (std::min)(index, state.entities.size() - 1u);
+            state.selectedEntityId = state.entities[state.selectedEntity].sceneObjectId;
+        }
+
+        void synchronize_editor_selection(EditorState& state)
+        {
+            normalize_editor_entity_ids(state);
+            if (state.entities.empty())
+            {
+                select_editor_entity(state, 0u);
+                state.sceneDragEntity = 0u;
+                state.sceneDragEntityId = scene::kInvalidSceneObjectId;
+                return;
+            }
+
+            if (const auto selected = editor_entity_index(state, state.selectedEntityId))
+                state.selectedEntity = *selected;
+            else
+                select_editor_entity(state, state.selectedEntity);
+
+            if (state.sceneDragActive)
+            {
+                if (const auto dragged = editor_entity_index(state, state.sceneDragEntityId))
+                    state.sceneDragEntity = *dragged;
+                else
+                {
+                    state.sceneDragActive = false;
+                    state.sceneDragEntity = 0u;
+                    state.sceneDragEntityId = scene::kInvalidSceneObjectId;
+                }
+            }
+        }
+
+        [[nodiscard]] scene::SceneSnapshot capture_editor_entity_projection(const EditorState& state)
+        {
+            scene::SceneSnapshot snapshot{};
+            if (state.sceneDocument.initialized())
+            {
+                const auto canonical = state.sceneDocument.project_snapshot(
+                    state.timeSnapshot.frame_index,
+                    state.timeSnapshot.simulated_seconds);
+                if (canonical)
+                    snapshot = canonical.snapshot;
+            }
+            snapshot.scene_id = std::string(editor_scene_identity(state));
+            snapshot.project_id = state.projectId;
+            snapshot.world_name = state.activeWorld;
+            if (snapshot.document_kind.empty())
+                snapshot.document_kind = "game";
+            if (snapshot.support_tier.empty())
+                snapshot.support_tier = "baseline";
+            snapshot.revision = (std::max)(std::uint64_t{ 1u }, state.sceneDocumentRevision);
+            snapshot.captured_frame_index = state.timeSnapshot.frame_index;
+            snapshot.captured_simulated_seconds = state.timeSnapshot.simulated_seconds;
+            snapshot.primary_camera = scene::kInvalidSceneObjectId;
+            snapshot.primary_spawn = scene::kInvalidSceneObjectId;
+            snapshot.objects.clear();
+            snapshot.objects.reserve(state.entities.size());
+
+            for (const EditorEntity& entity : state.entities)
+            {
+                scene::SceneObjectSnapshot object{};
+                object.id = entity.sceneObjectId;
+                object.name = entity.name;
+                object.type = entity.type;
+                object.category = entity.category;
+                object.position = entity.position;
+                object.rotation = entity.rotation;
+                object.scale = entity.scale;
+                object.visible = entity.visible;
+                object.editor_only = entity.editorOnly;
+                snapshot.objects.emplace_back(std::move(object));
+            }
+
+            const bool hasArcade = std::any_of(
+                state.entities.begin(),
+                state.entities.end(),
+                [](const EditorEntity& entity)
+                {
+                    return entity.category == "EngineArcade";
+                });
+            std::erase(snapshot.packages, "engine_arcade");
+            if (hasArcade)
+                snapshot.packages.emplace_back("engine_arcade");
+            scene::normalize_scene_document(snapshot);
+            return snapshot;
+        }
+
+        [[nodiscard]] scene::SceneSnapshot capture_editor_scene_projection(const EditorState& state)
+        {
+            if (state.sceneDocument.initialized())
+            {
+                const auto projection = state.sceneDocument.project_snapshot(
+                    state.timeSnapshot.frame_index,
+                    state.timeSnapshot.simulated_seconds);
+                if (projection)
+                    return projection.snapshot;
+            }
+            return capture_editor_entity_projection(state);
+        }
+
+        [[nodiscard]] bool ensure_editor_scene_interaction(EditorState& state)
+        {
+            synchronize_editor_selection(state);
+            if (!state.sceneInteractionDirty)
+                return true;
+
+            const scene::SceneSnapshot projection = capture_editor_scene_projection(state);
+            const auto validation = scene::validate_scene_document(
+                projection,
+                scene::SceneDocumentRequirement::authoring);
+            if (!validation)
+                return false;
+
+            const auto report = state.sceneInteraction.rebuild(projection);
+            if (!report.committed())
+                return false;
+
+            state.sceneInteractionDirty = false;
+            return true;
+        }
+
+        [[nodiscard]] bool rebuild_editor_scene_document(
+            EditorState& state,
+            std::string_view reason);
+        [[nodiscard]] bool rebuild_editor_scene_document_from_snapshot(
+            EditorState& state,
+            const scene::SceneSnapshot& snapshot,
+            std::string_view reason);
+        [[nodiscard]] bool commit_editor_scene_changes(
+            EditorState& state,
+            std::string_view label);
+        void mark_editor_scene_changed(EditorState& state);
+
         [[nodiscard]] bool load_editor_scene_snapshot(EditorState& state);
-        void save_editor_scene_snapshot(const EditorState& state);
+        [[nodiscard]] bool save_editor_scene_snapshot(EditorState& state);
 
         struct ContextPtrHash
         {
@@ -574,7 +782,7 @@ namespace epochengine
         {
             return surface == EditorMainSurface::Scene
                 || surface == EditorMainSurface::Game2D
-                || surface == EditorMainSurface::ForestFactory
+                || surface == EditorMainSurface::PlantLab
                 || surface == EditorMainSurface::Timeline;
         }
 
@@ -592,6 +800,8 @@ namespace epochengine
                 return "Project";
             case EditorMainSurface::ForestFactory:
                 return "Forest Factory";
+            case EditorMainSurface::PlantLab:
+                return "Plant Lab";
             case EditorMainSurface::Timeline:
                 return "Video";
             case EditorMainSurface::AISandbox:
@@ -605,14 +815,15 @@ namespace epochengine
 
         static void reset_editor_layout(EditorState& editor) noexcept
         {
+            const auto& application = editor_application_profile(editor.applicationKind);
             editor.outlinerSplit = 0.20f;
             editor.inspectorSplit = 0.22f;
             editor.dockSplit = 0.24f;
             editor.workspaceSplit = 0.68f;
-            editor.showOutliner = true;
-            editor.showInspector = true;
-            editor.showConsoleDock = true;
-            editor.showAiChat = true;
+            editor.showOutliner = application.panes.outliner;
+            editor.showInspector = application.panes.inspector;
+            editor.showConsoleDock = application.panes.console;
+            editor.showAiChat = application.panes.ai_chat;
             editor.layoutDrag = EditorLayoutDrag::None;
             editor.surfaceSettleFrames = 0;
             editor.lastLayoutExtent = {};
@@ -707,9 +918,255 @@ namespace epochengine
                 state.logLines.erase(state.logLines.begin(), state.logLines.begin() + static_cast<std::ptrdiff_t>(state.logLines.size() - kMaxLogLines));
         }
 
+        [[nodiscard]] bool project_scene_document_into_editor(EditorState& state)
+        {
+            const auto projection = state.sceneDocument.project_snapshot(
+                state.timeSnapshot.frame_index,
+                state.timeSnapshot.simulated_seconds);
+            if (!projection)
+                return false;
+
+            const scene::SceneObjectId selectedId = state.selectedEntityId;
+            const std::size_t selectedIndex = state.selectedEntity;
+            state.entities.clear();
+            state.entities.reserve(projection.snapshot.objects.size());
+            for (const scene::SceneObjectSnapshot& source : projection.snapshot.objects)
+            {
+                state.entities.push_back(EditorEntity{
+                    .sceneObjectId = source.id,
+                    .name = source.name,
+                    .type = source.type,
+                    .category = source.category,
+                    .position = source.position,
+                    .rotation = source.rotation,
+                    .scale = source.scale,
+                    .visible = source.visible,
+                    .editorOnly = source.editor_only
+                });
+            }
+            state.sceneDocumentRevision = projection.snapshot.revision;
+            state.selectedEntityId = selectedId;
+            if (const auto selected = editor_entity_index(state, selectedId))
+                state.selectedEntity = *selected;
+            else
+                select_editor_entity(state, selectedIndex);
+            synchronize_editor_selection(state);
+            state.sceneInteractionDirty = true;
+            state.sceneLightingDirty = true;
+            return true;
+        }
+
+        [[nodiscard]] bool rebuild_editor_scene_document_from_snapshot(
+            EditorState& state,
+            const scene::SceneSnapshot& snapshot,
+            std::string_view reason)
+        {
+            auto built = authoring::scene::SceneDocument::from_snapshot(snapshot);
+            if (!built)
+            {
+                state.projectStatus = std::format(
+                    "Scene document rebuild blocked (code {}).",
+                    static_cast<unsigned>(built.code));
+                push_editor_log(
+                    state,
+                    std::format("[scene] {}: {}", reason, state.projectStatus));
+                return false;
+            }
+
+            state.sceneDocument = std::move(built.value);
+            if (!project_scene_document_into_editor(state))
+            {
+                state.projectStatus = "Scene document projection failed after a validated rebuild.";
+                push_editor_log(
+                    state,
+                    std::format("[scene] {}: {}", reason, state.projectStatus));
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool rebuild_editor_scene_document(
+            EditorState& state,
+            std::string_view reason)
+        {
+            normalize_editor_entity_ids(state);
+            return rebuild_editor_scene_document_from_snapshot(
+                state,
+                capture_editor_entity_projection(state),
+                reason);
+        }
+
+        [[nodiscard]] bool commit_editor_scene_changes(
+            EditorState& state,
+            std::string_view label)
+        {
+            namespace document = authoring::scene;
+            normalize_editor_entity_ids(state);
+            if (!state.sceneDocument.initialized())
+                return rebuild_editor_scene_document(state, label);
+
+            scene::SceneSnapshot staged = capture_editor_entity_projection(state);
+            if (!scene::validate_scene_document(
+                    staged,
+                    scene::SceneDocumentRequirement::authoring))
+            {
+                (void)project_scene_document_into_editor(state);
+                state.projectStatus = "Scene edit rejected because the staged projection is invalid.";
+                push_editor_log(state, "[scene] " + state.projectStatus);
+                return false;
+            }
+
+            const std::vector<document::SceneObject> existing = state.sceneDocument.objects();
+            std::unordered_map<std::uint64_t, const document::SceneObject*> existingById{};
+            existingById.reserve(existing.size());
+            for (const document::SceneObject& object : existing)
+                existingById.emplace(object.descriptor.id.value, &object);
+
+            std::unordered_set<std::uint64_t> stagedIds{};
+            stagedIds.reserve(staged.objects.size());
+            std::vector<document::SceneOperation> operations{};
+            operations.reserve(staged.objects.size() * 3u + existing.size() + 1u);
+            for (std::size_t index = 0; index < staged.objects.size(); ++index)
+            {
+                const scene::SceneObjectSnapshot& source = staged.objects[index];
+                auto converted = document::descriptor_from_snapshot_object(
+                    source,
+                    static_cast<std::uint32_t>(index),
+                    state.sceneDocument.limits());
+                if (!converted)
+                {
+                    (void)project_scene_document_into_editor(state);
+                    state.projectStatus = "Scene edit rejected because an object descriptor is invalid.";
+                    push_editor_log(state, "[scene] " + state.projectStatus);
+                    return false;
+                }
+                if (converted->camera)
+                    converted->camera->primary = source.id == staged.primary_camera;
+                stagedIds.insert(source.id);
+
+                const auto found = existingById.find(source.id);
+                if (found == existingById.end())
+                {
+                    operations.emplace_back(document::ObjectCreatedOperation{
+                        .object = std::move(*converted)
+                    });
+                    continue;
+                }
+
+                const document::SceneObject& current = *found->second;
+                const document::SceneObjectDescriptor& next = *converted;
+                if (current.descriptor.metadata != next.metadata)
+                {
+                    operations.emplace_back(document::ObjectMetadataChangedOperation{
+                        .object = current.handle,
+                        .value = next.metadata
+                    });
+                }
+                if (current.descriptor.transform != next.transform)
+                {
+                    operations.emplace_back(document::ObjectTransformChangedOperation{
+                        .object = current.handle,
+                        .value = next.transform
+                    });
+                }
+                if (current.descriptor.runtime_visible != next.runtime_visible ||
+                    current.descriptor.editor_visible != next.editor_visible ||
+                    current.descriptor.editor_only != next.editor_only)
+                {
+                    operations.emplace_back(document::ObjectVisibilityChangedOperation{
+                        .object = current.handle,
+                        .runtime_visible = next.runtime_visible,
+                        .editor_visible = next.editor_visible,
+                        .editor_only = next.editor_only
+                    });
+                }
+                if (current.descriptor.camera != next.camera)
+                {
+                    operations.emplace_back(document::CameraComponentChangedOperation{
+                        .object = current.handle,
+                        .value = next.camera
+                    });
+                }
+                if (current.descriptor.ground != next.ground)
+                {
+                    operations.emplace_back(document::GroundComponentChangedOperation{
+                        .object = current.handle,
+                        .value = next.ground
+                    });
+                }
+                if (current.descriptor.light != next.light)
+                {
+                    operations.emplace_back(document::LightComponentChangedOperation{
+                        .object = current.handle,
+                        .value = next.light
+                    });
+                }
+                if (current.descriptor.spawn != next.spawn)
+                {
+                    operations.emplace_back(document::SpawnComponentChangedOperation{
+                        .object = current.handle,
+                        .value = next.spawn
+                    });
+                }
+            }
+
+            document::ProjectSettings project = state.sceneDocument.project_settings();
+            project.primary_camera = {staged.primary_camera};
+            project.primary_spawn = {staged.primary_spawn};
+            project.run_state = scene::validate_scene_document(
+                    staged,
+                    scene::SceneDocumentRequirement::runnable)
+                ? scene_tier0::ProjectRunState::ready_to_launch
+                : scene_tier0::ProjectRunState::blocked;
+            if (project != state.sceneDocument.project_settings())
+            {
+                operations.emplace_back(document::ProjectSettingsChangedOperation{
+                    .value = project
+                });
+            }
+
+            for (const document::SceneObject& object : existing)
+            {
+                if (!stagedIds.contains(object.descriptor.id.value))
+                {
+                    operations.emplace_back(document::ObjectDestroyedOperation{
+                        .object = object.handle
+                    });
+                }
+            }
+
+            const document::TransactionResult committed =
+                state.sceneDocument.apply_transaction(operations, label);
+            if (!committed)
+            {
+                (void)project_scene_document_into_editor(state);
+                state.projectStatus = std::format(
+                    "Scene transaction '{}' rejected (code {}).",
+                    label,
+                    static_cast<unsigned>(committed.code));
+                push_editor_log(state, "[scene] " + state.projectStatus);
+                return false;
+            }
+
+            state.sceneDocumentRevision = committed.revision.sequence;
+            if (!project_scene_document_into_editor(state))
+            {
+                state.projectStatus = "Scene transaction committed, but the editor projection failed.";
+                push_editor_log(state, "[scene] " + state.projectStatus);
+                return false;
+            }
+            return true;
+        }
+
+        void mark_editor_scene_changed(EditorState& state)
+        {
+            (void)commit_editor_scene_changes(state, "Editor scene edit");
+        }
+
         [[nodiscard]] EditorContextSnapshotEntity capture_snapshot_entity(const EditorEntity& entity)
         {
             return EditorContextSnapshotEntity{
+                .scene_object_id = entity.sceneObjectId,
                 .name = entity.name,
                 .type = entity.type,
                 .category = entity.category,
@@ -722,6 +1179,21 @@ namespace epochengine
         }
 
         [[nodiscard]] EditorEntity restore_snapshot_entity(const EditorContextSnapshotEntity& entity)
+        {
+            return EditorEntity{
+                .sceneObjectId = entity.scene_object_id,
+                .name = entity.name,
+                .type = entity.type,
+                .category = entity.category,
+                .position = entity.position,
+                .rotation = entity.rotation,
+                .scale = entity.scale,
+                .visible = entity.visible,
+                .editorOnly = entity.editor_only
+            };
+        }
+
+        [[nodiscard]] EditorEntity editor_entity_from_seed(const EditorSceneSeedEntity& entity)
         {
             return EditorEntity{
                 .name = entity.name,
@@ -756,6 +1228,7 @@ namespace epochengine
             case 4: return EditorMainSurface::ForestFactory;
             case 5: return EditorMainSurface::Timeline;
             case 6: return EditorMainSurface::AISandbox;
+            case 8: return EditorMainSurface::PlantLab;
             case 7: return EditorMainSurface::Systems;
             case 0:
             default: return EditorMainSurface::Scene;
@@ -859,6 +1332,59 @@ namespace epochengine
         [[nodiscard]] static double snapshot_frame_limit(double value, double fallback) noexcept
         {
             return (std::clamp)(finite_or(value, fallback), 15.0, 1000.0);
+        }
+
+        [[nodiscard]] static canvas2d::ProjectSettings canvas2d_runtime_settings(
+            const EditorCanvas2DProjectSnapshot& value) noexcept
+        {
+            canvas2d::ProjectSettings settings{};
+            settings.logical_canvas = {value.logical_width, value.logical_height};
+            settings.pixels_per_world_unit = value.pixels_per_world_unit;
+            switch (value.scale_policy)
+            {
+            case 1u: settings.viewport_policy = canvas2d::ViewportPolicy::fractional_scale; break;
+            case 2u: settings.viewport_policy = canvas2d::ViewportPolicy::fill_crop; break;
+            case 3u: settings.viewport_policy = canvas2d::ViewportPolicy::stretch; break;
+            case 0u:
+            default: settings.viewport_policy = canvas2d::ViewportPolicy::integer_scale; break;
+            }
+            settings.presentation_filter = value.sampling_policy == 1u
+                ? FilterMode::linear
+                : FilterMode::nearest;
+            settings.pixel_snap = value.pixel_snapping
+                ? canvas2d::PixelSnapMode::camera_and_sprites
+                : canvas2d::PixelSnapMode::none;
+            settings.maximum_sprites_per_batch = value.maximum_sprites_per_batch;
+            settings.maximum_batches = value.maximum_batches;
+            settings.tile_chunk_extent = value.tile_chunk_extent;
+            return settings;
+        }
+
+        [[nodiscard]] static EditorCanvas2DProjectSnapshot sanitize_canvas2d_project(
+            EditorCanvas2DProjectSnapshot value) noexcept
+        {
+            value.logical_width = (std::clamp)(value.logical_width, 160u, 16'384u);
+            value.logical_height = (std::clamp)(value.logical_height, 90u, 16'384u);
+            value.pixels_per_world_unit = (std::clamp)(
+                finite_or(value.pixels_per_world_unit, 100.0f), 1.0f, 2'048.0f);
+            if (value.scale_policy > 3u)
+                value.scale_policy = 0u;
+            if (value.sampling_policy > 1u)
+                value.sampling_policy = 0u;
+            value.maximum_sprites_per_batch = (std::clamp)(
+                value.maximum_sprites_per_batch, 1u, 65'536u);
+            value.maximum_batches = (std::clamp)(value.maximum_batches, 1u, 4'096u);
+            switch (value.tile_chunk_extent)
+            {
+            case 8u: case 16u: case 32u: case 64u: case 128u: case 256u:
+                break;
+            default:
+                value.tile_chunk_extent = 32u;
+                break;
+            }
+            if (canvas2d::validate(canvas2d_runtime_settings(value)) != canvas2d::ResultCode::success)
+                return {};
+            return value;
         }
 
         [[nodiscard]] static EditorTimeControl snapshot_time_control(EditorTimeControl value) noexcept
@@ -1641,11 +2167,52 @@ namespace epochengine
             return claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
         }
 
+        [[nodiscard]] EditorWorkspaceTab application_dock_tab(
+            EditorApplicationDock dock) noexcept
+        {
+            switch (dock)
+            {
+            case EditorApplicationDock::Assets:
+                return EditorWorkspaceTab::Assets;
+            case EditorApplicationDock::Project:
+                return EditorWorkspaceTab::Project;
+            case EditorApplicationDock::Output:
+            default:
+                return EditorWorkspaceTab::Output;
+            }
+        }
+
+        [[nodiscard]] previewgrid::CameraMode application_camera_mode(
+            EditorCameraPolicy policy) noexcept
+        {
+            return policy == EditorCameraPolicy::Canvas2D
+                ? previewgrid::CameraMode::Canvas2D
+                : previewgrid::CameraMode::Editor;
+        }
+
+        void apply_application_profile(
+            EditorState& state,
+            const EditorApplicationProfile& application)
+        {
+            state.applicationKind = application.kind;
+            state.mainSurface = application.default_surface;
+            state.workspaceTab = application_dock_tab(application.initial_dock);
+            state.projectCameraMode = application_camera_mode(application.camera_policy);
+            state.showOutliner = application.panes.outliner;
+            state.showInspector = application.panes.inspector;
+            state.showConsoleDock = application.panes.console;
+            state.showAiChat = application.panes.ai_chat;
+        }
+
         void set_project(EditorState& state, std::string_view projectId, bool writeLog)
         {
             const auto* profile = editor_find_project_profile(projectId);
             if (!profile)
                 profile = &editor_default_project_profile();
+            const auto* application = editor_application_for_project(profile->id);
+            apply_application_profile(
+                state,
+                application ? *application : standard_editor_application());
 
             state.helpersVisible = true;
             state.projectId = std::string(profile->id);
@@ -1658,9 +2225,6 @@ namespace epochengine
             state.activeWorld = std::string(profile->world_name);
             state.activeScript = std::string(profile->default_script);
             state.activeRuntimeScene = std::string(profile->runtime_scene_id);
-            state.projectCameraMode = profile->id == std::string_view{ "twodstudio" }
-                ? previewgrid::CameraMode::Canvas2D
-                : previewgrid::CameraMode::Editor;
             state.projectStatus = "Selected project profile. Use File > Save Project or the centered Run button to materialize/update generated project files.";
             state.projectBuildStatus = "Build Project creates or refreshes a repo-local child executable for the active shell after an explicit save/run.";
             state.scriptBuildStatus = "Select a script to validate or run against the active project shell.";
@@ -1668,22 +2232,13 @@ namespace epochengine
             state.entities.clear();
             for (const auto& seed : editor_seed_entities_for_project(profile->id))
             {
-                state.entities.push_back(EditorEntity{
-                    .name = std::string(seed.name),
-                    .type = std::string(seed.type),
-                    .category = std::string(seed.category),
-                    .position = seed.position,
-                    .rotation = seed.rotation,
-                    .scale = seed.scale,
-                    .visible = seed.visible,
-                    .editorOnly = seed.editor_only
-                });
+                state.entities.push_back(editor_entity_from_seed(seed));
             }
 
             (void)load_editor_scene_snapshot(state);
-            state.sceneLightingDirty = true;
+            mark_editor_scene_changed(state);
 
-            state.selectedEntity = state.entities.empty() ? 0u : (std::min)(state.selectedEntity, state.entities.size() - 1u);
+            synchronize_editor_selection(state);
             if (writeLog)
                 push_editor_log(
                     state,
@@ -1771,8 +2326,9 @@ namespace epochengine
             }
 
             state.entities.push_back(std::move(entity));
-            state.sceneLightingDirty = true;
-            state.selectedEntity = state.entities.empty() ? 0u : (state.entities.size() - 1u);
+            mark_editor_scene_changed(state);
+            normalize_editor_entity_ids(state);
+            select_editor_entity(state, state.entities.size() - 1u);
             push_editor_log(
                 state,
                 std::string("[entity] Added ")
@@ -1793,12 +2349,8 @@ namespace epochengine
                 });
             if (existing != state.entities.end())
             {
-                existing->editorOnly = true;
-                existing->category = "2D";
-                existing->position = { 0.0f, 1.8f, 0.0f };
-                existing->rotation = { 0.0f, 0.0f, 0.0f };
-                existing->scale = { 6.4f, 3.6f, 0.05f };
-                state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
+                // Application-owned canvases keep their canonical scene transform.
+                select_editor_entity(state, static_cast<std::size_t>(std::distance(state.entities.begin(), existing)));
                 return;
             }
 
@@ -1811,76 +2363,57 @@ namespace epochengine
             canvas.scale = { 6.4f, 3.6f, 0.05f };
             canvas.editorOnly = true;
             state.entities.push_back(std::move(canvas));
-            state.selectedEntity = state.entities.size() - 1u;
+            normalize_editor_entity_ids(state);
+            select_editor_entity(state, state.entities.size() - 1u);
             push_editor_log(state, "[2d] Added editor-only Canvas2D editing plane.");
         }
 
         void ensure_engine_arcade_preview_entities(EditorState& state)
         {
-            auto upsert = [&](std::string_view name, std::string_view type, std::array<float, 3> position, std::array<float, 3> scale)
+            const auto& bodyNode = epochengine::render_arcade::kCabinetBodySceneNode;
+            const auto& screenNode = epochengine::render_arcade::kScreenSceneNode;
+            std::erase_if(
+                state.entities,
+                [&](const EditorEntity& entity)
+                {
+                    return entity.category == "EngineArcade"
+                        && entity.name != bodyNode.name
+                        && entity.name != screenNode.name;
+                });
+
+            const auto upsert = [&](const epochengine::render_arcade::ArcadeSceneNodeContract& node)
             {
                 auto existing = std::find_if(
                     state.entities.begin(),
                     state.entities.end(),
                     [&](const EditorEntity& entity)
                     {
-                        return entity.name == name;
+                        return entity.name == node.name;
                     });
 
-                if (existing != state.entities.end())
+                if (existing == state.entities.end())
                 {
-                    existing->type = std::string(type);
-                    existing->category = "EngineArcade";
-                    existing->position = position;
-                    existing->rotation = { 0.0f, 0.0f, 0.0f };
-                    existing->scale = scale;
-                    existing->editorOnly = true;
-                    existing->visible = true;
-                    return static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
+                    EditorEntity entity{};
+                    entity.name = std::string(node.name);
+                    state.entities.push_back(std::move(entity));
+                    existing = std::prev(state.entities.end());
                 }
 
-                EditorEntity entity{};
-                entity.name = std::string(name);
-                entity.type = std::string(type);
-                entity.category = "EngineArcade";
-                entity.position = position;
-                entity.rotation = { 0.0f, 0.0f, 0.0f };
-                entity.scale = scale;
-                entity.editorOnly = true;
-                entity.visible = true;
-                state.entities.push_back(std::move(entity));
-                return state.entities.size() - 1u;
+                existing->type = std::string(node.type);
+                existing->category = "EngineArcade";
+                existing->position = node.position;
+                existing->rotation = { 0.0f, 0.0f, 0.0f };
+                existing->scale = node.scale;
+                existing->editorOnly = false;
+                existing->visible = true;
+                return static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
             };
 
-            const auto baseIndex = upsert(
-                "EngineArcadeCabinetBase",
-                "StaticMesh",
-                { 0.0f, 0.22f, 0.36f },
-                { 1.70f, 0.44f, 0.82f });
-            upsert(
-                "EngineArcadeCabinetBody",
-                "StaticMesh",
-                { 0.0f, 0.92f, 0.24f },
-                { 1.38f, 1.30f, 0.54f });
-            upsert(
-                "EngineArcadeControlDeck",
-                "StaticMesh",
-                { 0.0f, 1.18f, -0.30f },
-                { 1.56f, 0.20f, 0.70f });
-            const auto screenIndex = upsert(
-                "EngineArcadeScreen",
-                "Canvas2D",
-                { 0.0f, 1.78f, -0.42f },
-                { 2.22f, 1.22f, 0.06f });
-            upsert(
-                "EngineArcadeMarquee",
-                "Canvas2D",
-                { 0.0f, 2.46f, -0.34f },
-                { 2.10f, 0.42f, 0.05f });
-
-            state.selectedEntity = screenIndex < state.entities.size() ? screenIndex : baseIndex;
+            const auto bodyIndex = upsert(bodyNode);
+            const auto screenIndex = upsert(screenNode);
+            normalize_editor_entity_ids(state);
+            select_editor_entity(state, screenIndex < state.entities.size() ? screenIndex : bodyIndex);
         }
-
         void activate_engine_arcade_preview(EditorState& state)
         {
             state.activeRuntimeScene = std::string(epochengine::package_registry::engine_arcade_default_scene_id());
@@ -1926,23 +2459,15 @@ namespace epochengine
             if (activeSceneIsArcade)
                 state.activeRuntimeScene.clear();
             if (state.selectedEntity >= state.entities.size())
-                state.selectedEntity = state.entities.empty() ? 0u : (state.entities.size() - 1u);
+                select_editor_entity(state, state.entities.empty() ? 0u : state.entities.size() - 1u);
             state.projectStatus = "Engine Arcade removed from the active project preview.";
             state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
             push_editor_log(state, "[package] Engine Arcade preview state removed.");
         }
 
-        void ensure_forest_factory_preview_entities(EditorState& state)
+        void ensure_plant_lab_preview_entities(EditorState& state)
         {
             const std::size_t beforeCount = state.entities.size();
-            auto profile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
-            profile.config.targetHeightMeters = 4.2F;
-            profile.config.trunkRadiusMeters = 0.09F;
-            profile.branch.levels = 4u;
-            profile.branch.branchLengthMeters = 0.92F;
-            profile.branch.startHeightMeters = 0.24F;
-            const auto geometry = epochengine::forest::build_preview_geometry(profile);
-
             const auto is_forest_entity = [](const EditorEntity& entity) noexcept
             {
                 return entity.category == "ForestFactory";
@@ -1956,12 +2481,16 @@ namespace epochengine
                     previousSelection = state.entities[selectedIndex].name;
             }
 
-            std::erase_if(
-                state.entities,
-                is_forest_entity);
+            std::erase_if(state.entities, is_forest_entity);
 
-            auto upsert = [&](EditorEntity entity)
+            const auto scene = make_plant_lab_editor_scene();
+            std::size_t generatedCount = 0u;
+            for (const auto& seed : scene.entities)
             {
+                if (seed.category != "ForestFactory")
+                    continue;
+
+                auto entity = editor_entity_from_seed(seed);
                 const auto existing = std::find_if(
                     state.entities.begin(),
                     state.entities.end(),
@@ -1973,74 +2502,7 @@ namespace epochengine
                     *existing = std::move(entity);
                 else
                     state.entities.push_back(std::move(entity));
-            };
-
-            constexpr float kPreviewScale = 0.58F;
-            auto scaled_position = [](epochengine::voxel::Float3 value) noexcept
-            {
-                constexpr float scale = 0.58F;
-                return std::array<float, 3>{
-                    value.x * scale,
-                    value.y * scale,
-                    value.z * scale
-                };
-            };
-
-            if (geometry.segmentCount > 0u)
-            {
-                const auto& trunk = geometry.segments[0];
-                EditorEntity trunkEntity{};
-                trunkEntity.name = "ForestFactoryTrunk";
-                trunkEntity.type = "ForestTrunk";
-                trunkEntity.category = "ForestFactory";
-                trunkEntity.position = {
-                    (trunk.start.x + trunk.end.x) * 0.5F * kPreviewScale,
-                    (trunk.start.y + trunk.end.y) * 0.5F * kPreviewScale,
-                    (trunk.start.z + trunk.end.z) * 0.5F * kPreviewScale
-                };
-                const float trunkHeight = (std::max)(0.32F, (trunk.end.y - trunk.start.y) * kPreviewScale);
-                const float trunkWidth = (std::max)(0.12F, trunk.radius * 2.8F * kPreviewScale);
-                trunkEntity.scale = { trunkWidth, trunkHeight, trunkWidth };
-                trunkEntity.editorOnly = true;
-                upsert(std::move(trunkEntity));
-            }
-
-            const std::size_t branchBudget = (std::min)(geometry.segmentCount > 0u ? geometry.segmentCount - 1u : 0u, std::size_t{ 32u });
-            const std::size_t branchStep = branchBudget > 0u
-                ? (std::max)(std::size_t{ 1u }, (geometry.segmentCount - 1u) / branchBudget)
-                : 1u;
-            std::size_t branchOrdinal = 0u;
-            for (std::size_t i = 1u; i < geometry.segmentCount && branchOrdinal < branchBudget; i += branchStep, ++branchOrdinal)
-            {
-                const auto& segment = geometry.segments[i];
-                EditorEntity node{};
-                node.name = std::format("ForestFactoryBranch_{:02}", branchOrdinal);
-                node.type = "ForestBranchJoint";
-                node.category = "ForestFactory";
-                node.position = scaled_position(segment.end);
-                const float nodeSize = (std::clamp)(segment.radius * 2.1F * kPreviewScale, 0.055F, 0.16F);
-                node.scale = { nodeSize, nodeSize, nodeSize };
-                node.editorOnly = true;
-                upsert(std::move(node));
-            }
-
-            const std::size_t canopyBudget = (std::min)(geometry.leafCount, std::size_t{ 28u });
-            const std::size_t leafStep = canopyBudget > 0u
-                ? (std::max)(std::size_t{ 1u }, geometry.leafCount / canopyBudget)
-                : 1u;
-            std::size_t canopyOrdinal = 0u;
-            for (std::size_t i = 0u; i < geometry.leafCount && canopyOrdinal < canopyBudget; i += leafStep, ++canopyOrdinal)
-            {
-                const auto& leaf = geometry.leaves[i];
-                EditorEntity leafNode{};
-                leafNode.name = std::format("ForestFactoryCanopy_{:02}", canopyOrdinal);
-                leafNode.type = "ForestFoliageCluster";
-                leafNode.category = "ForestFactory";
-                leafNode.position = scaled_position(leaf.position);
-                const float leafSize = (std::clamp)(leaf.size * 1.15F * kPreviewScale, 0.10F, 0.24F);
-                leafNode.scale = { leafSize, leafSize * 0.62F, leafSize };
-                leafNode.editorOnly = true;
-                upsert(std::move(leafNode));
+                ++generatedCount;
             }
 
             auto restored = previousSelection.empty()
@@ -2063,19 +2525,73 @@ namespace epochengine
                     });
             }
             if (restored != state.entities.end())
-                state.selectedEntity = static_cast<std::size_t>(std::distance(state.entities.begin(), restored));
+                select_editor_entity(state, static_cast<std::size_t>(std::distance(state.entities.begin(), restored)));
             else
-                state.selectedEntity = 0u;
+                select_editor_entity(state, 0u);
 
             if (state.entities.size() != beforeCount)
             {
                 push_editor_log(
                     state,
                     std::format(
-                        "[forest] Rebuilt temporal graph Forest Factory preview: {} segments, {} canopy markers.",
-                        geometry.segmentCount,
-                        canopyBudget));
+                        "[plant] Loaded {} Plant Lab preview entities for Forest Factory asset authoring.",
+                        generatedCount));
             }
+        }
+
+        [[nodiscard]] std::size_t place_forest_factory_asset(EditorState& state)
+        {
+            const std::size_t assetOrdinal = static_cast<std::size_t>(std::count_if(
+                state.entities.begin(),
+                state.entities.end(),
+                [](const EditorEntity& entity)
+                {
+                    return entity.type == "ForestTrunk"
+                        && entity.name.rfind("ForestAsset_", 0u) == 0u;
+                }));
+
+            const auto source = make_plant_lab_editor_scene();
+            const float placementX = (static_cast<float>(assetOrdinal % 4u) - 1.5f) * 3.2f;
+            const float placementZ = static_cast<float>(assetOrdinal / 4u) * 3.2f;
+            const std::size_t firstPlaced = state.entities.size();
+            std::size_t placedCount = 0u;
+
+            for (const auto& seed : source.entities)
+            {
+                if (seed.category != "ForestFactory")
+                    continue;
+
+                auto entity = editor_entity_from_seed(seed);
+                entity.name = std::format("ForestAsset_{:02}_{}", assetOrdinal, seed.name);
+                entity.position[0] += placementX;
+                entity.position[2] += placementZ;
+                entity.editorOnly = false;
+                state.entities.push_back(std::move(entity));
+                ++placedCount;
+            }
+
+            if (placedCount == 0u)
+            {
+                push_editor_log(
+                    state,
+                    "[forest] Placement failed: Plant Lab produced no Forest Factory scene objects.");
+                return 0u;
+            }
+
+            normalize_editor_entity_ids(state);
+            select_editor_entity(state, firstPlaced);
+            state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
+            state.projectStatus = std::format(
+                "Placed Forest Factory asset {:02} with {} scene objects.",
+                assetOrdinal,
+                placedCount);
+            push_editor_log(
+                state,
+                std::format(
+                    "[forest] Placed ForestAsset_{:02} into the active 3D scene with {} persistent objects.",
+                    assetOrdinal,
+                    placedCount));
+            return placedCount;
         }
 
         [[nodiscard]] bool is_forest_factory_entity(const EditorEntity& entity) noexcept
@@ -2128,8 +2644,10 @@ namespace epochengine
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::object_camera());
             if (entity.category == "ForestFactory")
                 return forest_factory_color_for_entity(entity);
-            if (entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen")
+            if (entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name)
                 return { 0.08f, 0.92f, 0.64f };
+            if (entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kCabinetBodySceneNode.name)
+                return { 0.16f, 0.30f, 0.58f };
             if (entity.category == "World" || entity.type == "Level")
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::object_world());
             if (entity.editorOnly || entity.category == "Editor")
@@ -2162,7 +2680,9 @@ namespace epochengine
                 return epochengine::previewgrid::ObjectPreviewPrimitive::Spawn;
             if (entity.type == "Camera")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::Camera;
-            if (entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen")
+            if (entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kCabinetBodySceneNode.name)
+                return epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeCabinet;
+            if (entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name)
                 return epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen;
             if (entity.type == "Canvas2D")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::Canvas2D;
@@ -2281,7 +2801,7 @@ namespace epochengine
                     .primitive = preview_primitive_for_entity(entity),
                     .selected = marker_selected_for_entity(entity, selected),
                     .editorOnly = entity.editorOnly || entity.category == "Editor" || is_forest_factory_entity(entity),
-                    .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen"
+                    .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name
                 });
             }
 
@@ -2301,9 +2821,11 @@ namespace epochengine
             duplicate.name = make_entity_name(state, duplicate.name + "_Copy");
             duplicate.position[0] += 0.85f;
             duplicate.position[2] -= 0.55f;
+            duplicate.sceneObjectId = scene::kInvalidSceneObjectId;
             state.entities.push_back(std::move(duplicate));
-            state.sceneLightingDirty = true;
-            state.selectedEntity = state.entities.size() - 1u;
+            mark_editor_scene_changed(state);
+            normalize_editor_entity_ids(state);
+            select_editor_entity(state, state.entities.size() - 1u);
             push_editor_log(state, std::string("[entity] Duplicated ") + state.entities[selectedIndex].name + ".");
         }
 
@@ -2318,14 +2840,14 @@ namespace epochengine
             const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
             const std::string name = state.entities[selectedIndex].name;
             state.entities.erase(state.entities.begin() + static_cast<std::ptrdiff_t>(selectedIndex));
-            state.sceneLightingDirty = true;
+            mark_editor_scene_changed(state);
 
             if (state.entities.empty())
-                state.selectedEntity = 0u;
+                select_editor_entity(state, 0u);
             else if (selectedIndex >= state.entities.size())
-                state.selectedEntity = state.entities.size() - 1u;
+                select_editor_entity(state, state.entities.size() - 1u);
             else
-                state.selectedEntity = selectedIndex;
+                select_editor_entity(state, selectedIndex);
 
             push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
         }
@@ -2420,62 +2942,22 @@ namespace epochengine
             return epochengine::previewgrid::Vec3{ hit.x, hit.y, hit.z };
         }
 
-        [[nodiscard]] std::optional<std::size_t> pick_editor_scene_entity(
+        [[nodiscard]] std::optional<scene::SceneObjectId> pick_editor_scene_entity(
             const core::Context* ctx,
-            const EditorState& state,
+            EditorState& state,
             const gui::WidgetBounds& viewport,
             const gui::Vec2& mouse) noexcept
         {
             const auto queryRay = screen_point_to_world_ray(ctx, viewport, mouse);
-            if (!queryRay)
+            if (!queryRay || !ensure_editor_scene_interaction(state))
                 return std::nullopt;
 
-            epochengine::ray::RayScene scene{};
-            for (std::size_t index = 0; index < state.entities.size(); ++index)
-            {
-                const EditorEntity& entity = state.entities[index];
-                if (!entity.visible)
-                    continue;
-
-                const float fallback = (std::max)(0.16f, marker_radius_for_entity(entity) * 0.45f);
-                const auto axis = [fallback](float value) noexcept
-                {
-                    return (std::max)(std::abs(value) * 0.5f, fallback);
-                };
-                const epochengine::render_math::Float3 center{
-                    entity.position[0],
-                    entity.position[1],
-                    entity.position[2]
-                };
-                const epochengine::render_math::Float3 half{
-                    axis(entity.scale[0]),
-                    axis(entity.scale[1]),
-                    axis(entity.scale[2])
-                };
-
-                epochengine::ray::PrimitiveDesc primitive{};
-                primitive.kind = epochengine::ray::PrimitiveKind::Aabb;
-                primitive.aabb = {
-                    epochengine::render_math::subtract(center, half),
-                    epochengine::render_math::add(center, half)
-                };
-                primitive.visibilityMask = 1u;
-                primitive.object = {
-                    static_cast<std::uint64_t>(index + 1u),
-                    1u
-                };
-                primitive.primitiveIndex = static_cast<std::uint32_t>(index);
-                primitive.enabled = true;
-                (void)scene.create(primitive);
-            }
-
-            const auto result = scene.trace(*queryRay, epochengine::ray::QueryMode::Closest);
-            if (result.status != epochengine::ray::QueryStatus::Hit
-                || result.hit.primitiveIndex >= state.entities.size())
-            {
+            const auto selection = state.sceneInteraction.trace(
+                *queryRay,
+                epochengine::ray::QueryMode::Closest);
+            if (!selection.has_hit())
                 return std::nullopt;
-            }
-            return static_cast<std::size_t>(result.hit.primitiveIndex);
+            return selection.hit.object.value;
         }
         void update_scene_object_interaction(
             const std::shared_ptr<core::Context>& ctx,
@@ -2486,6 +2968,7 @@ namespace epochengine
             {
                 editor.sceneDragActive = false;
                 editor.sceneDragHasPlaneHit = false;
+                editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
                 editor.sceneLeftWasHeld = false;
                 return;
             }
@@ -2519,12 +3002,16 @@ namespace epochengine
 
             if (leftPressed && mouseInScene && !rightHeld)
             {
-                const auto picked = pick_editor_scene_entity(ctx.get(), editor, viewport, mouse);
-                if (picked)
+                const auto pickedId = pick_editor_scene_entity(ctx.get(), editor, viewport, mouse);
+                const auto picked = pickedId
+                    ? editor_entity_index(editor, *pickedId)
+                    : std::nullopt;
+                if (picked && pickedId)
                 {
-                    editor.selectedEntity = *picked;
+                    select_editor_entity(editor, *picked);
                     editor.sceneDragActive = true;
                     editor.sceneDragEntity = *picked;
+                    editor.sceneDragEntityId = *pickedId;
                     editor.sceneDragStartMouse = mouse;
                     editor.sceneDragStartPosition = editor.entities[*picked].position;
                     const auto startHit = screen_point_to_world_plane(
@@ -2571,6 +3058,7 @@ namespace epochengine
                         entity.position[0] = editor.sceneDragStartPosition[0] + (currentHit->x - editor.sceneDragStartHit[0]);
                         entity.position[2] = editor.sceneDragStartPosition[2] + (currentHit->z - editor.sceneDragStartHit[2]);
                         editor.sceneLightingDirty = true;
+                        editor.sceneInteractionDirty = true;
                     }
                 }
                 else
@@ -2597,6 +3085,7 @@ namespace epochengine
                     entity.position[0] = editor.sceneDragStartPosition[0] + delta.x;
                     entity.position[2] = editor.sceneDragStartPosition[2] + delta.z;
                     editor.sceneLightingDirty = true;
+                    editor.sceneInteractionDirty = true;
                 }
             }
 
@@ -2604,9 +3093,10 @@ namespace epochengine
             {
                 if (editor.sceneDragEntity < editor.entities.size())
                     push_editor_log(editor, "[scene] Moved " + editor.entities[editor.sceneDragEntity].name + ".");
-                editor.sceneLightingDirty = true;
+                mark_editor_scene_changed(editor);
                 editor.sceneDragActive = false;
                 editor.sceneDragHasPlaneHit = false;
+                editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
             }
 
             editor.sceneLeftWasHeld = leftHeld;
@@ -2675,18 +3165,26 @@ namespace epochengine
                     return;
                 }
 
-                const auto index = (std::min)(state.selectedEntity, state.entities.size() - 1u);
-                const EditorEntity& entity = state.entities[index];
-                const float radius = (std::max)({
-                    std::abs(entity.scale[0]),
-                    std::abs(entity.scale[1]),
-                    std::abs(entity.scale[2]),
-                    marker_radius_for_entity(entity) * 2.0f
-                }) * 0.5f;
+                if (!ensure_editor_scene_interaction(state))
+                {
+                    push_editor_log(state, "[scene] Selection bounds are invalid; Focus was not applied.");
+                    return;
+                }
+
+                const auto focus = state.sceneInteraction.focus_target(
+                    scene_interaction::SceneObjectId{ state.selectedEntityId, 1u });
+                const auto index = editor_entity_index(state, state.selectedEntityId);
+                if (!focus || !index)
+                {
+                    push_editor_log(state, "[scene] Selected object no longer resolves; Focus was not applied.");
+                    return;
+                }
+
+                const EditorEntity& entity = state.entities[*index];
                 const bool focused = epochengine::previewgrid::focus_camera(
                     ctx,
-                    { entity.position[0], entity.position[1], entity.position[2] },
-                    radius);
+                    { focus->target.x, focus->target.y, focus->target.z },
+                    focus->radius);
                 push_editor_log(
                     state,
                     focused
@@ -2707,6 +3205,7 @@ namespace epochengine
                 }
                 if (ctx)
                     epochengine::previewgrid::reset_camera(ctx);
+                mark_editor_scene_changed(state);
                 push_editor_log(state, "[scene] Camera rigs reset.");
                 return;
             }
@@ -2717,7 +3216,7 @@ namespace epochengine
                 for (auto& entity : state.entities)
                     if (entity.editorOnly || entity.category == "Editor")
                         entity.visible = state.helpersVisible;
-                state.sceneLightingDirty = true;
+                mark_editor_scene_changed(state);
                 push_editor_log(state, std::string("[scene] Helpers ") + (state.helpersVisible ? "shown." : "hidden."));
                 return;
             }
@@ -3240,64 +3739,78 @@ namespace epochengine
             }
         }
 
-        [[nodiscard]] constexpr epochengine::capability::Tier renderer_capability_tier(
-            const epochengine::RendererBackendKind kind) noexcept
+        [[nodiscard]] constexpr epochengine::RendererBackendKind renderer_backend_kind(
+            const std::string_view argument) noexcept
         {
-            switch (kind)
-            {
-            case epochengine::RendererBackendKind::vulkan:
-            case epochengine::RendererBackendKind::directx:
-                return epochengine::capability::Tier::explicit_api;
-            case epochengine::RendererBackendKind::opengl:
-            case epochengine::RendererBackendKind::sdl3:
-            case epochengine::RendererBackendKind::sfml3:
-            case epochengine::RendererBackendKind::raylib3:
-                return epochengine::capability::Tier::portable_graphics;
-            case epochengine::RendererBackendKind::software:
-            case epochengine::RendererBackendKind::null:
-            default:
-                return epochengine::capability::Tier::headless;
-            }
-        }
-
-        [[nodiscard]] epochengine::capability::EvidenceMask renderer_capability_evidence(
-            const epochengine::RendererCapabilityReport& report) noexcept
-        {
-            using epochengine::RendererCapabilityStatus;
-            using epochengine::capability::Evidence;
-
-            auto evidence = epochengine::capability::evidence_bit(Evidence::declared_contract);
-            if (report.build_graph_proof == RendererCapabilityStatus::partial
-                || report.build_graph_proof == RendererCapabilityStatus::present)
-            {
-                evidence |= epochengine::capability::evidence_bit(Evidence::build_contract);
-            }
-            if (report.presentation_proof == RendererCapabilityStatus::present)
-                evidence |= epochengine::capability::evidence_bit(Evidence::presentation_probe);
-            return evidence;
+            if (argument == "directx") return epochengine::RendererBackendKind::directx;
+            if (argument == "vulkan") return epochengine::RendererBackendKind::vulkan;
+            if (argument == "raylib") return epochengine::RendererBackendKind::raylib3;
+            if (argument == "sdl") return epochengine::RendererBackendKind::sdl3;
+            if (argument == "sfml") return epochengine::RendererBackendKind::sfml3;
+            if (argument == "software") return epochengine::RendererBackendKind::software;
+            if (argument == "headless") return epochengine::RendererBackendKind::null;
+            return epochengine::RendererBackendKind::opengl;
         }
 
         [[nodiscard]] epochengine::capability::Profile renderer_capability_profile(
             const std::shared_ptr<core::Context>& ctx) noexcept
         {
-            const auto kind = renderer_backend_kind(ctx);
-            if (kind == epochengine::RendererBackendKind::null)
-                return epochengine::capability::cpu_reference_profile();
+            return epochengine::capability::renderer_profile_for(
+                renderer_backend_kind(ctx));
+        }
 
-            const auto capabilities = epochengine::renderer_capabilities_for(kind);
-            const auto report = epochengine::renderer_capability_report_for(kind);
-            const auto evidence = renderer_capability_evidence(report);
-            if (kind == epochengine::RendererBackendKind::software)
+        [[nodiscard]] const EditorProjectProfile& active_project_profile(
+            const EditorState& editor) noexcept
+        {
+            if (const auto* profile = editor_find_project_profile(editor.projectId))
+                return *profile;
+            return editor_default_project_profile();
+        }
+
+        [[nodiscard]] epochengine::capability::RequirementAdmission renderer_admission(
+            const epochengine::RendererBackendKind kind,
+            const EditorProjectCapabilityPolicy& policy) noexcept
+        {
+            return epochengine::capability::assess_requirement(
+                epochengine::capability::renderer_subsystem_profile_for(kind),
+                policy.renderer_requirement,
+                policy.allow_experimental,
+                policy.allow_software_fallback);
+        }
+
+        [[nodiscard]] std::string renderer_admission_summary(
+            const epochengine::RendererBackendKind kind,
+            const EditorProjectCapabilityPolicy& policy)
+        {
+            const auto candidate =
+                epochengine::capability::renderer_subsystem_profile_for(kind);
+            const auto admission = renderer_admission(kind, policy);
+            std::string summary = std::format(
+                "{} | {} {}-{}",
+                policy.id,
+                epochengine::capability::admission_status_label(admission.status),
+                epochengine::capability::tier_code(candidate.capability.tier),
+                epochengine::capability::backend_code(candidate.capability.backend));
+            if (admission.status == epochengine::capability::AdmissionStatus::rejected)
             {
-                return epochengine::capability::software_profile(
-                    report.build_graph_proof,
-                    evidence);
+                summary += " | ";
+                summary += epochengine::capability::match_failure_label(admission.failure);
             }
-            return epochengine::capability::adapt_renderer_capabilities(
-                capabilities,
-                report,
-                renderer_capability_tier(kind),
-                evidence);
+            return summary;
+        }
+
+        [[nodiscard]] std::string renderer_budget_summary(
+            const epochengine::RendererBackendKind kind)
+        {
+            const auto budgets = epochengine::capability::renderer_profile_for(kind)
+                .recommended_budgets;
+            return std::format(
+                "{}x{} | CPU {:.1f} ms | GPU {:.1f} ms | {} MiB local",
+                budgets.max_w,
+                budgets.max_h,
+                budgets.cpu_ms,
+                budgets.gpu_ms,
+                budgets.vram_budget_bytes / (1024ull * 1024ull));
         }
 
         [[nodiscard]] std::string renderer_capability_profile_summary(
@@ -3365,13 +3878,14 @@ namespace epochengine
             const auto report = epochengine::renderer_capability_report_for(kind);
 
             return std::format(
-                "desc {} | graph {} | hook {} | live {} | presentation {} | sampled {}",
+                "desc {} | graph {} | hook {} | live {} | presentation {} | sampled {} | scene surface {}",
                 epochengine::renderer_capability_status_label(report.descriptor_contract),
                 epochengine::renderer_capability_status_label(report.build_graph_proof),
                 epochengine::renderer_capability_status_label(report.hook_readiness),
                 epochengine::renderer_capability_status_label(report.live_native_allocation),
                 epochengine::renderer_capability_status_label(report.presentation_proof),
-                epochengine::renderer_capability_status_label(report.sampled_render_targets));
+                epochengine::renderer_capability_status_label(report.sampled_render_targets),
+                epochengine::renderer_capability_status_label(report.scene_sampled_surface));
         }
 
         [[nodiscard]] std::string renderer_sampled_rtt_descriptor_status(const std::shared_ptr<core::Context>& ctx)
@@ -3409,6 +3923,12 @@ namespace epochengine
             const auto report = epochengine::renderer_capability_report_for(renderer_backend_kind(ctx));
             return epochengine::renderer_capability_status_label(report.sampled_render_targets);
         }
+        [[nodiscard]] std::string renderer_scene_sampled_surface_status(const std::shared_ptr<core::Context>& ctx)
+        {
+            const auto report = epochengine::renderer_capability_report_for(renderer_backend_kind(ctx));
+            return epochengine::renderer_capability_status_label(report.scene_sampled_surface);
+        }
+
 
         [[nodiscard]] std::string renderer_native_mesh_model_status(const std::shared_ptr<core::Context>& ctx)
         {
@@ -3434,14 +3954,15 @@ namespace epochengine
         [[nodiscard]] std::string renderer_native_sampled_rtt_status(const std::shared_ptr<core::Context>& ctx)
         {
             const auto kind = renderer_backend_kind(ctx);
-            if (kind == epochengine::RendererBackendKind::software)
-                return "debug fallback; production sampled RTT allocation is out of scope";
-
             const auto caps = epochengine::renderer_capabilities_for(kind);
             const auto report = epochengine::renderer_capability_report_for(kind);
             const std::string status = epochengine::renderer_capability_status_label(report.sampled_render_targets);
+            const std::string sceneStatus = epochengine::renderer_capability_status_label(report.scene_sampled_surface);
             const std::string liveStatus = epochengine::renderer_capability_status_label(report.live_native_allocation);
             const std::string presentationStatus = epochengine::renderer_capability_status_label(report.presentation_proof);
+            if (kind == epochengine::RendererBackendKind::software)
+                return sceneStatus + ": bounded CPU sampled scene surface; generic device-spine promotion deferred";
+
             if (epochengine::renderer_supports_native_sampled_render_targets(caps))
                 return status + ": native sampled RTT allocation active; live " + liveStatus +
                     " | presentation " + presentationStatus;
@@ -3450,20 +3971,19 @@ namespace epochengine
                 switch (kind)
                 {
                 case epochengine::RendererBackendKind::opengl:
-                    return status + ": descriptors/graph/hook ready; live " + liveStatus +
-                        " | presentation " + presentationStatus;
                 case epochengine::RendererBackendKind::sdl3:
+                    return sceneStatus + ": context sampled surface active; device spine " + status +
+                        " | presentation " + presentationStatus;
                 case epochengine::RendererBackendKind::sfml3:
                 case epochengine::RendererBackendKind::raylib3:
-                    return status + ": graph/model submission plus no-runtime guard; live " + liveStatus +
-                        " | presentation " + presentationStatus;
+                    return sceneStatus + ": context-native sampled surface active; device hooks " +
+                        epochengine::renderer_capability_status_label(report.hook_readiness);
                 case epochengine::RendererBackendKind::vulkan:
                 case epochengine::RendererBackendKind::directx:
-                    return status + ": shared descriptors/graph only; live " + liveStatus +
-                        " | presentation " + presentationStatus;
+                    return sceneStatus + ": context-native sampled surface active; device graph " +
+                        epochengine::renderer_capability_status_label(report.build_graph_proof);
                 default:
-                    return status + ": sampled RTT graph declared; live " + liveStatus +
-                        " | presentation " + presentationStatus;
+                    return sceneStatus + ": sampled scene surface path active; device spine " + status;
                 }
             }
             return status + ": sampled RTT unavailable";
@@ -3521,6 +4041,101 @@ namespace epochengine
                     return choice.label;
             }
             return "OpenGL single context";
+        }
+
+        struct Canvas2DResolutionChoice
+        {
+            std::string_view label{};
+            std::uint32_t width{};
+            std::uint32_t height{};
+        };
+
+        struct Canvas2DBudgetChoice
+        {
+            std::string_view label{};
+            std::uint32_t value{};
+        };
+
+        [[nodiscard]] std::span<const Canvas2DResolutionChoice> canvas2d_resolution_choices() noexcept
+        {
+            static constexpr std::array<Canvas2DResolutionChoice, 4> kChoices{ {
+                { "320 x 180", 320u, 180u },
+                { "640 x 360", 640u, 360u },
+                { "1280 x 720", 1280u, 720u },
+                { "1920 x 1080", 1920u, 1080u }
+            } };
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view canvas2d_resolution_label(
+            const EditorCanvas2DProjectSnapshot& settings) noexcept
+        {
+            for (const auto& choice : canvas2d_resolution_choices())
+            {
+                if (choice.width == settings.logical_width && choice.height == settings.logical_height)
+                    return choice.label;
+            }
+            return "Custom logical extent";
+        }
+
+        [[nodiscard]] constexpr std::string_view canvas2d_scale_policy_label(std::uint8_t policy) noexcept
+        {
+            switch (policy)
+            {
+            case 1u: return "Fractional fit";
+            case 2u: return "Fill and crop";
+            case 3u: return "Stretch";
+            case 0u:
+            default: return "Integer fit";
+            }
+        }
+
+        [[nodiscard]] constexpr std::string_view canvas2d_sampling_policy_label(std::uint8_t policy) noexcept
+        {
+            return policy == 1u ? "Linear" : "Nearest";
+        }
+
+        [[nodiscard]] std::span<const Canvas2DBudgetChoice> canvas2d_sprite_budget_choices() noexcept
+        {
+            static constexpr std::array<Canvas2DBudgetChoice, 4> kChoices{ {
+                { "512 sprites per batch", 512u },
+                { "2048 sprites per batch", 2048u },
+                { "8192 sprites per batch", 8192u },
+                { "16384 sprites per batch", 16'384u }
+            } };
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view canvas2d_sprite_budget_label(std::uint32_t value) noexcept
+        {
+            for (const auto& choice : canvas2d_sprite_budget_choices())
+            {
+                if (choice.value == value)
+                    return choice.label;
+            }
+            return "Custom sprite batch budget";
+        }
+
+        [[nodiscard]] std::span<const Canvas2DBudgetChoice> canvas2d_chunk_extent_choices() noexcept
+        {
+            static constexpr std::array<Canvas2DBudgetChoice, 5> kChoices{ {
+                { "8 x 8 tiles", 8u },
+                { "16 x 16 tiles", 16u },
+                { "32 x 32 tiles", 32u },
+                { "64 x 64 tiles", 64u },
+                { "128 x 128 tiles", 128u }
+            } };
+            return { kChoices.data(), kChoices.size() };
+        }
+
+        [[nodiscard]] std::string_view canvas2d_chunk_extent_label(std::uint32_t value) noexcept
+        {
+            for (const auto& choice : canvas2d_chunk_extent_choices())
+            {
+                if (choice.value == value)
+                    return choice.label;
+            }
+            return "Custom tile chunk";
         }
 
         struct FrameLimitChoice
@@ -3721,38 +4336,39 @@ namespace epochengine
             return resolve_editor_path(std::filesystem::path{ state.projectScenePath });
         }
 
-        void save_editor_scene_snapshot(const EditorState& state)
+        [[nodiscard]] bool save_editor_scene_snapshot(EditorState& state)
         {
             const auto scenePath = active_editor_scene_path(state);
             if (scenePath.empty())
-                return;
+                return false;
 
-            std::error_code ec;
-            std::filesystem::create_directories(scenePath.parent_path(), ec);
-            if (ec)
-                return;
-
-            std::ofstream out(scenePath, std::ios::binary | std::ios::trunc);
-            if (!out)
-                return;
-
-            out << std::setprecision(6);
-            out << "scene " << std::quoted(state.activeWorld) << "\n";
-            out << "project " << std::quoted(state.projectId) << "\n";
-            out << "epoch_editor_entities 1\n";
-            for (const auto& entity : state.entities)
+            synchronize_editor_selection(state);
+            const scene::SceneSnapshot projection = capture_editor_scene_projection(state);
+            const auto saved = scene::persistence::save_scene_snapshot_atomic(
+                scenePath,
+                projection,
+                scene::persistence::ScenePersistenceOptions{
+                    .requirement = editor_application_profile(state.applicationKind).allow_project_run
+                        ? scene::SceneDocumentRequirement::runnable
+                        : scene::SceneDocumentRequirement::authoring
+                });
+            if (!saved)
             {
-                out << "entity "
-                    << std::quoted(entity.name) << ' '
-                    << std::quoted(entity.type) << ' '
-                    << std::quoted(entity.category) << ' '
-                    << "pos " << entity.position[0] << ' ' << entity.position[1] << ' ' << entity.position[2] << ' '
-                    << "rot " << entity.rotation[0] << ' ' << entity.rotation[1] << ' ' << entity.rotation[2] << ' '
-                    << "scale " << entity.scale[0] << ' ' << entity.scale[1] << ' ' << entity.scale[2] << ' '
-                    << "visible " << (entity.visible ? 1 : 0) << ' '
-                    << "editor_only " << (entity.editorOnly ? 1 : 0)
-                    << "\n";
+                state.projectStatus = std::format(
+                    "Scene save blocked ({}): {}",
+                    scene::persistence::scene_persistence_status_name(saved.status),
+                    saved.error.empty() ? std::string("no committed scene evidence") : saved.error);
+                push_editor_log(state, "[scene] " + state.projectStatus);
+                return false;
             }
+
+            state.sceneDocumentRevision = saved.evidence.revision;
+            state.projectStatus = std::format(
+                "Saved scene revision {} ({} bytes).",
+                saved.evidence.revision,
+                saved.evidence.bytes);
+            return saved.evidence.atomic_replace_committed
+                && saved.evidence.temporary_bytes_verified;
         }
 
         [[nodiscard]] bool load_editor_scene_snapshot(EditorState& state)
@@ -3761,55 +4377,48 @@ namespace epochengine
             if (scenePath.empty())
                 return false;
 
-            std::ifstream in(scenePath, std::ios::binary);
-            if (!in)
+            auto loaded = scene::persistence::load_scene_snapshot(
+                scenePath,
+                scene::persistence::ScenePersistenceOptions{
+                    .requirement = scene::SceneDocumentRequirement::authoring
+                });
+            if (!loaded.result)
                 return false;
 
-            std::vector<EditorEntity> loaded;
-            std::string line;
-            while (std::getline(in, line))
+            scene::SceneSnapshot& snapshot = loaded.snapshot;
+            if (!snapshot.project_id.empty()
+                && !state.projectId.empty()
+                && snapshot.project_id != state.projectId)
             {
-                std::istringstream row(line);
-                std::string tag;
-                row >> tag;
-                if (tag != "entity")
-                    continue;
-
-                EditorEntity entity{};
-                std::string posTag;
-                std::string rotTag;
-                std::string scaleTag;
-                std::string visibleTag;
-                std::string editorOnlyTag;
-                int visible = 1;
-                int editorOnly = 0;
-                if (!(row
-                    >> std::quoted(entity.name)
-                    >> std::quoted(entity.type)
-                    >> std::quoted(entity.category)
-                    >> posTag >> entity.position[0] >> entity.position[1] >> entity.position[2]
-                    >> rotTag >> entity.rotation[0] >> entity.rotation[1] >> entity.rotation[2]
-                    >> scaleTag >> entity.scale[0] >> entity.scale[1] >> entity.scale[2]
-                    >> visibleTag >> visible
-                    >> editorOnlyTag >> editorOnly))
-                {
-                    continue;
-                }
-
-                if (posTag != "pos" || rotTag != "rot" || scaleTag != "scale" || visibleTag != "visible" || editorOnlyTag != "editor_only")
-                    continue;
-
-                entity.visible = visible != 0;
-                entity.editorOnly = editorOnly != 0;
-                loaded.push_back(std::move(entity));
+                push_editor_log(state, "[scene] Saved scene belongs to another project and was not loaded.");
+                return false;
             }
 
-            if (loaded.empty())
-                return false;
+            std::vector<EditorEntity> entities{};
+            entities.reserve(snapshot.objects.size());
+            for (const scene::SceneObjectSnapshot& source : snapshot.objects)
+            {
+                entities.push_back(EditorEntity{
+                    .sceneObjectId = source.id,
+                    .name = source.name,
+                    .type = source.type,
+                    .category = source.category,
+                    .position = source.position,
+                    .rotation = source.rotation,
+                    .scale = source.scale,
+                    .visible = source.visible,
+                    .editorOnly = source.editor_only
+                });
+            }
 
-            state.entities = std::move(loaded);
+            state.entities = std::move(entities);
+            state.sceneDocumentRevision = snapshot.revision;
             state.sceneLightingDirty = true;
-            state.selectedEntity = (std::min)(state.selectedEntity, state.entities.size() - 1u);
+            state.sceneInteractionDirty = true;
+            normalize_editor_entity_ids(state);
+            select_editor_entity(
+                state,
+                state.entities.empty() ? 0u : (std::min)(state.selectedEntity, state.entities.size() - 1u));
             return true;
         }
 
@@ -4786,6 +5395,7 @@ namespace epochengine
             const auto preservedWorkspaceTab = editor.workspaceTab;
             const auto preservedDockStatusTab = editor.dockStatusTab;
             const auto preservedMainSurface = editor.mainSurface;
+            const auto preservedCanvas2DProject = editor.canvas2dProject;
             const auto preservedProjectCameraMode = editor.projectCameraMode;
             const auto preservedInputProfile = editor.inputProfilePreset;
             const std::string preservedRunBackend = editor.projectRunBackend;
@@ -4804,6 +5414,7 @@ namespace epochengine
                     editor.workspaceTab = preservedWorkspaceTab;
                     editor.dockStatusTab = preservedDockStatusTab;
                     editor.mainSurface = preservedMainSurface;
+                    editor.canvas2dProject = preservedCanvas2DProject;
                     editor.projectCameraMode = preservedProjectCameraMode;
                     editor.inputProfilePreset = preservedInputProfile;
                     editor.projectRunBackend = preservedRunBackend;
@@ -4813,9 +5424,15 @@ namespace epochengine
                     if (!preservedEntities.empty())
                     {
                         editor.entities = preservedEntities;
-                        editor.selectedEntity = (std::min)(preservedSelected, editor.entities.size() - 1u);
-                        save_editor_scene_snapshot(editor);
+                        select_editor_entity(editor, (std::min)(preservedSelected, editor.entities.size() - 1u));
+                        normalize_editor_entity_ids(editor);
                     }
+                }
+                if (!save_editor_scene_snapshot(editor))
+                {
+                    editor.projectStatus = "Project save blocked because the active scene revision was not committed.";
+                    push_editor_log(editor, "[project] " + editor.projectStatus);
+                    return;
                 }
                 editor.projectStatus = ensured.summary + " Active project saved.";
                 editor.aiContinuousBuildStatus = isSandbox
@@ -5580,7 +6197,7 @@ namespace epochengine
                 else
                     set_project(it->second, editor_default_project_profile().id, false);
                 if (ctx)
-                    epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+                    epochengine::previewgrid::set_camera_mode(ctx.get(), it->second.projectCameraMode);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
                 push_editor_log(it->second, "[info] Use the bottom dock tabs for Project, Scripts, AI, Systems, and Output evidence. Dedicated editor windows/views are still being built.");
                 push_editor_log(it->second, "[info] Scene viewport is owned by the active backend.");
@@ -5647,57 +6264,37 @@ namespace epochengine
         if (!ctx)
             return;
 
+        if (const auto* application = editor_application_for_project(project_id))
+        {
+            editor_load_application(ctx, application->kind);
+            return;
+        }
+
         auto& editor = editor_state_for(ctx);
         set_project(editor, project_id, true);
-        epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+        epochengine::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
         epochengine::previewgrid::reset_camera(ctx.get());
     }
 
-    void editor_load_workspace(
+    void editor_load_application(
         const std::shared_ptr<core::Context>& ctx,
-        std::string_view project_id,
-        EditorLaunchWorkspace workspace)
+        EditorApplicationKind applicationKind)
     {
         if (!ctx)
             return;
 
-        editor_load_project(ctx, project_id);
+        const auto& application = editor_application_profile(applicationKind);
         auto& editor = editor_state_for(ctx);
-        editor.showOutliner = true;
-        editor.showInspector = true;
-        editor.showConsoleDock = true;
-        editor.showAiChat = true;
+        set_project(editor, application.project_id, true);
+        apply_application_profile(editor, application);
         editor.previewMode = core::ScenePreviewMode::Editor;
         editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 2);
+        epochengine::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
 
-        switch (workspace)
-        {
-        case EditorLaunchWorkspace::ForestFactory:
-            editor.mainSurface = EditorMainSurface::ForestFactory;
-            editor.workspaceTab = EditorWorkspaceTab::Assets;
-            editor.projectCameraMode = previewgrid::CameraMode::Editor;
-            ensure_forest_factory_preview_entities(editor);
-            epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
-            push_editor_log(editor, "[forest] Forest Factory workspace opened from the project launcher.");
-            break;
-        case EditorLaunchWorkspace::GuiEditor:
-            editor.mainSurface = EditorMainSurface::Game2D;
-            editor.workspaceTab = EditorWorkspaceTab::Project;
-            editor.projectCameraMode = previewgrid::CameraMode::Canvas2D;
-            ensure_2d_canvas_entity(editor);
-            epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Canvas2D);
-            push_editor_log(editor, "[gui] GUI Editor workspace opened from the project launcher.");
-            break;
-        case EditorLaunchWorkspace::Standard:
-        default:
-            editor.mainSurface = EditorMainSurface::Scene;
-            editor.workspaceTab = EditorWorkspaceTab::Output;
-            editor.projectCameraMode = previewgrid::CameraMode::Editor;
-            epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
-            push_editor_log(editor, "[editor] Standard editor workspace opened from the project launcher.");
-            break;
-        }
-
+        push_editor_log(
+            editor,
+            std::string("[editor] Opened dedicated ") + std::string(application.display_name)
+                + " application with scene " + std::string(application.scene_id) + ".");
         epochengine::previewgrid::reset_camera(ctx.get());
     }
 
@@ -5834,9 +6431,11 @@ namespace epochengine
         snapshot.script_editor_dirty = editor.scriptEditorDirty;
         snapshot.project_run_backend = editor.projectRunBackend;
         snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 60.0);
+        snapshot.canvas2d_project = sanitize_canvas2d_project(editor.canvas2dProject);
         snapshot.project_camera_mode = static_cast<std::uint8_t>(editor.projectCameraMode);
         snapshot.input_profile_preset = static_cast<std::uint8_t>(editor.inputProfilePreset);
         snapshot.theme_preference = snapshot_theme_preference(editor.themePreference);
+        snapshot.rounded_rectangles = editor.roundedRectangles;
         snapshot.editor_frame_limit_fps = snapshot_frame_limit(editor.editorFrameLimitFps, 120.0);
         snapshot.selected_project_file = editor.selectedProjectFile;
         snapshot.selected_asset_path = editor.selectedAssetPath;
@@ -5844,6 +6443,7 @@ namespace epochengine
         for (const EditorEntity& entity : editor.entities)
             snapshot.entities.emplace_back(capture_snapshot_entity(entity));
         snapshot.selected_entity = editor.selectedEntity;
+        snapshot.selected_entity_id = editor.selectedEntityId;
         snapshot.log_lines = editor.logLines;
         snapshot.helpers_visible = editor.helpersVisible;
         snapshot.time_snapshot = editor.timeSnapshot;
@@ -5862,6 +6462,7 @@ namespace epochengine
         snapshot.show_ai_chat = editor.showAiChat;
         snapshot.project_notes_visible = editor.projectNotesVisible;
         snapshot.ai_workspace_domain = static_cast<std::uint8_t>(editor.aiWorkspaceDomain);
+        snapshot.application_kind = editor.applicationKind;
         snapshot.systems_render_zoom = finite_or(editor.systems.renderZoom, 1.15f);
         snapshot.systems_task_zoom = finite_or(editor.systems.taskZoom, 1.15f);
         snapshot.systems_render_pan = editor.systems.renderPan;
@@ -5904,11 +6505,13 @@ namespace epochengine
         editor.projectBuildRunBackend.clear();
         editor.projectRunBackend = snapshot.project_run_backend.empty() ? std::string{ "opengl" } : snapshot.project_run_backend;
         editor.projectRunFrameLimitFps = snapshot_frame_limit(snapshot.project_run_frame_limit_fps, 60.0);
+        editor.canvas2dProject = sanitize_canvas2d_project(snapshot.canvas2d_project);
         editor.projectCameraMode = snapshot_camera_mode(snapshot.project_camera_mode);
         editor.projectBuildRunCameraMode = editor.projectCameraMode;
         editor.inputProfilePreset = snapshot_input_profile(snapshot.input_profile_preset);
         editor.projectBuildRunInputProfile = editor.inputProfilePreset;
         editor.themePreference = snapshot_theme_preference(snapshot.theme_preference);
+        editor.roundedRectangles = snapshot.rounded_rectangles;
         editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 120.0);
         editor.selectedProjectFile = snapshot.selected_project_file;
         editor.selectedAssetPath = snapshot.selected_asset_path;
@@ -5916,12 +6519,19 @@ namespace epochengine
         editor.entities.reserve(snapshot.entities.size());
         for (const EditorContextSnapshotEntity& entity : snapshot.entities)
             editor.entities.emplace_back(restore_snapshot_entity(entity));
-        editor.selectedEntity = editor.entities.empty()
-            ? 0u
-            : (std::min)(snapshot.selected_entity, editor.entities.size() - 1u);
+        normalize_editor_entity_ids(editor);
+        editor.selectedEntityId = snapshot.selected_entity_id;
+        if (const auto selected = editor_entity_index(editor, editor.selectedEntityId))
+            editor.selectedEntity = *selected;
+        else
+            select_editor_entity(editor, snapshot.selected_entity);
+        editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
         editor.logLines = snapshot.log_lines;
         editor.helpersVisible = snapshot.helpers_visible;
+        editor.applicationKind = snapshot.application_kind;
+        const auto& application = editor_application_profile(editor.applicationKind);
         editor.sceneLightingDirty = true;
+        editor.sceneInteractionDirty = true;
         editor.sceneDragActive = false;
         editor.sceneLeftWasHeld = false;
         editor.timeSnapshot = snapshot.time_snapshot;
@@ -5930,14 +6540,16 @@ namespace epochengine
         editor.workspaceTab = snapshot_workspace_tab(snapshot.workspace_tab);
         editor.dockStatusTab = snapshot_workspace_tab(snapshot.dock_status_tab);
         editor.mainSurface = snapshot_main_surface(snapshot.main_surface);
+        if (!editor_application_supports_surface(application, editor.mainSurface))
+            editor.mainSurface = application.default_surface;
         editor.workspaceSplit = snapshot_layout_split(snapshot.workspace_split, 0.68f);
         editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
         editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.22f);
         editor.dockSplit = snapshot_layout_split(snapshot.dock_split, 0.24f);
-        editor.showOutliner = snapshot.show_outliner;
-        editor.showInspector = snapshot.show_inspector;
-        editor.showConsoleDock = snapshot.show_console_dock;
-        editor.showAiChat = snapshot.show_ai_chat;
+        editor.showOutliner = snapshot.show_outliner && application.panes.outliner;
+        editor.showInspector = snapshot.show_inspector && application.panes.inspector;
+        editor.showConsoleDock = snapshot.show_console_dock && application.panes.console;
+        editor.showAiChat = snapshot.show_ai_chat && application.panes.ai_chat;
         editor.layoutDrag = EditorLayoutDrag::None;
         editor.surfaceSettleFrames = 1;
         editor.lastLayoutExtent = {};
@@ -6065,6 +6677,7 @@ namespace epochengine
         auto& editor = editor_state_for(ctx);
         ctx->set_gui_overlay_priority(true);
         const gui::ScopedTheme editorThemeScope{ editor.themePreference };
+        const gui::ScopedRoundedRectangles roundedRectScope{ editor.roundedRectangles };
         int resolvedWidth = 0;
         int resolvedHeight = 0;
         if (ctx->windowData)
@@ -6087,6 +6700,22 @@ namespace epochengine
         const bool floatingGuiRoute = route_id == "floating.gui";
         const bool sourcePaneRoute = outlinerRoute || inspectorRoute || consoleRoute || aiChatRoute;
         const bool paneRoute = sourcePaneRoute || floatingGuiRoute;
+        const auto& application = editor_application_profile(editor.applicationKind);
+        const bool routeAllowed = application.allow_floating_panes
+            && ((outlinerRoute && application.panes.outliner)
+                || (inspectorRoute && application.panes.inspector)
+                || (consoleRoute && application.panes.console)
+                || (aiChatRoute && application.panes.ai_chat)
+                || floatingGuiRoute);
+        if (paneRoute && !routeAllowed)
+        {
+            editor_mark_context_panel_detached(route_id, false);
+            result.command = EditorCommand::Exit;
+            result.command_argument = "application_route_unavailable";
+            result.scene_input_captured = true;
+            return result;
+        }
+
         const std::string_view windowTitle =
             outlinerRoute ? std::string_view{ "World Outliner" }
             : inspectorRoute ? std::string_view{ "Inspector" }
@@ -6097,11 +6726,14 @@ namespace epochengine
         gui::begin_window(windowTitle, { 0.0f, 0.0f }, { w, h });
 
         const float contentWidth = (std::max)(1.0f, w - 32.0f);
+        AiChat* detachedChat = nullptr;
+        if (aiChatRoute)
+        {
+            detachedChat = &chat_state_for(ctx);
+            detachedChat->pump();
+        }
         if (paneRoute)
         {
-            auto& chat = chat_state_for(ctx);
-            chat.pump();
-
             gui::label(windowTitle);
             gui::property_row("Route", std::string(route_id), 118.0f);
             gui::property_row("Renderer", renderer_name(ctx), 118.0f);
@@ -6167,16 +6799,16 @@ namespace epochengine
                 (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
                     .id = "popout-ai-chat",
                     .size = { contentWidth, (std::max)(120.0f, h - 212.0f) },
-                    .lines = chat.lines,
+                    .lines = detachedChat->lines,
                     .max_line_chars = 240,
                     .selectable = true,
                     .stick_to_bottom = true
                 });
-                const auto inputResult = gui::edit_box(chat.input, { contentWidth, 30.0f }, 4096, false);
+                const auto inputResult = gui::edit_box(detachedChat->input, { contentWidth, 30.0f }, 4096, false);
                 if (inputResult.submitted)
                 {
-                    chat.submit(std::move(chat.input));
-                    chat.input.clear();
+                    detachedChat->submit(std::move(detachedChat->input));
+                    detachedChat->input.clear();
                 }
             }
             else
@@ -6248,9 +6880,18 @@ namespace epochengine
             return result;
 
         auto& editor = editor_state_for(ctx);
+        const auto& application = editor_application_profile(editor.applicationKind);
+        if (!editor_application_supports_surface(application, editor.mainSurface))
+            editor.mainSurface = application.default_surface;
+        editor.showOutliner = editor.showOutliner && application.panes.outliner;
+        editor.showInspector = editor.showInspector && application.panes.inspector;
+        editor.showConsoleDock = editor.showConsoleDock && application.panes.console;
+        editor.showAiChat = editor.showAiChat && application.panes.ai_chat;
         const gui::ScopedTheme editorThemeScope{ editor.themePreference };
+        const gui::ScopedRoundedRectangles roundedRectScope{ editor.roundedRectangles };
         auto& chat = chat_state_for(ctx);
-        chat.pump();
+        if (application.panes.ai_chat)
+            chat.pump();
         if (editor.autoUpdateCheckQueued)
         {
             editor.autoUpdateCheckQueued = false;
@@ -6258,7 +6899,8 @@ namespace epochengine
         }
         pump_editor_update_check(editor);
         pump_editor_source_update_worker(editor);
-        if (editor.workspaceTab == EditorWorkspaceTab::AI
+        if (editor_application_supports_surface(application, EditorMainSurface::AISandbox)
+            && editor.workspaceTab == EditorWorkspaceTab::AI
             && editor.aiWorkspaceDomain == AiWorkspaceDomain::Control
             && editor.projectId != "sandbox")
         {
@@ -6573,7 +7215,12 @@ namespace epochengine
 
         auto play_active_context = [&]()
         {
-            save_editor_scene_snapshot(editor);
+            if (!save_editor_scene_snapshot(editor))
+            {
+                editor.projectStatus = "Play In Editor blocked because the active scene revision was not committed.";
+                push_editor_log(editor, "[project] " + editor.projectStatus);
+                return;
+            }
             const std::string sceneId =
                 project_runtime_scene_id(editor)
                 + "|camera="
@@ -6624,7 +7271,12 @@ namespace epochengine
                     "Project launch remains project-owned so script assets cannot crash the project run path by accident.");
             }
 
-            save_editor_scene_snapshot(editor);
+            if (!save_editor_scene_snapshot(editor))
+            {
+                editor.projectBuildStatus = "Run blocked because the active scene revision was not committed.";
+                push_editor_log(editor, "[project] " + editor.projectBuildStatus);
+                return;
+            }
             repair_active_project_evidence(editor);
 
             const ProjectBuildFreshness freshness = project_child_build_freshness(editor);
@@ -6782,6 +7434,15 @@ namespace epochengine
 
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
+            if (!editor_application_supports_surface(application, surface))
+            {
+                push_editor_log(
+                    editor,
+                    std::string("[editor] ") + std::string(application.display_name)
+                        + " does not own the requested " + std::string(main_surface_title(surface)) + " surface.");
+                return;
+            }
+
             const bool changedSurface = editor.mainSurface != surface;
             editor.mainSurface = surface;
             if (changedSurface)
@@ -6813,7 +7474,6 @@ namespace epochengine
                 editor.workspaceTab = EditorWorkspaceTab::Project;
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.projectCameraMode = previewgrid::CameraMode::Canvas2D;
-                ensure_2d_canvas_entity(editor);
                 if (ctx)
                 {
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Canvas2D);
@@ -6843,13 +7503,27 @@ namespace epochengine
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.projectCameraMode = previewgrid::CameraMode::Editor;
-                ensure_forest_factory_preview_entities(editor);
+                if (ctx)
+                    epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+                push_editor_log(
+                    editor,
+                    "[forest] Forest Factory placement opened for adding Plant Lab output to the active 3D scene.");
+                break;
+            case EditorMainSurface::PlantLab:
+                editor.showOutliner = true;
+                editor.showInspector = true;
+                editor.showConsoleDock = true;
+                editor.showAiChat = false;
+                editor.workspaceTab = EditorWorkspaceTab::Assets;
+                editor.previewMode = core::ScenePreviewMode::Editor;
+                editor.projectCameraMode = previewgrid::CameraMode::Editor;
+                ensure_plant_lab_preview_entities(editor);
                 if (ctx)
                 {
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
                     epochengine::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[forest] Forest Factory opened with the scene-backed Forest Factory preview.");
+                push_editor_log(editor, "[plant] Plant Lab opened with its procedural vegetation authoring preview.");
                 break;
             case EditorMainSurface::Timeline:
                 editor.showInspector = true;
@@ -6878,6 +7552,10 @@ namespace epochengine
             default:
                 break;
             }
+            editor.showOutliner = editor.showOutliner && application.panes.outliner;
+            editor.showInspector = editor.showInspector && application.panes.inspector;
+            editor.showConsoleDock = editor.showConsoleDock && application.panes.console;
+            editor.showAiChat = editor.showAiChat && application.panes.ai_chat;
         };
 
         auto open_editor_surface = [&](EditorMainSurface surface, std::string_view source)
@@ -7063,7 +7741,9 @@ namespace epochengine
         gui::begin_window("", toolbar_pos, toolbar_size);
         const float toolbar_button_y = toolbar_pos.y + 10.0f;
         const float toolbar_button_h = 24.0f;
-        float toolbar_x = toolbar_pos.x + 88.0f;
+        const float application_label_width =
+            application.kind == EditorApplicationKind::Standard ? 104.0f : 158.0f;
+        float toolbar_x = toolbar_pos.x + application_label_width;
 
         struct TopMenuButton
         {
@@ -7083,7 +7763,7 @@ namespace epochengine
         }};
 
         gui::set_cursor({ 16.0f, toolbar_pos.y + 14.0f });
-        gui::label("Epoch");
+        gui::label(application.display_name);
 
         const gui::Vec2 toolbarMouse = gui::mouse_position();
         const bool menusBlockedByModal = modal_visible_now();
@@ -7107,18 +7787,24 @@ namespace epochengine
         }
 
 
-        const float run_button_w = 108.0f;
-        const float run_button_x = (std::max)(toolbar_x + 12.0f, viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
-        gui::set_cursor({ run_button_x, toolbar_button_y });
-        if (gui::button("Run", { run_button_w, toolbar_button_h }) && !toolbarControlsBlockedByMenu)
+        float status_anchor_x = toolbar_x + 12.0f;
+        if (application.allow_project_run)
         {
-            if (editor.projectKind == "Engine Self-Iteration")
-                play_active_context();
-            else
-                launch_active_project_context();
+            const float run_button_w = 108.0f;
+            const float run_button_x = (std::max)(
+                toolbar_x + 12.0f,
+                viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
+            gui::set_cursor({ run_button_x, toolbar_button_y });
+            if (gui::button("Run", { run_button_w, toolbar_button_h }) && !toolbarControlsBlockedByMenu)
+            {
+                if (editor.projectKind == "Engine Self-Iteration")
+                    play_active_context();
+                else
+                    launch_active_project_context();
+            }
+            status_anchor_x = run_button_x + run_button_w + 14.0f;
         }
 
-        float status_anchor_x = run_button_x + run_button_w + 14.0f;
         if (editor.updateState == EditorUpdateState::Available
             || editor.updateState == EditorUpdateState::RestartReady)
         {
@@ -7170,66 +7856,28 @@ namespace epochengine
         const float tab_gap = 8.0f;
         float tab_x = 16.0f;
 
-        const std::string assets_tab = "Assets";
-        const std::string forest_tab = "Forest Factory";
-        const std::string timeline_tab = "Video";
-        const std::string project_tab = "Project";
-        const std::string ai_control_tab = "AI";
-        const std::string systems_tab = "System Info";
-
-        const std::array<std::string_view, 2> sceneModeLabels{ "3D Scene", "2D Scene/UI" };
-        const std::array<EditorMainSurface, 2> sceneModeSurfaces{
-            EditorMainSurface::Scene,
-            EditorMainSurface::Game2D
-        };
-        const std::array sceneModeButtons{
-            gui::SegmentedButtonSpec{ sceneModeLabels[0], 92.0f, editor.mainSurface == EditorMainSurface::Scene },
-            gui::SegmentedButtonSpec{ sceneModeLabels[1], 116.0f, editor.mainSurface == EditorMainSurface::Game2D }
-        };
-        gui::set_cursor({ tab_x, tab_y });
-        const auto selectedSceneMode = gui::segmented_button_row(sceneModeButtons, tab_h, 2.0f);
-        if (selectedSceneMode
-            && !toolbarControlsBlockedByMenu
-            && *selectedSceneMode < sceneModeSurfaces.size())
+        const auto draw_surface_tab = [&](EditorMainSurface surface, std::string_view label, float width)
         {
-            open_editor_surface(sceneModeSurfaces[*selectedSceneMode], "scene mode selector");
-        }
-        tab_x += 210.0f + tab_gap;
+            if (!editor_application_supports_surface(application, surface))
+                return;
+            gui::set_cursor({ tab_x, tab_y });
+            if (gui::button_selected(label, { width, tab_h }, editor.mainSurface == surface)
+                && !toolbarControlsBlockedByMenu)
+            {
+                open_editor_surface(surface, "application toolbar");
+            }
+            tab_x += width + tab_gap;
+        };
 
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(assets_tab, { 104.0f, tab_h }, editor.mainSurface == EditorMainSurface::Assets)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::Assets, "toolbar");
-        tab_x += 104.0f + tab_gap;
-
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(forest_tab, { 136.0f, tab_h }, editor.mainSurface == EditorMainSurface::ForestFactory)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::ForestFactory, "toolbar");
-        tab_x += 136.0f + tab_gap;
-
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(timeline_tab, { 92.0f, tab_h }, editor.mainSurface == EditorMainSurface::Timeline)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::Timeline, "toolbar");
-        tab_x += 92.0f + tab_gap;
-
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(project_tab, { 112.0f, tab_h }, editor.mainSurface == EditorMainSurface::Project)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::Project, "toolbar");
-        tab_x += 112.0f + tab_gap;
-
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(ai_control_tab, { 68.0f, tab_h }, editor.mainSurface == EditorMainSurface::AISandbox)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::AISandbox, "toolbar");
-        tab_x += 68.0f + tab_gap;
-
-        gui::set_cursor({ tab_x, tab_y });
-        if (gui::button_selected(systems_tab, { 132.0f, tab_h }, editor.mainSurface == EditorMainSurface::Systems)
-            && !toolbarControlsBlockedByMenu)
-            open_editor_surface(EditorMainSurface::Systems, "toolbar");
+        draw_surface_tab(EditorMainSurface::Scene, "3D Scene", 104.0f);
+        draw_surface_tab(EditorMainSurface::Game2D, "GUI Canvas", 116.0f);
+        draw_surface_tab(EditorMainSurface::ForestFactory, "Forest Factory", 136.0f);
+        draw_surface_tab(EditorMainSurface::PlantLab, "Plant Lab", 112.0f);
+        draw_surface_tab(EditorMainSurface::Assets, "Assets", 104.0f);
+        draw_surface_tab(EditorMainSurface::Timeline, "Video", 92.0f);
+        draw_surface_tab(EditorMainSurface::Project, "Project", 112.0f);
+        draw_surface_tab(EditorMainSurface::AISandbox, "AI", 68.0f);
+        draw_surface_tab(EditorMainSurface::Systems, "System Info", 132.0f);
 
         gui::end_window();
 
@@ -7462,50 +8110,59 @@ namespace epochengine
         gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
         gui::property_row("[outliner] Scene file", file_ready_summary(editor.projectScenePath), 104.0f);
 
-        const std::array outlinerWorldButtons{
-            gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f },
-            gui::InlineButtonSpec{ .label = "+ Ground", .width = 86.0f },
-            gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f }
-        };
-        if (const auto action = gui::inline_button_row(outlinerWorldButtons, 26.0f, 5.0f))
+        if (application.allow_entity_authoring)
         {
-            switch (*action)
+            const std::array outlinerWorldButtons{
+                gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f },
+                gui::InlineButtonSpec{ .label = "+ Ground", .width = 86.0f },
+                gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f }
+            };
+            if (const auto action = gui::inline_button_row(outlinerWorldButtons, 26.0f, 5.0f))
             {
-            case 0: add_entity(editor, "cube"); break;
-            case 1: add_entity(editor, "ground"); break;
-            case 2: add_entity(editor, "light"); break;
-            default: break;
+                switch (*action)
+                {
+                case 0: add_entity(editor, "cube"); break;
+                case 1: add_entity(editor, "ground"); break;
+                case 2: add_entity(editor, "light"); break;
+                default: break;
+                }
+            }
+
+            const std::array outlinerRuntimeButtons{
+                gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f },
+                gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f }
+            };
+            if (const auto action = gui::inline_button_row(outlinerRuntimeButtons, 26.0f, 5.0f))
+            {
+                switch (*action)
+                {
+                case 0: add_entity(editor, "spawn"); break;
+                case 1: add_entity(editor, "camera"); break;
+                default: break;
+                }
+            }
+
+            const std::array outlinerEditButtons{
+                gui::InlineButtonSpec{ .label = "Duplicate", .width = 96.0f },
+                gui::InlineButtonSpec{ .label = "Delete", .width = 74.0f },
+                gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f }
+            };
+            if (const auto action = gui::inline_button_row(outlinerEditButtons, 26.0f, 5.0f))
+            {
+                switch (*action)
+                {
+                case 0: duplicate_selected_entity(editor); break;
+                case 1: delete_selected_entity(editor); break;
+                case 2: handle_scene_tool(editor, ctx.get(), "focus_selection"); break;
+                default: break;
+                }
             }
         }
-
-        const std::array outlinerRuntimeButtons{
-            gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f },
-            gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f }
-        };
-        if (const auto action = gui::inline_button_row(outlinerRuntimeButtons, 26.0f, 5.0f))
+        else
         {
-            switch (*action)
-            {
-            case 0: add_entity(editor, "spawn"); break;
-            case 1: add_entity(editor, "camera"); break;
-            default: break;
-            }
-        }
-
-        const std::array outlinerEditButtons{
-            gui::InlineButtonSpec{ .label = "Duplicate", .width = 96.0f },
-            gui::InlineButtonSpec{ .label = "Delete", .width = 74.0f },
-            gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f }
-        };
-        if (const auto action = gui::inline_button_row(outlinerEditButtons, 26.0f, 5.0f))
-        {
-            switch (*action)
-            {
-            case 0: duplicate_selected_entity(editor); break;
-            case 1: delete_selected_entity(editor); break;
-            case 2: handle_scene_tool(editor, ctx.get(), "focus_selection"); break;
-            default: break;
-            }
+            gui::property_row("[outliner] Authoring", "Owned by this dedicated application scene", 92.0f);
+            if (gui::button("Focus Selection", { 144.0f, 26.0f }))
+                handle_scene_tool(editor, ctx.get(), "focus_selection");
         }
 
         for (std::size_t i = 0; i < editor.entities.size(); ++i)
@@ -7516,7 +8173,7 @@ namespace epochengine
                 label += " (hidden)";
             if (gui::button(label, { outlinerWidth, 28.0f }))
             {
-                editor.selectedEntity = i;
+                select_editor_entity(editor, i);
                 push_editor_log(editor, std::string("[select] ") + entity.name);
             }
         }
@@ -8132,6 +8789,14 @@ namespace epochengine
                     push_editor_log(editor, std::string("[project] Project Run backend set to ") + std::string(runChoices[*runBackendSelect.selected_index].label) + ".");
                 }
                 gui::property_row("[project] Run mode", std::string(project_run_backend_label(editor.projectRunBackend)), 108.0f);
+                const auto& projectProfile = active_project_profile(editor);
+                gui::property_row("[project] Capability policy", projectProfile.renderer_capability.id, 148.0f);
+                gui::property_row(
+                    "[project] Run admission",
+                    renderer_admission_summary(
+                        renderer_backend_kind(editor.projectRunBackend),
+                        projectProfile.renderer_capability),
+                    148.0f);
                 const auto limitChoices = frame_limit_choices();
                 std::vector<std::string_view> limitChoiceLabels;
                 limitChoiceLabels.reserve(limitChoices.size());
@@ -8208,17 +8873,193 @@ namespace epochengine
                 }
                 gui::property_row("[project] Input profile", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
                 gui::wrapped_label("Shared input actions currently drive editor preview cameras and in-editor/project runtime cameras. Key rebinding UI is the next promotion gate; profiles keep controls universal now.", centerWidth);
-                gui::wrapped_label(
-                    "Play In Editor runs the active project scene inside this editor. Launch Single Context starts the current child executable when build inputs are fresh, and only rebuilds when source or project build files changed.",
-                    centerWidth);
+                if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
+                {
+                    editor.canvas2dProject = sanitize_canvas2d_project(editor.canvas2dProject);
+                    gui::label("Canvas2D Project");
+
+                    const auto resolutionChoices = canvas2d_resolution_choices();
+                    std::vector<std::string_view> resolutionLabels;
+                    resolutionLabels.reserve(resolutionChoices.size());
+                    for (const auto& choice : resolutionChoices)
+                        resolutionLabels.emplace_back(choice.label);
+                    const auto resolutionSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-resolution-select",
+                        .placeholder = "Logical canvas resolution",
+                        .selected = canvas2d_resolution_label(editor.canvas2dProject),
+                        .options = std::span<const std::string_view>{ resolutionLabels.data(), resolutionLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 4
+                    });
+                    if (resolutionSelect.changed && resolutionSelect.selected_index
+                        && *resolutionSelect.selected_index < resolutionChoices.size())
+                    {
+                        const auto& choice = resolutionChoices[*resolutionSelect.selected_index];
+                        editor.canvas2dProject.logical_width = choice.width;
+                        editor.canvas2dProject.logical_height = choice.height;
+                        push_editor_log(editor, std::string("[canvas2d] Logical extent set to ") + std::string(choice.label) + ".");
+                    }
+                    gui::property_row("[canvas2d] Logical extent", std::string(canvas2d_resolution_label(editor.canvas2dProject)), 132.0f);
+
+                    static constexpr std::array<std::string_view, 4> scaleLabels{
+                        "Integer fit", "Fractional fit", "Fill and crop", "Stretch"
+                    };
+                    const auto scaleSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-scale-select",
+                        .placeholder = "Presentation scaling",
+                        .selected = canvas2d_scale_policy_label(editor.canvas2dProject.scale_policy),
+                        .options = std::span<const std::string_view>{ scaleLabels.data(), scaleLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 4
+                    });
+                    if (scaleSelect.changed && scaleSelect.selected_index)
+                    {
+                        editor.canvas2dProject.scale_policy = static_cast<std::uint8_t>(*scaleSelect.selected_index);
+                        push_editor_log(editor, std::string("[canvas2d] Presentation scale set to ")
+                            + std::string(canvas2d_scale_policy_label(editor.canvas2dProject.scale_policy)) + ".");
+                    }
+
+                    static constexpr std::array<std::string_view, 2> samplingLabels{ "Nearest", "Linear" };
+                    const auto samplingSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-sampling-select",
+                        .placeholder = "Canvas sampling",
+                        .selected = canvas2d_sampling_policy_label(editor.canvas2dProject.sampling_policy),
+                        .options = std::span<const std::string_view>{ samplingLabels.data(), samplingLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 2
+                    });
+                    if (samplingSelect.changed && samplingSelect.selected_index)
+                    {
+                        editor.canvas2dProject.sampling_policy = static_cast<std::uint8_t>(*samplingSelect.selected_index);
+                        push_editor_log(editor, std::string("[canvas2d] Sampling set to ")
+                            + std::string(canvas2d_sampling_policy_label(editor.canvas2dProject.sampling_policy)) + ".");
+                    }
+
+                    static constexpr std::array<Canvas2DBudgetChoice, 5> pixelsPerUnitChoices{ {
+                        { "16 pixels per world unit", 16u },
+                        { "32 pixels per world unit", 32u },
+                        { "64 pixels per world unit", 64u },
+                        { "100 pixels per world unit", 100u },
+                        { "128 pixels per world unit", 128u }
+                    } };
+                    std::array<std::string_view, pixelsPerUnitChoices.size()> pixelsPerUnitLabels{};
+                    std::string_view selectedPixelsPerUnit = "Custom pixel density";
+                    for (std::size_t index = 0; index < pixelsPerUnitChoices.size(); ++index)
+                    {
+                        pixelsPerUnitLabels[index] = pixelsPerUnitChoices[index].label;
+                        if (editor.canvas2dProject.pixels_per_world_unit == static_cast<float>(pixelsPerUnitChoices[index].value))
+                            selectedPixelsPerUnit = pixelsPerUnitChoices[index].label;
+                    }
+                    const auto pixelsPerUnitSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-pixels-per-unit-select",
+                        .placeholder = "Pixel density",
+                        .selected = selectedPixelsPerUnit,
+                        .options = std::span<const std::string_view>{ pixelsPerUnitLabels.data(), pixelsPerUnitLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 5
+                    });
+                    if (pixelsPerUnitSelect.changed && pixelsPerUnitSelect.selected_index)
+                        editor.canvas2dProject.pixels_per_world_unit = static_cast<float>(pixelsPerUnitChoices[*pixelsPerUnitSelect.selected_index].value);
+
+                    const auto spriteBudgetChoices = canvas2d_sprite_budget_choices();
+                    std::vector<std::string_view> spriteBudgetLabels;
+                    spriteBudgetLabels.reserve(spriteBudgetChoices.size());
+                    for (const auto& choice : spriteBudgetChoices)
+                        spriteBudgetLabels.emplace_back(choice.label);
+                    const auto spriteBudgetSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-sprite-budget-select",
+                        .placeholder = "Sprite batch budget",
+                        .selected = canvas2d_sprite_budget_label(editor.canvas2dProject.maximum_sprites_per_batch),
+                        .options = std::span<const std::string_view>{ spriteBudgetLabels.data(), spriteBudgetLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 4
+                    });
+                    if (spriteBudgetSelect.changed && spriteBudgetSelect.selected_index
+                        && *spriteBudgetSelect.selected_index < spriteBudgetChoices.size())
+                    {
+                        editor.canvas2dProject.maximum_sprites_per_batch = spriteBudgetChoices[*spriteBudgetSelect.selected_index].value;
+                        push_editor_log(editor, std::string("[canvas2d] ")
+                            + std::string(spriteBudgetChoices[*spriteBudgetSelect.selected_index].label) + ".");
+                    }
+
+                    static constexpr std::array<Canvas2DBudgetChoice, 4> batchCapChoices{ {
+                        { "64 logical batches", 64u },
+                        { "256 logical batches", 256u },
+                        { "1024 logical batches", 1024u },
+                        { "4096 logical batches", 4096u }
+                    } };
+                    std::array<std::string_view, batchCapChoices.size()> batchCapLabels{};
+                    std::string_view selectedBatchCap = "Custom logical batch cap";
+                    for (std::size_t index = 0; index < batchCapChoices.size(); ++index)
+                    {
+                        batchCapLabels[index] = batchCapChoices[index].label;
+                        if (editor.canvas2dProject.maximum_batches == batchCapChoices[index].value)
+                            selectedBatchCap = batchCapChoices[index].label;
+                    }
+                    const auto batchCapSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-batch-cap-select",
+                        .placeholder = "Logical batch cap",
+                        .selected = selectedBatchCap,
+                        .options = std::span<const std::string_view>{ batchCapLabels.data(), batchCapLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 4
+                    });
+                    if (batchCapSelect.changed && batchCapSelect.selected_index)
+                        editor.canvas2dProject.maximum_batches = batchCapChoices[*batchCapSelect.selected_index].value;
+
+                    const auto chunkChoices = canvas2d_chunk_extent_choices();
+                    std::vector<std::string_view> chunkLabels;
+                    chunkLabels.reserve(chunkChoices.size());
+                    for (const auto& choice : chunkChoices)
+                        chunkLabels.emplace_back(choice.label);
+                    const auto chunkSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "project-canvas2d-chunk-select",
+                        .placeholder = "Tile chunk extent",
+                        .selected = canvas2d_chunk_extent_label(editor.canvas2dProject.tile_chunk_extent),
+                        .options = std::span<const std::string_view>{ chunkLabels.data(), chunkLabels.size() },
+                        .size = { (std::min)(centerWidth, 320.0f), 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 5
+                    });
+                    if (chunkSelect.changed && chunkSelect.selected_index && *chunkSelect.selected_index < chunkChoices.size())
+                    {
+                        editor.canvas2dProject.tile_chunk_extent = chunkChoices[*chunkSelect.selected_index].value;
+                        push_editor_log(editor, std::string("[canvas2d] Tile chunk set to ")
+                            + std::string(chunkChoices[*chunkSelect.selected_index].label) + ".");
+                    }
+
+                    if (gui::button(editor.canvas2dProject.pixel_snapping ? "Pixel Snap: On" : "Pixel Snap: Off", { 180.0f, 30.0f }))
+                    {
+                        editor.canvas2dProject.pixel_snapping = !editor.canvas2dProject.pixel_snapping;
+                        push_editor_log(editor, editor.canvas2dProject.pixel_snapping
+                            ? "[canvas2d] Pixel snapping enabled."
+                            : "[canvas2d] Pixel snapping disabled.");
+                    }
+                }
                 if (gui::button("Save Active Project", { 220.0f, 30.0f }))
                     repair_active_project_evidence(editor);
-                if (gui::button("Play In Editor", { 220.0f, 30.0f }))
-                    play_active_context();
-                if (gui::button("Build Active Project", { 220.0f, 30.0f }))
-                    start_project_build(editor, false, "Project surface");
-                if (gui::button("Launch Single Context", { 220.0f, 30.0f }))
-                    launch_active_project_context();
+                if (application.allow_project_run)
+                {
+                    gui::wrapped_label(
+                        "Play In Editor runs the active project scene inside this editor. Launch Single Context starts the current child executable when build inputs are fresh, and only rebuilds when source or project build files changed.",
+                        centerWidth);
+                    if (gui::button("Play In Editor", { 220.0f, 30.0f }))
+                        play_active_context();
+                    if (gui::button("Build Active Project", { 220.0f, 30.0f }))
+                        start_project_build(editor, false, "Project surface");
+                    if (gui::button("Launch Single Context", { 220.0f, 30.0f }))
+                        launch_active_project_context();
+                }
+                else
+                {
+                    gui::property_row("[project] Runtime", "Not owned by this dedicated editor", 108.0f);
+                }
                 gui::wrapped_label(editor.projectStatus, centerWidth);
                 gui::wrapped_label(editor.projectBuildStatus, centerWidth);
                 break;
@@ -8317,6 +9158,73 @@ namespace epochengine
                     [](const epochengine::package_registry::PackageDescriptor& package) {
                         return package.id == epochengine::package_registry::kEngineForestFactoryPackageId;
                     });
+                const std::filesystem::path manifestPath =
+                    resolve_editor_path(std::filesystem::path{ editor.projectRoot })
+                    / "assets" / "packages" / "engine_forest_factory.package.json";
+                const bool manifestReady = std::filesystem::exists(manifestPath);
+                const std::size_t placedAssets = static_cast<std::size_t>(std::count_if(
+                    editor.entities.begin(),
+                    editor.entities.end(),
+                    [](const EditorEntity& entity)
+                    {
+                        return entity.type == "ForestTrunk"
+                            && entity.name.rfind("ForestAsset_", 0u) == 0u;
+                    }));
+
+                gui::label("Forest Factory");
+                gui::wrapped_label(
+                    "Place vegetation authored in Plant Lab into the active project scene. Placed objects belong to this scene and remain available to selection, Focus, save, and Run/Build.",
+                    centerWidth);
+                gui::property_row("[forest] Source designer", "Plant Lab", 148.0f);
+                gui::property_row("[forest] Placed assets", std::to_string(placedAssets), 148.0f);
+                gui::property_row("[forest] Package", forestPackage != epochengine::package_registry::kKnownPackages.end() ? std::string(forestPackage->displayName) : std::string("(missing registry entry)"), 148.0f);
+                gui::property_row("[forest] Manifest", manifestReady ? display_project_path(manifestPath) : std::string("not staged"), 148.0f);
+
+                std::array<gui::InlineButtonSpec, 3> placementActions{ {
+                    { "Place Plant", 132.0f },
+                    { "View In 3D", 132.0f },
+                    { "Focus Placed", 142.0f }
+                } };
+                if (auto clicked = gui::inline_button_row(placementActions, 30.0f, 8.0f))
+                {
+                    if (*clicked == 0)
+                    {
+                        if (place_forest_factory_asset(editor) > 0u)
+                            (void)save_editor_scene_snapshot(editor);
+                    }
+                    else
+                    {
+                        apply_editor_surface(EditorMainSurface::Scene, "Forest Factory");
+                        if (*clicked == 2)
+                            handle_scene_tool(editor, ctx.get(), "focus_selection");
+                    }
+                }
+                if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
+                {
+                    editor.showPackageManagerModal = true;
+                    editor.selectedPackageId = std::string(epochengine::package_registry::kEngineForestFactoryPackageId);
+                    editor.packageInstallStatus = manifestReady
+                        ? "Forest Factory project package is already staged."
+                        : "Select Install to stage the Forest Factory project package.";
+                    push_editor_log(editor, "[forest] Package Manager opened for Forest Factory.");
+                }
+                if (gui::button("Stage Forest Factory Package", { 240.0f, 30.0f }))
+                {
+                    if (forestPackage != epochengine::package_registry::kKnownPackages.end())
+                        (void)stage_forest_factory_package_opt_in(editor, *forestPackage);
+                    else
+                        editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
+                }
+                break;
+            }
+            case EditorMainSurface::PlantLab:
+            {
+                const auto forestPackage = std::find_if(
+                    epochengine::package_registry::kKnownPackages.begin(),
+                    epochengine::package_registry::kKnownPackages.end(),
+                    [](const epochengine::package_registry::PackageDescriptor& package) {
+                        return package.id == epochengine::package_registry::kEngineForestFactoryPackageId;
+                    });
                 const auto profile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
                 const auto geometry = epochengine::forest::build_preview_geometry(profile);
                 const auto stats = geometry.stats;
@@ -8330,9 +9238,9 @@ namespace epochengine
                 const bool manifestReady = std::filesystem::exists(manifestPath);
                 const bool profileReady = std::filesystem::exists(profilePath);
 
-                gui::label("Forest Factory");
+                gui::label("Plant Lab");
                 gui::wrapped_label(
-                    "Core temporal graph / parametric L-system vegetation lab. Forest Factory owns a live editor scene preview; generated projects receive assets only after package activation or main-scene use approval.",
+                    "Dedicated temporal graph and parametric vegetation designer. Plant Lab owns its live preview and emits Forest Factory assets for explicit placement in standard project scenes.",
                     centerWidth);
                 gui::property_row("[forest] Editor name", std::string(epochengine::forest::kForestFactoryWorkspace), 148.0f);
                 gui::property_row("[forest] Technique", std::string(epochengine::forest::kForestFactoryTechnique), 148.0f);
@@ -8371,19 +9279,19 @@ namespace epochengine
                         voxelSummary.foliageCells),
                     148.0f);
                 gui::wrapped_label(
-                    "Scene preview: Forest Factory now emits deterministic temporal graph segments, foliage clusters, and a voxel occupancy summary for future LOD, hit detection, navigation, lighting, and path-trace queries. Package activation emits reusable project assets only after an explicit install/stage gate.",
+                    "Plant Lab emits deterministic temporal graph segments, foliage clusters, and a voxel occupancy summary for future LOD, hit detection, navigation, lighting, and path-trace queries. Forest Factory placement and package activation remain explicit standard-editor actions.",
                     centerWidth);
                 std::array<gui::InlineButtonSpec, 3> forestActions{ {
                     { "Regenerate Temporal Graph", 228.0f },
                     { "Select Lead Tip", 132.0f },
-                    { "Reset Forest Data", 146.0f }
+                    { "Reset Plant Graph", 146.0f }
                 } };
                 if (auto clicked = gui::inline_button_row(forestActions, 30.0f, 8.0f))
                 {
                     if (*clicked == 0)
                     {
-                        ensure_forest_factory_preview_entities(editor);
-                        push_editor_log(editor, "[forest] Regenerated deterministic temporal graph preview.");
+                        ensure_plant_lab_preview_entities(editor);
+                        push_editor_log(editor, "[plant] Regenerated deterministic temporal graph preview.");
                     }
                     else if (*clicked == 1)
                     {
@@ -8396,18 +9304,18 @@ namespace epochengine
                             });
                         if (selected != editor.entities.end())
                         {
-                            editor.selectedEntity = static_cast<std::size_t>(std::distance(editor.entities.begin(), selected));
-                            push_editor_log(editor, "[forest] Selected the first visible Forest Factory lead tip.");
+                            select_editor_entity(editor, static_cast<std::size_t>(std::distance(editor.entities.begin(), selected)));
+                            push_editor_log(editor, "[plant] Selected the first visible Plant Lab lead tip.");
                         }
                         else
                         {
-                            ensure_forest_factory_preview_entities(editor);
+                            ensure_plant_lab_preview_entities(editor);
                         }
                     }
                     else if (*clicked == 2)
                     {
-                        editor.packageInstallStatus = "Forest Factory data reset is staged behind package activation; current preview primitives remain editor-only.";
-                        push_editor_log(editor, "[forest] Reset requested; package-backed data reset remains gated.");
+                        editor.packageInstallStatus = "Plant Lab graph reset is staged behind package activation; current preview primitives remain editor-only.";
+                        push_editor_log(editor, "[plant] Reset requested; package-backed data reset remains gated.");
                     }
                 }
                 if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
@@ -8845,8 +9753,23 @@ namespace epochengine
                     static_cast<std::uint32_t>(supportCanvas.height));
 
                 gui::label("System Info");
+                const auto& projectProfile = active_project_profile(editor);
+                const auto editorBackend = renderer_backend_kind(ctx);
+                const auto runBackend = renderer_backend_kind(editor.projectRunBackend);
                 gui::property_row("[system] Renderer", renderer_name(ctx), 112.0f);
                 gui::property_row("[system] Capability", renderer_capability_profile_summary(ctx), 112.0f);
+                gui::property_row(
+                    "[editor] Admission",
+                    renderer_admission_summary(editorBackend, projectProfile.renderer_capability),
+                    132.0f);
+                gui::property_row(
+                    "[project] Run admission",
+                    renderer_admission_summary(runBackend, projectProfile.renderer_capability),
+                    132.0f);
+                gui::property_row(
+                    "[system] Recommended budget",
+                    renderer_budget_summary(editorBackend),
+                    168.0f);
                 gui::property_row("[system] Platform", epochengine::GetEngineBuildTagString(), 112.0f);
                 gui::property_row("[system] Live threads", std::to_string(liveThreadCount), 112.0f);
                 gui::property_row("[system] CPU threads", std::to_string(hardwareThreadCount), 112.0f);
@@ -8867,6 +9790,7 @@ namespace epochengine
                 gui::property_row("[rtt] Live allocation", renderer_sampled_rtt_live_status(ctx), 132.0f);
                 gui::property_row("[rtt] Presentation", renderer_sampled_rtt_presentation_status(ctx), 132.0f);
                 gui::property_row("[rtt] Overall", renderer_sampled_rtt_rollup_status(ctx), 132.0f);
+                gui::property_row("[rtt] Scene surface", renderer_scene_sampled_surface_status(ctx), 132.0f);
                 gui::property_row("[renderer] Mesh/model", renderer_native_mesh_model_status(ctx), 132.0f);
                 gui::property_row("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx), 132.0f);
                 gui::property_row("[renderer] Next gate", renderer_next_feature_gate(ctx), 132.0f);
@@ -9092,6 +10016,12 @@ namespace epochengine
                 dockLine("[project] Scene", display_project_path(editor.projectScenePath)),
                 dockLine("[project] Runtime", activeProfile->runtime_scene_id),
                 dockLine("[project] Run backend", project_run_backend_label(editor.projectRunBackend)),
+                dockLine("[project] Capability policy", activeProfile->renderer_capability.id),
+                dockLine(
+                    "[project] Run admission",
+                    renderer_admission_summary(
+                        renderer_backend_kind(editor.projectRunBackend),
+                        activeProfile->renderer_capability)),
                 dockLine("[project] Frame limit", frame_limit_label(editor.projectRunFrameLimitFps)),
                 dockLine("[project] Output", display_project_path(outputExe)),
                 dockLine("[project] Build log", display_project_path(buildLog)),
@@ -9418,6 +10348,7 @@ namespace epochengine
                 dockLine("[rtt] Presentation", renderer_sampled_rtt_presentation_status(ctx)),
                 dockLine("[rtt] Overall", renderer_sampled_rtt_rollup_status(ctx)),
                 dockLine("[renderer] Sampled RTT", renderer_native_sampled_rtt_status(ctx)),
+                dockLine("[rtt] Scene surface", renderer_scene_sampled_surface_status(ctx)),
                 dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),
                 dockLine("[build] Configuration", build_configuration_label()),
@@ -9520,35 +10451,43 @@ namespace epochengine
             });
         });
 
-        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, 7), [&](gui::Vec2 pos)
+        const int assetMenuItemCount = application.allow_entity_authoring ? 7 : 2;
+        open_dropdown("Asset", TopMenu::Asset, dropdown_window_size(220.0f, assetMenuItemCount), [&](gui::Vec2 pos)
         {
             menu_item("Open Asset Browser", { pos.x + 12.0f, pos.y + 14.0f }, 220.0f, [&]() {
                 open_editor_surface(EditorMainSurface::Assets, "Asset menu");
             });
-            menu_item("Package Manager...", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
-                editor.openMenu = TopMenu::None;
-                editor.showPackageManagerModal = true;
-                editor.workspaceTab = EditorWorkspaceTab::Assets;
-                push_editor_log(editor, "[assets] Package Manager opened.");
-            });
-            menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
-                add_entity(editor, "cube");
-            });
-            menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
-                add_entity(editor, "light");
-            });
-            menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
-                add_entity(editor, "spawn");
-            });
-            menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
-                duplicate_selected_entity(editor);
-            });
-            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
-                delete_selected_entity(editor);
-            });
+            if (application.allow_package_management)
+            {
+                menu_item("Package Manager...", { pos.x + 12.0f, pos.y + 48.0f }, 220.0f, [&]() {
+                    editor.openMenu = TopMenu::None;
+                    editor.showPackageManagerModal = true;
+                    editor.workspaceTab = EditorWorkspaceTab::Assets;
+                    push_editor_log(editor, "[assets] Package Manager opened.");
+                });
+            }
+            if (application.allow_entity_authoring)
+            {
+                menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+                    add_entity(editor, "cube");
+                });
+                menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+                    add_entity(editor, "light");
+                });
+                menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+                    add_entity(editor, "spawn");
+                });
+                menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
+                    duplicate_selected_entity(editor);
+                });
+                menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
+                    delete_selected_entity(editor);
+                });
+            }
         });
 
-        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, 5), [&](gui::Vec2 pos)
+        const int windowMenuItemCount = application.panes.ai_chat ? 5 : 4;
+        open_dropdown("Window", TopMenu::Window, dropdown_window_size(248.0f, windowMenuItemCount), [&](gui::Vec2 pos)
         {
             menu_item(outliner_detached ? "Dock Outliner" : (editor.showOutliner ? "Hide Outliner" : "Show Outliner"), { pos.x + 12.0f, pos.y + 14.0f }, 248.0f, [&]() {
                 if (pane_route_is_detached("pane.outliner"))
@@ -9583,45 +10522,59 @@ namespace epochengine
                 editor.showConsoleDock = !editor.showConsoleDock;
                 push_editor_log(editor, editor.showConsoleDock ? "[window] Console Dock shown." : "[window] Console Dock hidden.");
             });
-            menu_item(ai_chat_detached ? "Dock AI Chat" : (editor.showAiChat ? "Hide AI Chat" : "Show AI Chat"), { pos.x + 12.0f, pos.y + 116.0f }, 248.0f, [&]() {
-                if (pane_route_is_detached("pane.ai_chat"))
-                {
-                    editor_mark_context_panel_detached("pane.ai_chat", false);
-                    editor.showAiChat = true;
-                    push_editor_log(editor, "[window] AI Chat docked back into the editor.");
-                    return;
-                }
-                editor.showAiChat = !editor.showAiChat;
-                push_editor_log(editor, editor.showAiChat ? "[window] AI Chat shown." : "[window] AI Chat hidden.");
-            });
-            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + 150.0f }, 248.0f, [&]() {
+            if (application.panes.ai_chat)
+            {
+                menu_item(ai_chat_detached ? "Dock AI Chat" : (editor.showAiChat ? "Hide AI Chat" : "Show AI Chat"), { pos.x + 12.0f, pos.y + 116.0f }, 248.0f, [&]() {
+                    if (pane_route_is_detached("pane.ai_chat"))
+                    {
+                        editor_mark_context_panel_detached("pane.ai_chat", false);
+                        editor.showAiChat = true;
+                        push_editor_log(editor, "[window] AI Chat docked back into the editor.");
+                        return;
+                    }
+                    editor.showAiChat = !editor.showAiChat;
+                    push_editor_log(editor, editor.showAiChat ? "[window] AI Chat shown." : "[window] AI Chat hidden.");
+                });
+            }
+            const float resetLayoutY = application.panes.ai_chat ? 150.0f : 116.0f;
+            menu_item("Reset Editor Layout", { pos.x + 12.0f, pos.y + resetLayoutY }, 248.0f, [&]() {
                 reset_editor_layout(editor);
                 push_editor_log(editor, "[window] Editor layout reset.");
             });
         });
 
-        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, 5), [&](gui::Vec2 pos)
+        const bool guiApplication = application.kind == EditorApplicationKind::GuiEditor;
+        const int toolsMenuItemCount = guiApplication ? 3 : 4;
+        open_dropdown("Tools", TopMenu::Tools, dropdown_window_size(228.0f, toolsMenuItemCount), [&](gui::Vec2 pos)
         {
-            menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
-                editor.projectCameraMode = epochengine::previewgrid::CameraMode::Editor;
-                epochengine::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
-                push_editor_log(editor, "[tools] Camera mode set to Editor.");
-            });
-            menu_item("Camera: FPS", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
-                editor.projectCameraMode = epochengine::previewgrid::CameraMode::FPS;
-                epochengine::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
-                push_editor_log(editor, "[tools] Camera mode set to FPS.");
-            });
-            menu_item("Camera: 2D Canvas", { pos.x + 12.0f, pos.y + 82.0f }, 228.0f, [&]() {
-                editor.projectCameraMode = epochengine::previewgrid::CameraMode::Canvas2D;
-                open_editor_surface(EditorMainSurface::Game2D, "Tools menu");
-                push_editor_log(editor, "[tools] Camera mode set to locked 2D Canvas.");
-            });
-            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + 116.0f }, 228.0f, [&]() {
+            if (guiApplication)
+            {
+                menu_item("Canvas Camera", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
+                    editor.projectCameraMode = epochengine::previewgrid::CameraMode::Canvas2D;
+                    open_editor_surface(EditorMainSurface::Game2D, "Tools menu");
+                    push_editor_log(editor, "[tools] Camera mode set to locked GUI canvas.");
+                });
+            }
+            else
+            {
+                menu_item("Camera: Editor", { pos.x + 12.0f, pos.y + 14.0f }, 228.0f, [&]() {
+                    editor.projectCameraMode = epochengine::previewgrid::CameraMode::Editor;
+                    epochengine::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
+                    push_editor_log(editor, "[tools] Camera mode set to Editor.");
+                });
+                menu_item("Camera: FPS", { pos.x + 12.0f, pos.y + 48.0f }, 228.0f, [&]() {
+                    editor.projectCameraMode = epochengine::previewgrid::CameraMode::FPS;
+                    epochengine::previewgrid::set_camera_mode(ctx.get(), editor.projectCameraMode);
+                    push_editor_log(editor, "[tools] Camera mode set to FPS.");
+                });
+            }
+            const float resetCameraY = guiApplication ? 48.0f : 82.0f;
+            const float saveProjectY = guiApplication ? 82.0f : 116.0f;
+            menu_item("Reset Preview Camera", { pos.x + 12.0f, pos.y + resetCameraY }, 228.0f, [&]() {
                 epochengine::previewgrid::reset_camera(ctx.get());
                 push_editor_log(editor, "[tools] Preview camera reset.");
             });
-            menu_item("Save Project", { pos.x + 12.0f, pos.y + 150.0f }, 228.0f, [&]() {
+            menu_item("Save Project", { pos.x + 12.0f, pos.y + saveProjectY }, 228.0f, [&]() {
                 repair_active_project_evidence(editor);
             });
         });
@@ -9708,8 +10661,21 @@ namespace epochengine
             }
             if (modalSize.x >= 620.0f)
             {
+                const auto& projectProfile = active_project_profile(editor);
                 gui::set_cursor({ contentPos.x + 326.0f, contentY + 62.0f });
-                gui::property_row("Capability", renderer_capability_profile_summary(ctx), 96.0f);
+                gui::property_row(
+                    "Editor gate",
+                    renderer_admission_summary(
+                        renderer_backend_kind(ctx),
+                        projectProfile.renderer_capability),
+                    88.0f);
+                gui::set_cursor({ contentPos.x + 326.0f, contentY + 86.0f });
+                gui::property_row(
+                    "Run gate",
+                    renderer_admission_summary(
+                        renderer_backend_kind(editor.projectRunBackend),
+                        projectProfile.renderer_capability),
+                    88.0f);
             }
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 94.0f });
             gui::property_row("Compiled", context_backend_summary(settingsContextOptions), 116.0f);
@@ -9726,13 +10692,15 @@ namespace epochengine
             settingsThemeLabels.reserve(settingsThemeChoices.size());
             for (const auto& choice : settingsThemeChoices)
                 settingsThemeLabels.emplace_back(choice.label);
+            const bool compactSettings = modalSize.x < 620.0f;
+            const float themeControlWidth = compactSettings ? 200.0f : 300.0f;
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 164.0f });
             const auto settingsThemeSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "editor-theme-select",
                 .placeholder = "Theme",
                 .selected = gui::theme_preference_label(editor.themePreference),
                 .options = std::span<const std::string_view>{ settingsThemeLabels.data(), settingsThemeLabels.size() },
-                .size = { 300.0f, 30.0f },
+                .size = { themeControlWidth, 30.0f },
                 .row_height = 28.0f,
                 .max_visible_options = 3
             });
@@ -9741,10 +10709,22 @@ namespace epochengine
                 editor.themePreference = settingsThemeChoices[*settingsThemeSelect.selected_index].preference;
                 push_editor_log(editor, std::string("[settings] Theme set to ") + std::string(gui::theme_preference_label(editor.themePreference)) + ".");
             }
-            if (modalSize.x >= 620.0f)
+
+            const float roundingControlX = compactSettings ? 216.0f : 326.0f;
+            const float roundingControlWidth = (std::max)(
+                156.0f,
+                contentWidth - roundingControlX - 8.0f);
+            gui::set_cursor({ contentPos.x + roundingControlX, contentY + 164.0f });
+            if (gui::toggle_switch(
+                compactSettings ? "Rounded GUI" : "Rounded rectangles",
+                editor.roundedRectangles,
+                { roundingControlWidth, 30.0f }))
             {
-                gui::set_cursor({ contentPos.x + 326.0f, contentY + 168.0f });
-                gui::property_row("Theme", std::string(gui::theme_preference_label(editor.themePreference)), 96.0f);
+                push_editor_log(
+                    editor,
+                    editor.roundedRectangles
+                        ? "[settings] Rounded GUI rectangles enabled."
+                        : "[settings] Rounded GUI rectangles disabled.");
             }
 
             const auto settingsInputChoices = input_profile_choices();

@@ -108,6 +108,19 @@ namespace epochengine::gui
         bool active_{ true };
     };
 
+    export class ScopedRoundedRectangles
+    {
+    public:
+        explicit ScopedRoundedRectangles(bool enabled) noexcept;
+        ~ScopedRoundedRectangles() noexcept;
+
+        ScopedRoundedRectangles(const ScopedRoundedRectangles&) = delete;
+        ScopedRoundedRectangles& operator=(const ScopedRoundedRectangles&) = delete;
+
+    private:
+        bool active_{ true };
+    };
+
     export enum class EventType : std::uint8_t
     {
         None = 0,
@@ -513,12 +526,16 @@ namespace epochengine::gui
     export ThemeVariant resolve_theme_preference(ThemePreference preference) noexcept;
     export void push_theme(ThemeVariant theme) noexcept;
     export void pop_theme() noexcept;
+    export bool rounded_rectangles_enabled() noexcept;
+    export void push_rounded_rectangles(bool enabled) noexcept;
+    export void pop_rounded_rectangles() noexcept;
 
     export void set_cursor(Vec2 position) noexcept;
     export void advance_cursor(Vec2 delta) noexcept;
 
     export bool button(std::string_view label, Vec2 size) noexcept;
     export bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept;
+    export bool toggle_switch(std::string_view label, bool& value, Vec2 size = { 160.0f, 28.0f }) noexcept;
     export bool text_link(std::string_view label, Vec2 size, bool selected = false) noexcept;
     export bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;

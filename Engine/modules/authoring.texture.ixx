@@ -16,25 +16,10 @@ module;
 #include <vector>
 
 export module authoring.texture;
+export import authoring.texture.artifact;
 
 export namespace epochengine::authoring::texture
 {
-    struct ContentHash final
-    {
-        std::array<std::uint64_t, 4> words{};
-
-        [[nodiscard]] constexpr bool empty() const noexcept
-        {
-            return words == std::array<std::uint64_t, 4>{};
-        }
-
-        [[nodiscard]] friend constexpr bool operator==(
-            const ContentHash&,
-            const ContentHash&) noexcept = default;
-    };
-
-    [[nodiscard]] std::string content_hash_hex(const ContentHash& hash);
-
     struct DocumentHandle final
     {
         static constexpr std::uint32_t invalid_index =
@@ -129,16 +114,6 @@ export namespace epochengine::authoring::texture
             const TemporalPoint&) noexcept = default;
     };
 
-    struct DocumentRevision final
-    {
-        ContentHash content{};
-        std::uint64_t sequence{};
-
-        [[nodiscard]] friend constexpr bool operator==(
-            const DocumentRevision&,
-            const DocumentRevision&) noexcept = default;
-    };
-
     enum class ResultCode : std::uint8_t
     {
         success,
@@ -173,12 +148,6 @@ export namespace epochengine::authoring::texture
     {
         rgba8_unorm,
         rgba8_srgb
-    };
-
-    enum class ColorSpace : std::uint8_t
-    {
-        linear,
-        srgb
     };
 
     struct CanvasDescriptor final
@@ -457,56 +426,12 @@ export namespace epochengine::authoring::texture
         std::uint64_t revision_sequence{};
     };
 
-    enum class ArtifactFormat : std::uint8_t
+    struct ArtifactCompilationLimits final
     {
-        rgba8_unorm,
-        rgba8_srgb,
-        bc1_rgb,
-        bc3_rgba,
-        bc5_normal,
-        bc7_rgba,
-        astc_4x4_rgba
-    };
-
-    enum class MipmapPolicy : std::uint8_t
-    {
-        preserve_authored,
-        generate_box_filter,
-        generate_normal_renormalized
-    };
-
-    struct TextureCompileProfile final
-    {
-        ArtifactFormat format{ ArtifactFormat::rgba8_srgb };
-        ColorSpace color_space{ ColorSpace::srgb };
-        MipmapPolicy mipmaps{ MipmapPolicy::preserve_authored };
-        std::uint32_t compiler_schema_version{ 1 };
-        std::uint32_t quality_tier{};
-
-        [[nodiscard]] friend constexpr bool operator==(
-            const TextureCompileProfile&,
-            const TextureCompileProfile&) noexcept = default;
-    };
-
-    struct CompiledTextureArtifactIdentity final
-    {
-        ContentHash key{};
-        DocumentRevision source_revision{};
-        TextureCompileProfile profile{};
-        std::uint32_t width{};
-        std::uint32_t height{};
-        std::uint8_t mip_count{};
-        std::uint64_t estimated_artifact_bytes{};
-        bool compilation_required{ true };
-
-        [[nodiscard]] constexpr explicit operator bool() const noexcept
-        {
-            return !key.empty()
-                && !source_revision.content.empty()
-                && width != 0
-                && height != 0
-                && mip_count != 0;
-        }
+        std::uint64_t maximum_output_bytes{
+            512ull * 1024ull * 1024ull
+        };
+        std::uint8_t maximum_mip_count{ 17 };
     };
 
     enum class PhysicalResidencyKind : std::uint8_t
@@ -521,7 +446,7 @@ export namespace epochengine::authoring::texture
     struct PhysicalResidencyCapabilities final
     {
         bool standalone_images{ true };
-        bool atlas_regions{ true };
+        bool atlas_regions{};
         bool bindless_images{};
         bool sparse_images{};
         std::uint32_t maximum_texture_dimension{ 16'384 };
@@ -536,10 +461,10 @@ export namespace epochengine::authoring::texture
     struct PhysicalResidencyPolicy final
     {
         PhysicalResidencyKind preferred{
-            PhysicalResidencyKind::hybrid_sparse_tail
+            PhysicalResidencyKind::standalone_image
         };
         bool allow_fallback{ true };
-        bool allow_atlas_for_small_textures{ true };
+        bool allow_atlas_for_small_textures{};
         std::uint32_t atlas_small_texture_limit{ 2048 };
         std::uint8_t minimum_streamed_mip_count{ 2 };
         std::uint64_t target_resident_bytes{
@@ -666,6 +591,9 @@ export namespace epochengine::authoring::texture
         [[nodiscard]] CompiledTextureArtifactIdentity
             compiled_artifact_identity(
                 TextureCompileProfile profile) const noexcept;
+        [[nodiscard]] CompiledTextureArtifact compile_artifact(
+            TextureCompileProfile profile,
+            ArtifactCompilationLimits limits = {}) const noexcept;
 
     private:
         struct Impl;

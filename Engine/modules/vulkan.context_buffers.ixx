@@ -129,6 +129,9 @@ namespace epochengine::vulkancontext
         indexBufferMemory = std::move(ibMem);
         indexCount = static_cast<std::uint32_t>(indices.size());
         solidIndexCount = preview_solid_index_count_for(bound_context());
-        lineIndexCount = indexCount >= solidIndexCount ? indexCount - solidIndexCount : 0u;
+        arcadeScreenIndexOffset = solidIndexCount;
+        arcadeScreenIndexCount = preview_arcade_screen_index_count_for(bound_context());
+        const std::uint32_t sceneIndexCount = solidIndexCount + arcadeScreenIndexCount;
+        lineIndexCount = indexCount >= sceneIndexCount ? indexCount - sceneIndexCount : 0u;
     }
 }

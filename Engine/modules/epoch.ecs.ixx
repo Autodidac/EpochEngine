@@ -150,7 +150,7 @@ export namespace epochengine::ecs
     public:
         explicit world(world_desc d = {}) : _desc(d)
         {
-            _generations.resize(static_cast<std::size_t>(_desc.max_entities + 1u), 0u);
+            _generations.resize(static_cast<std::size_t>(_desc.max_entities + 1u), 1u);
             _alive.resize(static_cast<std::size_t>(_desc.max_entities + 1u), false);
 
             _free.reserve(_desc.max_entities);
@@ -169,7 +169,7 @@ export namespace epochengine::ecs
                 const std::uint32_t old = _desc.max_entities;
                 const std::uint32_t neu = old ? old * 2u : 1024u;
                 _desc.max_entities = neu;
-                _generations.resize(static_cast<std::size_t>(neu + 1u), 0u);
+                _generations.resize(static_cast<std::size_t>(neu + 1u), 1u);
                 _alive.resize(static_cast<std::size_t>(neu + 1u), false);
                 for (std::uint32_t i = neu; i > old; --i)
                     _free.push_back(i);
@@ -185,7 +185,10 @@ export namespace epochengine::ecs
         {
             if (!alive(e)) return;
             _alive[e.index] = false;
-            ++_generations[e.index];
+            std::uint32_t& generation = _generations[e.index];
+            ++generation;
+            if (generation == 0u)
+                generation = 1u;
             _free.push_back(e.index);
         }
 

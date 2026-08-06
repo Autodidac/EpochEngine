@@ -303,6 +303,35 @@ namespace epochengine::raylib_api
         ::DrawTexturePro(to_rl(tex), to_rl(src), to_rl(dst), to_rl(origin), rotation, to_rl(tint));
     }
 
+    void draw_texture_quad(
+        const Texture2D& tex,
+        Vector2 top_left,
+        Vector2 bottom_left,
+        Vector2 bottom_right,
+        Vector2 top_right,
+        Color tint)
+    {
+        if (tex.id == 0u)
+            return;
+
+        (void)::rlCheckRenderBatchLimit(4);
+        ::rlSetTexture(tex.id);
+        ::rlBegin(RL_QUADS);
+        ::rlColor4ub(tint.r, tint.g, tint.b, tint.a);
+
+        ::rlTexCoord2f(0.0f, 1.0f);
+        ::rlVertex2f(top_left.x, top_left.y);
+        ::rlTexCoord2f(0.0f, 0.0f);
+        ::rlVertex2f(bottom_left.x, bottom_left.y);
+        ::rlTexCoord2f(1.0f, 0.0f);
+        ::rlVertex2f(bottom_right.x, bottom_right.y);
+        ::rlTexCoord2f(1.0f, 1.0f);
+        ::rlVertex2f(top_right.x, top_right.y);
+
+        ::rlEnd();
+        ::rlSetTexture(0u);
+    }
+
     int load_model(const char* path)
     {
         if (!path || path[0] == '\0')

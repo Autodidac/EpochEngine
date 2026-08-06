@@ -111,6 +111,31 @@ namespace epochengine::gui_lib::rounded_rect
         }
     }
 
+    RoundedRectStyle normalize_rounded_rect_style(RoundedRectStyle style) noexcept
+    {
+        style.control_radius = finite_nonnegative(style.control_radius);
+        style.segments_per_corner = std::clamp(
+            style.segments_per_corner,
+            minimum_segments,
+            maximum_segments);
+        return style;
+    }
+
+    RoundedRectOptions make_styled_rounded_rect_options(
+        Rect bounds,
+        const RoundedRectStyle& style,
+        float border_width) noexcept
+    {
+        const RoundedRectStyle normalized = normalize_rounded_rect_style(style);
+        const float radius = normalized.enabled ? normalized.control_radius : 0.0f;
+        return RoundedRectOptions{
+            .bounds = bounds,
+            .radii = { radius, radius, radius, radius },
+            .border_width = finite_nonnegative(border_width),
+            .segments_per_corner = normalized.segments_per_corner
+        };
+    }
+
     CornerRadii normalize_corner_radii(Rect bounds, CornerRadii radii) noexcept
     {
         bounds = sanitize_bounds(bounds);

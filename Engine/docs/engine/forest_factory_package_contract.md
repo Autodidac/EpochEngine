@@ -1,8 +1,10 @@
 # Forest Factory Package Contract
 
-Forest Factory is Epoch's core procedural vegetation surface. It is the
-production-facing name for the temporal graph / parametric L-system plant work
-shown in the older Plant Lab prototype line.
+Forest Factory is Epoch's standard-editor vegetation workflow. Plant Lab is the
+dedicated launcher application for temporal graph / parametric L-system plant
+authoring. Plant Lab produces reusable vegetation documents and assets; Forest
+Factory browses/imports those outputs and places them into ordinary project
+scenes.
 
 ## Ownership
 
@@ -14,10 +16,11 @@ shown in the older Plant Lab prototype line.
   `--engine-contract-self-test` lane, so Forest Factory must remain a core
   opt-in package that ships in the engine but does not enter generated projects
   until main-scene use or package activation is visible.
-- The editor workspace row opens the current Forest Factory workbench surface,
-  which runs through the scene-backed editor viewport with deterministic
-  temporal-graph preview entities while keeping provenance, staged package
-  evidence, and preview estimates documented.
+- Plant Lab owns the dedicated scene-backed vegetation authoring application and
+  deterministic temporal-graph preview.
+- The standard editor retains the Forest Factory surface/tool for generated
+  vegetation browsing, import, placement, package evidence, and project-visible
+  activation.
 - Package payload/source routing belongs in
   `https://github.com/Autodidac/EpochEngineExtensions`.
 - The Package Manager stages project-visible manifests and deterministic seed
@@ -57,10 +60,11 @@ The first production contract exposes:
   hit detection, navigation, lighting, and path-trace consumers can share the
   same deterministic vegetation descriptor
 - a scene-backed editor prototype made from deterministic preview primitives so
-  Forest Factory is visible in the same central 3D editor path as other
-  workspaces before the production mesh/voxel renderer lands
-- dedicated editor workspace access from the main toolbar instead of an Asset
-  command-menu shortcut that spawns placeholder geometry
+  Plant Lab can author vegetation before the production mesh/voxel renderer lands
+- a Forest Factory surface in the standard editor for importing and placing
+  Plant Lab outputs into the same central 3D scene path as ordinary objects
+- dedicated Plant Lab launcher access without replacing the standard-editor
+  Forest Factory workflow
 
 ## Package Manager Behavior
 
@@ -68,7 +72,7 @@ Selecting `Forest Factory` in Package Manager should show the
 `EpochEngineExtensions` package source and explain that the editor preview is
 built in while generated project payloads remain opt-in. The staged manifest
 keeps both `source_repo` and `reference_repo` so package payload ownership and
-Plant Lab provenance do not get mixed together.
+the external Plant Lab reference repository do not get mixed together.
 
 Installing the package stages:
 
@@ -85,9 +89,10 @@ Manager UI stays tied to the validated registry instead of local-only text.
 
 Before Forest Factory graduates beyond this contract:
 
-- The current Forest Factory scene-backed prototype graduates into a dedicated
-  3D preview with proper tabs, sliders, atlas controls, mature-stage playback,
-  and production GUI controls.
+- Plant Lab graduates into a dedicated 3D authoring preview with proper tabs,
+  sliders, atlas controls, mature-stage playback, and production GUI controls.
+- Forest Factory imports and places Plant Lab outputs in the standard editor
+  without duplicating the Plant Lab authoring application.
 - Package activation can materialize project-local generated assets without
   polluting software projects or minimal game clones.
 - Generated outputs can feed mesh LOD, impostor, and voxel occupancy consumers.

@@ -188,12 +188,14 @@ namespace epochengine::vulkancontext
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
+        createArcadeRenderTarget();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffers();
         createGuiUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
+        createArcadeDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
     }
@@ -515,6 +517,7 @@ namespace epochengine::vulkancontext
         textureImageMemory.reset();
 
         pipelineLayout.reset();
+        arcadeScreenPipeline.reset();
         solidGraphicsPipeline.reset();
         graphicsPipeline.reset();
         descriptorSetLayout.reset();

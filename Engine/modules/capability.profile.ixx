@@ -24,6 +24,7 @@ export module capability.profile;
 import perf.tier;
 import platform.budgets;
 import platform.capabilities;
+
 import render.device;
 
 export namespace epochengine::capability
@@ -75,6 +76,26 @@ export namespace epochengine::capability
         case BackendFamily::directx12: return "DX";
         }
         return "CPU";
+    }
+
+    [[nodiscard]] constexpr Tier renderer_tier_for(
+        const RendererBackendKind backend) noexcept
+    {
+        switch (backend)
+        {
+        case RendererBackendKind::vulkan:
+        case RendererBackendKind::directx:
+            return Tier::explicit_api;
+        case RendererBackendKind::opengl:
+        case RendererBackendKind::sdl3:
+        case RendererBackendKind::sfml3:
+        case RendererBackendKind::raylib3:
+            return Tier::portable_graphics;
+        case RendererBackendKind::software:
+        case RendererBackendKind::null:
+        default:
+            return Tier::headless;
+        }
     }
 
     using Status = RendererCapabilityStatus;
@@ -233,6 +254,20 @@ export namespace epochengine::capability
             | evidence_bit(Evidence::benchmark)
             | evidence_bit(Evidence::production_observation);
         return (available & validation) != 0u;
+    }
+
+    [[nodiscard]] constexpr EvidenceMask renderer_evidence_for(
+        const RendererCapabilityReport& report) noexcept
+    {
+        EvidenceMask evidence = evidence_bit(Evidence::declared_contract);
+        if (report.build_graph_proof == Status::partial
+            || report.build_graph_proof == Status::present)
+        {
+            evidence |= evidence_bit(Evidence::build_contract);
+        }
+        if (report.presentation_proof == Status::present)
+            evidence |= evidence_bit(Evidence::presentation_probe);
+        return evidence;
     }
 
     enum class StabilityStatus : std::uint8_t
@@ -683,6 +718,68 @@ export namespace epochengine::capability
         return profile;
     }
 
+    [[nodiscard]] constexpr Profile renderer_profile_for(
+        const RendererBackendKind backend) noexcept
+    {
+        const RendererCapabilityReport report = renderer_capability_report_for(backend);
+        const EvidenceMask evidence = renderer_evidence_for(report);
+
+        Profile profile{};
+        if (backend == RendererBackendKind::null)
+        {
+            profile = cpu_reference_profile();
+        }
+        else if (backend == RendererBackendKind::software)
+        {
+            profile = software_profile(report.build_graph_proof, evidence);
+            profile.evidence |= cpu_reference_profile().evidence;
+        }
+        else
+        {
+            profile = adapt_renderer_capabilities(
+                renderer_capabilities_for(backend),
+                report,
+                renderer_tier_for(backend),
+                evidence);
+        }
+
+        Profile defaults{};
+        switch (backend)
+        {
+        case RendererBackendKind::vulkan:
+            defaults = vulkan_profile();
+            break;
+        case RendererBackendKind::directx:
+            defaults = directx12_profile();
+            break;
+        case RendererBackendKind::opengl:
+        case RendererBackendKind::sdl3:
+        case RendererBackendKind::sfml3:
+        case RendererBackendKind::raylib3:
+            defaults = opengl_profile();
+            break;
+        case RendererBackendKind::software:
+            defaults = software_profile();
+            break;
+        case RendererBackendKind::null:
+        default:
+            defaults = cpu_reference_profile();
+            break;
+        }
+
+        profile.limits = defaults.limits;
+        profile.memory = defaults.memory;
+        profile.power = defaults.power;
+        profile.performance_tier = defaults.performance_tier;
+        profile.recommended_budgets =
+            platform::recommended_budgets_for_tier(profile.performance_tier);
+        profile.recommended_budgets.vram_budget_bytes =
+            profile.memory.local_budget_bytes;
+        profile.recommended_budgets.upload_budget_bytes =
+            profile.memory.upload_budget_bytes;
+        return profile;
+    }
+
     enum class Subsystem : std::uint8_t
     {
         rendering,
@@ -767,6 +864,50 @@ export namespace epochengine::capability
         bool software_fallback{};
     };
 
+    [[nodiscard]] constexpr SubsystemProfile renderer_subsystem_profile_for(
+        const RendererBackendKind backend) noexcept
+    {
+        const Profile profile = renderer_profile_for(backend);
+        std::uint8_t quality = 0u;
+        switch (profile.status)
+        {
+        case Status::present:
+            quality = 80u;
+            break;
+        case Status::partial:
+            quality = 60u;
+            break;
+        case Status::deferred:
+            quality = 30u;
+            break;
+        case Status::missing:
+        default:
+            break;
+        }
+
+        return SubsystemProfile{
+            .implementation_id =
+                0x45504f4300000000ull
+                | (static_cast<std::uint64_t>(backend) + 1ull),
+            .subsystem = Subsystem::rendering,
+            .capability = profile,
+            .implementation_features = 0u,
+            .representations = representation_mask(DataRepresentation::triangles),
+            .quality = { 0u, quality },
+            .determinism = backend == RendererBackendKind::null
+                    || backend == RendererBackendKind::software
+                ? Determinism::reference
+                : Determinism::repeatable,
+            .cost = {},
+            .stability = profile.stability,
+            .status = profile.status,
+            .evidence = profile.evidence,
+            .software_fallback =
+                backend == RendererBackendKind::software
+                || backend == RendererBackendKind::null
+        };
+    }
+
     struct Requirement final
     {
         Subsystem subsystem{ Subsystem::rendering };
@@ -784,6 +925,57 @@ export namespace epochengine::capability
         bool has_preferred_backend{};
         bool require_preferred_backend{};
     };
+
+    [[nodiscard]] constexpr Requirement headless_rendering_requirement() noexcept
+    {
+        Requirement requirement{};
+        requirement.subsystem = Subsystem::rendering;
+        requirement.minimum_tier = Tier::headless;
+        requirement.required_features = feature_mask(
+            Feature::scalar_cpu,
+            Feature::deterministic_reference,
+            Feature::headless);
+        requirement.accepted_representations =
+            representation_mask(DataRepresentation::triangles);
+        requirement.minimum_quality = 20u;
+        requirement.minimum_stability = StabilityStatus::validated;
+        requirement.minimum_determinism = Determinism::reference;
+        return requirement;
+    }
+
+    [[nodiscard]] constexpr Requirement portable_rendering_requirement() noexcept
+    {
+        Requirement requirement{};
+        requirement.subsystem = Subsystem::rendering;
+        requirement.minimum_tier = Tier::portable_graphics;
+        requirement.required_features = feature_mask(
+            Feature::presentation,
+            Feature::raster_pipeline,
+            Feature::textures,
+            Feature::render_targets,
+            Feature::resource_residency);
+        requirement.optional_features = feature_mask(
+            Feature::instancing,
+            Feature::indirect_draw,
+            Feature::compute);
+        requirement.accepted_representations =
+            representation_mask(DataRepresentation::triangles);
+        requirement.minimum_quality = 40u;
+        requirement.minimum_stability = StabilityStatus::experimental;
+        requirement.minimum_determinism = Determinism::repeatable;
+        return requirement;
+    }
+
+    [[nodiscard]] constexpr Requirement explicit_rendering_requirement() noexcept
+    {
+        Requirement requirement = portable_rendering_requirement();
+        requirement.minimum_tier = Tier::explicit_api;
+        requirement.required_features |= feature_mask(
+            Feature::explicit_queues,
+            Feature::explicit_synchronization);
+        requirement.minimum_quality = 60u;
+        return requirement;
+    }
 
     enum class MatchFailure : std::uint8_t
     {
@@ -869,6 +1061,188 @@ export namespace epochengine::capability
             return { false, MatchFailure::power_budget };
         }
         return { true, MatchFailure::none };
+    }
+
+    enum class AdmissionStatus : std::uint8_t
+    {
+        rejected,
+        experimental,
+        admitted
+    };
+
+    [[nodiscard]] constexpr const char* admission_status_label(
+        const AdmissionStatus status) noexcept
+    {
+        switch (status)
+        {
+        case AdmissionStatus::admitted:
+            return "Admitted";
+        case AdmissionStatus::experimental:
+            return "Experimental";
+        case AdmissionStatus::rejected:
+        default:
+            return "Unavailable";
+        }
+    }
+
+    [[nodiscard]] constexpr const char* match_failure_label(
+        const MatchFailure failure) noexcept
+    {
+        switch (failure)
+        {
+        case MatchFailure::none: return "none";
+        case MatchFailure::wrong_subsystem: return "wrong subsystem";
+        case MatchFailure::invalid_profile: return "invalid profile";
+        case MatchFailure::unavailable: return "unavailable";
+        case MatchFailure::missing_evidence: return "missing evidence";
+        case MatchFailure::wrong_backend: return "wrong backend";
+        case MatchFailure::insufficient_tier: return "insufficient tier";
+        case MatchFailure::missing_feature: return "missing feature";
+        case MatchFailure::unsupported_representation: return "unsupported representation";
+        case MatchFailure::insufficient_quality: return "insufficient quality";
+        case MatchFailure::insufficient_determinism: return "insufficient determinism";
+        case MatchFailure::insufficient_stability: return "insufficient stability";
+        case MatchFailure::memory_budget: return "memory budget";
+        case MatchFailure::latency_budget: return "latency budget";
+        case MatchFailure::power_budget: return "power budget";
+        case MatchFailure::no_candidate:
+        default:
+            return "no candidate";
+        }
+    }
+
+    struct RequirementAdmission final
+    {
+        AdmissionStatus status{ AdmissionStatus::rejected };
+        MatchFailure failure{ MatchFailure::no_candidate };
+        FeatureMask missing_features{};
+        FeatureMask provisional_features{};
+        Budgets effective_budgets{};
+        bool software_fallback{};
+    };
+
+    [[nodiscard]] constexpr RequirementAdmission assess_requirement(
+        const SubsystemProfile& candidate,
+        const Requirement& requirement,
+        const bool allow_experimental,
+        const bool allow_software_fallback) noexcept
+    {
+        RequirementAdmission admission{};
+        admission.effective_budgets = candidate.capability.recommended_budgets;
+        admission.software_fallback = candidate.software_fallback;
+
+        if (candidate.software_fallback && !allow_software_fallback)
+        {
+            admission.failure = MatchFailure::unavailable;
+            return admission;
+        }
+
+        const MatchResult exact = match(candidate, requirement);
+        if (exact.matched)
+        {
+            admission.status = AdmissionStatus::admitted;
+            admission.failure = MatchFailure::none;
+            return admission;
+        }
+
+        const auto reject = [&](const MatchFailure failure) constexpr noexcept
+        {
+            RequirementAdmission rejected = admission;
+            rejected.failure = failure;
+            return rejected;
+        };
+
+        if (candidate.subsystem != requirement.subsystem)
+            return reject(MatchFailure::wrong_subsystem);
+        if (candidate.implementation_id == 0u || !valid(candidate.capability))
+            return reject(MatchFailure::invalid_profile);
+        if (!has_validation_evidence(candidate.evidence)
+            || !has_validation_evidence(candidate.capability.evidence))
+        {
+            return reject(MatchFailure::missing_evidence);
+        }
+        if (candidate.status == Status::missing
+            || candidate.capability.status == Status::missing)
+        {
+            return reject(MatchFailure::unavailable);
+        }
+        if (requirement.require_preferred_backend
+            && candidate.capability.backend != requirement.preferred_backend)
+        {
+            return reject(MatchFailure::wrong_backend);
+        }
+        if (candidate.capability.tier < requirement.minimum_tier)
+            return reject(MatchFailure::insufficient_tier);
+
+        const FeatureMask present =
+            candidate.capability.features.present
+            | candidate.implementation_features;
+        const FeatureMask partial = candidate.capability.features.partial;
+        const FeatureMask deferred = candidate.capability.features.deferred;
+        admission.missing_features =
+            requirement.required_features & ~(present | partial | deferred);
+        if (admission.missing_features != 0u)
+            return reject(MatchFailure::missing_feature);
+
+        const FeatureMask required_deferred =
+            requirement.required_features & deferred;
+        if (required_deferred != 0u
+            && !(candidate.software_fallback && allow_software_fallback))
+        {
+            admission.missing_features = required_deferred;
+            return reject(MatchFailure::unavailable);
+        }
+
+        admission.provisional_features =
+            requirement.required_features & (partial | deferred);
+        if (requirement.accepted_representations != 0u
+            && (candidate.representations & requirement.accepted_representations) == 0u)
+        {
+            return reject(MatchFailure::unsupported_representation);
+        }
+        if (candidate.quality.maximum < requirement.minimum_quality)
+            return reject(MatchFailure::insufficient_quality);
+        if (candidate.determinism < requirement.minimum_determinism)
+            return reject(MatchFailure::insufficient_determinism);
+        if (candidate.stability < requirement.minimum_stability)
+            return reject(MatchFailure::insufficient_stability);
+        if (requirement.maximum_memory_bytes != 0u
+            && candidate.cost.working_memory_bytes > requirement.maximum_memory_bytes)
+        {
+            return reject(MatchFailure::memory_budget);
+        }
+        if (candidate.capability.recommended_budgets.vram_budget_bytes != 0u
+            && candidate.cost.working_memory_bytes
+                > candidate.capability.recommended_budgets.vram_budget_bytes)
+        {
+            return reject(MatchFailure::memory_budget);
+        }
+        if (requirement.maximum_latency_microseconds != 0u
+            && candidate.cost.latency_microseconds
+                > requirement.maximum_latency_microseconds)
+        {
+            return reject(MatchFailure::latency_budget);
+        }
+        if (requirement.maximum_power_milliwatts != 0u
+            && candidate.cost.sustained_power_milliwatts
+                > requirement.maximum_power_milliwatts)
+        {
+            return reject(MatchFailure::power_budget);
+        }
+
+        const bool provisional =
+            admission.provisional_features != 0u
+            || candidate.status != Status::present
+            || candidate.capability.status != Status::present
+            || candidate.software_fallback;
+        if (provisional && !allow_experimental)
+            return reject(MatchFailure::unavailable);
+
+        admission.status = provisional
+            ? AdmissionStatus::experimental
+            : AdmissionStatus::admitted;
+        admission.failure = MatchFailure::none;
+        return admission;
     }
 
     namespace detail
@@ -1038,7 +1412,14 @@ export namespace epochengine::capability
         project_validation = 1u << 6u,
         per_subsystem_selection = 1u << 7u,
         deterministic_selection = 1u << 8u,
-        no_capability_overclaim = 1u << 9u
+        no_capability_overclaim = 1u << 9u,
+        project_renderer_admission = 1u << 10u,
+        experimental_capability_labeling = 1u << 11u,
+        experimental_capability_rejection = 1u << 12u,
+        missing_requirement_rejection = 1u << 13u,
+        headless_reference_admission = 1u << 14u,
+        software_fallback_policy = 1u << 15u,
+        unknown_renderer_cost = 1u << 16u
     };
 
     struct ContractCheckReport final
@@ -1293,6 +1674,73 @@ export namespace epochengine::capability
                     && unproven_vk.status != Status::present
                     && !selectable(declaration_only_gles)
                     && !select(candidates, requirement).matched);
+        }
+
+        {
+            const Requirement portable = portable_rendering_requirement();
+            const RequirementAdmission admitted =
+                assess_requirement(gles_render, portable, true, true);
+            report.record(
+                ContractCheck::project_renderer_admission,
+                admitted.status == AdmissionStatus::admitted
+                && admitted.failure == MatchFailure::none
+                && admitted.missing_features == 0u
+                && admitted.effective_budgets.max_w
+                    == gles_render.capability.recommended_budgets.max_w);
+
+            SubsystemProfile experimental = gles_render;
+            experimental.status = Status::partial;
+            experimental.capability.status = Status::partial;
+            const RequirementAdmission provisional =
+                assess_requirement(experimental, portable, true, true);
+            report.record(
+                ContractCheck::experimental_capability_labeling,
+                provisional.status == AdmissionStatus::experimental
+                && provisional.failure == MatchFailure::none);
+
+            const RequirementAdmission blocked =
+                assess_requirement(experimental, portable, false, true);
+            report.record(
+                ContractCheck::experimental_capability_rejection,
+                blocked.status == AdmissionStatus::rejected
+                && blocked.failure == MatchFailure::unavailable);
+
+            SubsystemProfile missing = experimental;
+            missing.capability.features.set(Feature::textures, Status::missing);
+            const RequirementAdmission rejected =
+                assess_requirement(missing, portable, true, true);
+            report.record(
+                ContractCheck::missing_requirement_rejection,
+                rejected.status == AdmissionStatus::rejected
+                && rejected.failure == MatchFailure::missing_feature
+                && (rejected.missing_features & feature_bit(Feature::textures)) != 0u);
+        }
+
+        {
+            const SubsystemProfile null_renderer =
+                renderer_subsystem_profile_for(RendererBackendKind::null);
+            const Requirement headless = headless_rendering_requirement();
+            const RequirementAdmission admitted =
+                assess_requirement(null_renderer, headless, false, true);
+            report.record(
+                ContractCheck::headless_reference_admission,
+                admitted.status == AdmissionStatus::admitted
+                && null_renderer.determinism == Determinism::reference
+                && null_renderer.capability.backend == BackendFamily::cpu);
+
+            const RequirementAdmission blocked =
+                assess_requirement(cpu_render, headless, false, false);
+            report.record(
+                ContractCheck::software_fallback_policy,
+                blocked.status == AdmissionStatus::rejected
+                && blocked.failure == MatchFailure::unavailable);
+
+            report.record(
+                ContractCheck::unknown_renderer_cost,
+                null_renderer.cost.working_memory_bytes == 0u
+                && null_renderer.cost.startup_memory_bytes == 0u
+                && null_renderer.cost.latency_microseconds == 0u
+                && null_renderer.capability.recommended_budgets.vram_budget_bytes != 0u);
         }
 
         return report;

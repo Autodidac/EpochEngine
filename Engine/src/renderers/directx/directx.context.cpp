@@ -166,6 +166,7 @@ namespace epochengine::directxcontext
             state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
             state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
             detail::draw_vertices(state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            detail::render_engine_arcade_sampled_surface_preview(*ctx, state);
             detail::draw_vertices(state, lines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
         }
 

@@ -162,6 +162,33 @@ export namespace epochengine::opengltextures
         bool has_depth = false;
         bool active = false;
     };
+    struct NativeTextureGPU
+    {
+        GLuint texture = 0;
+        const void* context_key = nullptr;
+        epochengine::TextureDesc desc{};
+        bool active = false;
+    };
+
+    struct NativeTextureKey final
+    {
+        const void* context_key{};
+        GLuint texture{};
+
+        friend bool operator==(NativeTextureKey, NativeTextureKey) noexcept = default;
+    };
+
+    struct NativeTextureKeyHash final
+    {
+        [[nodiscard]] std::size_t operator()(NativeTextureKey key) const noexcept
+        {
+            const std::size_t context = std::hash<const void*>{}(key.context_key);
+            const std::size_t texture = std::hash<GLuint>{}(key.texture);
+            return context ^ (texture + static_cast<std::size_t>(0x9e3779b9u)
+                + (context << 6) + (context >> 2));
+        }
+    };
+
 
     struct TextureAtlasPtrHash {
         size_t operator()(const TextureAtlas* atlas) const noexcept {
@@ -185,6 +212,8 @@ export namespace epochengine::opengltextures
         std::unordered_map<const void*, AtlasGpuMap> context_gpu_atlases;
         std::unordered_map<const void*, std::unique_ptr<epochengine::openglstate::OpenGL4State>> context_gl_states;
         std::unordered_map<u32, NativeRenderTextureGPU> native_render_textures;
+        std::unordered_map<NativeTextureKey, NativeTextureGPU,
+            NativeTextureKeyHash> native_textures;
         std::mutex gpuMutex;
         epochengine::openglstate::OpenGL4State glState{};
     };
@@ -316,6 +345,294 @@ export namespace epochengine::opengltextures
         }
 
         return true;
+    }
+
+    struct NativeTextureFormat final
+    {
+        GLint internal_format{};
+        GLenum external_format{};
+        GLenum component_type{};
+        u32 bytes_per_texel{};
+    };
+
+    [[nodiscard]] inline bool native_texture_format(
+        epochengine::TextureFormat format,
+        NativeTextureFormat& output) noexcept
+    {
+        switch (format)
+        {
+        case epochengine::TextureFormat::r8_unorm:
+            output = { GL_R8, GL_RED, GL_UNSIGNED_BYTE, 1u };
+            return true;
+        case epochengine::TextureFormat::r16_float:
+            output = { GL_R16F, GL_RED, GL_HALF_FLOAT, 2u };
+            return true;
+        case epochengine::TextureFormat::r32_uint:
+            output = { GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, 4u };
+            return true;
+        case epochengine::TextureFormat::rgba8_unorm:
+            output = { GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, 4u };
+            return true;
+        case epochengine::TextureFormat::bgra8_unorm:
+            output = { GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, 4u };
+            return true;
+        case epochengine::TextureFormat::rgba16_float:
+            output = { GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, 8u };
+            return true;
+        case epochengine::TextureFormat::rgba32_float:
+            output = { GL_RGBA32F, GL_RGBA, GL_FLOAT, 16u };
+            return true;
+        default:
+            output = {};
+            return false;
+        }
+    }
+
+    struct ScopedNativeTextureState final
+    {
+        GLint texture_binding{};
+        GLint unpack_alignment{4};
+        GLint unpack_row_length{};
+        GLint unpack_buffer{};
+        GLint unpack_skip_pixels{};
+        GLint unpack_skip_rows{};
+        GLboolean unpack_swap_bytes{GL_FALSE};
+
+        ScopedNativeTextureState() noexcept
+        {
+            glGetIntegerv(GL_TEXTURE_BINDING_2D, &texture_binding);
+            glGetIntegerv(GL_UNPACK_ALIGNMENT, &unpack_alignment);
+            glGetIntegerv(GL_UNPACK_ROW_LENGTH, &unpack_row_length);
+            glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpack_buffer);
+            glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &unpack_skip_pixels);
+            glGetIntegerv(GL_UNPACK_SKIP_ROWS, &unpack_skip_rows);
+            glGetBooleanv(GL_UNPACK_SWAP_BYTES, &unpack_swap_bytes);
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+            glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+            glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+            glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
+        }
+
+        ScopedNativeTextureState(const ScopedNativeTextureState&) = delete;
+        ScopedNativeTextureState& operator=(const ScopedNativeTextureState&) = delete;
+
+        ~ScopedNativeTextureState() noexcept
+        {
+            glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(unpack_buffer));
+            glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(texture_binding));
+            glPixelStorei(GL_UNPACK_ALIGNMENT, unpack_alignment);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
+            glPixelStorei(GL_UNPACK_SKIP_PIXELS, unpack_skip_pixels);
+            glPixelStorei(GL_UNPACK_SKIP_ROWS, unpack_skip_rows);
+            glPixelStorei(GL_UNPACK_SWAP_BYTES, unpack_swap_bytes);
+        }
+    };
+
+    inline void clear_gl_errors() noexcept
+    {
+        while (glGetError() != GL_NO_ERROR)
+        {
+        }
+    }
+
+    inline void delete_native_texture_objects(NativeTextureGPU& gpu) noexcept
+    {
+        if (gpu.texture)
+            glDeleteTextures(1, &gpu.texture);
+        gpu = {};
+    }
+
+    [[nodiscard]] inline epochengine::OpenGLFamilyNativeTextureAllocation
+        allocate_native_texture(
+            void* user,
+            epochengine::RendererBackendKind,
+            const epochengine::TextureDesc& desc,
+            u32 slot)
+    {
+        epochengine::OpenGLFamilyNativeTextureAllocation allocation{};
+        NativeTextureFormat format{};
+        if (desc.width == 0u || desc.height == 0u || desc.mip_levels == 0u
+            || desc.mip_levels > 32u || desc.depth_stencil
+            || !native_texture_format(desc.format, format))
+        {
+            return allocation;
+        }
+
+        BackendData& backend = resolve_backend_data(user);
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "allocate texture"))
+            return allocation;
+
+        const auto platformContext = detail::to_platform_context(backend.glState);
+        const void* const contextKey = platform_context_key(platformContext);
+        if (!contextKey)
+            return allocation;
+        ScopedNativeTextureState stateGuard{};
+        NativeTextureGPU gpu{};
+        gpu.context_key = contextKey;
+        gpu.desc = desc;
+        gpu.desc.debug_name = nullptr;
+        clear_gl_errors();
+
+        glGenTextures(1, &gpu.texture);
+        if (!gpu.texture)
+            return allocation;
+        glBindTexture(GL_TEXTURE_2D, gpu.texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(
+            GL_TEXTURE_2D,
+            GL_TEXTURE_MIN_FILTER,
+            desc.mip_levels > 1u ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, static_cast<GLint>(desc.mip_levels - 1u));
+
+        for (u32 mip = 0; mip < desc.mip_levels; ++mip)
+        {
+            const u32 width = (std::max)(1u, desc.width >> mip);
+            const u32 height = (std::max)(1u, desc.height >> mip);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                static_cast<GLint>(mip),
+                format.internal_format,
+                static_cast<GLsizei>(width),
+                static_cast<GLsizei>(height),
+                0,
+                format.external_format,
+                format.component_type,
+                nullptr);
+        }
+
+        const GLenum allocationError = glGetError();
+        if (allocationError != GL_NO_ERROR || glIsTexture(gpu.texture) != GL_TRUE)
+        {
+            delete_native_texture_objects(gpu);
+            return allocation;
+        }
+
+        gpu.active = true;
+        allocation.texture_object = gpu.texture;
+        allocation.ready = true;
+        allocation.context_key = contextKey;
+        {
+            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+            backend.native_textures[NativeTextureKey{contextKey, gpu.texture}] = gpu;
+        }
+        static_cast<void>(slot);
+        return allocation;
+    }
+
+    [[nodiscard]] inline bool upload_native_texture(
+        void* user,
+        epochengine::RendererBackendKind,
+        const epochengine::OpenGLFamilyTextureRecord& record,
+        const epochengine::TextureUploadDesc& upload)
+    {
+        if (!record.native_work_order_ready() || !epochengine::valid(upload)
+            || upload.format != record.desc.format
+            || upload.mip_level >= record.desc.mip_levels)
+        {
+            return false;
+        }
+
+        NativeTextureFormat format{};
+        if (!native_texture_format(upload.format, format)
+            || format.bytes_per_texel == 0u)
+        {
+            return false;
+        }
+        const u64 tightRowBytes64 = static_cast<u64>(upload.width)
+            * static_cast<u64>(format.bytes_per_texel);
+        if (tightRowBytes64 > static_cast<u64>(~u32{0}))
+            return false;
+        const u32 tightRowBytes = static_cast<u32>(tightRowBytes64);
+        const u32 rowPitch = upload.row_pitch_bytes == 0u
+            ? tightRowBytes
+            : upload.row_pitch_bytes;
+        if (rowPitch < tightRowBytes || rowPitch % format.bytes_per_texel != 0u)
+            return false;
+
+        BackendData& backend = resolve_backend_data(user);
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "upload texture"))
+            return false;
+
+        const auto platformContext = detail::to_platform_context(backend.glState);
+        const void* const contextKey = platform_context_key(platformContext);
+        if (!contextKey || contextKey != record.native_context_key)
+            return false;
+        std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+        const auto stored = backend.native_textures.find(
+            NativeTextureKey{contextKey, record.texture_object});
+        if (stored == backend.native_textures.end()
+            || !stored->second.active
+            || glIsTexture(record.texture_object) != GL_TRUE)
+        {
+            return false;
+        }
+
+        ScopedNativeTextureState stateGuard{};
+        glBindTexture(GL_TEXTURE_2D, record.texture_object);
+        clear_gl_errors();
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(
+            GL_UNPACK_ROW_LENGTH,
+            rowPitch == tightRowBytes
+                ? 0
+                : static_cast<GLint>(rowPitch / format.bytes_per_texel));
+        glTexSubImage2D(
+            GL_TEXTURE_2D,
+            static_cast<GLint>(upload.mip_level),
+            static_cast<GLint>(upload.x),
+            static_cast<GLint>(upload.y),
+            static_cast<GLsizei>(upload.width),
+            static_cast<GLsizei>(upload.height),
+            format.external_format,
+            format.component_type,
+            upload.data);
+        return glGetError() == GL_NO_ERROR;
+    }
+
+    inline void destroy_native_texture(
+        void* user,
+        epochengine::RendererBackendKind,
+        const epochengine::OpenGLFamilyTextureRecord& record)
+    {
+        BackendData& backend = resolve_backend_data(user);
+        const NativeTextureKey key{
+            record.native_context_key,
+            record.texture_object};
+        epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!activate_backend_context(backend, contextGuard, "destroy texture"))
+        {
+            std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+            backend.native_textures.erase(key);
+            return;
+        }
+
+        const auto platformContext = detail::to_platform_context(backend.glState);
+        const void* const contextKey = platform_context_key(platformContext);
+        std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+        const auto it = backend.native_textures.find(key);
+        if (it == backend.native_textures.end())
+            return;
+        if (contextKey == record.native_context_key)
+        {
+            delete_native_texture_objects(it->second);
+        }
+        backend.native_textures.erase(it);
+    }
+
+    [[nodiscard]] inline epochengine::OpenGLFamilyNativeTextureHooks
+        make_native_texture_hooks() noexcept
+    {
+        epochengine::OpenGLFamilyNativeTextureHooks hooks{};
+        hooks.user = &get_opengl_backend();
+        hooks.allocate = &allocate_native_texture;
+        hooks.upload = &upload_native_texture;
+        hooks.destroy = &destroy_native_texture;
+        return hooks;
     }
 
     inline void delete_native_render_texture_objects(NativeRenderTextureGPU& gpu) noexcept
@@ -731,6 +1048,7 @@ export namespace epochengine::opengltextures
             };
 
             deleteAtlasMap(oglData->gpu_atlases);
+            oglData->native_textures.clear();
             for (auto& [_, atlasMap] : oglData->context_gpu_atlases)
                 deleteAtlasMap(atlasMap);
             oglData->gpu_atlases.clear();

@@ -65,6 +65,26 @@ export namespace epochengine
         depth24_stencil8,
         depth32_float
     };
+    [[nodiscard]] constexpr u32 texture_format_bytes_per_texel(
+        TextureFormat format) noexcept
+    {
+        switch (format)
+        {
+        case TextureFormat::r8_unorm: return 1;
+        case TextureFormat::r16_float: return 2;
+        case TextureFormat::r32_uint:
+        case TextureFormat::rgba8_unorm:
+        case TextureFormat::bgra8_unorm:
+        case TextureFormat::depth24_stencil8:
+        case TextureFormat::depth32_float:
+            return 4;
+        case TextureFormat::rgba16_float: return 8;
+        case TextureFormat::rgba32_float: return 16;
+        case TextureFormat::unknown: break;
+        }
+        return 0;
+    }
+
 
     enum class FilterMode : u8
     {
@@ -134,6 +154,52 @@ export namespace epochengine
         bool sparse = false;
         const char* debug_name = nullptr;
     };
+    struct TextureUploadDesc
+    {
+        u32 mip_level = 0;
+        u32 x = 0;
+        u32 y = 0;
+        u32 width = 0;
+        u32 height = 0;
+        u32 row_pitch_bytes = 0;
+        TextureFormat format = TextureFormat::unknown;
+        const void* data = nullptr;
+        u64 size_bytes = 0;
+    };
+
+    // Upload implementations consume or copy the non-owning data span before
+    // returning. Deferred backends must move bytes into backend-owned staging.
+
+    [[nodiscard]] constexpr u64 minimum_texture_upload_bytes(
+        const TextureUploadDesc& upload) noexcept
+    {
+        const u64 texelBytes = texture_format_bytes_per_texel(upload.format);
+        if (texelBytes == 0 || upload.width == 0 || upload.height == 0)
+            return 0;
+
+        const u64 tightRowBytes = static_cast<u64>(upload.width) * texelBytes;
+        const u64 rowPitch = upload.row_pitch_bytes == 0
+            ? tightRowBytes
+            : static_cast<u64>(upload.row_pitch_bytes);
+        if (rowPitch < tightRowBytes)
+            return 0;
+
+        const u64 precedingRows = static_cast<u64>(upload.height - 1u);
+        constexpr u64 maximum = ~u64{0};
+        if (precedingRows != 0 && rowPitch > (maximum - tightRowBytes) / precedingRows)
+            return 0;
+        return precedingRows * rowPitch + tightRowBytes;
+    }
+
+    [[nodiscard]] constexpr bool valid(
+        const TextureUploadDesc& upload) noexcept
+    {
+        const u64 minimumBytes = minimum_texture_upload_bytes(upload);
+        return upload.data != nullptr
+            && minimumBytes != 0
+            && upload.size_bytes >= minimumBytes;
+    }
+
 
     struct SamplerDesc
     {
@@ -482,6 +548,7 @@ export namespace epochengine
         RendererCapabilityStatus live_native_allocation = RendererCapabilityStatus::missing;
         RendererCapabilityStatus presentation_proof = RendererCapabilityStatus::missing;
         RendererCapabilityStatus sampled_render_targets = RendererCapabilityStatus::missing;
+        RendererCapabilityStatus scene_sampled_surface = RendererCapabilityStatus::missing;
         RendererCapabilityStatus mesh_model_resources = RendererCapabilityStatus::missing;
     };
 
@@ -597,6 +664,7 @@ export namespace epochengine
             report.live_native_allocation = RendererCapabilityStatus::partial;
             report.presentation_proof = RendererCapabilityStatus::partial;
             report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.scene_sampled_surface = RendererCapabilityStatus::partial;
             report.mesh_model_resources = RendererCapabilityStatus::partial;
             break;
         case RendererBackendKind::sdl3:
@@ -606,6 +674,7 @@ export namespace epochengine
             report.live_native_allocation = RendererCapabilityStatus::partial;
             report.presentation_proof = RendererCapabilityStatus::partial;
             report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.scene_sampled_surface = RendererCapabilityStatus::partial;
             report.mesh_model_resources = RendererCapabilityStatus::partial;
             break;
         case RendererBackendKind::sfml3:
@@ -616,6 +685,7 @@ export namespace epochengine
             report.live_native_allocation = RendererCapabilityStatus::partial;
             report.presentation_proof = RendererCapabilityStatus::missing;
             report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.scene_sampled_surface = RendererCapabilityStatus::partial;
             report.mesh_model_resources = RendererCapabilityStatus::partial;
             break;
         case RendererBackendKind::vulkan:
@@ -626,6 +696,7 @@ export namespace epochengine
             report.live_native_allocation = RendererCapabilityStatus::missing;
             report.presentation_proof = RendererCapabilityStatus::missing;
             report.sampled_render_targets = RendererCapabilityStatus::partial;
+            report.scene_sampled_surface = RendererCapabilityStatus::partial;
             report.mesh_model_resources = RendererCapabilityStatus::partial;
             break;
         case RendererBackendKind::software:
@@ -635,6 +706,7 @@ export namespace epochengine
             report.live_native_allocation = RendererCapabilityStatus::deferred;
             report.presentation_proof = RendererCapabilityStatus::deferred;
             report.sampled_render_targets = RendererCapabilityStatus::deferred;
+            report.scene_sampled_surface = RendererCapabilityStatus::partial;
             report.mesh_model_resources = RendererCapabilityStatus::deferred;
             break;
         case RendererBackendKind::null:
@@ -715,6 +787,14 @@ export namespace epochengine
         virtual BufferHandle  create_buffer(const BufferDesc& desc) = 0;
         virtual TextureHandle create_texture(const TextureDesc& desc) = 0;
         virtual SamplerHandle create_sampler(const SamplerDesc&) { return {}; }
+        virtual bool upload_texture(TextureHandle, const TextureUploadDesc&)
+        {
+            return false;
+        }
+        virtual bool texture_ready(TextureHandle) const noexcept
+        {
+            return false;
+        }
         virtual ShaderHandle create_shader(const ShaderDesc&) { return {}; }
         virtual PipelineHandle create_pipeline(const PipelineDesc&) { return {}; }
         virtual MaterialHandle create_material(const MaterialDesc&) { return {}; }

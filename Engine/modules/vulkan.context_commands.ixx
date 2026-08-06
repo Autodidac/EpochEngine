@@ -63,6 +63,7 @@ import core.context;
 import context.type;
 import atlas.texture;
 import render.preview_grid;
+import render.arcade;
 
 
 namespace epochengine::vulkancontext
@@ -106,6 +107,67 @@ namespace epochengine::vulkancontext
         commandBuffers = std::move(bufs);
     }
 
+    void Application::recordArcadeRenderTexturePass(vk::CommandBuffer commandBuffer)
+    {
+        if (epochengine::previewgrid::sampled_render_surface_markers_for(bound_context()).empty())
+            return;
+        if (!arcadeRenderPass
+            || !arcadeRenderFramebuffer
+            || !arcadeRenderImage
+            || arcadeRenderExtent.width == 0u
+            || arcadeRenderExtent.height == 0u)
+        {
+            throw std::runtime_error(
+                "[ Vulkan ] - Engine Arcade sampled screen requested without a complete render target.");
+        }
+
+        vk::ClearValue clearValue{};
+        clearValue.setColor(vk::ClearColorValue{
+            std::array<float, 4>{ 0.008f, 0.012f, 0.024f, 1.0f }
+        });
+
+        vk::RenderPassBeginInfo beginInfo{};
+        beginInfo.renderPass = *arcadeRenderPass;
+        beginInfo.framebuffer = *arcadeRenderFramebuffer;
+        beginInfo.renderArea = vk::Rect2D{ vk::Offset2D{ 0, 0 }, arcadeRenderExtent };
+        beginInfo.clearValueCount = 1u;
+        beginInfo.pClearValues = &clearValue;
+        commandBuffer.beginRenderPass(beginInfo, vk::SubpassContents::eInline);
+
+        const int width = static_cast<int>(arcadeRenderExtent.width);
+        const int height = static_cast<int>(arcadeRenderExtent.height);
+        epochengine::render_arcade::emit_arcade_attract_pattern(
+            width,
+            height,
+            arcadePreviewFrame++,
+            [&](const epochengine::render_arcade::ArcadePreviewRect& source)
+            {
+                const int left = (std::clamp)(source.x, 0, width);
+                const int top = (std::clamp)(source.y, 0, height);
+                const int right = (std::clamp)(source.x + source.width, left, width);
+                const int bottom = (std::clamp)(source.y + source.height, top, height);
+                if (right <= left || bottom <= top)
+                    return;
+
+                vk::ClearAttachment attachment{};
+                attachment.aspectMask = vk::ImageAspectFlagBits::eColor;
+                attachment.colorAttachment = 0u;
+                attachment.clearValue.setColor(vk::ClearColorValue{ source.color });
+
+                vk::ClearRect rect{};
+                rect.rect.offset = vk::Offset2D{ left, top };
+                rect.rect.extent = vk::Extent2D{
+                    static_cast<std::uint32_t>(right - left),
+                    static_cast<std::uint32_t>(bottom - top)
+                };
+                rect.baseArrayLayer = 0u;
+                rect.layerCount = 1u;
+                commandBuffer.clearAttachments(1u, &attachment, 1u, &rect);
+            });
+
+        commandBuffer.endRenderPass();
+    }
+
     void Application::recordCommandBuffer(std::uint32_t imageIndex)
     {
         if (imageIndex >= commandBuffers.size())
@@ -117,6 +179,8 @@ namespace epochengine::vulkancontext
         vk::CommandBufferBeginInfo beginInfo{};
         if (cmd.begin(beginInfo) != vk::Result::eSuccess)
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::begin failed.");
+
+        recordArcadeRenderTexturePass(cmd);
 #if EPOCH_USE_CLEAR_COLOR_VULKAN
         std::array<vk::ClearValue, 2> clearValues{};
         const auto frameClearColor = epochengine::core::clear_color_for_context(
@@ -228,10 +292,35 @@ namespace epochengine::vulkancontext
                 cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *solidGraphicsPipeline);
                 cmd.drawIndexed(solidIndexCount, 1, 0, 0, 0);
             }
+            if (arcadeScreenIndexCount > 0u)
+            {
+                if (!arcadeScreenPipeline || imageIndex >= arcadeDescriptorSets.size())
+                {
+                    throw std::runtime_error(
+                        "[ Vulkan ] - Engine Arcade screen geometry has no sampled descriptor path.");
+                }
+                vk::DescriptorSet arcadeSet = *arcadeDescriptorSets[imageIndex];
+                cmd.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,
+                    *pipelineLayout,
+                    0u,
+                    1u,
+                    &arcadeSet,
+                    0u,
+                    nullptr);
+                cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *arcadeScreenPipeline);
+                cmd.drawIndexed(
+                    arcadeScreenIndexCount,
+                    1u,
+                    arcadeScreenIndexOffset,
+                    0,
+                    0u);
+            }
             if (lineIndexCount > 0u)
             {
                 cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
-                cmd.drawIndexed(lineIndexCount, 1, solidIndexCount, 0, 0);
+                const std::uint32_t lineIndexOffset = solidIndexCount + arcadeScreenIndexCount;
+                cmd.drawIndexed(lineIndexCount, 1, lineIndexOffset, 0, 0);
             }
         }
 

@@ -58,50 +58,6 @@ export namespace epochengine::platform
         bool prefer_single_context_runtime = false;
     };
 
-    [[nodiscard]] inline Budgets recommended_budgets_for_tier(const epochengine::perf::tier perf_tier) noexcept
-    {
-        Budgets budgets{};
-
-        switch (perf_tier)
-        {
-        case epochengine::perf::tier::mobile_30:
-            budgets.cpu_ms = 10.0f;
-            budgets.gpu_ms = 20.0f;
-            budgets.max_w = 1280;
-            budgets.max_h = 720;
-            budgets.max_lights = 32;
-            budgets.shadow_cascades = 1;
-            break;
-        case epochengine::perf::tier::deck_40:
-            budgets.cpu_ms = 8.0f;
-            budgets.gpu_ms = 16.0f;
-            budgets.max_w = 1600;
-            budgets.max_h = 900;
-            budgets.max_lights = 48;
-            budgets.shadow_cascades = 2;
-            break;
-        case epochengine::perf::tier::desktop_60:
-            budgets.cpu_ms = 6.0f;
-            budgets.gpu_ms = 12.0f;
-            budgets.max_w = 1920;
-            budgets.max_h = 1080;
-            budgets.max_lights = 64;
-            budgets.shadow_cascades = 2;
-            break;
-        case epochengine::perf::tier::uncapped:
-        default:
-            budgets.cpu_ms = 4.0f;
-            budgets.gpu_ms = 8.0f;
-            budgets.max_w = 2560;
-            budgets.max_h = 1440;
-            budgets.max_lights = 96;
-            budgets.shadow_cascades = 4;
-            break;
-        }
-
-        return budgets;
-    }
-
     [[nodiscard]] inline Capabilities probe_capabilities(const IGraphicsContext* context) noexcept
     {
         Capabilities caps{};

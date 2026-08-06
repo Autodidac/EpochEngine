@@ -143,12 +143,11 @@ the same engine-owned path.
 - generated embedded-engine shells should emit a child project file, a build
   script, a build fragment, and script include fallback so the full engine
   surface stays real instead of roadmap-only promise text
-- an editor/project launcher profile is valid here as a prestep for choosing
-  projects, switching among live renderer contexts, updates, and future
-  automation flows
-- that launcher should stay flat and direct: project entry, clean editor launch,
-  live context focus handoff, updates, and quit belong there; layered
-  game/puzzle menus do not
+- the project launcher is a prelaunch surface for editor application, live
+  renderer context, update, and exit policy; it is not another editor shell
+- the direct actions are Open Editor, Plant Lab, GUI Editor, Update Epoch
+  Engine, and Quit. Launch Settings selects a live compiled context before an
+  editor application opens; layered game/puzzle menus do not belong here
 - the launcher may open project demos directly or preload a project before the
   editor, but it should not drift back into multiple menu layers or become a
   fake game shell
@@ -218,17 +217,26 @@ the same engine-owned path.
   GUI input queue as well as preserving their backend event path. Failed Linux
   thread initialization also runs backend cleanup before fallback. Mixed-backend
   grids remain explicit diagnostics and are not this workflow.
-- launcher context switching is not another editor or driver shell; it only
-  focuses another registered live dock and reports when none exists
-- `editor.scene.cpp` should own project profiles, script profiles, runtime
-  scene ids, and seed entities
-- `editor.cpp` should act as the live shell over that scene/project data, not
-  as a second hardcoded editor universe
+- launcher context selection is configuration, not an action button: the chosen
+  live context is promoted to the primary host slot before Open Editor, Plant
+  Lab, or GUI Editor starts
+- `editor.application` owns the registry, profile contract, surface mask,
+  initial camera/dock policy, pane ownership, authoring/run permissions, and
+  scene validation shared by all editor applications
+- `editor.standard.cpp`, `editor.plant_lab.cpp`, and `editor.gui.cpp` own the
+  three canonical editor scenes. Plant Lab owns dedicated vegetation authoring
+  and GUI canvas transforms remain GUI-scene data
+- Forest Factory remains a standard-editor surface/tool. It browses and imports
+  Plant Lab/package outputs and places vegetation into project-owned scenes
+- `editor.scene.cpp` owns ordinary project/script profiles and project
+  serialization, routing application projects through the application registry
+- `editor.cpp` is the live shell and seed-to-runtime adapter. It must enforce
+  application policy and must not recreate dedicated scene generation
 - default editor seed profiles should stay lean. Sandbox, Project Hub, and
   software/tool startup should keep only the workspace/root, camera, and light
   entities they need; starter cubes, grids, player starts, tray panels, fake
-  tool panels, and Forest Factory floor props must be created only by explicit
-  workspace/package actions or real scene data.
+  tool panels, and vegetation props must be created only by explicit
+  application/package actions or real scene data.
 - current `.epoch` scene/world files are metadata shells only. They must exist
   and be surfaced as evidence, but the live preview/runtime object list is still
   driven by `editor.scene.cpp` seed entities until scene-file loading,
@@ -305,25 +313,27 @@ the same engine-owned path.
   invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
   the script host; it must not copy those implementations out of the kernel
   engine. The package also records the shared `engine_arcade.screen` 512x512
-  sampled render target so future arcade cabinets and in-game terminals can
-  bind the same renderer-owned surface instead of relying on project-local
-  ad hoc textures. Installing or reinstalling Engine Arcade activates visible
-  editor state immediately: the default arcade scene is selected, the `3D Scene`
-  workspace receives a render-to-texture screen/cabinet proof, and the Run target
-  honors recognized arcade scene ids before falling back to `project:<id>`.
+  sampled render target. One deterministic attract-pattern contract is rendered
+  into backend-owned scene surfaces by OpenGL, SDL3, SFML3, Raylib3, Vulkan,
+  DirectX, and Software, then sampled by the cabinet screen instead of relying
+  on project-local ad hoc textures. This source path remains `Partial` pending
+  visual and repeated-switch proof. Installing or reinstalling Engine Arcade
+  activates visible editor state immediately: the default arcade scene is
+  selected, the `3D Scene` workspace receives the cabinet/screen proof, and the
+  Run target honors recognized arcade scene ids before falling back to
+  `project:<id>`.
   Removing the package clears the arcade preview entities and active arcade
   runtime scene so other package workspaces can take over cleanly.
-- Plant Lab is the editor-facing core vegetation workspace backed by the
-  Forest Factory descriptor lane, not a loose optional dump. The top editor
-  workspace row owns the `Plant Lab` surface, which
-  opens the current scene-backed deterministic temporal-graph preview instead of
-  hiding plant work behind an Asset command-menu action. Package Manager
-  activation stages
+- Plant Lab is the dedicated launcher application for scene-backed procedural
+  vegetation authoring and deterministic temporal-graph preview.
+- Forest Factory is the standard-editor vegetation surface/tool. It consumes
+  Plant Lab and package outputs for browsing, object/asset import, placement,
+  and visible main-scene use. Package Manager activation stages
   `assets/packages/engine_forest_factory.package.json` and
   `assets/packages/engine_forest_factory/default.forest.json` in the active
   project. Package payload/source routing points at
-  `Autodidac/EpochEngineExtensions`; the Plant Lab repo remains recorded
-  provenance/reference source, and generated project payloads are still emitted
+  `Autodidac/EpochEngineExtensions`; the external Plant Lab repository remains
+  provenance/reference material, and generated project payloads are emitted
   only after visible package activation or main-scene use.
 - the command-menu Package Manager is the intended modal surface for local
   runtime-mini packages first, then explicit downloadable source packages later.
@@ -339,17 +349,23 @@ the same engine-owned path.
   display the reason the package is blocked. The modal body is a clipped shared
   GUI scroll area; package rows and progress bars must not bleed into the scene
   or into command-menu/modal chrome.
-- Active project evidence repair now preserves the current editor entity list
-  and writes a minimal `.epoch` entity snapshot during explicit Save/Build/Run
-  paths. This is the current safety lane for editor modifications until the
-  full scene parser/serializer owns runtime/editor loading.
+- `scenesnapshot`, `sceneserializer`, and `scene.persistence` now own canonical
+  `epoch_snapshot 2` project scene evidence. Older v1/editor text is accepted
+  only through the bounded migration reader; new saves always emit v2.
+- explicit Save, Play, Build, and Run validate the active project/application,
+  write a verified temporary payload, atomically replace the scene file, and
+  fail closed when durable evidence cannot be committed.
+- project preview consumes the same saved revision through `scene.runtime`, a
+  deterministic renderer-neutral projection. The live editor entity collection
+  remains a transitional UI adapter until every mutation routes through
+  `SceneDocument` semantic commands.
 - OS model package lanes are on-demand model assets. Qwen, Nemotron, Bonsai,
   FLUX, Wan, and TRELLIS weights are staged to executable-local `cache/models/`
   only after operator action, are not cloned for engine self-iteration, and are
   included in generated projects only by explicit package opt-in with
   license/notice review. The current gate writes a project-local
   `*.model.package.json` opt-in manifest and a cache-local `download.plan.json`
-  before any future downloader is allowed to transfer weights. Intelligence now
+  before any future downloader is allowed to transfer weights. AI now
   exposes direct model-package entry buttons for Nemotron 3 Nano 4B BF16, Qwen
   3.6 27B, and the image lanes. Bonsai Ternary 4B is the recommended local
   image default, Bonsai Binary 4B is the low-memory lane, and FLUX.2 Klein 4B is
@@ -470,6 +486,12 @@ the same engine-owned path.
   - time-system diagnostics that point to Video for controls
   - pacing / perf select
   - diagnostics
+- capability diagnostics have two explicit targets: the active editor backend
+  and the independently selected project-run backend. Both are assessed against
+  the active project's typed policy; neither may certify the other.
+- recommended resolution, CPU/GPU frame time, upload, and local-memory budgets
+  are policy from `platform.budgets`, not measured renderer cost. Unknown cost
+  stays unknown until runtime evidence exists.
 - graph views render as engine-generated textures inside the central System Info
   surface only; the bottom Console Dock keeps compact text diagnostics and does
   not duplicate the graph UI
@@ -477,14 +499,16 @@ the same engine-owned path.
   full-width readable rows instead of tiny side-by-side thumbnails
 - graph views support pan/zoom and remain clipped when they are wider than the
   available panel
-- top-level editor mode buttons now route the central work area. `3D Scene` and
-  `2D Scene/UI` keep the real scene viewport; `Assets`, `Plant Lab`, `Video`,
-  `Project`, `Intelligence`, and `System Info` own their dedicated surfaces so
-  those workflows do not have to be operated from the console dock.
-- the central work area now has a first-pass tabbed `Editor Workbench` strip for
-  `3D Scene`, `2D Scene/UI`, `Assets`, `Plant Lab`, `Video`, `Project`,
-  `Intelligence`, and `System Info`.
-- Intelligence activation is centralized: the toolbar, bottom AI dock tab, and
+- top-level editor mode controls route the central work area. `3D Scene` and
+  `2D Scene/UI` keep the real scene viewport; `Assets`, `Forest Factory`,
+  `Video`, `Project`, `AI`, and `System Info` own dedicated surfaces so those
+  workflows do not have to be operated from the console dock.
+- launcher actions open standard Editor, Plant Lab, or GUI Editor directly.
+  Forest Factory stays in the standard editor. The three applications retain
+  one shared project/service shell while unsupported
+  tabs, entity commands, Run/Build controls, AI panes, and detached routes are
+  absent or rejected according to the active application profile.
+- AI activation is centralized: the toolbar, bottom AI dock tab, and
   Window > Open AI Control Surface all reopen Inspector, AI Chat, and the
   Console Dock before selecting the self-iteration sandbox.
 - `EPOCH_EDITOR_START_WORKSPACE=AI`, `Systems`, or `Assets` selects the matching
@@ -623,6 +647,12 @@ selection action may open or focus an editor context, but it must not open the
 floating GUI proof panel. A floating GUI route may show its renderer as evidence,
 but it must not own backend switching.
 
+Project capability policy is a third, separate concern. It declares what a
+project requires and whether experimental/software fallback is admissible. The
+Settings surface reports both editor and project-run admission; selecting a
+context still performs the existing state-preserving editor replacement rather
+than mutating the project policy.
+
 Current source ownership:
 
 | Responsibility | Primary files/modules |
@@ -639,13 +669,13 @@ Context switching acceptance:
 
 - the combobox label tracks the actual active backend, not stale desired state
 - choosing the active backend logs that it was kept and does not create windows
-- choosing another live backend focuses/restores that context, carries the
-  editor snapshot, and parks other duplicate editor sessions back to the
-  launcher/menu
-- choosing an available backend with no live editor context fails closed with
-  visible status; a future create-new-context path must report posted request,
-  window/context creation, session entry, snapshot restore, and frame-present
-  evidence separately before claiming success
+- choosing another live backend captures and restores editor state first, then
+  atomically promotes that context into the baked primary slot and parks other
+  editor sessions back to launcher/menu; failed restore keeps the old primary
+- choosing an available backend with no live editor context uses the serialized
+  replacement transaction on the Windows parent host: retire the old backend,
+  create the exact target in the same primary slot, restore state, and require
+  backend plus restored-frame evidence before claiming success
 - an explicit backend request must fail closed when that backend is unavailable;
   it must not silently substitute the priority/default backend
 - request evidence is staged: `OpenDetachedContextWindow == true` means a native
@@ -657,8 +687,9 @@ Context switching acceptance:
   as a complete context switch
 - choosing a backend that cannot be created fails closed with visible log/status
   evidence
-- the launcher `Switch Context` action cycles/focuses live contexts only; it
-  must not open the editor or duplicate the context-driver proof window
+- the launcher has no `Switch Context` command. Launch Settings selects the
+  target live context, and opening an editor workspace promotes it without
+  spawning another editor shell
 - no context switch persists across full engine restarts unless a future
   profile setting explicitly owns that policy
 - no switch path may fake success by only changing labels
@@ -667,7 +698,7 @@ Current platform truth:
 
 | Host | Missing-live-target behavior from combobox | Notes |
 | --- | --- | --- |
-| Windows desktop editor | Fail closed today | Live backend handoff is supported; missing targets report visible status instead of posting another editor/context-driver window. Future host-created contexts need staged evidence before success claims. |
+| Windows desktop editor | Live promotion plus serialized replacement | Live diagnostic targets are promoted only after snapshot restore; missing compiled targets use the same-parent replacement transaction and restored-frame evidence. |
 | Linux/WSL | Fail closed today | Single-context OpenGL remains the default proof path. |
 | Mobile/console/headless | Excluded unless a product host implements it | These targets should hide or reject native popout/context-create commands while keeping portable `EpochGui` controls available. |
 
@@ -696,8 +727,10 @@ Floating/routed GUI acceptance:
 - route windows are optional desktop editor/tool features. If a product target
   excludes native popouts, the command should be absent or report unsupported,
   not create hidden shells
-- future redock/undock support must move through the native host layer and the
-  reusable `EpochGui` dockable-window action model together
+- the first parented renderer context is the baked primary surface. Successful
+  launcher selection and editor switching transfer that role transactionally;
+  the primary cannot undock, while secondary diagnostic contexts and routed
+  panel windows retain native popout/redock through the EpochGui action model
 
 When this area is split across agents, keep file ownership disjoint: one agent
 may work on editor UI/status, another on session/window host code, another on
@@ -763,12 +796,12 @@ the write ranges are explicitly isolated.
   keyed events produce marker positions inside the visible range, so the editor
   can grow selectable/draggable 4D timeline lanes from validated data instead of
   hardcoded drawing.
-- `saveload.system`, `scenesnapshot`, and `sceneserializer` are the current
-  contract layer for timeline checkpoints: they define streaming-save config,
-  checkpoint labels, scene object snapshots, timeline keys, and deterministic
-  text serialization plus parser round-trip. The next acceptance gate is wiring
-  those contracts into real `.epoch` scene persistence, disk writing, and replay
-  restore.
+- `saveload.system` remains the contract layer for streaming timeline
+  checkpoints: it defines cadence, checkpoint labels, timeline keys, packages,
+  and approval-gated writers. Active project `.epoch` scenes now use the
+  separate canonical v2 `scene.persistence` lane described above. Streaming
+  replay/retention is still gated and must not be inferred from active-scene
+  Save/Build/Run persistence.
 - Streaming-save profiles are descriptor-backed engine data, not loose UI
   switches. `saveload.system` owns stable profile IDs, labels, summaries,
   activation defaults, retention caps, and included-data flags for manual

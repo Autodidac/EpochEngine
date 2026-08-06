@@ -281,6 +281,8 @@ namespace epochengine::vulkancontext
     {
         const auto vertShaderCode = readFile("shaders/vert.spv");
         const auto fragShaderCode = readFile("shaders/frag.spv");
+        const auto sampledVertShaderCode = readFile("shaders/gui_vert.spv");
+        const auto sampledFragShaderCode = readFile("shaders/gui_frag.spv");
 
         vk::ShaderModuleCreateInfo vInfo{};
         vInfo.codeSize = vertShaderCode.size();
@@ -290,10 +292,22 @@ namespace epochengine::vulkancontext
         fInfo.codeSize = fragShaderCode.size();
         fInfo.pCode = reinterpret_cast<const std::uint32_t*>(fragShaderCode.data());
 
+        vk::ShaderModuleCreateInfo sampledVInfo{};
+        sampledVInfo.codeSize = sampledVertShaderCode.size();
+        sampledVInfo.pCode = reinterpret_cast<const std::uint32_t*>(sampledVertShaderCode.data());
+
+        vk::ShaderModuleCreateInfo sampledFInfo{};
+        sampledFInfo.codeSize = sampledFragShaderCode.size();
+        sampledFInfo.pCode = reinterpret_cast<const std::uint32_t*>(sampledFragShaderCode.data());
+
         auto vMod = device->createShaderModuleUnique(vInfo);
         if (vMod.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(vert) failed.");
         auto fMod = device->createShaderModuleUnique(fInfo);
         if (fMod.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(frag) failed.");
+        auto sampledVMod = device->createShaderModuleUnique(sampledVInfo);
+        if (sampledVMod.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(arcade vert) failed.");
+        auto sampledFMod = device->createShaderModuleUnique(sampledFInfo);
+        if (sampledFMod.result != vk::Result::eSuccess) throw std::runtime_error("[ Vulkan ] - createShaderModuleUnique(arcade frag) failed.");
 
         vk::PipelineShaderStageCreateInfo shaderStages[2]{};
         shaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
@@ -302,6 +316,14 @@ namespace epochengine::vulkancontext
         shaderStages[1].stage = vk::ShaderStageFlagBits::eFragment;
         shaderStages[1].module = *fMod.value;
         shaderStages[1].pName = "main";
+
+        vk::PipelineShaderStageCreateInfo sampledShaderStages[2]{};
+        sampledShaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
+        sampledShaderStages[0].module = *sampledVMod.value;
+        sampledShaderStages[0].pName = "main";
+        sampledShaderStages[1].stage = vk::ShaderStageFlagBits::eFragment;
+        sampledShaderStages[1].module = *sampledFMod.value;
+        sampledShaderStages[1].pName = "main";
 
         const auto bindingDescription = Vertex::getBindingDescription();
         const auto attributeDescriptions = Vertex::getAttributeDescriptions();
@@ -410,6 +432,19 @@ namespace epochengine::vulkancontext
         if (linePipeline.result != vk::Result::eSuccess)
             throw std::runtime_error("[ Vulkan ] - createGraphicsPipelineUnique(lines) failed.");
         graphicsPipeline = std::move(linePipeline.value);
+
+        pipelineInfo.pStages = sampledShaderStages;
+        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+        depthStencil.depthTestEnable = VK_TRUE;
+        depthStencil.depthWriteEnable = VK_TRUE;
+        depthStencil.depthCompareOp = vk::CompareOp::eLessOrEqual;
+        auto sampledScreenPipeline =
+            device->createGraphicsPipelineUnique(vk::PipelineCache{}, pipelineInfo);
+        if (sampledScreenPipeline.result != vk::Result::eSuccess)
+            throw std::runtime_error(
+                "[ Vulkan ] - createGraphicsPipelineUnique(Engine Arcade sampled screen) failed.");
+        arcadeScreenPipeline = std::move(sampledScreenPipeline.value);
     }
 
     void Application::createGuiPipeline()

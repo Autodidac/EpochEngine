@@ -40,10 +40,28 @@ Current source or in-progress contracts include:
 - sparse voxel storage, analytic water queries, Tier-0 scene/terrain descriptors,
   and fail-closed package evidence policy;
 - sampled render-to-texture, render-device/resource descriptors, render graph,
-  Canvas2D camera state, and Engine Arcade graph proof;
-- a temporal texture document/history/compiler/residency foundation;
-- reusable EpochGui text, font, image, input, layout, rounded rectangle, popup,
-  panel, docking, and floating-window primitives.
+  Engine Arcade graph proof, and a renderer-neutral Canvas2D project/submission
+  planner with camera, viewport, sprite, batch, tile, compose, and diagnostics,
+  plus a deterministic CPU reference raster with texture/clip bindings,
+  fixed-point coverage, final composition, metrics, and image hashes, plus a
+  bounded generation-checked physical texture cache, a renderer-neutral
+  CPU-canvas-output/native-presentation adapter, context-guarded OpenGL native
+  texture hooks, and a compiled primary-context OpenGL compositor with scoped
+  scene-surface and GL-state ownership;
+- explicit request-driven temporal mapping and bounded observation history plus
+  a temporal texture document/history/compiler/residency foundation;
+- reusable EpochGui text, font, image, input, layout, rounded rectangle, toggle,
+  popup, panel, docking, and floating-window primitives;
+- direct launcher entry into three shared-spine editor applications: standard
+  Editor, Plant Lab, and GUI Editor, each with separate source, canonical scene,
+  surface/camera/dock policy, and authoring/run permissions;
+- a standard-editor Forest Factory workflow for browsing Plant Lab outputs,
+  importing vegetation objects/assets, and placing them into project scenes;
+- one baked primary context slot in the Windows parent host, with secondary
+  diagnostic contexts and routed pane popouts remaining optional;
+- a validated procedural Engine Arcade cabinet and camera-facing preview
+  culling, plus build-proven backend-owned sampled scene surfaces across all
+  seven contexts pending visual evidence.
 
 These are not blanket runtime claims. The active integration batch must rebuild
 and re-prove them.
@@ -69,10 +87,14 @@ A polished demo is useful, but the core acceptance is the complete project loop.
 
 ### Week 1: Capability And Tier-0 Scene
 
+Completed foundation:
+
+- one typed project capability policy now reaches project profiles, generated
+  manifests, active-editor and project-run admission, System Info, Settings,
+  recommended budgets, and build-safe contracts without adding a tier registry.
+
 Deliver:
 
-- integrate `capability.profile` with existing platform capabilities, budgets,
-  `perf.tier`, render-device evidence, System Info, project settings, and tests;
 - add a project profile for `T0-CPU` plus `T1-GL` and a headless test profile;
 - finish ray-based editor selection and working Focus;
 - make default ground, light, camera, spawn, and starter object use one saved
@@ -106,6 +128,19 @@ Exit gate:
 - changing physical residency does not change authoring identity.
 
 ### Week 3: Canvas2D And Sprite Batch
+
+Foundation status: renderer-neutral project/submission planning, deterministic
+batch compilation, tile validation, editor policy, and build-safe contracts are
+present. Deterministic `T0-CPU` raster, sampling/blending, final composition,
+metrics, and image hashes are build-proven on MSVC and Clang. Bounded physical
+texture residency, cache recreation, deterministic temporal RGBA8 artifact
+compilation, artifact-integrity validation, project logical-identity mapping,
+raster-to-residency presentation staging, OpenGL native texture hooks, and the
+primary-context OpenGL final compositor are also build-proven. Live project
+asset-registry authentication, authoring-free artifact reading,
+capability-derived admission, Canvas2D binding, editor scene-slot integration,
+native pixel comparison, sRGB/compressed/mip-chain execution, secondary GL share-group
+adapters, and built-project presentation remain delivery work.
 
 Deliver:
 

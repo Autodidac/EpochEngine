@@ -90,6 +90,7 @@
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\assets\texture\texture.artifact.contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
@@ -99,6 +100,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\a2048like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
@@ -107,6 +109,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.math.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.tier0.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.document.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.ray.ixx" />
@@ -150,7 +154,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.diagnostics.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.components.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.storage.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.application.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\temporal.request.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.cli.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.components.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.input.ixx" />
@@ -207,6 +213,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.document.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.interaction.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.persistence.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sceneserializer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scenesnapshot.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.state.ixx" />
@@ -244,6 +254,7 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.preview.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.renderer.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.canvas2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.textures.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.context.ixx">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
@@ -285,6 +296,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.select.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.tier.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.filesystem.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.capabilities.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx" />
@@ -297,6 +309,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.cpu.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.presentation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.artifact.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.residency.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx" />
@@ -340,6 +357,9 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor.scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.standard.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.plant_lab.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\context.command_queue.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
@@ -438,6 +458,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.gui.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\engine.scripting.compiler.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\filewatch.cpp" />
@@ -459,6 +480,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.render.graph.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\texture.artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.document.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\main.cpp">

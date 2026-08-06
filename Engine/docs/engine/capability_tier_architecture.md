@@ -100,9 +100,16 @@ runtime-profile ownership. It must not grow a second global tier manager.
 - device, memory, power, quality, determinism, and cost information;
 - validation evidence and stability;
 - per-subsystem implementation profiles;
-- project requirements and deterministic fallback selection;
+- typed project requirements, admission policy, and deterministic fallback
+  selection;
 - build-safe checks for CPU, GLES, OpenGL compute, Vulkan/DirectX equivalence,
-  missing-feature fallback, partial rejection, and no-overclaim behavior.
+  missing-feature fallback, software-fallback policy, experimental rejection,
+  unknown-cost reporting, and no-overclaim behavior.
+
+`platform.budgets` owns tier-to-budget recommendations. Project manifests name
+a capability profile, while the editor reports active-editor admission and
+selected project-run admission separately. Missing legacy manifest fields use
+the portable default; malformed, duplicated, or unknown values fail closed.
 
 Every capability has one state:
 
@@ -205,14 +212,18 @@ the engine loop before advanced rendering expands.
 
 ### Phase A: Capability And Control Alignment
 
-- Integrate `capability.profile` through existing platform budgets,
-  `perf.tier`, render-device reporting, System Info, project requirements, and
-  settings.
-- Replace scattered booleans with typed settings derived from actual compiled
-  and runtime-proven capabilities.
-- Keep controls inline with implementation: unavailable features are absent or
-  disabled with evidence, partial features are labeled experimental, and
-  settings persist at the correct project/user/session scope.
+Completed source checkpoint:
+
+- `capability.profile` centrally derives renderer and subsystem profiles from
+  render-device evidence and evaluates typed project requirements;
+- `platform.budgets` owns tier recommendations without depending on the
+  high-level runtime-profile module;
+- project manifests carry a capability profile with a portable legacy default
+  and fail-closed malformed, duplicated, unknown, or mismatched values;
+- Project, Settings, status, and System Info surfaces report editor-backend and
+  project-run admission separately, including the recommended budget;
+- build-safe contracts cover project policies, manifest parsing, fallback
+  policy, experimental rejection, and unknown renderer cost.
 
 ### Phase B: Canvas2D And Texture Spine
 
