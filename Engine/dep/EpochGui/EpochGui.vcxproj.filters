@@ -68,6 +68,9 @@
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\floating_window.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\font.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\layout_primitives.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

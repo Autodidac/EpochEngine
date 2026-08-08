@@ -1,5 +1,25 @@
 # Epoch Changelog
 
+## [v0.88.85] - One-sided Arcade display and EpochGui font contract
+
+- Synchronize the embedded EpochGui dependency with upstream `130f33f`, adding
+  the shared logical-pixel/DPI font-sizing contract and its CMake, MSVC, module,
+  rounded-rectangle, and test metadata while preserving newer toggle and rounded
+  control APIs.
+- Remove the float-only bitmap-cell compatibility overload. EpochGui font
+  measurement now requires explicit `FontSize` logical height and DPI.
+- Restore the Engine Arcade sampled display to the canonical positive-Z cabinet
+  front and compare against the transformed cabinet extent rather than an
+  unscaled profile coordinate.
+- Filter sampled Arcade screen markers through one shared front-view predicate,
+  so OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software no longer draw
+  the display through the rear of the cabinet.
+- Extend build-safe contracts for front-view acceptance and rear-view rejection.
+- Repair editor scene persistence qualification and add deterministic terrain/
+  ground value equality so semantic scene diffs compile in Debug and Release.
+- Advance development source metadata to `v0.88.85`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
 ## [v0.88.84] - Stable scene document and runtime projection
 
 - Add shared generation-checked authoring document identity, deterministic

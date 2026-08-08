@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.88.74 LANGUAGES CXX)
+project(EpochGui VERSION 0.88.75 LANGUAGES CXX)
 
 option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
 option(EPOCHGUI_ENABLE_INPUT "Build the optional EpochGui fallback input adapter module." OFF)
@@ -49,6 +49,7 @@ set(EPOCHGUI_PUBLIC_HEADERS
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/dockable_window.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/dock_layout.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/floating_window.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/font.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/layout_primitives.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/panel_host.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/popup_layout.hpp"

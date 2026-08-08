@@ -2040,7 +2040,7 @@ namespace
         else
             entities = sandbox_seed_entities();
 
-        scene::SceneSnapshot snapshot{};
+        epochengine::scene::SceneSnapshot snapshot{};
         snapshot.scene_id = "project:" + spec.project_id;
         snapshot.project_id = spec.project_id;
         snapshot.world_name = spec.world_name;
@@ -2053,8 +2053,8 @@ namespace
 
         for (const EditorSceneSeedEntity& entity : entities)
         {
-            scene::SceneObjectSnapshot object{};
-            object.id = scene::stable_scene_object_id(snapshot.scene_id, entity.name);
+            epochengine::scene::SceneObjectSnapshot object{};
+            object.id = epochengine::scene::stable_scene_object_id(snapshot.scene_id, entity.name);
             object.name = entity.name;
             object.type = entity.type;
             object.category = entity.category;
@@ -2063,15 +2063,15 @@ namespace
             object.scale = entity.scale;
             object.visible = entity.visible;
             object.editor_only = entity.editor_only;
-            if (snapshot.primary_camera == scene::kInvalidSceneObjectId && object.type == "Camera")
+            if (snapshot.primary_camera == epochengine::scene::kInvalidSceneObjectId && object.type == "Camera")
                 snapshot.primary_camera = object.id;
-            if (snapshot.primary_spawn == scene::kInvalidSceneObjectId && object.type == "Spawn")
+            if (snapshot.primary_spawn == epochengine::scene::kInvalidSceneObjectId && object.type == "Spawn")
                 snapshot.primary_spawn = object.id;
             snapshot.objects.emplace_back(std::move(object));
         }
 
-        scene::normalize_scene_document(snapshot);
-        return scene::serialize_snapshot_text(snapshot);
+        epochengine::scene::normalize_scene_document(snapshot);
+        return epochengine::scene::serialize_snapshot_text(snapshot);
     }
 
     [[nodiscard]] static constexpr std::string_view engine_arcade_scene_ids() noexcept

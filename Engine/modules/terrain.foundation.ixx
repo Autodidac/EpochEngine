@@ -99,6 +99,10 @@ export namespace epochengine::terrain
         float heightScale{};
         std::uint32_t materialSlot{};
         bool collisionQueries{true};
+
+        friend constexpr bool operator==(
+            const HeightfieldDescriptor&,
+            const HeightfieldDescriptor&) noexcept = default;
     };
 
     struct TerrainLimits final
@@ -244,6 +248,10 @@ export namespace epochengine::terrain
                 minimum.y <= maximum.y &&
                 minimum.z <= maximum.z;
         }
+
+        friend constexpr bool operator==(
+            const TerrainBounds&,
+            const TerrainBounds&) noexcept = default;
     };
 
     struct Heightfield final
@@ -256,6 +264,10 @@ export namespace epochengine::terrain
         TerrainBounds bounds{};
 
         [[nodiscard]] bool valid() const noexcept;
+
+        friend bool operator==(
+            const Heightfield&,
+            const Heightfield&) noexcept = default;
     };
 
     struct HeightfieldBuildResult final

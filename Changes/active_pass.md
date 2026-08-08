@@ -98,17 +98,19 @@ The working tree contains these current or in-progress foundations:
   spine or claiming unproved native effects;
 - Engine Arcade now validates its canonical cabinet/screen scene nodes, sampled
   render-surface material binding, geometry storage, and built-in scene catalog;
-- EpochGui dependency work adds portable font, image, input, rounded-rectangle,
-  toggle, text, layout, docking, popup, panel, and floating-window primitives;
-  the editor adapter exposes rounded controls as an opt-in Settings policy;
+- EpochGui dependency work adds portable DPI-aware font, image, input,
+  rounded-rectangle, toggle, text, layout, docking, popup, panel, and
+  floating-window primitives. Font measurement requires explicit logical-pixel
+  height and DPI; the editor adapter exposes rounded controls as an opt-in
+  Settings policy;
 - Engine Arcade now uses one validated cabinet mesh with screen/control details
   and camera-facing solid culling instead of overlapping preview boxes;
 - one shared Arcade attract-pattern contract now drives backend-owned sampled
   scene surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software;
   build-safe contracts prove routing and ownership while visual presentation
-  remains `Partial` pending the operator eye test. Every adapter uses the shared
-  front-facing cabinet plane rather than independently offsetting the screen to
-  the rear face;
+  remains `Partial` pending the corrected operator eye test. Every adapter uses
+  the shared positive-Z cabinet plane and shared front-view predicate, so the
+  sampled display is not visible through the rear face;
 - `editor.application` is the shared application registry. Standard Editor,
   Plant Lab, and GUI Editor own separate C++23 implementation units, canonical
   scene seeds, surface masks, camera/dock defaults, pane policy, and
@@ -172,7 +174,7 @@ pixels, project-registry/Canvas2D authored-texture binding, and secondary GL sha
 
 ## Completed Capability Checkpoint
 
-`v0.88.84` adds the bounded document/scene/persistence/runtime spine to the
+`v0.88.85` adds the bounded document/scene/persistence/runtime spine to the
 existing capability checkpoint. It does not claim the complete temporal world,
 native renderer presentation, or measured implementation cost.
 

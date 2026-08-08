@@ -127,13 +127,17 @@ namespace epochengine::previewgrid
         bool cabinet_excludes_marker_overlay{};
         bool screen_is_sampled_surface{};
         bool screen_excludes_marker_overlay{};
+        bool screen_accepts_front_view{};
+        bool screen_rejects_rear_view{};
 
         [[nodiscard]] constexpr bool passed() const noexcept
         {
             return cabinet_is_scene_geometry
                 && cabinet_excludes_marker_overlay
                 && screen_is_sampled_surface
-                && screen_excludes_marker_overlay;
+                && screen_excludes_marker_overlay
+                && screen_accepts_front_view
+                && screen_rejects_rear_view;
         }
     };
 
@@ -148,7 +152,15 @@ namespace epochengine::previewgrid
             .cabinet_is_scene_geometry = cabinet.solid_scene && !cabinet.sampled_surface,
             .cabinet_excludes_marker_overlay = !cabinet.marker_wire,
             .screen_is_sampled_surface = !screen.solid_scene && screen.sampled_surface,
-            .screen_excludes_marker_overlay = !screen.marker_wire
+            .screen_excludes_marker_overlay = !screen.marker_wire,
+            .screen_accepts_front_view = render_arcade::screen_sample_plane_faces_viewer(
+                render_arcade::kScreenSceneNode.position[2],
+                render_arcade::kScreenSceneNode.scale[2],
+                8.0f),
+            .screen_rejects_rear_view = !render_arcade::screen_sample_plane_faces_viewer(
+                render_arcade::kScreenSceneNode.position[2],
+                render_arcade::kScreenSceneNode.scale[2],
+                -8.0f)
         };
     }
 
@@ -1663,13 +1675,20 @@ namespace epochengine::previewgrid
             markers = it->second;
         }
 
+        const Camera camera = camera_for(rigKey);
         std::erase_if(
             markers,
-            [](const ObjectMarker& marker) noexcept
+            [camera](const ObjectMarker& marker) noexcept
             {
                 const ObjectPreviewGeometryRoute route =
                     object_preview_geometry_route(marker.primitive);
-                return !marker.sampledRenderSurface || !route.sampled_surface;
+                if (!marker.sampledRenderSurface || !route.sampled_surface)
+                    return true;
+                return marker.primitive == ObjectPreviewPrimitive::EngineArcadeScreen
+                    && !render_arcade::screen_sample_plane_faces_viewer(
+                        marker.position.z,
+                        marker.scale.z,
+                        camera.eye.z);
             });
         return markers;
     }

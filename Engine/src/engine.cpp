@@ -1163,7 +1163,15 @@ namespace epochengine::core
             && std::abs(screen.scale.y - epochengine::render_arcade::kScreenSceneNode.scale[1]) < 0.001f
             && std::abs(screen.scale.z - epochengine::render_arcade::kScreenSceneNode.scale[2]) < 0.001f
             && epochengine::render_arcade::screen_sample_plane_z(screen.position.z, screen.scale.z)
-                < screen.position.z;
+                > screen.position.z
+            && epochengine::render_arcade::screen_sample_plane_faces_viewer(
+                screen.position.z,
+                screen.scale.z,
+                8.0f)
+            && !epochengine::render_arcade::screen_sample_plane_faces_viewer(
+                screen.position.z,
+                screen.scale.z,
+                -8.0f);
     }
 
     [[nodiscard]] inline bool renderer_capability_report_contract_ready()

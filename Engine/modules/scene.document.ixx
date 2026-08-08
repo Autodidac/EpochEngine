@@ -89,6 +89,10 @@ export namespace epochengine::authoring::scene
         bool receives_lighting{true};
         bool receives_shadows{true};
         bool casts_shadows{};
+
+        friend bool operator==(
+            const GroundComponent&,
+            const GroundComponent&) noexcept = default;
     };
 
     struct LightComponent final

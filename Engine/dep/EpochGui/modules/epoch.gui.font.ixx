@@ -1,8 +1,6 @@
 module;
 
-#include <array>
-#include <cstddef>
-#include <cstdint>
+#include <gui/font.hpp>
 #include <string_view>
 
 export module epoch.gui.font;
@@ -11,118 +9,36 @@ export import epoch.gui;
 
 export namespace epochengine::gui_lib::font
 {
-    inline constexpr std::uint32_t glyph_width = 5;
-    inline constexpr std::uint32_t glyph_height = 7;
-    inline constexpr std::uint32_t glyph_advance = 6;
-    inline constexpr std::uint32_t line_advance = 9;
+    using ::epochengine::gui_lib::font::BitmapFontMetrics;
+    using ::epochengine::gui_lib::font::BitmapGlyph;
+    using ::epochengine::gui_lib::font::FontSize;
+    using ::epochengine::gui_lib::font::TextExtent;
 
-    struct BitmapGlyph
+    using ::epochengine::gui_lib::font::default_glyph;
+    using ::epochengine::gui_lib::font::make_bitmap_font_metrics;
+    using ::epochengine::gui_lib::font::measure_text;
+    using ::epochengine::gui_lib::font::pixel_on;
+    using ::epochengine::gui_lib::font::resolved_pixel_height;
+
+    using ::epochengine::gui_lib::font::default_logical_height;
+    using ::epochengine::gui_lib::font::glyph_advance;
+    using ::epochengine::gui_lib::font::glyph_height;
+    using ::epochengine::gui_lib::font::glyph_width;
+    using ::epochengine::gui_lib::font::line_advance;
+    using ::epochengine::gui_lib::font::minimum_readable_logical_height;
+
+    [[nodiscard]] constexpr Vec2 measure_text_pixels(
+        std::string_view text,
+        FontSize size = {},
+        float letter_spacing = 0.0F,
+        float line_spacing = 0.0F) noexcept
     {
-        std::array<std::uint8_t, glyph_height> rows{};
-    };
-
-    [[nodiscard]] constexpr BitmapGlyph default_glyph(char character) noexcept
-    {
-        char c = character;
-        if (c >= 'a' && c <= 'z')
-            c = static_cast<char>(c - 'a' + 'A');
-
-        switch (c)
-        {
-        case 'A': return { { 0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11 } };
-        case 'B': return { { 0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e } };
-        case 'C': return { { 0x0f, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0f } };
-        case 'D': return { { 0x1e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1e } };
-        case 'E': return { { 0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x1f } };
-        case 'F': return { { 0x1f, 0x10, 0x10, 0x1e, 0x10, 0x10, 0x10 } };
-        case 'G': return { { 0x0f, 0x10, 0x10, 0x17, 0x11, 0x11, 0x0f } };
-        case 'H': return { { 0x11, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11 } };
-        case 'I': return { { 0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1f } };
-        case 'J': return { { 0x07, 0x02, 0x02, 0x02, 0x12, 0x12, 0x0c } };
-        case 'K': return { { 0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11 } };
-        case 'L': return { { 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1f } };
-        case 'M': return { { 0x11, 0x1b, 0x15, 0x15, 0x11, 0x11, 0x11 } };
-        case 'N': return { { 0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11 } };
-        case 'O': return { { 0x0e, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e } };
-        case 'P': return { { 0x1e, 0x11, 0x11, 0x1e, 0x10, 0x10, 0x10 } };
-        case 'Q': return { { 0x0e, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0d } };
-        case 'R': return { { 0x1e, 0x11, 0x11, 0x1e, 0x14, 0x12, 0x11 } };
-        case 'S': return { { 0x0f, 0x10, 0x10, 0x0e, 0x01, 0x01, 0x1e } };
-        case 'T': return { { 0x1f, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04 } };
-        case 'U': return { { 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0e } };
-        case 'V': return { { 0x11, 0x11, 0x11, 0x11, 0x11, 0x0a, 0x04 } };
-        case 'W': return { { 0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0a } };
-        case 'X': return { { 0x11, 0x11, 0x0a, 0x04, 0x0a, 0x11, 0x11 } };
-        case 'Y': return { { 0x11, 0x11, 0x0a, 0x04, 0x04, 0x04, 0x04 } };
-        case 'Z': return { { 0x1f, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1f } };
-        case '0': return { { 0x0e, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0e } };
-        case '1': return { { 0x04, 0x0c, 0x04, 0x04, 0x04, 0x04, 0x0e } };
-        case '2': return { { 0x0e, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1f } };
-        case '3': return { { 0x1e, 0x01, 0x01, 0x0e, 0x01, 0x01, 0x1e } };
-        case '4': return { { 0x02, 0x06, 0x0a, 0x12, 0x1f, 0x02, 0x02 } };
-        case '5': return { { 0x1f, 0x10, 0x10, 0x1e, 0x01, 0x01, 0x1e } };
-        case '6': return { { 0x0e, 0x10, 0x10, 0x1e, 0x11, 0x11, 0x0e } };
-        case '7': return { { 0x1f, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08 } };
-        case '8': return { { 0x0e, 0x11, 0x11, 0x0e, 0x11, 0x11, 0x0e } };
-        case '9': return { { 0x0e, 0x11, 0x11, 0x0f, 0x01, 0x01, 0x0e } };
-        case '-': return { { 0x00, 0x00, 0x00, 0x1f, 0x00, 0x00, 0x00 } };
-        case '.': return { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06 } };
-        case ':': return { { 0x00, 0x06, 0x06, 0x00, 0x06, 0x06, 0x00 } };
-        case '/': return { { 0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10 } };
-        case '_': return { { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1f } };
-        case '+': return { { 0x00, 0x04, 0x04, 0x1f, 0x04, 0x04, 0x00 } };
-        case '!': return { { 0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04 } };
-        case '?': return { { 0x0e, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04 } };
-        case ',': return { { 0x00, 0x00, 0x00, 0x00, 0x06, 0x04, 0x08 } };
-        case ';': return { { 0x00, 0x06, 0x06, 0x00, 0x06, 0x04, 0x08 } };
-        case '=': return { { 0x00, 0x00, 0x1f, 0x00, 0x1f, 0x00, 0x00 } };
-        case '(': return { { 0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02 } };
-        case ')': return { { 0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08 } };
-        case '[': return { { 0x0e, 0x08, 0x08, 0x08, 0x08, 0x08, 0x0e } };
-        case ']': return { { 0x0e, 0x02, 0x02, 0x02, 0x02, 0x02, 0x0e } };
-        case ' ': return {};
-        default: return { { 0x0e, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04 } };
-        }
+        const TextExtent extent = ::epochengine::gui_lib::font::measure_text(
+            text,
+            size,
+            letter_spacing,
+            line_spacing);
+        return { extent.width, extent.height };
     }
 
-    [[nodiscard]] constexpr bool pixel_on(
-        const BitmapGlyph& glyph,
-        std::uint32_t column,
-        std::uint32_t row) noexcept
-    {
-        if (column >= glyph_width || row >= glyph_height)
-            return false;
-        const std::uint8_t mask = static_cast<std::uint8_t>(1U << (glyph_width - 1U - column));
-        return (glyph.rows[row] & mask) != 0;
-    }
-
-    [[nodiscard]] constexpr Vec2 measure_text(std::string_view text, float scale = 1.0f) noexcept
-    {
-        if (scale <= 0.0f)
-            return {};
-
-        std::size_t column{};
-        std::size_t maximum_column{};
-        std::size_t line_count{ 1 };
-        for (const char character : text)
-        {
-            if (character == '\n')
-            {
-                maximum_column = maximum_column < column ? column : maximum_column;
-                column = 0;
-                ++line_count;
-            }
-            else
-            {
-                ++column;
-            }
-        }
-        maximum_column = maximum_column < column ? column : maximum_column;
-
-        const float width = maximum_column == 0
-            ? 0.0f
-            : static_cast<float>((maximum_column - 1U) * glyph_advance + glyph_width) * scale;
-        const float height = static_cast<float>((line_count - 1U) * line_advance + glyph_height) * scale;
-        return { width, height };
-    }
 }
