@@ -12,10 +12,10 @@ This is the first gate in the two-month playable-2D critical path defined by
 
 ## Release Baseline
 
-The operator reopened the release lane for `v0.89.01`. Preserve the accepted
-updater implementation and behavior; package the validated source without
-redesigning updater code, handoff/build scripts, or update UI. After the release
-is published, development-source version metadata advances independently.
+The published `v0.89.01` Windows/Linux runtime, updater behavior, packaging,
+and stable multicontext branch are sealed. Development source continues from
+`v0.89.02`; do not alter release/updater code, handoff/build scripts, tags, or
+release assets unless the operator explicitly reopens that gate.
 Preserve these accepted source contracts:
 
 - normal editor operation owns one live backend; multicontext is diagnostic;

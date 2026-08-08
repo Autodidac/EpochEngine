@@ -1,5 +1,13 @@
 # Epoch Changelog
 
+## [v0.89.02] - Post-release source advance
+
+- Advance development source after publishing the verified `v0.89.01` Windows
+  and Linux packages; keep the release tag and stable multicontext branch pinned
+  to the published runtime.
+- Reseal updater, handoff, packaging, and release behavior while normal source
+  development continues.
+
 ## [v0.89.01] - Editor ownership, EpochGui text documents, and direct local AI
 
 - Remove the unwanted default `StarterCube` from standard and sandbox scene

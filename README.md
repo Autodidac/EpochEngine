@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.01-1F7A4C?style=for-the-badge" alt="Current development source v0.89.01" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.02-1F7A4C?style=for-the-badge" alt="Current development source v0.89.02" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.01-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.01" />
 </p>
 
@@ -75,10 +75,10 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source and the published Windows/Linux runtime candidate
-  are `v0.89.01`.
-- The accepted updater behavior remains unchanged while this release refreshes
-  the packaged editor, EpochGui, local-AI integration, and documentation.
+- Active development source is `v0.89.02`; the published stable Windows/Linux
+  runtime is `v0.89.01`.
+- The accepted `v0.89.01` updater and packages are sealed while source development
+  continues on the capability-tier and playable-2D plan.
 - Epoch now has one forward plan:
   [the capability-tier architecture](Engine/docs/engine/capability_tier_architecture.md).
   It selects implementations per subsystem and operation from `T0-CPU` through
