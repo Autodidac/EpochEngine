@@ -1,7 +1,9 @@
 module;
 
 #include <include/engine.config.hpp>
+#if defined(_MSC_VER)
 #include "opengl.frame_capture.hpp"
+#endif
 #include "opengl.context_process_impl.hpp"
 #include "opengl.scene_preview.hpp"
 
@@ -14,6 +16,9 @@ import context.commandqueue;
 import context.multiplexer;
 import context.type;
 import gui.engine;
+#if !defined(_MSC_VER)
+import opengl.capture;
+#endif
 
 namespace epochengine::openglcontext
 {

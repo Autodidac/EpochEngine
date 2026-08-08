@@ -37,8 +37,15 @@ module;
 #   include <windows.h>
 #   include <winhttp.h>
 #   pragma comment(lib, "winhttp.lib")
-#elif defined(EPOCH_HAS_CURL)
-#   include <curl/curl.h>
+#else
+#   include <fcntl.h>
+#   include <signal.h>
+#   include <sys/types.h>
+#   include <sys/wait.h>
+#   include <unistd.h>
+#   if defined(EPOCH_HAS_CURL)
+#       include <curl/curl.h>
+#   endif
 #endif
 
 #include <algorithm>
@@ -54,6 +61,7 @@ module;
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -145,6 +153,13 @@ namespace epochengine::ai
         std::string g_modelDetectionStatus = g_selectedModel.empty()
             ? std::string{ "Not scanned." }
             : std::string{ "Configured model: " } + g_selectedModel;
+        LocalInferenceTransport g_localTransport =
+            trim_env_value(read_env_var("EPOCH_AI_BACKEND")) == "llama_cpp_cli"
+                ? LocalInferenceTransport::LlamaCppCli
+                : LocalInferenceTransport::OpenAiCompatible;
+        std::string g_directExecutable = trim_env_value(read_env_var("EPOCH_LLAMA_CPP_EXECUTABLE"));
+        std::string g_directModel = trim_env_value(read_env_var("EPOCH_AI_MODEL_PATH"));
+        bool g_runtimePreferenceLoaded = false;
 
         static std::string executable_cache_bucket(std::string_view bucket)
         {
@@ -158,6 +173,11 @@ namespace epochengine::ai
         static std::filesystem::path selected_model_preference_file()
         {
             return std::filesystem::path{ executable_cache_bucket("models") } / "selected_os_model.txt";
+        }
+
+        static std::filesystem::path local_runtime_preference_file()
+        {
+            return std::filesystem::path{ executable_cache_bucket("models") } / "local_inference_runtime.conf";
         }
 
         static bool ends_with(std::string_view s, std::string_view suf)
@@ -449,6 +469,142 @@ namespace epochengine::ai
 
             if (!write_text_file(selected_model_preference_file(), selected + "\n"))
                 core::log::error("ai", "Failed to persist selected OS model preference.");
+        }
+
+        static void restore_runtime_preference_if_needed()
+        {
+            if (g_runtimePreferenceLoaded)
+                return;
+            g_runtimePreferenceLoaded = true;
+
+            std::istringstream input(read_small_text_file(local_runtime_preference_file(), 16384));
+            std::string line;
+            while (std::getline(input, line))
+            {
+                const auto separator = line.find('=');
+                if (separator == std::string::npos)
+                    continue;
+                const std::string key = trim(std::string_view{line}.substr(0u, separator));
+                const std::string value = trim(std::string_view{line}.substr(separator + 1u));
+                if (key == "transport" && value == "llama_cpp_cli")
+                    g_localTransport = LocalInferenceTransport::LlamaCppCli;
+                else if (key == "transport" && value == "openai_compatible")
+                    g_localTransport = LocalInferenceTransport::OpenAiCompatible;
+                else if (key == "executable" && g_directExecutable.empty())
+                    g_directExecutable = value;
+                else if (key == "model" && g_directModel.empty())
+                    g_directModel = value;
+            }
+        }
+
+        static void persist_runtime_preference()
+        {
+            std::ostringstream output;
+            output << "transport="
+                   << (g_localTransport == LocalInferenceTransport::LlamaCppCli
+                       ? "llama_cpp_cli" : "openai_compatible") << '\n';
+            output << "executable=" << g_directExecutable << '\n';
+            output << "model=" << g_directModel << '\n';
+            if (!write_text_file(local_runtime_preference_file(), output.str()))
+                core::log::error("ai", "Failed to persist local inference runtime preference.");
+        }
+
+        [[nodiscard]] static bool regular_file(const std::filesystem::path& path)
+        {
+            std::error_code ec;
+            return !path.empty() && std::filesystem::is_regular_file(path, ec);
+        }
+
+        [[nodiscard]] static std::filesystem::path find_path_executable(std::string_view name)
+        {
+            const std::filesystem::path requested{std::string{name}};
+            if (regular_file(requested))
+                return std::filesystem::absolute(requested);
+
+            const std::string pathValue = read_env_var("PATH");
+#if defined(_WIN32)
+            constexpr char separator = ';';
+            constexpr std::string_view suffix = ".exe";
+#else
+            constexpr char separator = ':';
+            constexpr std::string_view suffix{};
+#endif
+            std::size_t first = 0u;
+            while (first <= pathValue.size())
+            {
+                const std::size_t pastLast = pathValue.find(separator, first);
+                const std::string_view item = std::string_view{pathValue}.substr(
+                    first,
+                    pastLast == std::string::npos ? std::string::npos : pastLast - first);
+                if (!item.empty())
+                {
+                    std::filesystem::path candidate = std::filesystem::path{std::string{item}} / requested;
+                    if (candidate.extension().empty())
+                        candidate += suffix;
+                    if (regular_file(candidate))
+                        return std::filesystem::absolute(candidate);
+                }
+                if (pastLast == std::string::npos)
+                    break;
+                first = pastLast + 1u;
+            }
+            return {};
+        }
+
+        [[nodiscard]] static std::filesystem::path discover_llama_executable()
+        {
+            if (regular_file(g_directExecutable))
+                return std::filesystem::absolute(g_directExecutable);
+
+            const std::filesystem::path cacheRoot{executable_cache_bucket("packages")};
+            constexpr std::string_view names[] = {
+#if defined(_WIN32)
+                "llama-cli.exe", "main.exe"
+#else
+                "llama-cli", "main"
+#endif
+            };
+            const std::filesystem::path roots[] = {
+                cacheRoot / "local_ai_llama_cpp_runtime" / "bin",
+                cacheRoot / "llama.cpp" / "bin",
+                cacheRoot / "llama.cpp" / "build" / "bin"
+            };
+            for (const auto& root : roots)
+                for (const auto name : names)
+                    if (const auto candidate = root / name; regular_file(candidate))
+                        return std::filesystem::absolute(candidate);
+            for (const auto name : names)
+                if (const auto candidate = find_path_executable(name); !candidate.empty())
+                    return candidate;
+            return {};
+        }
+
+        [[nodiscard]] static std::filesystem::path discover_gguf_model()
+        {
+            if (regular_file(g_directModel))
+                return std::filesystem::absolute(g_directModel);
+
+            const std::filesystem::path root{executable_cache_bucket("models")};
+            std::error_code ec;
+            if (!std::filesystem::exists(root, ec))
+                return {};
+
+            std::filesystem::path best;
+            std::size_t visited = 0u;
+            std::filesystem::recursive_directory_iterator iterator{
+                root,
+                std::filesystem::directory_options::skip_permission_denied,
+                ec};
+            const std::filesystem::recursive_directory_iterator end{};
+            while (!ec && iterator != end && visited++ < 8192u)
+            {
+                const auto path = iterator->path();
+                if (iterator->is_regular_file(ec) && path.extension() == ".gguf"
+                    && (best.empty() || path.generic_string() < best.generic_string()))
+                    best = path;
+                iterator.increment(ec);
+            }
+            return best.empty() ? best : std::filesystem::absolute(best);
         }
 
         static std::string utc_timestamp_slug()
@@ -998,6 +1154,7 @@ namespace epochengine::ai
                 || starts_with_text(lower, "engine ai model could not initialize")
                 || starts_with_text(lower, "local model api error")
                 || starts_with_text(lower, "local openai-compatible request failed")
+                || starts_with_text(lower, "direct llama.cpp inference")
                 || starts_with_text(lower, "local model returned hidden reasoning")
                 || starts_with_text(lower, "local model returned no decodable assistant text")
                 || starts_with_text(lower, "no decodable reply from selected local model"))
@@ -1215,6 +1372,272 @@ namespace epochengine::ai
             }
         }
 
+        struct ProcessCapture
+        {
+            std::string output{};
+            int exit_code{-1};
+            bool launched{};
+            bool timed_out{};
+        };
+
+        constexpr std::size_t kMaximumInferenceOutputBytes = 16u * 1024u * 1024u;
+
+        static void append_process_output(std::string& output, const char* data, std::size_t size)
+        {
+            if (output.size() >= kMaximumInferenceOutputBytes)
+                return;
+            output.append(data, (std::min)(size, kMaximumInferenceOutputBytes - output.size()));
+        }
+
+#if defined(_WIN32)
+        [[nodiscard]] static std::wstring utf8_to_wide(std::string_view value)
+        {
+            if (value.empty())
+                return {};
+            const int required = MultiByteToWideChar(
+                CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
+            if (required <= 0)
+                return {};
+            std::wstring converted(static_cast<std::size_t>(required), L'\0');
+            if (MultiByteToWideChar(
+                    CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()),
+                    converted.data(), required) != required)
+                return {};
+            return converted;
+        }
+
+        [[nodiscard]] static std::wstring quote_windows_argument(std::wstring_view argument)
+        {
+            if (argument.find_first_of(L" \t\"") == std::wstring_view::npos)
+                return std::wstring{argument};
+
+            std::wstring quoted{L"\""};
+            std::size_t slashes = 0u;
+            for (const wchar_t character : argument)
+            {
+                if (character == L'\\')
+                {
+                    ++slashes;
+                    continue;
+                }
+                if (character == L'\"')
+                {
+                    quoted.append(slashes * 2u + 1u, L'\\');
+                    quoted.push_back(L'\"');
+                    slashes = 0u;
+                    continue;
+                }
+                quoted.append(slashes, L'\\');
+                slashes = 0u;
+                quoted.push_back(character);
+            }
+            quoted.append(slashes * 2u, L'\\');
+            quoted.push_back(L'\"');
+            return quoted;
+        }
+
+        [[nodiscard]] static ProcessCapture capture_process(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& arguments,
+            std::chrono::seconds timeout)
+        {
+            ProcessCapture capture{};
+            SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+            HANDLE readPipe = nullptr;
+            HANDLE writePipe = nullptr;
+            if (!CreatePipe(&readPipe, &writePipe, &security, 0))
+                return capture;
+            SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
+
+            std::wstring command = quote_windows_argument(executable.wstring());
+            for (const auto& argument : arguments)
+            {
+                command.push_back(L' ');
+                command += quote_windows_argument(utf8_to_wide(argument));
+            }
+            command.push_back(L'\0');
+
+            STARTUPINFOW startup{};
+            startup.cb = sizeof(startup);
+            startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+            startup.wShowWindow = SW_HIDE;
+            startup.hStdOutput = writePipe;
+            startup.hStdError = writePipe;
+            startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+            PROCESS_INFORMATION process{};
+            capture.launched = CreateProcessW(
+                executable.wstring().c_str(), command.data(), nullptr, nullptr, TRUE,
+                CREATE_NO_WINDOW, nullptr, executable.parent_path().wstring().c_str(),
+                &startup, &process) != FALSE;
+            CloseHandle(writePipe);
+            if (!capture.launched)
+            {
+                CloseHandle(readPipe);
+                return capture;
+            }
+
+            const auto deadline = std::chrono::steady_clock::now() + timeout;
+            bool running = true;
+            char buffer[8192];
+            while (running)
+            {
+                DWORD available = 0u;
+                while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr) && available > 0u)
+                {
+                    DWORD read = 0u;
+                    const DWORD requested = (std::min)(available, static_cast<DWORD>(sizeof(buffer)));
+                    if (!ReadFile(readPipe, buffer, requested, &read, nullptr) || read == 0u)
+                        break;
+                    append_process_output(capture.output, buffer, read);
+                }
+                running = WaitForSingleObject(process.hProcess, 20u) == WAIT_TIMEOUT;
+                if (running && std::chrono::steady_clock::now() >= deadline)
+                {
+                    capture.timed_out = true;
+                    TerminateProcess(process.hProcess, 124u);
+                    WaitForSingleObject(process.hProcess, 5000u);
+                    running = false;
+                }
+            }
+
+            DWORD read = 0u;
+            while (ReadFile(readPipe, buffer, sizeof(buffer), &read, nullptr) && read > 0u)
+                append_process_output(capture.output, buffer, read);
+            DWORD exitCode = 1u;
+            GetExitCodeProcess(process.hProcess, &exitCode);
+            capture.exit_code = static_cast<int>(exitCode);
+            CloseHandle(readPipe);
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
+            return capture;
+        }
+#else
+        [[nodiscard]] static ProcessCapture capture_process(
+            const std::filesystem::path& executable,
+            const std::vector<std::string>& arguments,
+            std::chrono::seconds timeout)
+        {
+            ProcessCapture capture{};
+            int outputPipe[2]{};
+            if (pipe(outputPipe) != 0)
+                return capture;
+
+            const pid_t child = fork();
+            if (child < 0)
+            {
+                close(outputPipe[0]);
+                close(outputPipe[1]);
+                return capture;
+            }
+            if (child == 0)
+            {
+                dup2(outputPipe[1], STDOUT_FILENO);
+                dup2(outputPipe[1], STDERR_FILENO);
+                close(outputPipe[0]);
+                close(outputPipe[1]);
+
+                std::vector<std::string> owned;
+                owned.reserve(arguments.size() + 1u);
+                owned.push_back(executable.string());
+                owned.insert(owned.end(), arguments.begin(), arguments.end());
+                std::vector<char*> argv;
+                argv.reserve(owned.size() + 1u);
+                for (auto& argument : owned)
+                    argv.push_back(argument.data());
+                argv.push_back(nullptr);
+                execvp(argv.front(), argv.data());
+                _exit(127);
+            }
+
+            capture.launched = true;
+            close(outputPipe[1]);
+            const int flags = fcntl(outputPipe[0], F_GETFL, 0);
+            if (flags >= 0)
+                fcntl(outputPipe[0], F_SETFL, flags | O_NONBLOCK);
+
+            const auto deadline = std::chrono::steady_clock::now() + timeout;
+            int status = 0;
+            bool running = true;
+            char buffer[8192];
+            while (running)
+            {
+                for (;;)
+                {
+                    const ssize_t read = ::read(outputPipe[0], buffer, sizeof(buffer));
+                    if (read <= 0)
+                        break;
+                    append_process_output(capture.output, buffer, static_cast<std::size_t>(read));
+                }
+
+                const pid_t waited = waitpid(child, &status, WNOHANG);
+                running = waited == 0;
+                if (running && std::chrono::steady_clock::now() >= deadline)
+                {
+                    capture.timed_out = true;
+                    kill(child, SIGTERM);
+                    std::this_thread::sleep_for(std::chrono::milliseconds{250});
+                    if (waitpid(child, &status, WNOHANG) == 0)
+                        kill(child, SIGKILL);
+                    waitpid(child, &status, 0);
+                    running = false;
+                }
+                if (running)
+                    std::this_thread::sleep_for(std::chrono::milliseconds{20});
+            }
+
+            for (;;)
+            {
+                const ssize_t read = ::read(outputPipe[0], buffer, sizeof(buffer));
+                if (read <= 0)
+                    break;
+                append_process_output(capture.output, buffer, static_cast<std::size_t>(read));
+            }
+            close(outputPipe[0]);
+            capture.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
+            return capture;
+        }
+#endif
+
+        [[nodiscard]] static std::string llama_cpp_complete(
+            const EngineAiModel::Config& config,
+            std::string_view systemPrompt,
+            std::string_view userText)
+        {
+            std::vector<std::string> arguments{
+                "--model", config.model,
+                "--offline",
+                "--log-disable",
+                "--no-display-prompt",
+                "--no-show-timings",
+                "--single-turn",
+                "--system-prompt", std::string{systemPrompt},
+                "--prompt", std::string{userText},
+                "--ctx-size", std::to_string(config.context_tokens),
+                "--n-predict", std::to_string(config.output_tokens),
+                "--gpu-layers", std::to_string(config.gpu_layers)
+            };
+            if (config.threads > 0u)
+            {
+                arguments.push_back("--threads");
+                arguments.push_back(std::to_string(config.threads));
+            }
+
+            ProcessCapture capture = capture_process(
+                std::filesystem::path{config.executable}, arguments,
+                std::chrono::seconds{config.timeout_seconds});
+            if (!capture.launched)
+                return "Direct llama.cpp inference could not start. Check the configured llama-cli executable.";
+            if (capture.timed_out)
+                return "Direct llama.cpp inference exceeded its time budget and was stopped.";
+            if (capture.exit_code != 0)
+            {
+                const std::string detail = trim(capture.output);
+                return "Direct llama.cpp inference failed with exit code "
+                    + std::to_string(capture.exit_code)
+                    + (detail.empty() ? std::string{"."} : std::string{": "} + detail);
+            }
+            return trim(capture.output);
+        }
         static std::string build_transcript(std::string_view system_prompt, std::string_view user_text)
         {
             // Keep it tight: context kills latency on local models.
@@ -1235,14 +1658,24 @@ namespace epochengine::ai
         if (m_cfg.best_of == 0)
             m_cfg.best_of = 1;
 
-        if (m_cfg.backend != "openai_chat")
-            core::log::info("ai", "OS AI backend is not openai_chat; only OpenAI-compatible chat is implemented here.");
-
-        m_endpoint_full = normalize_openai_chat_endpoint(m_cfg.endpoint);
-        m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
+        if (m_cfg.backend == "llama_cpp_cli")
+        {
+            g_localTransport = LocalInferenceTransport::LlamaCppCli;
+            g_directExecutable = m_cfg.executable;
+            g_directModel = m_cfg.model;
+        }
+        else
+        {
+            m_cfg.backend = "openai_chat";
+            m_endpoint_full = normalize_openai_chat_endpoint(m_cfg.endpoint);
+            m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
+            g_localTransport = LocalInferenceTransport::OpenAiCompatible;
+            g_selectedEndpoint = m_cfg.endpoint;
+        }
         g_providerMode = ProviderMode::OpenSourceLocal;
-        g_selectedEndpoint = m_cfg.endpoint;
-        g_selectedModel = m_cfg.model;
+        g_selectedModel = m_cfg.backend == "llama_cpp_cli"
+            ? std::filesystem::path{m_cfg.model}.filename().string()
+            : m_cfg.model;
         if (!m_cfg.model.empty())
         {
             std::string msg = "OS AI model: ";
@@ -1276,12 +1709,14 @@ namespace epochengine::ai
         // No scorer is active in this lane; first non-empty assistant content wins.
         for (std::size_t i = 0; i < n; ++i)
         {
-            std::string txt = openai_chat_complete(
-                m_endpoint_full,
-                m_cfg.model,
-                sys,
-                build_transcript(sys, user_input),
-                {});
+            std::string txt = m_cfg.backend == "llama_cpp_cli"
+                ? llama_cpp_complete(m_cfg, sys, user_input)
+                : openai_chat_complete(
+                    m_endpoint_full,
+                    m_cfg.model,
+                    sys,
+                    build_transcript(sys, user_input),
+                    {});
 
             txt = trim(txt);
             if (txt.empty())
@@ -1303,25 +1738,55 @@ namespace epochengine::ai
 
     void init_engine_ai()
     {
-        if (g_engineAi) return;
-
-        restore_selected_model_preference_if_needed();
-
-        if (g_detectedModels.empty() && g_modelDetectionStatus == "Not scanned.")
-            (void)refresh_detected_models();
-
-        if (g_selectedModel.empty())
-        {
-            core::log::info("ai", "OS AI model not initialized: no local model selected.");
+        if (g_engineAi)
             return;
-        }
 
-        g_engineAi = new EngineAiModel({
-            .backend = "openai_chat",
-            .endpoint = g_selectedEndpoint,
-            .model = g_selectedModel,
-            .best_of = 1
-        });
+        restore_runtime_preference_if_needed();
+        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+        {
+            if (const auto executable = discover_llama_executable(); !executable.empty())
+                g_directExecutable = executable.generic_string();
+            if (const auto model = discover_gguf_model(); !model.empty())
+                g_directModel = model.generic_string();
+            if (!regular_file(g_directExecutable) || !regular_file(g_directModel))
+            {
+                g_modelDetectionStatus = "Direct llama.cpp runtime needs both llama-cli and a GGUF model.";
+                core::log::info("ai", "OS AI direct runtime not initialized: llama-cli or GGUF model is missing.");
+                return;
+            }
+
+            g_engineAi = new EngineAiModel({
+                .backend = "llama_cpp_cli",
+                .model = g_directModel,
+                .executable = g_directExecutable,
+                .threads = (std::max)(1u, std::thread::hardware_concurrency()),
+                .context_tokens = 4096,
+                .output_tokens = 512,
+                .gpu_layers = -1,
+                .timeout_seconds = 120,
+                .best_of = 1
+            });
+            g_modelDetectionStatus = "Direct llama.cpp runtime initialized with "
+                + std::filesystem::path{g_directModel}.filename().string() + ".";
+        }
+        else
+        {
+            restore_selected_model_preference_if_needed();
+            if (g_detectedModels.empty() && g_modelDetectionStatus == "Not scanned.")
+                (void)refresh_detected_models();
+            if (g_selectedModel.empty())
+            {
+                core::log::info("ai", "OS AI model not initialized: no local model selected.");
+                return;
+            }
+
+            g_engineAi = new EngineAiModel({
+                .backend = "openai_chat",
+                .endpoint = g_selectedEndpoint,
+                .model = g_selectedModel,
+                .best_of = 1
+            });
+        }
 
         core::log::info("ai", "OS AI model initialized");
         {
@@ -1330,8 +1795,9 @@ namespace epochengine::ai
             core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
         {
-            std::string msg = "AI endpoint: ";
-            msg += g_selectedEndpoint;
+            std::string msg = g_localTransport == LocalInferenceTransport::LlamaCppCli
+                ? "AI executable: " + g_directExecutable
+                : "AI endpoint: " + g_selectedEndpoint;
             core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
         {
@@ -1345,7 +1811,6 @@ namespace epochengine::ai
             core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
     }
-
     void shutdown_engine_ai()
     {
         delete g_engineAi;
@@ -1423,20 +1888,102 @@ namespace epochengine::ai
         return g_providerMode;
     }
 
+    LocalInferenceTransport current_local_inference_transport() noexcept
+    {
+        restore_runtime_preference_if_needed();
+        return g_localTransport;
+    }
+
+    std::string_view local_inference_transport_name(LocalInferenceTransport transport) noexcept
+    {
+        switch (transport)
+        {
+        case LocalInferenceTransport::OpenAiCompatible:
+            return "Local OpenAI-compatible API";
+        case LocalInferenceTransport::LlamaCppCli:
+            return "Direct llama.cpp CLI";
+        }
+        return "Unknown local runtime";
+    }
+
+    DirectRuntimeStatus direct_runtime_status()
+    {
+        restore_runtime_preference_if_needed();
+        DirectRuntimeStatus status{};
+        status.executable = g_directExecutable;
+        status.model = g_directModel;
+        status.executable_ready = regular_file(status.executable);
+        status.model_ready = regular_file(status.model)
+            && std::filesystem::path{status.model}.extension() == ".gguf";
+        if (status.ready())
+            status.message = "Direct llama.cpp runtime is ready.";
+        else if (!status.executable_ready && !status.model_ready)
+            status.message = "llama-cli and a GGUF model are required.";
+        else if (!status.executable_ready)
+            status.message = "A GGUF model was found; llama-cli is missing.";
+        else
+            status.message = "llama-cli was found; place a GGUF model in cache/models.";
+        return status;
+    }
+
+    DirectRuntimeStatus discover_direct_runtime()
+    {
+        restore_runtime_preference_if_needed();
+        if (const auto executable = discover_llama_executable(); !executable.empty())
+            g_directExecutable = executable.generic_string();
+        if (const auto model = discover_gguf_model(); !model.empty())
+            g_directModel = model.generic_string();
+        const DirectRuntimeStatus status = direct_runtime_status();
+        g_modelDetectionStatus = status.message;
+        return status;
+    }
+
+    bool select_direct_runtime(std::string_view executable, std::string_view model)
+    {
+        const std::filesystem::path executablePath{trim(executable)};
+        const std::filesystem::path modelPath{trim(model)};
+        if (!regular_file(executablePath) || !regular_file(modelPath) || modelPath.extension() != ".gguf")
+        {
+            g_modelDetectionStatus = "Direct runtime selection rejected: choose an existing llama-cli executable and GGUF model.";
+            return false;
+        }
+
+        shutdown_engine_ai();
+        g_directExecutable = std::filesystem::absolute(executablePath).generic_string();
+        g_directModel = std::filesystem::absolute(modelPath).generic_string();
+        g_localTransport = LocalInferenceTransport::LlamaCppCli;
+        g_selectedModel = modelPath.filename().string();
+        persist_runtime_preference();
+        init_engine_ai();
+        return g_engineAi != nullptr;
+    }
+
+    void select_openai_compatible_runtime()
+    {
+        shutdown_engine_ai();
+        g_localTransport = LocalInferenceTransport::OpenAiCompatible;
+        persist_runtime_preference();
+        init_engine_ai();
+    }
+
     std::string active_model_name()
     {
+        restore_runtime_preference_if_needed();
+        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+            return g_directModel.empty() ? std::string{} : std::filesystem::path{g_directModel}.filename().string();
         restore_selected_model_preference_if_needed();
         return g_selectedModel;
     }
 
     std::string active_provider_summary()
     {
-        restore_selected_model_preference_if_needed();
-        std::string summary = std::string(provider_mode_name(g_providerMode));
-        if (!g_selectedModel.empty())
+        restore_runtime_preference_if_needed();
+        std::string summary = std::string(local_inference_transport_name(g_localTransport));
+        const std::string modelName = active_model_name();
+        if (!modelName.empty())
         {
             summary += " :: ";
-            summary += g_selectedModel;
+            summary += modelName;
         }
         return summary;
     }
@@ -1448,7 +1995,9 @@ namespace epochengine::ai
 
     std::string model_detection_status()
     {
-        restore_selected_model_preference_if_needed();
+        restore_runtime_preference_if_needed();
+        if (g_localTransport == LocalInferenceTransport::OpenAiCompatible)
+            restore_selected_model_preference_if_needed();
         return g_modelDetectionStatus;
     }
 
@@ -1459,22 +2008,40 @@ namespace epochengine::ai
 
     std::string model_connection_status()
     {
+        restore_runtime_preference_if_needed();
+        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+        {
+            const auto status = direct_runtime_status();
+            if (!status.ready())
+                return status.message;
+            if (!g_engineAi)
+                init_engine_ai();
+            return g_engineAi
+                ? "Direct llama.cpp client is initialized."
+                : "Direct llama.cpp files are present, but the client did not initialize.";
+        }
+
         restore_selected_model_preference_if_needed();
         if (g_selectedModel.empty())
             return "No local OS model selected.";
-
         if (g_engineAi)
             return "Selected model client is initialized.";
-
         init_engine_ai();
         if (g_engineAi)
             return "Selected model client is initialized.";
-
         return "Model selected, but client is not initialized; scan models or check the endpoint.";
     }
-
     std::vector<std::string> refresh_detected_models()
     {
+        restore_runtime_preference_if_needed();
+        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+        {
+            const auto status = discover_direct_runtime();
+            g_detectedModels.clear();
+            if (status.model_ready)
+                g_detectedModels.push_back(std::filesystem::path{status.model}.filename().string());
+            return g_detectedModels;
+        }
         restore_selected_model_preference_if_needed();
         g_detectedModels = fetch_detected_models(g_selectedEndpoint);
         if (g_detectedModels.empty())
@@ -1519,6 +2086,9 @@ namespace epochengine::ai
 
     bool select_active_model(std::string_view model_id)
     {
+        if (current_local_inference_transport() == LocalInferenceTransport::LlamaCppCli)
+            return select_direct_runtime(g_directExecutable, g_directModel);
+
         const std::string selected = trim(model_id);
         if (selected.empty())
             return false;
@@ -1550,24 +2120,29 @@ namespace epochengine::ai
 
     ModelManifest active_model_manifest()
     {
-        restore_selected_model_preference_if_needed();
+        restore_runtime_preference_if_needed();
+        if (g_localTransport == LocalInferenceTransport::OpenAiCompatible)
+            restore_selected_model_preference_if_needed();
+        const std::string selectedModel = active_model_name();
         ModelManifest manifest{};
-        manifest.id = g_selectedModel;
+        manifest.id = selectedModel;
         manifest.provider = g_providerMode;
-        manifest.endpoint = g_selectedEndpoint;
+        manifest.endpoint = g_localTransport == LocalInferenceTransport::LlamaCppCli
+            ? g_directExecutable : g_selectedEndpoint;
         manifest.repo_safe_manifest = true;
-        manifest.local_weights_only = false;
-        manifest.available = !g_selectedModel.empty();
+        manifest.local_weights_only = g_localTransport == LocalInferenceTransport::LlamaCppCli;
+        manifest.available = g_localTransport == LocalInferenceTransport::LlamaCppCli
+            ? direct_runtime_status().ready() : !selectedModel.empty();
 
         switch (g_providerMode)
         {
         case ProviderMode::McpOperations:
-            manifest.display_name = g_selectedModel;
+            manifest.display_name = selectedModel;
             manifest.manifest_path = manifests_root() + "/local_mcp_control.json";
             break;
         case ProviderMode::OpenSourceLocal:
         default:
-            manifest.display_name = g_selectedModel;
+            manifest.display_name = selectedModel;
             manifest.manifest_path = manifests_root() + "/open_source_model_provider.json";
             break;
         }

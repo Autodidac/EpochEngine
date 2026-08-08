@@ -54,8 +54,9 @@ Current source or in-progress contracts include:
   scene-surface and GL-state ownership;
 - explicit request-driven temporal mapping and bounded observation history plus
   a temporal texture document/history/compiler/residency foundation;
-- reusable EpochGui text, font, image, input, layout, rounded rectangle, toggle,
-  popup, panel, docking, and floating-window primitives;
+- reusable EpochGui text, primal multi-line document editing, font, image, input,
+  layout, rounded rectangle, toggle, popup, panel, docking, and floating-window
+  primitives, synchronized between the embedded and standalone repositories;
 - direct launcher entry into three shared-spine editor applications: standard
   Editor, Plant Lab, and GUI Editor, each with separate source, canonical scene,
   surface/camera/dock policy, and authoring/run permissions;
@@ -306,6 +307,15 @@ Near-term controls include:
 - audio buses, device state, and volume;
 - Run/Build profile and included systems.
 
+World Outliner owns the dockable World/Assets/Scripting tabs. The script lane
+uses the shared EpochGui text-control contract; syntax, diagnostics, document
+tabs, and large-file virtualization extend that one controller. Focus, input
+capture, selection, and redock are acceptance behavior for every pane, not
+optional polish. Miscellaneous Tools actions migrate to their owning surface.
+
+Direct OS AI supports an OpenAI-compatible API lane and an offline `llama-cli`
+lane. The optional Extensions package stages a human-approved build plan and
+never starts a server; GGUF model acquisition and licensing remain separate.
 Professional docking, floating panes, and advanced 3D controls continue in
 EpochGui/desktop editor work but remain optional to game/mobile/headless builds.
 

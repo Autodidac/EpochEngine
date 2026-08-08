@@ -1091,6 +1091,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>

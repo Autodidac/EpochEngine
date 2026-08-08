@@ -62,6 +62,26 @@ import core.log;
 
 export namespace epochengine::ai
 {
+    enum class LocalInferenceTransport : std::uint8_t
+    {
+        OpenAiCompatible,
+        LlamaCppCli
+    };
+
+    struct DirectRuntimeStatus
+    {
+        std::string executable{};
+        std::string model{};
+        std::string message{};
+        bool executable_ready{};
+        bool model_ready{};
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return executable_ready && model_ready;
+        }
+    };
+
     struct Candidate
     {
         std::string text;
@@ -80,9 +100,15 @@ export namespace epochengine::ai
     public:
         struct Config
         {
-            std::string backend = "openai_chat";     // currently only OpenAI-compatible chat
+            std::string backend = "openai_chat";
             std::string endpoint = "http://localhost:1234"; // base or full
             std::string model{};
+            std::string executable{};
+            std::size_t threads{};
+            std::size_t context_tokens = 4096;
+            std::size_t output_tokens = 512;
+            int gpu_layers = -1;
+            std::uint32_t timeout_seconds = 120;
             std::size_t best_of = 1;
         };
 
@@ -112,6 +138,12 @@ export namespace epochengine::ai
     [[nodiscard]] std::string local_model_root();
     [[nodiscard]] std::string local_cache_root();
     [[nodiscard]] ProviderMode current_provider_mode() noexcept;
+    [[nodiscard]] LocalInferenceTransport current_local_inference_transport() noexcept;
+    [[nodiscard]] std::string_view local_inference_transport_name(LocalInferenceTransport transport) noexcept;
+    [[nodiscard]] DirectRuntimeStatus direct_runtime_status();
+    [[nodiscard]] DirectRuntimeStatus discover_direct_runtime();
+    [[nodiscard]] bool select_direct_runtime(std::string_view executable, std::string_view model);
+    void select_openai_compatible_runtime();
     [[nodiscard]] std::string active_model_name();
     [[nodiscard]] std::string active_provider_summary();
     [[nodiscard]] ModelManifest active_model_manifest();

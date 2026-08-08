@@ -288,6 +288,7 @@ add_library(epoch_gui STATIC
     src/epochgui/gui.panel_host.cpp
     src/epochgui/gui.popup_layout.cpp
     src/epochgui/gui.text_control.cpp
+    dep/EpochGui/src/epochgui/text_editor.cpp
 )
 
 target_sources(epoch_gui PUBLIC
@@ -338,7 +339,6 @@ set(EPOCH_SOURCES
     src/renderers/opengl/opengl.context_init.cpp
     src/renderers/opengl/opengl.context_process.cpp
     src/renderers/opengl/opengl.context_cleanup.cpp
-    src/renderers/opengl/opengl.frame_capture.cpp
     src/renderers/opengl/opengl.context_detail.cpp
     src/renderers/opengl/opengl.scene_preview.cpp
     src/renderers/opengl/opengl.canvas2d_scene.cpp
@@ -395,6 +395,7 @@ set(EPOCH_SOURCES
 if(WIN32)
     list(APPEND EPOCH_SOURCES
         src/renderers/host/host.context_win.cpp
+        src/renderers/opengl/opengl.frame_capture.cpp
         resource/WinResource.rc
     )
 elseif(UNIX AND NOT APPLE)

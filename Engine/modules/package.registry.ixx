@@ -178,9 +178,10 @@ export namespace epochengine::package_registry
     inline constexpr std::string_view kQwenCoderPackageId = "os_model_qwen_27b";
     inline constexpr std::string_view kBonsaiImageTernaryPackageId = "os_model_bonsai_image_ternary_4b_mlx_2bit";
     inline constexpr std::string_view kBonsaiImageBinaryPackageId = "os_model_bonsai_image_binary_4b_mlx_1bit";
-    inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_klein_4b";
+inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_klein_4b";
+    inline constexpr std::string_view kLocalAiLlamaCppRuntimePackageId = "local_ai_llama_cpp_runtime";
 
-    inline constexpr std::array<PackageDescriptor, 15> kKnownPackages{{
+    inline constexpr std::array<PackageDescriptor, 16> kKnownPackages{{
         {
             .id = kEngineArcadePackageId,
             .displayName = "Engine Arcade",
@@ -272,6 +273,15 @@ export namespace epochengine::package_registry
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
             .externalSourceRepo = "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+        },
+        {
+            .id = kLocalAiLlamaCppRuntimePackageId,
+            .displayName = "Local AI llama.cpp Runtime",
+            .summary = "Human-approved C++23 helper package for locating or building llama-cli and connecting an operator-licensed GGUF model directly to Epoch without a local HTTP server.",
+            .kind = PackageKind::DownloadableSource,
+            .activation = ActivationMode::DownloadedOptIn,
+            .requiresHumanBuildGate = true,
+            .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_voxel_planetoid",

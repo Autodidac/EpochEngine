@@ -116,8 +116,6 @@ namespace epochengine
             };
         }
 
-        scene.entities.push_back(
-            { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } });
         return scene;
     }
 }

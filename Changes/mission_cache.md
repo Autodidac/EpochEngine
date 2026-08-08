@@ -199,6 +199,21 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## GUI And Editor
 
+- World Outliner owns dockable `World`, `Assets`, and `Scripting` tool tabs;
+  Assets/Scripting are not top-level workspace destinations. Preserve drag/drop,
+  pane popout/redock, selection, and project ownership as those tabs mature.
+- EpochGui now owns a primal `TextEditorController` over its text-control state:
+  multi-line indexing, caret/selection, clipboard command routing, scroll,
+  revision/dirty state, find, replacement, and save acknowledgement. The engine
+  adapter must finish migrating script/asset text surfaces onto that controller
+  and add syntax, diagnostics, tabs, search UI, and large-document virtualization
+  incrementally rather than creating another editor implementation.
+- Focus must target every renderer context presenting the selected scene object;
+  the GUI root context is not sufficient in the parented multicontext shell.
+- Retire the miscellaneous Tools dumping ground. Each action belongs with its
+  owning World/Assets/Scripting/Project/AI/Timeline/Package surface, and every
+  visible pane needs focus, selection, overflow, resize, empty, error, and
+  dock/popout behavior reviewed as part of the subsystem that owns it.
 - EpochGui is the reusable portable C++23 module/static-library layer.
 - EpochGui owns backend-neutral text, font, image, input, selection, layout,
   popup, progress, rounded rectangle, panel, docking, and floating-window state.
@@ -326,6 +341,15 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## Extensions And Packages
 
+- `local_ai_llama_cpp_runtime` is the optional Extensions package for an
+  operator-approved offline `llama-cli` build and runtime-status integration.
+  It stages under executable-local `cache/packages/`, disables server/curl
+  targets, never auto-runs, and keeps GGUF weights plus their licenses separate.
+- Plant Lab promotion must map the reference V6 graph rather than its demo
+  viewer: stable nodes/parents, recursive shoots, dormant-sapling timing,
+  per-organ birth/end ranges, 3D/2.5D/2D/pattern modes, mesh/atlas output, and
+  diffable parameter IO. The reference repo currently has no detected license;
+  verbatim promotion is blocked until a license/provenance record exists.
 - Mainline owns stable contracts, validation, safe fallback, provenance policy,
   and project/runtime integration.
 - EpochEngineExtensions owns heavy optional generators, FFT ocean, planetary or
@@ -340,6 +364,14 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## OS AI
 
+- Epoch supports two explicit local inference transports: the existing
+  OpenAI-compatible endpoint and direct `llama-cli`. Direct mode discovers an
+  executable plus operator-licensed GGUF, launches one captured child process
+  with argv (no shell), applies offline/no-server policy, bounds output, and
+  enforces timeout/termination. Runtime choice is executable-local state.
+- Direct runtime setup may be discovered from environment overrides or the
+  Extensions cache. Package installation only stages the reviewed setup plan;
+  source fetch/build remains a visible human-approved action.
 - OS AI means operator-selected external/source-available models, not an
   internal persona.
 - Model selection initializes exactly the selected model and persists only in
@@ -350,7 +382,7 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## Build, Source, And Release Boundaries
 
-- The `v0.88.69` packaged runtime/updater is sealed until explicitly reopened.
+- The operator explicitly reopened release work for the `v0.89.x` line. Preserve updater behavior while producing and validating the new Windows/Linux baseline; reseal the accepted release afterward.
 - Linux and Windows normal builds use vcpkg according to their documented lanes;
   headless diagnostics may intentionally differ.
 - Linux/WSL runtime proof defaults to single-context OpenGL. Vulkan is explicit
@@ -361,6 +393,10 @@ release history belong in the changelog/archive, not architecture docs.
   renderer sources live under `src/renderers/<backend>`.
 - CMake, MSVC items/filters, presets, scripts, and generated project metadata
   must remain aligned as source moves.
+- OpenGL frame capture is implemented by `opengl.capture` on Linux. The
+  traditional bridge is Windows/MSVC-only because importing the capture module
+  into `opengl.context` exhausts the MSVC module heap; compiling that bridge on
+  Linux creates a duplicate global/module declaration.
 - Never stage generated builds, caches, logs, captures, local projects, or
   unrelated operator files.
 

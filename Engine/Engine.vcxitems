@@ -473,6 +473,7 @@
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\utility.filewatch.cpp" />

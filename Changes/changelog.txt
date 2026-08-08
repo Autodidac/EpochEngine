@@ -1,5 +1,38 @@
 # Epoch Changelog
 
+## [v0.89.01] - Editor ownership, EpochGui text documents, and direct local AI
+
+- Remove the unwanted default `StarterCube` from standard and sandbox scene
+  seeds while preserving ground, spawn, camera, and light Tier-0 defaults.
+- Correct Engine Arcade cabinet profile orientation and validate that the
+  sampled display sits on the intended front display bay.
+- Make Focus update every active renderer child context that presents the scene
+  instead of stopping at the parent GUI context.
+- Move Assets and Scripting into dockable World Outliner tabs and retire the
+  top-level Assets destination; keep the legacy route as a compatibility
+  redirect into the owned tool tab.
+- Replace whole-field script editing behavior with caret placement, drag/shift
+  selection, copy/cut/paste, word and line navigation, deletion, focus, and
+  scroll-to-caret behavior.
+- Add EpochGui `TextEditorController` with multi-line indexing, revision and
+  dirty state, find/replace, save acknowledgement, module/header exports, CMake
+  and MSVC registration, and standalone contract tests. Synchronize the
+  standalone EpochGui repository to the engine's current C++23 surface.
+- Add selectable direct `llama-cli` inference beside the existing local
+  OpenAI-compatible API: executable/GGUF discovery, executable-local
+  preference, argv-only child launch, bounded output, timeout termination, and
+  offline/no-server policy on Windows and Linux.
+- Register and stage the human-approved `local_ai_llama_cpp_runtime` package;
+  EpochEngineExtensions owns its C++23 build/status planner, tests, cache
+  layout, MIT llama.cpp provenance, and separate GGUF-license gate.
+- Record the Plant Lab V6 promotion map and block verbatim source intake until
+  the referenced repository has explicit compatible licensing/provenance.
+- Reopen the release lane for the first `v0.89.x` Windows/Linux baseline while
+  preserving the accepted updater flow and checksum naming.
+- Keep OpenGL capture module-owned on Linux while retaining the small MSVC-only
+  adapter that avoids MSVC module heap exhaustion; remove the bridge from the
+  Linux source graph to prevent duplicate global/module definitions.
+
 ## [v0.88.89] - Engine-wide source ownership and temporal artifact IO
 
 - Normalize all first-party C++ files under `Engine/modules`, `Engine/src`,
@@ -3555,8 +3588,8 @@
   `Systems`, `AI`, and `Output`.
 - Added a post-update startup cooldown to relaunched runtimes so packaged/source
   update handoff can pause briefly before the full context stack comes back up,
-  reducing the longstanding “updated app restarts straight into a fragile
-  OpenGL/multicontext bring-up” crash seam on Windows.
+  reducing the longstanding ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œupdated app restarts straight into a fragile
+  OpenGL/multicontext bring-upÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â crash seam on Windows.
 - Fixed the editor top-menu dropdown sizing against the real titled-window
   content budget so the last menu item text no longer disappears when shared
   GUI content-origin math changes.
@@ -3858,7 +3891,7 @@
 - Refreshed the active release surfaces for the repaired `0.82.41` runtime drop.
 
 ## [v0.82.40]
-- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `♪◙` newline artifacts.
+- Routed updater status back through Epoch logging with sanitized updater messages so the commandline pane stops showing the raw `ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂªÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¾Ãƒâ€šÃ‚Â¢` newline artifacts.
 - Kept the newer-source fallback intact so a confirmed update still rebuilds from source when no newer packaged runtime exists.
 - Refreshed the active release surfaces for the repaired updater runtime drop.
 
@@ -4086,5 +4119,5 @@
 - Confirmed with new Debug evidence that SFML full-grid runs can now show real `Posted Undock -> Posted Redock -> Redock begin/end` sequencing in the engine log, while focused SDL/SFML single-backend runs remain green.
 - Added more in-editor project proof rows for generated project shells and script sources so the Project and Scripts workspaces expose concrete file/output/log locations rather than only status text.
 - Fixed the Win32 SFML redock decision to use the actual mouse-release screen point instead of stale drag history, which was leaving some full-grid runs detached even when the release returned inside the parent window.
-- Switched Win32 proxy drag tracking to the real screen cursor for detached SDL/SFML-style child drags so grabbed panes stop drifting or “running away” as their host/child relationship changes during undock.
+- Switched Win32 proxy drag tracking to the real screen cursor for detached SDL/SFML-style child drags so grabbed panes stop drifting or ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œrunning awayÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â as their host/child relationship changes during undock.
 - Clarified the AI workspace with explicit eval-suite visibility plus staged capture and promotion paths in the editor log so the Engine AI/MCP flow stays reviewable instead of reading like blind autonomy.

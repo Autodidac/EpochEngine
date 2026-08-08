@@ -37,6 +37,22 @@ Reference/prototype source:
 https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab
 ```
 
+GitHub currently reports no license for this repository and its source tree has
+no `LICENSE` file. Its architecture and operator-provided behavior remain valid
+reference requirements, but verbatim source promotion is blocked until the
+repository gains explicit compatible licensing or a provenance record confirms
+promotion rights.
+
+The reviewed V6 delta that Epoch must reproduce behind its own contracts is:
+
+- stable node/parent identity plus branch and leaf-cluster records;
+- recursive side shoots and editable generation/depth/shoot budgets;
+- dormant initial sapling state and overlapping trunk, branch, and leaf timing;
+- per-organ birth/end ranges for deterministic forward/reverse evaluation;
+- 3D, 2.5D, 2D plant, and 2D L-system pattern modes;
+- graph regeneration separated from time-only mesh evaluation;
+- indexed position/normal/color/UV mesh output, atlas regions, and leaf styles;
+- deterministic seed/preset state plus diffable save/load and export boundaries.
 The prototype repo is not cloned into EpochEngine mainline by default. Mainline
 keeps the stable API shape and package gate. Implementation-heavy or
 experimental payloads should move through `Autodidac/EpochEngineExtensions`

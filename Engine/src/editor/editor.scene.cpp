@@ -1707,7 +1707,6 @@ namespace
         return {
             { "PersistentLevel", "Level", "World", { 0.0f, -0.32f, 0.0f }, {}, { 14.0f, 0.20f, 14.0f } },
             { "GroundPlatform", "Ground", "World", { 0.0f, -0.25f, 0.0f }, {}, { 12.0f, 0.5f, 12.0f } },
-            { "StarterCube", "StaticMesh", "Gameplay", { 0.0f, 0.5f, 0.0f } },
             { "PlayerStart", "Spawn", "Gameplay", { -2.5f, 0.0f, 2.5f } },
             { "EditorCamera", "Camera", "Editor", { 0.0f, 4.8f, 8.5f }, { -28.0f, 0.0f, 0.0f } },
             { "DirectionalLight", "Light", "Lighting", { 2.0f, 5.5f, 2.0f }, { -48.0f, 35.0f, 0.0f } }

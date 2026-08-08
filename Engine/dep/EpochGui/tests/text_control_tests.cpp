@@ -142,6 +142,34 @@ namespace
         return 0;
     }
 
+    int text_editor_document()
+    {
+        TextEditorState editor{};
+        set_text_editor_text(editor, "alpha\x0a" "beta\x0a");
+        normalize_text_editor(editor);
+
+        TextEditorSnapshot snapshot = text_editor_snapshot(editor);
+        EPOCHGUI_CHECK(snapshot.line_count == 3u);
+        EPOCHGUI_CHECK(text_editor_line(editor, 0u) == "alpha");
+        EPOCHGUI_CHECK(text_editor_line(editor, 1u) == "beta");
+        EPOCHGUI_CHECK(text_editor_line(editor, 2u).empty());
+        EPOCHGUI_CHECK(!snapshot.dirty);
+
+        EPOCHGUI_CHECK(find_next_text_editor_match(editor, "beta"));
+        EPOCHGUI_CHECK(editor.active_match.first == 6u);
+        EPOCHGUI_CHECK(editor.active_match.past_last == 10u);
+
+        TextControlOptions options{ .multiline = true };
+        EPOCHGUI_CHECK(replace_text_editor_match(editor, options, "Epoch"));
+        snapshot = text_editor_snapshot(editor);
+        EPOCHGUI_CHECK(editor.text.text == "alpha\x0a" "Epoch\x0a");
+        EPOCHGUI_CHECK(snapshot.revision > 1u);
+        EPOCHGUI_CHECK(snapshot.dirty);
+
+        mark_text_editor_saved(editor);
+        EPOCHGUI_CHECK(!text_editor_snapshot(editor).dirty);
+        return 0;
+    }
     int segmented_control_geometry()
     {
         const std::array<float, 3> widths{ 80.0f, 120.0f, 60.0f };
@@ -188,6 +216,8 @@ int main()
     if (const int result = navigation_and_selection(); result != 0)
         return result;
     if (const int result = filtering_read_only_and_scroll(); result != 0)
+        return result;
+    if (const int result = text_editor_document(); result != 0)
         return result;
     return segmented_control_geometry();
 }

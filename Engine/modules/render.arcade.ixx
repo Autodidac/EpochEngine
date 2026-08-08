@@ -84,7 +84,7 @@ export namespace epochengine::render_arcade
         .name = "EngineArcadeScreen",
         .type = "Canvas2D",
         .position = { 0.0f, 1.80f, 0.465f },
-        .scale = { 1.30f, 0.76f, 0.035f },
+        .scale = { 1.30f, 0.74f, 0.035f },
         .sampled_render_surface = true,
         .diagnostic_overlay = false
     };
@@ -225,23 +225,24 @@ export namespace epochengine::render_arcade
     // The recessed kick plate, projecting control deck, display bay, and
     // marquee form one recognizable cabinet shell rather than stacked boxes.
     inline constexpr std::array<ArcadeCabinetProfilePoint, 8> kCabinetProfile{
-        ArcadeCabinetProfilePoint{ -0.50f, -0.10f },
-        ArcadeCabinetProfilePoint{ -0.50f,  0.39f },
-        ArcadeCabinetProfilePoint{  0.50f,  0.39f },
-        ArcadeCabinetProfilePoint{  0.50f, -0.24f },
-        ArcadeCabinetProfilePoint{  0.35f, -0.36f },
-        ArcadeCabinetProfilePoint{  0.02f, -0.36f },
-        ArcadeCabinetProfilePoint{ -0.08f, -0.55f },
-        ArcadeCabinetProfilePoint{ -0.18f, -0.31f }
+        ArcadeCabinetProfilePoint{ -0.18f,  0.31f },
+        ArcadeCabinetProfilePoint{ -0.08f,  0.55f },
+        ArcadeCabinetProfilePoint{  0.02f,  0.36f },
+        ArcadeCabinetProfilePoint{  0.35f,  0.36f },
+        ArcadeCabinetProfilePoint{  0.50f,  0.24f },
+        ArcadeCabinetProfilePoint{  0.50f, -0.39f },
+        ArcadeCabinetProfilePoint{ -0.50f, -0.39f },
+        ArcadeCabinetProfilePoint{ -0.50f,  0.10f }
     };
 
-    [[nodiscard]] consteval float cabinet_front_plane_z() noexcept
+    inline constexpr float kCabinetDisplayBayMinimumY = 0.02f;
+    inline constexpr float kCabinetDisplayBayMaximumY = 0.35f;
+    inline constexpr float kCabinetDisplayBayFrontZ = 0.36f;
+
+    [[nodiscard]] consteval float cabinet_display_plane_z() noexcept
     {
-        float front = kCabinetProfile.front().z;
-        for (const ArcadeCabinetProfilePoint point : kCabinetProfile)
-            front = (std::max)(front, point.z);
         return kCabinetBodySceneNode.position[2]
-            + front * kCabinetBodySceneNode.scale[2];
+            + kCabinetDisplayBayFrontZ * kCabinetBodySceneNode.scale[2];
     }
 
     [[nodiscard]] constexpr bool screen_faces_cabinet_front() noexcept
@@ -249,19 +250,38 @@ export namespace epochengine::render_arcade
         const float samplePlane = screen_sample_plane_z(
             kScreenSceneNode.position[2],
             kScreenSceneNode.scale[2]);
-        return samplePlane > cabinet_front_plane_z()
+        return samplePlane > cabinet_display_plane_z()
             && samplePlane > kScreenSceneNode.position[2];
     }
 
     static_assert(screen_faces_cabinet_front());
 
+    [[nodiscard]] constexpr bool screen_fits_cabinet_display_bay() noexcept
+    {
+        const float screenHalfWidth = kScreenSceneNode.scale[0] * 0.5f;
+        const float screenHalfHeight = kScreenSceneNode.scale[1] * 0.5f;
+        const float cabinetHalfWidth = kCabinetBodySceneNode.scale[0] * 0.5f;
+        const float bayMinimumY = kCabinetBodySceneNode.position[1]
+            + kCabinetDisplayBayMinimumY * kCabinetBodySceneNode.scale[1];
+        const float bayMaximumY = kCabinetBodySceneNode.position[1]
+            + kCabinetDisplayBayMaximumY * kCabinetBodySceneNode.scale[1];
+
+        return kScreenSceneNode.position[0] - screenHalfWidth >= -cabinetHalfWidth
+            && kScreenSceneNode.position[0] + screenHalfWidth <= cabinetHalfWidth
+            && kScreenSceneNode.position[1] - screenHalfHeight >= bayMinimumY
+            && kScreenSceneNode.position[1] + screenHalfHeight <= bayMaximumY
+            && kScreenSceneNode.position[2] > cabinet_display_plane_z();
+    }
+
+    static_assert(screen_fits_cabinet_display_bay());
+
     inline constexpr std::array<std::array<std::uint16_t, 3>, 6> kCabinetSideTriangles{{
-        { 7u, 0u, 1u },
-        { 7u, 1u, 2u },
-        { 7u, 2u, 3u },
-        { 7u, 3u, 4u },
-        { 7u, 4u, 5u },
-        { 5u, 6u, 7u }
+        { 0u, 6u, 7u },
+        { 0u, 5u, 6u },
+        { 0u, 4u, 5u },
+        { 0u, 3u, 4u },
+        { 0u, 2u, 3u },
+        { 2u, 0u, 1u }
     }};
 
     inline constexpr std::size_t kCabinetBodyVertexCount = kCabinetProfile.size() * 2u;
@@ -808,6 +828,7 @@ export namespace epochengine::render_arcade
         bool geometry_storage_consistent{};
         bool scene_integration_consistent{};
         bool screen_front_facing{};
+        bool screen_aligned_to_display_bay{};
         bool scene_nodes_exclude_diagnostic_overlay{};
 
         [[nodiscard]] constexpr bool passed() const noexcept
@@ -819,6 +840,7 @@ export namespace epochengine::render_arcade
                 && geometry_storage_consistent
                 && scene_integration_consistent
                 && screen_front_facing
+                && screen_aligned_to_display_bay
                 && scene_nodes_exclude_diagnostic_overlay;
         }
     };
@@ -893,6 +915,7 @@ export namespace epochengine::render_arcade
                 && screenSceneSlot.transform[13] == kScreenSceneNode.position[1]
                 && screenSceneSlot.transform[14] == kScreenSceneNode.position[2],
             .screen_front_facing = screen_faces_cabinet_front(),
+            .screen_aligned_to_display_bay = screen_fits_cabinet_display_bay(),
             .scene_nodes_exclude_diagnostic_overlay =
                 !kCabinetBodySceneNode.diagnostic_overlay
                 && !kScreenSceneNode.diagnostic_overlay

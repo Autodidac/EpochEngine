@@ -343,6 +343,14 @@ namespace epochengine::gui
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextRightMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
         static thread_local std::unordered_map<const void*, std::size_t, PtrHash> g_contextPressedButtonKeys{};
+        struct EditBoxTextState
+        {
+            gui_lib::TextControlState control{};
+            bool initialized{};
+            bool draggingSelection{};
+        };
+
+        static thread_local std::unordered_map<const void*, EditBoxTextState, PtrHash> g_editBoxTextStates{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_textFieldSelectAllStates{};
 
         struct ScrollTextState
@@ -4366,155 +4374,427 @@ namespace epochengine::gui
         return measure_wrapped_text_height(text, wrapWidth, kFontScale);
     }
 
+    [[nodiscard]] static std::size_t edit_box_line_start(
+        std::string_view text,
+        std::size_t index) noexcept
+    {
+        index = (std::min)(index, text.size());
+        if (index == 0u)
+            return 0u;
+        const std::size_t newline = text.rfind('\n', index - 1u);
+        return newline == std::string_view::npos ? 0u : newline + 1u;
+    }
+
+    [[nodiscard]] static std::size_t edit_box_line_end(
+        std::string_view text,
+        std::size_t index) noexcept
+    {
+        index = (std::min)(index, text.size());
+        const std::size_t newline = text.find('\n', index);
+        return newline == std::string_view::npos ? text.size() : newline;
+    }
+
+    [[nodiscard]] static float edit_box_x_for_index(
+        std::string_view text,
+        std::size_t lineStart,
+        std::size_t index,
+        float scale) noexcept
+    {
+        lineStart = (std::min)(lineStart, text.size());
+        index = (std::min)((std::max)(lineStart, index), text.size());
+        return measure_text_width(text.substr(lineStart, index - lineStart), scale);
+    }
+
+    [[nodiscard]] static std::size_t edit_box_index_from_point(
+        std::string_view text,
+        float pointerX,
+        float pointerY,
+        float textX,
+        float textY,
+        gui_lib::Vec2 scroll,
+        float lineAdvance,
+        float scale,
+        bool multiline) noexcept
+    {
+        std::size_t lineStart = 0u;
+        if (multiline)
+        {
+            const float localY = (std::max)(0.0f, pointerY - textY + scroll.y);
+            const std::size_t requestedLine =
+                static_cast<std::size_t>(localY / (std::max)(1.0f, lineAdvance));
+            for (std::size_t line = 0u; line < requestedLine && lineStart < text.size(); ++line)
+            {
+                const std::size_t lineEnd = edit_box_line_end(text, lineStart);
+                lineStart = lineEnd < text.size() ? lineEnd + 1u : text.size();
+            }
+        }
+
+        const std::size_t lineEnd = edit_box_line_end(text, lineStart);
+        const float localX = pointerX - textX + scroll.x;
+        if (localX <= 0.0f)
+            return lineStart;
+
+        float penX = 0.0f;
+        for (std::size_t index = lineStart; index < lineEnd; ++index)
+        {
+            const unsigned char raw = static_cast<unsigned char>(text[index]);
+            if (is_utf8_continuation_byte(raw))
+                continue;
+            const unsigned char ch = safe_draw_char(raw);
+            const float advance = glyph_advance_with_kerning(
+                ch,
+                next_drawable_char(text, index),
+                scale);
+            if (localX <= penX + advance * 0.5f)
+                return index;
+            penX += advance;
+        }
+        return lineEnd;
+    }
+
+    [[nodiscard]] static gui_lib::TextControlMetrics edit_box_text_metrics(
+        const gui_lib::TextControlState& state,
+        float scale,
+        float lineAdvance,
+        float caretHeight) noexcept
+    {
+        const std::string_view text{ state.text };
+        float maximumWidth = 0.0f;
+        std::size_t lineCount = 1u;
+        std::size_t lineStart = 0u;
+        while (lineStart <= text.size())
+        {
+            const std::size_t lineEnd = edit_box_line_end(text, lineStart);
+            maximumWidth = (std::max)(
+                maximumWidth,
+                edit_box_x_for_index(text, lineStart, lineEnd, scale));
+            if (lineEnd >= text.size())
+                break;
+            ++lineCount;
+            lineStart = lineEnd + 1u;
+        }
+
+        const std::size_t caret = (std::min)(state.caret, text.size());
+        const std::size_t caretLineStart = edit_box_line_start(text, caret);
+        std::size_t caretLine = 0u;
+        for (std::size_t index = 0u; index < caretLineStart; ++index)
+            if (text[index] == '\n')
+                ++caretLine;
+
+        return gui_lib::TextControlMetrics{
+            .content_size = { maximumWidth, static_cast<float>(lineCount) * lineAdvance },
+            .caret_position = {
+                edit_box_x_for_index(text, caretLineStart, caret, scale),
+                static_cast<float>(caretLine) * lineAdvance
+            },
+            .caret_size = { 1.0f, caretHeight },
+            .valid = true
+        };
+    }
+
     EditBoxResult edit_box(std::string& text, Vec2 size, std::size_t max_chars, bool multiline) noexcept
     {
         EditBoxResult result{};
-        if (!g_frame.insideWindow || !g_frame.ctx) return result;
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return result;
 
         ensure_resources();
 
         const Vec2 pos = g_frame.cursor;
         const float baseHeight = base_line_height(kFontScale);
+        const float lineAdvance = line_advance_amount(kFontScale);
         const float minWidth = space_advance(kFontScale) * 4.0f;
         const float minHeight = baseHeight + 2.0f * kBoxInnerPadding;
-
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
         const float height = (std::max)(static_cast<float>(size.y), minHeight);
-
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
-            && point_in_active_clip(g_frame.mousePos);
-        const void* id = widget_focus_key("edit-box", static_cast<const void*>(&text), pos, { width, height });
-        const void* ctxKey = static_cast<const void*>(g_frame.ctx);
-        const void* activeWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
-        bool& wholeFieldSelected = g_textFieldSelectAllStates[id];
-        auto& menuState = g_editBoxMenuStates[id];
-        const auto& palette = active_palette();
-
-        if (g_frame.justPressed || g_frame.rightJustPressed)
-        {
-            if (hovered)
-            {
-                activeWidget = id;
-                g_frame.caretTimer = 0.0f;
-                g_frame.caretVisible = true;
-                if (g_frame.justPressed)
-                    wholeFieldSelected = false;
-            }
-            else if (activeWidget == id)
-            {
-                activeWidget = nullptr;
-                wholeFieldSelected = false;
-            }
-        }
-
-        if (ctxKey)
-            g_contextActiveWidgets[ctxKey] = activeWidget;
-
-        const bool active = (activeWidget == id);
-        result.active = active;
-
-        const SpriteHandle background = active ? palette.textFieldActive : palette.textField;
-        draw_sprite(background, pos.x, pos.y, width, height);
-
         const float contentWidth = (std::max)(1.0f, width - 2.0f * kBoxInnerPadding);
         const float contentHeight = (std::max)(1.0f, height - 2.0f * kBoxInnerPadding);
         const float textX = pos.x + kBoxInnerPadding;
         const float textY = pos.y + kBoxInnerPadding;
+        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
 
-        const std::size_t limit = (max_chars == 0)
-            ? std::numeric_limits<std::size_t>::max()
+        const void* id = widget_focus_key(
+            "edit-box",
+            static_cast<const void*>(&text),
+            pos,
+            { width, height });
+        const void* textKey = static_cast<const void*>(&text);
+        const void* ctxKey = static_cast<const void*>(g_frame.ctx);
+        const auto& palette = active_palette();
+        auto& widget = g_editBoxTextStates[id];
+        auto& menuState = g_editBoxMenuStates[id];
+
+        if (!widget.initialized)
+        {
+            widget.control.text = text;
+            widget.control.anchor = text.size();
+            widget.control.caret = text.size();
+            widget.initialized = true;
+        }
+        else if (widget.control.text != text)
+        {
+            widget.control.text = text;
+            gui_lib::normalize_text_control(widget.control);
+        }
+
+        const std::size_t limit = max_chars == 0u
+            ? (std::numeric_limits<std::size_t>::max)()
             : max_chars;
+        const gui_lib::TextControlOptions options{
+            .viewport_size = { contentWidth, contentHeight },
+            .content_padding = {},
+            .maximum_bytes = limit,
+            .multiline = multiline,
+            .read_only = false,
+            .accept_tab = multiline
+        };
 
-        // Handle input first (mutates `text`)
+        const auto metrics = [&]()
+        {
+            return edit_box_text_metrics(widget.control, kFontScale, lineAdvance, baseHeight);
+        };
+        const auto dispatch = [&](gui_lib::TextControlCommand command,
+                                  std::string_view payload = {},
+                                  std::size_t requestedCaret = gui_lib::invalid_text_index,
+                                  bool extendSelection = false,
+                                  bool focusRequested = false,
+                                  bool blurRequested = false)
+        {
+            gui_lib::TextControlInput input{};
+            input.command = command;
+            input.text = payload;
+            input.requested_caret = requestedCaret;
+            input.metrics = metrics();
+            input.extend_selection = extendSelection;
+            input.focus_requested = focusRequested;
+            input.blur_requested = blurRequested;
+            const auto update = gui_lib::update_text_control(widget.control, options, input);
+            if (update.clipboard_write_requested)
+                (void)clipboard_write_text(update.clipboard_text);
+            result.changed = result.changed || update.text_changed;
+            return update;
+        };
+
+        const bool leftPressed = g_frame.justPressed;
+        const bool pointerPressed = leftPressed || g_frame.rightJustPressed;
+        const bool shiftHeld = std::any_of(
+            g_frame.events.begin(),
+            g_frame.events.end(),
+            [](const InputEvent& event) noexcept
+            {
+                return event.shift_down;
+            });
+        const void* activeBefore = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
+        if (pointerPressed)
+        {
+            if (hovered)
+            {
+                if (ctxKey)
+                    g_contextActiveWidgets[ctxKey] = id;
+                g_frame.caretTimer = 0.0f;
+                g_frame.caretVisible = true;
+            }
+            else if (activeBefore == id && !menuState.open)
+            {
+                if (ctxKey)
+                    g_contextActiveWidgets[ctxKey] = nullptr;
+                widget.draggingSelection = false;
+            }
+        }
+
+        bool active = ctxKey && g_contextActiveWidgets[ctxKey] == id;
+        if (active != widget.control.focused)
+            (void)dispatch(gui_lib::TextControlCommand::none, {}, gui_lib::invalid_text_index, false, active, !active);
+
+        if (g_textFieldSelectAllStates[textKey])
+        {
+            if (ctxKey)
+                g_contextActiveWidgets[ctxKey] = id;
+            active = true;
+            (void)dispatch(gui_lib::TextControlCommand::select_all, {}, gui_lib::invalid_text_index, false, true, false);
+            g_textFieldSelectAllStates[textKey] = false;
+            g_frame.caretTimer = 0.0f;
+            g_frame.caretVisible = true;
+        }
+
+        if (active && leftPressed && hovered)
+        {
+            const std::size_t requested = edit_box_index_from_point(
+                widget.control.text,
+                g_frame.mousePos.x,
+                g_frame.mousePos.y,
+                textX,
+                textY,
+                widget.control.scroll,
+                lineAdvance,
+                kFontScale,
+                multiline);
+            (void)dispatch(
+                gui_lib::TextControlCommand::set_caret,
+                {},
+                requested,
+                shiftHeld);
+            widget.draggingSelection = true;
+        }
+        else if (active && widget.draggingSelection && g_frame.mouseDown)
+        {
+            const std::size_t requested = edit_box_index_from_point(
+                widget.control.text,
+                g_frame.mousePos.x,
+                g_frame.mousePos.y,
+                textX,
+                textY,
+                widget.control.scroll,
+                lineAdvance,
+                kFontScale,
+                multiline);
+            (void)dispatch(
+                gui_lib::TextControlCommand::set_caret,
+                {},
+                requested,
+                true);
+        }
+        if (!g_frame.mouseDown)
+            widget.draggingSelection = false;
+
         if (active)
         {
-            const auto replace_selection_if_needed = [&]() noexcept
+            for (const auto& event : g_frame.events)
             {
-                if (!wholeFieldSelected)
-                    return;
-                if (!text.empty())
+                if (event.type == EventType::TextInput)
                 {
-                    text.clear();
-                    result.changed = true;
+                    (void)dispatch(gui_lib::TextControlCommand::insert_text, event.text);
+                    continue;
                 }
-                wholeFieldSelected = false;
-            };
+                if (event.type != EventType::KeyDown)
+                    continue;
 
-            for (const auto& evt : g_frame.events)
+                const int key = event.key;
+                if (event.ctrl_down && (key == 'A' || key == 'a'))
+                    (void)dispatch(gui_lib::TextControlCommand::select_all);
+                else if (event.ctrl_down && (key == 'C' || key == 'c'))
+                    (void)dispatch(gui_lib::TextControlCommand::copy_selection);
+                else if (event.ctrl_down && (key == 'X' || key == 'x'))
+                    (void)dispatch(gui_lib::TextControlCommand::cut_selection);
+                else if (event.ctrl_down && (key == 'V' || key == 'v'))
+                    (void)dispatch(gui_lib::TextControlCommand::paste_text, clipboard_read_text());
+                else if (key == 8)
+                    (void)dispatch(gui_lib::TextControlCommand::erase_backward);
+                else if (key == 46 || key == 127)
+                    (void)dispatch(gui_lib::TextControlCommand::erase_forward);
+                else if (key == 37)
+                    (void)dispatch(
+                        event.ctrl_down ? gui_lib::TextControlCommand::move_word_left
+                                        : gui_lib::TextControlCommand::move_left,
+                        {},
+                        gui_lib::invalid_text_index,
+                        event.shift_down);
+                else if (key == 39)
+                    (void)dispatch(
+                        event.ctrl_down ? gui_lib::TextControlCommand::move_word_right
+                                        : gui_lib::TextControlCommand::move_right,
+                        {},
+                        gui_lib::invalid_text_index,
+                        event.shift_down);
+                else if (key == 38 && multiline)
+                    (void)dispatch(gui_lib::TextControlCommand::move_up, {}, gui_lib::invalid_text_index, event.shift_down);
+                else if (key == 40 && multiline)
+                    (void)dispatch(gui_lib::TextControlCommand::move_down, {}, gui_lib::invalid_text_index, event.shift_down);
+                else if (key == 36)
+                    (void)dispatch(
+                        event.ctrl_down ? gui_lib::TextControlCommand::move_document_start
+                                        : gui_lib::TextControlCommand::move_line_start,
+                        {},
+                        gui_lib::invalid_text_index,
+                        event.shift_down);
+                else if (key == 35)
+                    (void)dispatch(
+                        event.ctrl_down ? gui_lib::TextControlCommand::move_document_end
+                                        : gui_lib::TextControlCommand::move_line_end,
+                        {},
+                        gui_lib::invalid_text_index,
+                        event.shift_down);
+                else if (key == 27)
+                {
+                    if (ctxKey)
+                        g_contextActiveWidgets[ctxKey] = nullptr;
+                    active = false;
+                    widget.draggingSelection = false;
+                    (void)dispatch(gui_lib::TextControlCommand::none, {}, gui_lib::invalid_text_index, false, false, true);
+                }
+                else if (key == 13)
+                {
+                    if (multiline)
+                        (void)dispatch(gui_lib::TextControlCommand::insert_text, "\n");
+                    else
+                        result.submitted = true;
+                }
+            }
+        }
+
+        gui_lib::update_text_control_scroll(widget.control, options, metrics());
+        text = widget.control.text;
+        result.active = active;
+
+        draw_sprite(active ? palette.textFieldActive : palette.textField, pos.x, pos.y, width, height);
+        {
+            ContentClipScope clip(
+                { pos.x + 1.0f, pos.y + 1.0f },
+                { pos.x + width - 1.0f, pos.y + height - 1.0f });
+            const auto selection = gui_lib::text_selection(widget.control);
+            const std::string_view view{ widget.control.text };
+            std::size_t lineStart = 0u;
+            std::size_t lineIndex = 0u;
+            while (lineStart <= view.size())
             {
-                switch (evt.type)
+                const std::size_t lineEnd = edit_box_line_end(view, lineStart);
+                const float drawX = textX - widget.control.scroll.x;
+                const float drawY = textY
+                    + static_cast<float>(lineIndex) * lineAdvance
+                    - widget.control.scroll.y;
+
+                if (!selection.empty() && selection.past_last >= lineStart && selection.first <= lineEnd)
                 {
-                case EventType::TextInput:
-                    replace_selection_if_needed();
-                    append_text_limited(text, evt.text, limit, multiline, result.changed);
-                    break;
-
-                case EventType::KeyDown:
-                    if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
-                    {
-                        (void)clipboard_write_text(text);
-                    }
-                    else if (evt.ctrl_down && (evt.key == 'X' || evt.key == 'x'))
-                    {
-                        (void)clipboard_write_text(text);
-                        if (!text.empty())
-                        {
-                            text.clear();
-                            result.changed = true;
-                        }
-                        wholeFieldSelected = false;
-                    }
-                    else if (evt.ctrl_down && (evt.key == 'V' || evt.key == 'v'))
-                    {
-                        replace_selection_if_needed();
-                        append_text_limited(text, clipboard_read_text(), limit, multiline, result.changed);
-                    }
-                    else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
-                    {
-                        wholeFieldSelected = true;
-                    }
-                    else if (evt.key == 8 || evt.key == 127) // backspace/del-ish
-                    {
-                        if (wholeFieldSelected)
-                        {
-                            if (!text.empty())
-                            {
-                                text.clear();
-                                result.changed = true;
-                            }
-                            wholeFieldSelected = false;
-                        }
-                        else if (!text.empty())
-                        {
-                            text.pop_back();
-                            result.changed = true;
-                        }
-                    }
-                    else if (evt.key == 27) // ESC
-                    {
-                        activeWidget = nullptr;
-                        if (ctxKey)
-                            g_contextActiveWidgets[ctxKey] = nullptr;
-                        result.active = false;
-                        wholeFieldSelected = false;
-                    }
-                    else if (evt.key == 13) // ENTER
-                    {
-                        if (multiline)
-                        {
-                            replace_selection_if_needed();
-                            if (text.size() < limit) { text.push_back('\n'); result.changed = true; }
-                        }
-                        else
-                        {
-                            result.submitted = true;
-                        }
-                    }
-                    break;
-
-                default:
-                    break;
+                    const std::size_t highlightBegin = (std::max)(selection.first, lineStart);
+                    const std::size_t highlightEnd = (std::min)(selection.past_last, lineEnd);
+                    const float highlightX = drawX
+                        + edit_box_x_for_index(view, lineStart, highlightBegin, kFontScale);
+                    float highlightWidth =
+                        edit_box_x_for_index(view, lineStart, highlightEnd, kFontScale)
+                        - edit_box_x_for_index(view, lineStart, highlightBegin, kFontScale);
+                    if (selection.past_last > lineEnd && highlightEnd == lineEnd)
+                        highlightWidth += space_advance(kFontScale) * 0.75f;
+                    if (highlightWidth > 0.0f)
+                        draw_sprite(
+                            palette.buttonActive,
+                            highlightX,
+                            drawY - 1.0f,
+                            highlightWidth,
+                            baseHeight + 2.0f);
                 }
+
+                draw_text_line(view.substr(lineStart, lineEnd - lineStart), drawX, drawY, kFontScale);
+                if (!multiline || lineEnd >= view.size())
+                    break;
+                lineStart = lineEnd + 1u;
+                ++lineIndex;
+            }
+
+            if (active && g_frame.caretVisible)
+            {
+                const std::size_t caret = (std::min)(widget.control.caret, view.size());
+                const std::size_t caretLineStart = edit_box_line_start(view, caret);
+                std::size_t caretLine = 0u;
+                for (std::size_t index = 0u; index < caretLineStart; ++index)
+                    if (view[index] == '\n')
+                        ++caretLine;
+
+                const float caretX = textX - widget.control.scroll.x
+                    + edit_box_x_for_index(view, caretLineStart, caret, kFontScale);
+                const float caretY = textY - widget.control.scroll.y
+                    + static_cast<float>(caretLine) * lineAdvance;
+                draw_caret(caretX, caretY, (std::min)(contentHeight, baseHeight));
             }
         }
 
@@ -4524,37 +4804,6 @@ namespace epochengine::gui
             menuState.open = true;
             menuState.pos = g_frame.mousePos;
             openedContextMenuThisFrame = true;
-        }
-
-        // Create view after edits.
-        const std::string_view sv{ text };
-
-        {
-            ContentClipScope clip(
-                { pos.x + 1.0f, pos.y + 1.0f },
-                { pos.x + width - 1.0f, pos.y + height - 1.0f });
-
-            if (active && wholeFieldSelected && !text.empty())
-                draw_sprite(palette.buttonActive, textX, textY, contentWidth, contentHeight);
-
-            if (multiline) draw_wrapped_text(sv, textX, textY, contentWidth, kFontScale);
-            else           draw_text_line(sv, textX, textY, kFontScale);
-        }
-
-        if (active && g_frame.caretVisible)
-        {
-            const Vec2 caret = multiline
-                ? compute_caret_position(sv, textX, textY, contentWidth, kFontScale)
-                : Vec2{ textX + measure_text_width(sv, kFontScale), textY };
-
-            const float caretHeight = multiline ? (std::min)(contentHeight, baseHeight) : baseHeight;
-
-            const float caretRight = textX + (std::max)(1.0f, contentWidth) - 1.0f;
-            const float caretX = std::clamp(caret.x, textX, caretRight);
-            const float caretY = std::clamp(caret.y, textY,
-                textY + (std::max)(0.0f, contentHeight - caretHeight));
-
-            draw_caret(caretX, caretY, caretHeight);
         }
 
         if (menuState.open)
@@ -4591,7 +4840,8 @@ namespace epochengine::gui
                 draw_sprite(menuPalette.panelBackground, menuPos.x, menuPos.y + menuHeight - 2.0f, menuWidth, 2.0f);
 
                 g_frame.insideWindow = true;
-                g_frame.windowKey = std::string("edit-box-context-menu-") + std::to_string(reinterpret_cast<std::uintptr_t>(id));
+                g_frame.windowKey = std::string("edit-box-context-menu-")
+                    + std::to_string(reinterpret_cast<std::uintptr_t>(id));
                 g_frame.widgetSerial = 0;
                 g_frame.origin = menuPos;
                 g_frame.windowSize = { menuWidth, menuHeight };
@@ -4601,35 +4851,25 @@ namespace epochengine::gui
 
                 if (button("Select All", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    wholeFieldSelected = !text.empty();
+                    (void)dispatch(gui_lib::TextControlCommand::select_all);
                     menuState.open = false;
                 }
                 if (button("Copy", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    (void)clipboard_write_text(text);
+                    (void)dispatch(gui_lib::TextControlCommand::copy_selection);
                     menuState.open = false;
                 }
                 if (button("Cut", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    (void)clipboard_write_text(text);
-                    if (!text.empty())
-                    {
-                        text.clear();
-                        result.changed = true;
-                    }
-                    wholeFieldSelected = false;
+                    (void)dispatch(gui_lib::TextControlCommand::cut_selection);
                     menuState.open = false;
                 }
                 if (button("Paste", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    if (wholeFieldSelected)
-                    {
-                        text.clear();
-                        wholeFieldSelected = false;
-                    }
-                    append_text_limited(text, clipboard_read_text(), limit, multiline, result.changed);
+                    (void)dispatch(gui_lib::TextControlCommand::paste_text, clipboard_read_text());
                     menuState.open = false;
                 }
+                text = widget.control.text;
 
                 g_frame.cursor = savedCursor;
                 g_frame.origin = savedOrigin;
@@ -4649,14 +4889,10 @@ namespace epochengine::gui
 
     void select_all_text_in_edit_box(std::string& text) noexcept
     {
-        const void* id = static_cast<const void*>(&text);
-        g_textFieldSelectAllStates[id] = true;
-        if (g_frame.ctx)
-            g_contextActiveWidgets[static_cast<const void*>(g_frame.ctx)] = id;
+        g_textFieldSelectAllStates[static_cast<const void*>(&text)] = true;
         g_frame.caretTimer = 0.0f;
         g_frame.caretVisible = true;
     }
-
     [[nodiscard]] static std::size_t line_count_for_text(std::string_view text) noexcept
     {
         if (text.empty())

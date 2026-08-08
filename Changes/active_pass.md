@@ -10,13 +10,12 @@ that expose only what the active build can prove.
 This is the first gate in the two-month playable-2D critical path defined by
 `Engine/docs/engine/capability_tier_architecture.md`.
 
-## Sealed Baseline
+## Release Baseline
 
-The published `v0.88.69` runtime and updater remain accepted and frozen. Do not
-edit updater code or UI, handoff/build scripts, packaging, release metadata,
-tags, or release assets unless the operator explicitly reopens that lane.
-Development-source version metadata may advance independently.
-
+The operator reopened the release lane for `v0.89.01`. Preserve the accepted
+updater implementation and behavior; package the validated source without
+redesigning updater code, handoff/build scripts, or update UI. After the release
+is published, development-source version metadata advances independently.
 Preserve these accepted source contracts:
 
 - normal editor operation owns one live backend; multicontext is diagnostic;
@@ -119,6 +118,21 @@ The working tree contains these current or in-progress foundations:
   spine or claiming unproved native effects;
 - Engine Arcade now validates its canonical cabinet/screen scene nodes, sampled
   render-surface material binding, geometry storage, and built-in scene catalog;
+- World Outliner now owns `World`, `Assets`, and `Scripting` tabs; the old
+  top-level Assets route forwards into the dockable tool surface. Script source
+  uses selection-aware caret, clipboard, focus, drag selection, word movement,
+  and scrolling behavior instead of a whole-field edit flag;
+- EpochGui now owns a reusable primal multi-line text document controller with
+  line indexing, revision/dirty state, find/replace, save acknowledgement, and
+  standalone tests. Embedded and standalone EpochGui source surfaces are
+  synchronized;
+- editor Focus updates every active renderer child context that presents the
+  selected scene, and default standard/sandbox scenes no longer inject the
+  unwanted `StarterCube`;
+- OS AI now supports direct offline `llama-cli` inference as a captured,
+  timeout-bounded child process beside the existing local API lane. Package
+  Manager stages the human-approved Extensions setup plan without starting a
+  server or fetching model weights;
 - EpochGui dependency work adds portable DPI-aware font, image, input,
   rounded-rectangle, toggle, text, layout, docking, popup, panel, and
   floating-window primitives. Font measurement requires explicit logical-pixel

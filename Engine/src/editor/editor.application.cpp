@@ -167,6 +167,13 @@ namespace epochengine
             Workspace
         };
 
+        enum class OutlinerToolTab : unsigned char
+        {
+            World = 0,
+            Assets,
+            Scripting
+        };
+
         using EditorMainSurface = EditorApplicationSurface;
 
         struct SystemsSurfaceState
@@ -501,6 +508,7 @@ namespace epochengine
             bool showConsoleDock{ true };
             bool showAiChat{ true };
             EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
+            OutlinerToolTab outlinerToolTab{ OutlinerToolTab::World };
             bool paneTitleDragActive{ false };
             std::string paneTitleDragRoute{};
             std::string paneTitleDragLabel{};
@@ -3443,10 +3451,24 @@ namespace epochengine
                 }
 
                 const EditorEntity& entity = state.entities[*index];
-                const bool focused = epochengine::previewgrid::focus_camera(
+                bool focused = epochengine::previewgrid::focus_camera(
                     ctx,
                     { focus->target.x, focus->target.y, focus->target.z },
                     focus->radius);
+#if defined(_WIN32)
+                if (auto* manager = core::GetActiveMultiContextManager())
+                {
+                    for (const auto& window : manager->GetWindows())
+                    {
+                        if (!window || !window->context || window->context.get() == ctx)
+                            continue;
+                        focused = epochengine::previewgrid::focus_camera(
+                            window->context.get(),
+                            { focus->target.x, focus->target.y, focus->target.z },
+                            focus->radius) || focused;
+                    }
+                }
+#endif
                 push_editor_log(
                     state,
                     focused
@@ -5929,6 +5951,63 @@ namespace epochengine
             return true;
         }
 
+        [[nodiscard]] bool stage_local_ai_runtime_opt_in(
+            EditorState& editor,
+            const epochengine::package_registry::PackageDescriptor& package)
+        {
+            const std::filesystem::path modelRoot =
+                resolve_editor_path(std::filesystem::path{ epochengine::ai::local_model_root() });
+            const std::filesystem::path packageRoot =
+                modelRoot.parent_path() / "packages" / safe_package_artifact_id(package.id);
+            const std::filesystem::path planPath = packageRoot / "setup.plan.json";
+            const std::filesystem::path sourceRoot = packageRoot / "source";
+            const std::filesystem::path buildRoot = packageRoot / "build";
+            const std::filesystem::path binaryRoot = packageRoot / "bin";
+
+            std::error_code ec;
+            std::filesystem::create_directories(sourceRoot, ec);
+            if (!ec)
+                std::filesystem::create_directories(buildRoot, ec);
+            if (!ec)
+                std::filesystem::create_directories(binaryRoot, ec);
+            if (ec)
+            {
+                editor.packageInstallStatus = "Could not stage executable-local llama.cpp package directories.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            std::ofstream out(planPath, std::ios::binary | std::ios::trunc);
+            if (!out)
+            {
+                editor.packageInstallStatus = "Could not write the llama.cpp setup plan.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
+
+            out
+                << "{\n"
+                << "  \"schema\": \"epoch.local_ai.runtime.plan.v1\",\n"
+                << "  \"package_id\": \"" << editor_json_escape(package.id) << "\",\n"
+                << "  \"package_source\": \"" << editor_json_escape(package.externalSourceRepo) << "\",\n"
+                << "  \"runtime_source\": \"https://github.com/ggml-org/llama.cpp\",\n"
+                << "  \"runtime_license\": \"MIT\",\n"
+                << "  \"source_dir\": \"" << editor_json_escape(sourceRoot.generic_string()) << "\",\n"
+                << "  \"build_dir\": \"" << editor_json_escape(buildRoot.generic_string()) << "\",\n"
+                << "  \"binary_dir\": \"" << editor_json_escape(binaryRoot.generic_string()) << "\",\n"
+                << "  \"model_dir\": \"" << editor_json_escape(modelRoot.generic_string()) << "\",\n"
+                << "  \"network_action\": \"human_approval_required\",\n"
+                << "  \"auto_run\": false,\n"
+                << "  \"server_or_listener\": false,\n"
+                << "  \"status\": \"staged\"\n"
+                << "}\n";
+            out.close();
+
+            editor.packageInstallStatus = "Direct llama.cpp setup plan staged; fetch/build remains human-approved.";
+            editor.packageInstallProgress = 1.0f;
+            push_editor_log(editor, "[package] Wrote local AI runtime plan: " + display_project_path(planPath));
+            return true;
+        }
         [[nodiscard]] bool stage_forest_factory_package_opt_in(
             EditorState& editor,
             const epochengine::package_registry::PackageDescriptor& package)
@@ -6405,15 +6484,56 @@ namespace epochengine
         void render_ai_model_picker(EditorState& editor, float width, std::string_view selectBoxId)
         {
             const float contentWidth = (std::max)(180.0f, width);
+            auto transport = epochengine::ai::current_local_inference_transport();
+            auto directStatus = epochengine::ai::direct_runtime_status();
+
+            gui::property_row("[ai] Runtime", std::string(epochengine::ai::local_inference_transport_name(transport)));
+            gui::property_row("[ai] Client state", epochengine::ai::model_connection_status());
+            gui::property_row("[ai] Discovery", epochengine::ai::model_detection_status());
+
+            if (gui::button("Discover Direct Runtime", { 208.0f, 30.0f }))
+            {
+                directStatus = epochengine::ai::discover_direct_runtime();
+                if (directStatus.ready()
+                    && epochengine::ai::select_direct_runtime(directStatus.executable, directStatus.model))
+                {
+                    transport = epochengine::ai::LocalInferenceTransport::LlamaCppCli;
+                    push_editor_log(editor, "[ai] Direct llama.cpp runtime selected: "
+                        + std::filesystem::path{directStatus.model}.filename().string());
+                }
+                else
+                    push_editor_log(editor, "[ai] " + directStatus.message);
+            }
+            if (gui::button("Use Local API", { 144.0f, 30.0f }))
+            {
+                epochengine::ai::select_openai_compatible_runtime();
+                transport = epochengine::ai::LocalInferenceTransport::OpenAiCompatible;
+                push_editor_log(editor, "[ai] Local OpenAI-compatible runtime selected.");
+            }
+
+            if (gui::button("Install / Configure llama.cpp", { 240.0f, 30.0f }))
+            {
+                editor.selectedPackageId = std::string(epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId);
+                editor.showPackageManagerModal = true;
+                push_editor_log(editor, "[ai] Package Manager opened for the direct llama.cpp runtime helper.");
+            }
+
+            if (transport == epochengine::ai::LocalInferenceTransport::LlamaCppCli)
+            {
+                directStatus = epochengine::ai::direct_runtime_status();
+                gui::property_row("[ai] Executable", directStatus.executable.empty() ? std::string("not found") : directStatus.executable);
+                gui::property_row("[ai] GGUF model", directStatus.model.empty() ? std::string("not found") : directStatus.model);
+                gui::wrapped_label(
+                    "Epoch invokes llama-cli directly as a captured child process. No hidden server or listener is started. Environment overrides: EPOCH_LLAMA_CPP_EXECUTABLE and EPOCH_AI_MODEL_PATH.",
+                    contentWidth);
+                return;
+            }
+
             const auto manifest = epochengine::ai::active_model_manifest();
             auto detectedModels = epochengine::ai::detected_model_names();
-
-            gui::property_row("[model] Chat provider", std::string(epochengine::ai::provider_mode_name(epochengine::ai::current_provider_mode())));
             gui::property_row("[model] Selected model", manifest.display_name.empty() ? std::string("(none selected)") : manifest.display_name);
             gui::property_row("[model] Endpoint", manifest.endpoint);
             gui::property_row("[model] API route", "/v1/models + /v1/chat/completions");
-            gui::property_row("[model] Client state", epochengine::ai::model_connection_status());
-            gui::property_row("[ai] Model discovery", epochengine::ai::model_detection_status());
 
             if (gui::button("Scan Local OpenAI Models", { 240.0f, 30.0f }))
             {
@@ -6428,7 +6548,7 @@ namespace epochengine
             if (detectedModels.empty())
             {
                 gui::wrapped_label(
-                    "No chat model is selected. Start LM Studio, Ollama, or another local OpenAI-compatible endpoint, scan models, then choose the exact model Epoch should call.",
+                    "No API model is selected. Start an operator-approved OpenAI-compatible local endpoint, scan once, then choose the exact model Epoch should call.",
                     contentWidth);
                 return;
             }
@@ -6441,7 +6561,7 @@ namespace epochengine
             const std::string selectedModel = epochengine::ai::active_model_name();
             const auto selectResult = gui::select_box(gui::SelectBoxOptions{
                 .id = selectBoxId,
-                .placeholder = "Choose local chat model",
+                .placeholder = "Choose local API model",
                 .selected = selectedModel.empty() ? std::string_view{} : std::string_view{ selectedModel },
                 .options = modelViews,
                 .size = { contentWidth, 30.0f },
@@ -6453,14 +6573,13 @@ namespace epochengine
                 const auto& modelId = detectedModels[*selectResult.selected_index];
                 if (epochengine::ai::select_active_model(modelId))
                 {
-                    push_editor_log(editor, "[ai] Selected local model: " + modelId + " (" + epochengine::ai::model_connection_status() + ")");
-                    push_editor_log(editor, "[ai] OS AI chat will use " + modelId + " through the local OpenAI-compatible endpoint.");
+                    push_editor_log(editor, "[ai] Selected local API model: " + modelId);
+                    push_editor_log(editor, "[ai] " + epochengine::ai::model_connection_status());
                 }
                 else
                     push_editor_log(editor, "[ai] Could not select model: " + modelId);
             }
         }
-
         void render_ai_control_status_panel(
             const EditorState& editor,
             const AiReviewGateStatus& status,
@@ -7848,11 +7967,14 @@ namespace epochengine
                 push_editor_log(editor, "[editor] 2D Scene/UI opened with the locked Canvas2D camera.");
                 break;
             case EditorMainSurface::Assets:
+                editor.mainSurface = EditorMainSurface::Scene;
+                editor.showOutliner = true;
                 editor.showInspector = true;
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
-                push_editor_log(editor, "[assets] Asset Browser opened.");
+                editor.outlinerToolTab = OutlinerToolTab::Assets;
+                push_editor_log(editor, "[assets] World Outliner opened on the Assets tool tab.");
                 break;
             case EditorMainSurface::Project:
                 editor.showInspector = true;
@@ -8239,7 +8361,6 @@ namespace epochengine
         draw_surface_tab(EditorMainSurface::Game2D, "GUI Canvas", 116.0f);
         draw_surface_tab(EditorMainSurface::ForestFactory, "Forest Factory", 136.0f);
         draw_surface_tab(EditorMainSurface::PlantLab, "Plant Lab", 112.0f);
-        draw_surface_tab(EditorMainSurface::Assets, "Assets", 104.0f);
         draw_surface_tab(EditorMainSurface::Timeline, "Video", 92.0f);
         draw_surface_tab(EditorMainSurface::Project, "Project", 112.0f);
         draw_surface_tab(EditorMainSurface::AISandbox, "AI", 68.0f);
@@ -8471,6 +8592,16 @@ namespace epochengine
             .show_scrollbar = true
         });
         const float outlinerWidth = (std::max)(150.0f, outliner_size.x - 18.0f);
+        const std::array outlinerTabs{
+            gui::SegmentedButtonSpec{ .label = "World", .width = 72.0f, .active = editor.outlinerToolTab == OutlinerToolTab::World },
+            gui::SegmentedButtonSpec{ .label = "Assets", .width = 76.0f, .active = editor.outlinerToolTab == OutlinerToolTab::Assets },
+            gui::SegmentedButtonSpec{ .label = "Scripting", .width = 92.0f, .active = editor.outlinerToolTab == OutlinerToolTab::Scripting }
+        };
+        if (const auto selectedTab = gui::tab_bar(outlinerTabs, 26.0f, 2.0f))
+            editor.outlinerToolTab = static_cast<OutlinerToolTab>(*selectedTab);
+
+        if (editor.outlinerToolTab == OutlinerToolTab::World)
+        {
         gui::label(std::string("Scene: ") + editor.activeWorld);
         gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
         gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
@@ -8542,6 +8673,93 @@ namespace epochengine
                 select_editor_entity(editor, i);
                 push_editor_log(editor, std::string("[select] ") + entity.name);
             }
+        }
+        }
+        else if (editor.outlinerToolTab == OutlinerToolTab::Assets)
+        {
+            gui::label(std::string("Project Assets: ") + editor.projectName);
+            gui::property_row("Root", display_project_path(editor.projectRoot), 64.0f);
+            const auto entries = collect_project_browser_entries(editor.projectRoot);
+            gui::property_row("Visible", std::to_string(entries.size()), 64.0f);
+            for (const auto& entry : entries)
+            {
+                const bool selected = editor.selectedProjectFile == entry.path;
+                if (gui::button_selected(entry.label, { outlinerWidth, 27.0f }, selected))
+                {
+                    editor.selectedProjectFile = entry.path;
+                    editor.selectedAssetPath = entry.path;
+                    push_editor_log(editor, "[assets] Selected " + entry.path);
+                    if (entry.kind == "SCRIPT")
+                    {
+                        editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
+                        (void)load_script_source_editor(editor, entry.path, false);
+                        editor.outlinerToolTab = OutlinerToolTab::Scripting;
+                    }
+                }
+            }
+            gui::property_row(
+                "Selected",
+                editor.selectedProjectFile.empty() ? std::string("(none)") : display_project_path(editor.selectedProjectFile),
+                64.0f);
+        }
+        else
+        {
+            const std::string activeSource =
+                editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
+            gui::label(std::string("Script: ") + editor.activeScript);
+            gui::property_row("Source", display_project_path(activeSource), 64.0f);
+            (void)gui::edit_box(editor.newScriptName, { outlinerWidth, 28.0f }, 64, false);
+
+            const std::array scriptActions{
+                gui::InlineButtonSpec{ .label = "Create", .width = 76.0f },
+                gui::InlineButtonSpec{ .label = "Save", .width = 68.0f },
+                gui::InlineButtonSpec{ .label = "Build", .width = 72.0f }
+            };
+            if (const auto action = gui::inline_button_row(scriptActions, 26.0f, 4.0f))
+            {
+                if (*action == 0)
+                {
+                    create_project_script_starter(editor);
+                }
+                else if (*action == 1)
+                {
+                    (void)save_script_source_editor(editor);
+                }
+                else
+                {
+                    if (editor.scriptEditorDirty)
+                        (void)save_script_source_editor(editor);
+                    const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
+                    editor.scriptBuildStatus = build.summary;
+                    push_editor_log(
+                        editor,
+                        std::string("[script] ")
+                            + (build.succeeded ? "Validation passed. " : "Validation failed. ")
+                            + build.summary);
+                }
+            }
+
+            const auto scripts = collect_script_browser_entries(editor.projectRoot);
+            for (const auto& entry : scripts)
+            {
+                const bool selected = editor.scriptEditorPath == entry.path;
+                if (gui::button_selected(entry.label, { outlinerWidth, 26.0f }, selected))
+                {
+                    editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
+                    editor.selectedProjectFile = entry.path;
+                    (void)load_script_source_editor(editor, entry.path, false);
+                }
+            }
+
+            if (editor.scriptEditorPath.empty() && std::filesystem::exists(std::filesystem::path{ activeSource }))
+                (void)load_script_source_editor(editor, activeSource, false);
+            draw_script_source_editor(
+                editor,
+                editor.scriptEditorPath.empty() ? activeSource : editor.scriptEditorPath,
+                outlinerWidth,
+                220.0f);
+            gui::wrapped_label(editor.scriptEditorStatus, outlinerWidth);
+            gui::wrapped_label(editor.scriptBuildStatus, outlinerWidth);
         }
         gui::end_scroll_area();
         gui::end_window();
@@ -11287,6 +11505,11 @@ namespace epochengine
                 const std::string safeId = safe_package_artifact_id(package.id);
                 return resolve_editor_path(std::filesystem::path{ epochengine::ai::local_model_root() }) / safeId / "download.plan.json";
             };
+            auto local_ai_runtime_plan_path = [&]()
+            {
+                return resolve_editor_path(std::filesystem::path{ epochengine::ai::local_model_root() })
+                    .parent_path() / "packages" / "local_ai_llama_cpp_runtime" / "setup.plan.json";
+            };
 
             auto package_installed = [&](const epochengine::package_registry::PackageDescriptor& package)
             {
@@ -11296,6 +11519,8 @@ namespace epochengine
                     return forestFactoryStaged;
                 if (package.kind == epochengine::package_registry::PackageKind::ModelAsset)
                     return path_exists(model_download_plan_path(package));
+                if (package.id == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId)
+                    return path_exists(local_ai_runtime_plan_path());
                 return false;
             };
 
@@ -11383,6 +11608,12 @@ namespace epochengine
                 if (package.kind == epochengine::package_registry::PackageKind::ModelAsset)
                 {
                     (void)stage_model_package_opt_in(editor, package);
+                    return;
+                }
+
+                if (package.id == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId)
+                {
+                    (void)stage_local_ai_runtime_opt_in(editor, package);
                     return;
                 }
 

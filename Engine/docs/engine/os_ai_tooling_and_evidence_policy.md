@@ -53,6 +53,30 @@ Apache-2.0 license text, upstream NOTICE files when present, source URLs,
 attribution metadata, and any modification/quantization notice before model
 weights are redistributed.
 
+## Local Inference Transports
+
+Epoch exposes two explicit operator-selected local transports behind the same
+engine AI evidence/capture service:
+
+- **Local OpenAI-compatible API** keeps the existing `/v1/models` and
+  `/v1/chat/completions` client for operator-started LM Studio, Ollama, or other
+  compatible providers.
+- **Direct llama.cpp CLI** discovers `llama-cli` plus one `.gguf` model, invokes
+  it as a captured child process with an argument vector, bounds captured
+  output, applies a timeout, and requests offline single-turn operation. It does
+  not start `llama-server`, bind a port, or interpolate a shell command.
+
+Direct discovery checks `EPOCH_LLAMA_CPP_EXECUTABLE` and
+`EPOCH_AI_MODEL_PATH`, then executable-local
+`cache/packages/local_ai_llama_cpp_runtime/` and `cache/models/`. Selection is
+persisted in executable-local cache only. A discovered executable or model is
+inventory; both must validate before direct mode initializes.
+
+Package Manager may stage the `local_ai_llama_cpp_runtime` setup plan from
+`Autodidac/EpochEngineExtensions`. Staging creates directories and policy
+evidence only. Fetching or compiling the MIT-licensed llama.cpp source remains
+a human-approved action, the server/curl build targets stay disabled, and every
+GGUF model license must be reviewed separately.
 ## Storage rules
 
 Repo-safe:

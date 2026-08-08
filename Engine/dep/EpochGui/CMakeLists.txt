@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.88.75 LANGUAGES CXX)
+project(EpochGui VERSION 0.89.01 LANGUAGES CXX)
 
 option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
 option(EPOCHGUI_ENABLE_INPUT "Build the optional EpochGui fallback input adapter module." OFF)
@@ -54,6 +54,7 @@ set(EPOCHGUI_PUBLIC_HEADERS
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/panel_host.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/popup_layout.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/text_control.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/text_editor.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/version.hpp"
 )
 
@@ -65,6 +66,7 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/panel_host.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_control.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_editor.cpp"
 )
 
 if(EPOCHGUI_ENABLE_ROUNDED_RECT)

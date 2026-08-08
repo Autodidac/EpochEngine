@@ -176,6 +176,7 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_control.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_editor.cpp" />
   </ItemGroup>
   <ItemGroup Condition="'$(EpochGuiEnableRoundedRect)'=='true'">
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.rounded_rect.ixx" />
@@ -194,6 +195,7 @@
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\panel_host.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\popup_layout.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\text_control.hpp" />
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\text_editor.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\version.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
