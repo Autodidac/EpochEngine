@@ -43,7 +43,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
 #   include <GLFW/glfw3.h>

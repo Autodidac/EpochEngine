@@ -47,8 +47,8 @@ export module software.textures;
 
 import atlas.texture;        // TextureAtlas
 import software.state;   // SoftRendState
-import engine.platform;    // epochengine
-import engine.input;       // epochengine::input
+import platform.engine;    // epochengine
+import input.engine;       // epochengine::input
 //import engine.config; // epochengine::input
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)

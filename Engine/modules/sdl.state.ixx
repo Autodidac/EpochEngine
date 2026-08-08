@@ -38,12 +38,12 @@ module;
 
 #include <include/engine.config.hpp> // for EPOCH_USING_RAYLIB
 
-//#include "engine.hpp" // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+//#include "epoch.engine.hpp" // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
 
 export module sdl.state;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 
-import engine.platform;
+import platform.engine;
 
 import core.timer;
 import context.window;

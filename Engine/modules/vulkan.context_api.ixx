@@ -40,6 +40,8 @@
 
 module;
 
+#include <compare>
+
 #include <functional>
 #include <memory>
 

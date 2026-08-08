@@ -32,7 +32,7 @@
 // It is not a replacement for exceptions or error handling, but rather a tool to catch programming errors and logic violations during development and debugging.
 module;
 
-#include "../include/_epoch.stl_types.hpp"
+#include "../include/core.stl_types.hpp"
 
 export module core.assert;
 

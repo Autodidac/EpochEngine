@@ -21,6 +21,10 @@ architecture. It does not create a second design.
   together.
 - Source documents and semantic history are authoritative. Compiled artifacts
   are reproducible. Physical caches are disposable.
+- First-party C++ ownership follows `source_naming_architecture.md`; source moves
+  preserve one-dot module/file identity and update every build surface together.
+- Project Save, materialize, Build, and Run decisions flow through
+  `project.lifecycle` rather than widget-local state machines.
 - OpenGL proves portable techniques first without becoming engine architecture.
 - Vulkan, DirectX, SDL, SFML, Raylib, mobile, and advanced effects stay aligned
   but cannot consume the 2D delivery schedule unless shared contracts regress.
@@ -139,7 +143,8 @@ authentication, content-derived logical artifact revisions, Canvas2D CPU
 resource binding, optional residency acquisition, raster-to-residency
 presentation staging, OpenGL native texture hooks, the primary-context final
 compositor, and immutable semantic editor scene-slot routing are build-proven.
-Serialized artifact reading, capability-derived admission, project-texture
+Serialized artifact byte serialization/reading is build-proven. Project Library
+persistence, capability-derived admission, project-texture
 scene binding, native pixel
 comparison, sRGB/compressed/mip-chain execution, secondary GL share-group
 adapters, and built-project presentation remain delivery work.

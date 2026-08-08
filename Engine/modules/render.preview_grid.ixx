@@ -47,7 +47,7 @@ module;
 
 export module render.preview_grid;
 
-import engine.visuals;
+import visuals.engine;
 import render.arcade;
 import render.lighting;
 

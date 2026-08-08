@@ -74,7 +74,7 @@ module;
 export module sdl.context;
 
 // Project
-import engine.platform;              // fine, but does NOT replace windows.h for this TU
+import platform.engine;              // fine, but does NOT replace windows.h for this TU
 import core.context;
 import context.window;
 import context.commandqueue;
@@ -89,8 +89,8 @@ import context.multiplexer;   // MakeDockable(...)
 import core.commandline;
 import core.logger;
 import image.writer;
-import engine.diagnostics;
-import engine.telemetry;
+import diagnostics.engine;
+import telemetry.engine;
 import render.arcade;
 import render.preview_grid;
 import package.registry;

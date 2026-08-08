@@ -9,7 +9,7 @@ module;
 
 module software.context;
 
-import spritehandle;
+import sprite.handle;
 import atlas.texture;
 import software.state;
 

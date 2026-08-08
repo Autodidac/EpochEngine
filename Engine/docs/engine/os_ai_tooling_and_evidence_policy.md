@@ -300,7 +300,7 @@ evidence remain the final authority.
 
 - sync with `origin/main` when possible
 - keep unrelated dirt out of the pass
-- bump `Engine/modules/engine.version.ixx`
+- bump `Engine/modules/epoch.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
 - document user-visible behavior in README/changelog/runtime docs

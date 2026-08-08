@@ -58,7 +58,7 @@ module;
 //#include "atexture.hpp"
 export module sdl.textures;
 
-import engine.platform;
+import platform.engine;
 //import engine.config;
 
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
@@ -66,8 +66,8 @@ import engine.platform;
 import atlas.manager;
 import atlas.texture;
 import image.loader;
-import texture;
-import spritehandle;
+import texture.core;
+import sprite.handle;
 import core.logger;
 
 import sdl.renderer;

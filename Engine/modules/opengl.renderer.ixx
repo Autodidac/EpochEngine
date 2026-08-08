@@ -49,8 +49,8 @@ module;
 
 export module opengl.renderer;
 
-import engine.platform;
-import engine.cli;
+import platform.engine;
+import epoch.cli;
 import core.context;
 import core.logger;
 
@@ -59,7 +59,7 @@ import opengl.state;
 import opengl.quad;
 import opengl.textures;
 
-import spritehandle;
+import sprite.handle;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 

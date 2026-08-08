@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-//main.cpp - the console demonstration of Epoch engine / Epoch engine
+//epoch.main.cpp - the console demonstration of Epoch engine / Epoch engine
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -38,15 +38,15 @@
 #  endif
 #  include <windows.h>
 #endif
-//#include "engine.hpp"
+//#include "epoch.engine.hpp"
 #include <chrono>
 #include <filesystem>
 #include <source_location>
 #include <string_view>
 #include <thread>
 #include <vector>
-#include "../../include/engine.hpp"
-//#include "engine.hpp"
+#include "../../include/epoch.engine.hpp"
+//#include "epoch.engine.hpp"
 
 import epoch.engine; // import the module
 import core.logger;

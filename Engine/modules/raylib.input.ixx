@@ -30,7 +30,7 @@
  ***********************************************/
 /**************************************************************
  *   epochengine - Modular C++ Framework
- *   Raylib Input Bridge
+ *   Raylib Input Adapter
  *
  *   SPDX-License-Identifier: LicenseRef-MIT-NoSell
  **************************************************************/
@@ -47,7 +47,7 @@ export module raylib.input;
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 import raylib.api;
-import engine.input;
+import input.engine;
 
 namespace epochengine::raylibcontext
 {

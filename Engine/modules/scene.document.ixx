@@ -21,7 +21,7 @@ export module scene.document;
 import authoring.document;
 import render.lighting;
 import scene.tier0;
-import scenesnapshot;
+import scene.snapshot;
 import terrain.foundation;
 
 export namespace epochengine::authoring::scene

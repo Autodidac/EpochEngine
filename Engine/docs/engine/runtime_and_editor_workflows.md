@@ -230,7 +230,7 @@ the same engine-owned path.
   Plant Lab/package outputs and places vegetation into project-owned scenes
 - `editor.scene.cpp` owns ordinary project/script profiles and project
   serialization, routing application projects through the application registry
-- `editor.cpp` is the live shell and seed-to-runtime adapter. It must enforce
+- `editor.application.cpp` is the live shell and seed-to-runtime adapter. It must enforce
   application policy and must not recreate dedicated scene generation
 - default editor seed profiles should stay lean. Sandbox, Project Hub, and
   software/tool startup should keep only the workspace/root, camera, and light
@@ -538,10 +538,10 @@ the same engine-owned path.
 - the target GUI shape is MSVC/IDE-like: visible context panes, ordinary
   close/resize affordances, modal/menu layers over scene views, and no duplicate
   console-only control surfaces for editor-critical actions
-- `engine.gui` is the reusable engine GUI library layer. Primitive widgets
+- `gui.engine` is the reusable engine GUI library layer. Primitive widgets
   such as tabs, dropdown/select boxes, text inputs, scroll areas, image views,
   window chrome, modal layers, and future context menus should live there before
-  editor workspaces consume them. `editor.cpp` chooses the active workspace and
+  editor workspaces consume them. `editor.application.cpp` chooses the active workspace and
   feeds domain data; it should not own generic widget behavior.
 - The detailed GUI library contract is tracked in
   `Engine/docs/engine/gui_library_architecture.md`; use that before adding new
@@ -657,13 +657,13 @@ Current source ownership:
 
 | Responsibility | Primary files/modules |
 | --- | --- |
-| Editor command/result payloads | `Engine/modules/editor.ixx` |
-| Toolbar context combobox and visible status | `Engine/src/editor.cpp` |
-| Editor state capture/restore for handoff | `Engine/src/editor.cpp` |
-| Session loop, live context discovery, handoff fallback | `Engine/src/engine.cpp` |
+| Editor command/result payloads | `Engine/modules/editor.core.ixx` |
+| Toolbar context combobox and visible status | `Engine/src/editor/editor.application.cpp` |
+| Editor state capture/restore for handoff | `Engine/src/editor/editor.application.cpp` |
+| Session loop, live context discovery, handoff fallback | `Engine/src/epoch.engine_legacy.cpp` |
 | Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/engine.context.host.*.cpp` |
 | Reusable GUI layout state | `Engine/include/gui`, `Engine/src/epochgui`, `Engine/dep/EpochGui` |
-| Engine GUI adapter/render/input bridge | `Engine/modules/engine.gui.ixx`, `Engine/src/engine.gui.cpp` |
+| Engine GUI adapter/render/input bridge | `Engine/modules/gui.engine.ixx`, `Engine/src/epochgui/gui.engine.cpp` |
 
 Context switching acceptance:
 
@@ -735,7 +735,7 @@ Floating/routed GUI acceptance:
 When this area is split across agents, keep file ownership disjoint: one agent
 may work on editor UI/status, another on session/window host code, another on
 `EpochGui` primitives/build metadata, and another on docs/build evidence. Do
-not run two workers against `editor.cpp` or `engine.cpp` simultaneously unless
+not run two workers against `editor.application.cpp` or `epoch.engine_legacy.cpp` simultaneously unless
 the write ranges are explicitly isolated.
 
 ## Naming and structure direction
@@ -752,7 +752,7 @@ the write ranges are explicitly isolated.
   should move toward consistent professional ownership instead of growing more
   orphan naming
 - `source_shape_audit.md` is the current guard for config/header/module/backend
-  cleanup. Use it before touching compatibility headers, bridge headers, Perf
+  cleanup. Use it before touching compatibility headers, backend adapters, Perf
   Manager integration, or backend file splits.
 
 ## Time-system spine
@@ -835,7 +835,7 @@ the write ranges are explicitly isolated.
 - Streaming-save profile-change plans are review-first. They let the Video
   Editor show what an interval/frame/manual/keyed profile transition would
   change before any dropdown mutates live save configuration.
-- `engine.input` is the shared input profile spine. The default editor profile
+- `input.engine` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package
   install actions with modifier-aware key bindings and mouse bindings. GUI

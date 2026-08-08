@@ -47,7 +47,7 @@ export module software.renderer;
 
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 
-import engine.platform;
+import platform.engine;
 
 // Provides TexturePtr / Texture (with sample(), width/height).
 // If your textures unit is named differently, change this import to match.

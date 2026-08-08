@@ -49,13 +49,13 @@ module;
 
 export module atlas.manager;
 
-import engine.platform;
+import platform.engine;
 
 import sprite.pool;
 import atlas.texture;
-import spriteregistry;
-import spritehandle;
-import texture;
+import sprite.registry;
+import sprite.handle;
+import texture.core;
 import context.type;
 import core.logger;
 

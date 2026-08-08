@@ -47,8 +47,8 @@ module;
 
 export module scene.persistence;
 
-import scenesnapshot;
-import sceneserializer;
+import scene.snapshot;
+import scene.serializer;
 import platform.filesystem;
 
 namespace epochengine::scene::persistence::detail

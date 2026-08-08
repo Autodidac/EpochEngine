@@ -42,7 +42,7 @@ export module raylib.renderer;
 import raylib.state;
 import raylib.textures;
 import atlas.texture;
-import spritehandle;
+import sprite.handle;
 import raylib.api;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)

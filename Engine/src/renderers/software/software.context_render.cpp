@@ -14,9 +14,9 @@ import core.context;
 import core.commandline;
 import context.commandqueue;
 import software.state;
-import engine.diagnostics;
-import engine.gui;
-import engine.telemetry;
+import diagnostics.engine;
+import gui.engine;
+import telemetry.engine;
 import render.preview_grid;
 
 namespace epochengine::anativecontext

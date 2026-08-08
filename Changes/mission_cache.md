@@ -1,4 +1,13 @@
 # Mission Cache
+- Preserve the engine-wide one-dot C++ naming contract and run the naming
+  validator with every source move; do not reintroduce generic bridge or flat
+  root ownership.
+- Continue the temporal texture lane by persisting `asset.texture_artifact`
+  bytes under the project Library, rebuilding them from authoring source after
+  cache loss, and admitting formats through capability evidence.
+- Finish project lifecycle integration so Save/materialize/Build/Run and child
+  process focus share generation-safe evidence in editor and generated projects.
+
 
 This file preserves durable operator intent and accepted constraints. The active
 gate is `Changes/active_pass.md`; scheduling is `Changes/roadmap.md`; architecture
@@ -53,14 +62,14 @@ release history belong in the changelog/archive, not architecture docs.
   offscreen/final-compose planning, sprite material/alpha/sampler declarations,
   stable ordering, bounded quad batches, tile set/layer/chunk validation,
   immutable submissions, diagnostics, and project settings.
-- `render.canvas2d.cpu` now owns deterministic `T0-CPU` reference raster,
+- `render.canvas2d_cpu` now owns deterministic `T0-CPU` reference raster,
   explicit RGBA8 texture/clip bindings, fixed-point triangle coverage,
   nearest/linear sampling, alpha composition, final presentation compose,
   bounded metrics, image hashes, and staged failure diagnostics.
 - `render.texture.residency` now owns bounded generation-checked physical
   records, logical-artifact reuse, priority/LRU eviction, pinning, upload
   budgets, backend epochs, recreation, metrics, and staged failure proof.
-- `render.canvas2d.presentation` now connects complete CPU canvas output to that
+- `render.canvas2d_presentation` now connects complete CPU canvas output to that
   cache and an explicit backend-owned presentation packet; the primary OpenGL
   compositor is compiled and build-proven.
 - Runtime project asset identity now authenticates compiled texture source
@@ -98,9 +107,9 @@ release history belong in the changelog/archive, not architecture docs.
 - Logical texture identity never contains descriptor slots, atlas coordinates,
   sparse mappings, GPU handles, upload state, or preview targets.
 - Project asset identity is supplied separately from compiled content identity.
-  `project.asset.registry` now owns deterministic project/asset keys, portable
+  `project.asset_registry` now owns deterministic project/asset keys, portable
   path authentication, generation-checked lifetime, and accepted source
-  revision. `project.texture.resources` validates that revision and the full
+  revision. `project.texture_resources` validates that revision and the full
   artifact before binding CPU resource sets or requesting residency.
 - Logical artifact revision is content-derived rather than copied from source
   edit sequence. Equivalent content reconstructed at a later sequence therefore
@@ -193,7 +202,7 @@ release history belong in the changelog/archive, not architecture docs.
 - EpochGui is the reusable portable C++23 module/static-library layer.
 - EpochGui owns backend-neutral text, font, image, input, selection, layout,
   popup, progress, rounded rectangle, panel, docking, and floating-window state.
-- `engine.gui` owns engine input translation, theme/font state, clipping, batches,
+- `gui.engine` owns engine input translation, theme/font state, clipping, batches,
   top-layer replay, renderer drawing, native hosts, and project integration.
 - Games, mobile, console, generated runtime, and headless builds can retain only
   the portable controls/artifact readers they need.

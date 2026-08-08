@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.88-1F7A4C?style=for-the-badge" alt="Current development source v0.88.88" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.89-1F7A4C?style=for-the-badge" alt="Current development source v0.88.89" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.88.69-2C6A8A?style=for-the-badge" alt="Published stable release v0.88.69" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.88.88`; the published Windows/Linux runtime
+- Active development source is `v0.88.89`; the published Windows/Linux runtime
   baseline remains `v0.88.69`.
 - The runtime release and updater are sealed. Source development advances
   independently without changing packaged-version defaults, release assets, or
@@ -96,7 +96,7 @@ For engine/tooling developers:
   submissions, final-compose plans, bounded diagnostics, contract tests, and a
   deterministic `T0-CPU` reference raster with texture/clip bindings, fixed-point
   coverage, sampling/blend policy, final composition, metrics, and image hashes.
-  `render.canvas2d.presentation` now validates full-frame identity, derives
+  `render.canvas2d_presentation` now validates full-frame identity, derives
   content digests from actual pixel bytes, resolves CPU raster output through
   `render.texture.residency`, and dispatches an explicit native presentation
   packet without making physical state canonical. The cache resolves stable

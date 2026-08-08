@@ -66,10 +66,10 @@ ship.
 - **Temporal texture compilation boundary**: `authoring.texture` compiles sparse
   layer documents into deterministic owning RGBA8 mip artifacts and validates
   identity, dimensions, per-mip content, aggregate bytes, and payload digest.
-  `authoring.texture.artifact` owns the always-built artifact schema and
+  `asset.texture_artifact` owns the always-built artifact schema and
   validator; `render.texture.artifact` maps sealed linear RGBA8 mip 0 into the
-  shared standalone residency cache. `project.asset.registry` and
-  `project.texture.resources` authenticate in-memory project/source/artifact
+  shared standalone residency cache. `project.asset_registry` and
+  `project.texture_resources` authenticate in-memory project/source/artifact
   identity, own bounded CPU bindings, and optionally acquire residency without
   authoring UI. Serialized artifact reading and capability-derived admission remain. sRGB-native storage, compression, whole mip-chain upload, atlas,
   bindless, sparse, and streaming execution remain fail-closed or planned.
@@ -77,11 +77,11 @@ ship.
   pixel-aware camera/viewport mapping, stable sprite identity, logical texture
   materials, deterministic batching, tile descriptors, immutable submissions,
   offscreen targets, final composition, and bounded diagnostics.
-  `render.canvas2d.cpu` provides the deterministic `T0-CPU` reference path with
+  `render.canvas2d_cpu` provides the deterministic `T0-CPU` reference path with
   RGBA8 resources, clip bindings, fixed-point coverage, nearest/linear sampling,
   alpha modes, presentation composition, metrics, hashes, and staged contract
   diagnostics. OpenGL now supplies context-guarded native texture allocate,
-  upload, readiness, and destruction hooks. `render.canvas2d.presentation`
+  upload, readiness, and destruction hooks. `render.canvas2d_presentation`
   verifies complete raster/frame identity, full byte-derived content identity,
   residency acquisition, explicit image semantics, and native surface bounds.
   `opengl.canvas2d` provides a compiled primary-context final compositor with
@@ -157,7 +157,7 @@ storage growth are proven.
   paths. Persistent imported asset IDs and explicit rename/move migration are still
   required before project-browser moves can preserve logical identity.
 - The always-built compiled texture schema is still named
-  `authoring.texture.artifact` even though it has no authoring UI/history
+  `asset.texture_artifact` even though it has no authoring UI/history
   dependency. Runtime-oriented module/namespace ownership remains cleanup before
   the product API is frozen.
 - Package installation, active downloaded content, servers/listeners, and native

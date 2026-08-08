@@ -4,8 +4,9 @@
  ************************************************/
 module project.contracts;
 
-import project.asset.registry;
-import project.texture.resources;
+import project.asset_registry;
+import project.lifecycle;
+import project.texture_resources;
 
 namespace epochengine::project_contracts
 {
@@ -23,6 +24,14 @@ namespace epochengine::project_contracts
             return {
                 false,
                 project_textures::texture_resource_contract_failure_name(textures)};
+        }
+        const auto lifecycle =
+            project_lifecycle::runtime_contract_failure();
+        if (lifecycle != project_lifecycle::ContractFailure::none)
+        {
+            return {
+                false,
+                project_lifecycle::contract_failure_name(lifecycle)};
         }
         return {true, "pass"};
     }

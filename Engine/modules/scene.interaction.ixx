@@ -19,7 +19,7 @@ module;
 
 export module scene.interaction;
 
-import scenesnapshot;
+import scene.snapshot;
 import render.ray;
 
 export namespace epochengine::scene_interaction

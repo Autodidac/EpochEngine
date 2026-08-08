@@ -35,6 +35,8 @@
 
 module;
 
+#include <compare>
+
 #include <cstdint>
 #include <optional>
 #include <vector>

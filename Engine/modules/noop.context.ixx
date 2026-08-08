@@ -42,7 +42,7 @@ export module noop.context;
 
 import context.commandqueue;
 import core.context;
-import engine.diagnostics;
+import diagnostics.engine;
 
 namespace epochengine::noopcontext
 {

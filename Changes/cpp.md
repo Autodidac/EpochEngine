@@ -30,13 +30,13 @@ After that, you are in the named module.
 module;
 
 #if defined(_WIN32)
-#include "framework.hpp"
+#include "platform.framework.hpp"
 #endif
 #include <string>
 
 export module epoch.example;
 
-import engine.platform;
+import platform.engine;
 
 export namespace epoch::example
 {

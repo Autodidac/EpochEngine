@@ -43,7 +43,7 @@ the normal Linux updater or release lane.
 Release optimization remains target-owned by CMake. Current Clang Release
 builds use `-O3` generally, with narrowly documented source-file overrides only
 for reproducible compiler defects. LLVM 22.1.8 currently requires
-`core.commandline.ixx` and `net.ixx` at `-O0` because its CGSCC/inliner and
+`core.commandline.ixx` and `network.core.ixx` at `-O0` because its CGSCC/inliner and
 `globalopt` passes crash on those modules; this does not disable optimization
 for updater, editor, runtime, renderer, or other engine code.
 
@@ -100,7 +100,7 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - sync with `origin/main` if the local branch has drifted
 - keep unrelated dirt out of the commit
 - commit only stable, verified changes
-- bump `Engine/modules/engine.version.ixx`
+- bump `Engine/modules/epoch.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
 - rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
@@ -214,7 +214,7 @@ Keep these identities separate:
 
 Version numbers belong in:
 
-- `Engine/modules/engine.version.ixx`
+- `Engine/modules/epoch.version.ixx`
 - README/public version badges
 - changelog/release notes
 - release tags

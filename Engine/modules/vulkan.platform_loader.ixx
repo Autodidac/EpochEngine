@@ -30,11 +30,13 @@
  ***********************************************/
 module;
 
+#include <compare>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 
 #include <cstdlib>
 
@@ -50,7 +52,7 @@ module;
 #define _WINSOCKAPI_
 #endif
 
-#include <../src/framework.hpp>  // include Windows headers
+#include <../src/platform.framework.hpp>  // include Windows headers
 #else
 #include <dlfcn.h>
 #endif

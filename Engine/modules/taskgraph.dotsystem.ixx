@@ -52,9 +52,9 @@ export module taskgraph.dotsystem;
 // Engine dependencies (header units / modules)
 // ------------------------------------------------------------
 
-import mpmcboundedqueue;   // provides epochengine::MPMCQueue
-import engine.systems;     // provides epochengine::Task
-import epoch.systems;
+import core.mpmc_bounded_queue;   // provides epochengine::MPMCQueue
+import systems.task;     // provides epochengine::Task
+import systems.registry;
 import core.logger;
 
 // ------------------------------------------------------------

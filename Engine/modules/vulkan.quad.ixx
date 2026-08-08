@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include <compare>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif

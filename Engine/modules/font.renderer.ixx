@@ -49,12 +49,12 @@ module;
 
 export module font.renderer;
 
-import spritehandle;
+import sprite.handle;
 
 // import the modules that define these types
 import core.logger;
 import atlas.texture;
-import texture;
+import texture.core;
 
 namespace epochengine::font
 {

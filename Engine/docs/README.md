@@ -74,6 +74,8 @@ not set independent product priorities:
 - `engine/voxel_planetary_package_track.md`
 - `engine/os_ai_tooling_and_evidence_policy.md`
 - `engine/research_import_and_promotion.md`
+- `engine/source_naming_architecture.md` - canonical C++ filename, module,
+  owner, directory, and temporal-layer naming contract;
 - `engine/source_shape_audit.md`
 - `../ai/README.md`
 

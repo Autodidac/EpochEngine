@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -38,7 +38,7 @@ export module directx.context;
 
 import core.context;
 import context.commandqueue;
-import spritehandle;
+import sprite.handle;
 import atlas.texture;
 
 export namespace epochengine::directxcontext

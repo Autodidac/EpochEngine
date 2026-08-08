@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-#include "../include/_epoch.stl_types.hpp"
+#include "../include/core.stl_types.hpp"
 
 export module core.log;
 
@@ -69,7 +69,7 @@ export namespace epochengine::core::log
     inline void warn(epochengine::string_view tag, epochengine::string_view msg) { write(level::warn, tag, msg); }
     inline void error(epochengine::string_view tag, epochengine::string_view msg) { write(level::error, tag, msg); }
 
-    // C ABI bridge for non-module translation units (App project, tools, etc.)
+    // C ABI adapter for non-module translation units (App project, tools, etc.)
     // Implemented in src/core.log.cpp.
     extern "C" void core_log_write(std::uint32_t lvl, const char* tag_utf8, const char* msg_utf8);
 }

@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -36,7 +36,7 @@ module;
 
 export module software.context;
 
-import spritehandle;
+import sprite.handle;
 import atlas.texture;
 import core.context;
 import context.commandqueue;

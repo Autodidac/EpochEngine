@@ -60,7 +60,7 @@ module;
 #   endif
 
     // Optional: if you still need your framework helpers, include it AFTER windows.h
-#   include <../src/framework.hpp>
+#   include <../src/platform.framework.hpp>
 #   ifdef min
 #       undef min
 #   endif
@@ -74,15 +74,15 @@ export module core.context;
 // Std
 
 // Project
-import engine.visuals;
+import visuals.engine;
 import context.type;
 import context.commandqueue;
 import context.window;
 import utility.atomicfunction;
-import engine.input;
+import input.engine;
 import atlas.texture;
 import atlas.manager;   // reacquire atlas vector inside queued draw
-import spritehandle;
+import sprite.handle;
 import image.loader;
 
 namespace epochengine::core

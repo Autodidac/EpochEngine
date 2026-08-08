@@ -3,7 +3,7 @@ module;
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
-#include "../src/framework.hpp"
+#include "../src/platform.framework.hpp"
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #endif
@@ -25,17 +25,17 @@ import core.commandline;
 import core.context;
 import core.logger;
 import context.commandqueue;
-import engine.gui;
+import gui.engine;
 import render.preview_grid;
 import atlas.texture;
-import spritehandle;
+import sprite.handle;
 
 #if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-#include "directx_context_detail.hpp"
+#include "directx.context_detail.hpp"
 
 namespace epochengine::directxcontext
 {

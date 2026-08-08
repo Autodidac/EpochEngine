@@ -197,7 +197,7 @@ if(EPOCH_CI_HEADLESS_USES_MODULE_LOG)
     )
 else()
     list(APPEND EPOCH_CI_HEADLESS_SOURCES
-        src/core.log.headless.cpp
+        src/core.log_headless.cpp
     )
 endif()
 
@@ -243,14 +243,14 @@ if(BUILD_TESTING)
     )
 
     add_executable(epoch_texture_artifact_contract
-    src/assets/texture/texture.artifact.cpp
-        src/assets/texture/texture.artifact.contract.cpp
+    src/assets/texture/asset.texture_artifact.cpp
+        src/assets/texture/asset.texture_artifact_contract.cpp
     )
     target_sources(epoch_texture_artifact_contract PRIVATE
         FILE_SET epoch_texture_artifact_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
             FILES
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.texture.artifact.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_artifact.ixx
     )
     target_include_directories(epoch_texture_artifact_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -282,12 +282,12 @@ endif()
 
 add_library(epoch_gui STATIC
     dep/EpochGui/src/epochgui/rounded_rect.cpp
-    src/epochgui/dockable_window.cpp
-    src/epochgui/dock_layout.cpp
-    src/epochgui/floating_window.cpp
-    src/epochgui/panel_host.cpp
-    src/epochgui/popup_layout.cpp
-    src/epochgui/text_control.cpp
+    src/epochgui/gui.dockable_window.cpp
+    src/epochgui/gui.dock_layout.cpp
+    src/epochgui/gui.floating_window.cpp
+    src/epochgui/gui.panel_host.cpp
+    src/epochgui/gui.popup_layout.cpp
+    src/epochgui/gui.text_control.cpp
 )
 
 target_sources(epoch_gui PUBLIC
@@ -320,57 +320,57 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packag
 set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged macOS version revision")
 
 set(EPOCH_SOURCES
-    src/engine.cpp
+    src/epoch.engine_legacy.cpp
     src/audio/audio.manager.cpp
     src/physics/physics.manager.cpp
-    src/renderers/core/context.command_queue.cpp
+    src/renderers/core/core.context_command_queue.cpp
     src/renderers/core/engine.context.cpp
-    src/renderers/directx/context_directx.cpp
-    src/renderers/software/context_software.cpp
-    src/renderers/vulkan/context_vulkan.cpp
+    src/renderers/directx/core.context_directx.cpp
+    src/renderers/software/core.context_software.cpp
+    src/renderers/vulkan/core.context_vulkan.cpp
     src/renderers/directx/directx.context.cpp
-    src/directx.device.cpp
-    src/directx.gui.cpp
-    src/directx.preview.cpp
-    src/directx.state.cpp
-    src/opengl.backend.cpp
+    src/renderers/directx/directx.device.cpp
+    src/renderers/directx/directx.gui.cpp
+    src/renderers/directx/directx.preview.cpp
+    src/renderers/directx/directx.state.cpp
+    src/renderers/opengl/opengl.backend.cpp
     src/renderers/opengl/opengl.context.cpp
-    src/opengl.init.cpp
-    src/opengl.process.cpp
-    src/opengl.cleanup.cpp
-    src/opengl_capture_bridge.cpp
-    src/renderers/opengl/opengl_context_detail.cpp
-    src/opengl_preview_bridge.cpp
-    src/opengl_canvas2d_scene_bridge.cpp
-    src/opengl_process_impl.cpp
+    src/renderers/opengl/opengl.context_init.cpp
+    src/renderers/opengl/opengl.context_process.cpp
+    src/renderers/opengl/opengl.context_cleanup.cpp
+    src/renderers/opengl/opengl.frame_capture.cpp
+    src/renderers/opengl/opengl.context_detail.cpp
+    src/renderers/opengl/opengl.scene_preview.cpp
+    src/renderers/opengl/opengl.canvas2d_scene.cpp
+    src/renderers/opengl/opengl.context_process_impl.cpp
     src/renderers/software/software.context.cpp
     src/renderers/software/software.context_capture.cpp
     src/renderers/software/software.context_draw.cpp
     src/renderers/software/software.context_present.cpp
     src/renderers/software/software.context_preview.cpp
     src/renderers/software/software.context_render.cpp
-    src/renderers/opengl/context_opengl.cpp
-    src/renderers/sfml/context_sfml.cpp
-    src/renderers/sdl/context_sdl.cpp
-    src/renderers/raylib/context_raylib.cpp
-    src/raylib.bridge.cpp
-    src/engine.gui.cpp
-    src/engine.scripting.compiler.cpp
-    src/editor.cpp
-    src/editor.scene.cpp
+    src/renderers/opengl/core.context_opengl.cpp
+    src/renderers/sfml/core.context_sfml.cpp
+    src/renderers/sdl/core.context_sdl.cpp
+    src/renderers/raylib/core.context_raylib.cpp
+    src/renderers/raylib/raylib.api.cpp
+    src/epochgui/gui.engine.cpp
+    src/scripts/scripting.compiler_engine.cpp
+    src/editor/editor.application.cpp
+    src/editor/editor.scene.cpp
     src/editor/editor.standard.cpp
     src/editor/editor.plant_lab.cpp
     src/editor/editor.gui.cpp
-    src/editor/editor.canvas2d.scene.cpp
-    src/renderers/canvas2d/render.canvas2d.scene.cpp
-    src/renderers/canvas2d/render.canvas2d.scene.contract.cpp
-    src/renderers/canvas2d/canvas2d.scene.contracts.cpp
-    src/filewatch.cpp
+    src/editor/editor.canvas2d_scene.cpp
+    src/renderers/canvas2d/render.canvas2d_scene.cpp
+    src/renderers/canvas2d/render.canvas2d_scene_contract.cpp
+    src/renderers/canvas2d/canvas2d.scene_contracts.cpp
+    src/utility.filewatch.cpp
     src/font.renderer.cpp
-    src/project/project.asset.registry.cpp
-    src/project/project.texture.resources.cpp
+    src/project/project.asset_registry.cpp
+    src/project/project.texture_resources.cpp
     src/project/project.contracts.cpp
-    src/assets/texture/texture.artifact.cpp
+    src/assets/texture/asset.texture_artifact.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp
@@ -380,32 +380,32 @@ set(EPOCH_SOURCES
     src/platform/core.path.cpp
     src/core.string.cpp
     src/core.time.cpp
-    src/epoch.ai.cpp
+    src/ai/ai.engine.cpp
     src/epoch.engine.cpp
     src/epoch.headers.cpp
-    src/renderers/platform/epoch.platform.context.cpp
-    src/epoch.platform.window.cpp
-    src/epoch.render.graph.cpp
+    src/renderers/platform/platform.context_epoch.cpp
+    src/platform/platform.window.cpp
+    src/render.graph_epoch.cpp
     src/epoch.systems.cpp
-    src/main.cpp
-    src/runtime.cpp
+    src/epoch.main.cpp
+    src/epoch.runtime.cpp
 )
 
 
 if(WIN32)
     list(APPEND EPOCH_SOURCES
-        src/renderers/host/engine.context.host.win.cpp
+        src/renderers/host/host.context_win.cpp
         resource/WinResource.rc
     )
 elseif(UNIX AND NOT APPLE)
     list(APPEND EPOCH_SOURCES
-        src/renderers/host/engine.context.host.linux.cpp
+        src/renderers/host/host.context_linux.cpp
     )
 endif()
 
 if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
     list(APPEND EPOCH_SOURCES
-        src/authoring/texture/texture.document.cpp
+        src/authoring/texture/authoring.texture_document.cpp
     )
 endif()
 
@@ -430,18 +430,18 @@ if(MSVC)
 
     set_source_files_properties(
         src/renderers/core/engine.context.cpp
-        src/renderers/software/context_software.cpp
-        src/renderers/vulkan/context_vulkan.cpp
+        src/renderers/software/core.context_software.cpp
+        src/renderers/vulkan/core.context_vulkan.cpp
         src/renderers/software/software.context.cpp
         src/renderers/software/software.context_capture.cpp
         src/renderers/software/software.context_draw.cpp
         src/renderers/software/software.context_present.cpp
         src/renderers/software/software.context_preview.cpp
         src/renderers/software/software.context_render.cpp
-        src/renderers/opengl/context_opengl.cpp
-        src/renderers/sfml/context_sfml.cpp
-        src/renderers/sdl/context_sdl.cpp
-        src/renderers/raylib/context_raylib.cpp
+        src/renderers/opengl/core.context_opengl.cpp
+        src/renderers/sfml/core.context_sfml.cpp
+        src/renderers/sdl/core.context_sdl.cpp
+        src/renderers/raylib/core.context_raylib.cpp
         PROPERTIES
             COMPILE_OPTIONS "/Zm500"
     )
@@ -453,30 +453,30 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/renderers/opengl/context_opengl.cpp
-        src/opengl.backend.cpp
+        src/renderers/opengl/core.context_opengl.cpp
+        src/renderers/opengl/opengl.backend.cpp
         src/renderers/opengl/opengl.context.cpp
-        src/opengl.init.cpp
-        src/opengl.process.cpp
-        src/opengl.cleanup.cpp
-        src/opengl_capture_bridge.cpp
-        src/renderers/opengl/opengl_context_detail.cpp
-        src/opengl_preview_bridge.cpp
-        src/opengl_process_impl.cpp
+        src/renderers/opengl/opengl.context_init.cpp
+        src/renderers/opengl/opengl.context_process.cpp
+        src/renderers/opengl/opengl.context_cleanup.cpp
+        src/renderers/opengl/opengl.frame_capture.cpp
+        src/renderers/opengl/opengl.context_detail.cpp
+        src/renderers/opengl/opengl.scene_preview.cpp
+        src/renderers/opengl/opengl.context_process_impl.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000;/Od;/Ob0;/GL-"
     )
 
     set_source_files_properties(
-        src/renderers/sfml/context_sfml.cpp
-        src/renderers/sdl/context_sdl.cpp
-        src/renderers/raylib/context_raylib.cpp
-        src/renderers/directx/context_directx.cpp
+        src/renderers/sfml/core.context_sfml.cpp
+        src/renderers/sdl/core.context_sdl.cpp
+        src/renderers/raylib/core.context_raylib.cpp
+        src/renderers/directx/core.context_directx.cpp
         src/renderers/directx/directx.context.cpp
-        src/directx.device.cpp
-        src/directx.gui.cpp
-        src/directx.preview.cpp
-        src/directx.state.cpp
+        src/renderers/directx/directx.device.cpp
+        src/renderers/directx/directx.gui.cpp
+        src/renderers/directx/directx.preview.cpp
+        src/renderers/directx/directx.state.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000;/GL-"
     )
@@ -488,7 +488,7 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/raylib.bridge.cpp
+        src/renderers/raylib/raylib.api.cpp
         PROPERTIES
             COMPILE_OPTIONS "/GL-"
     )
@@ -549,7 +549,7 @@ if(EPOCH_UPDATER_SHELL_BUILD)
 endif()
 
 add_executable(epoch_renderer_smoke EXCLUDE_FROM_ALL
-    src/renderer_smoke_harness.cpp
+    src/renderers/render.smoke_harness.cpp
     src/core.log.cpp
     src/core.time.cpp
 )
@@ -576,7 +576,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
     set_source_files_properties(
-        "${EPOCH_MODULE_DIR}/net.ixx"
+        "${EPOCH_MODULE_DIR}/network.core.ixx"
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
 endif()
@@ -961,8 +961,8 @@ if(EPOCH_VULKAN_ACTIVE)
     if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
             src/image.stb.cpp
-            src/renderers/vulkan/vulkan.platform.context.cpp
-            src/vulkan.dispatch_storage.cpp
+            src/renderers/vulkan/vulkan.platform_context.cpp
+            src/renderers/vulkan/vulkan.dispatch_storage.cpp
         )
     endif()
 endif()
@@ -985,12 +985,20 @@ if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE)
     set(EPOCH_GLAD_SHOULD_LINK ON)
 endif()
 
+# The Windows Raylib DLL exports gladLoadGL. Epoch still owns its GLAD data
+# table, so the checked-in implementation namespaces that one colliding entry
+# point while retaining the normal gladLoadGLLoader API and function table.
+set(EPOCH_GLAD_RAYLIB_INTEROP OFF)
+if(WIN32 AND EPOCH_RAYLIB_ACTIVE AND EPOCH_GLAD_SHOULD_LINK)
+    set(EPOCH_GLAD_RAYLIB_INTEROP ON)
+endif()
+
 if(EPOCH_GLAD_NEED_HEADERS)
     set(EPOCH_GLAD_TARGET "")
     set(EPOCH_GLAD_RESOLVED_PROVIDER "")
     set(_epoch_builtin_glad_dir ${CMAKE_CURRENT_SOURCE_DIR}/third_party/glad)
 
-    if(NOT EPOCH_GLAD_PROVIDER STREQUAL "bundled")
+    if(NOT EPOCH_GLAD_PROVIDER STREQUAL "bundled" AND NOT EPOCH_GLAD_RAYLIB_INTEROP)
         find_package(glad CONFIG QUIET)
         if(TARGET glad::glad)
             set(EPOCH_GLAD_TARGET glad::glad)
@@ -1005,11 +1013,18 @@ if(EPOCH_GLAD_NEED_HEADERS)
             if(EPOCH_GLAD_SHOULD_LINK)
                 add_library(epoch_builtin_glad STATIC ${_epoch_builtin_glad_dir}/src/glad.c)
                 target_include_directories(epoch_builtin_glad PUBLIC ${_epoch_builtin_glad_dir}/include)
+                if(EPOCH_GLAD_RAYLIB_INTEROP)
+                    target_compile_definitions(epoch_builtin_glad PRIVATE gladLoadGL=epochGladLoadGL)
+                    target_compile_definitions(epoch PRIVATE gladLoadGL=epochGladLoadGL)
+                    set(EPOCH_GLAD_RESOLVED_PROVIDER "bundled-raylib-compatible")
+                else()
+                    set(EPOCH_GLAD_RESOLVED_PROVIDER "bundled")
+                endif()
                 set(EPOCH_GLAD_TARGET epoch_builtin_glad)
             else()
                 target_include_directories(epoch PRIVATE ${_epoch_builtin_glad_dir}/include)
+                set(EPOCH_GLAD_RESOLVED_PROVIDER "bundled-headers")
             endif()
-            set(EPOCH_GLAD_RESOLVED_PROVIDER "bundled")
         else()
             message(FATAL_ERROR "Epoch's bundled GLAD loader was not found. Install vcpkg glad or restore third_party/glad.")
         endif()
@@ -1023,7 +1038,6 @@ if(EPOCH_GLAD_NEED_HEADERS)
         endif()
     endif()
 endif()
-
 set(EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_FILES})
 
 function(epoch_exclude_modules list_var regex_pattern)
@@ -1076,34 +1090,34 @@ endif()
 
 if(NOT EPOCH_RAYLIB_ACTIVE)
     set_source_files_properties(
-        src/renderers/raylib/context_raylib.cpp
-        src/raylib.bridge.cpp
+        src/renderers/raylib/core.context_raylib.cpp
+        src/renderers/raylib/raylib.api.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
 
 if(NOT EPOCH_SDL_ACTIVE)
     set_source_files_properties(
-        src/renderers/sdl/context_sdl.cpp
+        src/renderers/sdl/core.context_sdl.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
 
 if(NOT EPOCH_SFML_ACTIVE)
     set_source_files_properties(
-        src/renderers/sfml/context_sfml.cpp
+        src/renderers/sfml/core.context_sfml.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
 
 if(NOT EPOCH_DIRECTX_ACTIVE)
     set_source_files_properties(
-        src/renderers/directx/context_directx.cpp
+        src/renderers/directx/core.context_directx.cpp
         src/renderers/directx/directx.context.cpp
-        src/directx.device.cpp
-        src/directx.gui.cpp
-        src/directx.preview.cpp
-        src/directx.state.cpp
+        src/renderers/directx/directx.device.cpp
+        src/renderers/directx/directx.gui.cpp
+        src/renderers/directx/directx.preview.cpp
+        src/renderers/directx/directx.state.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE
     )
 endif()
@@ -1116,7 +1130,7 @@ target_sources(epoch PRIVATE
 if(BUILD_TESTING)
     add_executable(epoch_physics_manager_contract
         src/physics/physics.manager.cpp
-        src/physics/physics.manager.contract.cpp
+        src/physics/physics.manager_contract.cpp
     )
     target_sources(epoch_physics_manager_contract PRIVATE
         FILE_SET epoch_physics_manager_modules TYPE CXX_MODULES
@@ -1140,15 +1154,15 @@ if(BUILD_TESTING)
     )
     if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
         add_executable(epoch_authoring_texture_contract
-    src/assets/texture/texture.artifact.cpp
-            src/authoring/texture/texture.document.cpp
-            src/authoring/texture/texture.contract.cpp
+    src/assets/texture/asset.texture_artifact.cpp
+            src/authoring/texture/authoring.texture_document.cpp
+            src/authoring/texture/authoring.texture_contract.cpp
         )
         target_sources(epoch_authoring_texture_contract PRIVATE
             FILE_SET epoch_authoring_texture_modules TYPE CXX_MODULES
                 BASE_DIRS ${EPOCH_MODULE_DIR}
                 FILES
-                    ${EPOCH_MODULE_DIR}/authoring.texture.artifact.ixx
+                    ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
                     ${EPOCH_MODULE_DIR}/authoring.texture.ixx
         )
         target_include_directories(epoch_authoring_texture_contract PRIVATE

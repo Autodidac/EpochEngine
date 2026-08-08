@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -31,8 +31,8 @@
 module;
 
 #include <algorithm>
-#include "../include/_epoch.stl_types.hpp"
-#include "../src/cpp_feature_probe.hpp"
+#include "../include/core.stl_types.hpp"
+#include "../src/build.cpp_feature_probe.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -305,7 +305,7 @@ namespace epochengine::core::log
     }
 }
 
-// C ABI bridge for non-module TUs (e.g., App project).
+// C ABI adapter for non-module TUs (e.g., App project).
 extern "C" void core_log_write(std::uint32_t lvl, const char* tag_utf8, const char* msg_utf8)
 {
     using epochengine::core::log::level;

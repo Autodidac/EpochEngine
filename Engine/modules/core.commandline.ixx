@@ -46,10 +46,10 @@ module;
 export module core.commandline;
 
 import context.type;
-import engine.version;
+import epoch.version;
 import core.logger;
 import core.path;
-import engine.platform;
+import platform.engine;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;

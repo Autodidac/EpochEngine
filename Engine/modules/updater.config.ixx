@@ -36,8 +36,8 @@ module;
 
 export module updater.config;
 
-import engine.platform;
-import engine.version;
+import platform.engine;
+import epoch.version;
 
 namespace epochengine::updater
 {

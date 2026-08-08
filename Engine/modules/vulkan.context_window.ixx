@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include <compare>
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -39,7 +41,7 @@ export module vulkan.context:window;
 
 import :shared_vk;
 import vulkan.camera;
-import engine.input;
+import input.engine;
 
 namespace epochengine::vulkancontext {
 

@@ -45,7 +45,7 @@ module;
 #include <utility>
 #include <vector>
 
-#include <include/epoch.script_api.h>
+#include <include/scripting.epoch_api.h>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -56,8 +56,8 @@ module;
 export module scripting.system;
 
 import scripting.compiler;
-import engine.cli;
-import engine.systems;
+import epoch.cli;
+import systems.task;
 import taskgraph.dotsystem;
 import core.logger;
 import core.path;

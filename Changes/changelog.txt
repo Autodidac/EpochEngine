@@ -1,5 +1,36 @@
 # Epoch Changelog
 
+## [v0.88.89] - Engine-wide source ownership and temporal artifact IO
+
+- Normalize all first-party C++ files under `Engine/modules`, `Engine/src`,
+  and `Engine/include` to one lowercase
+  `<owner>.<subject_role>.<extension>` grammar with underscores for additional
+  subject words and exact module-interface identity.
+- Move renderer, editor, GUI, project, AI, platform, script, asset, and public
+  header implementations into owned folders; synchronize CMake, MSVC projects,
+  shared items, filters, includes, imports, scripts, and current documentation.
+- Replace ambiguous bridge identities with explicit legacy-runtime, input
+  adapter, OpenGL scene/capture/Canvas2D, and texture artifact transfer roles.
+- Move compiled texture identity into `asset.texture_artifact`; add
+  deterministic little-endian serialization, bounded deserialization,
+  magic/schema checks, enum validation, payload budgets, integrity validation,
+  and malformed/truncated/tamper contracts.
+- Add `project.lifecycle` as the shared Save/materialize/Build/Run decision
+  contract with generation-safe attempt tracking, and route editor standalone
+  launch admission through it.
+- Preserve a thin `engine.version` compatibility module so published stable
+  updaters retain their existing GitHub source-version URL while new code uses
+  canonical `epoch.version`.
+- Add the engine-wide naming validator and canonical source naming architecture.
+  Regenerate the disposable vcpkg install tree after discovering corruption
+  from an abandoned mechanical rename.
+- Verify Visual Studio Debug and Release editor builds and engine contracts, the
+  all-context Windows CMake engine build, the standalone temporal artifact lane,
+  and all five Windows CTests. The managed Linux toolchain check passes; the
+  current full rerun remains pending after its vcpkg ABI cache was invalidated.
+- Advance development source to `v0.88.89`; keep the published
+  `v0.88.69` runtime and updater sealed.
+
 ## [v0.88.88] - Live Canvas2D scene publication
 
 - Add a renderer-owned, per-context immutable Canvas2D scene exchange with
@@ -534,7 +565,7 @@
 - Add a build-safe ownership contract that distinguishes the active replacement
   context from unrelated live contexts.
 - Keep Linux Clang Release optimization at `-O3` generally while compiling only
-  `core.commandline.ixx` and `net.ixx` at `-O0`, avoiding reproducible LLVM
+  `core.commandline.ixx` and `network.core.ixx` at `-O0`, avoiding reproducible LLVM
   22.1.8 optimizer crashes without reducing renderer or engine hot-path builds.
 - Serialize active-window, render-thread, and deferred-cleanup ownership during
   replacement. A Win32 close now retires the tracked window first, joins its
@@ -1300,9 +1331,9 @@
   Cancel, Install/Restart, and Advanced Source controls now stay inside the
   dialog body and stack on narrow panes without drifting away from input capture.
 - Split the update/source modal work out of the main editor shell: measured
-  geometry lives in `Engine/src/editor/update_modal_layout.hpp`, update workers
-  live in `Engine/src/editor/update_runtime.inl`, and modal drawing/automation
-  lives in `Engine/src/editor/update_modal_view.inl`. Added
+  geometry lives in `Engine/src/editor/editor.update_modal_layout.hpp`, update workers
+  live in `Engine/src/editor/editor.update_runtime.inl`, and modal drawing/automation
+  lives in `Engine/src/editor/editor.update_modal_view.inl`. Added
   `gui::measure_wrapped_label_height(...)` so layout uses the same wrapped-text
   measurement as drawing.
 - Applied bottom-anchored measured action strips to the Advanced Source
@@ -1455,7 +1486,7 @@
   descriptor/handle/work-order path without claiming live GPU allocation when
   no OpenGL context is registered. Validation: MSVC Debug x64
   `ConsoleApplication1` passed.
-- Fixed the Linux/Clang full-engine build by making `engine.cpp` explicitly
+- Fixed the Linux/Clang full-engine build by making `epoch.engine_legacy.cpp` explicitly
   include the public Epoch API type definitions before importing module-backed
   renderer contracts. Validation: `cmake --build --preset ninja-clang-debug
   --target epoch -j 1` completed successfully under WSL/Clang.
@@ -1690,10 +1721,10 @@
   resolution, and scoped application now live in `engine.gui` instead of
   editor-local tables, with the system option resolving to the dark tool palette
   until a platform light/dark bridge lands.
-- Removed the Linux Clang `gamecore.ixx` optimizer workaround by fixing the
+- Removed the Linux Clang `game.core.ixx` optimizer workaround by fixing the
   module shape directly: `gamecore` now owns only grid helpers and no longer
   imports atlas modules or exports an unused atlas pointer registry.
-- Fixed the `net.ixx` impossible-backend path so Clang no longer reports a
+- Fixed the `network.core.ixx` impossible-backend path so Clang no longer reports a
   possible fallthrough from `dial()` when Steam networking is not enabled.
 - Refreshed the roadmap and release-history archive so the active source line,
   Clang-engine lane, and current OS AI/package progress are recorded in the
@@ -1740,7 +1771,7 @@
 ## [v0.84.86]
 - Bumped the active source line to `v0.84.86` for the hosted Linux Clang
   full-engine CMake repair.
-- Imported `voxel.field` directly in `editor.cpp` so Clang's module visibility
+- Imported `voxel.field` directly in `editor.application.cpp` so Clang's module visibility
   rules see `epoch::voxel::Float3` at the Forest Factory editor call site.
 - Kept the fix surgical: no renderer ordering, GUI draw-model, or package
   workflow behavior was changed.
@@ -2820,7 +2851,7 @@
   preserving the explicit `a2048like` module exception because numeric-leading
   module names are not valid.
 - Updated executable-root discovery and the glad WinMain bridge to probe the
-  renamed `engine.hpp`/`framework.hpp` headers instead of stale `a*` paths.
+  renamed `epoch.engine.hpp`/`framework.hpp` headers instead of stale `a*` paths.
 - Kept OpenGL scene-first / GUI-over composition, but made the central scene
   workbench background transparent for scene-backed surfaces so Perspective and
   Game/2D previews are not hidden by the retained GUI batch.
@@ -2852,7 +2883,7 @@
 - Added the `engine_arcade` local runtime-mini package path for generated game
   project shells: manifests can advertise the package, assets receive an
   `engine_arcade.package.json`, and scripts receive an
-  `engine_arcade_scene.ascript.cpp` bridge without copying game implementations
+  `script.engine_arcade_scene.cpp` bridge without copying game implementations
   out of the engine.
 - Added an Asset menu Package Manager modal for local runtime-mini packages and
   documented the future downloadable-source package rule: source packages must
@@ -2947,8 +2978,8 @@
 - Clarified that the remaining `aengine.*` naming migration is a filename/source
   layout migration, not a runtime namespace or log-category rename.
 - Started that migration with a source-implementation filename batch:
-  `engine.cpp`, `engine.context.cpp`, `engine.gui.cpp`,
-  `engine.scripting.compiler.cpp`, and `engine.context.host.*.cpp` now own the
+  `epoch.engine_legacy.cpp`, `engine.context.cpp`, `gui.engine.cpp`,
+  `scripting.compiler_engine.cpp`, and `engine.context.host.*.cpp` now own the
   former `aengine*.cpp` paths while module names/imports stay compatibility
   stable.
 
@@ -3497,8 +3528,8 @@
   six-context parent and could destabilize SDL during detach/redock cycles.
 - Closed the remaining honest Phase 2 checklist items by removing the editor's
   last built-in sample-script fallback from the runtime command path and
-  sourcing the default project shell state from `Engine/src/editor.scene.cpp`
-  instead of hardcoded sandbox strings in `Engine/src/editor.cpp`.
+  sourcing the default project shell state from `Engine/src/editor/editor.scene.cpp`
+  instead of hardcoded sandbox strings in `Engine/src/editor/editor.application.cpp`.
 - Updated the README promoted-window proof row so the detached-window shot and a
   live six-context desktop capture now sit side by side, making the docked vs.
   promoted state easier to compare at a glance.
@@ -3590,7 +3621,7 @@
 - Tightened the parented SDL and SFML startup path so the docked child window now pushes its slot size back through the backend window object before the first present, instead of waiting for a later resize event to settle the first visible frame.
 - Corrected the Win32 parented harness dock-state probe so it reports both truthful dock contracts: direct child panes parented into the grid with hidden helper hosts, and true proxy-host detached panes. Focused SDL and SFML dock -> undock -> redock checks are green again without faking wrapper visibility.
 - Removed more width-mutating shared editor labels from the top-bar and segmented button paths so active menu/workspace buttons stop changing their own width just to indicate selection.
-- Removed the outstanding MSVC `C5202` mixed-module warning from `Engine/src/runtime.cpp` by keeping the global module fragment limited to preprocessor directives and moving the legacy runtime forward declaration into normal module scope.
+- Removed the outstanding MSVC `C5202` mixed-module warning from `Engine/src/epoch.runtime.cpp` by keeping the global module fragment limited to preprocessor directives and moving the legacy runtime forward declaration into normal module scope.
 - Made generated editor project shells more honest and easier to follow: new shells now root under repo-level `Projects/`, emit broader embedded-engine folder surfaces (`include`, `modules`, `source`, `scripts`, `resource`, `assets`), and write a `project.paths.txt` manifest so the editor/build logs point at concrete files instead of vague output.
 - Added stronger project-shell transparency in the editor log by reporting the generated root, manifest, entry source, build script, and default script paths when a game or tool shell is created.
 - Fixed the shared preview camera bookkeeping so per-context preview state stops collapsing onto one camera key, and tightened the ground-hit marker fallback order around real editor focus / center-ray behavior.
@@ -3630,7 +3661,7 @@
 - Hardened the release packaging contract for the next updater-shell asset: the Windows zip now carries the VC143 CRT app-local instead of depending on a machine-global redistributable, the no-args launcher shell gets a direct smoke pass before publishing, and the Linux/WSL2 asset must be rebuilt from the same bumped source commit instead of drifting from the public tag.
 
 ## [v0.83.76]
-- Fixed the Linux/WSL2 updater-shell build by importing `context.window` in [engine.cpp](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/src/engine.cpp), which keeps the tagged source snapshot and the packaged Linux asset aligned to the same working commit.
+- Fixed the Linux/WSL2 updater-shell build by importing `context.window` in [epoch.engine_legacy.cpp](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Engine/src/epoch.engine_legacy.cpp), which keeps the tagged source snapshot and the packaged Linux asset aligned to the same working commit.
 - Follow-up release packaging now targets matching Windows and Linux updater-shell assets from the same corrected source tag instead of shipping a Linux binary from a different commit than the public source snapshot.
 
 ## [v0.83.75]

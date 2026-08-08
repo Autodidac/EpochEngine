@@ -9,21 +9,21 @@ important behavior while cleaning up the repo.
 - Allocator utilities:
   `Engine/modules/autility.allocator.ixx`
 - Application module registry:
-  `Engine/modules/applicationmodule.ixx`
+  `Engine/modules/application.registry.ixx`
 - Code inspection helpers:
   `Engine/modules/utility.codeinspector.ixx`
 - Script compiler and reload flow:
   `Engine/modules/scripting.compiler.ixx`,
-  `Engine/src/engine.scripting.compiler.cpp`,
+  `Engine/src/scripts/scripting.compiler_engine.cpp`,
   `Engine/modules/scripting.system.ixx`
 - File watching:
   `Engine/modules/utility.filewatch.ixx`,
-  `Engine/src/filewatch.cpp`
+  `Engine/src/utility.filewatch.cpp`
 - Image writing:
   `Engine/modules/image.writer.ixx`,
-  `Engine/modules/imageatlaswriter.ixx`
+  `Engine/modules/image.atlas_writer.ixx`
 - Mipmap atlas support:
-  `Engine/modules/mipmapatlas.ixx`
+  `Engine/modules/atlas.mipmap.ixx`
 - Movement events:
   `Engine/modules/event.movement.ixx`
 - String conversion:
@@ -33,7 +33,7 @@ important behavior while cleaning up the repo.
 - Task graph with DOT output:
   `Engine/modules/taskgraph.dotsystem.ixx`
 - Linux OpenGL / multiplexer ownership:
-  `Engine/src/renderers/host/engine.context.host.linux.cpp`,
+  `Engine/src/renderers/host/host.context_linux.cpp`,
   `Engine/modules/opengl.context.ixx`
 
 ## Explicitly deferred

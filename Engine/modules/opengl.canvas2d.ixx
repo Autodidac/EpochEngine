@@ -19,11 +19,11 @@ module;
 export module opengl.canvas2d;
 
 import render.canvas2d;
-import render.canvas2d.cpu;
-import render.canvas2d.presentation;
+import render.canvas2d_cpu;
+import render.canvas2d_presentation;
 import render.device;
 import render.device_opengl_family;
-import render.texture.residency;
+import render.texture_residency;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.platform;

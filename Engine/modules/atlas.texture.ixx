@@ -61,7 +61,7 @@ export module atlas.texture;
 // ENGINE DEPENDENCIES
 // ────────────────────────────────────────────────────────────
 
-import texture;        // provides Texture
+import texture.core;        // provides Texture
 import core.logger;
 
 // ────────────────────────────────────────────────────────────

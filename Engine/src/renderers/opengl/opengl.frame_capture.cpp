@@ -1,0 +1,22 @@
+#include "opengl.frame_capture.hpp"
+
+#include <include/engine.config.hpp>
+
+#if defined(_MSC_VER)
+namespace epochengine::openglcapture
+{
+    void capture_frame_if_requested(int, int, std::uintptr_t)
+    {
+    }
+}
+#elif defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+import opengl.capture;
+
+namespace epochengine::openglcapture
+{
+    void capture_frame_if_requested(int framebufferWidth, int framebufferHeight, std::uintptr_t windowId)
+    {
+        openglcapture::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
+    }
+}
+#endif

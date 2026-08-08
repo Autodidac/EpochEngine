@@ -45,7 +45,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 // Include Vulkan-Hpp after config.
 #include <compare>
 #include <vulkan/vulkan.hpp>
@@ -57,7 +57,7 @@ import core.logger;
 
 namespace epochengine::vulkancontext
 {
-    inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
+    inline constexpr std::string_view kMemoryLogSystem = "Epoch.Vulkan";
 
     std::uint32_t Application::findMemoryType(std::uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {

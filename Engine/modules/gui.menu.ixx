@@ -53,10 +53,10 @@ export module gui.menu;
 
 import core.context;
 import context.multiplexer;
-import engine.cli;
-import engine.input;
-import engine.gui;
-import engine.version;
+import epoch.cli;
+import input.engine;
+import gui.engine;
+import epoch.version;
 import context.window;
 import core.context;
 import context.type;

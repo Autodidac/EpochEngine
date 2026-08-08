@@ -75,7 +75,7 @@ package-manager, timeline, model-package, Forest Factory, and editor-stability
 work. The source line keeps the current OS-model direction, executable-local
 cache lanes, and reviewable package/model gates while preserving the protected
 OpenGL GUI/scene draw model. It also records the Linux Clang full-engine
-optimizer crash reduction in `gamecore.ixx`: the module now stays focused on
+optimizer crash reduction in `game.core.ixx`: the module now stays focused on
 grid helpers and no longer imports atlas modules or exports unused atlas
 registry state, so the Clang-only `-O0` source workaround is no longer needed.
 The same line hardens automatic editor update handoff so Epoch verifies the
@@ -635,13 +635,13 @@ systems.
 
 ## Active code surfaces
 
-- [Engine/include/epoch.script_api.h](../Engine/include/epoch.script_api.h)
+- [Engine/include/scripting.epoch_api.h](../Engine/include/scripting.epoch_api.h)
 - [Engine/modules/ascripting.system.ixx](../Engine/modules/ascripting.system.ixx)
 - [Engine/modules/aengine.scripting.compiler.ixx](../Engine/modules/aengine.scripting.compiler.ixx)
-- [Engine/src/scripts/rotate_all_entities.ascript.cpp](../Engine/src/scripts/rotate_all_entities.ascript.cpp)
+- [Engine/src/scripts/script.rotate_all_entities.cpp](../Engine/src/scripts/script.rotate_all_entities.cpp)
 - [Engine/modules/epoch.render.preview_grid.ixx](../Engine/modules/epoch.render.preview_grid.ixx)
-- [Engine/src/engine.cpp](../Engine/src/engine.cpp)
-- [Engine/src/editor.cpp](../Engine/src/editor.cpp)
+- [Engine/src/epoch.engine_legacy.cpp](../Engine/src/epoch.engine_legacy.cpp)
+- [Engine/src/editor/editor.application.cpp](../Engine/src/editor/editor.application.cpp)
 - [Engine/modules/aengine.updater.system.ixx](../Engine/modules/aengine.updater.system.ixx)
 
 ## Verification

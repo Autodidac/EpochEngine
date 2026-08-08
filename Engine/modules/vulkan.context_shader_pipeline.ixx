@@ -38,7 +38,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 // Include Vulkan-Hpp after config.
 #include <compare>
 #include <vulkan/vulkan.hpp>
@@ -56,7 +56,7 @@ module;
 export module vulkan.context:shader_pipeline;
 
 import :shared_vk;
-import engine.cli;
+import epoch.cli;
 import core.path;
 
 namespace epochengine::vulkancontext

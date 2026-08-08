@@ -7,14 +7,14 @@ windows should compose shared GUI primitives from the same layer.
 
 ## Current Boundary
 
-- Public module API: `Engine/modules/engine.gui.ixx`
-- Current implementation: `Engine/src/engine.gui.cpp`
-- Primary consumer: `Engine/src/editor.cpp`
+- Public module API: `Engine/modules/gui.engine.ixx`
+- Current implementation: `Engine/src/epochgui/gui.engine.cpp`
+- Primary consumer: `Engine/src/editor/editor.application.cpp`
 - Backend replay consumers: renderer/context code that drains deferred GUI
   batches after scene rendering
 
 The current implementation is still physically compact, but the ownership rule
-is already library-like: reusable controls are added to `engine.gui` first, then
+is already library-like: reusable controls are added to `gui.engine` first, then
 editor domains consume them. Editor workspaces should not reimplement generic
 buttons, tabs, dropdowns, scroll areas, text inputs, modal chrome, or clipping
 logic.
@@ -95,7 +95,7 @@ replay pass.
 - Theme and rendering: palette ownership, font/glyph metrics, clipping,
   runtime-surface atlas use, deferred GUI replay, and backend-safe present
   ordering. Theme preference labels, option data, preference resolution, and
-  scoped theme application belong to `engine.gui`; editor surfaces may store the
+  scoped theme application belong to `gui.engine`; editor surfaces may store the
   selected preference but must not recreate theme tables in domain code. Current
   exposed choices are `System Light/Dark`, `Light`, and `Dark`. System mode must
   resolve through platform app-theme preference when available and fall back to
@@ -130,9 +130,9 @@ Before a control is considered ready, it needs:
 - progress bars are shared GUI primitives for package installs, workspace
   loading, updater/cache operations, generated-project builds, and any future
   visible long-running editor action; do not draw one-off progress rows in
-  Console Dock or domain code when `engine.gui` can own the behavior
+  Console Dock or domain code when `gui.engine` can own the behavior
 - loading screens are shared GUI primitives too. `EpochGui` owns the
-  backend-neutral `LoadingScreenLayout`; `engine.gui` owns drawing, input
+  backend-neutral `LoadingScreenLayout`; `gui.engine` owns drawing, input
   capture, and theme integration; launcher/editor/update domains provide only
   title, message, progress, status, and action text. Loading surfaces are valid
   for mode handoff, updater handoff, package/cache work, and project build
@@ -236,7 +236,7 @@ must never be promoted to chat output.
 ## Script Editing Gate
 
 The Assets workspace owns the first visible Script Source Editor surface. It
-loads the active `.ascript.cpp` through the shared `engine.gui` source-editor
+loads the active `.ascript.cpp` through the shared `gui.engine` source-editor
 primitive, not an editor-local clipboard hack. The primitive owns scrollable
 multiline editing, click-to-caret placement, drag ranged selection, Ctrl+A/C/X/V,
 Left/Right/Home/End navigation, and right-click Select All/Copy/Cut/Paste.
@@ -264,14 +264,14 @@ visible evidence and no Console Dock-only control path.
 
 Window chrome follows the same rule: close buttons, titlebar controls, context
 menus, scroll areas, text inputs, and future tabs/splitters belong in
-`engine.gui` first. Editor domains compose those primitives and should not draw
+`gui.engine` first. Editor domains compose those primitives and should not draw
 their own ad hoc copies.
 
 ## Safe Split Plan
 
 Do not split files only for aesthetics. The safe code split is:
 
-1. Keep `engine.gui` as the public module name.
+1. Keep `gui.engine` as the public module name.
 2. Move implementation chunks into owned source files only when CMake, MSVC
    project files, and filters are updated together.
 3. Prefer slices that match responsibility: primitives, layout/docking, text,
@@ -282,7 +282,7 @@ Do not split files only for aesthetics. The safe code split is:
 `EpochGui` is now a real linkable static-library target for backend-neutral
 layout primitives under `Engine/include/gui` and `Engine/src/epochgui`, with
 standalone mirror metadata in `Engine/dep/EpochGui` for `Autodidac/EpochGui`.
-Keep `engine.gui` as the engine module/API adapter around rendering, input,
+Keep `gui.engine` as the engine module/API adapter around rendering, input,
 theme, text, and atlas/backend replay; keep portable math/control state in
 `EpochGui` first.
 
@@ -292,7 +292,7 @@ progress-bar layout, selectable-list row math, segmented-selection geometry,
 rounded-rectangle mesh/style policy, toggle-switch layout, and portable
 text-control state. `SelectionControlController` owns clamped segment sizing,
 gap-aware item placement, aggregate bounds, toggle geometry, and hit testing;
-`engine.gui` supplies rendering, cached rounded control corners, theme, font,
+`gui.engine` supplies rendering, cached rounded control corners, theme, font,
 focus, and translated input.
 `TextControlController` provides UTF-8-safe caret boundaries, anchor/range
 selection, line/document/word/multiline navigation, edit and clipboard intent,
@@ -326,7 +326,7 @@ AI tooling, or a particular input system in order to compile.
 
 This split gives future products a clear choice:
 
-| Target kind | May link `EpochGui` | May use `engine.gui` adapter | May include native floating hosts | Default expectation |
+| Target kind | May link `EpochGui` | May use `gui.engine` adapter | May include native floating hosts | Default expectation |
 | --- | --- | --- | --- | --- |
 | Epoch desktop editor | Yes | Yes | Yes | Full panes, routed popouts, modal/top-layer replay, context handoff |
 | Desktop tool/software app | Yes | Usually | Optional | App chooses whether popouts/docking are worth the platform cost |
@@ -351,7 +351,7 @@ There are three different concepts that must not be collapsed into one:
    controller classes. This belongs in `EpochGui`.
 2. **Engine GUI adapter**: renderer submission, font atlas access, input event
    translation, theme tables, deferred GUI batches, top-layer replay, and editor
-   bridge functions. This belongs in `engine.gui`.
+   bridge functions. This belongs in `gui.engine`.
 3. **Native/application host**: OS windows, parented backend child panes,
    detached routed contexts, redock/undock window movement, app lifecycle,
    platform permission checks, and product-specific inclusion flags. This
@@ -368,7 +368,7 @@ The source should keep preparing for these compile-time or target-profile
 boundaries even before all flags exist:
 
 - `EpochGui` core: always free of renderer and OS-window dependencies.
-- `engine.gui` desktop adapter: enabled for editor/tool builds with renderer
+- `gui.engine` desktop adapter: enabled for editor/tool builds with renderer
   replay and font atlas ownership.
 - Editor dock host: enabled for desktop editor shells that need docked panes,
   splitters, modals, menus, and inspector/workspace windows.
@@ -428,7 +428,7 @@ authority, hidden automation, or a whole duplicate editor.
 
 Before a new GUI surface is considered production progress, record the answers:
 
-- Which pieces belong in `EpochGui`, `engine.gui`, editor domain code, and
+- Which pieces belong in `EpochGui`, `gui.engine`, editor domain code, and
   native/application host code?
 - Can a game or mobile target use the reusable controls without linking the
   desktop popout host?

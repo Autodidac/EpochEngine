@@ -15,7 +15,7 @@ module;
 
 export module scene.runtime;
 
-import scenesnapshot;
+import scene.snapshot;
 
 export namespace epochengine::scene_runtime
 {

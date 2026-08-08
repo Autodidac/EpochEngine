@@ -1,0 +1,5333 @@
+/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
+ // context.multiplexer.win.cpp  (TU implementation; NOT a module partition)
+ //
+
+#include <include/engine.config.hpp>
+
+#if defined(_WIN32)
+#   ifdef EPOCH_USING_WINMAIN
+#       include <../src/platform.framework.hpp>
+#   endif
+#   ifndef WIN32_LEAN_AND_MEAN
+#       define WIN32_LEAN_AND_MEAN
+#   endif
+#   ifndef NOMINMAX
+#       define NOMINMAX
+#   endif
+#   include <windowsx.h>
+#   include <commctrl.h>
+#   include <dwmapi.h>
+#   include <shellapi.h>
+#   pragma comment(lib, "comctl32.lib")
+#   pragma comment(lib, "dwmapi.lib")
+
+#   include <algorithm>
+#   include <chrono>
+#   include <cstdint>
+#   include <format>
+#   include <functional>
+#   include <iostream>
+#   include <memory>
+#   include <mutex>
+#   include <shared_mutex>
+#   include <source_location>
+#   include <stdexcept>
+#   include <string>
+#   include <string_view>
+#   include <thread>
+#   include <unordered_map>
+#   include <utility>
+#   include <vector>
+
+#   include <glad/glad.h>
+#endif
+
+
+import platform.engine;
+import utility.string_converter;
+
+import epoch.cli;
+import core.context;
+import core.logger;
+import gui.engine;
+
+import context.commandqueue;
+import context.multiplexer;
+import context.type;
+import context.window;
+import telemetry.engine;
+import systems.registry;
+import perf.tier;
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+import opengl.context;
+#endif
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+import software.context;
+#endif
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+import raylib.context;
+#endif
+
+#if defined(_WIN32)
+
+namespace
+{
+    [[nodiscard]] inline epochengine::gui::Vec2 client_mouse_position(
+        HWND hwnd,
+        LPARAM lParam,
+        bool screenCoordinates = false) noexcept
+    {
+        POINT pt{
+            GET_X_LPARAM(lParam),
+            GET_Y_LPARAM(lParam)
+        };
+
+        if (screenCoordinates)
+            ::ScreenToClient(hwnd, &pt);
+
+        return {
+            static_cast<float>(pt.x),
+            static_cast<float>(pt.y)
+        };
+    }
+
+    inline void push_gui_mouse_event(
+        const epochengine::core::Context* ctx,
+        HWND hwnd,
+        epochengine::gui::EventType type,
+        LPARAM lParam,
+        int wheelDelta = 0,
+        bool screenCoordinates = false,
+        int mouseButton = 0) noexcept
+    {
+        if (!ctx)
+            return;
+
+        epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
+            .type = type,
+            .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates),
+            .mouse_button = mouseButton,
+            .wheel_delta = wheelDelta
+        });
+    }
+
+    inline void push_gui_key_event(const epochengine::core::Context* ctx, int key) noexcept
+    {
+        if (!ctx)
+            return;
+
+        epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
+            .type = epochengine::gui::EventType::KeyDown,
+            .key = key,
+            .ctrl_down = (::GetKeyState(VK_CONTROL) & 0x8000) != 0,
+            .shift_down = (::GetKeyState(VK_SHIFT) & 0x8000) != 0,
+            .alt_down = (::GetKeyState(VK_MENU) & 0x8000) != 0
+        });
+    }
+
+    [[nodiscard]] inline std::string utf8_from_codepoint(char32_t codepoint) noexcept
+    {
+        std::string out{};
+        if (codepoint <= 0x7Fu)
+        {
+            out.push_back(static_cast<char>(codepoint));
+        }
+        else if (codepoint <= 0x7FFu)
+        {
+            out.push_back(static_cast<char>(0xC0u | ((codepoint >> 6) & 0x1Fu)));
+            out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        }
+        else if (codepoint <= 0xFFFFu)
+        {
+            out.push_back(static_cast<char>(0xE0u | ((codepoint >> 12) & 0x0Fu)));
+            out.push_back(static_cast<char>(0x80u | ((codepoint >> 6) & 0x3Fu)));
+            out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        }
+        else if (codepoint <= 0x10FFFFu)
+        {
+            out.push_back(static_cast<char>(0xF0u | ((codepoint >> 18) & 0x07u)));
+            out.push_back(static_cast<char>(0x80u | ((codepoint >> 12) & 0x3Fu)));
+            out.push_back(static_cast<char>(0x80u | ((codepoint >> 6) & 0x3Fu)));
+            out.push_back(static_cast<char>(0x80u | (codepoint & 0x3Fu)));
+        }
+        return out;
+    }
+
+    inline void push_gui_text_event(const epochengine::core::Context* ctx, char32_t codepoint) noexcept
+    {
+        if (!ctx)
+            return;
+
+        const std::string utf8 = utf8_from_codepoint(codepoint);
+        if (utf8.empty())
+            return;
+
+        epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
+            .type = epochengine::gui::EventType::TextInput,
+            .text = utf8
+        });
+    }
+
+    [[nodiscard]] inline std::shared_ptr<epochengine::core::Context> typed_context(
+        const epochengine::core::OpaqueContextHandle& opaque) noexcept
+    {
+        return opaque
+            ? std::reinterpret_pointer_cast<epochengine::core::Context>(opaque)
+            : nullptr;
+    }
+
+    // TU-owned globals.
+    std::unordered_map<HWND, std::thread> g_threads;
+    std::mutex g_threadStateMutex;
+    epochengine::core::DragState       g_drag;
+    epochengine::core::MultiContextManager* g_activeManager = nullptr;
+    struct PendingWindowCleanup
+    {
+        HWND hwnd{};
+        std::thread thread{};
+        std::unique_ptr<epochengine::core::WindowData> window{};
+    };
+    std::vector<PendingWindowCleanup> g_pendingCleanups;
+    constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
+    constexpr COLORREF kParentBackgroundColor = RGB(0x1C, 0x1F, 0x26);
+    constexpr auto kRenderThreadStartupStepDelay = std::chrono::milliseconds(250);
+
+    [[nodiscard]] inline HBRUSH parent_background_brush() noexcept
+    {
+        static HBRUSH brush = ::CreateSolidBrush(kParentBackgroundColor);
+        return brush;
+    }
+
+    inline void apply_dark_window_chrome(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        const BOOL enabled = TRUE;
+        ::DwmSetWindowAttribute(hwnd, 20, &enabled, sizeof(enabled));
+        ::DwmSetWindowAttribute(hwnd, 19, &enabled, sizeof(enabled));
+
+        constexpr DWORD DWMWA_BORDER_COLOR = 34;
+        constexpr DWORD DWMWA_CAPTION_COLOR = 35;
+        constexpr DWORD DWMWA_TEXT_COLOR = 36;
+        const COLORREF captionColor = kParentBackgroundColor;
+        const COLORREF borderColor = kParentBackgroundColor;
+        const COLORREF textColor = RGB(0xE8, 0xEA, 0xEE);
+        ::DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, &borderColor, sizeof(borderColor));
+        ::DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, &captionColor, sizeof(captionColor));
+        ::DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, &textColor, sizeof(textColor));
+
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+        ::RedrawWindow(hwnd, nullptr, nullptr, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+
+    [[nodiscard]] inline bool should_draw_opengl_startup_placeholder(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return window
+            && window->type == epochengine::core::ContextType::OpenGL
+            && !window->firstPresentComplete.load(std::memory_order_acquire);
+    }
+    // Some Windows SDK setups don't expose WGL_ARB_create_context declarations here.
+    // Provide local fallbacks so this TU can request modern core contexts without extra headers.
+#if !defined(WGL_CONTEXT_MAJOR_VERSION_ARB)
+    constexpr int WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
+#endif
+#if !defined(WGL_CONTEXT_MINOR_VERSION_ARB)
+    constexpr int WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
+#endif
+#if !defined(WGL_CONTEXT_PROFILE_MASK_ARB)
+    constexpr int WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
+#endif
+#if !defined(WGL_CONTEXT_CORE_PROFILE_BIT_ARB)
+    constexpr int WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
+#endif
+#if !defined(PFNWGLCREATECONTEXTATTRIBSARBPROC)
+    using PFNWGLCREATECONTEXTATTRIBSARBPROC = HGLRC(WINAPI*)(HDC, HGLRC, const int*);
+#endif
+
+   // [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
+    [[nodiscard]] inline int clamp_positive(int v) noexcept { return (v < 1) ? 1 : v; }
+
+#if EPOCH_SINGLE_PARENT
+    struct SubCtx { HWND originalParent{}; };
+    constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
+    constexpr int kDockDragStripHeight = 28;
+    static thread_local HWND g_guiInputOwner = nullptr;
+
+    [[nodiscard]] inline bool is_dock_drag_hotspot(HWND hwnd, LPARAM lp) noexcept
+    {
+        if (!hwnd)
+            return false;
+
+        RECT clientRect{};
+        if (!::GetClientRect(hwnd, &clientRect))
+            return false;
+
+        const int width = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
+        const int height = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+        const int hotspotHeight = (std::min)(kDockDragStripHeight, height);
+
+        const int x = GET_X_LPARAM(lp);
+        const int y = GET_Y_LPARAM(lp);
+        return x >= 0 && x < width && y >= 0 && y < hotspotHeight;
+    }
+
+    [[nodiscard]] inline RECT screen_client_rect(HWND hwnd) noexcept
+    {
+        RECT clientRect{};
+        if (!hwnd || !::GetClientRect(hwnd, &clientRect))
+            return clientRect;
+
+        POINT topLeft{ 0, 0 };
+        ::ClientToScreen(hwnd, &topLeft);
+        ::OffsetRect(&clientRect, topLeft.x, topLeft.y);
+        return clientRect;
+    }
+
+    [[nodiscard]] inline bool point_in_rect(const RECT& rect, const POINT& pt) noexcept
+    {
+        return pt.x >= rect.left
+            && pt.x < rect.right
+            && pt.y >= rect.top
+            && pt.y < rect.bottom;
+    }
+
+    [[nodiscard]] inline bool rect_within_rect(const RECT& outer, const RECT& inner) noexcept
+    {
+        return inner.left >= outer.left
+            && inner.top >= outer.top
+            && inner.right <= outer.right
+            && inner.bottom <= outer.bottom;
+    }
+
+    [[nodiscard]] inline bool rects_intersect(const RECT& a, const RECT& b) noexcept
+    {
+        return a.left < b.right
+            && a.right > b.left
+            && a.top < b.bottom
+            && a.bottom > b.top;
+    }
+
+    [[nodiscard]] inline bool should_redock_to_parent(
+        HWND parent,
+        const POINT& screenPoint,
+        const RECT& windowRect) noexcept
+    {
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        const RECT parentClientRect = screen_client_rect(parent);
+        RECT parentWindowRect{};
+        ::GetWindowRect(parent, &parentWindowRect);
+        if (point_in_rect(parentClientRect, screenPoint)
+            || point_in_rect(parentWindowRect, screenPoint))
+            return true;
+
+        const POINT windowCenter{
+            windowRect.left + ((windowRect.right - windowRect.left) / 2),
+            windowRect.top + ((windowRect.bottom - windowRect.top) / 2)
+        };
+        return point_in_rect(parentClientRect, windowCenter)
+            || point_in_rect(parentWindowRect, windowCenter);
+    }
+
+    [[nodiscard]] inline bool pointer_inside_parent_client(HWND parent, const POINT& screenPoint) noexcept
+    {
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        const RECT parentClientRect = screen_client_rect(parent);
+        RECT parentWindowRect{};
+        ::GetWindowRect(parent, &parentWindowRect);
+        return point_in_rect(parentClientRect, screenPoint)
+            || point_in_rect(parentWindowRect, screenPoint);
+    }
+
+    [[nodiscard]] inline bool pointer_inside_parent_dock_region(HWND parent, const POINT& screenPoint) noexcept
+    {
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        return point_in_rect(screen_client_rect(parent), screenPoint);
+    }
+
+    [[nodiscard]] inline POINT screen_drag_point(HWND hwnd, LPARAM lParam) noexcept
+    {
+        POINT pt{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        if (hwnd && ::IsWindow(hwnd) != FALSE && ::ClientToScreen(hwnd, &pt) != FALSE)
+            return pt;
+
+        if (::GetCursorPos(&pt) != FALSE)
+            return pt;
+
+        return pt;
+    }
+
+    [[nodiscard]] inline bool is_nonclient_mouse_message(UINT msg) noexcept
+    {
+        return msg == WM_NCMOUSEMOVE
+            || msg == WM_NCLBUTTONUP
+            || msg == WM_NCLBUTTONDOWN;
+    }
+
+    [[nodiscard]] inline POINT screen_mouse_point(HWND hwnd, UINT msg, LPARAM lParam) noexcept
+    {
+        if (is_nonclient_mouse_message(msg))
+            return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        return screen_drag_point(hwnd, lParam);
+    }
+
+    [[nodiscard]] inline HWND stored_dock_parent(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return nullptr;
+
+        return static_cast<HWND>(::GetPropW(hwnd, kEpochDockParentProp));
+    }
+
+    [[nodiscard]] inline bool drag_distance_exceeded(
+        const POINT& start,
+        const POINT& current,
+        int thresholdPx = 10) noexcept
+    {
+        const long dx = static_cast<long>(current.x) - static_cast<long>(start.x);
+        const long dy = static_cast<long>(current.y) - static_cast<long>(start.y);
+        const long threshold = static_cast<long>(thresholdPx);
+        return (dx * dx) + (dy * dy) >= (threshold * threshold);
+    }
+
+    [[nodiscard]] inline POINT force_proxy_shell_outside_parent(
+        HWND parent,
+        const POINT& cursorScreen,
+        int proposedClientLeft,
+        int proposedClientTop,
+        int clientW,
+        int clientH) noexcept
+    {
+        POINT adjusted{
+            proposedClientLeft,
+            proposedClientTop
+        };
+
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return adjusted;
+
+        constexpr int kEscapeMargin = 18;
+        RECT parentWindowRect{};
+        ::GetWindowRect(parent, &parentWindowRect);
+
+        RECT adjustedShellRect{ 0, 0, clientW, clientH };
+        constexpr DWORD kDetachedShellStyle =
+            WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        constexpr DWORD kDetachedShellExStyle = WS_EX_APPWINDOW;
+        if (::AdjustWindowRectEx(
+            &adjustedShellRect,
+            kDetachedShellStyle,
+            FALSE,
+            kDetachedShellExStyle) == FALSE)
+        {
+            adjustedShellRect.left = 0;
+            adjustedShellRect.top = 0;
+            adjustedShellRect.right = clientW;
+            adjustedShellRect.bottom = clientH;
+        }
+
+        auto compute_shell_rect = [&](int clientLeft, int clientTop) noexcept
+        {
+            const int hostLeft = clientLeft + adjustedShellRect.left;
+            const int hostTop = clientTop + adjustedShellRect.top;
+            return RECT{
+                hostLeft,
+                hostTop,
+                hostLeft + clamp_positive(adjustedShellRect.right - adjustedShellRect.left),
+                hostTop + clamp_positive(adjustedShellRect.bottom - adjustedShellRect.top)
+            };
+        };
+
+        auto escaped_to_right = [&]() noexcept
+        {
+            adjusted.x = parentWindowRect.right + kEscapeMargin - adjustedShellRect.left;
+        };
+
+        auto escaped_to_left = [&]() noexcept
+        {
+            adjusted.x = parentWindowRect.left - kEscapeMargin - adjustedShellRect.right;
+        };
+
+        auto escaped_to_bottom = [&]() noexcept
+        {
+            adjusted.y = parentWindowRect.bottom + kEscapeMargin - adjustedShellRect.top;
+        };
+
+        auto escaped_to_top = [&]() noexcept
+        {
+            adjusted.y = parentWindowRect.top - kEscapeMargin - adjustedShellRect.bottom;
+        };
+
+        const RECT proposedShellRect = compute_shell_rect(proposedClientLeft, proposedClientTop);
+        const int overflowLeft = (std::max)(0, static_cast<int>(parentWindowRect.left - proposedShellRect.left));
+        const int overflowRight = (std::max)(0, static_cast<int>(proposedShellRect.right - parentWindowRect.right));
+        const int overflowTop = (std::max)(0, static_cast<int>(parentWindowRect.top - proposedShellRect.top));
+        const int overflowBottom = (std::max)(0, static_cast<int>(proposedShellRect.bottom - parentWindowRect.bottom));
+
+        if (overflowRight > 0 || overflowLeft > 0 || overflowBottom > 0 || overflowTop > 0)
+        {
+            const int maxOverflow = (std::max)((std::max)(overflowLeft, overflowRight), (std::max)(overflowTop, overflowBottom));
+            if (maxOverflow == overflowRight)
+                escaped_to_right();
+            else if (maxOverflow == overflowLeft)
+                escaped_to_left();
+            else if (maxOverflow == overflowBottom)
+                escaped_to_bottom();
+            else
+                escaped_to_top();
+        }
+        else if (rect_within_rect(parentWindowRect, proposedShellRect)
+            || rects_intersect(parentWindowRect, proposedShellRect))
+        {
+            const int distLeft = std::abs(proposedShellRect.left - parentWindowRect.left);
+            const int distRight = std::abs(parentWindowRect.right - proposedShellRect.right);
+            const int distTop = std::abs(proposedShellRect.top - parentWindowRect.top);
+            const int distBottom = std::abs(parentWindowRect.bottom - proposedShellRect.bottom);
+            const int minDistance = (std::min)((std::min)(distLeft, distRight), (std::min)(distTop, distBottom));
+            if (minDistance == distRight)
+                escaped_to_right();
+            else if (minDistance == distLeft)
+                escaped_to_left();
+            else if (minDistance == distBottom)
+                escaped_to_bottom();
+            else
+                escaped_to_top();
+        }
+        else if (cursorScreen.x >= parentWindowRect.right)
+            escaped_to_right();
+        else if (cursorScreen.x < parentWindowRect.left)
+            escaped_to_left();
+        else if (cursorScreen.y >= parentWindowRect.bottom)
+            escaped_to_bottom();
+        else if (cursorScreen.y < parentWindowRect.top)
+            escaped_to_top();
+
+        return adjusted;
+    }
+
+    inline void dock_host_window_to_parent(
+        HWND hwnd,
+        HWND parent,
+        int desiredScreenX,
+        int desiredScreenY,
+        int clientW,
+        int clientH,
+        bool asynchronous = true) noexcept
+    {
+        if (!hwnd || !parent || ::IsWindow(parent) == FALSE)
+            return;
+
+        const HWND currentParent = ::GetParent(hwnd);
+        LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+        const bool needsChildStyle = (style & WS_CHILD) == 0 || (style & (WS_POPUP | WS_OVERLAPPEDWINDOW)) != 0;
+        if (needsChildStyle)
+        {
+            style &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
+            style |= WS_CHILD;
+            ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+        }
+
+        LONG_PTR exStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        LONG_PTR desiredExStyle = exStyle;
+        desiredExStyle &= ~static_cast<LONG_PTR>(
+            WS_EX_APPWINDOW
+            | WS_EX_TOOLWINDOW
+            | WS_EX_TOPMOST
+            | WS_EX_WINDOWEDGE
+            | WS_EX_CLIENTEDGE
+            | WS_EX_DLGMODALFRAME);
+        desiredExStyle |= WS_EX_NOPARENTNOTIFY;
+        if (desiredExStyle != exStyle)
+            ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desiredExStyle);
+
+        if (currentParent != parent)
+            ::SetParent(hwnd, parent);
+        ::SetPropW(hwnd, kEpochDockParentProp, parent);
+
+        RECT parentClient{};
+        ::GetClientRect(parent, &parentClient);
+        POINT clientPos{ desiredScreenX, desiredScreenY };
+        ::ScreenToClient(parent, &clientPos);
+
+        const int maxX = (std::max)(0, static_cast<int>(parentClient.right - clientW));
+        const int maxY = (std::max)(0, static_cast<int>(parentClient.bottom - clientH));
+        clientPos.x = (std::clamp)(static_cast<int>(clientPos.x), 0, maxX);
+        clientPos.y = (std::clamp)(static_cast<int>(clientPos.y), 0, maxY);
+
+        UINT flags = SWP_NOZORDER
+            | SWP_NOACTIVATE
+            | (needsChildStyle || currentParent != parent ? SWP_FRAMECHANGED : 0)
+            | SWP_SHOWWINDOW;
+        if (asynchronous)
+            flags |= SWP_ASYNCWINDOWPOS;
+
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            clientPos.x,
+            clientPos.y,
+            clientW,
+            clientH,
+            flags);
+    }
+
+    inline void request_routed_panel_redock_close(epochengine::core::WindowData* window) noexcept
+    {
+        if (!window || window->guiRoute.empty())
+            return;
+
+        window->routedRedockRequested.store(true);
+    }
+
+    [[nodiscard]] inline bool child_window_matches_parent_slot(
+        HWND hwnd,
+        HWND parent,
+        int x,
+        int y,
+        int width,
+        int height) noexcept
+    {
+        if (!hwnd
+            || !parent
+            || ::IsWindow(hwnd) == FALSE
+            || ::IsWindow(parent) == FALSE
+            || ::GetParent(hwnd) != parent)
+        {
+            return false;
+        }
+
+        RECT rect{};
+        if (::GetWindowRect(hwnd, &rect) == FALSE)
+            return false;
+
+        POINT points[2]{
+            { rect.left, rect.top },
+            { rect.right, rect.bottom }
+        };
+        ::SetLastError(ERROR_SUCCESS);
+        if (::MapWindowPoints(HWND_DESKTOP, parent, points, 2) == 0
+            && (::GetLastError() != ERROR_SUCCESS))
+        {
+            return false;
+        }
+
+        constexpr int kDockSlotTolerance = 2;
+        const int actualX = points[0].x;
+        const int actualY = points[0].y;
+        const int actualW = points[1].x - points[0].x;
+        const int actualH = points[1].y - points[0].y;
+
+        return std::abs(actualX - x) <= kDockSlotTolerance
+            && std::abs(actualY - y) <= kDockSlotTolerance
+            && std::abs(actualW - width) <= kDockSlotTolerance
+            && std::abs(actualH - height) <= kDockSlotTolerance;
+    }
+
+    // Dock/undock requests must be processed on the window's owning thread.
+    // GLFW/raylib windows are owned by the thread that created them (typically the render thread).
+    // Cross-thread SetParent/SetWindowLongPtr/SetWindowPos can deadlock.
+    constexpr UINT WM_EPOCH_DOCKCMD = WM_APP + 0x4A11;
+    constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
+    constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
+    constexpr UINT WM_EPOCH_OPEN_DETACHED_CONTEXT = WM_APP + 0x4A14;
+    constexpr UINT WM_EPOCH_RETIRE_CONTEXT_WINDOW = WM_APP + 0x4A15;
+    constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
+    constexpr wchar_t kEpochBackendInputAdapterProp[] = L"EpochBackendInputAdapter";
+    enum class DockCmd : WPARAM
+    {
+        Undock = 1,
+    };
+    enum class ProxyDockCmd : WPARAM
+    {
+        Undock = 1,
+        MoveDetached = 2,
+        Redock = 3,
+    };
+    struct ProxyDockRequest
+    {
+        HWND sourceHwnd{};
+        HWND parentHwnd{};
+        int x{};
+        int y{};
+        int width{};
+        int height{};
+    };
+
+    inline void request_parent_layout(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        if (::GetPropW(hwnd, kEpochLayoutPendingProp))
+            return;
+
+        ::SetPropW(hwnd, kEpochLayoutPendingProp, reinterpret_cast<HANDLE>(1));
+        ::PostMessageW(hwnd, WM_EPOCH_LAYOUT, 0, 0);
+    }
+
+    [[nodiscard]] inline std::shared_ptr<epochengine::core::Context> resolve_gui_context_for_hwnd(HWND hwnd) noexcept
+    {
+        auto* mgr = g_activeManager;
+        if (!mgr)
+            return {};
+
+        if (auto* win = mgr->findWindowByHWND(hwnd))
+            return typed_context(win->context);
+
+        return {};
+    }
+
+    [[nodiscard]] inline epochengine::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
+    {
+        auto* mgr = g_activeManager;
+        if (!mgr)
+            return nullptr;
+
+        return mgr->findWindowByHWND(hwnd);
+    }
+
+    inline void remember_gui_input_owner(HWND hwnd) noexcept
+    {
+        if (hwnd && ::IsWindow(hwnd) != FALSE)
+            g_guiInputOwner = hwnd;
+    }
+
+    inline void forget_gui_input_owner(HWND hwnd) noexcept
+    {
+        if (g_guiInputOwner == hwnd)
+            g_guiInputOwner = nullptr;
+    }
+
+    [[nodiscard]] inline bool same_gui_input_surface(HWND lhs, HWND rhs) noexcept
+    {
+        if (!lhs || !rhs)
+            return false;
+
+        if (lhs == rhs)
+            return true;
+
+        auto* mgr = g_activeManager;
+        if (!mgr)
+            return false;
+
+        return mgr->findWindowByHWND(lhs) == mgr->findWindowByHWND(rhs);
+    }
+
+    [[nodiscard]] inline bool accepts_gui_keyboard_input(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return false;
+
+        if (const HWND focused = ::GetFocus();
+            focused && ::IsWindow(focused) != FALSE)
+        {
+            if (!same_gui_input_surface(focused, hwnd))
+                return false;
+
+            remember_gui_input_owner(focused);
+        }
+
+        if (!g_guiInputOwner || ::IsWindow(g_guiInputOwner) == FALSE)
+        {
+            g_guiInputOwner = hwnd;
+            return true;
+        }
+
+        return same_gui_input_surface(g_guiInputOwner, hwnd);
+    }
+
+    [[nodiscard]] inline bool has_proxy_shell_pair(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return window
+            && (window->type == epochengine::core::ContextType::SDL
+                || window->type == epochengine::core::ContextType::SFML)
+            && window->hwndChild
+            && window->host_hwnd
+            && window->hwndChild != window->host_hwnd
+            && ::IsWindow(window->hwndChild) != FALSE
+            && ::IsWindow(window->host_hwnd) != FALSE;
+    }
+
+    [[nodiscard]] inline bool has_proxy_host(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return has_proxy_shell_pair(window)
+            && (::GetParent(window->hwndChild) == window->host_hwnd
+                || ::GetParent(window->host_hwnd) == nullptr);
+    }
+
+    [[nodiscard]] inline bool uses_visible_proxy_host(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return has_proxy_host(window)
+            && (::GetParent(window->hwndChild) == window->host_hwnd
+                || ::GetParent(window->host_hwnd) == nullptr);
+    }
+
+    inline void apply_child_fill_layout(HWND child, HWND parent, int clientW, int clientH) noexcept;
+
+    inline void hide_associated_host_window(
+        const epochengine::core::WindowData* window,
+        HWND activeHwnd,
+        HWND expectedParent) noexcept
+    {
+        if (!window || !window->host_hwnd || window->host_hwnd == activeHwnd)
+            return;
+
+        if (has_proxy_host(window))
+        {
+            if (expectedParent
+                && ::GetParent(window->host_hwnd) == expectedParent)
+            {
+                ::ShowWindow(window->host_hwnd, SW_HIDE);
+            }
+            return;
+        }
+
+        if (::IsWindow(window->host_hwnd) == FALSE)
+            return;
+
+        if (expectedParent
+            && ::GetParent(window->host_hwnd) == expectedParent)
+        {
+            ::ShowWindow(window->host_hwnd, SW_HIDE);
+        }
+    }
+
+    inline void restore_associated_host_window(
+        const epochengine::core::WindowData* window,
+        HWND parent,
+        int desiredScreenX,
+        int desiredScreenY,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!window)
+            return;
+
+        if (window->type == epochengine::core::ContextType::SDL
+            && uses_visible_proxy_host(window))
+        {
+            if (!parent
+                || ::IsWindow(parent) == FALSE
+                || !window->host_hwnd
+                || !window->hwndChild
+                || ::IsWindow(window->host_hwnd) == FALSE
+                || ::IsWindow(window->hwndChild) == FALSE)
+            {
+                return;
+            }
+
+            dock_host_window_to_parent(
+                window->host_hwnd,
+                parent,
+                desiredScreenX,
+                desiredScreenY,
+                clientW,
+                clientH);
+            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+            ::ShowWindow(window->host_hwnd, SW_SHOWNA);
+            return;
+        }
+
+        if (!window
+            || !parent
+            || ::IsWindow(parent) == FALSE
+            || !window->host_hwnd
+            || window->host_hwnd == window->hwnd
+            || window->host_hwnd == window->hwndChild
+            || ::IsWindow(window->host_hwnd) == FALSE)
+        {
+            return;
+        }
+
+        dock_host_window_to_parent(
+            window->host_hwnd,
+            parent,
+            desiredScreenX,
+            desiredScreenY,
+            clientW,
+            clientH);
+        ::ShowWindow(window->host_hwnd, SW_HIDE);
+    }
+
+    [[nodiscard]] inline bool is_sfml_proxy_candidate(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return has_proxy_shell_pair(window);
+    }
+
+    [[nodiscard]] inline bool backend_uses_proxy_child(epochengine::core::ContextType type) noexcept
+    {
+        return type == epochengine::core::ContextType::SDL
+            || type == epochengine::core::ContextType::SFML;
+    }
+
+    [[nodiscard]] inline bool backend_adopts_native_child(epochengine::core::ContextType type) noexcept
+    {
+        return type == epochengine::core::ContextType::RayLib;
+    }
+
+    [[nodiscard]] inline bool is_proxy_host_hwnd(
+        const epochengine::core::WindowData* window,
+        HWND hwnd) noexcept
+    {
+        return window
+            && hwnd
+            && window->host_hwnd == hwnd
+            && window->hwndChild
+            && window->hwndChild != hwnd
+            && ::IsWindow(window->hwndChild) != FALSE;
+    }
+
+    [[nodiscard]] inline bool is_sfml_proxy_detached(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return has_proxy_shell_pair(window)
+            && ::GetParent(window->hwndChild) == window->host_hwnd
+            && ::GetParent(window->host_hwnd) == nullptr;
+    }
+
+    [[nodiscard]] inline bool is_proxy_child_directly_docked(
+        const epochengine::core::WindowData* window,
+        HWND expectedParent = nullptr) noexcept
+    {
+        if (!has_proxy_shell_pair(window))
+            return false;
+
+        const HWND childParent = ::GetParent(window->hwndChild);
+        const HWND hostParent = ::GetParent(window->host_hwnd);
+        if (!childParent || childParent == window->host_hwnd)
+            return false;
+
+        if (hostParent && hostParent != childParent)
+            return false;
+
+        return !expectedParent || childParent == expectedParent;
+    }
+
+    [[nodiscard]] inline bool uses_hidden_proxy_shell(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return has_proxy_shell_pair(window)
+            && ::IsWindowVisible(window->host_hwnd) == FALSE;
+    }
+
+    [[nodiscard]] inline HWND proxy_drag_frame(
+        const epochengine::core::WindowData* window,
+        HWND dockParent,
+        HWND fallback) noexcept
+    {
+        if (!window || !is_sfml_proxy_candidate(window))
+            return fallback;
+
+        if (is_sfml_proxy_detached(window))
+            return window->host_hwnd ? window->host_hwnd : fallback;
+
+        if (is_proxy_child_directly_docked(window, dockParent))
+        {
+            const HWND child = window->hwndChild.load(std::memory_order_acquire);
+            return child ? child : fallback;
+        }
+
+        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+            return window->host_hwnd;
+
+        return fallback;
+    }
+
+    [[nodiscard]] inline bool proxy_drag_owns_host(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window))
+            return false;
+
+        const auto& drag = epochengine::core::Drag();
+        return drag.dragging
+            && (drag.draggedWindow == window->host_hwnd
+                || drag.draggedWindow == window->hwndChild);
+    }
+
+    inline void apply_child_fill_layout(HWND child, HWND parent, int clientW, int clientH) noexcept
+    {
+        if (!child || !parent)
+            return;
+
+        LONG_PTR style = ::GetWindowLongPtrW(child, GWL_STYLE);
+        style &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
+        style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        ::SetWindowLongPtrW(child, GWL_STYLE, style);
+        if (::GetParent(child) != parent)
+            ::SetParent(child, parent);
+
+        ::SetWindowPos(
+            child,
+            nullptr,
+            0,
+            0,
+            clientW,
+            clientH,
+            SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+    }
+
+    inline void position_top_level_shell(
+        HWND hwnd,
+        int desiredClientLeft,
+        int desiredClientTop,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+        style &= ~WS_CHILD;
+        style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+
+        LONG_PTR exStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        LONG_PTR desiredExStyle = exStyle;
+        desiredExStyle &= ~static_cast<LONG_PTR>(
+            WS_EX_NOPARENTNOTIFY
+            | WS_EX_TOOLWINDOW
+            | WS_EX_TOPMOST);
+        desiredExStyle |= WS_EX_APPWINDOW;
+        if (desiredExStyle != exStyle)
+            ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desiredExStyle);
+
+        if (const HWND currentParent = ::GetParent(hwnd);
+            currentParent != nullptr)
+        {
+            ::SetPropW(hwnd, kEpochDockParentProp, currentParent);
+            ::SetParent(hwnd, nullptr);
+        }
+        ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
+
+        const DWORD adjustedExStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+        RECT adjusted{ 0, 0, clientW, clientH };
+        int hostX = desiredClientLeft;
+        int hostY = desiredClientTop;
+        int hostW = clientW;
+        int hostH = clientH;
+        if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, adjustedExStyle))
+        {
+            hostX += adjusted.left;
+            hostY += adjusted.top;
+            hostW = clamp_positive(adjusted.right - adjusted.left);
+            hostH = clamp_positive(adjusted.bottom - adjusted.top);
+        }
+
+        ::ShowWindow(hwnd, SW_SHOWNORMAL);
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            hostX,
+            hostY,
+            hostW,
+            hostH,
+            SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+        RECT actualRect{};
+        if (::GetWindowRect(hwnd, &actualRect) != FALSE
+            && (std::abs(actualRect.left - hostX) > 2
+                || std::abs(actualRect.top - hostY) > 2
+                || std::abs((actualRect.right - actualRect.left) - hostW) > 2
+                || std::abs((actualRect.bottom - actualRect.top) - hostH) > 2))
+        {
+            ::MoveWindow(hwnd, hostX, hostY, hostW, hostH, TRUE);
+            ::SetWindowPos(
+                hwnd,
+                HWND_TOP,
+                hostX,
+                hostY,
+                hostW,
+                hostH,
+                SWP_NOOWNERZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+        }
+
+        apply_dark_window_chrome(hwnd);
+        ::BringWindowToTop(hwnd);
+        ::SetActiveWindow(hwnd);
+        ::SetForegroundWindow(hwnd);
+    }
+
+    inline void move_detached_top_level_shell(
+        HWND hwnd,
+        int desiredClientLeft,
+        int desiredClientTop,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        const DWORD style = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_STYLE));
+        const DWORD exStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+        RECT adjusted{ 0, 0, clientW, clientH };
+        int hostX = desiredClientLeft;
+        int hostY = desiredClientTop;
+        int hostW = clientW;
+        int hostH = clientH;
+        if (::AdjustWindowRectEx(&adjusted, style, FALSE, exStyle))
+        {
+            hostX += adjusted.left;
+            hostY += adjusted.top;
+            hostW = clamp_positive(adjusted.right - adjusted.left);
+            hostH = clamp_positive(adjusted.bottom - adjusted.top);
+        }
+
+        ::SetWindowPos(
+            hwnd,
+            nullptr,
+            hostX,
+            hostY,
+            hostW,
+            hostH,
+            SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+
+        RECT actualRect{};
+        if (::GetWindowRect(hwnd, &actualRect) != FALSE
+            && (std::abs(actualRect.left - hostX) > 2
+                || std::abs(actualRect.top - hostY) > 2
+                || std::abs((actualRect.right - actualRect.left) - hostW) > 2
+                || std::abs((actualRect.bottom - actualRect.top) - hostH) > 2))
+        {
+            ::MoveWindow(hwnd, hostX, hostY, hostW, hostH, TRUE);
+            ::SetWindowPos(
+                hwnd,
+                HWND_TOP,
+                hostX,
+                hostY,
+                hostW,
+                hostH,
+                SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
+        }
+
+        apply_dark_window_chrome(hwnd);
+        ::BringWindowToTop(hwnd);
+        const auto& drag = epochengine::core::Drag();
+        if (drag.dragging && drag.draggedWindow == hwnd)
+        {
+            ::SetActiveWindow(hwnd);
+            ::SetForegroundWindow(hwnd);
+            ::SetFocus(hwnd);
+        }
+    }
+
+    inline void sync_drag_offset_to_host_window(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        POINT cursor{};
+        RECT hostRect{};
+        if (::GetCursorPos(&cursor) == FALSE || ::GetWindowRect(hwnd, &hostRect) == FALSE)
+            return;
+
+        auto& drag = epochengine::core::Drag();
+        drag.dragWindowOffset.x = cursor.x - hostRect.left;
+        drag.dragWindowOffset.y = cursor.y - hostRect.top;
+    }
+
+    inline void undock_sfml_proxy_window(
+        epochengine::core::WindowData* window,
+        int desiredClientLeft,
+        int desiredClientTop,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window))
+            return;
+        if (window->pinnedToParent.load(std::memory_order_acquire))
+            return;
+
+        window->isFloating = true;
+        position_top_level_shell(
+            window->host_hwnd,
+            desiredClientLeft,
+            desiredClientTop,
+            clientW,
+            clientH);
+        apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+        window->set_size(clientW, clientH);
+        if (proxy_drag_owns_host(window))
+            ::SetFocus(window->host_hwnd);
+        else
+        {
+            const HWND child = window->hwndChild.load(std::memory_order_acquire);
+            ::SetFocus(child ? child : window->host_hwnd);
+        }
+    }
+
+    inline void redock_sfml_proxy_window(
+        epochengine::core::WindowData* window,
+        HWND parent,
+        int desiredScreenX,
+        int desiredScreenY,
+        int clientW,
+        int clientH) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window) || !parent || ::IsWindow(parent) == FALSE)
+            return;
+
+        window->isFloating = false;
+#if defined(_DEBUG)
+        epochengine::logger::get(kLogSys).logf(
+            epochengine::logger::LogLevel::INFO,
+            std::source_location::current(),
+            "SFML redock begin host={} child={} hostParentBefore={} childParentBefore={} targetParent={}",
+            static_cast<void*>(window->host_hwnd),
+            static_cast<void*>(window->hwndChild),
+            static_cast<void*>(::GetParent(window->host_hwnd)),
+            static_cast<void*>(::GetParent(window->hwndChild)),
+            static_cast<void*>(parent));
+#endif
+
+        if (uses_visible_proxy_host(window))
+        {
+            dock_host_window_to_parent(
+                window->host_hwnd,
+                parent,
+                desiredScreenX,
+                desiredScreenY,
+                clientW,
+                clientH);
+            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+            ::ShowWindow(window->host_hwnd, SW_SHOWNA);
+            ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            window->set_size(clientW, clientH);
+            if (proxy_drag_owns_host(window))
+            {
+                const HWND child = window->hwndChild.load(std::memory_order_acquire);
+                ::SetFocus(child ? child : window->host_hwnd);
+            }
+        }
+        else
+        {
+            dock_host_window_to_parent(
+                window->hwndChild,
+                parent,
+                desiredScreenX,
+                desiredScreenY,
+                clientW,
+                clientH);
+            ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            if (window->host_hwnd
+                && window->host_hwnd != window->hwndChild
+                && ::IsWindow(window->host_hwnd) != FALSE)
+            {
+                dock_host_window_to_parent(
+                    window->host_hwnd,
+                    parent,
+                    desiredScreenX,
+                    desiredScreenY,
+                    clientW,
+                    clientH);
+                ::ShowWindow(window->host_hwnd, SW_HIDE);
+            }
+            window->set_size(clientW, clientH);
+            if (proxy_drag_owns_host(window))
+                ::SetFocus(window->hwndChild);
+        }
+
+#if defined(_DEBUG)
+        epochengine::logger::get(kLogSys).logf(
+            epochengine::logger::LogLevel::INFO,
+            std::source_location::current(),
+            "SFML redock end host={} child={} hostParentAfter={} childParentAfter={} hostVisible={}",
+            static_cast<void*>(window->host_hwnd),
+            static_cast<void*>(window->hwndChild),
+            static_cast<void*>(::GetParent(window->host_hwnd)),
+            static_cast<void*>(::GetParent(window->hwndChild)),
+            ::IsWindowVisible(window->host_hwnd) != FALSE);
+#endif
+    }
+
+    inline void post_proxy_host_command(
+        const epochengine::core::WindowData* window,
+        ProxyDockCmd command,
+        HWND parent,
+        int x,
+        int y,
+        int width,
+        int height) noexcept
+    {
+        if (!is_sfml_proxy_candidate(window))
+            return;
+
+        const HWND child = window->hwndChild.load(std::memory_order_acquire);
+        auto* request = new (std::nothrow) ProxyDockRequest{
+            .sourceHwnd = child ? child : window->host_hwnd,
+            .parentHwnd = parent,
+            .x = x,
+            .y = y,
+            .width = width,
+            .height = height
+        };
+        if (!request)
+            return;
+
+        if (!::PostMessageW(
+            window->host_hwnd,
+            WM_EPOCH_PROXY_DOCKCMD,
+            static_cast<WPARAM>(command),
+            reinterpret_cast<LPARAM>(request)))
+        {
+            delete request;
+        }
+#if defined(_DEBUG)
+        else
+        {
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Posted SFML proxy command={} host={} child={} hostParent={} childParent={} targetParent={}",
+                static_cast<int>(command),
+                static_cast<void*>(window->host_hwnd),
+                static_cast<void*>(window->hwndChild),
+                static_cast<void*>(::GetParent(window->host_hwnd)),
+                static_cast<void*>(::GetParent(window->hwndChild)),
+                static_cast<void*>(parent));
+        }
+#endif
+    }
+
+    [[nodiscard]] inline bool backend_requires_owner_thread_dock_commands(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return window
+            && window->type == epochengine::core::ContextType::RayLib;
+    }
+
+    [[nodiscard]] inline HWND owner_thread_dock_handle(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return nullptr;
+
+        if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+            return window->hwndChild;
+        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+            return window->hwnd;
+        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+            return window->host_hwnd;
+        return nullptr;
+    }
+
+    [[nodiscard]] inline bool post_owner_thread_dock_command(
+        epochengine::core::WindowData* window,
+        ProxyDockCmd command,
+        HWND parent,
+        int x,
+        int y,
+        int width,
+        int height) noexcept
+    {
+        if (!backend_requires_owner_thread_dock_commands(window))
+            return false;
+
+        const HWND target = owner_thread_dock_handle(window);
+        if (!target)
+            return false;
+        if (window->pinnedToParent.load(std::memory_order_acquire)
+            && (command == ProxyDockCmd::Undock || command == ProxyDockCmd::MoveDetached))
+        {
+            return false;
+        }
+
+        if (command == ProxyDockCmd::Redock
+            && (!parent || ::IsWindow(parent) == FALSE))
+        {
+            return false;
+        }
+
+        window->firstPresentComplete.store(false, std::memory_order_release);
+        window->ownerThreadCommandQueue.enqueue([window, target, command, parent, x, y, width, height]()
+            {
+                if (!window || !target || ::IsWindow(target) == FALSE)
+                    return;
+
+                switch (command)
+                {
+                case ProxyDockCmd::Undock:
+                    window->isFloating = true;
+                    if (parent && ::IsWindow(parent) != FALSE)
+                        ::SetPropW(target, kEpochDockParentProp, parent);
+                    position_top_level_shell(target, x, y, width, height);
+                    break;
+
+                case ProxyDockCmd::MoveDetached:
+                    window->isFloating = true;
+                    move_detached_top_level_shell(target, x, y, width, height);
+                    break;
+
+                case ProxyDockCmd::Redock:
+                    window->isFloating = false;
+                    // This command already runs on the Raylib/GLFW owner thread.
+                    // Place it synchronously before accepting the next present.
+                    dock_host_window_to_parent(target, parent, x, y, width, height, false);
+                    hide_associated_host_window(window, target, parent);
+                    ::ShowWindow(target, SW_SHOWNA);
+                    ::UpdateWindow(target);
+                    ::SetFocus(target);
+                    break;
+                }
+
+                window->hwnd = target;
+                window->hwndChild = target;
+                window->set_size(width, height);
+            });
+        return true;
+    }
+
+    inline void forward_gui_input_message(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) noexcept
+    {
+        const auto ctx = resolve_gui_context_for_hwnd(hwnd);
+        if (!ctx)
+            return;
+
+        switch (msg)
+        {
+        case WM_LBUTTONDOWN:
+            remember_gui_input_owner(hwnd);
+            ::SetFocus(hwnd);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
+            break;
+        case WM_RBUTTONDOWN:
+            remember_gui_input_owner(hwnd);
+            ::SetFocus(hwnd);
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam, 0, false, 1);
+            break;
+        case WM_MOUSEMOVE:
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseMove, lParam);
+            break;
+        case WM_LBUTTONUP:
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam);
+            break;
+        case WM_RBUTTONUP:
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam, 0, false, 1);
+            break;
+        case WM_MOUSEWHEEL:
+            push_gui_mouse_event(
+                ctx.get(),
+                hwnd,
+                epochengine::gui::EventType::MouseWheel,
+                lParam,
+                GET_WHEEL_DELTA_WPARAM(wParam),
+                true);
+            break;
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            if (!accepts_gui_keyboard_input(hwnd))
+                break;
+            push_gui_key_event(ctx.get(), static_cast<int>(wParam));
+            break;
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            if (!accepts_gui_keyboard_input(hwnd))
+                break;
+            if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
+                push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
+            break;
+        default:
+            break;
+        }
+    }
+
+    LRESULT CALLBACK BackendInputProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR)
+    {
+        switch (msg)
+        {
+        case WM_SETFOCUS:
+            remember_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_KILLFOCUS:
+            forget_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_NCDESTROY:
+            forget_gui_input_owner(hwnd);
+            ::RemovePropW(hwnd, kEpochBackendInputAdapterProp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return 0;
+        case WM_LBUTTONDOWN:
+        case WM_RBUTTONDOWN:
+        case WM_MOUSEMOVE:
+        case WM_LBUTTONUP:
+        case WM_RBUTTONUP:
+        case WM_MOUSEWHEEL:
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            if (msg == WM_LBUTTONDOWN || msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP)
+            {
+                auto* const window = resolve_window_data_for_hwnd(hwnd);
+                const auto& drag = epochengine::core::Drag();
+                const bool backendDockableChild =
+                    window
+                    && (window->type == epochengine::core::ContextType::SDL
+                        || window->type == epochengine::core::ContextType::SFML)
+                    && hwnd == window->hwndChild;
+                const bool proxyDragStart =
+                    backendDockableChild
+                    && msg == WM_LBUTTONDOWN
+                    && is_dock_drag_hotspot(hwnd, lp);
+                const bool proxyContinueDrag =
+                    backendDockableChild
+                    && drag.dragging
+                    && (drag.draggedWindow == hwnd
+                        || drag.draggedWindow == window->host_hwnd);
+                if (proxyDragStart || proxyContinueDrag)
+                {
+                    return epochengine::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+                }
+            }
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        default:
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
+    }
+
+
+    LRESULT CALLBACK DockableProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR dw)
+    {
+        auto* ctx = reinterpret_cast<SubCtx*>(dw);
+
+        switch (msg)
+        {
+        case WM_SETFOCUS:
+            remember_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_KILLFOCUS:
+            forget_gui_input_owner(hwnd);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        case WM_NCDESTROY:
+            forget_gui_input_owner(hwnd);
+            ::RemovePropW(hwnd, kEpochDockParentProp);
+            delete ctx;
+            return DefSubclassProc(hwnd, msg, wp, lp);
+
+        case WM_EPOCH_DOCKCMD:
+        {
+            if (static_cast<DockCmd>(wp) == DockCmd::Undock)
+            {
+                if (auto* window = resolve_window_data_for_hwnd(hwnd);
+                    window && window->pinnedToParent.load(std::memory_order_acquire))
+                {
+                    return 0;
+                }
+
+                // Convert to a top-level window, preserving client size.
+                RECT clientRect{};
+                ::GetClientRect(hwnd, &clientRect);
+                const int clientW = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
+                const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+
+                LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+                style &= ~WS_CHILD;
+                style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+                ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+
+                const DWORD exStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+                RECT adjusted{ 0, 0, clientW, clientH };
+                if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, exStyle))
+                {
+                    const int wndW = clamp_positive(adjusted.right - adjusted.left);
+                    const int wndH = clamp_positive(adjusted.bottom - adjusted.top);
+                    ::SetParent(hwnd, nullptr);
+                    ::SetWindowPos(hwnd, nullptr, 0, 0, wndW, wndH,
+                        SWP_NOMOVE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                }
+                else
+                {
+                    ::SetParent(hwnd, nullptr);
+                    ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                }
+                return 0;
+            }
+            break;
+        }
+
+        case WM_CLOSE:
+        {
+            // If this is a GLFW-owned HWND (raylib), do NOT DestroyWindow here.
+            // Let GLFW/raylib handle the close.
+            wchar_t cls[64]{};
+            ::GetClassNameW(hwnd, cls, static_cast<int>(std::size(cls)));
+            if (wcsncmp(cls, L"GLFW", 4) == 0)
+                return DefSubclassProc(hwnd, msg, wp, lp);
+
+            ::DestroyWindow(hwnd);
+            return 0;
+        }
+
+        case WM_LBUTTONDOWN:
+        case WM_MOUSEMOVE:
+        case WM_LBUTTONUP:
+        {
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            const auto& dragState = epochengine::core::Drag();
+            const bool continueDrag = dragState.dragging && dragState.draggedWindow == hwnd;
+            const bool dragStart = (msg == WM_LBUTTONDOWN) && is_dock_drag_hotspot(hwnd, lp);
+            if (dragStart || continueDrag)
+                return epochengine::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
+
+        case WM_MOUSEWHEEL:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+
+        case WM_CHAR:
+        case WM_SYSCHAR:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return 0;
+
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return DefSubclassProc(hwnd, msg, wp, lp);
+        }
+
+        return DefSubclassProc(hwnd, msg, wp, lp);
+    }
+#else
+    struct SubCtx { HWND originalParent{}; };
+    constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
+    constexpr wchar_t kEpochLayoutPendingProp[] = L"EpochLayoutPending";
+    constexpr wchar_t kEpochBackendInputAdapterProp[] = L"EpochBackendInputAdapter";
+    constexpr UINT WM_EPOCH_LAYOUT = WM_APP + 0x4A12;
+    constexpr UINT WM_EPOCH_PROXY_DOCKCMD = WM_APP + 0x4A13;
+    constexpr UINT WM_EPOCH_OPEN_DETACHED_CONTEXT = WM_APP + 0x4A14;
+    constexpr UINT WM_EPOCH_RETIRE_CONTEXT_WINDOW = WM_APP + 0x4A15;
+
+    enum class ProxyDockCmd : WPARAM
+    {
+        Undock = 1,
+        MoveDetached = 2,
+        Redock = 3,
+    };
+
+    struct ProxyDockRequest
+    {
+        HWND sourceHwnd{};
+        HWND parentHwnd{};
+        int x{};
+        int y{};
+        int width{};
+        int height{};
+    };
+
+    inline void request_parent_layout(HWND) noexcept {}
+    inline void remember_gui_input_owner(HWND) noexcept {}
+    inline void forget_gui_input_owner(HWND) noexcept {}
+    [[nodiscard]] inline bool accepts_gui_keyboard_input(HWND) noexcept { return true; }
+
+    [[nodiscard]] inline HWND stored_dock_parent(HWND) noexcept { return nullptr; }
+
+    [[nodiscard]] inline RECT screen_client_rect(HWND) noexcept { return RECT{}; }
+    [[nodiscard]] inline bool point_in_rect(const RECT&, const POINT&) noexcept { return false; }
+    [[nodiscard]] inline bool should_redock_to_parent(HWND, const POINT&, const RECT&) noexcept { return false; }
+
+    [[nodiscard]] inline POINT screen_mouse_point(HWND hwnd, UINT msg, LPARAM lParam) noexcept
+    {
+        (void)hwnd;
+        if (msg == WM_NCMOUSEMOVE || msg == WM_NCLBUTTONUP || msg == WM_NCLBUTTONDOWN)
+            return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+
+        POINT pt{};
+        if (::GetCursorPos(&pt) != FALSE)
+            return pt;
+        return POINT{ GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+    }
+
+    [[nodiscard]] inline epochengine::core::WindowData* resolve_window_data_for_hwnd(HWND hwnd) noexcept
+    {
+        auto* mgr = g_activeManager;
+        return (mgr && hwnd) ? mgr->findWindowByHWND(hwnd) : nullptr;
+    }
+
+    [[nodiscard]] inline bool is_dock_drag_hotspot(HWND, LPARAM) noexcept { return false; }
+    [[nodiscard]] inline bool pointer_inside_parent_client(HWND, const POINT&) noexcept { return false; }
+    [[nodiscard]] inline bool pointer_inside_parent_dock_region(HWND, const POINT&) noexcept { return false; }
+    [[nodiscard]] inline bool drag_distance_exceeded(const POINT&, const POINT&, int = 10) noexcept { return false; }
+    [[nodiscard]] inline bool has_proxy_shell_pair(const epochengine::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_sfml_proxy_candidate(const epochengine::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_proxy_host_hwnd(const epochengine::core::WindowData*, HWND) noexcept { return false; }
+    [[nodiscard]] inline bool is_sfml_proxy_detached(const epochengine::core::WindowData*) noexcept { return false; }
+    [[nodiscard]] inline bool is_proxy_child_directly_docked(const epochengine::core::WindowData*, HWND = nullptr) noexcept { return false; }
+    [[nodiscard]] inline bool backend_uses_proxy_child(epochengine::core::ContextType) noexcept { return false; }
+    [[nodiscard]] inline bool backend_adopts_native_child(epochengine::core::ContextType) noexcept { return false; }
+    [[nodiscard]] inline HWND proxy_drag_frame(const epochengine::core::WindowData*, HWND, HWND fallback) noexcept { return fallback; }
+
+    [[nodiscard]] inline POINT force_proxy_shell_outside_parent(
+        HWND,
+        const POINT&,
+        int proposedClientLeft,
+        int proposedClientTop,
+        int,
+        int) noexcept
+    {
+        return POINT{ proposedClientLeft, proposedClientTop };
+    }
+
+    inline void dock_host_window_to_parent(HWND, HWND, int, int, int, int) noexcept {}
+    inline void apply_child_fill_layout(HWND, HWND, int, int) noexcept {}
+    inline void move_detached_top_level_shell(HWND, int, int, int, int) noexcept {}
+    inline void sync_drag_offset_to_host_window(HWND) noexcept {}
+    inline void hide_associated_host_window(const epochengine::core::WindowData*, HWND, HWND) noexcept {}
+    inline void restore_associated_host_window(const epochengine::core::WindowData*, HWND, int, int, int, int) noexcept {}
+    inline void undock_sfml_proxy_window(epochengine::core::WindowData*, int, int, int, int) noexcept {}
+    inline void redock_sfml_proxy_window(epochengine::core::WindowData*, HWND, int, int, int, int) noexcept {}
+    inline void post_proxy_host_command(const epochengine::core::WindowData*, ProxyDockCmd, HWND, int, int, int, int) noexcept {}
+
+    LRESULT CALLBACK BackendInputProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR)
+    {
+        return DefSubclassProc(hwnd, msg, wp, lp);
+    }
+#endif
+
+    inline void cleanup_window_resources(std::unique_ptr<epochengine::core::WindowData>& window) noexcept
+    {
+        if (!window)
+            return;
+
+        window->ownerThreadCommandQueue.clear();
+        window->commandQueue.clear();
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        if (window->ownsNativeGlContext && window->glContext)
+        {
+            ::wglMakeCurrent(nullptr, nullptr);
+            ::wglDeleteContext(window->glContext);
+            window->glContext = nullptr;
+            window->ownsNativeGlContext = false;
+        }
+#endif
+        if (window->ownsNativeDc && window->hdc)
+        {
+            HWND releaseTarget = nullptr;
+            if (window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+                releaseTarget = window->hwndChild;
+            else if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+                releaseTarget = window->hwnd;
+            else if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                releaseTarget = window->host_hwnd;
+
+            if (releaseTarget)
+                ::ReleaseDC(releaseTarget, window->hdc);
+            window->hdc = nullptr;
+            window->ownsNativeDc = false;
+        }
+
+        if (auto context = typed_context(window->context);
+            context && context->windowData == window.get())
+        {
+            context->windowData = nullptr;
+            context->hwnd = nullptr;
+            context->hdc = nullptr;
+            context->hglrc = nullptr;
+            context->native_window = nullptr;
+            context->native_drawable = nullptr;
+            context->native_gl_context = nullptr;
+        }
+
+        const HWND host = window->host_hwnd ? window->host_hwnd : window->hwnd;
+        if (host && ::IsWindow(host) != FALSE)
+            ::DestroyWindow(host);
+
+        window->host_hwnd = nullptr;
+        window->hwnd = nullptr;
+        window->hwndChild = nullptr;
+    }
+
+    [[nodiscard]] inline HWND primary_window_handle(const epochengine::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return nullptr;
+
+        if (window->hwnd && ::IsWindow(window->hwnd) != FALSE)
+            return window->hwnd;
+        const HWND child = window->hwndChild.load(std::memory_order_acquire);
+        if (child && ::IsWindow(child) != FALSE)
+            return child;
+        if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+            return window->host_hwnd;
+        return window->hwnd ? window->hwnd : (child ? child : window->host_hwnd);
+    }
+
+    [[nodiscard]] inline HWND render_thread_key(const epochengine::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return nullptr;
+        return window->host_hwnd ? window->host_hwnd : window->hwnd;
+    }
+
+    [[nodiscard]] inline HWND dock_slot_handle(
+        const epochengine::core::WindowData* window,
+        HWND dockParent) noexcept
+    {
+        if (!window || !dockParent || ::IsWindow(dockParent) == FALSE)
+            return nullptr;
+
+        if (window->hwndChild
+            && ::IsWindow(window->hwndChild) != FALSE
+            && ::GetParent(window->hwndChild) == dockParent)
+        {
+            return window->hwndChild;
+        }
+
+        if (window->host_hwnd
+            && ::IsWindow(window->host_hwnd) != FALSE
+            && ::GetParent(window->host_hwnd) == dockParent)
+        {
+            return window->host_hwnd;
+        }
+
+        if (window->hwnd
+            && ::IsWindow(window->hwnd) != FALSE
+            && ::GetParent(window->hwnd) == dockParent)
+        {
+            return window->hwnd;
+        }
+
+        return nullptr;
+    }
+
+    [[nodiscard]] inline bool matches_window_handle(
+        const epochengine::core::WindowData* window,
+        HWND hwnd) noexcept
+    {
+        return window
+            && hwnd
+            && (window->hwnd == hwnd
+                || window->hwndChild == hwnd
+                || window->host_hwnd == hwnd);
+    }
+
+    [[nodiscard]] inline bool thread_finished(std::thread& thread) noexcept
+    {
+        if (!thread.joinable()) return true;
+        HANDLE handle = static_cast<HANDLE>(thread.native_handle());
+        if (!handle) return false;
+        return ::WaitForSingleObject(handle, 0) == WAIT_OBJECT_0;
+    }
+
+    inline void pump_pending_host_messages() noexcept
+    {
+        MSG msg{};
+        while (::PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE)
+        {
+            if (msg.message == WM_QUIT)
+                continue;
+
+            ::TranslateMessage(&msg);
+            ::DispatchMessageW(&msg);
+        }
+    }
+
+    inline void join_thread_with_message_pump(std::thread& thread) noexcept
+    {
+        while (thread.joinable() && !thread_finished(thread))
+        {
+            pump_pending_host_messages();
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+
+        if (thread.joinable())
+            thread.join();
+    }
+
+    struct NativeTitleFpsState
+    {
+        std::wstring baseTitle{};
+        std::uint64_t frameCount = 0;
+        double fps = 0.0;
+        std::chrono::steady_clock::time_point lastSample{};
+    };
+
+    std::mutex g_nativeTitleFpsMutex;
+    std::unordered_map<const epochengine::core::WindowData*, NativeTitleFpsState> g_nativeTitleFps;
+
+    [[nodiscard]] std::wstring make_native_fps_title(std::wstring_view base, double fps)
+    {
+        std::wstring title{ base };
+        title += L" | host ";
+        title += std::to_wstring(static_cast<long long>(fps + 0.5));
+        title += L" FPS";
+        return title;
+    }
+
+    void set_native_title_if_alive(HWND hwnd, const std::wstring& title) noexcept
+    {
+        if (hwnd && ::IsWindow(hwnd) != FALSE)
+            ::SetWindowTextW(hwnd, title.c_str());
+    }
+
+    void record_native_title_frame(
+        epochengine::core::MultiContextManager* manager,
+        epochengine::core::WindowData& window)
+    {
+        const auto now = std::chrono::steady_clock::now();
+        std::wstring childTitle{};
+        std::wstring parentTitle{};
+        bool shouldUpdate = false;
+
+        {
+            std::scoped_lock lock(g_nativeTitleFpsMutex);
+            auto& state = g_nativeTitleFps[&window];
+            if (state.baseTitle.empty())
+            {
+                state.baseTitle = window.titleWide.empty()
+                    ? L"Epoch Context"
+                    : window.titleWide;
+                state.lastSample = now;
+            }
+
+            ++state.frameCount;
+
+            const auto elapsed = now - state.lastSample;
+            if (elapsed < std::chrono::seconds(1))
+                return;
+
+            const double seconds = std::chrono::duration<double>(elapsed).count();
+            state.fps = seconds > 0.0
+                ? static_cast<double>(state.frameCount) / seconds
+                : 0.0;
+            state.frameCount = 0;
+            state.lastSample = now;
+
+            childTitle = make_native_fps_title(state.baseTitle, state.fps);
+            parentTitle = L"Epoch Docking";
+
+            for (const auto& [_, sampled] : g_nativeTitleFps)
+            {
+                if (sampled.baseTitle.empty() || sampled.fps <= 0.0)
+                    continue;
+
+                parentTitle += L" | ";
+                parentTitle += sampled.baseTitle;
+                parentTitle += L" ";
+                parentTitle += std::to_wstring(static_cast<long long>(sampled.fps + 0.5));
+                parentTitle += L" FPS";
+            }
+
+            shouldUpdate = true;
+        }
+
+        if (!shouldUpdate)
+            return;
+
+        set_native_title_if_alive(window.hwnd, childTitle);
+        if (window.hwndChild != window.hwnd)
+            set_native_title_if_alive(window.hwndChild, childTitle);
+        if (window.host_hwnd != window.hwnd && window.host_hwnd != window.hwndChild)
+            set_native_title_if_alive(window.host_hwnd, childTitle);
+
+        if (manager)
+            set_native_title_if_alive(manager->GetParentWindow(), parentTitle);
+    }
+
+    void forget_native_title_frame_source(const epochengine::core::WindowData* window) noexcept
+    {
+        if (!window)
+            return;
+
+        std::scoped_lock lock(g_nativeTitleFpsMutex);
+        g_nativeTitleFps.erase(window);
+    }
+}
+
+namespace epochengine::core
+{
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+    // Raylib embeds a real GLFW-created HWND. Re-parenting must be performed on the
+    // thread that owns the host HWND, otherwise Win32 can deadlock via cross-thread
+    // synchronous messages during SetParent/SetWindowPos.
+#endif
+    // ------------------------------------------------------------
+    // Exported helpers (declared in the interface module)
+    // ------------------------------------------------------------
+    std::unordered_map<HWND, std::thread>& Threads() noexcept { return g_threads; }
+    DragState& Drag() noexcept { return g_drag; }
+    MultiContextManager* GetActiveMultiContextManager() noexcept { return g_activeManager; }
+
+    void RequestActiveParentLayout() noexcept
+    {
+        if (auto* mgr = GetActiveMultiContextManager())
+        {
+            if (const HWND parentHwnd = mgr->GetParentWindow();
+                parentHwnd && ::IsWindow(parentHwnd) != FALSE)
+            {
+                request_parent_layout(parentHwnd);
+            }
+        }
+    }
+
+    void MakeDockable(HWND hwnd, HWND parent)
+    {
+#if EPOCH_SINGLE_PARENT
+        (void)parent;
+        if (!hwnd) return;
+        auto* ctx = new SubCtx{ parent };
+        if (parent)
+            ::SetPropW(hwnd, kEpochDockParentProp, parent);
+        if (!::SetWindowSubclass(hwnd, DockableProc, 1, reinterpret_cast<DWORD_PTR>(ctx)))
+        {
+            if (parent)
+                ::RemovePropW(hwnd, kEpochDockParentProp);
+            delete ctx;
+        }
+#else
+        (void)hwnd;
+        (void)parent;
+#endif
+    }
+
+    void MultiContextManager::AttachBackendInputAdapter(HWND hwnd) noexcept
+    {
+        if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return;
+
+        // Dockable child panes already forward GUI input through DockableProc.
+        // Installing the input adapter again on the same HWND duplicates WM_CHAR/WM_KEYDOWN.
+        if (::GetPropW(hwnd, kEpochDockParentProp))
+            return;
+
+        if (::GetPropW(hwnd, kEpochBackendInputAdapterProp))
+            return;
+
+        if (::SetWindowSubclass(hwnd, BackendInputProc, 2, 0))
+            ::SetPropW(hwnd, kEpochBackendInputAdapterProp, reinterpret_cast<HANDLE>(1));
+    }
+
+    namespace backend
+    {
+        std::wstring_view BackendDisplayName(ContextType type) noexcept
+        {
+            switch (type)
+            {
+            case ContextType::OpenGL:   return L"OpenGL";
+            case ContextType::SDL:      return L"SDL";
+            case ContextType::SFML:     return L"SFML";
+            case ContextType::RayLib:   return L"Raylib";
+            case ContextType::Software: return L"Software";
+            case ContextType::Vulkan:   return L"Vulkan";
+            case ContextType::DirectX:  return L"DirectX";
+            case ContextType::Noop:     return L"Noop";
+            case ContextType::Custom:   return L"Custom";
+            default:                    return L"Context";
+            }
+        }
+
+        std::wstring BuildChildWindowTitle(ContextType type, int index)
+        {
+            if (epochengine::core::cli::updater_shell_requested
+                && type == ContextType::OpenGL
+                && index == 0)
+            {
+                return L"Epoch Updater Shell";
+            }
+
+            const std::wstring_view base = BackendDisplayName(type);
+            std::wstring title{ base.begin(), base.end() };
+            title += L" Dock ";
+            title += std::to_wstring(static_cast<long long>(index) + 1);
+            return title;
+        }
+
+        void ResolveClientSize(HWND hwnd, int& width, int& height) noexcept
+        {
+            if (!hwnd) return;
+            RECT client{};
+            if (!::GetClientRect(hwnd, &client)) return;
+            width = clamp_positive(static_cast<int>(client.right - client.left));
+            height = clamp_positive(static_cast<int>(client.bottom - client.top));
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Window lookup
+    // ------------------------------------------------------------
+    WindowData* MultiContextManager::findWindowByHWND(HWND hwnd)
+    {
+        std::scoped_lock lock(windowsMutex);
+        auto it = std::find_if(windows.begin(), windows.end(),
+            [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+        return (it != windows.end()) ? it->get() : nullptr;
+    }
+
+    const WindowData* MultiContextManager::findWindowByHWND(HWND hwnd) const
+    {
+        std::scoped_lock lock(windowsMutex);
+        auto it = std::find_if(windows.begin(), windows.end(),
+            [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+        return (it != windows.end()) ? it->get() : nullptr;
+    }
+
+    WindowData* MultiContextManager::findWindowByContext(const std::shared_ptr<Context>& ctx)
+    {
+        if (!ctx) return nullptr;
+        std::scoped_lock lock(windowsMutex);
+        auto it = std::find_if(windows.begin(), windows.end(),
+            [&](const std::unique_ptr<WindowData>& w) { return w && w->context && w->context.get() == static_cast<void*>(ctx.get()); });
+        return (it != windows.end()) ? it->get() : nullptr;
+    }
+
+    const WindowData* MultiContextManager::findWindowByContext(const std::shared_ptr<Context>& ctx) const
+    {
+        if (!ctx) return nullptr;
+        std::scoped_lock lock(windowsMutex);
+        auto it = std::find_if(windows.begin(), windows.end(),
+            [&](const std::unique_ptr<WindowData>& w) { return w && w->context && w->context.get() == static_cast<void*>(ctx.get()); });
+        return (it != windows.end()) ? it->get() : nullptr;
+    }
+
+    bool MultiContextManager::PromotePrimaryWindow(const std::shared_ptr<Context>& context)
+    {
+        if (!context || !parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        {
+            std::scoped_lock lock(windowsMutex);
+            const auto targetIt = std::find_if(
+                windows.begin(),
+                windows.end(),
+                [&](const std::unique_ptr<WindowData>& window)
+                {
+                    return window
+                        && window->context
+                        && window->context.get() == static_cast<void*>(context.get());
+                });
+            if (targetIt == windows.end())
+                return false;
+
+            auto* const target = targetIt->get();
+            if (!target
+                || !target->guiRoute.empty()
+                || target->isFloating
+                || !target->running.load(std::memory_order_acquire)
+                || target->get_should_close()
+                || target->backend_lifecycle() != BackendLifecycleState::ready)
+            {
+                return false;
+            }
+
+            for (auto& window : windows)
+                window->pinnedToParent.store(window.get() == target, std::memory_order_release);
+        }
+
+        ArrangeDockedWindowsGrid();
+        return true;
+    }
+
+    // ------------------------------------------------------------
+    // MultiContextManager (public helpers)
+    // ------------------------------------------------------------
+    bool MultiContextManager::IsRunning() const noexcept
+    {
+        return running.load(std::memory_order_acquire);
+    }
+
+    void MultiContextManager::BeginContextReplacement() noexcept
+    {
+        contextReplacementHolds.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    void MultiContextManager::EndContextReplacement() noexcept
+    {
+        std::uint32_t previous = contextReplacementHolds.load(std::memory_order_acquire);
+        while (previous != 0
+            && !contextReplacementHolds.compare_exchange_weak(
+                previous,
+                previous - 1,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire))
+        {
+        }
+
+        if (previous == 0)
+            return;
+
+        if (previous != 1)
+            return;
+
+        bool noWindows = false;
+        {
+            std::scoped_lock lock(windowsMutex);
+            noWindows = windows.empty();
+        }
+        if (!noWindows)
+            return;
+
+        running.store(false, std::memory_order_release);
+        if (uiThreadId != 0 && uiThreadId != ::GetCurrentThreadId())
+            ::PostThreadMessageW(uiThreadId, WM_QUIT, 0, 0);
+        else
+            ::PostQuitMessage(0);
+    }
+
+    bool MultiContextManager::ContextReplacementInProgress() const noexcept
+    {
+        return contextReplacementHolds.load(std::memory_order_acquire) > 0;
+    }
+
+    bool MultiContextManager::IsContextRetired(const Context* context) const noexcept
+    {
+        if (!context)
+            return true;
+
+        std::scoped_lock lock(windowsMutex, g_threadStateMutex);
+        const bool stillOwned = std::ranges::any_of(
+            windows,
+            [context](const std::unique_ptr<WindowData>& window)
+            {
+                const auto liveContext = window ? typed_context(window->context) : nullptr;
+                return liveContext && liveContext.get() == context;
+            });
+        if (stillOwned)
+            return false;
+
+        return std::ranges::none_of(
+            g_pendingCleanups,
+            [context](const PendingWindowCleanup& pending)
+            {
+                const auto liveContext = pending.window ? typed_context(pending.window->context) : nullptr;
+                return liveContext && liveContext.get() == context;
+            });
+    }
+
+    void MultiContextManager::StopRunning() noexcept
+    {
+        running.store(false, std::memory_order_release);
+    }
+
+    void MultiContextManager::EnqueueRenderCommand(HWND hwnd, RenderCommand cmd)
+    {
+        std::scoped_lock lock(windowsMutex);
+        auto it = std::find_if(windows.begin(), windows.end(),
+            [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+        if (it != windows.end()) (*it)->EnqueueCommand(std::move(cmd));
+    }
+
+    bool MultiContextManager::OpenDetachedContextWindow(const DetachedContextWindowRequest& request)
+    {
+        if (!running.load(std::memory_order_acquire))
+            return false;
+
+        s_activeInstance = this;
+        g_activeManager = this;
+
+        if (uiThreadId == 0 || ::GetCurrentThreadId() == uiThreadId)
+            return CreateDetachedContextWindowOnOwnerThread(request);
+
+        HWND target = parent;
+        if (!target || ::IsWindow(target) == FALSE)
+        {
+            std::scoped_lock lock(windowsMutex);
+            for (const auto& window : windows)
+            {
+                target = primary_window_handle(window.get());
+                if (target && ::IsWindow(target) != FALSE)
+                    break;
+            }
+        }
+
+        if (!target || ::IsWindow(target) == FALSE)
+            return false;
+
+        auto* posted = new DetachedContextWindowRequest(request);
+        if (::PostMessageW(
+            target,
+            WM_EPOCH_OPEN_DETACHED_CONTEXT,
+            0,
+            reinterpret_cast<LPARAM>(posted)) == FALSE)
+        {
+            delete posted;
+            return false;
+        }
+
+        return true;
+    }
+
+    bool MultiContextManager::OpenReplacementContextWindow(
+        const DetachedContextWindowRequest& request,
+        std::shared_ptr<Context>* createdContext)
+    {
+        if (createdContext)
+            createdContext->reset();
+
+        if (!ContextReplacementInProgress()
+            || !parent
+            || ::IsWindow(parent) == FALSE
+            || uiThreadId == 0
+            || ::GetCurrentThreadId() != uiThreadId)
+        {
+            return false;
+        }
+
+        DetachedContextWindowRequest dockedRequest = request;
+        dockedRequest.start_docked = true;
+        dockedRequest.pinned_to_parent = true;
+        return CreateDetachedContextWindowOnOwnerThread(dockedRequest, createdContext);
+    }
+
+    // ------------------------------------------------------------
+    // Implementation
+    // ------------------------------------------------------------
+    void MultiContextManager::ShowConsole()
+    {
+        if (::AllocConsole())
+        {
+            FILE* f{};
+            freopen_s(&f, "CONOUT$", "w", stdout);
+            freopen_s(&f, "CONIN$", "r", stdin);
+            freopen_s(&f, "CONOUT$", "w", stderr);
+            std::ios::sync_with_stdio(true);
+        }
+    }
+
+    bool MultiContextManager::CreateDetachedContextWindowOnOwnerThread(
+        const DetachedContextWindowRequest& request,
+        std::shared_ptr<Context>* createdContext)
+    {
+        if (createdContext)
+            createdContext->reset();
+
+        if (!running.load(std::memory_order_acquire))
+            return false;
+
+        s_activeInstance = this;
+        g_activeManager = this;
+
+        const int clientW = clamp_positive(request.width);
+        const int clientH = clamp_positive(request.height);
+        std::wstring title = epochengine::text::widen_utf16(request.title);
+        if (title.empty())
+            title = L"Epoch Context";
+
+        int initialX = CW_USEDEFAULT;
+        int initialY = CW_USEDEFAULT;
+        RECT workArea{};
+        if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0) != FALSE)
+        {
+            constexpr int kMargin = 36;
+            initialX = (std::max)(static_cast<int>(workArea.left) + kMargin,
+                static_cast<int>(workArea.right) - clientW - kMargin);
+            initialY = static_cast<int>(workArea.top) + kMargin + 56;
+        }
+
+        const bool proxyChildBackend = backend_uses_proxy_child(request.type);
+        const bool adoptedChildBackend = backend_adopts_native_child(request.type);
+        const bool delayedPlaceholderVisibility = proxyChildBackend || adoptedChildBackend;
+        const bool hasValidParent =
+            parent
+            && ::IsWindow(parent) != FALSE;
+
+        if (request.start_docked && delayedPlaceholderVisibility && !hasValidParent)
+        {
+            epochengine::logger::get(kLogSys).logf(
+                logger::LogLevel::Error,
+                std::source_location::current(),
+                "Refusing start-docked native-child context '{}' because no valid parent host exists.",
+                request.title);
+            return false;
+        }
+
+        const bool startDocked =
+            request.start_docked
+            && hasValidParent;
+
+        const DWORD childStyle = WS_CHILD
+            | WS_CLIPSIBLINGS
+            | WS_CLIPCHILDREN
+            | (delayedPlaceholderVisibility ? 0u : WS_VISIBLE);
+        const DWORD floatingStyle = WS_OVERLAPPEDWINDOW
+            | WS_VISIBLE
+            | WS_CLIPSIBLINGS
+            | WS_CLIPCHILDREN;
+
+        HWND hwnd = ::CreateWindowExW(
+            startDocked ? 0 : WS_EX_APPWINDOW,
+            L"EpochChild",
+            title.c_str(),
+            startDocked ? childStyle : floatingStyle,
+            startDocked ? 0 : initialX,
+            startDocked ? 0 : initialY,
+            clientW,
+            clientH,
+            startDocked ? parent : nullptr,
+            nullptr,
+            ::GetModuleHandleW(nullptr),
+            this);
+
+        if (!hwnd)
+            return false;
+
+        ::SetWindowTextW(hwnd, title.c_str());
+        apply_dark_window_chrome(hwnd);
+        ::DragAcceptFiles(hwnd, TRUE);
+        if (startDocked)
+        {
+            MakeDockable(hwnd, parent);
+        }
+        else if (const HWND dockParent = GetParentWindow();
+            dockParent && ::IsWindow(dockParent) != FALSE && !proxyChildBackend)
+        {
+            MakeDockable(hwnd, dockParent);
+        }
+
+        HDC hdc = ::GetDC(hwnd);
+        HGLRC glrc = nullptr;
+        bool usesSharedContext = false;
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        if (request.type == ContextType::OpenGL)
+        {
+            glrc = CreateSharedGLContext(hdc);
+            usesSharedContext = (glrc != nullptr);
+            if (!glrc)
+            {
+                ::ReleaseDC(hwnd, hdc);
+                ::DestroyWindow(hwnd);
+                return false;
+            }
+        }
+#endif
+
+        {
+            bool needInit = false;
+            {
+                std::shared_lock lock(g_backendsMutex);
+                needInit = g_backends.empty();
+            }
+            if (needInit)
+                InitializeAllContexts();
+        }
+
+        std::shared_ptr<Context> ctx;
+        {
+            std::unique_lock lock(g_backendsMutex);
+            auto it = g_backends.find(request.type);
+            if (it == g_backends.end() || !it->second.master)
+            {
+                ::ReleaseDC(hwnd, hdc);
+                ::DestroyWindow(hwnd);
+                return false;
+            }
+
+            auto& backendSlot = it->second;
+            if (!backendSlot.master->windowData)
+            {
+                ctx = backendSlot.master;
+            }
+            else
+            {
+                auto freeIt = std::find_if(
+                    backendSlot.duplicates.begin(),
+                    backendSlot.duplicates.end(),
+                    [](const std::shared_ptr<Context>& dup) { return dup && !dup->windowData; });
+
+                if (freeIt != backendSlot.duplicates.end())
+                {
+                    ctx = *freeIt;
+                }
+                else
+                {
+                    auto dup = CloneContext(*backendSlot.master);
+                    backendSlot.duplicates.push_back(dup);
+                    ctx = std::move(dup);
+                }
+            }
+        }
+
+        if (!ctx)
+        {
+            ::ReleaseDC(hwnd, hdc);
+            ::DestroyWindow(hwnd);
+            return false;
+        }
+
+        ctx->type = request.type;
+        ctx->hwnd = hwnd;
+        ctx->hdc = hdc;
+        ctx->hglrc = glrc;
+        ctx->native_window = hwnd;
+        ctx->native_drawable = hdc;
+        ctx->native_gl_context = glrc;
+
+        auto winPtr = std::make_unique<WindowData>(hwnd, hdc, glrc, usesSharedContext, request.type);
+        winPtr->running = true;
+        winPtr->context = ctx;
+        winPtr->titleWide = title;
+        winPtr->titleNarrow = epochengine::text::narrow_utf8(title);
+        winPtr->guiRoute = request.gui_route;
+        winPtr->isFloating = !startDocked;
+        winPtr->pinnedToParent.store(request.pinned_to_parent && startDocked, std::memory_order_release);
+        winPtr->firstPresentComplete.store(
+            request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
+            std::memory_order_release);
+        ctx->windowData = winPtr.get();
+
+        RECT rc{};
+        ::GetClientRect(hwnd, &rc);
+        ctx->width = clamp_positive(static_cast<int>(rc.right - rc.left));
+        ctx->height = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+        ctx->framebufferWidth = ctx->width;
+        ctx->framebufferHeight = ctx->height;
+        winPtr->width = ctx->width;
+        winPtr->height = ctx->height;
+        if (!ctx->onResize && winPtr->onResize)
+            ctx->onResize = winPtr->onResize;
+
+        WindowData* rawWin = winPtr.get();
+        {
+            std::scoped_lock lock(windowsMutex);
+            windows.emplace_back(std::move(winPtr));
+        }
+
+        if (rawWin)
+        {
+            std::scoped_lock lock(g_threadStateMutex);
+            if (!g_threads.contains(hwnd))
+            {
+                g_threads.emplace(
+                    hwnd,
+                    std::thread([this, rawWin]()
+                    {
+                        epochengine::systems::threading::ScopedThreadActivity threadActivity{};
+                        RenderLoop(*rawWin);
+                    }));
+            }
+        }
+
+        if (!startDocked || !delayedPlaceholderVisibility)
+        {
+            ::ShowWindow(hwnd, SW_SHOWNORMAL);
+            ::BringWindowToTop(hwnd);
+            ::SetForegroundWindow(hwnd);
+            ::SetFocus(hwnd);
+        }
+        if (startDocked)
+            ArrangeDockedWindowsGrid();
+        if (createdContext)
+            *createdContext = ctx;
+        return true;
+    }
+
+    ATOM MultiContextManager::RegisterParentClass(HINSTANCE hInst, LPCWSTR name)
+    {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = ParentProc;
+        wc.hInstance = hInst;
+        wc.lpszClassName = name;
+        wc.style = CS_OWNDC;
+        wc.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = parent_background_brush();
+        return ::RegisterClassW(&wc);
+    }
+
+    ATOM MultiContextManager::RegisterChildClass(HINSTANCE hInst, LPCWSTR name)
+    {
+        WNDCLASSW wc{};
+        wc.lpfnWndProc = ChildProc;
+        wc.hInstance = hInst;
+        wc.lpszClassName = name;
+        wc.style = CS_OWNDC;
+        wc.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = nullptr;
+        return ::RegisterClassW(&wc);
+    }
+
+    void MultiContextManager::SetupPixelFormat(HDC hdc)
+    {
+        if (!hdc) return;
+        if (::GetPixelFormat(hdc) != 0)
+            return;
+        PIXELFORMATDESCRIPTOR pfd{};
+        pfd.nSize = sizeof(pfd);
+        pfd.nVersion = 1;
+        pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+        pfd.iPixelType = PFD_TYPE_RGBA;
+        pfd.cColorBits = 32;
+        pfd.cDepthBits = 24;
+        pfd.iLayerType = PFD_MAIN_PLANE;
+
+        const int pf = ::ChoosePixelFormat(hdc, &pfd);
+        if (pf == 0 || !::SetPixelFormat(hdc, pf, &pfd))
+            throw std::runtime_error("Failed to set pixel format");
+    }
+
+        HGLRC MultiContextManager::CreateSharedGLContext(HDC hdc)
+    {
+        SetupPixelFormat(hdc);
+        HGLRC tempCtx = ::wglCreateContext(hdc);
+        if (!tempCtx) throw std::runtime_error("Failed to create temporary OpenGL context");
+        if (!::wglMakeCurrent(hdc, tempCtx))
+        {
+            ::wglDeleteContext(tempCtx);
+            throw std::runtime_error("Failed to activate temporary OpenGL context");
+        }
+
+        HGLRC finalCtx = nullptr;
+        auto* createAttribs = reinterpret_cast<PFNWGLCREATECONTEXTATTRIBSARBPROC>(
+            ::wglGetProcAddress("wglCreateContextAttribsARB"));
+
+        if (createAttribs)
+        {
+            int attribs46[] = {
+                WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
+                WGL_CONTEXT_MINOR_VERSION_ARB, 6,
+                WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                0
+            };
+            finalCtx = createAttribs(hdc, sharedContext, attribs46);
+
+            if (!finalCtx)
+            {
+                int attribs41[] = {
+                    WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
+                    WGL_CONTEXT_MINOR_VERSION_ARB, 1,
+                    WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                    0
+                };
+                finalCtx = createAttribs(hdc, sharedContext, attribs41);
+            }
+        }
+
+        if (!finalCtx)
+        {
+            finalCtx = tempCtx;
+            tempCtx = nullptr;
+
+            if (sharedContext && !::wglShareLists(sharedContext, finalCtx))
+            {
+                ::wglMakeCurrent(nullptr, nullptr);
+                ::wglDeleteContext(finalCtx);
+                throw std::runtime_error("Failed to share OpenGL context");
+            }
+        }
+
+        ::wglMakeCurrent(nullptr, nullptr);
+
+        if (tempCtx)
+            ::wglDeleteContext(tempCtx);
+
+        return finalCtx;
+    }
+    int MultiContextManager::get_title_bar_thickness(const HWND window_handle)
+    {
+        RECT wr{}, cr{};
+        ::GetWindowRect(window_handle, &wr);
+        ::GetClientRect(window_handle, &cr);
+
+        const int totalH = wr.bottom - wr.top;
+        const int clientH = cr.bottom - cr.top;
+        const int totalW = wr.right - wr.left;
+        const int clientW = cr.right - cr.left;
+
+        const int nonClientH = totalH - clientH;
+        const int nonClientW = totalW - clientW;
+
+        const int border = nonClientW / 2;
+        const int title = nonClientH - border * 2;
+        return title;
+    }
+
+    bool MultiContextManager::Initialize(
+        HINSTANCE hInst,
+        int RayLibWinCount,
+        int SDLWinCount,
+        int SFMLWinCount,
+        int VulkanWinCount,
+        int OpenGLWinCount,
+        int DirectXWinCount,
+        int SoftwareWinCount,
+        bool parented)
+    {
+        const int totalRequested = RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + DirectXWinCount + SoftwareWinCount;
+        if (totalRequested <= 0) return false;
+
+        uiThreadId = ::GetCurrentThreadId();
+        running.store(true, std::memory_order_release);
+        s_activeInstance = this;
+        g_activeManager = this;
+
+        RegisterParentClass(hInst, L"EpochParent");
+        RegisterChildClass(hInst, L"EpochChild");
+
+        epochengine::core::InitializeAllContexts();
+
+        // ---------------- Parent (dock container) ----------------
+        if (parented)
+        {
+            int cols = 1, rows = 1;
+            while (cols * rows < totalRequested) (cols <= rows ? ++cols : ++rows);
+
+            int clientW = cli::window_width;
+            int clientH = cli::window_height;
+
+            if (totalRequested > 1)
+            {
+                RECT workArea{};
+                constexpr int kMargin = 24;
+                if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+                {
+                    clientW = (std::max)(
+                        960,
+                        static_cast<int>(workArea.right - workArea.left) - (kMargin * 2));
+                    clientH = (std::max)(
+                        720,
+                        static_cast<int>(workArea.bottom - workArea.top) - (kMargin * 2));
+                }
+                else
+                {
+                    clientW = cols * 640;
+                    clientH = rows * 360;
+                }
+            }
+
+            RECT want{ 0, 0, clientW, clientH };
+            const DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN;
+            ::AdjustWindowRect(&want, style, FALSE);
+
+            parent = ::CreateWindowExW(
+                0,
+                L"EpochParent",
+                L"Epoch Docking",
+                style,
+                CW_USEDEFAULT,
+                CW_USEDEFAULT,
+                want.right - want.left,
+                want.bottom - want.top,
+                nullptr,
+                nullptr,
+                hInst,
+                this);
+
+            if (!GetParentWindow()) return false;
+            apply_dark_window_chrome(GetParentWindow());
+            ::DragAcceptFiles(GetParentWindow(), TRUE);
+        }
+        else
+        {
+            parent = nullptr;
+        }
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        // ---------------- Shared dummy GL context (for wglShareLists + glad bootstrap) ----------------
+        {
+            HWND dummy = ::CreateWindowExW(
+                WS_EX_TOOLWINDOW,
+                L"EpochChild",
+                L"Dummy",
+                WS_POPUP,
+                0, 0, 1, 1,
+                nullptr,
+                nullptr,
+                hInst,
+                nullptr);
+
+            if (!dummy) return false;
+
+            HDC dummyDC = ::GetDC(dummy);
+            sharedContext = CreateSharedGLContext(dummyDC);
+            if (!sharedContext)
+            {
+                ::ReleaseDC(dummy, dummyDC);
+                ::DestroyWindow(dummy);
+                throw std::runtime_error("Failed to create shared OpenGL context");
+            }
+
+            ::wglMakeCurrent(dummyDC, sharedContext);
+
+            static bool gladInitialized = false;
+            if (!gladInitialized)
+            {
+                gladInitialized = (gladLoadGL() != 0);
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                epochengine::logger::get(kLogSys).log(
+                    epochengine::logger::LogLevel::INFO,
+                    "GLAD loaded on dummy context",
+                    std::source_location::current());
+#endif
+            }
+
+            ::wglMakeCurrent(nullptr, nullptr);
+            ::ReleaseDC(dummy, dummyDC);
+            ::DestroyWindow(dummy);
+        }
+#endif
+
+        // ---------------- Helper: create N windows for a backend ----------------
+        auto make_backend_windows = [&](ContextType type, int count)
+            {
+                if (count <= 0) return;
+
+                std::vector<HWND> created;
+                created.reserve(static_cast<size_t>(count));
+                std::vector<std::string> createdTitles;
+                createdTitles.reserve(static_cast<size_t>(count));
+
+                for (int i = 0; i < count; ++i)
+                {
+                    const std::wstring windowTitle = backend::BuildChildWindowTitle(type, i);
+                    const std::string narrowTitle = epochengine::text::narrow_utf8(windowTitle);
+                    const bool singleStandaloneWindow = (!parent && totalRequested == 1);
+                    const bool updaterStandaloneWindow = singleStandaloneWindow && cli::updater_shell_requested;
+                    const int initialWidth = singleStandaloneWindow ? cli::window_width : 1280;
+                    const int initialHeight = singleStandaloneWindow ? cli::window_height : 1277;
+                    int initialX = singleStandaloneWindow ? CW_USEDEFAULT : 0;
+                    int initialY = singleStandaloneWindow ? CW_USEDEFAULT : 0;
+
+                    if (updaterStandaloneWindow)
+                    {
+                        RECT workArea{};
+                        if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+                        {
+                            constexpr int kMargin = 24;
+                            const int workLeft = static_cast<int>(workArea.left);
+                            const int workTop = static_cast<int>(workArea.top);
+                            const int workRight = static_cast<int>(workArea.right);
+                            const int workBottom = static_cast<int>(workArea.bottom);
+                            const int minX = workLeft + kMargin;
+                            const int minY = workTop + kMargin;
+                            const int maxX = (std::max)(minX, workRight - initialWidth - kMargin);
+                            const int maxY = (std::max)(minY, workBottom - initialHeight - kMargin);
+
+                            if (const HWND consoleWindow = ::GetConsoleWindow())
+                            {
+                                RECT consoleRect{};
+                                if (::GetWindowRect(consoleWindow, &consoleRect))
+                                {
+                                    const int consoleLeft = static_cast<int>(consoleRect.left);
+                                    const int consoleTop = static_cast<int>(consoleRect.top);
+                                    const int consoleRight = static_cast<int>(consoleRect.right);
+                                    const int consoleBottom = static_cast<int>(consoleRect.bottom);
+                                    const int rightSideX = consoleRight + kMargin;
+                                    const bool fitsRight = rightSideX <= maxX;
+                                    if (fitsRight)
+                                    {
+                                        initialX = rightSideX;
+                                        initialY = (std::clamp)(consoleTop, minY, maxY);
+                                    }
+                                    else
+                                    {
+                                        initialX = (std::clamp)(consoleLeft, minX, maxX);
+                                        initialY = (std::clamp)(consoleBottom + kMargin, minY, maxY);
+                                    }
+                                }
+                            }
+
+                            if (initialX == CW_USEDEFAULT || initialY == CW_USEDEFAULT)
+                            {
+                                initialX = maxX;
+                                initialY = minY + 48;
+                            }
+                        }
+                    }
+
+                    HWND hwnd = ::CreateWindowExW(
+                        0,
+                        L"EpochChild",
+                        windowTitle.c_str(),
+                        (parent
+                            ? (WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
+                            : (WS_OVERLAPPEDWINDOW | WS_VISIBLE)),
+                        initialX, initialY, initialWidth, initialHeight,
+                        parent,
+                        nullptr,
+                        hInst,
+                        nullptr);
+
+                    if (!hwnd) continue;
+
+                    ::SetWindowTextW(hwnd, windowTitle.c_str());
+
+                    HDC hdc = ::GetDC(hwnd);
+                    HGLRC glrc = nullptr;
+                    bool usesSharedContext = false;
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+                    if (type == ContextType::OpenGL)
+                    {
+                        glrc = CreateSharedGLContext(hdc);
+                        usesSharedContext = (glrc != nullptr);
+                    }
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
+                    else if (type == ContextType::Vulkan)
+                    {
+                        // Keep Vulkan windows free of WGL state to avoid WSI surface conflicts.
+                        glrc = nullptr;
+                        usesSharedContext = false;
+                    }
+#endif
+#endif
+
+                    auto winPtr = std::make_unique<WindowData>(hwnd, hdc, glrc, usesSharedContext, type);
+                    winPtr->running = true;
+                    winPtr->titleWide = windowTitle;
+                    winPtr->titleNarrow = narrowTitle;
+
+                    if (parent && !backend_uses_proxy_child(type))
+                        MakeDockable(hwnd, parent);
+
+                    {
+                        std::scoped_lock lock(windowsMutex);
+                        winPtr->pinnedToParent.store(parent && windows.empty(), std::memory_order_release);
+                        windows.emplace_back(std::move(winPtr));
+                    }
+
+                    created.push_back(hwnd);
+                    createdTitles.push_back(narrowTitle);
+                }
+
+                std::vector<std::shared_ptr<Context>> ctxs;
+
+                std::shared_ptr<Context> master;
+                std::vector<std::shared_ptr<Context>> free_dups;
+                free_dups.reserve(static_cast<size_t>((std::max)(0, count - 1)));
+
+                {
+                    std::unique_lock lock(g_backendsMutex);
+                    auto it = g_backends.find(type);
+                    if (it == g_backends.end() || !it->second.master)
+                    {
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::Error,
+                            std::source_location::current(),
+                            "Missing prototype context for backend type {}",
+                            static_cast<int>(type));
+                        return;
+                    }
+
+                    core::BackendState& backendSlot = it->second;
+                    master = backendSlot.master;
+
+                    for (auto& dup : backendSlot.duplicates)
+                    {
+                        if (dup && dup->windowData == nullptr)
+                            free_dups.push_back(dup);
+                    }
+                }
+
+                if (!master) return;
+
+                ctxs.reserve(static_cast<size_t>(count));
+                ctxs.push_back(master);
+
+                while (ctxs.size() < static_cast<size_t>(count))
+                {
+                    if (!free_dups.empty())
+                    {
+                        ctxs.push_back(std::move(free_dups.back()));
+                        free_dups.pop_back();
+                        continue;
+                    }
+
+                    auto cloned = CloneContext(*master);
+                    {
+                        std::unique_lock lock(g_backendsMutex);
+                        g_backends[type].duplicates.push_back(cloned);
+                    }
+                    ctxs.push_back(std::move(cloned));
+                }
+
+                const size_t n = (std::min)(created.size(), ctxs.size());
+                for (size_t i = 0; i < n; ++i)
+                {
+                    HWND hwnd = created[i];
+                    auto* w = findWindowByHWND(hwnd);
+                    auto& ctx = ctxs[i];
+                    if (!ctx) continue;
+
+                    ctx->type = type;
+                    ctx->hwnd = hwnd;
+
+                    int width = 800;
+                    int height = 600;
+                    backend::ResolveClientSize(hwnd, width, height);
+                    ctx->width = width;
+                    ctx->height = height;
+                    ctx->framebufferWidth = width;
+                    ctx->framebufferHeight = height;
+
+                    std::string narrowTitle;
+                    if (w)
+                    {
+                        ctx->hdc = w->hdc;
+                        ctx->hglrc = w->glContext;
+                        ctx->windowData = w;
+                        w->context = ctx;
+                        w->width = width;
+                        w->height = height;
+                        w->running = true;
+
+                        if (!ctx->onResize && w->onResize) ctx->onResize = w->onResize;
+                        if (!w->titleNarrow.empty()) narrowTitle = w->titleNarrow;
+                    }
+
+                    if (narrowTitle.empty())
+                    {
+                        narrowTitle = (i < createdTitles.size())
+                            ? createdTitles[i]
+                            : epochengine::text::narrow_utf8(backend::BuildChildWindowTitle(type, static_cast<int>(i)));
+                    }
+
+                    if (w && w->titleNarrow.empty())
+                        w->titleNarrow = narrowTitle;
+
+                    // ---------------- Backend initialization policy ----------------
+                    // OpenGL uses the placeholder HWND + wgl contexts -> safe to init now.
+                    // Raylib/SDL create their own HWND/GL context internally -> MUST init on the render thread.
+                    switch (type)
+                    {
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+                    case ContextType::OpenGL:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring OpenGL init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+
+                    case ContextType::Software:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring Software init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+#if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
+                    case ContextType::DirectX:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring DirectX init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+                    case ContextType::RayLib:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring Raylib init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+                    case ContextType::SDL:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring SDL init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
+                    case ContextType::Vulkan:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring Vulkan init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+                    case ContextType::SFML:
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Deferring SFML init to render thread. host={}",
+                            static_cast<void*>(hwnd));
+#endif
+                        break;
+#endif
+
+                    default:
+                        break;
+                    }
+                }
+            };
+
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+        make_backend_windows(ContextType::RayLib, RayLibWinCount);
+#endif
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        make_backend_windows(ContextType::SDL, SDLWinCount);
+#endif
+#if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
+        make_backend_windows(ContextType::SFML, SFMLWinCount);
+#endif
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
+        make_backend_windows(ContextType::Vulkan, VulkanWinCount);
+#endif
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        make_backend_windows(ContextType::OpenGL, OpenGLWinCount);
+#endif
+#if defined(EPOCH_USING_DIRECTX) && (EPOCH_USING_DIRECTX == 1)
+        make_backend_windows(ContextType::DirectX, DirectXWinCount);
+#endif
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+
+        make_backend_windows(ContextType::Software, SoftwareWinCount);
+#endif
+        {
+            std::shared_lock lock(g_backendsMutex);
+            return !g_backends.empty();
+        }
+    }
+
+    void MultiContextManager::AddWindow(
+        HWND hwnd,
+        HWND parentWnd,
+        HDC hdc,
+        HGLRC glContext,
+        bool usesSharedContext,
+        ResizeCallback onResize,
+        ContextType type)
+    {
+        if (!hwnd) return;
+
+        s_activeInstance = this;
+        g_activeManager = this;
+
+        if (!hdc) hdc = ::GetDC(hwnd);
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        if (type == ContextType::OpenGL && !glContext)
+        {
+            glContext = CreateSharedGLContext(hdc);
+            static bool gladInitialized = false;
+            if (!gladInitialized)
+            {
+                ::wglMakeCurrent(hdc, glContext);
+                gladInitialized = (gladLoadGL() != 0);
+                ::wglMakeCurrent(nullptr, nullptr);
+            }
+        }
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
+        if (type == ContextType::Vulkan)
+        {
+            // Keep docked Vulkan windows free of WGL state too.
+            glContext = nullptr;
+            usesSharedContext = false;
+        }
+#endif
+#endif
+
+        if (parentWnd && !backend_uses_proxy_child(type))
+            MakeDockable(hwnd, parentWnd);
+
+        {
+            bool needInit = false;
+            {
+                std::shared_lock lock(g_backendsMutex);
+                needInit = g_backends.empty();
+            }
+            if (needInit) InitializeAllContexts();
+        }
+
+        std::shared_ptr<Context> ctx;
+        {
+            std::unique_lock lock(g_backendsMutex);
+            auto& backendSlot = g_backends[type];
+
+            if (!backendSlot.master)
+            {
+                ctx = std::make_shared<Context>();
+                ctx->type = type;
+                backendSlot.master = ctx;
+            }
+            else if (!backendSlot.master->windowData)
+            {
+                ctx = backendSlot.master;
+            }
+            else
+            {
+                auto it = std::find_if(backendSlot.duplicates.begin(), backendSlot.duplicates.end(),
+                    [](const std::shared_ptr<Context>& dup) { return dup && !dup->windowData; });
+
+                if (it != backendSlot.duplicates.end()) ctx = *it;
+                else
+                {
+                    auto dup = CloneContext(*backendSlot.master);
+                    backendSlot.duplicates.push_back(dup);
+                    ctx = dup;
+                }
+            }
+        }
+
+        if (!ctx) return;
+
+        ctx->type = type;
+        ctx->hwnd = hwnd;
+        ctx->hdc = hdc;
+        ctx->hglrc = glContext;
+
+        // Keep the cross-backend fields in sync.
+        // Many render helpers use native_*.
+        ctx->native_window = hwnd;
+        ctx->native_drawable = hdc;
+        ctx->native_gl_context = glContext;
+
+        auto winPtr = std::make_unique<WindowData>(hwnd, hdc, glContext, usesSharedContext, type);
+        winPtr->running = true;
+        winPtr->onResize = std::move(onResize);
+        winPtr->context = ctx;
+        winPtr->firstPresentComplete.store(
+            type != ContextType::OpenGL && type != ContextType::RayLib,
+            std::memory_order_release);
+        ctx->windowData = winPtr.get();
+
+        RECT rc{};
+        ::GetClientRect(hwnd, &rc);
+        ctx->width = clamp_positive(static_cast<int>(rc.right - rc.left));
+        ctx->height = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+        ctx->framebufferWidth = ctx->width;
+        ctx->framebufferHeight = ctx->height;
+        winPtr->width = ctx->width;
+        winPtr->height = ctx->height;
+
+        if (!ctx->onResize && winPtr->onResize) ctx->onResize = winPtr->onResize;
+        if (type != ContextType::RayLib
+            && !winPtr->onResize && ctx->onResize)
+            winPtr->onResize = ctx->onResize;
+
+        WindowData* rawWin = winPtr.get();
+        {
+            std::scoped_lock lock(windowsMutex);
+            windows.emplace_back(std::move(winPtr));
+        }
+
+        if (rawWin)
+        {
+            std::scoped_lock lock(g_threadStateMutex);
+            if (!g_threads.contains(hwnd))
+            {
+                g_threads.emplace(
+                    hwnd,
+                    std::thread([this, rawWin]()
+                    {
+                        epochengine::systems::threading::ScopedThreadActivity threadActivity{};
+                        RenderLoop(*rawWin);
+                    }));
+            }
+        }
+
+        ArrangeDockedWindowsGrid();
+    }
+
+    void MultiContextManager::HandleResize(HWND hwnd, int width, int height)
+    {
+        if (!hwnd) return;
+
+        int clampedWidth = clamp_positive(width);
+        int clampedHeight = clamp_positive(height);
+        if (clampedWidth <= 1 || clampedHeight <= 1)
+            backend::ResolveClientSize(hwnd, clampedWidth, clampedHeight);
+
+        std::function<void(int, int)> resizeCallback;
+        core::ContextType contextType = core::ContextType::None;
+        std::uintptr_t windowId = 0;
+        WindowData* window = nullptr;
+        std::uint64_t resizeGeneration = 0;
+
+        {
+            std::scoped_lock lock(windowsMutex);
+            auto it = std::find_if(windows.begin(), windows.end(),
+                [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+            if (it == windows.end()) return;
+
+            window = it->get();
+            if (window->width == clampedWidth && window->height == clampedHeight)
+                return;
+
+            window->width = clampedWidth;
+            window->height = clampedHeight;
+            resizeGeneration = window->resizeGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+
+            if (window->context)
+            {
+                if (auto liveContext = typed_context(window->context))
+                {
+                    liveContext->width = clampedWidth;
+                    liveContext->height = clampedHeight;
+                    contextType = liveContext->type;
+                    if (liveContext->onResize) resizeCallback = liveContext->onResize;
+                }
+            }
+            else
+            {
+                contextType = window->type;
+            }
+
+            if (!resizeCallback && window->onResize) resizeCallback = window->onResize;
+
+            if (const HWND liveHwnd = primary_window_handle(window))
+                windowId = reinterpret_cast<std::uintptr_t>(liveHwnd);
+        }
+
+        if (window)
+        {
+            const bool ownerThreadResize =
+                backend_requires_owner_thread_dock_commands(window);
+            if (ownerThreadResize)
+                window->firstPresentComplete.store(false, std::memory_order_release);
+
+            auto& resizeQueue = ownerThreadResize
+                ? window->ownerThreadCommandQueue
+                : window->commandQueue;
+            resizeQueue.enqueue([
+                cb = std::move(resizeCallback),
+                contextType,
+                windowId,
+                resizeGeneration,
+                window,
+                w = clampedWidth,
+                h = clampedHeight
+            ]() mutable
+                {
+                    if (window && window->resizeGeneration.load(std::memory_order_acquire) != resizeGeneration)
+                        return;
+
+                    telemetry::emit_counter(
+                        "renderer.resize.count",
+                        1,
+                        telemetry::RendererTelemetryTags{ contextType, windowId });
+                    telemetry::emit_gauge(
+                        "renderer.resize.latest_dimensions",
+                        w,
+                        telemetry::RendererTelemetryTags{ contextType, windowId, "width" });
+                    telemetry::emit_gauge(
+                        "renderer.resize.latest_dimensions",
+                        h,
+                        telemetry::RendererTelemetryTags{ contextType, windowId, "height" });
+
+                    if (cb) cb(w, h);
+                });
+        }
+    }
+
+    void MultiContextManager::StartRenderThreads()
+    {
+        std::vector<HWND> hwnds;
+        {
+            std::scoped_lock lock(windowsMutex);
+            hwnds.reserve(windows.size());
+            for (const auto& w : windows)
+                if (const HWND key = render_thread_key(w.get())) hwnds.push_back(key);
+        }
+
+        std::size_t launchIndex = 0;
+        for (HWND hwnd : hwnds)
+        {
+            const auto startupDelay =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    kRenderThreadStartupStepDelay * static_cast<int>(launchIndex++));
+
+            std::scoped_lock lock(g_threadStateMutex);
+            if (g_threads.contains(hwnd))
+                continue;
+
+            g_threads.emplace(hwnd, std::thread([this, hwnd, startupDelay]()
+                {
+                    epochengine::systems::threading::ScopedThreadActivity threadActivity{};
+                    if (startupDelay.count() > 0)
+                    {
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Startup stagger: delaying render thread {} by {} ms.",
+                            static_cast<void*>(hwnd),
+                            startupDelay.count());
+                        std::this_thread::sleep_for(startupDelay);
+                    }
+
+                    if (!running.load(std::memory_order_acquire))
+                        return;
+
+                    WindowData* win = nullptr;
+                    {
+                        std::scoped_lock lock(windowsMutex);
+                        auto it = std::find_if(windows.begin(), windows.end(),
+                            [hwnd](const std::unique_ptr<WindowData>& w)
+                            {
+                                return render_thread_key(w.get()) == hwnd;
+                            });
+                        if (it != windows.end()) win = it->get();
+                    }
+
+                    if (win) RenderLoop(*win);
+                }));
+        }
+    }
+
+    void MultiContextManager::RemoveWindow(HWND hwnd)
+    {
+        std::unique_ptr<WindowData> removed;
+        PendingWindowCleanup replacementCleanup{};
+        bool hasReplacementCleanup = false;
+        bool should_quit = false;
+        HWND layoutParent = nullptr;
+        const bool synchronousReplacementRetirement =
+            contextReplacementHolds.load(std::memory_order_acquire) > 0;
+
+        // StopAll owns every active WindowData until its render thread has
+        // joined. Native destruction during that phase must not transfer the
+        // same object into the ordinary deferred-cleanup lane.
+        if (!running.load(std::memory_order_acquire))
+        {
+            std::scoped_lock lock(windowsMutex);
+            auto it = std::find_if(windows.begin(), windows.end(),
+                [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+            if (it != windows.end())
+            {
+                (*it)->set_should_close(true);
+                (*it)->running = false;
+            }
+            return;
+        }
+
+        // Backend-owned HWND procedures execute on renderer threads. The
+        // session/event loop reads the active window vector on uiThreadId, so
+        // renderer threads may only mark retirement and queue the ownership
+        // transfer back to that thread. Mutating the vector here was a Release
+        // heap race during rapid context replacement.
+        if (uiThreadId != 0 && ::GetCurrentThreadId() != uiThreadId)
+        {
+            HWND retirementHost = nullptr;
+            {
+                std::scoped_lock lock(windowsMutex);
+                auto it = std::find_if(windows.begin(), windows.end(),
+                    [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+                if (it == windows.end())
+                    return;
+
+                (*it)->set_should_close(true);
+                (*it)->running = false;
+                if ((*it)->retirementQueued.exchange(true, std::memory_order_acq_rel))
+                    return;
+
+                retirementHost = parent;
+                if (!retirementHost || ::IsWindow(retirementHost) == FALSE)
+                {
+                    const HWND candidate = (*it)->host_hwnd
+                        ? ::GetParent((*it)->host_hwnd)
+                        : ((*it)->hwndChild
+                            ? ::GetParent((*it)->hwndChild)
+                            : ::GetParent((*it)->hwnd));
+                    if (candidate && ::IsWindow(candidate) != FALSE)
+                        retirementHost = candidate;
+                }
+            }
+
+            bool posted = false;
+            if (retirementHost && ::IsWindow(retirementHost) != FALSE)
+            {
+                posted = ::PostMessageW(
+                    retirementHost,
+                    WM_EPOCH_RETIRE_CONTEXT_WINDOW,
+                    0,
+                    reinterpret_cast<LPARAM>(hwnd)) != FALSE;
+            }
+
+            if (!posted)
+            {
+                std::scoped_lock lock(windowsMutex);
+                auto it = std::find_if(windows.begin(), windows.end(),
+                    [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+                if (it != windows.end())
+                    (*it)->retirementQueued.store(false, std::memory_order_release);
+            }
+            return;
+        }
+
+        {
+            std::scoped_lock lock(windowsMutex, g_threadStateMutex);
+            auto it = std::find_if(windows.begin(), windows.end(),
+                [hwnd](const std::unique_ptr<WindowData>& w) { return matches_window_handle(w.get(), hwnd); });
+            if (it == windows.end()) return;
+
+            if ((*it)->host_hwnd && ::IsWindow((*it)->host_hwnd) != FALSE)
+                layoutParent = ::GetParent((*it)->host_hwnd);
+            if (!layoutParent && (*it)->hwndChild && ::IsWindow((*it)->hwndChild) != FALSE)
+                layoutParent = ::GetParent((*it)->hwndChild);
+            if (!layoutParent && (*it)->hwnd && ::IsWindow((*it)->hwnd) != FALSE)
+                layoutParent = ::GetParent((*it)->hwnd);
+
+            (*it)->set_should_close(true);
+            (*it)->running = false;
+            (*it)->retirementQueued.store(true, std::memory_order_release);
+
+            removed = std::move(*it);
+            windows.erase(it);
+            should_quit = windows.empty()
+                && contextReplacementHolds.load(std::memory_order_acquire) == 0;
+
+            HWND threadKey = hwnd;
+            if (!g_threads.contains(threadKey) && removed)
+            {
+                if (removed->host_hwnd && g_threads.contains(removed->host_hwnd))
+                    threadKey = removed->host_hwnd;
+                else if (removed->hwndChild && g_threads.contains(removed->hwndChild))
+                    threadKey = removed->hwndChild;
+                else if (removed->hwnd && g_threads.contains(removed->hwnd))
+                    threadKey = removed->hwnd;
+            }
+
+            auto threadIt = g_threads.find(threadKey);
+            if (threadIt != g_threads.end())
+            {
+                PendingWindowCleanup pending{};
+                pending.hwnd = threadKey;
+                pending.thread = std::move(threadIt->second);
+                pending.window = std::move(removed);
+                g_threads.erase(threadIt);
+                if (synchronousReplacementRetirement)
+                {
+                    replacementCleanup = std::move(pending);
+                    hasReplacementCleanup = true;
+                }
+                else
+                {
+                    g_pendingCleanups.emplace_back(std::move(pending));
+                }
+            }
+        }
+
+        if (hasReplacementCleanup)
+        {
+            // A whole-editor replacement must not overlap the old renderer's
+            // cleanup with construction of the new backend. Keep the UI
+            // message pump alive while joining so owner-thread HWND teardown
+            // and synchronous Win32 messages can complete without deadlock.
+            join_thread_with_message_pump(replacementCleanup.thread);
+            forget_native_title_frame_source(replacementCleanup.window.get());
+            cleanup_window_resources(replacementCleanup.window);
+        }
+        else if (removed)
+        {
+            forget_native_title_frame_source(removed.get());
+            cleanup_window_resources(removed);
+        }
+
+        CleanupFinishedWindows();
+
+        if (!should_quit)
+        {
+            if ((!layoutParent || ::IsWindow(layoutParent) == FALSE)
+                && GetParentWindow()
+                && ::IsWindow(GetParentWindow()) != FALSE)
+            {
+                layoutParent = GetParentWindow();
+            }
+
+            if (layoutParent && ::IsWindow(layoutParent) != FALSE)
+                request_parent_layout(layoutParent);
+        }
+
+        if (should_quit)
+        {
+            running.store(false, std::memory_order_release);
+
+            if (uiThreadId != 0 && uiThreadId != ::GetCurrentThreadId())
+                ::PostThreadMessageW(uiThreadId, WM_QUIT, 0, 0);
+            else
+                ::PostQuitMessage(0);
+        }
+    }
+
+    void MultiContextManager::CleanupFinishedWindows()
+    {
+        std::vector<PendingWindowCleanup> finished;
+        {
+            std::scoped_lock lock(g_threadStateMutex);
+            auto it = g_pendingCleanups.begin();
+            while (it != g_pendingCleanups.end())
+            {
+                if (!thread_finished(it->thread))
+                {
+                    ++it;
+                    continue;
+                }
+
+                finished.emplace_back(std::move(*it));
+                it = g_pendingCleanups.erase(it);
+            }
+        }
+
+        for (auto& pending : finished)
+        {
+            if (pending.thread.joinable())
+                pending.thread.join();
+            forget_native_title_frame_source(pending.window.get());
+            cleanup_window_resources(pending.window);
+        }
+    }
+
+    void MultiContextManager::ArrangeDockedWindowsGrid()
+    {
+        if (!parent) return;
+
+        std::scoped_lock lock(windowsMutex);
+        if (windows.empty()) return;
+
+        std::vector<WindowData*> dockedWindows;
+        dockedWindows.reserve(windows.size());
+        for (auto& win : windows)
+        {
+            const HWND liveHwnd = dock_slot_handle(win.get(), parent);
+            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
+                continue;
+
+            dockedWindows.push_back(win.get());
+        }
+
+        if (dockedWindows.empty())
+            return;
+
+        const auto dock_order = [](const WindowData* win) noexcept
+        {
+            if (win && win->pinnedToParent.load(std::memory_order_acquire))
+                return -1;
+
+            const auto liveContext = (win && win->context) ? typed_context(win->context) : nullptr;
+            const auto type = liveContext ? liveContext->type : ContextType::None;
+            switch (type)
+            {
+            case ContextType::RayLib: return 0;
+            case ContextType::SDL: return 1;
+            case ContextType::SFML: return 2;
+            case ContextType::Vulkan: return 3;
+            case ContextType::OpenGL: return 4;
+            case ContextType::DirectX: return 5;
+            case ContextType::Software: return 6;
+            default: return 99;
+            }
+        };
+
+        std::stable_sort(
+            dockedWindows.begin(),
+            dockedWindows.end(),
+            [&](const WindowData* lhs, const WindowData* rhs)
+            {
+                return dock_order(lhs) < dock_order(rhs);
+            });
+
+        const int total = static_cast<int>(dockedWindows.size());
+        int cols = 1, rows = 1;
+        while (cols * rows < total) (cols <= rows ? ++cols : ++rows);
+
+        RECT rcClient{};
+        ::GetClientRect(parent, &rcClient);
+        const int clientW = rcClient.right - rcClient.left;
+        const int clientH = rcClient.bottom - rcClient.top;
+
+        const int cw = clamp_positive(clientW / cols);
+        const int ch = clamp_positive(clientH / rows);
+
+        const auto client_size_or_slot = [](HWND hwnd, int fallbackW, int fallbackH) noexcept
+        {
+            RECT rc{};
+            if (hwnd && ::IsWindow(hwnd) != FALSE && ::GetClientRect(hwnd, &rc))
+            {
+                const int w = clamp_positive(static_cast<int>(rc.right - rc.left));
+                const int h = clamp_positive(static_cast<int>(rc.bottom - rc.top));
+                return SIZE{ w, h };
+            }
+
+            return SIZE{ clamp_positive(fallbackW), clamp_positive(fallbackH) };
+        };
+
+        const auto redraw_window_tree = [](HWND hwnd) noexcept
+        {
+            if (!hwnd || ::IsWindow(hwnd) == FALSE)
+                return;
+
+            ::RedrawWindow(
+                hwnd,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_NOERASE);
+        };
+
+        for (size_t i = 0; i < dockedWindows.size(); ++i)
+        {
+            const int c = static_cast<int>(i) % cols;
+            const int r = static_cast<int>(i) / cols;
+            const int slotX = c * cw;
+            const int slotY = r * ch;
+            POINT slotScreen{ slotX, slotY };
+            ::ClientToScreen(parent, &slotScreen);
+
+            WindowData& win = *dockedWindows[i];
+            if ((win.type == ContextType::SDL || win.type == ContextType::SFML)
+                && has_proxy_shell_pair(&win))
+            {
+                const HWND proxySlot = dock_slot_handle(&win, parent);
+                bool childFitsHost = true;
+                if (::GetParent(win.hwndChild) == win.host_hwnd)
+                {
+                    RECT hostClient{};
+                    if (::GetClientRect(win.host_hwnd, &hostClient) != FALSE)
+                    {
+                        childFitsHost = child_window_matches_parent_slot(
+                            win.hwndChild,
+                            win.host_hwnd,
+                            0,
+                            0,
+                            clamp_positive(static_cast<int>(hostClient.right - hostClient.left)),
+                            clamp_positive(static_cast<int>(hostClient.bottom - hostClient.top)));
+                    }
+                }
+
+                if (!child_window_matches_parent_slot(proxySlot, parent, slotX, slotY, cw, ch)
+                    || !childFitsHost
+                    || win.width != cw
+                    || win.height != ch)
+                {
+                    post_proxy_host_command(&win, ProxyDockCmd::Redock, parent, slotScreen.x, slotScreen.y, cw, ch);
+                    win.set_size(cw, ch);
+                }
+                continue;
+            }
+
+            const HWND liveHwnd = dock_slot_handle(&win, parent);
+            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
+                continue;
+
+            const bool raylibOwnerThreadWindow =
+                backend_requires_owner_thread_dock_commands(&win)
+                && win.hwndChild
+                && liveHwnd == win.hwndChild
+                && win.host_hwnd
+                && win.host_hwnd != liveHwnd;
+            if (raylibOwnerThreadWindow)
+            {
+                const bool placementMatches = child_window_matches_parent_slot(
+                    liveHwnd,
+                    parent,
+                    slotX,
+                    slotY,
+                    cw,
+                    ch);
+                if (!placementMatches || win.width != cw || win.height != ch)
+                {
+                    // Raylib owns this GLFW HWND on the render thread. Calling
+                    // SetWindowPos here while windowsMutex is held can deadlock
+                    // against the subclass input path when the user clicks the
+                    // pane. Queue the complete layout mutation for its owner.
+                    if (post_owner_thread_dock_command(
+                        &win,
+                        ProxyDockCmd::Redock,
+                        parent,
+                        slotScreen.x,
+                        slotScreen.y,
+                        cw,
+                        ch))
+                    {
+                        HandleResize(liveHwnd, cw, ch);
+                    }
+                }
+
+                if (::IsWindow(win.host_hwnd) != FALSE
+                    && ::GetParent(win.host_hwnd) == parent)
+                {
+                    ::ShowWindow(win.host_hwnd, SW_HIDE);
+                }
+                continue;
+            }
+
+            const bool usingHiddenHostPlaceholder =
+                win.host_hwnd
+                && liveHwnd == win.host_hwnd
+                && (
+                    (win.hwndChild
+                        && ::IsWindow(win.hwndChild) != FALSE
+                        && ::GetParent(win.hwndChild) != parent
+                        && ::GetParent(win.hwndChild) != win.host_hwnd)
+                    || ((win.type == ContextType::SDL || win.type == ContextType::SFML)
+                        && (!win.hwndChild || ::IsWindow(win.hwndChild) == FALSE))
+                );
+
+            UINT layoutFlags = SWP_NOZORDER | SWP_NOACTIVATE;
+            if (win.type == ContextType::SDL || win.type == ContextType::SFML)
+                layoutFlags |= SWP_ASYNCWINDOWPOS;
+            if (!usingHiddenHostPlaceholder)
+                layoutFlags |= SWP_SHOWWINDOW;
+
+            ::SetWindowPos(liveHwnd, nullptr, slotX, slotY, cw, ch, layoutFlags);
+
+            if (usingHiddenHostPlaceholder)
+                ::ShowWindow(liveHwnd, SW_HIDE);
+
+            if (win.host_hwnd
+                && win.host_hwnd != liveHwnd
+                && ::IsWindow(win.host_hwnd) != FALSE
+                && ::GetParent(win.host_hwnd) == parent)
+            {
+                ::ShowWindow(win.host_hwnd, SW_HIDE);
+            }
+
+            if (win.host_hwnd
+                && win.host_hwnd != liveHwnd
+                && ::IsWindow(win.host_hwnd) != FALSE
+                && ::GetParent(win.host_hwnd) != parent)
+            {
+                restore_associated_host_window(&win, parent, slotScreen.x, slotScreen.y, cw, ch);
+            }
+
+            if (win.host_hwnd
+                && win.hwndChild
+                && ::IsWindow(win.host_hwnd) != FALSE
+                && ::IsWindow(win.hwndChild) != FALSE
+                && ::GetParent(win.hwndChild) == win.host_hwnd)
+            {
+                const SIZE hostClient = client_size_or_slot(win.host_hwnd, cw, ch);
+                apply_child_fill_layout(win.hwndChild, win.host_hwnd, hostClient.cx, hostClient.cy);
+                redraw_window_tree(win.hwndChild);
+            }
+
+            const SIZE liveClient = client_size_or_slot(liveHwnd, cw, ch);
+            if (win.width != liveClient.cx || win.height != liveClient.cy)
+                HandleResize(liveHwnd, liveClient.cx, liveClient.cy);
+
+            redraw_window_tree(liveHwnd);
+            hide_associated_host_window(&win, liveHwnd, parent);
+        }
+    }
+
+    void MultiContextManager::StopAll()
+    {
+        running.store(false, std::memory_order_release);
+
+        {
+            std::scoped_lock lock(windowsMutex);
+            for (auto& w : windows)
+            {
+                if (!w)
+                    continue;
+
+                w->running = false;
+                w->set_should_close(true);
+                if (auto liveContext = typed_context(w->context);
+                    liveContext && liveContext->windowData == w.get())
+                {
+                    liveContext->windowData->set_should_close(true);
+                }
+            }
+        }
+
+        std::unordered_map<HWND, std::thread> activeThreads;
+        std::vector<PendingWindowCleanup> pendingCleanups;
+        {
+            std::scoped_lock lock(g_threadStateMutex);
+            activeThreads.swap(g_threads);
+            pendingCleanups.swap(g_pendingCleanups);
+        }
+
+        for (auto& [hwnd, th] : activeThreads)
+        {
+            core::ContextType joinType = core::ContextType::None;
+            std::string joinTitle{};
+            {
+                std::scoped_lock lock(windowsMutex);
+                for (const auto& w : windows)
+                {
+                    if (!w || !matches_window_handle(w.get(), hwnd))
+                        continue;
+
+                    joinType = w->type;
+                    joinTitle = w->titleNarrow;
+                    break;
+                }
+            }
+#if defined(_DEBUG)
+            if (th.joinable())
+            {
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "StopAll joining render thread hwnd={} type={} title='{}'",
+                    static_cast<void*>(hwnd),
+                    static_cast<int>(joinType),
+                    joinTitle);
+            }
+#endif
+            join_thread_with_message_pump(th);
+#if defined(_DEBUG)
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "StopAll joined render thread hwnd={}",
+                static_cast<void*>(hwnd));
+#endif
+        }
+
+        for (auto& pending : pendingCleanups)
+        {
+            if (pending.thread.joinable())
+                join_thread_with_message_pump(pending.thread);
+            forget_native_title_frame_source(pending.window.get());
+            cleanup_window_resources(pending.window);
+        }
+
+        std::vector<std::unique_ptr<WindowData>> remainingWindows;
+        {
+            std::scoped_lock lock(windowsMutex);
+            remainingWindows.swap(windows);
+        }
+        for (auto& window : remainingWindows)
+        {
+            forget_native_title_frame_source(window.get());
+            cleanup_window_resources(window);
+        }
+
+        if (s_activeInstance == this) s_activeInstance = nullptr;
+        if (g_activeManager == this) g_activeManager = nullptr;
+    }
+
+    void MultiContextManager::RenderLoop(WindowData& win)
+    {
+        auto ctx = typed_context(win.context);
+        if (!ctx)
+        {
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            return;
+        }
+
+        ctx->windowData = &win;
+        MultiContextManager::SetCurrent(ctx);
+        win.set_backend_lifecycle(BackendLifecycleState::initializing);
+        ctx->init_failed = false;
+
+        struct ResetGuard { ~ResetGuard() { MultiContextManager::SetCurrent(nullptr); } } resetGuard;
+
+        if (!running.load(std::memory_order_acquire) || win.get_should_close())
+        {
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::stopped);
+            return;
+        }
+
+        // Raylib must be created+initialized on the SAME thread that will render it.
+        // SDL/SFML use their registered backend lifecycle directly.
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+        if (ctx->type == ContextType::RayLib)
+        {
+#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Raylib init. host={}",
+                static_cast<void*>(win.hwnd));
+#endif
+            const bool initialized = epochengine::raylibcontext::raylib_initialize(
+                ctx,
+                win.hwnd,
+                static_cast<unsigned>(ctx->width),
+                static_cast<unsigned>(ctx->height),
+                win.onResize,
+                win.titleNarrow);
+
+            if (!initialized)
+            {
+                win.running = false;
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                epochengine::raylibcontext::raylib_cleanup(ctx);
+                return;
+            }
+        }
+#endif
+
+        // skipGenericInit for backends that do their own init above
+        const bool skipGenericInit =
+#if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+            (ctx->type == ContextType::RayLib) ||
+#endif
+            false;
+
+        if (!skipGenericInit)
+        {
+            if (ctx->initialize) ctx->initialize_safe();
+            else
+            {
+                win.running = false;
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                return;
+            }
+        }
+
+        if (ctx->init_failed)
+        {
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::Error,
+                std::source_location::current(),
+                "Backend init failed for {}. Rejecting the replacement window.",
+                ctx->backendName);
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            if (ctx->cleanup)
+                ctx->cleanup_safe();
+            return;
+        }
+
+        if (!ctx->process)
+        {
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::Error,
+                std::source_location::current(),
+                "Backend {} has no frame processor. Rejecting the replacement window.",
+                ctx->backendName);
+            win.running = false;
+            win.set_backend_lifecycle(BackendLifecycleState::failed);
+            if (ctx->cleanup)
+                ctx->cleanup_safe();
+            return;
+        }
+
+        const bool requiresFirstPresent =
+            ctx->type == ContextType::OpenGL
+            || ctx->type == ContextType::RayLib;
+        const auto publishRenderReady = [&]()
+        {
+            win.set_backend_lifecycle(BackendLifecycleState::ready);
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Backend {} reached render-ready state for hwnd={}.",
+                ctx->backendName,
+                static_cast<void*>(win.hwnd));
+        };
+
+        epochengine::perf::frame_limiter coreFrameLimiter{};
+        double activeCoreFrameLimit = -1.0;
+        const auto resolveCoreFrameLimit = []() noexcept -> double
+        {
+            if (epochengine::core::cli::frame_limit_explicit)
+                return epochengine::core::cli::frame_limit_fps;
+
+            const bool standaloneProject =
+                !epochengine::core::cli::parented_mode
+                && !epochengine::core::cli::editor_requested
+                && !epochengine::core::cli::run_menu_loop;
+
+            return epochengine::perf::target_fps_for(standaloneProject
+                ? epochengine::perf::frame_limit_preset::fps_60
+                : epochengine::perf::frame_limit_preset::fps_120);
+        };
+
+        while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
+        {
+            bool keepRunning = true;
+
+            try
+            {
+                // Native owner-thread work must finish before a backend opens
+                // its frame. In particular, a GLFW child cannot be reparented
+                // or resized between Raylib BeginDrawing/EndDrawing.
+                win.ownerThreadCommandQueue.drain();
+            }
+            catch (const std::exception& e)
+            {
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::Error,
+                    std::source_location::current(),
+                    "Backend {} owner-thread command failed: {}",
+                    ctx->backendName,
+                    e.what());
+                win.set_backend_lifecycle(BackendLifecycleState::failed);
+                win.running = false;
+                break;
+            }
+
+            {
+                const std::size_t depth = win.commandQueue.depth();
+                telemetry::emit_gauge(
+                    "renderer.command_queue.depth",
+                    static_cast<std::int64_t>(depth),
+                    telemetry::RendererTelemetryTags{
+                        ctx->type,
+                        reinterpret_cast<std::uintptr_t>(win.hwnd)
+                    });
+            }
+
+            keepRunning = ctx->process_safe(ctx, win.commandQueue);
+
+            if (!keepRunning)
+            {
+                if (win.backend_lifecycle() == BackendLifecycleState::initializing
+                    && !win.get_should_close()
+                    && running.load(std::memory_order_acquire))
+                {
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::Error,
+                        std::source_location::current(),
+                        "Backend {} stopped before its first successful frame. Rejecting the replacement window.",
+                        ctx->backendName);
+                    win.set_backend_lifecycle(BackendLifecycleState::failed);
+                }
+                win.running = false;
+                break;
+            }
+
+            win.successfulFrameGeneration.fetch_add(1, std::memory_order_acq_rel);
+            if (win.backend_lifecycle() == BackendLifecycleState::initializing
+                && (!requiresFirstPresent
+                    || win.firstPresentComplete.load(std::memory_order_acquire)))
+            {
+                publishRenderReady();
+            }
+
+            record_native_title_frame(this, win);
+
+            const double requestedFrameLimit = resolveCoreFrameLimit();
+            if (requestedFrameLimit != activeCoreFrameLimit)
+            {
+                coreFrameLimiter.set_target_fps(requestedFrameLimit);
+                activeCoreFrameLimit = requestedFrameLimit;
+            }
+            coreFrameLimiter.wait_for_next_frame();
+        }
+
+        win.ownerThreadCommandQueue.clear();
+        if (win.running && !win.get_should_close())
+            win.commandQueue.drain();
+        else
+            win.commandQueue.clear();
+
+        if (ctx->cleanup) ctx->cleanup_safe();
+        if (win.backend_lifecycle() != BackendLifecycleState::failed)
+            win.set_backend_lifecycle(BackendLifecycleState::stopped);
+    }
+
+    void MultiContextManager::HandleDropFiles(HWND, HDROP hDrop)
+    {
+        const UINT count = ::DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
+        for (UINT i = 0; i < count; ++i)
+        {
+            wchar_t path[MAX_PATH]{};
+            ::DragQueryFileW(hDrop, i, path, MAX_PATH);
+            std::wcout << L"[Drop] " << path << L"\n";
+        }
+    }
+
+    LRESULT CALLBACK MultiContextManager::ParentProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        if (msg == WM_NCCREATE)
+        {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
+            return TRUE;
+        }
+
+        auto* mgr = reinterpret_cast<MultiContextManager*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (!mgr) return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+        switch (msg)
+        {
+        case WM_CREATE:
+        case WM_SHOWWINDOW:
+        case WM_ACTIVATE:
+            apply_dark_window_chrome(hwnd);
+            return 0;
+
+        case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED)
+                request_parent_layout(hwnd);
+            return 0;
+
+        case WM_EXITSIZEMOVE:
+            request_parent_layout(hwnd);
+            return 0;
+
+        case WM_EPOCH_LAYOUT:
+            ::RemovePropW(hwnd, kEpochLayoutPendingProp);
+            mgr->ArrangeDockedWindowsGrid();
+            return 0;
+
+        case WM_EPOCH_OPEN_DETACHED_CONTEXT:
+        {
+            std::unique_ptr<DetachedContextWindowRequest> request{
+                reinterpret_cast<DetachedContextWindowRequest*>(lParam)
+            };
+            if (request)
+                static_cast<void>(mgr->CreateDetachedContextWindowOnOwnerThread(*request));
+            return 0;
+        }
+
+        case WM_EPOCH_RETIRE_CONTEXT_WINDOW:
+            mgr->RemoveWindow(reinterpret_cast<HWND>(lParam));
+            return 0;
+
+        case WM_ERASEBKGND:
+            return 1;
+
+        case WM_PAINT:
+        {
+            PAINTSTRUCT ps{};
+            HDC hdc = ::BeginPaint(hwnd, &ps);
+            ::FillRect(hdc, &ps.rcPaint, parent_background_brush());
+            ::EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+        case WM_DROPFILES:
+            mgr->HandleDropFiles(hwnd, reinterpret_cast<HDROP>(wParam));
+            ::DragFinish(reinterpret_cast<HDROP>(wParam));
+            return 0;
+
+        case WM_CLOSE:
+        {
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Parent WM_CLOSE received hwnd={} - beginning orderly child shutdown.",
+                static_cast<void*>(hwnd));
+            std::vector<HWND> children;
+            {
+                std::scoped_lock lock(mgr->windowsMutex);
+                children.reserve(mgr->windows.size());
+                for (const auto& win : mgr->windows)
+                {
+                    if (!win)
+                        continue;
+
+                    HWND closeTarget = nullptr;
+                    if (win->host_hwnd
+                        && ::IsWindow(win->host_hwnd) != FALSE)
+                    {
+                        closeTarget = win->host_hwnd;
+                    }
+                    else
+                    {
+                        closeTarget = primary_window_handle(win.get());
+                    }
+
+                    if (!closeTarget || closeTarget == hwnd || ::IsWindow(closeTarget) == FALSE)
+                        continue;
+
+                    win->running = false;
+                    win->set_should_close(true);
+
+                    if (auto liveContext = typed_context(win->context);
+                        liveContext && liveContext->windowData == win.get())
+                    {
+                        liveContext->windowData->set_should_close(true);
+                    }
+
+                    children.push_back(closeTarget);
+                }
+            }
+
+            std::sort(children.begin(), children.end());
+            children.erase(std::unique(children.begin(), children.end()), children.end());
+
+            // Parent shutdown should close the live child windows in place.
+            // Undocking here is the wrong behavior: it visibly tears panes out of the
+            // parent host during shutdown and can confuse backend-owned child HWNDs.
+            for (HWND child : children)
+            {
+                ::PostMessageW(child, WM_CLOSE, 0, 0);
+            }
+
+            mgr->parent = nullptr;
+            if (auto* mgr = s_activeInstance)
+                mgr->RemoveWindow(hwnd);
+            return 0;
+        }
+
+        case WM_DESTROY:
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Parent WM_DESTROY received hwnd={} - parent window destroyed cleanly.",
+                static_cast<void*>(hwnd));
+            ::RemovePropW(hwnd, kEpochLayoutPendingProp);
+            return 0;
+        }
+
+        return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+    }
+
+    LRESULT CALLBACK MultiContextManager::ChildProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+    {
+        static DragState& drag = Drag();
+        const auto resolveGuiContext = [hwnd]() -> std::shared_ptr<epochengine::core::Context>
+        {
+            auto* mgr = s_activeInstance;
+            if (!mgr)
+                return {};
+
+            if (auto* win = mgr->findWindowByHWND(hwnd))
+                return typed_context(win->context);
+
+            return {};
+        };
+        const auto resolveWindowData = [hwnd]() noexcept -> epochengine::core::WindowData*
+        {
+            return resolve_window_data_for_hwnd(hwnd);
+        };
+
+        if (msg == WM_NCCREATE)
+        {
+            auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
+            ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(cs->lpCreateParams));
+            return TRUE;
+        }
+
+        switch (msg)
+        {
+        case WM_EPOCH_OPEN_DETACHED_CONTEXT:
+        {
+            std::unique_ptr<DetachedContextWindowRequest> request{
+                reinterpret_cast<DetachedContextWindowRequest*>(lParam)
+            };
+            if (request)
+            {
+                if (auto* mgr = s_activeInstance)
+                    static_cast<void>(mgr->CreateDetachedContextWindowOnOwnerThread(*request));
+            }
+            return 0;
+        }
+        case WM_SETFOCUS:
+            remember_gui_input_owner(hwnd);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_KILLFOCUS:
+            forget_gui_input_owner(hwnd);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_NCDESTROY:
+            forget_gui_input_owner(hwnd);
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_RBUTTONDOWN:
+        {
+            remember_gui_input_owner(hwnd);
+            ::SetFocus(hwnd);
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam, 0, false, 1);
+            return 0;
+        }
+        case WM_RBUTTONUP:
+        {
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam, 0, false, 1);
+            return 0;
+        }
+        case WM_NCLBUTTONDOWN:
+        case WM_LBUTTONDOWN:
+        {
+            auto* const window = resolve_window_data_for_hwnd(hwnd);
+            if (window && window->pinnedToParent.load(std::memory_order_acquire))
+            {
+                if (msg == WM_LBUTTONDOWN)
+                {
+                    remember_gui_input_owner(hwnd);
+                    ::SetFocus(hwnd);
+                    const auto ctx = resolveGuiContext();
+                    push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
+                }
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+
+            const bool detachedProxyHost =
+                window
+                && is_proxy_host_hwnd(window, hwnd)
+                && is_sfml_proxy_detached(window);
+            const bool detachedRoutedHost =
+                window
+                && !window->guiRoute.empty()
+                && window->hwnd == hwnd
+                && (::GetParent(hwnd) == nullptr || window->isFloating);
+            const bool detachedNativeTitleHost = detachedProxyHost || detachedRoutedHost;
+
+            if (msg == WM_NCLBUTTONDOWN)
+            {
+                if (!detachedNativeTitleHost || static_cast<UINT>(wParam) != HTCAPTION)
+                    return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+            else
+            {
+                remember_gui_input_owner(hwnd);
+                ::SetFocus(hwnd);
+                const auto ctx = resolveGuiContext();
+                push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
+                if (!is_dock_drag_hotspot(hwnd, lParam))
+                    return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
+
+            if (detachedProxyHost && window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
+                ::SetFocus(window->hwndChild);
+            else if (!detachedProxyHost)
+                ::SetFocus(hwnd);
+
+            ::SetCapture(hwnd);
+            drag.dragging = true;
+            drag.draggedWindow = hwnd;
+            if (window && is_sfml_proxy_candidate(window) && window->host_hwnd)
+            {
+                drag.originalParent = ::GetParent(window->host_hwnd);
+                if (!drag.originalParent)
+                    drag.originalParent = stored_dock_parent(window->host_hwnd);
+                if (!drag.originalParent && window->hwndChild)
+                    drag.originalParent = stored_dock_parent(window->hwndChild);
+            }
+            else
+            {
+                drag.originalParent = ::GetParent(hwnd);
+            }
+            if (!drag.originalParent)
+                drag.originalParent = stored_dock_parent(hwnd);
+            drag.lastMousePos = screen_mouse_point(hwnd, msg, lParam);
+            drag.dragStartMousePos = drag.lastMousePos;
+
+            HWND dragFrame = hwnd;
+            if (!detachedProxyHost && window && is_sfml_proxy_candidate(window))
+            {
+                if (is_proxy_child_directly_docked(window, drag.originalParent))
+                {
+                    const HWND child = window->hwndChild.load(std::memory_order_acquire);
+                    dragFrame = child ? child : hwnd;
+                }
+                else if (window->host_hwnd)
+                    dragFrame = window->host_hwnd;
+            }
+
+            RECT dragFrameRect{};
+            ::GetWindowRect(dragFrame, &dragFrameRect);
+            drag.dragWindowOffset.x = drag.lastMousePos.x - dragFrameRect.left;
+            drag.dragWindowOffset.y = drag.lastMousePos.y - dragFrameRect.top;
+            drag.proxyUndockPending = false;
+            drag.proxyRedockPending = false;
+#if defined(_DEBUG)
+            if (window && is_sfml_proxy_candidate(window))
+            {
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Proxy drag start hwnd={} host={} child={} originalParent={} hostParent={} childParent={} dragFrame={}",
+                    static_cast<void*>(hwnd),
+                    static_cast<void*>(window->host_hwnd),
+                    static_cast<void*>(window->hwndChild),
+                    static_cast<void*>(drag.originalParent),
+                    static_cast<void*>(window->host_hwnd ? ::GetParent(window->host_hwnd) : nullptr),
+                    static_cast<void*>(window->hwndChild ? ::GetParent(window->hwndChild) : nullptr),
+                    static_cast<void*>(dragFrame));
+            }
+#endif
+            return 0;
+        }
+
+        case WM_NCMOUSEMOVE:
+        case WM_MOUSEMOVE:
+        {
+            auto* const window = resolve_window_data_for_hwnd(hwnd);
+            const bool detachedProxyHostDrag =
+                drag.dragging
+                && window
+                && is_proxy_host_hwnd(window, hwnd)
+                && drag.draggedWindow == hwnd;
+            const bool detachedRoutedHostDrag =
+                drag.dragging
+                && window
+                && !window->guiRoute.empty()
+                && window->hwnd == hwnd
+                && drag.draggedWindow == hwnd;
+            if (msg == WM_NCMOUSEMOVE && !detachedProxyHostDrag && !detachedRoutedHostDrag)
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            if (msg == WM_MOUSEMOVE)
+            {
+                const auto ctx = resolveGuiContext();
+                push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseMove, lParam);
+            }
+            const bool proxyChildContinuingHostDrag =
+                drag.dragging
+                && window
+                && is_sfml_proxy_candidate(window)
+                && hwnd == window->hwndChild
+                && drag.draggedWindow == window->host_hwnd;
+            if (!drag.dragging || (drag.draggedWindow != hwnd && !proxyChildContinuingHostDrag))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            POINT pt = screen_mouse_point(hwnd, msg, lParam);
+            if (proxyChildContinuingHostDrag || detachedProxyHostDrag || detachedRoutedHostDrag || is_sfml_proxy_detached(window))
+            {
+                POINT cursor{};
+                if (::GetCursorPos(&cursor) != FALSE)
+                    pt = cursor;
+            }
+
+            drag.lastMousePos = pt;
+            const bool proxyDragActivated =
+                window
+                && is_sfml_proxy_candidate(window)
+                && drag_distance_exceeded(drag.dragStartMousePos, pt);
+
+            RECT wndRect{};
+            const HWND dragFrame = proxy_drag_frame(window, drag.originalParent, hwnd);
+            ::GetWindowRect(dragFrame, &wndRect);
+
+            const int newX = pt.x - drag.dragWindowOffset.x;
+            const int newY = pt.y - drag.dragWindowOffset.y;
+
+            RECT clientRect{};
+            const HWND sizeFrame = proxy_drag_frame(window, drag.originalParent, hwnd);
+            ::GetClientRect(sizeFrame, &clientRect);
+            const int clientW = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
+            const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+
+            if (drag.originalParent)
+            {
+                int wndW = clientW;
+                int wndH = clientH;
+                bool inside = false;
+                if (window && is_sfml_proxy_candidate(window))
+                {
+                    inside = pointer_inside_parent_client(drag.originalParent, pt);
+                    if (!is_sfml_proxy_detached(window))
+                    {
+                        inside = !proxyDragActivated
+                            || pointer_inside_parent_dock_region(drag.originalParent, pt);
+                    }
+                    else
+                    {
+                        inside = pointer_inside_parent_dock_region(drag.originalParent, pt);
+                    }
+                }
+                else
+                {
+                    RECT parentRect{};
+                    ::GetClientRect(drag.originalParent, &parentRect);
+                    POINT topLeft{ 0, 0 };
+                    ::ClientToScreen(drag.originalParent, &topLeft);
+                    ::OffsetRect(&parentRect, topLeft.x, topLeft.y);
+                    const int currentW = clamp_positive(static_cast<int>(wndRect.right - wndRect.left));
+                    const int currentH = clamp_positive(static_cast<int>(wndRect.bottom - wndRect.top));
+                    inside =
+                        newX >= parentRect.left && newY >= parentRect.top &&
+                        (newX + currentW) <= parentRect.right && (newY + currentH) <= parentRect.bottom;
+                }
+
+                if (inside)
+                {
+                    if (is_sfml_proxy_detached(window))
+                    {
+                        drag.proxyUndockPending = false;
+                        drag.proxyRedockPending = false;
+                        post_proxy_host_command(
+                            window,
+                            ProxyDockCmd::MoveDetached,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH);
+                        ::SetFocus(window->host_hwnd);
+                    }
+                    else if (window && is_sfml_proxy_candidate(window))
+                    {
+                        drag.proxyUndockPending = false;
+                        drag.proxyRedockPending = false;
+                        if (is_proxy_child_directly_docked(window, drag.originalParent))
+                        {
+                            dock_host_window_to_parent(
+                                window->hwndChild,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                clientW,
+                                clientH);
+                            if (window->host_hwnd
+                                && window->host_hwnd != window->hwndChild
+                                && ::IsWindow(window->host_hwnd) != FALSE
+                                && ::GetParent(window->host_hwnd) == drag.originalParent)
+                            {
+                                ::ShowWindow(window->host_hwnd, SW_HIDE);
+                            }
+                            ::SetFocus(window->hwndChild);
+                        }
+                        else
+                        {
+                            dock_host_window_to_parent(
+                                window->host_hwnd,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                clientW,
+                                clientH);
+                            apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
+                            ::SetFocus(hwnd);
+                        }
+                    }
+                    else if (window && backend_requires_owner_thread_dock_commands(window))
+                    {
+                        drag.proxyUndockPending = false;
+                        drag.proxyRedockPending = false;
+                        if (::GetParent(hwnd) != drag.originalParent || window->isFloating)
+                        {
+                            window->isFloating = false;
+                            static_cast<void>(post_owner_thread_dock_command(
+                                window,
+                                ProxyDockCmd::Redock,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                wndW,
+                                wndH));
+                            if (auto* mgr = s_activeInstance)
+                                mgr->HandleResize(hwnd, wndW, wndH);
+                        }
+                    }
+                    else if (::GetParent(hwnd) != drag.originalParent)
+                    {
+                        dock_host_window_to_parent(
+                            hwnd,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        restore_associated_host_window(
+                            window,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        if (window)
+                            window->isFloating = false;
+                        if (auto* mgr = s_activeInstance)
+                            mgr->HandleResize(hwnd, wndW, wndH);
+                    }
+                    else
+                    {
+                        dock_host_window_to_parent(
+                            hwnd,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        restore_associated_host_window(
+                            window,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            wndW,
+                            wndH);
+                        if (window)
+                            window->isFloating = false;
+                    }
+
+                    hide_associated_host_window(
+                        resolve_window_data_for_hwnd(hwnd),
+                        hwnd,
+                        drag.originalParent);
+                    ::SetFocus(hwnd);
+                }
+                else
+                {
+                    if (window && is_sfml_proxy_candidate(window))
+                    {
+                        if (!is_sfml_proxy_detached(window))
+                        {
+                            if (::IsZoomed(drag.originalParent) != FALSE)
+                                ::ShowWindow(drag.originalParent, SW_RESTORE);
+                            drag.proxyRedockPending = false;
+                            const POINT escaped = force_proxy_shell_outside_parent(
+                                drag.originalParent,
+                                pt,
+                                newX,
+                                newY,
+                                clientW,
+                                clientH);
+#if defined(_DEBUG)
+                            epochengine::logger::get(kLogSys).logf(
+                                epochengine::logger::LogLevel::INFO,
+                                std::source_location::current(),
+                                "Proxy undock move host={} child={} pt=({}, {}) new=({}, {}) escaped=({}, {}) parent={} hostParentBefore={} childParentBefore={}",
+                                static_cast<void*>(window->host_hwnd),
+                                static_cast<void*>(window->hwndChild),
+                                pt.x,
+                                pt.y,
+                                newX,
+                                newY,
+                                escaped.x,
+                                escaped.y,
+                                static_cast<void*>(drag.originalParent),
+                                static_cast<void*>(window->host_hwnd ? ::GetParent(window->host_hwnd) : nullptr),
+                                static_cast<void*>(window->hwndChild ? ::GetParent(window->hwndChild) : nullptr));
+#endif
+                            if (!drag.proxyUndockPending)
+                            {
+                                post_proxy_host_command(
+                                    window,
+                                    ProxyDockCmd::Undock,
+                                    drag.originalParent,
+                                    escaped.x,
+                                    escaped.y,
+                                    clientW,
+                                    clientH);
+                                drag.proxyUndockPending = true;
+                            }
+                        }
+                        else
+                        {
+                            drag.proxyUndockPending = false;
+                            post_proxy_host_command(
+                                window,
+                                ProxyDockCmd::MoveDetached,
+                                drag.originalParent,
+                                newX,
+                                newY,
+                                clientW,
+                                clientH);
+                            ::SetFocus(window->host_hwnd);
+                        }
+                    }
+                    else if (window
+                        && backend_requires_owner_thread_dock_commands(window)
+                        && (::GetParent(hwnd) == drag.originalParent || !window->isFloating))
+                    {
+                        if (::IsZoomed(drag.originalParent) != FALSE)
+                            ::ShowWindow(drag.originalParent, SW_RESTORE);
+                        const POINT escaped = force_proxy_shell_outside_parent(
+                            drag.originalParent,
+                            pt,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH);
+                        if (!drag.proxyUndockPending)
+                        {
+                            static_cast<void>(post_owner_thread_dock_command(
+                                window,
+                                ProxyDockCmd::Undock,
+                                drag.originalParent,
+                                escaped.x,
+                                escaped.y,
+                                clientW,
+                                clientH));
+                            drag.proxyUndockPending = true;
+                        }
+                    }
+                    else if (::GetParent(hwnd) == drag.originalParent)
+                    {
+                        if (::IsZoomed(drag.originalParent) != FALSE)
+                            ::ShowWindow(drag.originalParent, SW_RESTORE);
+                        const POINT escaped = force_proxy_shell_outside_parent(
+                            drag.originalParent,
+                            pt,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH);
+                        LONG_PTR style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+                        style &= ~WS_CHILD;
+                        style |= WS_OVERLAPPEDWINDOW | WS_VISIBLE;
+                        ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+                        ::SetParent(hwnd, nullptr);
+                        ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
+                        RECT adjusted{ 0, 0, clientW, clientH };
+                        const DWORD exStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+                        if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, exStyle))
+                        {
+                            wndW = clamp_positive(adjusted.right - adjusted.left);
+                            wndH = clamp_positive(adjusted.bottom - adjusted.top);
+                        }
+                        ::SetWindowPos(hwnd, HWND_TOPMOST, escaped.x, escaped.y, wndW, wndH,
+                            SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                        ::SetWindowPos(hwnd, HWND_NOTOPMOST, escaped.x, escaped.y, wndW, wndH,
+                            SWP_SHOWWINDOW);
+                        apply_dark_window_chrome(hwnd);
+                        if (window)
+                            window->isFloating = true;
+                        ::BringWindowToTop(hwnd);
+                        ::SetActiveWindow(hwnd);
+                        ::SetForegroundWindow(hwnd);
+                        ::SetFocus(hwnd);
+                    }
+                    else if (window && backend_requires_owner_thread_dock_commands(window))
+                    {
+                        static_cast<void>(post_owner_thread_dock_command(
+                            window,
+                            ProxyDockCmd::MoveDetached,
+                            drag.originalParent,
+                            newX,
+                            newY,
+                            clientW,
+                            clientH));
+                    }
+                    else
+                    {
+                        if (window)
+                            window->isFloating = true;
+                        ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
+                            SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                    }
+                }
+            }
+            else
+            {
+                if (window && backend_requires_owner_thread_dock_commands(window))
+                {
+                    static_cast<void>(post_owner_thread_dock_command(
+                        window,
+                        ProxyDockCmd::MoveDetached,
+                        nullptr,
+                        newX,
+                        newY,
+                        clientW,
+                        clientH));
+                }
+                else
+                {
+                    if (window)
+                        window->isFloating = true;
+                    ::SetWindowPos(hwnd, nullptr, newX, newY, 0, 0,
+                        SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                }
+            }
+
+            return 0;
+        }
+
+        case WM_SIZE:
+        {
+            if (wParam == SIZE_MINIMIZED) return 0;
+
+            auto* mgr = s_activeInstance;
+            if (!mgr) break;
+
+            const int width = clamp_positive(static_cast<int>(LOWORD(lParam)));
+            const int height = clamp_positive(static_cast<int>(HIWORD(lParam)));
+            mgr->HandleResize(hwnd, width, height);
+            return 0;
+        }
+
+        case WM_EPOCH_PROXY_DOCKCMD:
+        {
+            std::unique_ptr<ProxyDockRequest> request{
+                reinterpret_cast<ProxyDockRequest*>(lParam)
+            };
+            auto* const window = resolve_window_data_for_hwnd(
+                request && request->sourceHwnd ? request->sourceHwnd : hwnd);
+            if (!request || !is_sfml_proxy_candidate(window))
+                return 0;
+            const auto command = static_cast<ProxyDockCmd>(wParam);
+            if (window->pinnedToParent.load(std::memory_order_acquire)
+                && command != ProxyDockCmd::Redock)
+            {
+                return 0;
+            }
+
+            switch (command)
+            {
+            case ProxyDockCmd::Undock:
+                undock_sfml_proxy_window(
+                    window,
+                    request->x,
+                    request->y,
+                    request->width,
+                    request->height);
+#if defined(_DEBUG)
+                if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                {
+                    RECT hostRect{};
+                    ::GetWindowRect(window->host_hwnd, &hostRect);
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Proxy undock applied host={} child={} hostParentAfter={} childParentAfter={} hostRect=({}, {}, {}, {})",
+                        static_cast<void*>(window->host_hwnd),
+                        static_cast<void*>(window->hwndChild),
+                        static_cast<void*>(::GetParent(window->host_hwnd)),
+                        static_cast<void*>(::GetParent(window->hwndChild)),
+                        hostRect.left,
+                        hostRect.top,
+                        hostRect.right,
+                        hostRect.bottom);
+                }
+#endif
+                {
+                    auto& dragState = epochengine::core::Drag();
+                    if (dragState.dragging
+                        && window->host_hwnd
+                        && (dragState.draggedWindow == window->hwndChild
+                            || dragState.draggedWindow == window->host_hwnd)
+                        && ::IsWindow(window->host_hwnd) != FALSE)
+                    {
+                        ::ReleaseCapture();
+                        ::SetCapture(window->host_hwnd);
+                        dragState.draggedWindow = window->host_hwnd;
+                        sync_drag_offset_to_host_window(window->host_hwnd);
+                        ::SetActiveWindow(window->host_hwnd);
+                        ::SetForegroundWindow(window->host_hwnd);
+                        const HWND child = window->hwndChild.load(std::memory_order_acquire);
+                        ::SetFocus(
+                            (child && ::IsWindow(child) != FALSE)
+                            ? child
+                            : window->host_hwnd);
+                    }
+                }
+                if (request->parentHwnd && ::IsWindow(request->parentHwnd) != FALSE)
+                    request_parent_layout(request->parentHwnd);
+                return 0;
+
+            case ProxyDockCmd::MoveDetached:
+                move_detached_top_level_shell(
+                    window->host_hwnd,
+                    request->x,
+                    request->y,
+                    request->width,
+                    request->height);
+                window->set_size(request->width, request->height);
+#if defined(_DEBUG)
+                if (window->host_hwnd && ::IsWindow(window->host_hwnd) != FALSE)
+                {
+                    RECT hostRect{};
+                    ::GetWindowRect(window->host_hwnd, &hostRect);
+                    epochengine::logger::get(kLogSys).logf(
+                        epochengine::logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Proxy move applied host={} child={} hostParent={} childParent={} hostRect=({}, {}, {}, {})",
+                        static_cast<void*>(window->host_hwnd),
+                        static_cast<void*>(window->hwndChild),
+                        static_cast<void*>(::GetParent(window->host_hwnd)),
+                        static_cast<void*>(::GetParent(window->hwndChild)),
+                        hostRect.left,
+                        hostRect.top,
+                        hostRect.right,
+                        hostRect.bottom);
+                }
+#endif
+                return 0;
+
+            case ProxyDockCmd::Redock:
+                redock_sfml_proxy_window(
+                    window,
+                    request->parentHwnd,
+                    request->x,
+                    request->y,
+                    request->width,
+                    request->height);
+                // Parent layout either requested this redock or follows the drag release.
+                // Re-requesting it here can loop SDL/SFML proxy placement.
+                return 0;
+            }
+
+            return 0;
+        }
+
+        case WM_NCLBUTTONUP:
+        case WM_LBUTTONUP:
+        {
+            auto* const window = resolve_window_data_for_hwnd(hwnd);
+            const bool detachedProxyHostDrag =
+                drag.dragging
+                && window
+                && is_proxy_host_hwnd(window, hwnd)
+                && drag.draggedWindow == hwnd;
+            const bool detachedRoutedHostDrag =
+                drag.dragging
+                && window
+                && !window->guiRoute.empty()
+                && window->hwnd == hwnd
+                && drag.draggedWindow == hwnd;
+            if (msg == WM_NCLBUTTONUP && !detachedProxyHostDrag && !detachedRoutedHostDrag)
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            if (msg == WM_LBUTTONUP)
+            {
+                const auto ctx = resolveGuiContext();
+                push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseUp, lParam);
+            }
+            const bool proxyChildContinuingHostDrag =
+                drag.dragging
+                && window
+                && is_sfml_proxy_candidate(window)
+                && hwnd == window->hwndChild
+                && drag.draggedWindow == window->host_hwnd;
+            if (drag.dragging && (drag.draggedWindow == hwnd || proxyChildContinuingHostDrag))
+            {
+                const HWND originalParent = drag.originalParent;
+                POINT releasePoint = screen_mouse_point(hwnd, msg, lParam);
+                if (proxyChildContinuingHostDrag || detachedProxyHostDrag || detachedRoutedHostDrag || is_sfml_proxy_detached(window))
+                {
+                    POINT cursor{};
+                    if (::GetCursorPos(&cursor) != FALSE)
+                        releasePoint = cursor;
+                }
+                const bool proxyDragActivated =
+                    window
+                    && is_sfml_proxy_candidate(window)
+                    && drag_distance_exceeded(drag.dragStartMousePos, releasePoint);
+                RECT wndRect{};
+                const HWND releaseFrame = proxy_drag_frame(window, originalParent, hwnd);
+                ::GetWindowRect(releaseFrame, &wndRect);
+                ::ReleaseCapture();
+                const POINT dragWindowOffset = drag.dragWindowOffset;
+                drag.dragging = false;
+                drag.draggedWindow = nullptr;
+                drag.originalParent = nullptr;
+                drag.dragStartMousePos = POINT{};
+                drag.proxyUndockPending = false;
+                drag.proxyRedockPending = false;
+
+                if (originalParent
+                    && ::IsWindow(originalParent) != FALSE)
+                {
+                    RECT clientRect{};
+                    const HWND sizeFrame = proxy_drag_frame(window, originalParent, hwnd);
+                    ::GetClientRect(sizeFrame, &clientRect);
+                    const int clientW = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
+                    const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+                    const RECT parentRect = screen_client_rect(originalParent);
+                    const bool releaseInsideParent = point_in_rect(parentRect, releasePoint);
+                    const POINT windowCenter{
+                        wndRect.left + ((wndRect.right - wndRect.left) / 2),
+                        wndRect.top + ((wndRect.bottom - wndRect.top) / 2)
+                    };
+                    const bool centerInsideParent = point_in_rect(parentRect, windowCenter);
+                    const bool releaseOutsideParent = !should_redock_to_parent(originalParent, releasePoint, wndRect);
+                    const bool detachedProxy = window && is_sfml_proxy_detached(window);
+                    const bool wantsRedock = detachedProxy
+                        ? releaseInsideParent
+                        : (((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent)
+                            && should_redock_to_parent(originalParent, releasePoint, wndRect));
+#if defined(_DEBUG)
+                    if (window && is_sfml_proxy_candidate(window))
+                    {
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Proxy release host={} child={} detached={} release=({}, {}) parentRect=({}, {}, {}, {}) wndRect=({}, {}, {}, {}) releaseInside={} centerInside={} detachedProxy={} wantsRedock={}",
+                            static_cast<void*>(window->host_hwnd),
+                            static_cast<void*>(window->hwndChild),
+                            is_sfml_proxy_detached(window),
+                            releasePoint.x,
+                            releasePoint.y,
+                            parentRect.left,
+                            parentRect.top,
+                            parentRect.right,
+                            parentRect.bottom,
+                            wndRect.left,
+                            wndRect.top,
+                            wndRect.right,
+                            wndRect.bottom,
+                            releaseInsideParent,
+                            centerInsideParent,
+                            detachedProxy,
+                            wantsRedock);
+                    }
+#endif
+
+                    if (wantsRedock)
+                    {
+                        if (window && is_sfml_proxy_detached(window))
+                        {
+                            post_proxy_host_command(
+                                window,
+                                ProxyDockCmd::Redock,
+                                originalParent,
+                                wndRect.left,
+                                wndRect.top,
+                                clientW,
+                                clientH);
+                        }
+                        else if (window && backend_requires_owner_thread_dock_commands(window))
+                        {
+                            window->isFloating = false;
+                            static_cast<void>(post_owner_thread_dock_command(
+                                window,
+                                ProxyDockCmd::Redock,
+                                originalParent,
+                                wndRect.left,
+                                wndRect.top,
+                                clientW,
+                                clientH));
+                        }
+                        else
+                        {
+                            dock_host_window_to_parent(
+                                hwnd,
+                                originalParent,
+                                wndRect.left,
+                                wndRect.top,
+                                clientW,
+                                clientH);
+                            restore_associated_host_window(
+                                window,
+                                originalParent,
+                                wndRect.left,
+                                wndRect.top,
+                                clientW,
+                                clientH);
+                            if (window)
+                                window->isFloating = false;
+                        }
+                        if (auto* mgr = s_activeInstance)
+                            mgr->HandleResize(hwnd, clientW, clientH);
+                        request_routed_panel_redock_close(window);
+                    }
+                    else if (window
+                        && is_sfml_proxy_candidate(window)
+                        && !is_sfml_proxy_detached(window)
+                        && proxyDragActivated
+                        && releaseOutsideParent)
+                    {
+                        if (::IsZoomed(originalParent) != FALSE)
+                            ::ShowWindow(originalParent, SW_RESTORE);
+                        const POINT escaped = force_proxy_shell_outside_parent(
+                            originalParent,
+                            releasePoint,
+                            releasePoint.x - dragWindowOffset.x,
+                            releasePoint.y - dragWindowOffset.y,
+                            clientW,
+                            clientH);
+#if defined(_DEBUG)
+                        epochengine::logger::get(kLogSys).logf(
+                            epochengine::logger::LogLevel::INFO,
+                            std::source_location::current(),
+                            "Proxy undock release host={} child={} release=({}, {}) escaped=({}, {}) parent={} hostParentBefore={} childParentBefore={}",
+                            static_cast<void*>(window->host_hwnd),
+                            static_cast<void*>(window->hwndChild),
+                            releasePoint.x,
+                            releasePoint.y,
+                            escaped.x,
+                            escaped.y,
+                            static_cast<void*>(originalParent),
+                            static_cast<void*>(window->host_hwnd ? ::GetParent(window->host_hwnd) : nullptr),
+                            static_cast<void*>(window->hwndChild ? ::GetParent(window->hwndChild) : nullptr));
+#endif
+                        post_proxy_host_command(
+                            window,
+                            ProxyDockCmd::Undock,
+                            originalParent,
+                            escaped.x,
+                            escaped.y,
+                            clientW,
+                            clientH);
+                        request_parent_layout(originalParent);
+                    }
+                }
+
+                drag.dragWindowOffset = POINT{};
+
+                if (!(window && is_sfml_proxy_candidate(window)))
+                {
+                    hide_associated_host_window(
+                        resolve_window_data_for_hwnd(hwnd),
+                        hwnd,
+                        originalParent);
+                }
+                HWND focusTarget = hwnd;
+                if (window
+                    && is_sfml_proxy_candidate(window)
+                    && window->hwndChild
+                    && ::IsWindow(window->hwndChild) != FALSE)
+                {
+                    if (is_sfml_proxy_detached(window)
+                        && window->host_hwnd
+                        && ::IsWindow(window->host_hwnd) != FALSE)
+                    {
+                        ::BringWindowToTop(window->host_hwnd);
+                        ::SetActiveWindow(window->host_hwnd);
+                        ::SetForegroundWindow(window->host_hwnd);
+                    }
+                    focusTarget = window->hwndChild;
+                }
+                ::SetFocus(focusTarget);
+
+                if (originalParent && ::IsWindow(originalParent) != FALSE)
+                    ::PostMessageW(originalParent, WM_SIZE, 0, 0);
+                return 0;
+            }
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
+
+        case WM_MOUSEWHEEL:
+        {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            const auto ctx = resolveGuiContext();
+            push_gui_mouse_event(
+                ctx.get(),
+                hwnd,
+                epochengine::gui::EventType::MouseWheel,
+                lParam,
+                GET_WHEEL_DELTA_WPARAM(wParam),
+                true);
+            return 0;
+        }
+
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            if (!accepts_gui_keyboard_input(hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            const auto ctx = resolveGuiContext();
+            push_gui_key_event(ctx.get(), static_cast<int>(wParam));
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
+
+        case WM_CHAR:
+        case WM_SYSCHAR:
+        {
+            if (is_proxy_host_hwnd(resolveWindowData(), hwnd))
+                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+
+            if (!accepts_gui_keyboard_input(hwnd))
+                return 0;
+
+            const auto ctx = resolveGuiContext();
+            if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
+                push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
+            return 0;
+        }
+
+        case WM_DROPFILES:
+            if (HWND p = ::GetParent(hwnd))
+                ::SendMessageW(p, WM_DROPFILES, wParam, lParam);
+            ::DragFinish(reinterpret_cast<HDROP>(wParam));
+            return 0;
+
+        case WM_ERASEBKGND:
+            if (auto* const window = resolveWindowData();
+                should_draw_opengl_startup_placeholder(window))
+            {
+                RECT clientRect{};
+                if (::GetClientRect(hwnd, &clientRect))
+                {
+                    ::FillRect(reinterpret_cast<HDC>(wParam), &clientRect, parent_background_brush());
+                }
+            }
+            return 1;
+
+        case WM_PAINT:
+        {
+            PAINTSTRUCT ps{};
+            HDC hdc = ::BeginPaint(hwnd, &ps);
+            if (auto* const window = resolveWindowData();
+                should_draw_opengl_startup_placeholder(window))
+            {
+                ::FillRect(hdc, &ps.rcPaint, parent_background_brush());
+            }
+            ::EndPaint(hwnd, &ps);
+            return 0;
+        }
+        case WM_CLOSE:
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Child WM_CLOSE received hwnd={} parent={}",
+                static_cast<void*>(hwnd),
+                static_cast<void*>(::GetParent(hwnd)));
+            if (auto* mgr = s_activeInstance;
+                mgr && mgr->findWindowByHWND(hwnd))
+            {
+                // Keep the native surface alive until the renderer has stopped
+                // and released its swapchain/context. CleanupFinishedWindows
+                // performs the final HWND destruction after joining the thread.
+                mgr->RemoveWindow(hwnd);
+            }
+            else
+            {
+                ::DestroyWindow(hwnd);
+            }
+            return 0;
+
+        case WM_DESTROY:
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Child WM_DESTROY received hwnd={} parentAfter={}",
+                static_cast<void*>(hwnd),
+                static_cast<void*>(::GetParent(hwnd)));
+            if (auto* mgr = s_activeInstance)
+            {
+                mgr->RemoveWindow(hwnd);
+            }
+            return 0;
+
+        default:
+            return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        }
+
+        return 0;
+    }
+}
+
+#endif // _WIN32

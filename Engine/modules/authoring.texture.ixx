@@ -16,10 +16,22 @@ module;
 #include <vector>
 
 export module authoring.texture;
-export import authoring.texture.artifact;
+export import asset.texture_artifact;
 
 export namespace epochengine::authoring::texture
 {
+    using asset::texture::ArtifactCompilationStatus;
+    using asset::texture::ArtifactFormat;
+    using asset::texture::ColorSpace;
+    using asset::texture::CompiledTextureArtifact;
+    using asset::texture::CompiledTextureArtifactIdentity;
+    using asset::texture::CompiledTextureMip;
+    using asset::texture::ContentHash;
+    using asset::texture::DocumentRevision;
+    using asset::texture::MipmapPolicy;
+    using asset::texture::TextureCompileProfile;
+    using asset::texture::build_compiled_texture_artifact_identity;
+    using asset::texture::compiled_texture_payload_content;
     struct DocumentHandle final
     {
         static constexpr std::uint32_t invalid_index =

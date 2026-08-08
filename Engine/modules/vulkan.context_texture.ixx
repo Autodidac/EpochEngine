@@ -46,7 +46,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 // Include Vulkan-Hpp after config.
 #include <compare>
 #include <vulkan/vulkan.hpp>
@@ -56,7 +56,7 @@ export module vulkan.context:texture;
 import :shared_vk;
 import core.logger;
 import core.path;
-import engine.cli;
+import epoch.cli;
 import utility.string_converter;
 import image.loader;
 import atlas.texture;

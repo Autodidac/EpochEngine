@@ -72,8 +72,8 @@ export module updater.system;
 
 import core.logger;
 import core.path;
-import engine.cli;
-import engine.platform;
+import epoch.cli;
+import platform.engine;
 import updater.tools;
 import updater.config;
 

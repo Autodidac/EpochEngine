@@ -263,7 +263,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version_module="$GITHUB_WORKSPACE/Engine/modules/engine.version.ixx"
+          version_module="$GITHUB_WORKSPACE/Engine/modules/epoch.version.ixx"
           major="$(sed -n 's/^#  define EPOCH_VERSION_MAJOR_VALUE \([0-9][0-9]*\)$/\1/p' "$version_module")"
           minor="$(sed -n 's/^#  define EPOCH_VERSION_MINOR_VALUE \([0-9][0-9]*\)$/\1/p' "$version_module")"
           revision="$(sed -n 's/^#  define EPOCH_VERSION_REVISION_VALUE \([0-9][0-9]*\)$/\1/p' "$version_module")"

@@ -86,13 +86,13 @@ The working tree contains these current or in-progress foundations:
   residency planning. Planning is advisory, defaults to standalone-only, and
   does not count atlas/bindless/sparse choices as runtime capability evidence.
   Compressed and color-conversion lanes fail closed;
-- `project.asset.registry` now owns deterministic path-derived runtime project/asset
+- `project.asset_registry` now owns deterministic path-derived runtime project/asset
   identity separately from authoring documents, compiled content,
   filesystem case behavior, and
   physical caches. It normalizes portable logical paths, rejects traversal and
   case-fold collisions, issues generation-checked handles and deterministic
   keys, and publishes explicit current source revisions;
-- `project.texture.resources` authenticates compiled texture source revision
+- `project.texture_resources` authenticates compiled texture source revision
   against that registry, seals the full artifact identity, and issues Canvas2D
   references from project asset key plus content-derived artifact revision.
   Identical content reconstructed at a later temporal sequence reuses the same
@@ -106,8 +106,9 @@ The working tree contains these current or in-progress foundations:
   explicit physical graph-output binding;
 - `render.texture.artifact` remains the sole validated artifact-to-residency
   adapter and no longer treats source edit sequence as artifact revision;
-- `authoring.texture.artifact` now owns the always-built artifact schema, stable
-  hash protocol, and integrity validator. The authoring compiler re-exports and
+- `asset.texture_artifact` now owns the always-built artifact schema, stable
+  hash protocol, deterministic little-endian serializer, bounded reader, and
+  integrity validator. The authoring compiler re-exports and
   consumes it, while a standalone Clang contract proves artifact consumption
   with the authoring platform and texture editor disabled;
 - `package.registry` owns fail-closed extension evidence policy, not download,
@@ -159,7 +160,7 @@ The working tree contains these current or in-progress foundations:
   the OpenGL-family device and `opengl.textures` provide context-guarded native
   allocation, base-mip upload, readiness, and destruction hooks without moving
   backend handles into authoring or Canvas2D state;
-- `render.canvas2d.presentation` validates complete frame/raster identity,
+- `render.canvas2d_presentation` validates complete frame/raster identity,
   derives artifact digests from actual pixel bytes, acquires disposable output
   through the residency cache, and emits an explicit surface/image/native
   packet; `opengl.canvas2d` implements the primary-context final compositor with
@@ -167,6 +168,11 @@ The working tree contains these current or in-progress foundations:
   texture validation, and scoped GL state restoration. An immutable per-context
   scene exchange now maps committed editor entities to semantic solid sprites
   and invokes that compositor in the protected live scene slot;
+- `project.lifecycle` centralizes Save, materialize, Build, Run, wait, and
+  focus-existing-runtime decisions with generation-safe attempt tracking;
+- all 351 first-party C++ files follow the canonical one-dot owner grammar,
+  exact module/file identity, and owned directory layout enforced by the source
+  naming validator;
 - the launcher opens the three editor applications, selects a live context
   before launch, and keeps update/exit actions direct;
 - the Windows parent host elects exactly one baked primary renderer surface. The
@@ -192,17 +198,20 @@ A clean authoring-disabled managed Clang configuration independently proves the
 runtime artifact schema, hashing, and validator without authoring document/UI
 linkage. Immutable scene publication, replacement lifetime, semantic entity mapping, CPU
 shading, and protected OpenGL scene-slot routing are build-proven. Live OpenGL
-allocation/drawing, operator-visible pixels, serialized artifact reading,
+allocation/drawing, operator-visible pixels, filesystem integration for serialized artifacts,
 capability-derived texture admission, and secondary GL share-group adapters
 remain Partial.
 
 ## Completed Capability Checkpoint
 
-Source v0.88.88 adds immutable per-context Canvas2D scene publication,
+Source v0.88.89 establishes engine-wide source ownership, serialized texture
+artifacts, project lifecycle policy, and retains immutable per-context Canvas2D
+scene publication. It adds
 semantic editor entity projection, replacement-safe reader lifetime, protected
 OpenGL scene-slot routing, and context-retirement cleanup. It does not claim
 live native pixel correctness, project texture admission into that scene,
-secondary share groups, serialized artifacts, or built-game presentation.
+secondary share groups, artifact filesystem/library integration, or built-game
+presentation.
 
 ## Immediate Implementation Order
 

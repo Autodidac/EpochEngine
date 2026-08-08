@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include <compare>
+
 #include <cstdint>
 
 #ifndef EPOCH_USING_VULKAN

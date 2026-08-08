@@ -81,11 +81,11 @@ module;
 
 export module opengl.textures;
 
-import engine.platform;
+import platform.engine;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1) && (EPOCH_USING_OPENGL == 1)
 
-import engine.cli;
+import epoch.cli;
 import context.type;
 import core.context;
 import context.multiplexer;
@@ -95,9 +95,9 @@ import opengl.state;
 import opengl.quad;
 import atlas.manager;
 import atlas.texture;
-import texture;
+import texture.core;
 import image.loader;
-import spritehandle;
+import sprite.handle;
 import core.logger;
 import render.device;
 import render.device_opengl_family;

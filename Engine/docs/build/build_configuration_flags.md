@@ -140,7 +140,7 @@ override them locally in `engine.config.hpp`.
   with `/FORCE:MULTIPLE`.
 - Module-aware builds should keep `CMAKE_CXX_SCAN_FOR_MODULES=ON` enabled.
 - LLVM 22.1.8 Linux Release builds keep the engine at `-O3` while compiling
-  only `modules/core.commandline.ixx` and `modules/net.ixx` at `-O0` to avoid
+  only `modules/core.commandline.ixx` and `modules/network.core.ixx` at `-O0` to avoid
   reproducible LLVM CGSCC/inliner and `globalopt` crashes. These are
   source-local compiler workarounds, not a reduced Linux, updater, renderer, or
   context build.

@@ -57,7 +57,7 @@ module;
 // Win32 has BOOL CloseWindow(HWND). Raylib has void CloseWindow(void).
 // Prevent the collision in this TU by temporarily renaming Win32's symbol name during header include.
 //#   define CloseWindow CloseWindow_Win32
-#   include <../src/framework.hpp>
+#   include <../src/platform.framework.hpp>
 //#   undef CloseWindow
 
 #   include <wingdi.h> // HGLRC + wgl*
@@ -78,7 +78,7 @@ import core.commandline;
 import core.logger;
 import context.type;
 import context.multiplexer;
-import engine.diagnostics;
+import diagnostics.engine;
 import atlas.manager;
 import image.writer;
 import package.registry;

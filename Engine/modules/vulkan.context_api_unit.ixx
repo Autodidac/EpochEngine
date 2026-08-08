@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include <compare>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -55,17 +57,17 @@ import :texture;
 import core.context;
 import context.type;
 import core.logger;
-import engine.diagnostics;
-import engine.telemetry;
+import diagnostics.engine;
+import telemetry.engine;
 import atlas.manager;
 import atlas.texture;
-import spritehandle;
+import sprite.handle;
 import context.commandqueue;
 
 
 namespace epochengine::vulkancontext
 {
-    inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
+    inline constexpr std::string_view kApiLogSystem = "Epoch.Vulkan";
 
     void vulkan_draw_sprite(
         SpriteHandle sprite,
@@ -154,7 +156,7 @@ namespace epochengine::vulkancontext
         app.initWindow();
         app.initVulkan();
 
-        logger::get(kLogSys).log(
+        logger::get(kApiLogSystem).log(
             logger::LogLevel::INFO,
             "Initialized successfully.",
             std::source_location::current());
@@ -230,12 +232,12 @@ namespace epochengine::vulkancontext
 
         if (auto app = take_vulkan_app(ctx.get()))
         {
-            logger::get(kLogSys).log(
+            logger::get(kApiLogSystem).log(
                 logger::LogLevel::INFO,
                 "Retirement detached Vulkan application ownership; waiting for the device before resource destruction.",
                 std::source_location::current());
             app->cleanup();
-            logger::get(kLogSys).log(
+            logger::get(kApiLogSystem).log(
                 logger::LogLevel::INFO,
                 "Vulkan application resources retired successfully.",
                 std::source_location::current());

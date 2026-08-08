@@ -162,7 +162,22 @@
   checking notices, `$ORIGIN/lib`, shared-library resolution, version and
   contract output, archive cleanliness, and the release checksum.
 
-## 4. Source Ownership Rules
+## 4. Source Naming And Ownership
+
+- `Engine/docs/engine/source_naming_architecture.md` is normative for every
+  first-party C++ filename and module identity.
+- Use exactly one ownership dot in each basename:
+  `<owner>.<subject_role>.<extension>`. Use underscores for additional subject
+  words. Module partitions use `:` in C++ and `_` in the filename.
+- Run `Tools/ai/validate_source_names.ps1` after adding or moving first-party
+  C++ files. Update CMake, MSVC projects/shared items/filters, imports, includes,
+  scripts, and docs in the same pass.
+- `core` owns dependency-light primitives and lifecycle. `epoch` owns public
+  composition/runtime entry. Domain prefixes retain domain implementation.
+- Temporal resources flow from `authoring.*` documents to `asset.*` compiled
+  artifacts, `project.*` admission, and disposable `render.*` residency.
+
+## 5. Source Ownership Rules
 
 - Public/external headers belong under `Engine/include/...`; internal
   implementation headers stay near owning source under `Engine/src/...` or
@@ -173,7 +188,7 @@
 - Renames and moves are source work, not cosmetics. Before moving files,
   inventory includes/imports, module ownership, MSVC projects/filters, CMake
   targets, runtime asset references, and docs links.
-- `engine.gui` is an engine-internal reusable GUI library. Add reusable
+- `gui.engine` is an engine-internal reusable GUI library. Add reusable
   primitives there first: tabs, dropdowns, scroll areas, text inputs,
   selectable text, context menus, window chrome, modal layers, splitters,
   progress bars, docking, and future floating GUI windows.
@@ -201,7 +216,7 @@
   Visible AI surfaces use operator-selected OS/source-available models such as
   Qwen, Nemotron, Bonsai, Wan, TRELLIS, and FLUX fallback.
 
-## 5. What Agents Must Never Do
+## 6. What Agents Must Never Do
 
 - Never add placeholders, fake UI, fake AI autonomy, hidden self-training,
   dead code, or duplicate wrappers as if they were production progress.
@@ -219,7 +234,7 @@
 - Never stage generated caches, transient capture JSON/startup probes, local
   runtime folders, or unrelated operator files.
 
-## 6. Active Pass Pointer
+## 7. Active Pass Pointer
 
 - Start every churn pass by reading this file and `Changes/active_pass.md`.
   Read `Changes/roadmap.md` only for broader context or durable follow-up

@@ -65,7 +65,7 @@ import context.type;
 import atlas.manager;
 import atlas.texture;
 import image.loader;
-import texture;
+import texture.core;
 import core.logger;
 import raylib.api;
 import raylib.state;

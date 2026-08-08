@@ -38,7 +38,7 @@
 //#   define EPOCH_USING_VULKAN 1
 //#endif
 //
-//#include <include/context.vulkan.hpp>
+//#include <include/vulkan.context_shared.hpp>
 //
 //// Include Vulkan-Hpp after config.
 //#include <vulkan/vulkan.hpp>

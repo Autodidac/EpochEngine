@@ -44,7 +44,7 @@ module;
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include <../src/framework.hpp>
+#       include <../src/platform.framework.hpp>
 #   endif
 #endif
 #endif
@@ -52,7 +52,7 @@ module;
 export module raylib.state;
 
 import core.timer;
-import engine.cli;
+import epoch.cli;
 import core.context;
 import raylib.api;
 

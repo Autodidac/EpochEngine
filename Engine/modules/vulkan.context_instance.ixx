@@ -57,7 +57,7 @@ module;
 #   include <X11/Xlib.h>
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
 #   include <GLFW/glfw3.h>
@@ -71,7 +71,7 @@ module;
 #       define NOMINMAX
 #   endif
 #   include <windows.h> // for LoadLibrary/GetProcAddress
-#   include <../src/framework.hpp>
+#   include <../src/platform.framework.hpp>
 #else
 #   include <dlfcn.h> // dlopen/dlsym
 #endif
@@ -90,7 +90,7 @@ import core.logger;
 
 namespace epochengine::vulkancontext
 {
-    inline constexpr std::string_view kLogSys = "Epoch.Vulkan";
+    inline constexpr std::string_view kInstanceLogSystem = "Epoch.Vulkan";
 }
 
 namespace epochengine::vulkancontext::detail
@@ -235,7 +235,7 @@ export namespace epochengine::vulkancontext
         validationLayersEnabled = epochengine::vulkanrenderer::vulkan_config.enable_validation_layers;
         if (validationLayersEnabled && !checkValidationLayerSupport())
         {
-            logger::get(kLogSys).log(
+            logger::get(kInstanceLogSystem).log(
                 logger::LogLevel::INFO,
                 "Validation layers unavailable; continuing with validation disabled.",
                 std::source_location::current());

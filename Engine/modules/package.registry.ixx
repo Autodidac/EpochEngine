@@ -36,7 +36,7 @@ module;
 #include <span>
 #include <string_view>
 
-#include "../include/_epoch.stl_types.hpp"
+#include "../include/core.stl_types.hpp"
 
 export module package.registry;
 

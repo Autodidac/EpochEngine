@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-#include "../include/_epoch.stl_types.hpp"
+#include "../include/core.stl_types.hpp"
 
 export module epoch.engine;
 
@@ -41,9 +41,9 @@ import platform.budgets;
 import platform.window;
 import platform.context;
 import platform.runtime;
-import epoch.systems;
-import epoch.events;
-import epoch.ecs;
+import systems.registry;
+import events.bus;
+import ecs.world;
 
 export namespace epochengine
 {

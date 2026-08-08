@@ -51,9 +51,9 @@ export module sprite.pool;
 // Engine modules
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-import spritehandle;          // SpriteHandle
-import engine.systems;         // Task
-import mpmcboundedqueue;
+import sprite.handle;          // SpriteHandle
+import systems.task;         // Task
+import core.mpmc_bounded_queue;
 import taskgraph.dotsystem;      // taskgraph::TaskGraph, Node
 import core.logger;
 

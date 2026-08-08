@@ -43,7 +43,7 @@ export module context.platform_utils;
 #endif
 
 import core.context;
-import engine.input;
+import input.engine;
 
 namespace
 {

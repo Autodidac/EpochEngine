@@ -38,7 +38,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 #include <compare>
 #include <vulkan/vulkan.hpp>
 #include <stdexcept>

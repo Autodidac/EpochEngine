@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -42,7 +42,7 @@ module;
 export module timeline.system;
 
 import core.time;
-import scenesnapshot;
+import scene.snapshot;
 
 export namespace epochengine::timeline
 {

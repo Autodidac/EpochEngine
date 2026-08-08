@@ -53,15 +53,15 @@ module;
 
 export module sfml.textures;
 
-import engine.platform;
+import platform.engine;
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 
 import atlas.manager;
 import atlas.texture;
 import image.loader;
-import texture;
-import spritehandle;
+import texture.core;
+import sprite.handle;
 import core.logger;
 
 import sfml.state;

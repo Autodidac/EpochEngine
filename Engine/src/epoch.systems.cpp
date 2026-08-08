@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -30,10 +30,10 @@
  ***********************************************/
 module;
 
-#include "../include/_epoch.stl_types.hpp"
+#include "../include/core.stl_types.hpp"
 #include <unordered_map>
 
-module epoch.systems;
+module systems.registry;
 
 import core.format;
 import core.log;

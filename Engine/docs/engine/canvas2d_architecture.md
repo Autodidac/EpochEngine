@@ -85,9 +85,9 @@ delay the baseline path. API names never imply capability.
   content identity and bytes; the residency cache supplies physical lifetime.
   None may synthesize or absorb the other two identities.
 - Compiled artifact schemas and readers must be runtime-owned and available
-  without authoring UI. Authoring owns compilation. `project.asset.registry`
+  without authoring UI. Authoring owns compilation. `project.asset_registry`
   now authenticates stable project identity and source revision, while
-  `project.texture.resources` validates in-memory artifacts and binds the first
+  `project.texture_resources` validates in-memory artifacts and binds the first
   linear RGBA8 base-mip CPU/residency lane. Serialized artifact reading and
   capability-derived admission remain required before the complete
   game/mobile/console/headless product boundary is present.

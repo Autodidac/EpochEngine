@@ -46,7 +46,7 @@ module;
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
 #   if defined(_WIN32)
 #       ifdef EPOCH_USING_WINMAIN
-#         include "../src/framework.hpp"
+#         include "../src/platform.framework.hpp"
 #       endif
 #       ifndef WIN32_LEAN_AND_MEAN
 #           define WIN32_LEAN_AND_MEAN
@@ -57,7 +57,7 @@ module;
 export module software.state;
 
 
-//import engine.platform;
+//import platform.engine;
 import core.context;
 import core.timer;
 

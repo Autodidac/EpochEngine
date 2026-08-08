@@ -43,7 +43,7 @@ module;
 #include <vector>
 
 #if defined(_WIN32)
-#     include <../src/framework.hpp>
+#     include <../src/platform.framework.hpp>
 //#   include <windowsx.h>
 //#   include <shellapi.h>
 #   include <commctrl.h>
@@ -59,7 +59,7 @@ module;
 
 export module context.multiplexer;
 
-import engine.platform;
+import platform.engine;
 import context.type;         // epochengine::core::ContextType
 import context.commandqueue; // epochengine::core::CommandQueue
 import context.window;       // epochengine::core::WindowData
@@ -184,7 +184,7 @@ namespace epochengine::core
         static LRESULT CALLBACK ParentProc(HWND, UINT, WPARAM, LPARAM);
         static LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
         void HandleDropFiles(HWND, HDROP);
-        static void AttachBackendInputBridge(HWND hwnd) noexcept;
+        static void AttachBackendInputAdapter(HWND hwnd) noexcept;
 
         static ATOM RegisterParentClass(HINSTANCE, LPCWSTR);
         static ATOM RegisterChildClass(HINSTANCE, LPCWSTR);

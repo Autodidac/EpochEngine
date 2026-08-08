@@ -44,7 +44,7 @@ module;
 #   endif
 #endif
 
-#include "../include/engine.hpp"          // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+#include "../include/epoch.engine.hpp"          // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
 #include "../include/engine.config.hpp"   // EPOCH_USING_* macros
 
 // If some include above already pulled windows.h, nuke the macros anyway.
@@ -63,7 +63,7 @@ module;
 
 export module sfml.state;
 
-import engine.platform;
+import platform.engine;
 import context.window;
 import core.timer;
 

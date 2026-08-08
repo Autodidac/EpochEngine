@@ -14,7 +14,7 @@ module;
 
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include "../src/framework.hpp"
+#       include "../src/platform.framework.hpp"
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -23,7 +23,7 @@ module;
 
 module software.context;
 
-import spritehandle;
+import sprite.handle;
 import atlas.texture;
 import core.context;
 import context.commandqueue;

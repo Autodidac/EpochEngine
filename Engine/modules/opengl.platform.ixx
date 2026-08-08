@@ -58,7 +58,7 @@ module;
 // - DO NOT include any GL headers here.
 // - DO NOT include GL/wglext.h here.
 // This module only needs core WGL + Win32 types and functions.
-#include <../src/framework.hpp>
+#include <../src/platform.framework.hpp>
 #include <wingdi.h>
 
 #elif defined(__linux__)

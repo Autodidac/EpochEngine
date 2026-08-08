@@ -53,7 +53,7 @@ module;
 #   define EPOCH_USING_VULKAN 1
 #endif
 
-#include <../src/context.vulkan.hpp>
+#include <../src/renderers/vulkan/vulkan.context_shared.hpp>
 
 #if defined(EPOCH_VULKAN_STANDALONE)
 #   ifndef GLFW_INCLUDE_VULKAN
@@ -74,10 +74,10 @@ import :shared_context;
 
 import context.commandqueue;
 import core.context;
-import engine.input;
+import input.engine;
 import vulkan.camera;
 import atlas.texture;
-import spritehandle;
+import sprite.handle;
 
 #if !defined(EPOCH_VULKAN_STANDALONE)
 struct GLFWwindow; // engine-owned window integration: don't drag GLFW into the BMI
