@@ -29,6 +29,9 @@
   the referenced repository has explicit compatible licensing/provenance.
 - Reopen the release lane for the first `v0.89.x` Windows/Linux baseline while
   preserving the accepted updater flow and checksum naming.
+- Make every platform packaged-version default inherit the canonical source
+  revision, preventing stale release revisions from producing hybrid names such
+  as `0.89.69` in a `v0.89.01` package.
 - Keep OpenGL capture module-owned on Linux while retaining the small MSVC-only
   adapter that avoids MSVC module heap exhaustion; remove the bridge from the
   Linux source graph to prevent duplicate global/module definitions.
