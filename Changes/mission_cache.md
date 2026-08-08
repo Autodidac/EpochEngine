@@ -63,9 +63,11 @@ release history belong in the changelog/archive, not architecture docs.
 - `render.canvas2d.presentation` now connects complete CPU canvas output to that
   cache and an explicit backend-owned presentation packet; the primary OpenGL
   compositor is compiled and build-proven.
-- Connect compiled project texture artifacts to that boundary, route the
-  compositor through the protected editor scene-content slot, and compare live
-  native pixels to the CPU oracle.
+- Runtime project asset identity now authenticates compiled texture source
+  revisions and binds content-derived logical references into bounded Canvas2D
+  CPU resource sets plus optional residency. Next route the compositor through
+  the protected editor scene-content slot and compare live native pixels to the
+  CPU oracle.
 - Extend the current tile descriptors with palettes, map objects, collision,
   visible-chunk culling, project persistence, and compiled runtime artifacts.
 - Add animation-frame selection and sprite culling without weakening stable draw
@@ -95,14 +97,21 @@ release history belong in the changelog/archive, not architecture docs.
 - Logical texture identity never contains descriptor slots, atlas coordinates,
   sparse mappings, GPU handles, upload state, or preview targets.
 - Project asset identity is supplied separately from compiled content identity.
-  `render.texture.artifact` maps an explicit linear RGBA8 mip into the shared
+  `project.asset.registry` now owns deterministic project/asset keys, portable
+  path authentication, generation-checked lifetime, and accepted source
+  revision. `project.texture.resources` validates that revision and the full
+  artifact before binding CPU resource sets or requesting residency.
+- Logical artifact revision is content-derived rather than copied from source
+  edit sequence. Equivalent content reconstructed at a later sequence therefore
+  reuses compiled/cache identity while the registry still authenticates the
+  current source revision.
+- `render.texture.artifact` maps the explicit linear RGBA8 mip into the shared
   standalone residency cache and preserves backend epochs as disposable state.
-- Compiled artifact schema, stable hashing, and integrity validation are now
-  runtime-owned so game,
-  mobile, console, server, and headless products can consume compiled output
-  while excluding authoring UI and history. A standalone Clang contract proves
-  this lane with authoring and texture-editor features disabled; product asset
-  registry and serialized artifact reading remain the next consumption gate.
+- Compiled artifact schema, stable hashing, and integrity validation are
+  runtime-owned so game, mobile, console, server, and headless products can
+  consume compiled output while excluding authoring UI and history. Serialized
+  artifact reading and capability-derived admission remain the next
+  consumption gate.
 - Standalone, atlas, bindless, and sparse representations are physical residency
   plans chosen by capability, budget, format, update rate, and workload.
 - The first physical cache contract supports sampled color resources through a

@@ -1309,7 +1309,7 @@ namespace epochengine::gui
 
             auto setFallback = [&](unsigned char ch)
                 {
-                    if (ch < fontCache.glyphLookup.size() && fontCache.glyphLookup[ch])
+                    if (fontCache.glyphLookup[ch])
                         fontCache.fallbackGlyph = fontCache.glyphLookup[ch];
                 };
 

@@ -1504,7 +1504,6 @@ export namespace epochengine::canvas2d
     struct TileSetDescriptor final
     {
         TileSetHandle handle{};
-        TextureHandle texture{};
         CanvasExtent texture_extent{256, 256};
         UInt2 tile_extent{16, 16};
         UInt2 grid{16, 16};
@@ -1534,10 +1533,10 @@ export namespace epochengine::canvas2d
         const TileValidationLimits& limits = {}) noexcept
     {
         TileSetValidation result{};
-        if (!valid(limits) || !descriptor.handle.valid() || !descriptor.texture
+        if (!valid(limits) || !descriptor.handle.valid()
             || !valid(descriptor.material)
-            || descriptor.material.source == SpriteSourceKind::solid_color
-            || descriptor.material.texture != descriptor.texture
+            || descriptor.material.source != SpriteSourceKind::texture
+            || !descriptor.material.logical_texture
             || descriptor.texture_extent.empty()
             || descriptor.tile_extent.x == 0 || descriptor.tile_extent.y == 0
             || descriptor.tile_extent.x > limits.maximum_tile_extent
@@ -2263,7 +2262,6 @@ export namespace epochengine::canvas2d
 
         TileSetDescriptor tile_set{};
         tile_set.handle = {0, 1};
-        tile_set.texture = material.texture;
         tile_set.material = material;
         const TileSetValidation tile_set_validation = validate(tile_set);
         if (!tile_set_validation

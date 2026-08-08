@@ -1181,6 +1181,9 @@
     <Filter Include="Module Files\epoch\authoring">
       <UniqueIdentifier>{7a56a0a3-c219-44ec-b364-7d2f07869dc1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Module Files\epoch\project">
+      <UniqueIdentifier>{3d5cc807-9112-4cc0-a58b-484547d2c861}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Module Files\epoch\terrain">
       <UniqueIdentifier>{e7f08d55-5db3-48f5-a203-3af0774e71be}</UniqueIdentifier>
     </Filter>
@@ -1205,6 +1208,9 @@
     <Filter Include="Source Files\epochengine\authoring\texture">
       <UniqueIdentifier>{0304862f-2d95-4308-b1a6-4d29bc847130}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\epochengine\project">
+      <UniqueIdentifier>{2d012ae0-0465-4bca-a747-b94aa914e9be}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\epochengine\assets">
       <UniqueIdentifier>{ccfacdae-e3be-4458-9677-d2fb1b86b08e}</UniqueIdentifier>
     </Filter>
@@ -1224,6 +1230,15 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
       <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset.registry.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture.resources.ixx">
+      <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx">
       <Filter>Module Files\epoch\terrain</Filter>
@@ -1254,6 +1269,15 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp">
       <Filter>Source Files\epochengine\physics</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset.registry.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture.resources.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\texture.artifact.cpp">
       <Filter>Source Files\epochengine\assets\texture</Filter>

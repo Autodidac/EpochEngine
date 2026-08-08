@@ -302,6 +302,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset.registry.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture.resources.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx" />
@@ -480,6 +483,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.render.graph.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset.registry.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture.resources.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\texture.artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\texture.document.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp" />

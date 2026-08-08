@@ -67,11 +67,11 @@ ship.
   layer documents into deterministic owning RGBA8 mip artifacts and validates
   identity, dimensions, per-mip content, aggregate bytes, and payload digest.
   `authoring.texture.artifact` owns the always-built artifact schema and
-  validator; `render.texture.artifact` receives stable project logical identity
-  and maps a one-time sealed linear RGBA8 mip 0 into the shared standalone
-  residency cache. Runtime artifact reading is build-proven with authoring
-  disabled. Project-registry authentication and capability-derived admission remain
-  required. sRGB-native storage, compression, whole mip-chain upload, atlas,
+  validator; `render.texture.artifact` maps sealed linear RGBA8 mip 0 into the
+  shared standalone residency cache. `project.asset.registry` and
+  `project.texture.resources` authenticate in-memory project/source/artifact
+  identity, own bounded CPU bindings, and optionally acquire residency without
+  authoring UI. Serialized artifact reading and capability-derived admission remain. sRGB-native storage, compression, whole mip-chain upload, atlas,
   bindless, sparse, and streaming execution remain fail-closed or planned.
 - **Canvas2D planning spine**: `render.canvas2d` validates project policy,
   pixel-aware camera/viewport mapping, stable sprite identity, logical texture
@@ -88,9 +88,9 @@ ship.
   context-owned texture validation, viewport-confined clear/draw work,
   top-left-to-GL coordinate conversion, and scoped GL state restoration.
   Build-safe family, staged-presentation, and no-context refusal contracts pass;
-  protected editor scene-slot integration, operator-visible pixels, secondary
-  GL share-group adapters, authoring, and the built-project loop remain active
-  gates.
+  protected editor scene-slot integration, operator-visible project textures,
+  secondary GL share-group adapters, serialized artifact admission, tilemap
+  authoring, and the built-project loop remain active gates.
 - **Arcade scene-surface proof**: one shared attract-pattern contract feeds
   backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
   DirectX, and Software. Build contracts prove ownership/routing; visual and
@@ -151,6 +151,13 @@ storage growth are proven.
   DirectX remain partial feature paths, and Software parity is a continuing goal.
 - Professional docking guide zones, text controls, decoded asset previews, project browser
   operations, and independently routed GUI windows remain incomplete.
+- Runtime project asset keys are currently deterministic from canonical logical
+  paths. Persistent imported asset IDs and explicit rename/move migration are still
+  required before project-browser moves can preserve logical identity.
+- The always-built compiled texture schema is still named
+  `authoring.texture.artifact` even though it has no authoring UI/history
+  dependency. Runtime-oriented module/namespace ownership remains cleanup before
+  the product API is frozen.
 - Package installation, active downloaded content, servers/listeners, and native
   extensions remain explicit human-gated capabilities.
 - OS AI remains operator-selected external tooling with evidence and promotion
@@ -163,10 +170,10 @@ storage growth are proven.
    save/reopen, Play/Stop, Run, and Build.
 2. Keep capability selection, settings, diagnostics, and project requirements
    aligned with proven T0-CPU and T1-GL behavior before broadening claims.
-3. Connect project asset-registry logical references and Canvas2D bindings to
-   the proven temporal-artifact/standalone-cache bridge, then extend that same
-   boundary through sRGB, compression, mip-chain, atlas, bindless, sparse, and
-   streaming policies only as capability evidence permits.
+3. Route the proven project asset-registry and Canvas2D binding boundary through
+   serialized artifact reading, capability-derived admission, and the protected
+   editor scene slot, then extend it through sRGB, compression, mip-chain, atlas,
+   bindless, sparse, and streaming policies only as evidence permits.
 4. Continue EpochGui controls and desktop docking without making floating hosts
    mandatory for game, mobile, console, or headless products.
 5. Preserve the sealed runtime/updater baseline while Debug, Release, Clang, and

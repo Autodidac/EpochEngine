@@ -81,7 +81,7 @@ Tiers are capability levels, not API rankings.
 T0 is intentionally headless. Native or windowed presentation begins at T1; software raster output at T0 remains an offscreen/reference result.
 
 A machine can expose several tiers at once. A project can use T0 CPU spatial
-queries, T0 GL presentation, and a T2 explicit upload path in the same run.
+queries, T1 GL presentation, and a T2 explicit upload path in the same run.
 Equivalent Vulkan and DirectX capabilities occupy the same numeric tier.
 
 Vendor-specific features are capability packs, not invented higher tiers.

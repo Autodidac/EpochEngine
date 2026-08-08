@@ -243,7 +243,7 @@ if(BUILD_TESTING)
     )
 
     add_executable(epoch_texture_artifact_contract
-        src/assets/texture/texture.artifact.cpp
+    src/assets/texture/texture.artifact.cpp
         src/assets/texture/texture.artifact.contract.cpp
     )
     target_sources(epoch_texture_artifact_contract PRIVATE
@@ -362,6 +362,9 @@ set(EPOCH_SOURCES
     src/editor/editor.gui.cpp
     src/filewatch.cpp
     src/font.renderer.cpp
+    src/project/project.asset.registry.cpp
+    src/project/project.texture.resources.cpp
+    src/project/project.contracts.cpp
     src/assets/texture/texture.artifact.cpp
     src/core.assert.cpp
     src/core.env.cpp
@@ -1132,7 +1135,7 @@ if(BUILD_TESTING)
     )
     if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
         add_executable(epoch_authoring_texture_contract
-            src/assets/texture/texture.artifact.cpp
+    src/assets/texture/texture.artifact.cpp
             src/authoring/texture/texture.document.cpp
             src/authoring/texture/texture.contract.cpp
         )

@@ -1,5 +1,27 @@
 # Epoch Changelog
 
+## [v0.88.87] - Project texture registry and Canvas2D binding
+
+- Add a runtime-owned, generation-checked project asset registry with portable
+  logical-path normalization, deterministic project/asset keys, stable
+  re-registration, explicit revision publication, bounded metrics, and
+  fail-closed collision, traversal, stale-handle, and capacity behavior.
+- Add a project texture resource service that authenticates source revisions,
+  seals validated compiled artifacts, issues content-derived logical texture
+  revisions, owns decoded T0-CPU resource sets, and optionally acquires
+  disposable native residency through the existing bridge.
+- Preserve artifact/cache reuse when later temporal source sequences reconstruct
+  identical content; the project registry authenticates source revision while
+  Canvas2D and residency use content-derived artifact revision plus full digest.
+- Remove physical texture handles from authored tileset descriptors. Tilesets
+  now require logical texture material intent, while render-surface materials
+  retain explicit transient physical bindings.
+- Isolate the new contract implementations behind a small C++23 module to avoid
+  MSVC interface expansion, and correct a Clang tautological glyph lookup check.
+- Validate with MSVC Debug/Release editor builds and engine contracts plus the
+  managed Clang 22 Release build and all five no-display CTests. Keep the
+  published v0.88.69 runtime and updater sealed.
+
 ## [v0.88.86] - Semantic live editor scene commands
 
 - Replace the editor's whole-vector scene diff with one typed SceneDocument

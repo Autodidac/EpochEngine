@@ -163,6 +163,24 @@ export namespace epochengine::texture_artifact
         }
     }
 
+    [[nodiscard]] constexpr std::uint64_t compiled_artifact_revision(
+        const authoring::texture::CompiledTextureArtifactIdentity& identity)
+        noexcept
+    {
+        if (identity.key.empty())
+            return 0;
+        std::uint64_t revision = 14695981039346656037ull;
+        for (const std::uint64_t word : identity.key.words)
+        {
+            for (std::uint32_t byte = 0; byte < 8; ++byte)
+            {
+                revision ^= static_cast<std::uint8_t>(word >> (byte * 8u));
+                revision *= 1099511628211ull;
+            }
+        }
+        return revision == 0 ? 1u : revision;
+    }
+
     [[nodiscard]] ArtifactSealResult seal_compiled_texture(
         const authoring::texture::CompiledTextureArtifact& artifact) noexcept
     {
@@ -222,7 +240,7 @@ export namespace epochengine::texture_artifact
             return {BridgeCode::invalid_artifact, {}};
         const CompiledTextureArtifact& artifact = *artifactPtr;
         if (logical.artifact_revision
-            != artifact.identity.source_revision.sequence)
+            != compiled_artifact_revision(artifact.identity))
         {
             return {BridgeCode::revision_mismatch, {}};
         }
@@ -600,7 +618,7 @@ export namespace epochengine::texture_artifact
 
         const canvas2d::LogicalTextureReference logical{
             0x45504f4348544558ull,
-            artifact.identity.source_revision.sequence};
+            compiled_artifact_revision(artifact.identity)};
         ResidencySelection selection{};
         selection.frame_sequence = 1;
         selection.debug_name = "contract.authored.texture";
@@ -769,7 +787,7 @@ export namespace epochengine::texture_artifact
             srgbDocument.compile_artifact(srgbProfile);
         const canvas2d::LogicalTextureReference srgbLogical{
             logical.asset_key + 1u,
-            srgbArtifact.identity.source_revision.sequence};
+            compiled_artifact_revision(srgbArtifact.identity)};
         const ArtifactSealResult sealedSrgb =
             seal_compiled_texture(srgbArtifact);
         if (!srgbArtifact

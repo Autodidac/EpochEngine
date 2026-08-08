@@ -35,9 +35,16 @@ a one-time sealed linear mip 0 into the shared standalone residency cache.
 The synthetic-device bridge contract proves synchronous payload ownership,
 reuse, transactional recreation, backend
 reset, and stale-handle rejection without storing physical state in documents.
+Source `v0.88.87` adds
+the runtime-owned project asset registry and texture resource service:
+generation-checked project handles, portable logical paths, content-derived
+artifact revisions, full source/artifact authentication, bounded owning CPU
+resource sets, optional residency acquisition, and logical-only tileset
+references. Equivalent content at a later temporal source sequence reuses the
+same artifact/cache identity.
 Build proof covers staged presentation, native adapter compilation, and safe
 no-context refusal. It does not yet prove live editor scene-slot execution,
-operator-visible pixels, project asset-registry binding, secondary GL share
+operator-visible pixels, serialized artifact reading, capability admission, secondary GL share
 groups, backend parity, sRGB/compressed/mip-chain execution, or a built-game
 loop.
 
@@ -70,10 +77,12 @@ delay the baseline path. API names never imply capability.
   content identity and bytes; the residency cache supplies physical lifetime.
   None may synthesize or absorb the other two identities.
 - Compiled artifact schemas and readers must be runtime-owned and available
-  without authoring UI. Authoring owns compilation; a future runtime texture
-  service owns project-registry authentication and capability admission before
-  this bridge is used by game/mobile/console/headless products. The current
-  authoring-coupled module is not that final product boundary.
+  without authoring UI. Authoring owns compilation. `project.asset.registry`
+  now authenticates stable project identity and source revision, while
+  `project.texture.resources` validates in-memory artifacts and binds the first
+  linear RGBA8 base-mip CPU/residency lane. Serialized artifact reading and
+  capability-derived admission remain required before the complete
+  game/mobile/console/headless product boundary is present.
 - Backend adapters own API objects, uploads, shaders, pipelines, render targets,
   synchronization, readback, and presentation evidence.
 - Input, physics, animation, and audio own their runtime state and publish
@@ -180,7 +189,9 @@ occurred.
 
 Tilesets, palettes, tilemaps, layers, chunks, cells, and map objects use stable
 generation-checked identity. Tile values reference logical tileset entries,
-not atlas coordinates.
+not atlas coordinates. Tileset texture material intent uses the same project asset key
+and content-derived artifact revision as sprites; authored tilesets never retain
+a physical texture handle.
 
 Compilation produces deterministic layer/chunk bounds, visible-cell data,
 sprite instances, animation tables, collision artifacts, and dependency keys.
@@ -365,12 +376,19 @@ limits expose the temporary physical-memory cost of atomic swaps.
 
 ### Phase 2: Sprite Composition
 
+Landed in `v0.88.87`: a runtime-owned project asset registry and texture
+resource service authenticate project/source/artifact identity, derive logical
+artifact revisions from content, bind owning CPU resource sets, and acquire
+optional disposable residency. Contracts cover portable path identity,
+collisions, stale handles/revisions, equivalent-content temporal reuse,
+duplicate/missing bindings, cache recreation, retirement, and bounded metrics.
+Tilesets now depend on logical texture material intent rather than physical
+handles.
 Route the compiled compositor through the protected editor scene-content slot,
-compare native output to the CPU reference, issue logical identities from the
-project registry, bind compiled artifacts into Canvas2D resource sets, and
-complete `T1-GL` presentation evidence. Then add explicit GL share-group
-adapters and broaden physical target/material execution without duplicating the
-renderer spine.
+compare native output to the CPU reference, and complete `T1-GL` presentation
+evidence. Add serialized artifact reading and capability-derived admission, then
+add explicit GL share-group adapters and broaden physical target/material
+execution without duplicating the renderer spine.
 
 ### Phase 3: Tilemap Authoring
 

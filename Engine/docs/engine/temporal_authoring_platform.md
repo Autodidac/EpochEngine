@@ -175,6 +175,23 @@ caches for compatibility and batching; they are not canonical asset meaning.
 Changing atlas placement, descriptor index, sparse mapping, compression variant,
 or GPU backend must not change the texture document revision.
 
+The runtime project registry supplies stable project/asset identity and the
+currently accepted source revision; it does not own compiled bytes or physical
+placement. A logical texture reference combines that stable asset key with a
+content-derived artifact revision. Source sequence remains separately
+authenticated, so undo or branch reconstruction that returns to identical
+content can reuse the same compiled artifact and cache key.
+The current key is deterministic from canonical logical path; persistent imported
+asset IDs and semantic rename/move migration remain required before path changes
+can preserve the same identity.
+
+`project.texture.resources` is the bounded runtime consumption service for the
+first linear RGBA8 base-mip lane. It validates the registry revision and full
+artifact integrity before producing CPU resource views or requesting disposable
+residency. Serialized artifact reading, broader formats/mips, and
+capability-derived admission remain later work; authoring UI is not required by
+the service.
+
 Required metrics include decoded/compressed bytes, resident/virtual bytes, tile
 count, mip cost, atlas padding, upload cost, history cost, compilation time, and
 cache pressure.

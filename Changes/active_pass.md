@@ -86,10 +86,26 @@ The working tree contains these current or in-progress foundations:
   residency planning. Planning is advisory, defaults to standalone-only, and
   does not count atlas/bindless/sparse choices as runtime capability evidence.
   Compressed and color-conversion lanes fail closed;
-- `render.texture.artifact` accepts project-owned logical identity and maps one
-  one-time sealed linear RGBA8 mip-0 artifact into the existing standalone
-  residency cache without exposing physical state to authoring. Current proof
-  uses a synthetic device contract, not production asset-registry admission;
+- `project.asset.registry` now owns deterministic path-derived runtime project/asset
+  identity separately from authoring documents, compiled content,
+  filesystem case behavior, and
+  physical caches. It normalizes portable logical paths, rejects traversal and
+  case-fold collisions, issues generation-checked handles and deterministic
+  keys, and publishes explicit current source revisions;
+- `project.texture.resources` authenticates compiled texture source revision
+  against that registry, seals the full artifact identity, and issues Canvas2D
+  references from project asset key plus content-derived artifact revision.
+  Identical content reconstructed at a later temporal sequence reuses the same
+  compiled/cache identity;
+- the same texture service owns bounded decoded `T0-CPU` resource sets and may
+  acquire disposable native residency through `render.texture.artifact`.
+  Current execution remains an explicit linear RGBA8 mip-0 lane; unsupported
+  color-space, format, and mip requests fail closed;
+- authored tilesets now carry logical texture material intent instead of a
+  physical `TextureHandle`. Transient render-surface materials retain their
+  explicit physical graph-output binding;
+- `render.texture.artifact` remains the sole validated artifact-to-residency
+  adapter and no longer treats source edit sequence as artifact revision;
 - `authoring.texture.artifact` now owns the always-built artifact schema, stable
   hash protocol, and integrity validator. The authoring compiler re-exports and
   consumes it, while a standalone Clang contract proves artifact consumption
@@ -174,23 +190,24 @@ backend recreation/reset, stale-handle rejection, and synchronous upload copy.
 A clean authoring-disabled managed Clang configuration independently proves the
 runtime artifact schema, hashing, and validator without authoring document/UI
 linkage. Live OpenGL allocation/drawing, editor scene-slot integration, operator-visible
-pixels, project-registry/Canvas2D authored-texture binding, and secondary GL share-group adapters remain `Partial`.
+pixels, serialized artifact reading, capability-derived texture admission, and secondary GL share-group adapters remain `Partial`.
 
 ## Completed Capability Checkpoint
 
-`v0.88.86` routes live editor scene mutations through the bounded semantic
-document/scene/persistence/runtime spine. It does not claim the complete
-temporal world, native renderer presentation, or measured implementation cost.
+`v0.88.87` adds the runtime-owned project asset/texture registry boundary,
+content-derived logical artifact revisions, bounded Canvas2D CPU resource sets,
+optional residency acquisition, and logical-only authored tilesets. It does not
+claim serialized artifact loading, live editor scene-slot presentation, broad
+format/mip support, or measured implementation cost.
 
 ## Immediate Implementation Order
 
-1. Issue stable logical texture references from the project asset registry and
-   bind validated compiled base mips into Canvas2D resource sets through the
-   proven artifact/residency bridge.
-2. Route the primary OpenGL compositor through the existing protected editor
+1. Route the primary OpenGL compositor through the existing protected editor
    scene-content slot without changing GUI replay or present order.
-3. Compare live `T1-GL` output against the `T0-CPU` reference, then add explicit
+2. Compare live `T1-GL` output against the `T0-CPU` reference, then add explicit
    SDL3/SFML3/Raylib3 share-group adapters before broadening backend claims.
+3. Add serialized compiled-artifact reading and capability-derived texture
+   admission without importing authoring UI into runtime products.
 4. Extend settings and controls in the same pass as each capability so users can
    select project policy, inspect evidence, and tune budgets without stale UI.
 5. Expose SceneDocument undo/redo and transaction diagnostics through EpochGui

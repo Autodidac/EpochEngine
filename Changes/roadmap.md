@@ -134,12 +134,13 @@ batch compilation, tile validation, editor policy, and build-safe contracts are
 present. Deterministic `T0-CPU` raster, sampling/blending, final composition,
 metrics, and image hashes are build-proven on MSVC and Clang. Bounded physical
 texture residency, cache recreation, deterministic temporal RGBA8 artifact
-compilation, artifact-integrity validation, project logical-identity mapping,
-raster-to-residency presentation staging, OpenGL native texture hooks, and the
-primary-context OpenGL final compositor are also build-proven. Live project
-asset-registry authentication, authoring-free artifact reading,
-capability-derived admission, Canvas2D binding, editor scene-slot integration,
-native pixel comparison, sRGB/compressed/mip-chain execution, secondary GL share-group
+compilation, artifact-integrity validation, runtime project asset-registry
+authentication, content-derived logical artifact revisions, Canvas2D CPU
+resource binding, optional residency acquisition, raster-to-residency
+presentation staging, OpenGL native texture hooks, and the primary-context
+OpenGL final compositor are also build-proven. Serialized artifact reading,
+capability-derived admission, editor scene-slot integration, native pixel
+comparison, sRGB/compressed/mip-chain execution, secondary GL share-group
 adapters, and built-project presentation remain delivery work.
 
 Deliver:

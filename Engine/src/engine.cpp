@@ -161,6 +161,7 @@ import render.canvas2d;
 import render.canvas2d.cpu;
 import render.canvas2d.presentation;
 import render.texture.residency;
+import project.contracts;
 import render.texture.artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
@@ -2614,6 +2615,12 @@ namespace epochengine::core
             std::string{"render.canvas2d.presentation."}
                 + epochengine::canvas2d::presentation::presentation_contract_failure_name(canvasPresentationContract),
             canvasPresentationContract == epochengine::canvas2d::presentation::PresentationContractFailure::none);
+        const auto projectTextureSpineContract =
+            epochengine::project_contracts::run_texture_spine_contract();
+        check(
+            std::string{"project.texture_spine."}
+                + std::string{projectTextureSpineContract.stage},
+            projectTextureSpineContract.passed);
         const auto textureResidencyContract =
             epochengine::texture_residency::texture_residency_runtime_contract_failure();
         check(
