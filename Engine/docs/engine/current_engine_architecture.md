@@ -87,9 +87,10 @@ ship.
   `opengl.canvas2d` provides a compiled primary-context final compositor with
   context-owned texture validation, viewport-confined clear/draw work,
   top-left-to-GL coordinate conversion, and scoped GL state restoration.
-  Build-safe family, staged-presentation, and no-context refusal contracts pass;
-  protected editor scene-slot integration, operator-visible project textures,
-  secondary GL share-group adapters, serialized artifact admission, tilemap
+  Build-safe family, staged-presentation, no-context refusal, immutable scene
+  publication, semantic editor projection, and protected scene-slot routing
+  contracts pass. Operator-visible project textures, secondary GL share-group
+  adapters, serialized artifact admission, tilemap
   authoring, and the built-project loop remain active gates.
 - **Arcade scene-surface proof**: one shared attract-pattern contract feeds
   backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
@@ -143,8 +144,9 @@ storage growth are proven.
 
 ## Current Gaps
 
-- `.epoch` scene/world files are still metadata shells; parser/serializer does
-  not yet own complete authoring, preview restore, and runtime handoff.
+- Canonical snapshot persistence now owns validated scene save and runtime
+  projection, but project documents do not yet cover complete tilemap, texture,
+  animation, physics, and audio authoring/runtime handoff.
 - Existing timeline, streaming-save, snapshot, and Video controls are precursor
   contracts, not the immutable event/page/branch temporal database.
 - Renderer context coverage is broader than renderer feature parity. Vulkan and
@@ -170,9 +172,9 @@ storage growth are proven.
    save/reopen, Play/Stop, Run, and Build.
 2. Keep capability selection, settings, diagnostics, and project requirements
    aligned with proven T0-CPU and T1-GL behavior before broadening claims.
-3. Route the proven project asset-registry and Canvas2D binding boundary through
-   serialized artifact reading, capability-derived admission, and the protected
-   editor scene slot, then extend it through sRGB, compression, mip-chain, atlas,
+3. Extend the proven protected Canvas2D scene-slot route through authenticated
+   project textures, serialized artifact reading, and capability-derived
+   admission, then continue through sRGB, compression, mip-chain, atlas,
    bindless, sparse, and streaming policies only as evidence permits.
 4. Continue EpochGui controls and desktop docking without making floating hosts
    mandatory for game, mobile, console, or headless products.

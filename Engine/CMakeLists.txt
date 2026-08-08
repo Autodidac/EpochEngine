@@ -341,6 +341,7 @@ set(EPOCH_SOURCES
     src/opengl_capture_bridge.cpp
     src/renderers/opengl/opengl_context_detail.cpp
     src/opengl_preview_bridge.cpp
+    src/opengl_canvas2d_scene_bridge.cpp
     src/opengl_process_impl.cpp
     src/renderers/software/software.context.cpp
     src/renderers/software/software.context_capture.cpp
@@ -360,6 +361,10 @@ set(EPOCH_SOURCES
     src/editor/editor.standard.cpp
     src/editor/editor.plant_lab.cpp
     src/editor/editor.gui.cpp
+    src/editor/editor.canvas2d.scene.cpp
+    src/renderers/canvas2d/render.canvas2d.scene.cpp
+    src/renderers/canvas2d/render.canvas2d.scene.contract.cpp
+    src/renderers/canvas2d/canvas2d.scene.contracts.cpp
     src/filewatch.cpp
     src/font.renderer.cpp
     src/project/project.asset.registry.cpp

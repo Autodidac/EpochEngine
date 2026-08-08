@@ -164,8 +164,9 @@ The working tree contains these current or in-progress foundations:
   through the residency cache, and emits an explicit surface/image/native
   packet; `opengl.canvas2d` implements the primary-context final compositor with
   viewport-confined clears, top-left coordinate conversion, context-owned
-  texture validation, and scoped GL state restoration, but is not yet connected
-  to the protected live editor scene-content slot;
+  texture validation, and scoped GL state restoration. An immutable per-context
+  scene exchange now maps committed editor entities to semantic solid sprites
+  and invokes that compositor in the protected live scene slot;
 - the launcher opens the three editor applications, selects a live context
   before launch, and keeps update/exit actions direct;
 - the Windows parent host elects exactly one baked primary renderer surface. The
@@ -189,23 +190,26 @@ artifact-integrity rejection, project logical-identity mapping, cache reuse,
 backend recreation/reset, stale-handle rejection, and synchronous upload copy.
 A clean authoring-disabled managed Clang configuration independently proves the
 runtime artifact schema, hashing, and validator without authoring document/UI
-linkage. Live OpenGL allocation/drawing, editor scene-slot integration, operator-visible
-pixels, serialized artifact reading, capability-derived texture admission, and secondary GL share-group adapters remain `Partial`.
+linkage. Immutable scene publication, replacement lifetime, semantic entity mapping, CPU
+shading, and protected OpenGL scene-slot routing are build-proven. Live OpenGL
+allocation/drawing, operator-visible pixels, serialized artifact reading,
+capability-derived texture admission, and secondary GL share-group adapters
+remain Partial.
 
 ## Completed Capability Checkpoint
 
-`v0.88.87` adds the runtime-owned project asset/texture registry boundary,
-content-derived logical artifact revisions, bounded Canvas2D CPU resource sets,
-optional residency acquisition, and logical-only authored tilesets. It does not
-claim serialized artifact loading, live editor scene-slot presentation, broad
-format/mip support, or measured implementation cost.
+Source v0.88.88 adds immutable per-context Canvas2D scene publication,
+semantic editor entity projection, replacement-safe reader lifetime, protected
+OpenGL scene-slot routing, and context-retirement cleanup. It does not claim
+live native pixel correctness, project texture admission into that scene,
+secondary share groups, serialized artifacts, or built-game presentation.
 
 ## Immediate Implementation Order
 
-1. Route the primary OpenGL compositor through the existing protected editor
-   scene-content slot without changing GUI replay or present order.
-2. Compare live `T1-GL` output against the `T0-CPU` reference, then add explicit
-   SDL3/SFML3/Raylib3 share-group adapters before broadening backend claims.
+1. Compare live T1-GL scene-slot output against the T0-CPU reference and
+   verify resize, retirement, fallback, GUI replay, and present order.
+2. Bind authenticated project textures into immutable scene publication, then
+   add explicit SDL3/SFML3/Raylib3 share-group adapters.
 3. Add serialized compiled-artifact reading and capability-derived texture
    admission without importing authoring UI into runtime products.
 4. Extend settings and controls in the same pass as each capability so users can

@@ -1,4 +1,5 @@
 #include "opengl_preview_bridge.hpp"
+#include "opengl_canvas2d_scene_bridge.hpp"
 
 #include <include/engine.config.hpp>
 
@@ -20,6 +21,15 @@ namespace epochengine::openglbridge
         const auto viewport = ctx->scene_viewport();
         if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
             return;
+
+        if (render_canvas2d_scene_content(
+                ctx,
+                viewport,
+                framebufferWidth,
+                framebufferHeight))
+        {
+            return;
+        }
 
         auto& glState = opengltextures::get_opengl_backend().glState;
         openglpreview::render_scene_preview(

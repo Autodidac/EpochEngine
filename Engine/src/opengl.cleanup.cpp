@@ -118,6 +118,7 @@ module;
 #endif
 
 #include "renderers/opengl/opengl_context_detail.hpp"
+#include "opengl_canvas2d_scene_bridge.hpp"
 
 module opengl.context;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -178,6 +179,8 @@ namespace epochengine::openglcontext
     // ------------------------------------------------------------
     void opengl_cleanup(std::shared_ptr<core::Context> ctx)
     {
+        openglbridge::release_canvas2d_scene_renderer(ctx.get());
+
         auto& backend = opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
 

@@ -249,6 +249,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp">
       <Filter>Header Files\engine\context\opengl</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_canvas2d_scene_bridge.hpp">
+      <Filter>Header Files\engine\context\opengl</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.hpp">
       <Filter>Header Files\engine\context\opengl</Filter>
     </ClInclude>
@@ -854,6 +857,18 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.canvas2d.scene.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d.scene.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d.scene.contract.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\canvas2d.scene.contracts.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp">
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </ClCompile>
@@ -1025,6 +1040,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.cpp">
       <Filter>Source Files\epochengine\core\context\opengl</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_canvas2d_scene_bridge.cpp">
+      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.headless.cpp">
       <Filter>Source Files\epochengine\core\context</Filter>
     </ClCompile>
@@ -1119,6 +1137,15 @@
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.presentation.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.scene.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d.scene.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\canvas2d.scene.contracts.ixx">
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.artifact.ixx">

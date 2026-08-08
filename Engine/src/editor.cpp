@@ -93,7 +93,9 @@ import forest.factory;
 import package.registry;
 import perf.tier;
 import render.arcade;
+import editor.canvas2d.scene;
 import render.canvas2d;
+import render.canvas2d.scene;
 import render.device;
 import render.lighting;
 import render.math;
@@ -2963,6 +2965,60 @@ namespace epochengine
             }
 
             state.sceneLightingDirty = false;
+        }
+
+        void publish_editor_canvas2d_scene(
+            const core::Context* ctx,
+            const EditorState& state) noexcept
+        {
+            if (!ctx || state.previewMode != core::ScenePreviewMode::Editor
+                || state.projectCameraMode != previewgrid::CameraMode::Canvas2D)
+            {
+                (void)canvas2d::scene_content::retire(ctx);
+                return;
+            }
+
+            try
+            {
+                std::vector<editor_canvas2d::EntityView> entities{};
+                entities.reserve(state.entities.size());
+                for (std::size_t index = 0; index < state.entities.size(); ++index)
+                {
+                    const EditorEntity& entity = state.entities[index];
+                    entities.push_back(editor_canvas2d::EntityView{
+                        .stable_id = entity.sceneObjectId,
+                        .generation = 1,
+                        .type = entity.type,
+                        .category = entity.category,
+                        .position = entity.position,
+                        .rotation = entity.rotation,
+                        .scale = entity.scale,
+                        .visible = entity.visible,
+                        .editor_only = entity.editorOnly,
+                        .selected = index == state.selectedEntity});
+                }
+
+                auto built = editor_canvas2d::build_scene(
+                    editor_canvas2d::BuildRequest{
+                        .project = canvas2d_runtime_settings(state.canvas2dProject),
+                        .entities = entities,
+                        .source_revision = (std::max)(
+                            std::uint64_t{1},
+                            state.sceneDocumentRevision),
+                        .include_helpers = state.helpersVisible});
+                if (!built)
+                {
+                    (void)canvas2d::scene_content::retire(ctx);
+                    return;
+                }
+                (void)canvas2d::scene_content::publish(
+                    ctx,
+                    std::move(built.content));
+            }
+            catch (...)
+            {
+                (void)canvas2d::scene_content::retire(ctx);
+            }
         }
 
         void publish_editor_preview_markers(const core::Context* ctx, EditorState& state)
@@ -6503,6 +6559,7 @@ namespace epochengine
         std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
         chatStorage.chats.erase(ctx);
         editorStorage.states.erase(ctx);
+        (void)epochengine::canvas2d::scene_content::retire(ctx);
         epochengine::previewgrid::cleanup_context(ctx);
     }
 
@@ -6512,6 +6569,11 @@ namespace epochengine
         auto& editorStorage = editor_storage();
         std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
 
+        for (const auto& [ctx, state] : editorStorage.states)
+        {
+            (void)state;
+            (void)epochengine::canvas2d::scene_content::retire(ctx);
+        }
         chatStorage.chats.clear();
         editorStorage.states.clear();
         editorStorage.detachedPaneRoutes.clear();
@@ -8989,6 +9051,7 @@ namespace epochengine
                 (std::max)(0, viewportBottom - viewportY)
             });
             update_scene_object_interaction(ctx, editor, result);
+            publish_editor_canvas2d_scene(ctx.get(), editor);
             publish_editor_preview_markers(ctx.get(), editor);
 
             if (showSceneTimeline)
@@ -9012,6 +9075,7 @@ namespace epochengine
             result.scene_viewport = gui::WidgetBounds{ .position = centerSurfacePos, .size = centerSurfaceSize };
             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
             ctx->clear_scene_viewport();
+            (void)canvas2d::scene_content::retire(ctx.get());
 
             gui::label(std::string(main_surface_title(editor.mainSurface)));
             const gui::Vec2 centerScrollStart = gui::cursor_position();

@@ -501,6 +501,15 @@ export namespace epochengine::openglcanvas2d
             return presenter_.present(frame, raster, policy);
         }
 
+        [[nodiscard]] canvas2d::presentation::PresentationResult present(
+            const canvas2d::Canvas2DFramePlan& frame,
+            const canvas2d::cpu::RasterResult& raster,
+            canvas2d::presentation::PresentationSurface surface,
+            const canvas2d::presentation::PresentationPolicy& policy = {})
+        {
+            return presenter_.present(frame, raster, surface, policy);
+        }
+
         [[nodiscard]] canvas2d::presentation::PresentationResult rasterize_and_present(
             const canvas2d::Canvas2DFramePlan& frame,
             const canvas2d::cpu::ResourceBindings& resources = {},

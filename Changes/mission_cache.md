@@ -65,9 +65,10 @@ release history belong in the changelog/archive, not architecture docs.
   compositor is compiled and build-proven.
 - Runtime project asset identity now authenticates compiled texture source
   revisions and binds content-derived logical references into bounded Canvas2D
-  CPU resource sets plus optional residency. Next route the compositor through
-  the protected editor scene-content slot and compare live native pixels to the
-  CPU oracle.
+  CPU resource sets plus optional residency. Immutable semantic scene
+  publication now routes committed editor entities through the protected OpenGL
+  scene slot. Next bind authenticated project textures there and compare live
+  native pixels to the CPU oracle.
 - Extend the current tile descriptors with palettes, map objects, collision,
   visible-chunk culling, project persistence, and compiled runtime artifacts.
 - Add animation-frame selection and sprite culling without weakening stable draw

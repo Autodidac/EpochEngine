@@ -137,9 +137,10 @@ texture residency, cache recreation, deterministic temporal RGBA8 artifact
 compilation, artifact-integrity validation, runtime project asset-registry
 authentication, content-derived logical artifact revisions, Canvas2D CPU
 resource binding, optional residency acquisition, raster-to-residency
-presentation staging, OpenGL native texture hooks, and the primary-context
-OpenGL final compositor are also build-proven. Serialized artifact reading,
-capability-derived admission, editor scene-slot integration, native pixel
+presentation staging, OpenGL native texture hooks, the primary-context final
+compositor, and immutable semantic editor scene-slot routing are build-proven.
+Serialized artifact reading, capability-derived admission, project-texture
+scene binding, native pixel
 comparison, sRGB/compressed/mip-chain execution, secondary GL share-group
 adapters, and built-project presentation remain delivery work.
 

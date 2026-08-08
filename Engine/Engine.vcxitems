@@ -58,6 +58,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_capture_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl_context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_canvas2d_scene_bridge.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.hpp" />
   </ItemGroup>
   <ItemGroup>
@@ -315,6 +316,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.cpu.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.presentation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.scene.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d.scene.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\canvas2d.scene.contracts.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture.residency.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
@@ -363,6 +367,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.standard.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.plant_lab.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.canvas2d.scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d.scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d.scene.contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\canvas2d.scene.contracts.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\context.command_queue.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
@@ -388,6 +396,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_preview_bridge.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_canvas2d_scene_bridge.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\opengl_process_impl.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>

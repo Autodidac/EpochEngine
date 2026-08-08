@@ -1,5 +1,30 @@
 # Epoch Changelog
 
+## [v0.88.88] - Live Canvas2D scene publication
+
+- Add a renderer-owned, per-context immutable Canvas2D scene exchange with
+  bounded validation, deterministic content hashes, replacement generations,
+  stable frame sequences, owner isolation, retirement, metrics, and reader
+  lifetime across publication replacement.
+- Add a standard-editor adapter that projects committed scene entities into
+  stable semantic solid sprites while filtering structural, hidden, and
+  disabled helper objects without exposing editor storage to renderers.
+- Route the primary OpenGL compositor through the existing protected live scene
+  slot, retain the legacy 3D preview as fail-safe fallback, release presentation
+  resources on context retirement, and preserve queue drain, GUI replay, and
+  present order.
+- Extend the OpenGL presenter with an explicit sub-surface contract so Canvas2D
+  output remains confined to the editor scene viewport.
+- Add build-safe contracts for publication, immutable readers, retirement,
+  semantic filtering, deterministic compilation, and CPU raster shading.
+- Validate MSVC Debug/Release builds and engine contracts plus managed Clang 22
+  Release and all five Linux no-display CTests. The Clang lane requires direct
+  owner-module imports and serial compilation of the heavy editor unit after a
+  parallel LLVM frontend resource crash.
+- Keep operator-visible OpenGL pixels, project texture admission, secondary GL
+  share groups, and built-project presentation Partial. Keep the published
+  v0.88.69 runtime and updater sealed.
+
 ## [v0.88.87] - Project texture registry and Canvas2D binding
 
 - Add a runtime-owned, generation-checked project asset registry with portable

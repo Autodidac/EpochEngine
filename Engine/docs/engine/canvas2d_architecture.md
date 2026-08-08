@@ -42,9 +42,17 @@ artifact revisions, full source/artifact authentication, bounded owning CPU
 resource sets, optional residency acquisition, and logical-only tileset
 references. Equivalent content at a later temporal source sequence reuses the
 same artifact/cache identity.
+Source v0.88.88 adds the live semantic scene boundary: committed editor
+entities are projected into immutable per-context Canvas2D scene content with
+stable sprite identity, deterministic hashes, replacement generations, reader
+lifetime, retirement, and bounded metrics. The primary OpenGL adapter consumes
+that content inside the protected editor scene slot while retaining the legacy
+3D preview as a fail-safe and preserving GUI replay and present order.
 Build proof covers staged presentation, native adapter compilation, and safe
-no-context refusal. It does not yet prove live editor scene-slot execution,
-operator-visible pixels, serialized artifact reading, capability admission, secondary GL share
+no-context refusal. It proves semantic scene publication and protected
+scene-slot routing, but does
+not prove live native pixel correctness, authenticated project-texture scene
+binding, serialized artifact reading, capability admission, secondary GL share
 groups, backend parity, sRGB/compressed/mip-chain execution, or a built-game
 loop.
 
@@ -384,11 +392,13 @@ collisions, stale handles/revisions, equivalent-content temporal reuse,
 duplicate/missing bindings, cache recreation, retirement, and bounded metrics.
 Tilesets now depend on logical texture material intent rather than physical
 handles.
-Route the compiled compositor through the protected editor scene-content slot,
-compare native output to the CPU reference, and complete `T1-GL` presentation
-evidence. Add serialized artifact reading and capability-derived admission, then
-add explicit GL share-group adapters and broaden physical target/material
-execution without duplicating the renderer spine.
+Landed in v0.88.88: immutable semantic editor scene publication, protected
+OpenGL scene-slot routing, replacement-safe reader lifetime, explicit viewport
+sub-surfaces, context-retirement cleanup, and build-safe CPU shading proof.
+Next bind authenticated project textures into that publication, compare native
+output to the CPU reference, add serialized artifact admission and explicit GL
+share-group adapters, and broaden physical target/material execution without
+duplicating the renderer spine.
 
 ### Phase 3: Tilemap Authoring
 

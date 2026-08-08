@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.87-1F7A4C?style=for-the-badge" alt="Current development source v0.88.87" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.88.88-1F7A4C?style=for-the-badge" alt="Current development source v0.88.88" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.88.69-2C6A8A?style=for-the-badge" alt="Published stable release v0.88.69" />
 </p>
 
@@ -75,7 +75,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.88.87`; the published Windows/Linux runtime
+- Active development source is `v0.88.88`; the published Windows/Linux runtime
   baseline remains `v0.88.69`.
 - The runtime release and updater are sealed. Source development advances
   independently without changing packaged-version defaults, release assets, or
@@ -108,8 +108,10 @@ For engine/tooling developers:
   imports that same canonical artifact boundary when producing source content.
   The primary OpenGL adapter compiles a scoped, viewport-confined final
   compositor with context-owned texture checks and complete GL state restoration.
-  Live editor-slot integration, operator-visible pixels, and SDL3/SFML3/Raylib3
-  share-group adapters remain the next proof gate.
+  An immutable per-context scene exchange now maps committed editor entities into
+  semantic Canvas2D sprites and presents them in the protected OpenGL scene slot;
+  operator-visible pixel comparison and SDL3/SFML3/Raylib3 share-group adapters
+  remain the next proof gate.
 - The launcher directly opens three application profiles after a prelaunch
   context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
   services and one shell implementation but own separate source files, scene

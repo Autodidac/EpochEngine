@@ -1,0 +1,26 @@
+/************************************************
+ * Epoch Engine
+ * SPDX-License-Identifier: LicenseRef-MIT-NoSell
+ ************************************************/
+module canvas2d.scene.contracts;
+
+import editor.canvas2d.scene;
+import render.canvas2d.scene;
+
+namespace epochengine::canvas2d_scene_contracts
+{
+    ContractResult run() noexcept
+    {
+        const auto scene = canvas2d::scene_content::run_scene_content_contract();
+        if (scene != canvas2d::scene_content::SceneContractFailure::none)
+        {
+            return {
+                false,
+                canvas2d::scene_content::scene_contract_failure_name(scene)};
+        }
+        const auto editor = editor_canvas2d::run_contract();
+        if (editor != editor_canvas2d::ContractFailure::none)
+            return {false, editor_canvas2d::contract_failure_name(editor)};
+        return {true, "pass"};
+    }
+}
