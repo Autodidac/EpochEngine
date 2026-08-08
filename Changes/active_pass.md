@@ -66,8 +66,12 @@ The working tree contains these current or in-progress foundations:
   deterministic content revisions, and bounded history policy;
 - `scene.document` owns stable scene object identity, typed scene components,
   semantic operations, atomic transactions, undo/redo, Tier-0 construction,
-  and deterministic snapshot projection. The current live editor entity vector
-  is a transitional view adapter, not the final canonical mutation surface;
+  and deterministic snapshot projection;
+- live editor create, duplicate, delete, drag completion, camera reset, helper
+  visibility, script rotation, Canvas2D creation, Arcade/Plant Lab preview
+  synchronization, and Forest Factory placement now enter one typed command
+  gateway. Atomic document transactions own durable meaning and history; the
+  entity vector is rebuilt from the committed projection for rendering and UI;
 - `scene.interaction` resolves ray selection, drag ownership, and Focus through
   persistent scene object IDs rather than mutable vector positions;
 - `scenesnapshot`, `sceneserializer`, and `scene.persistence` own canonical
@@ -174,24 +178,23 @@ pixels, project-registry/Canvas2D authored-texture binding, and secondary GL sha
 
 ## Completed Capability Checkpoint
 
-`v0.88.85` adds the bounded document/scene/persistence/runtime spine to the
-existing capability checkpoint. It does not claim the complete temporal world,
-native renderer presentation, or measured implementation cost.
+`v0.88.86` routes live editor scene mutations through the bounded semantic
+document/scene/persistence/runtime spine. It does not claim the complete
+temporal world, native renderer presentation, or measured implementation cost.
 
 ## Immediate Implementation Order
 
-1. Route live editor create/delete/transform/property mutations through
-   `SceneDocument` semantic commands and reduce the transitional entity-vector
-   adapter to projection/UI responsibilities.
-2. Issue stable logical texture references from the project asset registry and
+1. Issue stable logical texture references from the project asset registry and
    bind validated compiled base mips into Canvas2D resource sets through the
    proven artifact/residency bridge.
-3. Route the primary OpenGL compositor through the existing protected editor
+2. Route the primary OpenGL compositor through the existing protected editor
    scene-content slot without changing GUI replay or present order.
-4. Compare live `T1-GL` output against the `T0-CPU` reference, then add explicit
+3. Compare live `T1-GL` output against the `T0-CPU` reference, then add explicit
    SDL3/SFML3/Raylib3 share-group adapters before broadening backend claims.
-5. Extend settings and controls in the same pass as each capability so users can
+4. Extend settings and controls in the same pass as each capability so users can
    select project policy, inspect evidence, and tune budgets without stale UI.
+5. Expose SceneDocument undo/redo and transaction diagnostics through EpochGui
+   controls after command ownership is proven in the live editor.
 
 ## Backend Repair Within This Gate
 

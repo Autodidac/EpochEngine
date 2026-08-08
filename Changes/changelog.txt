@@ -1,5 +1,19 @@
 # Epoch Changelog
 
+## [v0.88.86] - Semantic live editor scene commands
+
+- Replace the editor's whole-vector scene diff with one typed SceneDocument
+  transaction gateway keyed by stable scene object identity.
+- Route create, duplicate, delete, drag completion, camera reset, helper
+  visibility, and scripted transforms through semantic operations; the editor
+  entity vector now returns to committed projection/UI responsibility.
+- Add atomic multi-object creation and category synchronization for Canvas2D,
+  Engine Arcade, Plant Lab, and persistent Forest Factory placement.
+- Preserve temporary drag preview while recording only the final transform as
+  durable authoring history, and restore the committed projection on rejection.
+- Validate the change with MSVC Debug/Release editor builds and build-safe engine
+  contracts; keep the published `v0.88.69` runtime and updater sealed.
+
 ## [v0.88.85] - One-sided Arcade display and EpochGui font contract
 
 - Synchronize the embedded EpochGui dependency with upstream `130f33f`, adding

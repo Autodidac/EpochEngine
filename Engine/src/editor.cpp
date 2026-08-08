@@ -754,10 +754,6 @@ namespace epochengine
             EditorState& state,
             const scene::SceneSnapshot& snapshot,
             std::string_view reason);
-        [[nodiscard]] bool commit_editor_scene_changes(
-            EditorState& state,
-            std::string_view label);
-        void mark_editor_scene_changed(EditorState& state);
 
         [[nodiscard]] bool load_editor_scene_snapshot(EditorState& state);
         [[nodiscard]] bool save_editor_scene_snapshot(EditorState& state);
@@ -996,147 +992,60 @@ namespace epochengine
                 reason);
         }
 
-        [[nodiscard]] bool commit_editor_scene_changes(
-            EditorState& state,
-            std::string_view label)
+        [[nodiscard]] scene::SceneObjectSnapshot editor_entity_snapshot(
+            const EditorEntity& entity)
         {
-            namespace document = authoring::scene;
-            normalize_editor_entity_ids(state);
-            if (!state.sceneDocument.initialized())
-                return rebuild_editor_scene_document(state, label);
+            return {
+                .id = entity.sceneObjectId,
+                .name = entity.name,
+                .type = entity.type,
+                .category = entity.category,
+                .position = entity.position,
+                .rotation = entity.rotation,
+                .scale = entity.scale,
+                .visible = entity.visible,
+                .editor_only = entity.editorOnly
+            };
+        }
 
-            scene::SceneSnapshot staged = capture_editor_entity_projection(state);
-            if (!scene::validate_scene_document(
-                    staged,
-                    scene::SceneDocumentRequirement::authoring))
+        [[nodiscard]] scene::SceneObjectId allocate_editor_scene_object_id(
+            const EditorState& state,
+            std::string_view name)
+        {
+            std::unordered_set<scene::SceneObjectId> occupied{};
+            const auto objects = state.sceneDocument.objects();
+            occupied.reserve(objects.size());
+            for (const auto& object : objects)
+                occupied.insert(object.descriptor.id.value);
+
+            scene::SceneObjectId candidate = scene::stable_scene_object_id(
+                editor_scene_identity(state),
+                name);
+            std::uint64_t salt = static_cast<std::uint64_t>(objects.size()) + 1u;
+            while (candidate == scene::kInvalidSceneObjectId || occupied.contains(candidate))
             {
-                (void)project_scene_document_into_editor(state);
-                state.projectStatus = "Scene edit rejected because the staged projection is invalid.";
-                push_editor_log(state, "[scene] " + state.projectStatus);
+                candidate ^= 0x9e3779b97f4a7c15ull
+                    + salt
+                    + (candidate << 6u)
+                    + (candidate >> 2u);
+                ++salt;
+            }
+            return candidate;
+        }
+
+        [[nodiscard]] bool apply_editor_scene_transaction(
+            EditorState& state,
+            std::span<const authoring::scene::SceneOperation> operations,
+            std::string_view label,
+            std::optional<scene::SceneObjectId> selected = std::nullopt)
+        {
+            if (!state.sceneDocument.initialized() &&
+                !rebuild_editor_scene_document(state, "Initialize semantic scene commands"))
+            {
                 return false;
             }
 
-            const std::vector<document::SceneObject> existing = state.sceneDocument.objects();
-            std::unordered_map<std::uint64_t, const document::SceneObject*> existingById{};
-            existingById.reserve(existing.size());
-            for (const document::SceneObject& object : existing)
-                existingById.emplace(object.descriptor.id.value, &object);
-
-            std::unordered_set<std::uint64_t> stagedIds{};
-            stagedIds.reserve(staged.objects.size());
-            std::vector<document::SceneOperation> operations{};
-            operations.reserve(staged.objects.size() * 3u + existing.size() + 1u);
-            for (std::size_t index = 0; index < staged.objects.size(); ++index)
-            {
-                const scene::SceneObjectSnapshot& source = staged.objects[index];
-                auto converted = document::descriptor_from_snapshot_object(
-                    source,
-                    static_cast<std::uint32_t>(index),
-                    state.sceneDocument.limits());
-                if (!converted)
-                {
-                    (void)project_scene_document_into_editor(state);
-                    state.projectStatus = "Scene edit rejected because an object descriptor is invalid.";
-                    push_editor_log(state, "[scene] " + state.projectStatus);
-                    return false;
-                }
-                if (converted->camera)
-                    converted->camera->primary = source.id == staged.primary_camera;
-                stagedIds.insert(source.id);
-
-                const auto found = existingById.find(source.id);
-                if (found == existingById.end())
-                {
-                    operations.emplace_back(document::ObjectCreatedOperation{
-                        .object = std::move(*converted)
-                    });
-                    continue;
-                }
-
-                const document::SceneObject& current = *found->second;
-                const document::SceneObjectDescriptor& next = *converted;
-                if (current.descriptor.metadata != next.metadata)
-                {
-                    operations.emplace_back(document::ObjectMetadataChangedOperation{
-                        .object = current.handle,
-                        .value = next.metadata
-                    });
-                }
-                if (current.descriptor.transform != next.transform)
-                {
-                    operations.emplace_back(document::ObjectTransformChangedOperation{
-                        .object = current.handle,
-                        .value = next.transform
-                    });
-                }
-                if (current.descriptor.runtime_visible != next.runtime_visible ||
-                    current.descriptor.editor_visible != next.editor_visible ||
-                    current.descriptor.editor_only != next.editor_only)
-                {
-                    operations.emplace_back(document::ObjectVisibilityChangedOperation{
-                        .object = current.handle,
-                        .runtime_visible = next.runtime_visible,
-                        .editor_visible = next.editor_visible,
-                        .editor_only = next.editor_only
-                    });
-                }
-                if (current.descriptor.camera != next.camera)
-                {
-                    operations.emplace_back(document::CameraComponentChangedOperation{
-                        .object = current.handle,
-                        .value = next.camera
-                    });
-                }
-                if (current.descriptor.ground != next.ground)
-                {
-                    operations.emplace_back(document::GroundComponentChangedOperation{
-                        .object = current.handle,
-                        .value = next.ground
-                    });
-                }
-                if (current.descriptor.light != next.light)
-                {
-                    operations.emplace_back(document::LightComponentChangedOperation{
-                        .object = current.handle,
-                        .value = next.light
-                    });
-                }
-                if (current.descriptor.spawn != next.spawn)
-                {
-                    operations.emplace_back(document::SpawnComponentChangedOperation{
-                        .object = current.handle,
-                        .value = next.spawn
-                    });
-                }
-            }
-
-            document::ProjectSettings project = state.sceneDocument.project_settings();
-            project.primary_camera = {staged.primary_camera};
-            project.primary_spawn = {staged.primary_spawn};
-            project.run_state = scene::validate_scene_document(
-                    staged,
-                    scene::SceneDocumentRequirement::runnable)
-                ? scene_tier0::ProjectRunState::ready_to_launch
-                : scene_tier0::ProjectRunState::blocked;
-            if (project != state.sceneDocument.project_settings())
-            {
-                operations.emplace_back(document::ProjectSettingsChangedOperation{
-                    .value = project
-                });
-            }
-
-            for (const document::SceneObject& object : existing)
-            {
-                if (!stagedIds.contains(object.descriptor.id.value))
-                {
-                    operations.emplace_back(document::ObjectDestroyedOperation{
-                        .object = object.handle
-                    });
-                }
-            }
-
-            const document::TransactionResult committed =
-                state.sceneDocument.apply_transaction(operations, label);
+            const auto committed = state.sceneDocument.apply_transaction(operations, label);
             if (!committed)
             {
                 (void)project_scene_document_into_editor(state);
@@ -1148,6 +1057,8 @@ namespace epochengine
                 return false;
             }
 
+            if (selected)
+                state.selectedEntityId = *selected;
             state.sceneDocumentRevision = committed.revision.sequence;
             if (!project_scene_document_into_editor(state))
             {
@@ -1158,11 +1069,341 @@ namespace epochengine
             return true;
         }
 
-        void mark_editor_scene_changed(EditorState& state)
+        [[nodiscard]] bool create_editor_scene_entity(
+            EditorState& state,
+            EditorEntity entity,
+            std::string_view label)
         {
-            (void)commit_editor_scene_changes(state, "Editor scene edit");
+            if (!state.sceneDocument.initialized() &&
+                !rebuild_editor_scene_document(state, "Initialize scene before object creation"))
+            {
+                return false;
+            }
+            if (entity.sceneObjectId == scene::kInvalidSceneObjectId)
+                entity.sceneObjectId = allocate_editor_scene_object_id(state, entity.name);
+
+            const auto converted = authoring::scene::descriptor_from_snapshot_object(
+                editor_entity_snapshot(entity),
+                static_cast<std::uint32_t>(state.sceneDocument.objects().size()),
+                state.sceneDocument.limits());
+            if (!converted)
+            {
+                state.projectStatus = "Scene object creation rejected because its descriptor is invalid.";
+                push_editor_log(state, "[scene] " + state.projectStatus);
+                return false;
+            }
+
+            const std::array<authoring::scene::SceneOperation, 1> operations{
+                authoring::scene::ObjectCreatedOperation{.object = *converted}
+            };
+            return apply_editor_scene_transaction(
+                state,
+                operations,
+                label,
+                entity.sceneObjectId);
         }
 
+        void append_editor_descriptor_operations(
+            std::vector<authoring::scene::SceneOperation>& operations,
+            const authoring::scene::SceneObject& current,
+            const authoring::scene::SceneObjectDescriptor& next)
+        {
+            namespace document = authoring::scene;
+            if (current.descriptor.metadata != next.metadata)
+            {
+                operations.emplace_back(document::ObjectMetadataChangedOperation{
+                    .object = current.handle,
+                    .value = next.metadata
+                });
+            }
+            if (current.descriptor.transform != next.transform)
+            {
+                operations.emplace_back(document::ObjectTransformChangedOperation{
+                    .object = current.handle,
+                    .value = next.transform
+                });
+            }
+            if (current.descriptor.runtime_visible != next.runtime_visible ||
+                current.descriptor.editor_visible != next.editor_visible ||
+                current.descriptor.editor_only != next.editor_only)
+            {
+                operations.emplace_back(document::ObjectVisibilityChangedOperation{
+                    .object = current.handle,
+                    .runtime_visible = next.runtime_visible,
+                    .editor_visible = next.editor_visible,
+                    .editor_only = next.editor_only
+                });
+            }
+            if (current.descriptor.camera != next.camera)
+            {
+                operations.emplace_back(document::CameraComponentChangedOperation{
+                    .object = current.handle,
+                    .value = next.camera
+                });
+            }
+            if (current.descriptor.ground != next.ground)
+            {
+                operations.emplace_back(document::GroundComponentChangedOperation{
+                    .object = current.handle,
+                    .value = next.ground
+                });
+            }
+            if (current.descriptor.light != next.light)
+            {
+                operations.emplace_back(document::LightComponentChangedOperation{
+                    .object = current.handle,
+                    .value = next.light
+                });
+            }
+            if (current.descriptor.spawn != next.spawn)
+            {
+                operations.emplace_back(document::SpawnComponentChangedOperation{
+                    .object = current.handle,
+                    .value = next.spawn
+                });
+            }
+        }
+
+        [[nodiscard]] bool create_editor_scene_entities(
+            EditorState& state,
+            std::vector<EditorEntity> entities,
+            std::string_view label)
+        {
+            if (entities.empty())
+                return true;
+            if (!state.sceneDocument.initialized() &&
+                !rebuild_editor_scene_document(state, "Initialize scene before batch creation"))
+            {
+                return false;
+            }
+
+            const auto existing = state.sceneDocument.objects();
+            std::unordered_set<scene::SceneObjectId> occupied{};
+            occupied.reserve(existing.size() + entities.size());
+            for (const auto& object : existing)
+                occupied.insert(object.descriptor.id.value);
+
+            std::vector<authoring::scene::SceneOperation> operations{};
+            operations.reserve(entities.size());
+            std::optional<scene::SceneObjectId> selected{};
+            for (std::size_t index = 0; index < entities.size(); ++index)
+            {
+                auto& entity = entities[index];
+                scene::SceneObjectId candidate = entity.sceneObjectId;
+                if (candidate == scene::kInvalidSceneObjectId || occupied.contains(candidate))
+                {
+                    candidate = scene::stable_scene_object_id(
+                        editor_scene_identity(state),
+                        entity.name);
+                    std::uint64_t salt =
+                        static_cast<std::uint64_t>(existing.size() + index) + 1u;
+                    while (candidate == scene::kInvalidSceneObjectId ||
+                           occupied.contains(candidate))
+                    {
+                        candidate ^= 0x9e3779b97f4a7c15ull
+                            + salt
+                            + (candidate << 6u)
+                            + (candidate >> 2u);
+                        ++salt;
+                    }
+                }
+                entity.sceneObjectId = candidate;
+                occupied.insert(candidate);
+
+                const auto converted =
+                    authoring::scene::descriptor_from_snapshot_object(
+                        editor_entity_snapshot(entity),
+                        static_cast<std::uint32_t>(existing.size() + index),
+                        state.sceneDocument.limits());
+                if (!converted)
+                {
+                    state.projectStatus =
+                        "Scene batch creation rejected because an object descriptor is invalid.";
+                    push_editor_log(state, "[scene] " + state.projectStatus);
+                    return false;
+                }
+                operations.emplace_back(
+                    authoring::scene::ObjectCreatedOperation{.object = *converted});
+                if (!selected)
+                    selected = candidate;
+            }
+            return apply_editor_scene_transaction(state, operations, label, selected);
+        }
+
+        [[nodiscard]] bool synchronize_editor_scene_category(
+            EditorState& state,
+            std::string_view category,
+            std::vector<EditorEntity> desired,
+            std::string_view label,
+            std::string_view selected_name = {})
+        {
+            if (!state.sceneDocument.initialized() &&
+                !rebuild_editor_scene_document(state, "Initialize scene before category synchronization"))
+            {
+                return false;
+            }
+
+            const auto existing = state.sceneDocument.objects();
+            std::unordered_map<std::string, const authoring::scene::SceneObject*> existingByName{};
+            std::unordered_set<scene::SceneObjectId> occupied{};
+            occupied.reserve(existing.size() + desired.size());
+            for (const auto& object : existing)
+            {
+                occupied.insert(object.descriptor.id.value);
+                if (object.descriptor.metadata.category == category)
+                    existingByName.emplace(object.descriptor.metadata.name, &object);
+            }
+
+            std::unordered_set<std::string> desiredNames{};
+            desiredNames.reserve(desired.size());
+            std::vector<authoring::scene::SceneOperation> operations{};
+            std::optional<scene::SceneObjectId> selected{};
+            for (std::size_t index = 0; index < desired.size(); ++index)
+            {
+                auto& entity = desired[index];
+                entity.category = std::string(category);
+                desiredNames.insert(entity.name);
+                const auto found = existingByName.find(entity.name);
+                std::uint32_t sortOrder =
+                    static_cast<std::uint32_t>(existing.size() + index);
+                if (found != existingByName.end())
+                {
+                    entity.sceneObjectId = found->second->descriptor.id.value;
+                    sortOrder = found->second->descriptor.metadata.sort_order;
+                }
+                else
+                {
+                    scene::SceneObjectId candidate = scene::stable_scene_object_id(
+                        editor_scene_identity(state),
+                        entity.name);
+                    std::uint64_t salt =
+                        static_cast<std::uint64_t>(existing.size() + index) + 1u;
+                    while (candidate == scene::kInvalidSceneObjectId ||
+                           occupied.contains(candidate))
+                    {
+                        candidate ^= 0x9e3779b97f4a7c15ull
+                            + salt
+                            + (candidate << 6u)
+                            + (candidate >> 2u);
+                        ++salt;
+                    }
+                    entity.sceneObjectId = candidate;
+                    occupied.insert(candidate);
+                }
+
+                const auto converted =
+                    authoring::scene::descriptor_from_snapshot_object(
+                        editor_entity_snapshot(entity),
+                        sortOrder,
+                        state.sceneDocument.limits());
+                if (!converted)
+                {
+                    state.projectStatus =
+                        "Scene category synchronization rejected because an object descriptor is invalid.";
+                    push_editor_log(state, "[scene] " + state.projectStatus);
+                    return false;
+                }
+                if (found == existingByName.end())
+                {
+                    operations.emplace_back(
+                        authoring::scene::ObjectCreatedOperation{.object = *converted});
+                }
+                else
+                {
+                    append_editor_descriptor_operations(
+                        operations,
+                        *found->second,
+                        *converted);
+                }
+                if (!selected_name.empty() && entity.name == selected_name)
+                    selected = entity.sceneObjectId;
+            }
+
+            for (const auto& [name, object] : existingByName)
+            {
+                if (!desiredNames.contains(name))
+                {
+                    operations.emplace_back(
+                        authoring::scene::ObjectDestroyedOperation{
+                            .object = object->handle
+                        });
+                }
+            }
+            if (operations.empty())
+            {
+                if (selected)
+                {
+                    state.selectedEntityId = *selected;
+                    synchronize_editor_selection(state);
+                }
+                return true;
+            }
+            return apply_editor_scene_transaction(state, operations, label, selected);
+        }
+        [[nodiscard]] bool destroy_editor_scene_entity(
+            EditorState& state,
+            scene::SceneObjectId id,
+            std::string_view label)
+        {
+            if (!state.sceneDocument.initialized() &&
+                !rebuild_editor_scene_document(state, "Initialize scene before object deletion"))
+            {
+                return false;
+            }
+            const auto handle = state.sceneDocument.find(authoring::scene::ObjectId{id});
+            if (!handle)
+                return false;
+            std::vector<authoring::scene::SceneOperation> operations{};
+            operations.emplace_back(
+                authoring::scene::ObjectDestroyedOperation{.object = *handle});
+            auto project = state.sceneDocument.project_settings();
+            bool projectChanged = false;
+            if (project.primary_camera.value == id)
+            {
+                project.primary_camera = {};
+                projectChanged = true;
+            }
+            if (project.primary_spawn.value == id)
+            {
+                project.primary_spawn = {};
+                projectChanged = true;
+            }
+            if (projectChanged)
+            {
+                project.run_state = scene_tier0::ProjectRunState::blocked;
+                operations.emplace_back(
+                    authoring::scene::ProjectSettingsChangedOperation{
+                        .value = project
+                    });
+            }
+            return apply_editor_scene_transaction(state, operations, label);
+        }
+
+        [[nodiscard]] bool transform_editor_scene_entity(
+            EditorState& state,
+            const EditorEntity& entity,
+            std::string_view label)
+        {
+            const auto handle = state.sceneDocument.find(
+                authoring::scene::ObjectId{entity.sceneObjectId});
+            if (!handle)
+                return false;
+            const std::array<authoring::scene::SceneOperation, 1> operations{
+                authoring::scene::ObjectTransformChangedOperation{
+                    .object = *handle,
+                    .value = {
+                        .position = {entity.position[0], entity.position[1], entity.position[2]},
+                        .rotation_degrees = {entity.rotation[0], entity.rotation[1], entity.rotation[2]},
+                        .scale = {entity.scale[0], entity.scale[1], entity.scale[2]}
+                    }
+                }
+            };
+            return apply_editor_scene_transaction(
+                state,
+                operations,
+                label,
+                entity.sceneObjectId);
+        }
         [[nodiscard]] EditorContextSnapshotEntity capture_snapshot_entity(const EditorEntity& entity)
         {
             return EditorContextSnapshotEntity{
@@ -2235,8 +2476,8 @@ namespace epochengine
                 state.entities.push_back(editor_entity_from_seed(seed));
             }
 
-            (void)load_editor_scene_snapshot(state);
-            mark_editor_scene_changed(state);
+            if (!load_editor_scene_snapshot(state))
+                (void)rebuild_editor_scene_document(state, "Load project scene seed");
 
             synchronize_editor_selection(state);
             if (writeLog)
@@ -2325,16 +2566,19 @@ namespace epochengine
                 return;
             }
 
-            state.entities.push_back(std::move(entity));
-            mark_editor_scene_changed(state);
-            normalize_editor_entity_ids(state);
-            select_editor_entity(state, state.entities.size() - 1u);
+            const std::string addedName = entity.name;
+            const std::string addedType = entity.type;
+            if (!create_editor_scene_entity(state, std::move(entity), "Create " + addedName))
+            {
+                push_editor_log(state, "[entity] Could not create " + addedName + ".");
+                return;
+            }
             push_editor_log(
                 state,
                 std::string("[entity] Added ")
-                + state.entities[state.selectedEntity].name
+                + addedName
                 + " ["
-                + state.entities[state.selectedEntity].type
+                + addedType
                 + "].");
         }
 
@@ -2349,8 +2593,10 @@ namespace epochengine
                 });
             if (existing != state.entities.end())
             {
-                // Application-owned canvases keep their canonical scene transform.
-                select_editor_entity(state, static_cast<std::size_t>(std::distance(state.entities.begin(), existing)));
+                select_editor_entity(
+                    state,
+                    static_cast<std::size_t>(
+                        std::distance(state.entities.begin(), existing)));
                 return;
             }
 
@@ -2358,61 +2604,43 @@ namespace epochengine
             canvas.name = "Canvas2D";
             canvas.type = "Canvas2D";
             canvas.category = "2D";
-            canvas.position = { 0.0f, 1.8f, 0.0f };
-            canvas.rotation = { 0.0f, 0.0f, 0.0f };
-            canvas.scale = { 6.4f, 3.6f, 0.05f };
+            canvas.position = {0.0f, 1.8f, 0.0f};
+            canvas.scale = {6.4f, 3.6f, 0.05f};
             canvas.editorOnly = true;
-            state.entities.push_back(std::move(canvas));
-            normalize_editor_entity_ids(state);
-            select_editor_entity(state, state.entities.size() - 1u);
-            push_editor_log(state, "[2d] Added editor-only Canvas2D editing plane.");
+            if (create_editor_scene_entity(
+                    state,
+                    std::move(canvas),
+                    "Create Canvas2D editing plane"))
+            {
+                push_editor_log(
+                    state,
+                    "[2d] Added editor-only Canvas2D editing plane.");
+            }
         }
-
         void ensure_engine_arcade_preview_entities(EditorState& state)
         {
-            const auto& bodyNode = epochengine::render_arcade::kCabinetBodySceneNode;
-            const auto& screenNode = epochengine::render_arcade::kScreenSceneNode;
-            std::erase_if(
-                state.entities,
-                [&](const EditorEntity& entity)
-                {
-                    return entity.category == "EngineArcade"
-                        && entity.name != bodyNode.name
-                        && entity.name != screenNode.name;
-                });
-
-            const auto upsert = [&](const epochengine::render_arcade::ArcadeSceneNodeContract& node)
-            {
-                auto existing = std::find_if(
-                    state.entities.begin(),
-                    state.entities.end(),
-                    [&](const EditorEntity& entity)
-                    {
-                        return entity.name == node.name;
-                    });
-
-                if (existing == state.entities.end())
-                {
-                    EditorEntity entity{};
-                    entity.name = std::string(node.name);
-                    state.entities.push_back(std::move(entity));
-                    existing = std::prev(state.entities.end());
-                }
-
-                existing->type = std::string(node.type);
-                existing->category = "EngineArcade";
-                existing->position = node.position;
-                existing->rotation = { 0.0f, 0.0f, 0.0f };
-                existing->scale = node.scale;
-                existing->editorOnly = false;
-                existing->visible = true;
-                return static_cast<std::size_t>(std::distance(state.entities.begin(), existing));
+            const std::array nodes{
+                epochengine::render_arcade::kCabinetBodySceneNode,
+                epochengine::render_arcade::kScreenSceneNode
             };
-
-            const auto bodyIndex = upsert(bodyNode);
-            const auto screenIndex = upsert(screenNode);
-            normalize_editor_entity_ids(state);
-            select_editor_entity(state, screenIndex < state.entities.size() ? screenIndex : bodyIndex);
+            std::vector<EditorEntity> desired{};
+            desired.reserve(nodes.size());
+            for (const auto& node : nodes)
+            {
+                EditorEntity entity{};
+                entity.name = std::string(node.name);
+                entity.type = std::string(node.type);
+                entity.category = "EngineArcade";
+                entity.position = node.position;
+                entity.scale = node.scale;
+                desired.push_back(std::move(entity));
+            }
+            (void)synchronize_editor_scene_category(
+                state,
+                "EngineArcade",
+                std::move(desired),
+                "Activate Engine Arcade preview",
+                epochengine::render_arcade::kScreenSceneNode.name);
         }
         void activate_engine_arcade_preview(EditorState& state)
         {
@@ -2433,20 +2661,22 @@ namespace epochengine
 
         void deactivate_engine_arcade_preview(EditorState& state)
         {
-            std::erase_if(
-                state.entities,
-                [](const EditorEntity& entity)
-                {
-                    return entity.category == "EngineArcade";
-                });
-            const auto sceneIds = epochengine::package_registry::engine_arcade_scene_ids();
-            const std::string_view activeScene{ state.activeRuntimeScene };
+            (void)synchronize_editor_scene_category(
+                state,
+                "EngineArcade",
+                {},
+                "Deactivate Engine Arcade preview");
+            const auto sceneIds =
+                epochengine::package_registry::engine_arcade_scene_ids();
+            const std::string_view activeScene{state.activeRuntimeScene};
             bool activeSceneIsArcade = false;
             std::string_view remaining = sceneIds;
             while (!activeScene.empty() && !remaining.empty())
             {
                 const auto comma = remaining.find(',');
-                const auto scene = comma == std::string_view::npos ? remaining : remaining.substr(0u, comma);
+                const auto scene = comma == std::string_view::npos
+                    ? remaining
+                    : remaining.substr(0u, comma);
                 if (scene == activeScene)
                 {
                     activeSceneIsArcade = true;
@@ -2458,78 +2688,40 @@ namespace epochengine
             }
             if (activeSceneIsArcade)
                 state.activeRuntimeScene.clear();
-            if (state.selectedEntity >= state.entities.size())
-                select_editor_entity(state, state.entities.empty() ? 0u : state.entities.size() - 1u);
-            state.projectStatus = "Engine Arcade removed from the active project preview.";
-            state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
-            push_editor_log(state, "[package] Engine Arcade preview state removed.");
+            state.projectStatus =
+                "Engine Arcade removed from the active project preview.";
+            state.surfaceSettleFrames =
+                (std::max)(state.surfaceSettleFrames, 2);
+            push_editor_log(
+                state,
+                "[package] Engine Arcade preview state removed.");
         }
-
         void ensure_plant_lab_preview_entities(EditorState& state)
         {
-            const std::size_t beforeCount = state.entities.size();
-            const auto is_forest_entity = [](const EditorEntity& entity) noexcept
-            {
-                return entity.category == "ForestFactory";
-            };
-
             std::string previousSelection{};
             if (!state.entities.empty())
             {
-                const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
-                if (!is_forest_entity(state.entities[selectedIndex]))
+                const std::size_t selectedIndex = (std::min)(
+                    state.selectedEntity,
+                    state.entities.size() - 1u);
+                if (state.entities[selectedIndex].category != "ForestFactory")
                     previousSelection = state.entities[selectedIndex].name;
             }
 
-            std::erase_if(state.entities, is_forest_entity);
-
+            std::vector<EditorEntity> desired{};
             const auto scene = make_plant_lab_editor_scene();
-            std::size_t generatedCount = 0u;
             for (const auto& seed : scene.entities)
             {
-                if (seed.category != "ForestFactory")
-                    continue;
-
-                auto entity = editor_entity_from_seed(seed);
-                const auto existing = std::find_if(
-                    state.entities.begin(),
-                    state.entities.end(),
-                    [&](const EditorEntity& candidate)
-                    {
-                        return candidate.name == entity.name;
-                    });
-                if (existing != state.entities.end())
-                    *existing = std::move(entity);
-                else
-                    state.entities.push_back(std::move(entity));
-                ++generatedCount;
+                if (seed.category == "ForestFactory")
+                    desired.push_back(editor_entity_from_seed(seed));
             }
-
-            auto restored = previousSelection.empty()
-                ? state.entities.end()
-                : std::find_if(
-                    state.entities.begin(),
-                    state.entities.end(),
-                    [&](const EditorEntity& entity)
-                    {
-                        return entity.name == previousSelection;
-                    });
-            if (restored == state.entities.end())
-            {
-                restored = std::find_if(
-                    state.entities.begin(),
-                    state.entities.end(),
-                    [&](const EditorEntity& entity)
-                    {
-                        return !is_forest_entity(entity);
-                    });
-            }
-            if (restored != state.entities.end())
-                select_editor_entity(state, static_cast<std::size_t>(std::distance(state.entities.begin(), restored)));
-            else
-                select_editor_entity(state, 0u);
-
-            if (state.entities.size() != beforeCount)
+            const std::size_t generatedCount = desired.size();
+            if (synchronize_editor_scene_category(
+                    state,
+                    "ForestFactory",
+                    std::move(desired),
+                    "Regenerate Plant Lab preview",
+                    previousSelection))
             {
                 push_editor_log(
                     state,
@@ -2538,38 +2730,39 @@ namespace epochengine
                         generatedCount));
             }
         }
-
         [[nodiscard]] std::size_t place_forest_factory_asset(EditorState& state)
         {
-            const std::size_t assetOrdinal = static_cast<std::size_t>(std::count_if(
-                state.entities.begin(),
-                state.entities.end(),
-                [](const EditorEntity& entity)
-                {
-                    return entity.type == "ForestTrunk"
-                        && entity.name.rfind("ForestAsset_", 0u) == 0u;
-                }));
+            const std::size_t assetOrdinal =
+                static_cast<std::size_t>(std::count_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [](const EditorEntity& entity)
+                    {
+                        return entity.type == "ForestTrunk" &&
+                            entity.name.rfind("ForestAsset_", 0u) == 0u;
+                    }));
 
             const auto source = make_plant_lab_editor_scene();
-            const float placementX = (static_cast<float>(assetOrdinal % 4u) - 1.5f) * 3.2f;
-            const float placementZ = static_cast<float>(assetOrdinal / 4u) * 3.2f;
-            const std::size_t firstPlaced = state.entities.size();
-            std::size_t placedCount = 0u;
-
+            const float placementX =
+                (static_cast<float>(assetOrdinal % 4u) - 1.5f) * 3.2f;
+            const float placementZ =
+                static_cast<float>(assetOrdinal / 4u) * 3.2f;
+            std::vector<EditorEntity> placed{};
             for (const auto& seed : source.entities)
             {
                 if (seed.category != "ForestFactory")
                     continue;
-
                 auto entity = editor_entity_from_seed(seed);
-                entity.name = std::format("ForestAsset_{:02}_{}", assetOrdinal, seed.name);
+                entity.name = std::format(
+                    "ForestAsset_{:02}_{}",
+                    assetOrdinal,
+                    seed.name);
                 entity.position[0] += placementX;
                 entity.position[2] += placementZ;
                 entity.editorOnly = false;
-                state.entities.push_back(std::move(entity));
-                ++placedCount;
+                placed.push_back(std::move(entity));
             }
-
+            const std::size_t placedCount = placed.size();
             if (placedCount == 0u)
             {
                 push_editor_log(
@@ -2577,10 +2770,19 @@ namespace epochengine
                     "[forest] Placement failed: Plant Lab produced no Forest Factory scene objects.");
                 return 0u;
             }
+            if (!create_editor_scene_entities(
+                    state,
+                    std::move(placed),
+                    std::format("Place Forest Factory asset {:02}", assetOrdinal)))
+            {
+                push_editor_log(
+                    state,
+                    "[forest] Placement failed: scene transaction was rejected.");
+                return 0u;
+            }
 
-            normalize_editor_entity_ids(state);
-            select_editor_entity(state, firstPlaced);
-            state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
+            state.surfaceSettleFrames =
+                (std::max)(state.surfaceSettleFrames, 2);
             state.projectStatus = std::format(
                 "Placed Forest Factory asset {:02} with {} scene objects.",
                 assetOrdinal,
@@ -2593,7 +2795,6 @@ namespace epochengine
                     placedCount));
             return placedCount;
         }
-
         [[nodiscard]] bool is_forest_factory_entity(const EditorEntity& entity) noexcept
         {
             return entity.category == "ForestFactory";
@@ -2822,11 +3023,16 @@ namespace epochengine
             duplicate.position[0] += 0.85f;
             duplicate.position[2] -= 0.55f;
             duplicate.sceneObjectId = scene::kInvalidSceneObjectId;
-            state.entities.push_back(std::move(duplicate));
-            mark_editor_scene_changed(state);
-            normalize_editor_entity_ids(state);
-            select_editor_entity(state, state.entities.size() - 1u);
-            push_editor_log(state, std::string("[entity] Duplicated ") + state.entities[selectedIndex].name + ".");
+            const std::string sourceName = state.entities[selectedIndex].name;
+            if (!create_editor_scene_entity(
+                    state,
+                    std::move(duplicate),
+                    "Duplicate " + sourceName))
+            {
+                push_editor_log(state, "[entity] Could not duplicate " + sourceName + ".");
+                return;
+            }
+            push_editor_log(state, std::string("[entity] Duplicated ") + sourceName + ".");
         }
 
         void delete_selected_entity(EditorState& state)
@@ -2839,16 +3045,12 @@ namespace epochengine
 
             const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
             const std::string name = state.entities[selectedIndex].name;
-            state.entities.erase(state.entities.begin() + static_cast<std::ptrdiff_t>(selectedIndex));
-            mark_editor_scene_changed(state);
-
-            if (state.entities.empty())
-                select_editor_entity(state, 0u);
-            else if (selectedIndex >= state.entities.size())
-                select_editor_entity(state, state.entities.size() - 1u);
-            else
-                select_editor_entity(state, selectedIndex);
-
+            const scene::SceneObjectId id = state.entities[selectedIndex].sceneObjectId;
+            if (!destroy_editor_scene_entity(state, id, "Delete " + name))
+            {
+                push_editor_log(state, "[entity] Could not delete " + name + ".");
+                return;
+            }
             push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
         }
 
@@ -3092,8 +3294,11 @@ namespace epochengine
             if (!leftHeld && editor.sceneDragActive)
             {
                 if (editor.sceneDragEntity < editor.entities.size())
-                    push_editor_log(editor, "[scene] Moved " + editor.entities[editor.sceneDragEntity].name + ".");
-                mark_editor_scene_changed(editor);
+                {
+                    const EditorEntity moved = editor.entities[editor.sceneDragEntity];
+                    if (transform_editor_scene_entity(editor, moved, "Move " + moved.name))
+                        push_editor_log(editor, "[scene] Moved " + moved.name + ".");
+                }
                 editor.sceneDragActive = false;
                 editor.sceneDragHasPlaneHit = false;
                 editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
@@ -3195,49 +3400,118 @@ namespace epochengine
 
             if (toolId == "reset_camera")
             {
-                for (auto& entity : state.entities)
+                std::vector<authoring::scene::SceneOperation> operations{};
+                for (const auto& entity : state.entities)
                 {
-                    if (entity.type == "Camera")
-                    {
-                        entity.position = { 0.0f, 1.5f, 5.0f };
-                        entity.rotation = { 0.0f, 0.0f, 0.0f };
-                    }
+                    if (entity.type != "Camera")
+                        continue;
+                    const auto handle = state.sceneDocument.find(
+                        authoring::scene::ObjectId{entity.sceneObjectId});
+                    if (!handle)
+                        continue;
+                    operations.emplace_back(
+                        authoring::scene::ObjectTransformChangedOperation{
+                            .object = *handle,
+                            .value = {
+                                .position = {0.0f, 1.5f, 5.0f},
+                                .rotation_degrees = {0.0f, 0.0f, 0.0f},
+                                .scale = {
+                                    entity.scale[0],
+                                    entity.scale[1],
+                                    entity.scale[2]}
+                            }
+                        });
                 }
-                if (ctx)
+                const bool committed = operations.empty() ||
+                    apply_editor_scene_transaction(state, operations, "Reset camera rigs");
+                if (committed && ctx)
                     epochengine::previewgrid::reset_camera(ctx);
-                mark_editor_scene_changed(state);
-                push_editor_log(state, "[scene] Camera rigs reset.");
+                push_editor_log(
+                    state,
+                    committed
+                        ? "[scene] Camera rigs reset."
+                        : "[scene] Camera reset was rejected.");
                 return;
             }
 
             if (toolId == "toggle_helpers")
             {
-                state.helpersVisible = !state.helpersVisible;
-                for (auto& entity : state.entities)
-                    if (entity.editorOnly || entity.category == "Editor")
-                        entity.visible = state.helpersVisible;
-                mark_editor_scene_changed(state);
-                push_editor_log(state, std::string("[scene] Helpers ") + (state.helpersVisible ? "shown." : "hidden."));
+                const bool nextVisibility = !state.helpersVisible;
+                std::vector<authoring::scene::SceneOperation> operations{};
+                for (const auto& entity : state.entities)
+                {
+                    if (!entity.editorOnly && entity.category != "Editor")
+                        continue;
+                    const auto handle = state.sceneDocument.find(
+                        authoring::scene::ObjectId{entity.sceneObjectId});
+                    if (!handle)
+                        continue;
+                    operations.emplace_back(
+                        authoring::scene::ObjectVisibilityChangedOperation{
+                            .object = *handle,
+                            .runtime_visible = nextVisibility && !entity.editorOnly,
+                            .editor_visible = nextVisibility,
+                            .editor_only = entity.editorOnly
+                        });
+                }
+                const bool committed = operations.empty() ||
+                    apply_editor_scene_transaction(state, operations, "Toggle editor helpers");
+                if (committed)
+                    state.helpersVisible = nextVisibility;
+                push_editor_log(
+                    state,
+                    committed
+                        ? std::string("[scene] Helpers ") +
+                            (state.helpersVisible ? "shown." : "hidden.")
+                        : "[scene] Helper visibility change was rejected.");
                 return;
             }
         }
 
         std::size_t rotate_script_target_entities(EditorState& state, float deltaDegrees)
         {
-            std::size_t rotated = 0;
-            for (auto& entity : state.entities)
+            std::vector<authoring::scene::SceneOperation> operations{};
+            for (const auto& entity : state.entities)
             {
                 if (entity.editorOnly || entity.type == "Level" || entity.type == "Camera")
                     continue;
 
-                entity.rotation[1] += deltaDegrees;
-                if (entity.rotation[1] > 180.0f)
-                    entity.rotation[1] -= 360.0f;
-                if (entity.rotation[1] < -180.0f)
-                    entity.rotation[1] += 360.0f;
-                ++rotated;
+                const auto handle = state.sceneDocument.find(
+                    authoring::scene::ObjectId{entity.sceneObjectId});
+                if (!handle)
+                    continue;
+                float yaw = entity.rotation[1] + deltaDegrees;
+                if (yaw > 180.0f)
+                    yaw -= 360.0f;
+                if (yaw < -180.0f)
+                    yaw += 360.0f;
+                operations.emplace_back(
+                    authoring::scene::ObjectTransformChangedOperation{
+                        .object = *handle,
+                        .value = {
+                            .position = {
+                                entity.position[0],
+                                entity.position[1],
+                                entity.position[2]},
+                            .rotation_degrees = {
+                                entity.rotation[0],
+                                yaw,
+                                entity.rotation[2]},
+                            .scale = {
+                                entity.scale[0],
+                                entity.scale[1],
+                                entity.scale[2]}
+                        }
+                    });
             }
-            return rotated;
+            if (operations.empty())
+                return 0u;
+            return apply_editor_scene_transaction(
+                state,
+                operations,
+                "Script rotate scene objects")
+                ? operations.size()
+                : 0u;
         }
 
         [[nodiscard]] std::string editor_tooling_state_summary(const EditorState& state)
