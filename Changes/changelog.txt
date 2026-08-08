@@ -28,6 +28,8 @@
   all-context Windows CMake engine build, the standalone temporal artifact lane,
   and all five Windows CTests. The managed Linux toolchain check passes; the
   current full rerun remains pending after its vcpkg ABI cache was invalidated.
+- Build both registered headless test targets in every hosted headless matrix lane
+  so CTest never schedules an executable that the workflow omitted.
 - Advance development source to `v0.88.89`; keep the published
   `v0.88.69` runtime and updater sealed.
 
