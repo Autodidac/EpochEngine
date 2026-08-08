@@ -28,8 +28,10 @@
   all-context Windows CMake engine build, the standalone temporal artifact lane,
   and all five Windows CTests. The managed Linux toolchain check passes; the
   current full rerun remains pending after its vcpkg ABI cache was invalidated.
-- Build both registered headless test targets in every hosted headless matrix lane
-  so CTest never schedules an executable that the workflow omitted.
+- Build both registered headless test targets in the MSVC and Clang matrix
+  lanes so CTest never schedules an omitted executable. Keep GCC 16 on its
+  documented headless-only contract because its full C++ module lane remains
+  experimental and currently hits an upstream module-mangling compiler ICE.
 - Advance development source to `v0.88.89`; keep the published
   `v0.88.69` runtime and updater sealed.
 

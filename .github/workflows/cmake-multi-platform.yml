@@ -62,10 +62,10 @@ jobs:
             install_gcc_current: true
             build_command: >
               python -m cmake --build "$GITHUB_WORKSPACE/build/ci"
-              --target epoch_ci_headless epoch_texture_artifact_contract
+              --target epoch_ci_headless
             test_command: >
               python -m cmake -E chdir "$GITHUB_WORKSPACE/build/ci"
-              ctest --output-on-failure
+              ctest --output-on-failure -R '^epoch_ci_headless$'
           - name: linux-clang
             os: ubuntu-latest
             shell: bash
