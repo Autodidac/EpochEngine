@@ -40,6 +40,7 @@ module;
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 // -----------------------------------------------------------------------------
 // Global module fragment: macros + C headers MUST live here.

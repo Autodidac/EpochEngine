@@ -37,6 +37,7 @@ module;
 #include <chrono>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <source_location>
 #include <string>
