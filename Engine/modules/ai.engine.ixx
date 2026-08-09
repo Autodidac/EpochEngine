@@ -54,7 +54,7 @@ export module ai.engine;
 
 export import ai.runtime;
 export import ai.dataset;
-export import ai.train;
+export import ai.session;
 export import ai.mcp;
 export import ai.eval;
 
@@ -123,7 +123,7 @@ export namespace epochengine::ai
     // Engine-global service wrapper (simple singleton)
     void init_engine_ai();
     void shutdown_engine_ai();
-    void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source = "win32_chat_panel");
+
     [[nodiscard]] std::string send_to_engine_ai(const std::string& user_text);
     [[nodiscard]] std::string default_workspace_root();
     [[nodiscard]] std::string research_staging_root();
@@ -132,9 +132,9 @@ export namespace epochengine::ai
     [[nodiscard]] std::string evals_root();
     [[nodiscard]] std::string prompts_root();
     [[nodiscard]] std::string manifests_root();
-    [[nodiscard]] std::string local_capture_jsonl_path();
-    [[nodiscard]] std::string local_mcp_capture_jsonl_path();
-    [[nodiscard]] std::string local_checkpoint_root();
+    [[nodiscard]] std::string local_model_exchange_jsonl_path();
+    [[nodiscard]] std::string local_tool_trace_jsonl_path();
+    [[nodiscard]] std::string local_session_root();
     [[nodiscard]] std::string local_model_root();
     [[nodiscard]] std::string local_cache_root();
     [[nodiscard]] ProviderMode current_provider_mode() noexcept;
@@ -153,10 +153,10 @@ export namespace epochengine::ai
     [[nodiscard]] bool is_engine_ai_initialized() noexcept;
     [[nodiscard]] std::vector<std::string> refresh_detected_models();
     [[nodiscard]] bool select_active_model(std::string_view model_id);
-    [[nodiscard]] TrainingPaths default_training_paths();
-    void append_mcp_capture(const McpCaptureRecord& record);
+    [[nodiscard]] EvidencePaths default_evidence_paths();
+    void append_tool_trace(const McpCaptureRecord& record);
     [[nodiscard]] std::string stage_iteration_packet(const IterationPacket& packet);
-    [[nodiscard]] bool promote_mcp_capture_record(const McpCaptureRecord& record, std::string_view dataset_name = "epoch_mcp_curated");
+    [[nodiscard]] bool promote_tool_trace_record(const McpCaptureRecord& record, std::string_view dataset_name = "epoch_mcp_curated");
     [[nodiscard]] bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name = "epoch_editor_curated");
     [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
     [[nodiscard]] bool is_promotable_assistant_reply(std::string_view reply);

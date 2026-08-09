@@ -234,10 +234,11 @@ release history belong in the changelog/archive, not architecture docs.
   workspace controls.
 - Package Manager needs real rows, action/status, transfer/build progress,
   license/source/cache evidence, and cancellation without fake progress.
-- Plant Lab is the dedicated launcher application for procedural vegetation
-  authoring. Forest Factory remains a standard-editor surface/tool that consumes
-  Plant Lab outputs for vegetation browsing, scene/object import, placement,
-  package activation, and project-visible asset use.
+- Plant Lab is a separate launcher editor for authoring custom trees, reusable
+  tree assets, and forest configurations. Forest Factory is the placement
+  portal inside the standard Epoch editor: it browses Plant Lab outputs and
+  places/configures them in real project scenes. Shared morphology contracts do
+  not merge those editors or make Forest Factory the generator.
 - GUI Editor similarly authors reusable GUI documents/assets; the standard
   editor consumes those results without duplicating the dedicated designer.
 
@@ -315,6 +316,10 @@ release history belong in the changelog/archive, not architecture docs.
 - Graph execution compiles through validated IR into CPU, SIMD, GPU, or software
   plans. Evaluation caches are derived and shared by identical revisions.
 - Texture is the first domain because it directly unlocks the 2D product.
+- `authoring.morphology` is the first generalized branching-domain slice: stable
+  node/segment/terminal IDs, deterministic domain recipes, per-organ temporal
+  sampling, and voxel LOD plans. Editable typed nodes, compiled morphology
+  artifacts, and sparse voxel rasterization remain subsequent slices.
 - Material, model, effects, animation, general scene, collaboration, and broad UX
   phases follow in dependency order.
 - Previews are budgeted, cancellable, cacheable, generation-checked, lower
@@ -341,17 +346,20 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## Extensions And Packages
 
-- `local_ai_llama_cpp_runtime` is the optional Extensions package for an
-  operator-approved offline `llama-cli` build and runtime-status integration.
-  It stages under executable-local `cache/packages/`, disables server/curl
-  targets, never auto-runs, and keeps GGUF weights plus their licenses separate.
-- Plant Lab promotion must map the reference V6 graph rather than its demo
-  viewer: stable nodes/parents, recursive shoots, dormant-sapling timing,
-  per-organ birth/end ranges, 3D/2.5D/2D/pattern modes, mesh/atlas output, and
-  diffable parameter IO. The reference repo currently has no detected license;
-  verbatim promotion is blocked until a license/provenance record exists.
-- Mainline owns stable contracts, validation, safe fallback, provenance policy,
-  and project/runtime integration.
+- `local_ai_llama_cpp_runtime` is a plan/validation package, not a downloader
+  or installer. It describes an offline `llama-cli` build, requires a reviewed
+  immutable llama.cpp revision before any future fetch, starts no server, and
+  keeps GGUF weights and licenses separate.
+- The operator owns
+  `Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab` and has
+  explicitly authorized its Epoch integration. Source revision `40a3db7` is
+  the recorded provenance point; there is no third-party license blocker.
+- `authoring.morphology` generalizes the Plant Lab foundation across plant,
+  vascular, respiratory, electrical, coral, and generic branching domains with
+  stable IDs, per-organ time ranges, deterministic sampling, and voxel LOD
+  planning. Plant Lab owns generation; Forest Factory is the standard-editor placement portal that consumes authored tree and forest-configuration outputs.
+- Mainline owns stable contracts, validation, temporal/document identity, safe
+  fallback, provenance policy, and project/runtime integration.
 - EpochEngineExtensions owns heavy optional generators, FFT ocean, planetary or
   game-specific world stacks, immutable payload source, manifests, licenses,
   hashes, tests, and generated artifacts.
@@ -359,27 +367,30 @@ release history belong in the changelog/archive, not architecture docs.
   verifier-produced evidence; it is not itself a downloader/verifier.
 - Built-in mini-runtimes remain kernel-owned and can be exposed as package/script
   assets.
-- Anything that can listen, host, bind a port, execute native code, or expose a
-  control surface requires explicit human approval.
-
+- Anything that can listen, host, bind a port, execute downloaded native code,
+  or expose a control surface requires explicit human approval.
 ## OS AI
 
-- Epoch supports two explicit local inference transports: the existing
-  OpenAI-compatible endpoint and direct `llama-cli`. Direct mode discovers an
-  executable plus operator-licensed GGUF, launches one captured child process
-  with argv (no shell), applies offline/no-server policy, bounds output, and
-  enforces timeout/termination. Runtime choice is executable-local state.
-- Direct runtime setup may be discovered from environment overrides or the
-  Extensions cache. Package installation only stages the reviewed setup plan;
-  source fetch/build remains a visible human-approved action.
-- OS AI means operator-selected external/source-available models, not an
-  internal persona.
-- Model selection initializes exactly the selected model and persists only in
-  executable-local cache state.
-- AI/tool decisions require visible evidence and never become hidden training or
-  authority.
-- Network/server/model activity remains capability- and approval-gated.
-
+- Epoch does not own or train an internal LLM. It runs an operator-selected
+  external/source-available model through a local OpenAI-compatible endpoint or
+  a directly selected `llama-cli` plus separately licensed GGUF.
+- Model discovery is inventory only. Selection and runtime state are explicit
+  and executable-local.
+- `ai.mcp` is model-provider-independent and owns bounded tool descriptors,
+  calls, results, errors, capabilities, approval gates, cancellation, evidence,
+  and session budgets. Epoch starts no MCP server/listener.
+- The project tool registry covers inspect, create, save, document/script edit,
+  build, run, test, capture, and diagnostics. Current execution is
+  operator-invoked through real editor/project harness paths; model tool-call
+  parsing and multi-step dispatch remain unfinished.
+- Chat is not captured automatically. Explicit harness/trace work writes
+  `model_exchange.jsonl`, `tool_trace.jsonl`, and bounded session packets as
+  evidence, never hidden training or authority.
+- Engine-source tools require a separate developer capability, allowlisted
+  roots, patch preview, explicit approval, and build/test evidence. They never
+  commit, push, release, or grant themselves permission.
+- Network/server/model/package activity remains capability-, integrity-, and
+  approval-gated.
 ## Build, Source, And Release Boundaries
 
 - The operator explicitly reopened release work for the `v0.89.x` line. Preserve updater behavior while producing and validating the new Windows/Linux baseline; reseal the accepted release afterward.

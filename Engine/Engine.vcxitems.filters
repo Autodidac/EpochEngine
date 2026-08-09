@@ -836,7 +836,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.dataset.ixx">
       <Filter>Module Files\epoch\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.train.ixx">
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.session.ixx">
       <Filter>Module Files\epoch\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp.ixx">
@@ -1256,6 +1256,9 @@
       <Filter>Module Files\epoch\capability</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.document.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.morphology.ixx">
       <Filter>Module Files\epoch\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_artifact.ixx">

@@ -1,121 +1,107 @@
-# Forest Factory Package Contract
+# Forest Factory Portal And Plant Lab Contract
 
-Forest Factory is Epoch's standard-editor vegetation workflow. Plant Lab is the
-dedicated launcher application for temporal graph / parametric L-system plant
-authoring. Plant Lab produces reusable vegetation documents and assets; Forest
-Factory browses/imports those outputs and places them into ordinary project
-scenes.
+Plant Lab and Forest Factory are separate editor experiences.
+
+- **Plant Lab** is a dedicated launcher editor for authoring custom trees,
+  reusable tree assets, growth behavior, and forest configurations.
+- **Forest Factory** is a portal/editor surface inside the standard Epoch
+  application. It browses Plant Lab outputs and places or configures them in the
+  real project scene.
+
+They may share deterministic morphology, temporal, voxel, asset, and GUI
+contracts, but they do not share a central editor surface and one never replaces
+the other.
+
+## Provenance
+
+The Plant Lab integration source is:
+
+`https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab`
+
+The operator has confirmed this is their own code, created for Epoch
+integration, and has explicitly authorized its use. Record source revision
+`40a3db7` when adapting behavior. There is no third-party license blocker.
+
+The prototype remains an integration source rather than a runtime dependency.
+Epoch owns production limits, tests, identity, serialization, compiled assets,
+and backend-neutral preview/runtime contracts.
+
+## Plant Lab Authoring
+
+Plant Lab owns:
+
+- custom tree and branching-form documents;
+- reusable species/preset assets;
+- forest configurations such as composition, distribution, density, scale,
+  seed, age/time, and LOD intent;
+- temporal graph and parametric L-system editing;
+- 3D, 2.5D, 2D, and pattern previews;
+- mesh, foliage/material, impostor, voxel, and seed output requests;
+- save/load, undo/redo, deterministic regeneration, and export.
+
+`authoring.morphology` is its first shared C++23 generation foundation. It
+provides generation-checked node/segment/terminal IDs, bounded deterministic
+construction, per-organ birth/end ranges, forward/reverse sampling, content
+identity, and multi-level voxel LOD planning.
+
+The underlying morphology contract also supports vascular, respiratory,
+electrical, coral, and generic branching structures. Those capabilities can
+serve future authoring tools without turning Forest Factory into a general
+morphology editor.
+
+The current slice is build-proven. Editable typed node UI, compiled morphology
+artifacts, sparse voxel rasterization, production mesh compilation, and physical
+texture/material outputs remain unfinished.
+
+## Forest Factory Placement Portal
+
+Forest Factory owns:
+
+- browsing Plant Lab tree assets and forest configurations;
+- previews sufficient to identify an authored asset;
+- placement of individual trees or configured forest groups;
+- transforms, bounds, distribution regions, density, seed, age/time, and LOD
+  overrides that belong to the project scene;
+- package activation and project-visible asset references;
+- selection, Focus, save, Build, Run, and scene persistence of placed results.
+
+Forest Factory consumes authored/compiled outputs through stable logical asset
+identity. It must not mutate Plant Lab authoring documents through placement
+widgets, regenerate a different canonical tree behind the user's back, or embed
+Plant Lab's complete editor inside the main application.
+
+The existing `forest.factory` profile/preview path is a compatibility and
+default-asset adapter while the authored asset pipeline is completed. Shared
+morphology use beneath that adapter does not merge editor ownership.
 
 ## Ownership
 
-- Engine core owns the lightweight deterministic contracts in
-  `Engine/modules/forest.factory.ixx`.
-- Package Registry owns package identity, provenance, activation mode, and
-  security gates in `Engine/modules/package.registry.ixx`.
-- `package.registry` validation is part of the non-GUI
-  `--engine-contract-self-test` lane, so Forest Factory must remain a core
-  opt-in package that ships in the engine but does not enter generated projects
-  until main-scene use or package activation is visible.
-- Plant Lab owns the dedicated scene-backed vegetation authoring application and
-  deterministic temporal-graph preview.
-- The standard editor retains the Forest Factory surface/tool for generated
-  vegetation browsing, import, placement, package evidence, and project-visible
-  activation.
-- Package payload/source routing belongs in
-  `https://github.com/Autodidac/EpochEngineExtensions`.
-- The Package Manager stages project-visible manifests and deterministic seed
-  profiles under `assets/packages/engine_forest_factory/`.
-- Generated projects do not carry Forest Factory payload by default. They get
-  project assets only after explicit package activation or visible main-scene
-  use.
+- Plant Lab owns generation and forest-configuration authoring.
+- Forest Factory owns standard-editor browsing and placement.
+- Engine mainline owns shared document, morphology, temporal, voxel, compiled
+  asset, validation, and project integration contracts.
+- EpochEngineExtensions owns heavy optional generators and generated payloads.
+- Package Registry owns activation, provenance, integrity, and approval gates.
+- Generated projects receive optional payload only after visible activation or
+  main-scene use.
 
-## Prototype Source
+## Next Production Slices
 
-Reference/prototype source:
+1. Define Plant Lab tree-asset and forest-configuration documents with stable
+   identity and semantic operations.
+2. Build the shared typed node editor with stable node/pin/connection identity,
+   validation, serialization, and migration.
+3. Separate editable documents, compiled morphology/forest artifacts, and
+   physical preview/voxel/texture caches.
+4. Add deterministic regeneration independent from time-only sampling.
+5. Rasterize selected samples into `SparseVoxelField` LODs and compile indexed
+   mesh/material/impostor outputs.
+6. Save Plant Lab outputs to the asset registry and project library.
+7. Make Forest Factory browse those assets, place scene references, and edit
+   placement/configuration overrides without opening Plant Lab internally.
+8. Add replay, boundedness, forward/reverse equivalence, placement persistence,
+   and Build/Run tests.
 
-```text
-https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab
-```
-
-GitHub currently reports no license for this repository and its source tree has
-no `LICENSE` file. Its architecture and operator-provided behavior remain valid
-reference requirements, but verbatim source promotion is blocked until the
-repository gains explicit compatible licensing or a provenance record confirms
-promotion rights.
-
-The reviewed V6 delta that Epoch must reproduce behind its own contracts is:
-
-- stable node/parent identity plus branch and leaf-cluster records;
-- recursive side shoots and editable generation/depth/shoot budgets;
-- dormant initial sapling state and overlapping trunk, branch, and leaf timing;
-- per-organ birth/end ranges for deterministic forward/reverse evaluation;
-- 3D, 2.5D, 2D plant, and 2D L-system pattern modes;
-- graph regeneration separated from time-only mesh evaluation;
-- indexed position/normal/color/UV mesh output, atlas regions, and leaf styles;
-- deterministic seed/preset state plus diffable save/load and export boundaries.
-The prototype repo is not cloned into EpochEngine mainline by default. Mainline
-keeps the stable API shape and package gate. Implementation-heavy or
-experimental payloads should move through `Autodidac/EpochEngineExtensions`
-package work before source promotion.
-
-## Current Core Shape
-
-The first production contract exposes:
-
-- presets: Cannabis, Tree, Bush, Fern
-- preview modes: 2D and 3D
-- edit stages: Stage, Structure, Branch, Foliage
-- deterministic seed/profile data
-- temporal controls: time, speed, duration, play, reverse
-- branch controls matching the Plant Lab direction: node count, branch length,
-  levels, children, angle, spread, twist, jitter, bend, outward bias, curve, sag
-- output categories: preview skeleton, mesh LOD, impostor, voxel occupancy, and
-  seed asset
-- estimated preview stats for nodes, branches, leaves, vertices, and triangles
-- estimated voxel occupancy for trunk, branch, and foliage cells so future LOD,
-  hit detection, navigation, lighting, and path-trace consumers can share the
-  same deterministic vegetation descriptor
-- a scene-backed editor prototype made from deterministic preview primitives so
-  Plant Lab can author vegetation before the production mesh/voxel renderer lands
-- a Forest Factory surface in the standard editor for importing and placing
-  Plant Lab outputs into the same central 3D scene path as ordinary objects
-- dedicated Plant Lab launcher access without replacing the standard-editor
-  Forest Factory workflow
-
-## Package Manager Behavior
-
-Selecting `Forest Factory` in Package Manager should show the
-`EpochEngineExtensions` package source and explain that the editor preview is
-built in while generated project payloads remain opt-in. The staged manifest
-keeps both `source_repo` and `reference_repo` so package payload ownership and
-the external Plant Lab reference repository do not get mixed together.
-
-Installing the package stages:
-
-- `assets/packages/engine_forest_factory.package.json`
-- `assets/packages/engine_forest_factory/default.forest.json`
-
-This is a visible project activation record, not a hidden import. It does not
-download source, bind ports, create servers, or run package code automatically.
-The package descriptor must keep `Main-scene use` activation, the
-`EpochEngineExtensions` source route, and a human build gate so the Package
-Manager UI stays tied to the validated registry instead of local-only text.
-
-## Acceptance Gates
-
-Before Forest Factory graduates beyond this contract:
-
-- Plant Lab graduates into a dedicated 3D authoring preview with proper tabs,
-  sliders, atlas controls, mature-stage playback, and production GUI controls.
-- Forest Factory imports and places Plant Lab outputs in the standard editor
-  without duplicating the Plant Lab authoring application.
-- Package activation can materialize project-local generated assets without
-  polluting software projects or minimal game clones.
-- Generated outputs can feed mesh LOD, impostor, and voxel occupancy consumers.
-- The voxel/pathing/tracing spine can consume Forest Factory occupancy without a
-  renderer-specific dependency.
-- The preview graduates from primitive occupancy evidence to asset-grade branch,
-  foliage, atlas, and growth playback rendering that visibly matches the Plant
-  Lab direction.
-- Prototype code from the Plant Lab repo is reviewed through package provenance,
-  build, test, and license evidence before any source promotion.
+Stable authoring documents and semantic operations are canonical. Atlases,
+sparse pages, GPU buffers, descriptors, previews, and renderer caches remain
+disposable.

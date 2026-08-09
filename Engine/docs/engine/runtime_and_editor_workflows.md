@@ -224,7 +224,7 @@ the same engine-owned path.
   initial camera/dock policy, pane ownership, authoring/run permissions, and
   scene validation shared by all editor applications
 - `editor.standard.cpp`, `editor.plant_lab.cpp`, and `editor.gui.cpp` own the
-  three canonical editor scenes. Plant Lab owns dedicated vegetation authoring
+  three canonical editor scenes. Plant Lab owns separate custom-tree and forest-configuration authoring
   and GUI canvas transforms remain GUI-scene data
 - Forest Factory remains a standard-editor surface/tool. It browses and imports
   Plant Lab/package outputs and places vegetation into project-owned scenes
@@ -294,7 +294,7 @@ the same engine-owned path.
   discovery still remains separate from activation.
 - `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
   launching the GUI. Use it before letting helper LLM replies influence curated
-  training, eval promotion, or source-change planning.
+  evidence review, eval changes, or source-change planning.
 - `--engine-contract-self-test` runs only the pure Forest Factory, package
   registry/model-gate, timeline streaming-save, input profile, and scene
   snapshot/serializer checks, then exits before project-profile builds, child
@@ -326,7 +326,7 @@ the same engine-owned path.
   runtime scene so other package workspaces can take over cleanly.
 - Plant Lab is the dedicated launcher application for scene-backed procedural
   vegetation authoring and deterministic temporal-graph preview.
-- Forest Factory is the standard-editor vegetation surface/tool. It consumes
+- Forest Factory is the standard-editor placement portal. It consumes
   Plant Lab and package outputs for browsing, object/asset import, placement,
   and visible main-scene use. Package Manager activation stages
   `assets/packages/engine_forest_factory.package.json` and
@@ -979,53 +979,36 @@ features over forcing every integration on every machine.
 - the preview should show a visible look-hit marker where the center camera ray
   intersects the grid
 
-## AI runtime direction
+## AI runtime, MCP, and harness direction
 
-Epoch documents three AI/control pieces:
+Epoch runs an operator-selected external model; it does not own or train an
+internal LLM. The model may be reached through an operator-started
+OpenAI-compatible endpoint or a directly selected `llama-cli` plus separately
+licensed GGUF.
 
-- OS AI, the engine-owned open-source model harness for memory, retrieval,
-  planning, tool use, verification, evidence metrics, and dataset/eval gates
-- local tool/MCP control harnesses that operate the editor and collect proof
-- operator-selected Qwen/Nemotron local model lanes for coding, review,
-  fallback, and future generated-software embedding where licensing allows, with
-  Bonsai/Wan/TRELLIS tracked as package-managed creative model lanes and
-  FLUX.2 Klein kept as a higher-memory image fallback
+Model transport and tool transport are separate. `ai.mcp` owns bounded tool
+descriptors, calls, results, errors, capabilities, approval gates, cancellation,
+and evidence attachments. The in-process registry covers project inspection,
+creation, save, document/script edit, build, run, test, editor capture, and
+diagnostics. Epoch starts no MCP server or listener.
 
-External local OpenAI-compatible LLMs such as LM Studio or Ollama are selected
-runtime/helper providers. They can help with testing, evals, dataset cleanup,
-and faster iteration, but they are not hidden authority and are not a substitute
-for visible build/test evidence.
-The editor scans `/v1/models` and sends selected-model chat to
-`/v1/chat/completions`; tool evidence capture files, including the legacy
-`mcp_capture.jsonl` path, are evidence logs for the harness, not a hidden second
-chat runtime.
+The protocol/registry and manual Tool Harness are implemented. Parsing arbitrary
+model-generated tool calls and multi-step dispatch are pending. Until then,
+operator-invoked controls execute the real project lifecycle and append
+structured traces to `workspace/tool_trace.jsonl`.
 
-Data rules:
+Normal chat is not captured automatically. Explicit trace/harness actions may
+write `workspace/model_exchange.jsonl`, `workspace/tool_trace.jsonl`, and
+bounded packets under `workspace/ai/sessions/`. These are evidence, not model
+training. Hidden reasoning is neither displayed nor harvested.
 
-- curated repo-safe assets belong in `Engine/ai/`
-- `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl` and `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl` are raw/staged
-  capture paths
-- checkpoints, compiled local models, and caches stay under local
-`Engine/examples/ConsoleApplication1/workspace/ai/` paths
-- outdated or bad training data should be deleted or replaced when the training
-  direction changes
-- helper-first passes may probe `/v1/models` at the start of a phase, but the
-  engine must not auto-name or activate a model from discovery. Only the
-  operator-selected model is the active helper model for chat/planning.
-- CLI/self-iteration passes can use `EPOCH_AI_MODEL`, `EPOCH_OPENAI_MODEL`,
-  `LM_STUDIO_MODEL`, or `OPENAI_MODEL` as an explicit operator-selected helper
-  identity. This exists so evidence packets can record the reviewer model during
-  non-GUI runs without reverting to first-model auto-selection.
-- additional loaded helpers may be used only as explicitly allowed drafting or
-  review lanes, and their output remains proposal material until build/runtime
-  evidence and human review promote it
-- for direct helper drafting, use LM Studio `/v1/responses` or
-  `/v1/chat/completions` with bounded output, and retry without any reasoning
-  field when the selected model rejects explicit reasoning configuration
-- if a selected helper returns blank visible content with only hidden reasoning,
-  the editor must reject the response as a model/API configuration issue rather
-  than showing the reasoning text in AI Chat or promoting it as training data
+Project creation is part of the harness contract. Model-requested creation,
+editing, save, build, and run must pass the same path, capability, package,
+network, and human-approval gates as editor controls. Engine-source work is a
+separate developer capability with allowlisted roots, patch preview, build/test
+proof, and no automatic commit, push, or release.
 
+See `os_ai_tooling_and_evidence_policy.md` for the normative contract.
 ## Procedural/time-node direction
 
 - the later procedural authoring phase should cover SpeedTree-like modular
@@ -1048,7 +1031,7 @@ editor-window system. It currently hosts reusable tabbed panes for:
 
 These tabs should keep logs, build evidence, status, model inventory, and visual
 feedback available without becoming the main command surface. Action controls
-that start AI repair/build/training passes belong in the Inspector until the
+that start AI plan/build/harness passes belong in the Inspector until the
 dedicated editor windows below exist.
 
 The real editor shell target is a set of independently focusable/dockable

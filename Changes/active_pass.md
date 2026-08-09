@@ -14,7 +14,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 
 The published `v0.89.01` Windows/Linux runtime, updater behavior, packaging,
 and stable multicontext branch are sealed. Development source continues from
-`v0.89.02`; do not alter release/updater code, handoff/build scripts, tags, or
+`v0.89.03`; do not alter release/updater code, handoff/build scripts, tags, or
 release assets unless the operator explicitly reopens that gate.
 Preserve these accepted source contracts:
 
@@ -150,9 +150,11 @@ The working tree contains these current or in-progress foundations:
   Plant Lab, and GUI Editor own separate C++23 implementation units, canonical
   scene seeds, surface masks, camera/dock defaults, pane policy, and
   run/authoring permissions while reusing one editor shell and service spine;
-- Plant Lab owns dedicated vegetation authoring, while Forest Factory remains
-  available inside the standard editor for generated-plant browsing,
-  scene/object import, and placement;
+- Plant Lab remains a separate editor for custom tree assets and forest
+  configurations. It uses `authoring.morphology` for stable-ID deterministic
+  temporal branching. Forest Factory remains the placement portal in the
+  standard editor and consumes those outputs for browsing, scene import, and
+  placement; the shared spine does not merge their UI or ownership;
 - `temporal.request` owns explicit global/sample time mapping, rates, anchors,
   forward/reverse/frozen direction, bounded exact/nearest/bracket observation,
   truth/reconstruction evidence, retained-history metrics, and
@@ -331,7 +333,7 @@ The active gate is accepted when:
 12. Each editor application validates one canonical scene/camera, rejects
     cross-application surfaces, and enforces pane/run/entity policy through the
     shared shell. The standard editor retains Forest Factory import/placement;
-    Plant Lab owns the dedicated plant-authoring scene.
+    Plant Lab owns the dedicated custom-tree and forest-configuration authoring scene; Forest Factory owns standard-editor placement.
 13. Temporal request tests prove forward/reverse/frozen mapping, exact,
     nearest, bracket, boundary clamp, bounded retention, reconstruction flags,
     cumulative metrics, and stale-handle rejection.

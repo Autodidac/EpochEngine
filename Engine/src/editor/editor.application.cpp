@@ -153,7 +153,7 @@ namespace epochengine
             Tooling,
             Engine,
             Software,
-            Training,
+            Evidence,
             Visualizer,
             Ops
         };
@@ -300,8 +300,6 @@ namespace epochengine
                     std::string reply = normalize_editor_text_for_gui(pending->get());
                     if (reply.empty()) reply = "(empty reply)";
                     lines.emplace_back("ai> " + reply);
-                    if (!pendingPrompt.empty() && reply != "(empty reply)")
-                        epochengine::ai::append_training_sample(pendingPrompt, reply, "editor_ai_chat");
                     pendingPrompt.clear();
                     trim_lines();
                 }
@@ -1556,7 +1554,7 @@ namespace epochengine
             case AiWorkspaceDomain::Tooling:
             case AiWorkspaceDomain::Engine:
             case AiWorkspaceDomain::Software:
-            case AiWorkspaceDomain::Training:
+            case AiWorkspaceDomain::Evidence:
             case AiWorkspaceDomain::Visualizer:
             case AiWorkspaceDomain::Ops:
             case AiWorkspaceDomain::Control:
@@ -2737,7 +2735,7 @@ namespace epochengine
                 push_editor_log(
                     state,
                     std::format(
-                        "[plant] Loaded {} Plant Lab preview entities for Forest Factory asset authoring.",
+                        "[plant] Loaded {} preview entities for Plant Lab tree-asset authoring.",
                         generatedCount));
             }
         }
@@ -3405,7 +3403,7 @@ namespace epochengine
                 state.projectBuildStatus);
         }
 
-        [[nodiscard]] std::string build_ai_sandbox_scene_training_prompt(const EditorState& state)
+        [[nodiscard]] std::string build_ai_sandbox_scene_harness_prompt(const EditorState& state)
         {
             const std::size_t selectedIndex = state.entities.empty()
                 ? 0u
@@ -3414,7 +3412,7 @@ namespace epochengine
                 ? std::string("(none)")
                 : (state.entities[selectedIndex].name + " [" + state.entities[selectedIndex].type + "]");
             return std::format(
-                "Create one sandboxed 3D scene-training exercise for OS AI. The selected model must edit or inspect visible primitives in a sandbox scene, produce build/tool/runtime evidence, and report what changed. It must not answer that it is working fine unless it cites concrete evidence paths. Active project: '{}' ({}), selected object: {}, object count: {}, active script: '{}'.",
+                "Create one sandboxed 3D scene-harness exercise for OS AI. The selected model must edit or inspect visible primitives in a sandbox scene, produce build/tool/runtime evidence, and report what changed. It must not answer that it is working fine unless it cites concrete evidence paths. Active project: '{}' ({}), selected object: {}, object count: {}, active script: '{}'.",
                 state.projectName,
                 state.projectId,
                 selected,
@@ -5592,10 +5590,10 @@ namespace epochengine
             const std::filesystem::path& outputExe)
         {
             return std::format(
-                "You are the selected OS AI model helping Epoch through an engine-owned harness around selected Qwen/Nemotron model lanes and approved creative model package lanes, trained through editor tools, sandbox scenes, build evidence, and eval gates.\n"
+                "You are the selected OS AI model helping Epoch through an engine-owned harness around selected Qwen/Nemotron model lanes and approved creative model package lanes, operating through editor tools, sandbox scenes, build evidence, and eval gates.\n"
                 "Review the latest project output evidence and produce exactly one safe self-iteration pass.\n"
                 "Do not claim anything is working unless you cite the evidence paths below.\n"
-                "Return concise sections: Diagnosis, Proposed Files, Editor/Tool Actions, Build/Test Commands, Verifier Gate, Training/Eval Record.\n"
+                "Return concise sections: Diagnosis, Proposed Files, Editor/Tool Actions, Build/Test Commands, Verifier Gate, Evidence/Eval Record.\n"
                 "Keep normal ProjectLauncher game/software work separate from the Self-Iteration Sandbox unless the operator explicitly approves mixing them.\n\n"
                 "Local game/tool/app/server project code is allowed when requested, and local game/tool tests may run through visible editor/tool-harness controls when evidence-captured.\n"
                 "Do not create or run apps/services that expose a model-accessible bypass channel, hidden control surface, server, listener, port bind, or serving mode without an explicit human enable/run action.\n\n"
@@ -5992,6 +5990,8 @@ namespace epochengine
                 << "  \"package_source\": \"" << editor_json_escape(package.externalSourceRepo) << "\",\n"
                 << "  \"runtime_source\": \"https://github.com/ggml-org/llama.cpp\",\n"
                 << "  \"runtime_license\": \"MIT\",\n"
+                << "  \"immutable_revision_required\": true,\n"
+                << "  \"immutable_revision\": \"\",\n"
                 << "  \"source_dir\": \"" << editor_json_escape(sourceRoot.generic_string()) << "\",\n"
                 << "  \"build_dir\": \"" << editor_json_escape(buildRoot.generic_string()) << "\",\n"
                 << "  \"binary_dir\": \"" << editor_json_escape(binaryRoot.generic_string()) << "\",\n"
@@ -5999,11 +5999,11 @@ namespace epochengine
                 << "  \"network_action\": \"human_approval_required\",\n"
                 << "  \"auto_run\": false,\n"
                 << "  \"server_or_listener\": false,\n"
-                << "  \"status\": \"staged\"\n"
+                << "  \"status\": \"awaiting_pinned_source_and_approval\"\n"
                 << "}\n";
             out.close();
 
-            editor.packageInstallStatus = "Direct llama.cpp setup plan staged; fetch/build remains human-approved.";
+            editor.packageInstallStatus = "Direct llama.cpp plan staged; immutable source pin and human approval are required before fetch/build.";
             editor.packageInstallProgress = 1.0f;
             push_editor_log(editor, "[package] Wrote local AI runtime plan: " + display_project_path(planPath));
             return true;
@@ -6376,7 +6376,7 @@ namespace epochengine
             const std::filesystem::path& buildLog,
             const std::filesystem::path& outputExe,
             const std::filesystem::path& pathsManifest,
-            const epochengine::ai::TrainingPaths& training,
+            const epochengine::ai::EvidencePaths& evidence,
             std::string_view latestPrompt,
             std::string_view latestReply)
         {
@@ -6387,8 +6387,8 @@ namespace epochengine
             const bool buildLogReady = path_exists(buildLog);
             const bool outputReady = path_exists(outputExe);
             const bool pathsReady = path_exists(pathsManifest);
-            const bool rawCaptureReady = path_exists(training.local_capture_jsonl);
-            const bool mcpCaptureReady = path_exists(training.mcp_capture_jsonl);
+            const bool rawCaptureReady = path_exists(evidence.model_exchange_jsonl);
+            const bool mcpCaptureReady = path_exists(evidence.tool_trace_jsonl);
 
             status.buildEvidenceReady = buildLogReady && outputReady;
             status.projectEvidenceReady = manifestReady && projectRootReady && pathsReady;
@@ -6470,8 +6470,8 @@ namespace epochengine
                 return "Engine Assistant";
             case AiWorkspaceDomain::Software:
                 return "Project Launcher";
-            case AiWorkspaceDomain::Training:
-                return "Training";
+            case AiWorkspaceDomain::Evidence:
+                return "Evidence";
             case AiWorkspaceDomain::Visualizer:
                 return "AI Visualizer";
             case AiWorkspaceDomain::Ops:
@@ -8788,7 +8788,7 @@ namespace epochengine
         });
         if (editor.workspaceTab == EditorWorkspaceTab::AI)
         {
-            const auto inspectorTraining = epochengine::ai::default_training_paths();
+            const auto inspectorEvidence = epochengine::ai::default_evidence_paths();
             const std::filesystem::path inspectorBuildLog = project_build_log_path(editor.projectRoot);
             const std::filesystem::path inspectorOutputExe = project_output_exe_path(editor.projectRoot);
             const std::filesystem::path inspectorPathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
@@ -8801,7 +8801,7 @@ namespace epochengine
                 inspectorBuildLog,
                 inspectorOutputExe,
                 inspectorPathsManifest,
-                inspectorTraining,
+                inspectorEvidence,
                 inspectorLatestPrompt,
                 inspectorLatestReply);
             const std::string inspectorStage = ai_control_loop_stage(inspectorGate);
@@ -8833,10 +8833,10 @@ namespace epochengine
                 addEvidence(inspectorPathsManifest.string());
                 addEvidence(inspectorBuildLog.string());
                 addEvidence(inspectorOutputExe.string());
-                addEvidence(inspectorTraining.local_capture_jsonl);
-                addEvidence(inspectorTraining.mcp_capture_jsonl);
-                addEvidence(inspectorTraining.curated_dataset_root);
-                addEvidence(inspectorTraining.eval_root);
+                addEvidence(inspectorEvidence.model_exchange_jsonl);
+                addEvidence(inspectorEvidence.tool_trace_jsonl);
+                addEvidence(inspectorEvidence.curated_dataset_root);
+                addEvidence(inspectorEvidence.eval_root);
                 addEvidence(inspectorManifest.manifest_path);
 
                 return epochengine::ai::IterationPacket{
@@ -8862,14 +8862,14 @@ namespace epochengine
                     .provider_summary = epochengine::ai::active_provider_summary(),
                     .active_model = inspectorManifest.display_name,
                     .manifest_path = inspectorManifest.manifest_path,
-                    .workspace_root = inspectorTraining.workspace_root,
-                    .raw_capture_path = inspectorTraining.local_capture_jsonl,
-                    .mcp_capture_path = inspectorTraining.mcp_capture_jsonl,
-                    .checkpoint_root = inspectorTraining.checkpoint_root,
-                    .model_root = inspectorTraining.model_root,
-                    .cache_root = inspectorTraining.cache_root,
-                    .curated_dataset_root = inspectorTraining.curated_dataset_root,
-                    .eval_root = inspectorTraining.eval_root,
+                    .workspace_root = inspectorEvidence.workspace_root,
+                    .model_exchange_path = inspectorEvidence.model_exchange_jsonl,
+                    .tool_trace_path = inspectorEvidence.tool_trace_jsonl,
+                    .session_root = inspectorEvidence.session_root,
+                    .model_root = inspectorEvidence.model_root,
+                    .cache_root = inspectorEvidence.cache_root,
+                    .curated_dataset_root = inspectorEvidence.curated_dataset_root,
+                    .eval_root = inspectorEvidence.eval_root,
                     .evidence_paths = std::move(evidencePaths)
                 };
             };
@@ -8912,7 +8912,7 @@ namespace epochengine
             const bool inspectorToolingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Tooling;
             const bool inspectorAssistantControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine;
             const bool inspectorLauncherControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Software;
-            const bool inspectorTrainingControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Training;
+            const bool inspectorEvidenceControls = editor.aiWorkspaceDomain == AiWorkspaceDomain::Evidence;
 
             if (inspectorSandboxControls || inspectorLauncherControls)
             {
@@ -8940,28 +8940,28 @@ namespace epochengine
                         "Wait for build evidence, then review the staged packet before promotion.");
                 }
 
-                if (gui::button("Stage Scene Training Task", { inspectorWidth, 30.0f }))
+                if (gui::button("Stage Scene Harness Task", { inspectorWidth, 30.0f }))
                 {
                     auto packet = inspectorIterationPacket();
                     packet.packet_name = editor.projectId.empty()
-                        ? std::string("sandbox-scene-training")
-                        : editor.projectId + "-sandbox-scene-training";
-                    packet.task_prompt = build_ai_sandbox_scene_training_prompt(editor);
+                        ? std::string("sandbox-scene-harness")
+                        : editor.projectId + "-sandbox-scene-harness";
+                    packet.task_prompt = build_ai_sandbox_scene_harness_prompt(editor);
                     packet.operator_notes =
                         "OS AI must use visible sandbox scene/tool/build evidence. Generic self-reporting like 'working fine' is invalid without paths, changed object state, and verifier output.";
-                    packet.control_loop_stage = "Planner queued: sandbox scene-training task requires tool/build/runtime evidence";
+                    packet.control_loop_stage = "Planner queued: sandbox scene-harness task requires tool/build/runtime evidence";
                     const std::string packetDir = epochengine::ai::stage_iteration_packet(packet);
                     if (packetDir.empty())
                     {
-                        push_editor_log(editor, "[ai] Failed to stage sandbox scene-training task.");
+                        push_editor_log(editor, "[ai] Failed to stage sandbox scene-harness task.");
                     }
                     else
                     {
-                        push_editor_log(editor, "[ai] Staged sandbox scene-training task.");
-                        push_editor_log(editor, std::string("[ai] Sandbox training packet path: ") + packetDir);
+                        push_editor_log(editor, "[ai] Staged sandbox scene-harness task.");
+                        push_editor_log(editor, std::string("[ai] Sandbox harness packet path: ") + packetDir);
                         append_project_note(
                             editor,
-                            "Sandbox Scene Training Task Staged",
+                            "Sandbox Scene Harness Task Staged",
                             std::string("Packet staged at ") + packetDir,
                             "Use this for visible OS AI scene-edit/test review; reject answers without evidence paths or visible state changes.");
                     }
@@ -8982,7 +8982,7 @@ namespace epochengine
                         ? "Harness ran selected script and captured editor before/after evidence."
                         : "Harness failed; inspect script build/run logs.";
 
-                    epochengine::ai::append_mcp_capture(epochengine::ai::McpCaptureRecord{
+                    epochengine::ai::append_tool_trace(epochengine::ai::McpCaptureRecord{
                         .server = "editor",
                         .tool = "ai-tool-harness",
                         .prompt = std::string("Build and run selected editor tooling script: ") + editor.activeScript,
@@ -9019,7 +9019,7 @@ namespace epochengine
                 }
             }
 
-            if (inspectorSandboxControls || inspectorAssistantControls || inspectorTrainingControls)
+            if (inspectorSandboxControls || inspectorAssistantControls || inspectorEvidenceControls)
             {
                 if (gui::button("Stage Evidence Packet", { inspectorWidth, 30.0f }))
                     (void)stageInspectorPacket(
@@ -9056,34 +9056,34 @@ namespace epochengine
                 }
             }
 
-            if (inspectorTrainingControls)
+            if (inspectorEvidenceControls)
             {
-                if (gui::button("Capture Tool Evidence Snapshot", { inspectorWidth, 30.0f }))
+                if (gui::button("Capture Tool Trace", { inspectorWidth, 30.0f }))
                 {
-                    epochengine::ai::append_mcp_capture(inspectorMcpRecord());
-                    push_editor_log(editor, "[ai] Captured tool evidence training snapshot.");
-                    push_editor_log(editor, std::string("[ai] Tool evidence path: ") + inspectorTraining.mcp_capture_jsonl);
+                    epochengine::ai::append_tool_trace(inspectorMcpRecord());
+                    push_editor_log(editor, "[ai] Captured structured tool trace.");
+                    push_editor_log(editor, std::string("[ai] Tool evidence path: ") + inspectorEvidence.tool_trace_jsonl);
                     append_project_note(
                         editor,
-                        "Capture Tool Evidence Snapshot",
-                        std::string("Tool evidence snapshot appended to ") + inspectorTraining.mcp_capture_jsonl,
-                        "Review captured evidence before curating or promoting training data.");
+                        "Capture Tool Trace",
+                        std::string("Tool evidence snapshot appended to ") + inspectorEvidence.tool_trace_jsonl,
+                        "Review captured evidence before reviewing it as session evidence.");
                 }
 
-                if (gui::button("Promote Tool Evidence Snapshot", { inspectorWidth, 30.0f }))
+                if (gui::button("Review Tool Trace", { inspectorWidth, 30.0f }))
                 {
-                    const bool ok = epochengine::ai::promote_mcp_capture_record(inspectorMcpRecord(), "epoch_mcp_curated");
+                    const bool ok = epochengine::ai::promote_tool_trace_record(inspectorMcpRecord(), "epoch_mcp_curated");
                     push_editor_log(editor, ok
                         ? "[ai] Promoted tool evidence snapshot into Engine/ai/datasets/curated."
                         : "[ai] Failed to promote tool evidence snapshot.");
                     if (ok)
                     {
-                        push_editor_log(editor, std::string("[ai] Curated dataset root: ") + inspectorTraining.curated_dataset_root);
+                        push_editor_log(editor, std::string("[ai] Curated dataset root: ") + inspectorEvidence.curated_dataset_root);
                         append_project_note(
                             editor,
-                            "Promote Tool Evidence Snapshot",
-                            std::string("Promoted into ") + inspectorTraining.curated_dataset_root,
-                            "Promotion happened from the Inspector Training controls.");
+                            "Review Tool Trace",
+                            std::string("Promoted into ") + inspectorEvidence.curated_dataset_root,
+                            "Review happened from the Inspector Evidence controls.");
                     }
                 }
 
@@ -9100,7 +9100,7 @@ namespace epochengine
                         ? "[ai] Promoted scene eval into Engine/ai/evals."
                         : "[ai] Failed to promote scene eval.");
                     if (ok)
-                        push_editor_log(editor, std::string("[ai] Eval suite root: ") + inspectorTraining.eval_root);
+                        push_editor_log(editor, std::string("[ai] Eval suite root: ") + inspectorEvidence.eval_root);
                 }
 
                 if (gui::button("Promote Latest Chat Pair", { inspectorWidth, 30.0f }))
@@ -9759,7 +9759,7 @@ namespace epochengine
 
                 gui::label("Forest Factory");
                 gui::wrapped_label(
-                    "Place vegetation authored in Plant Lab into the active project scene. Placed objects belong to this scene and remain available to selection, Focus, save, and Run/Build.",
+                    "Browse custom trees and forest configurations authored in Plant Lab, then place or configure them in the active project scene. Placed objects remain available to selection, Focus, save, and Run/Build.",
                     centerWidth);
                 gui::property_row("[forest] Source designer", "Plant Lab", 148.0f);
                 gui::property_row("[forest] Placed assets", std::to_string(placedAssets), 148.0f);
@@ -9826,9 +9826,9 @@ namespace epochengine
 
                 gui::label("Plant Lab");
                 gui::wrapped_label(
-                    "Dedicated temporal graph and parametric vegetation designer. Plant Lab owns its live preview and emits Forest Factory assets for explicit placement in standard project scenes.",
+                    "Separate temporal graph and parametric tree/forest authoring editor. Plant Lab owns custom tree assets, forest configurations, and live preview; Forest Factory later places those outputs in standard project scenes.",
                     centerWidth);
-                gui::property_row("[forest] Editor name", std::string(epochengine::forest::kForestFactoryWorkspace), 148.0f);
+                gui::property_row("[forest] Editor name", std::string(epochengine::forest::kPlantLabWorkspace), 148.0f);
                 gui::property_row("[forest] Technique", std::string(epochengine::forest::kForestFactoryTechnique), 148.0f);
                 gui::property_row("[forest] Reference repo", std::string(epochengine::forest::kForestFactoryReferenceRepo), 148.0f);
                 gui::property_row("[forest] Package", forestPackage != epochengine::package_registry::kKnownPackages.end() ? std::string(forestPackage->displayName) : std::string("(missing registry entry)"), 148.0f);
@@ -9865,7 +9865,7 @@ namespace epochengine
                         voxelSummary.foliageCells),
                     148.0f);
                 gui::wrapped_label(
-                    "Plant Lab emits deterministic temporal graph segments, foliage clusters, and a voxel occupancy summary for future LOD, hit detection, navigation, lighting, and path-trace queries. Forest Factory placement and package activation remain explicit standard-editor actions.",
+                    "Plant Lab authors deterministic tree assets and forest configurations with temporal graph, foliage, and voxel LOD intent. Forest Factory browsing, placement, scene overrides, and package activation remain explicit standard-editor actions.",
                     centerWidth);
                 std::array<gui::InlineButtonSpec, 3> forestActions{ {
                     { "Regenerate Temporal Graph", 228.0f },
@@ -10173,7 +10173,7 @@ namespace epochengine
             }
             case EditorMainSurface::AISandbox:
             {
-                const auto training = epochengine::ai::default_training_paths();
+                const auto evidence = epochengine::ai::default_evidence_paths();
                 const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
                 const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
                 const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
@@ -10184,7 +10184,7 @@ namespace epochengine
                     buildLog,
                     outputExe,
                     pathsManifest,
-                    training,
+                    evidence,
                     latestPrompt,
                     latestReply);
                 const std::array<bool, 5> aiLoopReady{{
@@ -10213,7 +10213,7 @@ namespace epochengine
                 gui::property_row("[ai] Selected model", epochengine::ai::active_model_name().empty() ? "(none selected)" : epochengine::ai::active_model_name(), 108.0f);
                 gui::property_row("[ai] Model client", epochengine::ai::model_connection_status(), 108.0f);
                 gui::property_row("[ai] Status", editor.aiContinuousBuildStatus, 108.0f);
-                gui::property_row("[ai] Captures", display_project_path(training.local_capture_jsonl), 108.0f);
+                gui::property_row("[ai] Captures", display_project_path(evidence.model_exchange_jsonl), 108.0f);
                 gui::property_row("[ai] Loop stage", ai_control_loop_stage(gateStatus), 108.0f);
                 gui::property_row("[ai] Evidence", gateStatus.packetEvidenceSummary, 108.0f);
                 gui::label("AI Loop Visualizer");
@@ -10313,7 +10313,7 @@ namespace epochengine
 
                 const auto renderCanvas = build_render_graph_surface(
                     editor.systems,
-                    epochengine::ai::current_provider_mode() == epochengine::ai::ProviderMode::McpOperations);
+                    true);
                 const auto taskCanvas = build_task_graph_surface(
                     editor.systems,
                     liveThreadCount,
@@ -10741,7 +10741,7 @@ namespace epochengine
         case EditorWorkspaceTab::AI:
         {
             const auto manifest = epochengine::ai::active_model_manifest();
-            const auto training = epochengine::ai::default_training_paths();
+            const auto evidence = epochengine::ai::default_evidence_paths();
             const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
             const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
             const std::filesystem::path pathsManifest = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "project.paths.txt";
@@ -10753,7 +10753,7 @@ namespace epochengine
                 buildLog,
                 outputExe,
                 pathsManifest,
-                training,
+                evidence,
                 latestPrompt,
                 latestReply);
             const std::string loopStage = ai_control_loop_stage(gateStatus);
@@ -10777,10 +10777,10 @@ namespace epochengine
                 addEvidence(pathsManifest.string());
                 addEvidence(buildLog.string());
                 addEvidence(outputExe.string());
-                addEvidence(training.local_capture_jsonl);
-                addEvidence(training.mcp_capture_jsonl);
-                addEvidence(training.curated_dataset_root);
-                addEvidence(training.eval_root);
+                addEvidence(evidence.model_exchange_jsonl);
+                addEvidence(evidence.tool_trace_jsonl);
+                addEvidence(evidence.curated_dataset_root);
+                addEvidence(evidence.eval_root);
                 addEvidence(manifest.manifest_path);
 
                 return epochengine::ai::IterationPacket{
@@ -10806,14 +10806,14 @@ namespace epochengine
                     .provider_summary = epochengine::ai::active_provider_summary(),
                     .active_model = manifest.display_name,
                     .manifest_path = manifest.manifest_path,
-                    .workspace_root = training.workspace_root,
-                    .raw_capture_path = training.local_capture_jsonl,
-                    .mcp_capture_path = training.mcp_capture_jsonl,
-                    .checkpoint_root = training.checkpoint_root,
-                    .model_root = training.model_root,
-                    .cache_root = training.cache_root,
-                    .curated_dataset_root = training.curated_dataset_root,
-                    .eval_root = training.eval_root,
+                    .workspace_root = evidence.workspace_root,
+                    .model_exchange_path = evidence.model_exchange_jsonl,
+                    .tool_trace_path = evidence.tool_trace_jsonl,
+                    .session_root = evidence.session_root,
+                    .model_root = evidence.model_root,
+                    .cache_root = evidence.cache_root,
+                    .curated_dataset_root = evidence.curated_dataset_root,
+                    .eval_root = evidence.eval_root,
                     .evidence_paths = std::move(evidencePaths)
                 };
             };
@@ -11765,7 +11765,7 @@ namespace epochengine
                 gui::property_row("Manifest", path_exists(forestFactoryPackage) ? "staged" : "missing", 104.0f);
                 gui::property_row("Profile", path_exists(forestFactoryProfile) ? "staged" : "missing", 104.0f);
                 gui::wrapped_label(
-                    "Forest Factory is the editor-facing Forest Factory workspace. Installing stages the project manifest/profile; generated project assets still require visible scene-use approval.",
+                    "Forest Factory is the placement portal inside the standard editor. Installing stages project references; authored tree assets and forest configurations remain Plant Lab outputs and scene use stays explicit.",
                     contentWidth - 20.0f);
             }
             else if (selectedPackage && selectedPackage->requiresExplicitNetworkApproval)

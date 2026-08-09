@@ -69,7 +69,7 @@ module ai.engine;
 
 import ai.runtime;
 import ai.dataset;
-import ai.train;
+import ai.session;
 import ai.mcp;
 import ai.eval;
 import core.log;
@@ -1698,9 +1698,9 @@ namespace epochengine::ai
             " - Put only the final answer in assistant content; do not include or rely on hidden reasoning.\n"
             " - Stay grounded in the current Epoch editor/project context.\n"
             " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the OS AI harness what to do next.\n"
-            " - The local MCP/control layer can teach and steer the selected model while it operates; keep responses useful for that training loop instead of acting like a generic assistant.\n"
-            " - If asked whether Epoch, OS AI, training, or self-iteration is working, do not claim success from confidence alone; cite the visible tool, build, scene, packet, log, or capture evidence that proves it.\n"
-            " - Treat sandboxed 3D scene-training as a learning exercise: name the intended scene edit, the tool/action to run, the evidence to watch, and the pass/fail condition.\n"
+            " - MCP tool calls are bounded requests; Epoch validates and executes them, then returns structured evidence to the selected model.\n"
+            " - If asked whether Epoch, OS AI, or a development pass is working, cite the visible tool, build, scene, packet, log, or capture evidence that proves it.\n"
+            " - Treat sandboxed 3D scene work as a harness exercise: name the intended edit, tool call, evidence, and pass/fail condition.\n"
             " - Keep self-iteration separate from normal ProjectLauncher game/software editing unless the operator explicitly asks to change the project/editor scene.\n"
             " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
 
@@ -1802,12 +1802,12 @@ namespace epochengine::ai
         }
         {
             std::string msg = "AI raw capture path: ";
-            msg += local_capture_jsonl_path();
+            msg += local_model_exchange_jsonl_path();
             core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
         {
             std::string msg = "AI tool evidence capture path: ";
-            msg += local_mcp_capture_jsonl_path();
+            msg += local_tool_trace_jsonl_path();
             core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
         }
     }
@@ -1858,19 +1858,19 @@ namespace epochengine::ai
         return "Engine/ai/manifests";
     }
 
-    std::string local_capture_jsonl_path()
+    std::string local_model_exchange_jsonl_path()
     {
-        return default_workspace_root() + "/auto_train.jsonl";
+        return default_workspace_root() + "/model_exchange.jsonl";
     }
 
-    std::string local_mcp_capture_jsonl_path()
+    std::string local_tool_trace_jsonl_path()
     {
-        return default_workspace_root() + "/mcp_capture.jsonl";
+        return default_workspace_root() + "/tool_trace.jsonl";
     }
 
-    std::string local_checkpoint_root()
+    std::string local_session_root()
     {
-        return default_workspace_root() + "/ai/checkpoints";
+        return default_workspace_root() + "/ai/sessions";
     }
 
     std::string local_model_root()
@@ -2134,29 +2134,19 @@ namespace epochengine::ai
         manifest.available = g_localTransport == LocalInferenceTransport::LlamaCppCli
             ? direct_runtime_status().ready() : !selectedModel.empty();
 
-        switch (g_providerMode)
-        {
-        case ProviderMode::McpOperations:
-            manifest.display_name = selectedModel;
-            manifest.manifest_path = manifests_root() + "/local_mcp_control.json";
-            break;
-        case ProviderMode::OpenSourceLocal:
-        default:
-            manifest.display_name = selectedModel;
-            manifest.manifest_path = manifests_root() + "/open_source_model_provider.json";
-            break;
-        }
+        manifest.display_name = selectedModel;
+        manifest.manifest_path = manifests_root() + "/open_source_model_provider.json";
 
         return manifest;
     }
 
-    TrainingPaths default_training_paths()
+    EvidencePaths default_evidence_paths()
     {
-        return TrainingPaths{
+        return EvidencePaths{
             .workspace_root = default_workspace_root(),
-            .local_capture_jsonl = local_capture_jsonl_path(),
-            .mcp_capture_jsonl = local_mcp_capture_jsonl_path(),
-            .checkpoint_root = local_checkpoint_root(),
+            .model_exchange_jsonl = local_model_exchange_jsonl_path(),
+            .tool_trace_jsonl = local_tool_trace_jsonl_path(),
+            .session_root = local_session_root(),
             .model_root = local_model_root(),
             .cache_root = local_cache_root(),
             .curated_dataset_root = curated_datasets_root(),
@@ -2164,58 +2154,22 @@ namespace epochengine::ai
         };
     }
 
-    void append_training_sample(std::string_view prompt, std::string_view answer, std::string_view source)
+    void append_tool_trace(const McpCaptureRecord& record)
     {
-        if (!is_promotable_assistant_text(answer))
-        {
-            core::log::warn("ai", "Skipped non-promotable local training capture.");
-            return;
-        }
-
-        const TrainingPaths paths = default_training_paths();
-        const std::filesystem::path workspaceDir = paths.workspace_root;
-        const std::filesystem::path checkpointDir = paths.checkpoint_root;
-        const std::filesystem::path modelDir = paths.model_root;
-        const std::filesystem::path cacheDir = paths.cache_root;
-        std::error_code ec;
-        std::filesystem::create_directories(workspaceDir, ec);
-        std::filesystem::create_directories(checkpointDir, ec);
-        std::filesystem::create_directories(modelDir, ec);
-        std::filesystem::create_directories(cacheDir, ec);
-
-        const std::filesystem::path file = paths.local_capture_jsonl;
+        const EvidencePaths paths = default_evidence_paths();
+        const std::filesystem::path file = paths.tool_trace_jsonl;
 
         std::ostringstream oss;
         oss << "{";
-        oss << "\"prompt\":\"" << json_escape(prompt) << "\",";
-        oss << "\"answer\":\"" << json_escape(answer) << "\",";
-        oss << "\"source\":\"" << json_escape(source) << "\"";
-        oss << "}\n";
-        if (append_jsonl_line(file, trim(oss.str())))
-        {
-            static bool loggedCapturePath = false;
-            if (!loggedCapturePath)
-            {
-                loggedCapturePath = true;
-                std::string msg = "AI appended local training capture: ";
-                msg += file.string();
-                core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
-            }
-        }
-    }
-
-    void append_mcp_capture(const McpCaptureRecord& record)
-    {
-        const TrainingPaths paths = default_training_paths();
-        const std::filesystem::path file = paths.mcp_capture_jsonl;
-
-        std::ostringstream oss;
-        oss << "{";
+        oss << "\"session_id\":\"" << json_escape(record.session_id) << "\",";
+        oss << "\"call_id\":\"" << json_escape(record.call_id) << "\",";
         oss << "\"server\":\"" << json_escape(record.server) << "\",";
         oss << "\"tool\":\"" << json_escape(record.tool) << "\",";
         oss << "\"prompt\":\"" << json_escape(record.prompt) << "\",";
         oss << "\"normalized_output\":\"" << json_escape(record.normalized_output) << "\",";
-        oss << "\"source_path\":\"" << json_escape(record.source_path) << "\"";
+        oss << "\"source_path\":\"" << json_escape(record.source_path) << "\",";
+        oss << "\"state\":" << static_cast<unsigned>(record.state) << ",";
+        oss << "\"error\":" << static_cast<unsigned>(record.error);
         oss << "}";
 
         if (append_jsonl_line(file, oss.str()))
@@ -2224,7 +2178,7 @@ namespace epochengine::ai
             if (!loggedCapturePath)
             {
                 loggedCapturePath = true;
-                std::string msg = "AI appended tool evidence capture: ";
+                std::string msg = "AI appended structured tool trace: ";
                 msg += file.string();
                 core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
             }
@@ -2266,9 +2220,9 @@ namespace epochengine::ai
         json << "  \"active_model\": \"" << json_escape(packet.active_model) << "\",\n";
         json << "  \"manifest_path\": \"" << json_escape(packet.manifest_path) << "\",\n";
         json << "  \"workspace_root\": \"" << json_escape(packet.workspace_root) << "\",\n";
-        json << "  \"raw_capture_path\": \"" << json_escape(packet.raw_capture_path) << "\",\n";
-        json << "  \"mcp_capture_path\": \"" << json_escape(packet.mcp_capture_path) << "\",\n";
-        json << "  \"checkpoint_root\": \"" << json_escape(packet.checkpoint_root) << "\",\n";
+        json << "  \"model_exchange_path\": \"" << json_escape(packet.model_exchange_path) << "\",\n";
+        json << "  \"tool_trace_path\": \"" << json_escape(packet.tool_trace_path) << "\",\n";
+        json << "  \"session_root\": \"" << json_escape(packet.session_root) << "\",\n";
         json << "  \"model_root\": \"" << json_escape(packet.model_root) << "\",\n";
         json << "  \"cache_root\": \"" << json_escape(packet.cache_root) << "\",\n";
         json << "  \"curated_dataset_root\": \"" << json_escape(packet.curated_dataset_root) << "\",\n";
@@ -2298,11 +2252,11 @@ namespace epochengine::ai
         task << "- Active model: " << (packet.active_model.empty() ? "(none selected)" : packet.active_model) << "\n";
         task << "- Manifest: " << packet.manifest_path << "\n";
         task << "- Workspace root: " << packet.workspace_root << "\n";
-        task << "- Raw capture: " << packet.raw_capture_path << "\n";
-        task << "- Tool evidence capture: " << packet.mcp_capture_path << "\n";
+        task << "- Raw capture: " << packet.model_exchange_path << "\n";
+        task << "- Tool evidence capture: " << packet.tool_trace_path << "\n";
         task << "- Curated datasets: " << packet.curated_dataset_root << "\n";
         task << "- Eval root: " << packet.eval_root << "\n";
-        task << "- Checkpoints: " << packet.checkpoint_root << "\n";
+        task << "- Checkpoints: " << packet.session_root << "\n";
         task << "- Local models: " << packet.model_root << "\n";
         task << "- Cache: " << packet.cache_root << "\n\n";
         task << "## Project Snapshot\n";
@@ -2358,7 +2312,7 @@ namespace epochengine::ai
         return append_jsonl_line(datasetFile, oss.str());
     }
 
-    bool promote_mcp_capture_record(const McpCaptureRecord& record, std::string_view dataset_name)
+    bool promote_tool_trace_record(const McpCaptureRecord& record, std::string_view dataset_name)
     {
         std::string source = record.server;
         if (!record.tool.empty())
@@ -2501,7 +2455,7 @@ namespace epochengine::ai
         const auto reply = g_engineAi->submit(user_text);
         if (is_promotable_assistant_text(reply.text))
         {
-            append_mcp_capture(McpCaptureRecord{
+            append_tool_trace(McpCaptureRecord{
                 .server = "local-openai-compatible",
                 .tool = "chat",
                 .prompt = user_text,

@@ -30,7 +30,7 @@ architecture. It does not create a second design.
   but cannot consume the 2D delivery schedule unless shared contracts regress.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
-- The `v0.88.69` release/updater remains sealed unless explicitly reopened.
+- The `v0.89.01` release/updater remains sealed unless explicitly reopened.
 
 ## Current Foundation
 
@@ -60,8 +60,9 @@ Current source or in-progress contracts include:
 - direct launcher entry into three shared-spine editor applications: standard
   Editor, Plant Lab, and GUI Editor, each with separate source, canonical scene,
   surface/camera/dock policy, and authoring/run permissions;
-- a standard-editor Forest Factory workflow for browsing Plant Lab outputs,
-  importing vegetation objects/assets, and placing them into project scenes;
+- a shared temporal morphology spine used by the separate Plant Lab authoring
+  editor for custom trees and forest configurations, with Forest Factory kept
+  as the placement portal inside the standard editor;
 - one baked primary context slot in the Windows parent host, with secondary
   diagnostic contexts and routed pane popouts remaining optional;
 - a validated procedural Engine Arcade cabinet and camera-facing preview

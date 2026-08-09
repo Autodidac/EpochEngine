@@ -111,6 +111,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.tier0.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.document.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.morphology.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx" />
@@ -287,7 +288,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.dataset.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.train.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.session.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.eval.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.engine.ixx" />

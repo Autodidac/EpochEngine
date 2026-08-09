@@ -277,7 +277,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         {
             .id = kLocalAiLlamaCppRuntimePackageId,
             .displayName = "Local AI llama.cpp Runtime",
-            .summary = "Human-approved C++23 helper package for locating or building llama-cli and connecting an operator-licensed GGUF model directly to Epoch without a local HTTP server.",
+            .summary = "Plan-only C++23 helper for locating llama-cli and validating a future pinned, human-approved offline build; GGUF licensing stays separate and no server is started.",
             .kind = PackageKind::DownloadableSource,
             .activation = ActivationMode::DownloadedOptIn,
             .requiresHumanBuildGate = true,
@@ -302,7 +302,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         {
             .id = "research_forest_temporal_graph",
             .displayName = "Research Forest Factory Temporal Graph",
-            .summary = "Plant Lab source/prototype lineage used as Forest Factory reference material before production promotion.",
+            .summary = "Operator-owned Plant Lab authoring lineage for reusable tree assets and forest configurations consumed later by the standard-editor Forest Factory placement portal.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
             .externalSourceRepo = kForestFactoryReferenceRepo,

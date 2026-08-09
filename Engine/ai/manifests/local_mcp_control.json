@@ -1,10 +1,24 @@
 {
-  "id": "local-mcp-control",
-  "display_name": "Local MCP Control Layer",
-  "provider": "local-mcp-control",
-  "endpoint": "workspace/mcp_capture.jsonl",
-  "model_selection": "operator-selected-model",
+  "id": "epoch-mcp-tool-protocol",
+  "display_name": "Epoch MCP Tool Protocol",
+  "provider": "operator-selected-model-independent",
+  "transport": "in-process-registry",
+  "trace": "workspace/tool_trace.jsonl",
+  "model_selection": "operator-selected-external-model",
+  "network_listener": false,
   "repo_safe_manifest": true,
-  "local_weights_only": true,
-  "status": "active"
+  "status": "protocol-foundation",
+  "implemented": [
+    "tool-registry",
+    "capability-validation",
+    "operator-approval-gates",
+    "cancellation",
+    "bounded-calls-and-results",
+    "structured-evidence"
+  ],
+  "pending": [
+    "model-tool-call-parser",
+    "multi-step-dispatch",
+    "stdio-adapter"
+  ]
 }

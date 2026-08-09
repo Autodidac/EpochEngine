@@ -41,12 +41,14 @@ module;
 
 export module forest.factory;
 
+import authoring.morphology;
 import voxel.field;
 
 export namespace epochengine::forest
 {
     inline constexpr std::string_view kForestFactoryPackageId = "engine_forest_factory";
-    inline constexpr std::string_view kForestFactoryWorkspace = "Forest Factory";
+    inline constexpr std::string_view kPlantLabWorkspace = "Plant Lab";
+    inline constexpr std::string_view kForestFactoryWorkspace = "Forest Factory Placement Portal";
     inline constexpr std::string_view kForestFactoryTechnique = "Temporal graph / parametric L-system";
     inline constexpr std::string_view kForestFactoryReferenceRepo =
         "https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab";
@@ -309,6 +311,85 @@ export namespace epochengine::forest
         return profile;
     }
 
+    using MorphologyGraph = epochengine::authoring::morphology::Graph;
+    using MorphologySample = epochengine::authoring::morphology::Sample;
+    using MorphologyVoxelLodPlan = epochengine::authoring::morphology::VoxelLodPlan;
+
+    [[nodiscard]] inline epochengine::authoring::morphology::Recipe morphology_recipe(
+        const ForestFactoryProfile& profile) noexcept
+    {
+        namespace morphology = epochengine::authoring::morphology;
+        auto recipe = morphology::default_recipe(morphology::Domain::plant);
+        recipe.dimension = profile.previewMode == ForestPreviewMode::Mode2D
+            ? morphology::DimensionMode::planar_2d
+            : morphology::DimensionMode::spatial_3d;
+        recipe.duration_seconds = (std::max)(0.001f, profile.temporal.durationSeconds);
+        recipe.growth.seed = profile.seed.value;
+        recipe.growth.generations = (std::max)(1u,
+            (std::min)(profile.branch.levels, profile.config.maxBranchDepth));
+        recipe.growth.children_per_node = (std::max)(1u, profile.branch.childrenPerNode);
+        recipe.growth.root_length_meters = profile.config.targetHeightMeters * 0.36f;
+        recipe.growth.segment_length_meters = profile.branch.branchLengthMeters;
+        recipe.growth.length_decay = (std::clamp)(
+            0.58f + profile.branch.curve * 0.24f,
+            0.45f,
+            0.94f);
+        recipe.growth.root_radius_meters = profile.config.trunkRadiusMeters;
+        recipe.growth.radius_decay = 0.72f;
+        recipe.growth.branch_angle_degrees = profile.branch.angleDegrees;
+        recipe.growth.spread_degrees = profile.branch.spreadDegrees;
+        recipe.growth.twist_degrees = profile.branch.twistDegrees;
+        recipe.growth.jitter_degrees = profile.branch.jitterDegrees;
+        recipe.growth.upward_bias = profile.branch.upwardBend + 0.52f;
+        recipe.growth.outward_bias = profile.branch.outwardBias;
+        recipe.growth.sag = profile.branch.sag;
+        recipe.growth.sapling_pre_age_seconds = recipe.duration_seconds * 0.04f;
+        recipe.growth.generation_delay_seconds = recipe.duration_seconds * 0.54f /
+            static_cast<float>(recipe.growth.generations + 1u);
+        recipe.growth.segment_growth_seconds = recipe.duration_seconds * 0.32f;
+        recipe.growth.terminal_delay_seconds = recipe.duration_seconds * 0.02f;
+        recipe.growth.terminal_growth_seconds = recipe.duration_seconds * 0.12f;
+        recipe.limits.maximum_depth = profile.config.maxBranchDepth;
+        recipe.limits.maximum_children_per_node = 8u;
+        recipe.limits.maximum_nodes = (std::max)(2u,
+            (std::min)(profile.config.maxPreviewSegments + 1u, 16'384u));
+        recipe.limits.maximum_segments = (std::max)(1u,
+            (std::min)(profile.config.maxPreviewSegments, 16'383u));
+        recipe.limits.maximum_terminals =
+            static_cast<std::uint32_t>(kForestPreviewMaxLeaves);
+        return recipe;
+    }
+
+    [[nodiscard]] inline MorphologyGraph build_morphology_graph(
+        const ForestFactoryProfile& profile)
+    {
+        return epochengine::authoring::morphology::build_graph(
+            morphology_recipe(profile));
+    }
+
+    [[nodiscard]] inline MorphologySample sample_morphology_graph(
+        const ForestFactoryProfile& profile,
+        const MorphologyGraph& graph)
+    {
+        const float duration = (std::max)(0.001f, profile.temporal.durationSeconds);
+        const float sampleTime = profile.temporal.reverse
+            ? duration - (std::clamp)(profile.temporal.timeSeconds, 0.0f, duration)
+            : profile.temporal.timeSeconds;
+        return epochengine::authoring::morphology::sample(graph, sampleTime);
+    }
+
+    [[nodiscard]] inline MorphologyVoxelLodPlan plan_morphology_lods(
+        const MorphologyGraph& graph,
+        epochengine::voxel::LodPolicy policy = {},
+        float baseCellSizeMeters = 0.05f,
+        std::uint8_t levelCount = 5u)
+    {
+        return epochengine::authoring::morphology::plan_voxel_lods(
+            graph,
+            policy,
+            baseCellSizeMeters,
+            levelCount);
+    }
     [[nodiscard]] constexpr bool valid(const ForestFactoryConfig& config) noexcept
     {
         return config.maxBranchDepth > 0u &&
@@ -393,107 +474,65 @@ export namespace epochengine::forest
         };
     }
 
-    [[nodiscard]] inline ForestPreviewGeometry build_preview_geometry(const ForestFactoryProfile& profile) noexcept
+    [[nodiscard]] inline ForestPreviewGeometry build_preview_geometry(
+        const ForestFactoryProfile& profile)
     {
         ForestPreviewGeometry geometry{};
-        const float duration = (std::max)(0.001F, profile.temporal.durationSeconds);
-        const float temporalProgress = profile.temporal.reverse
-            ? (1.0F - clamp01(profile.temporal.timeSeconds / duration))
-            : clamp01(profile.temporal.timeSeconds / duration);
-        const float growth = (std::max)(0.18F, temporalProgress);
-        const std::uint32_t levels = (std::min)(profile.branch.levels, profile.config.maxBranchDepth);
-        const std::uint32_t children = (std::max)(1u, profile.branch.childrenPerNode);
-        const float trunkHeight = profile.config.targetHeightMeters * 0.36F * growth;
+        const MorphologyGraph graph = build_morphology_graph(profile);
+        if (!epochengine::authoring::morphology::validate(graph))
+            return geometry;
+        const MorphologySample sample = sample_morphology_graph(profile, graph);
 
-        auto add_segment = [&](epochengine::voxel::Float3 start, epochengine::voxel::Float3 direction, float length, float radius, std::uint32_t depth) noexcept -> std::size_t
+        for (const auto& segment : sample.segments)
         {
             if (geometry.segmentCount >= geometry.segments.size())
-                return geometry.segmentCount;
-
-            const auto index = geometry.segmentCount++;
-            geometry.segments[index] = ForestPreviewSegment{
-                .start = start,
-                .end = add(start, scale(normalize(direction), length)),
-                .radius = radius,
-                .depth = depth
-            };
-            return index;
-        };
-
-        const auto trunkIndex = add_segment({ 0.0F, 0.0F, 0.0F }, { 0.0F, 1.0F, 0.0F }, trunkHeight, profile.config.trunkRadiusMeters, 0u);
-        (void)trunkIndex;
-
-        std::array<std::size_t, kForestPreviewMaxSegments> frontier{};
-        std::array<std::size_t, kForestPreviewMaxSegments> nextFrontier{};
-        std::size_t frontierCount = geometry.segmentCount > 0u ? 1u : 0u;
-        frontier[0] = 0u;
-
-        for (std::uint32_t depth = 1u; depth <= levels && frontierCount > 0u; ++depth)
-        {
-            std::size_t nextCount = 0u;
-            const float depthFactor = static_cast<float>(depth) / static_cast<float>((std::max)(1u, levels));
-            const float length = profile.branch.branchLengthMeters * growth * (1.0F - depthFactor * 0.42F);
-            const float radius = (std::max)(0.025F, profile.config.trunkRadiusMeters * (1.0F - depthFactor * 0.72F));
-            const float pitch = degrees_to_radians(profile.branch.angleDegrees + profile.branch.upwardBend * 18.0F);
-            const float upward = (std::max)(0.12F, std::sin(pitch) + profile.branch.upwardBend * (1.0F - depthFactor));
-            const float outward = (std::max)(0.08F, std::cos(pitch) * profile.branch.outwardBias);
-
-            for (std::size_t parentIndex = 0u; parentIndex < frontierCount; ++parentIndex)
-            {
-                const auto& parent = geometry.segments[frontier[parentIndex]];
-                for (std::uint32_t child = 0u; child < children; ++child)
-                {
-                    const float childRatio = children > 1u
-                        ? static_cast<float>(child) / static_cast<float>(children)
-                        : 0.0F;
-                    const float yawDegrees =
-                        childRatio * profile.branch.spreadDegrees
-                        + profile.branch.twistDegrees * static_cast<float>(depth)
-                        + deterministic_jitter(profile.seed, depth, child) * profile.branch.jitterDegrees;
-                    const float yaw = degrees_to_radians(yawDegrees);
-                    const epochengine::voxel::Float3 direction = normalize({
-                        std::cos(yaw) * outward,
-                        upward - profile.branch.sag * depthFactor,
-                        std::sin(yaw) * outward
-                    });
-                    const std::size_t segmentIndex = add_segment(parent.end, direction, length, radius, depth);
-                    if (segmentIndex >= geometry.segments.size() || segmentIndex >= geometry.segmentCount)
-                        continue;
-                    if (nextCount < nextFrontier.size())
-                        nextFrontier[nextCount++] = segmentIndex;
-                }
-            }
-
-            frontier = nextFrontier;
-            frontierCount = nextCount;
+                break;
+            geometry.segments[geometry.segmentCount++] = ForestPreviewSegment{
+                .start = segment.start,
+                .end = segment.end,
+                .radius = (std::max)(
+                    segment.radius_start_meters,
+                    segment.radius_end_meters),
+                .depth = segment.depth};
         }
 
-        const float leafSize = profile.preset == ForestPreset::Fern ? 0.34F : (profile.preset == ForestPreset::Bush ? 0.28F : 0.24F);
-        const std::uint32_t leafCopies = profile.preset == ForestPreset::Fern ? 3u : 1u;
-        for (std::size_t i = 1u; i < geometry.segmentCount && geometry.leafCount < geometry.leaves.size(); ++i)
+        const float presetLeafScale = profile.preset == ForestPreset::Fern
+            ? 0.34f
+            : (profile.preset == ForestPreset::Bush ? 0.28f : 0.24f);
+        const std::uint32_t leafCopies =
+            profile.preset == ForestPreset::Fern ? 3u : 1u;
+        for (const auto& terminal : sample.terminals)
         {
-            const auto& segment = geometry.segments[i];
-            if (segment.depth + 1u < levels)
-                continue;
-
-            for (std::uint32_t copy = 0u; copy < leafCopies && geometry.leafCount < geometry.leaves.size(); ++copy)
+            for (std::uint32_t copy = 0u;
+                copy < leafCopies && geometry.leafCount < geometry.leaves.size();
+                ++copy)
             {
-                const float offset = (static_cast<float>(copy) - static_cast<float>(leafCopies - 1u) * 0.5F) * 0.08F;
+                const float offset =
+                    (static_cast<float>(copy) -
+                        static_cast<float>(leafCopies - 1u) * 0.5f) * 0.08f;
+                const std::uint32_t sourceSegment = geometry.segmentCount == 0u
+                    ? 0u
+                    : (std::min)(terminal.source.index,
+                        static_cast<std::uint32_t>(geometry.segmentCount - 1u));
                 geometry.leaves[geometry.leafCount++] = ForestPreviewLeaf{
-                    .position = add(segment.end, { offset, 0.02F * static_cast<float>(copy), -offset }),
-                    .size = leafSize,
-                    .sourceSegment = static_cast<std::uint32_t>(i)
-                };
+                    .position = add(terminal.position, {
+                        offset,
+                        0.02f * static_cast<float>(copy),
+                        -offset}),
+                    .size = (std::max)(presetLeafScale, terminal.scale_meters),
+                    .sourceSegment = sourceSegment};
             }
         }
 
         geometry.stats = ForestPreviewStats{
             .nodes = static_cast<std::uint32_t>(geometry.segmentCount + 1u),
-            .branches = static_cast<std::uint32_t>(geometry.segmentCount > 0u ? geometry.segmentCount - 1u : 0u),
+            .branches = static_cast<std::uint32_t>(
+                geometry.segmentCount > 0u ? geometry.segmentCount - 1u : 0u),
             .leaves = static_cast<std::uint32_t>(geometry.leafCount),
-            .vertices = static_cast<std::uint32_t>(geometry.segmentCount * 12u + geometry.leafCount * 6u),
-            .triangles = static_cast<std::uint32_t>(geometry.segmentCount * 8u + geometry.leafCount * 2u)
-        };
+            .vertices = static_cast<std::uint32_t>(
+                geometry.segmentCount * 12u + geometry.leafCount * 6u),
+            .triangles = static_cast<std::uint32_t>(
+                geometry.segmentCount * 8u + geometry.leafCount * 2u)};
         return geometry;
     }
 

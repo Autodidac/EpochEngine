@@ -1,119 +1,63 @@
 {
   "$schema": "https://epoch.local/schemas/ai_control_loop.schema.json",
-  "name": "epoch_engine_ai_control_loop",
-  "status": "phase3_4_control_foundation",
-  "summary": "Evidence-gated loop for turning editor/project/sandbox work into build-verified AI training and eval material around explicit open-source OS model lanes, without shipping bundled model weights or confusing the normal game/software editor with the self-iteration sandbox.",
-  "roles": {
-    "runtime_agent": "Epoch OS-model memory/tool/verifier/eval harness",
-    "control_bot": "local MCP/control",
-    "primary_coder_model": "operator-selected Qwen/Qwen3.6-27B lane for coding, planning, and larger review tasks",
-    "fast_reviewer_model": "operator-selected nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16 lane for fast local review, status, and bounded helper tasks",
-    "creative_model_lanes": "operator-selected Bonsai Image 4B, Wan2.1 VACE, and TRELLIS.2 package lanes for future image/video/3D asset workflows; Bonsai Ternary 4B is the preferred local image lane, Bonsai Binary 4B is the low-memory option, and FLUX.2 Klein 4B remains a higher-memory fallback"
+  "name": "epoch_operator_model_tool_harness",
+  "status": "mcp_protocol_foundation_manual_dispatch",
+  "summary": "Operator-selected model plus bounded Epoch-owned project and engine tools. No internal model, model training, hidden watcher, or autonomous source write-through exists.",
+  "model_runtime": {
+    "ownership": "operator-selected external asset",
+    "transports": ["openai-compatible-local-api", "direct-llama-cli"],
+    "automatic_selection": false,
+    "internal_training": false,
+    "starts_server": false
   },
-  "model_source_pages": [
-    "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
-    "https://huggingface.co/Qwen/Qwen3.6-27B",
-    "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
-    "https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit",
-    "https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
-    "https://huggingface.co/microsoft/TRELLIS.2-4B",
-    "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B"
-  ],
-  "technique_policy": [
-    "Keep the loop simple and inspectable: planner, executor, builder, verifier, and gate are workflow stages, not unsupervised autonomous agents.",
-    "Local OpenAI-compatible models may propose plans, review project output, and help label captures only after an operator explicitly selects a model.",
-    "Tool use is mediated by Epoch: models request actions, the editor/tool harness executes them, and tool outputs are captured as evidence before another model step.",
-    "Game, tool, app, and server project generation is allowed as reviewable artifact creation, but bypass-capable runtime activation is human-gated: no model may create or run a self-accessible server, hidden control app, listener, port bind, or serving behavior automatically.",
-    "Local game and tool tests are allowed through approved editor/MCP/harness controls when visible, evidence-captured, and not exposing a new model-accessible network/control surface.",
-    "Raw model output is not training truth. Generated replies can become training data only after they are tied to real tool/build/scene evidence and reviewed.",
-    "Avoid recursive self-training on unverified generated data. Synthetic records must be labeled, mixed with real evidence, and gated by evals before promotion.",
-    "Maintain separate training and eval material so prompt/model changes can be measured instead of trusted by feel."
-  ],
-  "selected_model_policy": {
-    "gui_activation": "model discovery is separate from activation; the operator must choose a model before chat/tooling is active",
-    "cli_activation": "non-GUI self-iteration may use EPOCH_AI_MODEL, EPOCH_OPENAI_MODEL, LM_STUDIO_MODEL, or OPENAI_MODEL as an explicit operator-selected reviewer model",
-    "download_activation": "Qwen, Nemotron, Bonsai, FLUX, Wan, and TRELLIS weights download only on explicit operator demand into executable-local cache/models",
-    "project_inclusion": "generated projects may include model weights only after explicit package opt-in with license and notice review",
-    "forbidden_fallback": "do not activate the first discovered model automatically"
+  "mcp": {
+    "transport": "in-process-registry",
+    "network_listener": false,
+    "implemented": ["tool-descriptors", "capabilities", "calls", "results", "errors", "evidence", "cancellation", "budgets", "approval-validation"],
+    "pending": ["model-tool-call-parser", "multi-step-dispatch", "stdio-adapter"]
   },
   "loop": [
     {
       "stage": "planner",
-      "input": "active project, script, manifest, task prompt, and current roadmap intent",
-      "output": "staged task packet"
+      "input": "operator request plus active project and evidence",
+      "output": "bounded proposed tool calls"
     },
     {
       "stage": "executor",
-      "input": "reviewed packet plus explicit operator request",
-      "output": "candidate project/script/repo change"
+      "input": "validated call plus required operator approval",
+      "output": "one tool result and evidence attachments"
     },
     {
       "stage": "builder",
-      "input": "candidate change",
-      "output": "child-project build log and output executable evidence"
+      "input": "approved project or engine change",
+      "output": "compiler log and artifact evidence"
     },
     {
       "stage": "verifier",
-      "input": "build output, runtime captures, MCP captures, eval prompts, and retained logs",
-      "output": "pass/fail evidence and normalized review notes"
+      "input": "tool results, tests, captures, diagnostics, and diffs",
+      "output": "pass, fail, cancellation, or blocked evidence"
     },
     {
       "stage": "gate",
-      "input": "verifier output plus human/operator review",
-      "output": "curated dataset/eval promotion or discard"
+      "input": "verifier output and operator review",
+      "output": "accept, revise, or discard"
     }
   ],
-  "active_engine_hooks": [
-    "AI workspace domain selector",
-    "Self-Iteration Sandbox status surface",
-    "self-iteration build watcher toggle",
-    "AI workspace editor tool harness",
-    "single-flight async child-project build",
-    "post-build iteration packet staging",
-    "raw chat capture JSONL",
-    "MCP capture JSONL",
-    "curated dataset promotion",
-    "scene eval promotion",
-    "sandbox scene-training packet staging"
+  "implemented_hooks": [
+    "operator-selected local model transport",
+    "validated project shell creation",
+    "project save and lifecycle build/run",
+    "script build/run tool harness",
+    "generated project self-test",
+    "structured tool trace",
+    "bounded session packet",
+    "visible diagnostics"
   ],
-  "promotion_rules": [
-    "Never promote raw captures directly into committed datasets.",
-    "Never treat failed builds as positive training examples unless explicitly labeled as failure-analysis data.",
+  "policy": [
     "Never allow blind repo write-through from planner or executor output.",
-    "Never accept OS AI saying it is working fine unless the answer cites visible tool, build, scene, packet, log, or capture evidence.",
-    "Reject helper-model plans that cite no staged packet, build log, output executable, verifier result, runtime capture, or eval gate.",
-    "Keep self-iteration sandbox tasks separate from normal ProjectLauncher game/software editing unless the operator explicitly approves a project/editor change.",
-    "Apps and server projects may be generated or edited as artifacts, but any app/service that exposes a model-accessible control surface, server process, listener, port, or network-serving mode requires an explicit human run/enable action.",
-    "Every promoted record must be traceable to a staged packet, build log, runtime capture, MCP capture, or eval case.",
-    "Local checkpoints stay in workspace AI folders; downloaded OS model weights stay under executable-local cache/models unless packaged intentionally after human approval."
-  ],
-  "runtime_permission_gates": {
-    "game_project_generation": "allowed_after_operator_request",
-    "local_game_or_tool_test_run": "allowed_through_visible_editor_or_mcp_harness",
-    "app_project_generation": "allowed_as_reviewable_artifact_after_operator_request",
-    "server_project_generation": "allowed_after_operator_request",
-    "server_process_launch": "explicit_human_enable_required",
-    "network_listener_or_port_bind": "explicit_human_enable_required",
-    "model_accessible_control_surface": "explicit_human_enable_required",
-    "hidden_or_automatic_bypass_app": "forbidden",
-    "automatic_server_creation_and_run": "forbidden"
-  },
-  "next_required_hooks": [
-    "structured tool-call schema for editor/project actions",
-    "packet replay runner",
-    "verifier result JSON",
-    "eval score history",
-    "watchable sandbox 3D scene-training runner",
-    "scene-state diff capture for object edits",
-    "tool-schema replay against local MCP/control",
-    "curated failure-analysis dataset lane",
-    "script/tool action replay against editor state",
-    "GUI feature verifier for theme selection, menu capture, and pane popout routes"
-  ],
-  "gui_feature_verifier": [
-    "Theme passes must exercise System Light/Dark, Light, and Dark by name and reject changes that only affect native window chrome.",
-    "Command-menu passes must click every visible Window-menu show/hide/reset row and prove visible top-layer menus own the click before toolbar, context selector, scene, or dock controls behind them.",
-    "Pane popout passes must start from real pane title-bar chrome, use a drag/release gesture, verify the detached route shows cloned pane content, hide the docked source pane while the route is open, restore it on Dock Back/Close/native close, preserve normal font rendering after spawn, and reject duplicate editor shells or generic GUI test windows.",
-    "Runtime GUI evidence should prefer engine-owned screenshots/captures from asset-bearing output folders and should run serially to avoid contaminated focus/drag data."
+    "Normal chat is not automatically captured or treated as training data.",
+    "Every write, child process, engine-source edit, and network-sensitive action requires the declared capability and visible approval.",
+    "No model may commit, push, release, start a listener, or grant itself permission.",
+    "Tool completion requires structured result and evidence, not model confidence."
   ]
 }

@@ -1,5 +1,29 @@
 # Epoch Changelog
 
+## [v0.89.03] - Temporal morphology and operator-model MCP foundation
+
+- Add `authoring.morphology` with stable generation-checked nodes, segments,
+  terminals, deterministic plant/vascular/respiratory/electrical/coral recipes,
+  per-organ temporal sampling, and tiered voxel LOD plans.
+- Adapt the existing Forest Factory default-preview contract to the shared
+  morphology sampler while preserving product ownership: Plant Lab remains the
+  separate custom-tree/forest-configuration editor and Forest Factory remains
+  the placement portal inside the standard editor.
+- Record operator-authorized Plant Lab provenance and remove the obsolete
+  third-party license blocker.
+- Replace the capture-only MCP placeholder with bounded tool descriptors, calls,
+  results, errors, capability/approval gates, cancellation, session budgets,
+  project create/save/build/run/test/capture/diagnostic registry, and contract
+  proof.
+- Remove automatic chat-to-training capture and the dead MCP-as-model-provider
+  branch. Rename the Training workspace and storage contracts to explicit
+  Evidence/session/model-exchange/tool-trace terminology.
+- Keep local inference operator-selected through OpenAI-compatible or direct
+  `llama-cli` transport; no internal LLM, weight training, hidden server, or
+  autonomous repo write-through is claimed.
+- Make the EpochEngineExtensions llama.cpp package honestly plan-only and
+  require an immutable upstream revision before any future approved fetch.
+- Preserve the operator's `run.bat` default change from Raylib to OpenGL.
 ## [v0.89.02] - Post-release source advance
 
 - Advance development source after publishing the verified `v0.89.01` Windows

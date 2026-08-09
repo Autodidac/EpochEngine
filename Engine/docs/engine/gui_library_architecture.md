@@ -230,7 +230,7 @@ safe visible fallback until the font pipeline owns full UTF-8 shaping. UTF-8
 continuation bytes are skipped so unsupported glyphs collapse instead of
 turning one source banner into a wall of question marks. That is a stability
 rule, not the final typography goal: mojibake in AI notes or local model replies
-must be normalized before display/training capture, and hidden reasoning text
+must be normalized before display or explicit session capture, and hidden reasoning text
 must never be promoted to chat output.
 
 ## Script Editing Gate

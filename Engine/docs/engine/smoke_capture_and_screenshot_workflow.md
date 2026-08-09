@@ -201,8 +201,8 @@ Expected smoke behavior:
 - if the selected model rejects explicit reasoning configuration, the
   request path should retry without the reasoning field instead of surfacing an
   empty reply
-- raw capture lands in `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
-- MCP/control snapshots can land in `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
+- explicitly retained model exchange lands in `Engine/examples/ConsoleApplication1/workspace/model_exchange.jsonl`
+- MCP tool traces can land in `Engine/examples/ConsoleApplication1/workspace/tool_trace.jsonl`
 - no `Engine/examples/ConsoleApplication1/workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
 - if the local helper set changes, re-probe `/v1/models` and require an
@@ -222,7 +222,7 @@ Expected smoke behavior:
   pass as a model/API configuration failure for user-visible chat. Do not
   surface or harvest hidden reasoning as an assistant answer; retry with a
   content-producing model/configuration or keep the pass as private diagnostic
-  evidence outside training promotion.
+  private diagnostic evidence outside reviewed session traces.
 - if allowed helpers split text and vision strengths, keep the selected editor
   model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage

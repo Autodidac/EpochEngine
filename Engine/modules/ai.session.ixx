@@ -3,16 +3,16 @@ module;
 #include <string>
 #include <vector>
 
-export module ai.train;
+export module ai.session;
 
 export namespace epochengine::ai
 {
-    struct TrainingPaths
+    struct EvidencePaths
     {
         std::string workspace_root{};
-        std::string local_capture_jsonl{};
-        std::string mcp_capture_jsonl{};
-        std::string checkpoint_root{};
+        std::string model_exchange_jsonl{};
+        std::string tool_trace_jsonl{};
+        std::string session_root{};
         std::string model_root{};
         std::string cache_root{};
         std::string curated_dataset_root{};
@@ -40,9 +40,9 @@ export namespace epochengine::ai
         std::string active_model{};
         std::string manifest_path{};
         std::string workspace_root{};
-        std::string raw_capture_path{};
-        std::string mcp_capture_path{};
-        std::string checkpoint_root{};
+        std::string model_exchange_path{};
+        std::string tool_trace_path{};
+        std::string session_root{};
         std::string model_root{};
         std::string cache_root{};
         std::string curated_dataset_root{};

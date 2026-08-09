@@ -79,7 +79,8 @@ export namespace epochengine::voxel
         Biome = 1u << 5u,
         Water = 1u << 6u,
         Atmosphere = 1u << 7u,
-        ProceduralVegetation = 1u << 8u
+        ProceduralMorphology = 1u << 8u,
+        ProceduralVegetation = ProceduralMorphology
     };
 
     [[nodiscard]] constexpr CellSemantic operator|(CellSemantic lhs, CellSemantic rhs) noexcept
@@ -227,6 +228,11 @@ export namespace epochengine::voxel
     [[nodiscard]] constexpr ChunkKey make_chunk_key(ChunkCoord coord, std::uint8_t lodLevel) noexcept
     {
         return {coord, lodLevel, stable_chunk_hash(coord, lodLevel)};
+    }
+
+    [[nodiscard]] constexpr bool morphology_semantics(CellSemantic semantics) noexcept
+    {
+        return has_semantic(semantics, CellSemantic::ProceduralMorphology);
     }
 
     [[nodiscard]] constexpr bool vegetation_semantics(CellSemantic semantics) noexcept

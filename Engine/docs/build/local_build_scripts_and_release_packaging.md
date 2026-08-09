@@ -421,15 +421,13 @@ Downloaded model/package artifacts stay out of Git:
 
 Git-safe staging capture paths include:
 
-- `Engine/examples/ConsoleApplication1/workspace/auto_train.jsonl`
-- `Engine/examples/ConsoleApplication1/workspace/mcp_capture.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/model_exchange.jsonl`
+- `Engine/examples/ConsoleApplication1/workspace/tool_trace.jsonl`
 
-`append_training_sample(...)` and MCP capture writes are raw/staging data, not
-automatic curated truth. Review them, delete bad or outdated samples when the
-training direction changes, and only then promote intentional records into
-`Engine/ai/datasets/curated/` or `Engine/ai/evals/`.
-
-When using local helpers through LM Studio direct responses, prefer the
+Explicit `model_exchange.jsonl` and `tool_trace.jsonl` writes are session
+evidence, not automatic model training. Review or delete stale traces and
+promote only intentional fixtures into `Engine/ai/evals/` or reviewed evidence
+sets.When using local helpers through LM Studio direct responses, prefer the
 lightest visible-output settings the loaded model actually accepts. For helpers
 that expose reasoning controls, disable reasoning when supported; for
 non-reasoning models, omit the reasoning field entirely.
@@ -486,7 +484,7 @@ When the helper returns mostly reasoning text or stalls:
 - prefer refining small helper drafts locally over waiting on long monolithic answers
 - if `content` is blank but `reasoning_content` contains useful-looking text,
   reject it as engine assistant output. Do not harvest hidden reasoning into
-  AI chat, MCP capture, local raw training capture, or curated datasets.
+  AI chat, explicit MCP tool traces, model exchanges, or reviewed eval fixtures.
 
 ## Related docs
 
