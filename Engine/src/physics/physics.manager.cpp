@@ -11,6 +11,7 @@ module;
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 #include <vector>
