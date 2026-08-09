@@ -3,6 +3,7 @@ module;
 
 #include <string>
 #include <utility>
+#include <vector>
 
 module editor.application;
 

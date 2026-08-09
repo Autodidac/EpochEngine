@@ -7,6 +7,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 module editor.application;
 

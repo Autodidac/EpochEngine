@@ -5,6 +5,7 @@
 module;
 
 #include <utility>
+#include <vector>
 
 module render.canvas2d_scene;
 

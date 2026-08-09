@@ -2,10 +2,12 @@
  * Epoch Engine
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <vector>
 
 import authoring.texture;
 

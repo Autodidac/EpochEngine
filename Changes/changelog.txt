@@ -21,6 +21,9 @@
   `core.format` text contract, migrate logger/editor/renderer/update call sites,
   and prove plain, padded, decimal, hexadecimal, pointer, and escaped formatting
   on MSVC and the Ubuntu 22.04 Clang/libstdc++ baseline.
+- Make module implementations and importers own the standard-library headers
+  needed by their exported container operations, and prove the complete engine
+  against Ubuntu 22.04 GCC 12/libstdc++12 before hosted package staging.
 - Ship the accumulated capability-tier foundation since v0.89.01: explicit
   sampled-image admission, project-scoped texture resources, immutable exact
   Canvas2D resource closure, deterministic texture artifacts, and stronger

@@ -41,6 +41,7 @@ module;
 #include <functional>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>

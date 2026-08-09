@@ -38,6 +38,7 @@ module;
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <source_location>
 #include <stdexcept>
 #include <string>

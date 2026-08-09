@@ -206,9 +206,10 @@ The working tree contains these current or in-progress foundations:
 
 These facts are contracts, not blanket runtime claims. Current checkpoint proof
 includes MSVC Debug/Release editor builds and contracts, the managed Clang 22
-full-engine Release build on the Ubuntu 22.04/GLIBC 2.35 baseline, all five
-no-display Linux engine CTests, the portable `core.format` contract, and 5/5
-standalone EpochGui feature tests. Operator evidence proves correct filled scene orientation
+full-engine Release build against GCC 12/libstdc++12 on the Ubuntu 22.04/GLIBC
+2.35 baseline, all five no-display Linux engine CTests, the portable
+`core.format` contract, and 5/5 standalone EpochGui feature tests. Operator
+evidence proves correct filled scene orientation
 in SDL3, SFML3, DirectX, and Software. Raylib/Vulkan orientation and repeated
 Vulkan replacement remain `Partial`. The seven Arcade sampled scene-surface
 implementations compile and pass build-safe contracts but remain `Partial` until

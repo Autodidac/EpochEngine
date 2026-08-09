@@ -12,6 +12,7 @@ module;
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 module editor.canvas2d_scene;
 
