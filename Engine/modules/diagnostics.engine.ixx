@@ -30,11 +30,12 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <mutex>
 #include <ostream>
 #include <sstream>
@@ -152,7 +153,7 @@ export namespace epochengine::diagnostics {
                 const std::string_view backend = backendName.empty() ? "Unknown" : backendName;
                 epochengine::logger::warn(
                     "Renderer",
-                    std::format("[{}] Slow frame {:.2f} ms (> {:.2f} ms)", backend, lastMs, effectiveSlowFrameMs));
+                    epochengine::format_text("[{}] Slow frame {:.2f} ms (> {:.2f} ms)", backend, lastMs, effectiveSlowFrameMs));
             }
 
             return lastMs;

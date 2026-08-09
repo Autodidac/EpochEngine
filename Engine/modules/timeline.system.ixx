@@ -30,10 +30,11 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -320,7 +321,7 @@ export namespace epochengine::timeline
 
     [[nodiscard]] inline std::string describe_event(const TimelineEvent& event)
     {
-        return std::format(
+        return epochengine::format_text(
             "{} @ {:.3f}s / frame {} -> {}",
             event_kind_name(event.kind),
             event.simulated_seconds,
@@ -469,7 +470,7 @@ export namespace epochengine::timeline
             {
                 return marker.visible;
             }));
-        return std::format(
+        return epochengine::format_text(
             "{} lanes | {} markers | {} visible",
             lanes.size(),
             markers.size(),
@@ -483,7 +484,7 @@ export namespace epochengine::timeline
         const TimelineViewConfig& view)
     {
         const auto metrics = make_view_metrics(state, tracks, events, view);
-        return std::format(
+        return epochengine::format_text(
             "timeline view {:.2f}-{:.2f}s | playhead x {:.1f} | events {} | tracks {}",
             metrics.visible_start_seconds,
             metrics.visible_end_seconds,

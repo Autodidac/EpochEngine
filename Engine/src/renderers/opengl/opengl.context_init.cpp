@@ -31,12 +31,13 @@
  // opengl.context.ixx
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <fstream>
 #include <iostream>
@@ -216,7 +217,7 @@ namespace epochengine::openglcontext
             {
                 const DWORD err = ::GetLastError();
                 if (err != ERROR_CLASS_ALREADY_EXISTS)
-                    throw std::runtime_error(std::format("[ OpenGL ] - RegisterClassExW failed (err={})", err));
+                    throw std::runtime_error(epochengine::format_text("[ OpenGL ] - RegisterClassExW failed (err={})", err));
             }
 
             s_registered = true;

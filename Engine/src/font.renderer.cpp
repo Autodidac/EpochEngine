@@ -30,13 +30,14 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 #undef STB_TRUETYPE_IMPLEMENTATION
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -103,13 +104,13 @@ namespace epochengine::font
 
         if (!load_and_bake_font(path, size_pt, baked_glyphs, metrics, kerning_pairs, raw_texture))
         {
-            logger::error("FontRenderer", std::format("Failed to bake font '{}' from '{}'", name, path));
+            logger::error("FontRenderer", epochengine::format_text("Failed to bake font '{}' from '{}'", name, path));
             return false;
         }
 
         if (raw_texture.empty())
         {
-            logger::error("FontRenderer", std::format("Baked texture for font '{}' is empty", name));
+            logger::error("FontRenderer", epochengine::format_text("Baked texture for font '{}' is empty", name));
             return false;
         }
 
@@ -130,7 +131,7 @@ namespace epochengine::font
         auto* registrar = atlasmanager::get_registrar(atlas_name);
         if (!registrar)
         {
-            logger::error("FontRenderer", std::format("Missing registrar for atlas '{}'", atlas_name));
+            logger::error("FontRenderer", epochengine::format_text("Missing registrar for atlas '{}'", atlas_name));
             return false;
         }
 
@@ -144,7 +145,7 @@ namespace epochengine::font
 
         if (!maybe_entry)
         {
-            logger::error("FontRenderer", std::format("Failed to pack font '{}' into shared atlas", name));
+            logger::error("FontRenderer", epochengine::format_text("Failed to pack font '{}' into shared atlas", name));
             return false;
         }
 
@@ -254,28 +255,28 @@ namespace epochengine::font
 
         if (size_pt <= 0.0f)
         {
-            logger::error("FontRenderer", std::format("Invalid font size '{}' requested for '{}'", size_pt, ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Invalid font size '{}' requested for '{}'", size_pt, ttf_path));
             return false;
         }
 
         auto font_buffer = read_file_binary(ttf_path);
         if (font_buffer.empty())
         {
-            logger::error("FontRenderer", std::format("Unable to read font file '{}'", ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Unable to read font file '{}'", ttf_path));
             return false;
         }
 
         const int font_offset = stbtt_GetFontOffsetForIndex(font_buffer.data(), 0);
         if (font_offset < 0)
         {
-            logger::error("FontRenderer", std::format("Invalid font offset for '{}'", ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Invalid font offset for '{}'", ttf_path));
             return false;
         }
 
         stbtt_fontinfo font{};
         if (!stbtt_InitFont(&font, font_buffer.data(), font_offset))
         {
-            logger::error("FontRenderer", std::format("Failed to initialise font info for '{}'", ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Failed to initialise font info for '{}'", ttf_path));
             return false;
         }
 
@@ -297,7 +298,7 @@ namespace epochengine::font
         stbtt_pack_context pack_context{};
         if (!stbtt_PackBegin(&pack_context, mono_bitmap.data(), pack_width, pack_height, pack_width, 3, nullptr))
         {
-            logger::error("FontRenderer", std::format("Failed to begin packing for font '{}'", ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Failed to begin packing for font '{}'", ttf_path));
             return false;
         }
 
@@ -335,7 +336,7 @@ namespace epochengine::font
         if (!stbtt_PackFontRanges(&pack_context, font_buffer.data(), 0, pack_ranges.data(), static_cast<int>(pack_ranges.size())))
         {
             stbtt_PackEnd(&pack_context);
-            logger::error("FontRenderer", std::format("Failed to pack glyph ranges for '{}'", ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Failed to pack glyph ranges for '{}'", ttf_path));
             return false;
         }
 
@@ -351,7 +352,7 @@ namespace epochengine::font
 
         if (max_x1 <= 0 || max_y1 <= 0)
         {
-            logger::error("FontRenderer", std::format("Packed bitmap for font '{}' is empty", ttf_path));
+            logger::error("FontRenderer", epochengine::format_text("Packed bitmap for font '{}' is empty", ttf_path));
             return false;
         }
 

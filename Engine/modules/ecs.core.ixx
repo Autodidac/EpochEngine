@@ -31,10 +31,11 @@
 // aecs.ixx â€” C++23 module conversion of aecs.hpp
 module;
 
+#include "core.format_text.hpp"
+
 #include <typeinfo>
 #include <string>
 #include <string_view>
-#include <format>
 #include <utility>
 #include <vector>
 #include <cassert>
@@ -108,10 +109,10 @@ namespace epochengine::ecs
             const auto ts = timing::getCurrentTimeString();
 
             R.log->log(
-                std::format(
+                epochengine::format_text(
                     "[ECS] {}{} entity={} at {}",
                     action,
-                    comp.empty() ? "" : std::format(":{}", comp),
+                    comp.empty() ? "" : epochengine::format_text(":{}", comp),
                     e,
                     ts));
 

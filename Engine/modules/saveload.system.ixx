@@ -30,13 +30,14 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <format>
 #include <span>
 #include <string>
 #include <string_view>
@@ -535,9 +536,9 @@ export namespace epochengine::saveload
             return plan.message;
 
         if (plan.capture_due)
-            return std::format("{} | capture due now | frame {} | {:.3f}s", mode_name(plan.mode), plan.current_frame, plan.current_seconds);
+            return epochengine::format_text("{} | capture due now | frame {} | {:.3f}s", mode_name(plan.mode), plan.current_frame, plan.current_seconds);
 
-        return std::format(
+        return epochengine::format_text(
             "{} | next frame {} | {:.3f}s | wait {}f / {:.3f}s",
             mode_name(plan.mode),
             plan.next_frame,
@@ -551,7 +552,7 @@ export namespace epochengine::saveload
         const epochengine::core::time::simulation_stats& stats)
     {
         const std::string safeProfile = profile.empty() ? std::string("editor_timeline") : std::string(profile);
-        return std::format("{}_frame_{:012}_t_{:.3f}", safeProfile, stats.frame_index, stats.simulated_seconds);
+        return epochengine::format_text("{}_frame_{:012}_t_{:.3f}", safeProfile, stats.frame_index, stats.simulated_seconds);
     }
 
     [[nodiscard]] inline std::string join_stream_path(std::string_view root, std::string_view leaf)
@@ -608,7 +609,7 @@ export namespace epochengine::saveload
 
     [[nodiscard]] inline std::string describe_retention(const StreamingSaveConfig& config)
     {
-        return std::format(
+        return epochengine::format_text(
             "rolling {} checkpoint{} | scene {} | timeline {} | packages {}",
             config.max_snapshots,
             config.max_snapshots == 1u ? "" : "s",
@@ -645,7 +646,7 @@ export namespace epochengine::saveload
         plan.include_scene = staged.include_scene;
         plan.include_timeline = staged.include_timeline;
         plan.include_packages = staged.include_packages;
-        plan.message = std::format(
+        plan.message = epochengine::format_text(
             "profile change {} -> {} | {} | {}",
             plan.from_profile_id,
             plan.to_profile_id,
@@ -660,7 +661,7 @@ export namespace epochengine::saveload
         if (!plan.valid)
             return plan.message.empty() ? "No streaming-save profile change staged." : plan.message;
 
-        return std::format(
+        return epochengine::format_text(
             "{} -> {} | {} | {} | max {}",
             plan.from_profile_id,
             plan.to_profile_id,
@@ -674,7 +675,7 @@ export namespace epochengine::saveload
         if (!record.valid)
             return "No checkpoint record staged.";
 
-        return std::format(
+        return epochengine::format_text(
             "{} | {} | frame {} | {:.3f}s | {} keys | {} bytes",
             record.stream_profile,
             record.label,
@@ -701,7 +702,7 @@ export namespace epochengine::saveload
         if (!approval.approved)
             return "Writer gate blocked: human approval is required.";
 
-        return std::format(
+        return epochengine::format_text(
             "Writer gate approved by {}: {}",
             approval.approved_by.empty() ? "operator" : approval.approved_by,
             approval.reason.empty() ? "checkpoint persistence" : approval.reason);
@@ -709,7 +710,7 @@ export namespace epochengine::saveload
 
     [[nodiscard]] inline std::string checkpoint_payload_hash_text(std::uint64_t hash)
     {
-        return std::format("{:016X}", hash);
+        return epochengine::format_text("{:016X}", hash);
     }
 
     [[nodiscard]] inline std::string checkpoint_manifest_line(const StreamingCheckpointRecord& record)
@@ -717,7 +718,7 @@ export namespace epochengine::saveload
         if (!record.valid)
             return "checkpoint invalid";
 
-        return std::format(
+        return epochengine::format_text(
             "checkpoint \"{}\" path \"{}\" mode \"{}\" frame {} time {:.6f} scene_bytes {} timeline_keys {}",
             record.label,
             record.output_path,
@@ -732,7 +733,7 @@ export namespace epochengine::saveload
         const StreamingCheckpointWritePlan& plan,
         const StreamingCheckpointPackage& package)
     {
-        return std::format(
+        return epochengine::format_text(
             "epoch_checkpoint 1\n"
             "label \"{}\"\n"
             "snapshot \"{}\"\n"
@@ -838,7 +839,7 @@ export namespace epochengine::saveload
         if (!validate_checkpoint_package(package))
             return "No valid checkpoint package staged.";
 
-        return std::format(
+        return epochengine::format_text(
             "{} | hash {} | {}",
             checkpoint_record_summary(package.record),
             checkpoint_payload_hash_text(package.scene_text_hash),
@@ -850,7 +851,7 @@ export namespace epochengine::saveload
         if (!plan.valid)
             return plan.message.empty() ? std::string("No checkpoint write plan staged.") : plan.message;
 
-        return std::format(
+        return epochengine::format_text(
             "write plan | snapshot {} | manifest {} | scene {}",
             plan.snapshot_path,
             plan.manifest_path,
@@ -862,7 +863,7 @@ export namespace epochengine::saveload
         if (!plan.valid)
             return plan.message.empty() ? std::string("No checkpoint restore plan staged.") : plan.message;
 
-        return std::format(
+        return epochengine::format_text(
             "restore plan | checkpoint {} | snapshot {} | scene {}",
             plan.checkpoint_label,
             plan.snapshot_path,
@@ -895,7 +896,7 @@ export namespace epochengine::saveload
             plan.prune_snapshot_paths.push_back(records[index].output_path);
         }
 
-        plan.message = std::format("Retention plan prunes {} old checkpoint{}.", pruneCount, pruneCount == 1u ? "" : "s");
+        plan.message = epochengine::format_text("Retention plan prunes {} old checkpoint{}.", pruneCount, pruneCount == 1u ? "" : "s");
         return plan;
     }
 
@@ -904,7 +905,7 @@ export namespace epochengine::saveload
         if (!plan.valid)
             return "No checkpoint retention plan staged.";
 
-        return std::format(
+        return epochengine::format_text(
             "retention plan | retained {}/{} | prune {} | max {}",
             plan.retained_count,
             plan.source_count,
@@ -928,7 +929,7 @@ export namespace epochengine::saveload
         if (!ec && std::filesystem::exists(parent))
             return true;
 
-        errorMessage = std::format("Could not create checkpoint directory: {}", parent.generic_string());
+        errorMessage = epochengine::format_text("Could not create checkpoint directory: {}", parent.generic_string());
         return false;
     }
 
@@ -1002,7 +1003,7 @@ export namespace epochengine::saveload
         const StreamingSaveConfig& config,
         const StreamingSaveStatus& status)
     {
-        return std::format(
+        return epochengine::format_text(
             "{} | {} | {} snapshots | target {}",
             config.enabled ? "enabled" : "disabled",
             mode_name(config.mode),

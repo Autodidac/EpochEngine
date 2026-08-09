@@ -30,8 +30,9 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <functional>
-#include <format>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -71,7 +72,7 @@ export namespace epochengine::sdlcontext
     {
         const char* err = SDL_GetError();
         if (err && *err) {
-            logger::error("SDL", std::format("{}: {}", location, err));
+            logger::error("SDL", epochengine::format_text("{}: {}", location, err));
             SDL_ClearError();
         }
     }

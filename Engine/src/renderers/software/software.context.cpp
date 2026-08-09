@@ -1,8 +1,9 @@
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -155,14 +156,14 @@ namespace epochengine::anativecontext
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
         logger::info(
             "Epoch.Software",
-            std::format("Initialized. HWND={} ({}x{})", reinterpret_cast<std::uintptr_t>(sr.hwnd), sr.width, sr.height));
+            epochengine::format_text("Initialized. HWND={} ({}x{})", reinterpret_cast<std::uintptr_t>(sr.hwnd), sr.width, sr.height));
 #endif
 #else
         (void)parentWnd;
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
         logger::info(
             "Epoch.Software",
-            std::format("Initialized (non-Win32) {}x{}", sr.width, sr.height));
+            epochengine::format_text("Initialized (non-Win32) {}x{}", sr.width, sr.height));
 #endif
 #endif
 

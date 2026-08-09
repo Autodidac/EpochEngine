@@ -30,11 +30,12 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <array>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <format>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -134,7 +135,7 @@ namespace epochengine::vulkancontext
                 tried += epochengine::text::path_to_utf8(fs::absolute(p).lexically_normal());
             }
 
-            log_error(std::format("Failed to load texture image. Tried paths:{}", tried), loc);
+            log_error(epochengine::format_text("Failed to load texture image. Tried paths:{}", tried), loc);
             throw std::runtime_error("Failed to resolve Vulkan texture path.");
         }
 
@@ -314,7 +315,7 @@ namespace epochengine::vulkancontext
             }
             catch (const std::exception& ex)
             {
-                log_error(std::format("a_loadImage failed for path='{}': {}", texturePathUtf8, ex.what()), loc);
+                log_error(epochengine::format_text("a_loadImage failed for path='{}': {}", texturePathUtf8, ex.what()), loc);
                 throw std::runtime_error("Failed to load texture image '" + texturePathUtf8 + "': " + ex.what());
             }
         }();
@@ -323,8 +324,8 @@ namespace epochengine::vulkancontext
 
         const vk::DeviceSize imageSize = static_cast<vk::DeviceSize>(texture.pixels.size());
 
-        log_info(std::format("path='{}'", texturePathUtf8), loc);
-        log_info(std::format("size={}x{} bytes={}",
+        log_info(epochengine::format_text("path='{}'", texturePathUtf8), loc);
+        log_info(epochengine::format_text("size={}x{} bytes={}",
             static_cast<std::uint32_t>(texture.width),
             static_cast<std::uint32_t>(texture.height),
             static_cast<std::uint64_t>(imageSize)), loc);
@@ -338,12 +339,12 @@ namespace epochengine::vulkancontext
             vk::MemoryPropertyFlagBits::eHostVisible |
             vk::MemoryPropertyFlagBits::eHostCoherent);
 
-        log_info(std::format("staging-copy bytes={}", static_cast<std::uint64_t>(imageSize)), loc);
+        log_info(epochengine::format_text("staging-copy bytes={}", static_cast<std::uint64_t>(imageSize)), loc);
 
         auto [mapRes, mapped] = device->mapMemory(*stagingMemory, 0, imageSize);
         if (mapRes != vk::Result::eSuccess)
         {
-            log_error(std::format("mapMemory failed: {}", vk_result_to_string(mapRes)), loc);
+            log_error(epochengine::format_text("mapMemory failed: {}", vk_result_to_string(mapRes)), loc);
             throw std::runtime_error(
                 "Failed to map texture staging buffer (mapMemory returned " +
                 vk_result_to_string(mapRes) + ").");
@@ -372,7 +373,7 @@ namespace epochengine::vulkancontext
         auto [imgRes, img] = device->createImageUnique(imageInfo);
         if (imgRes != vk::Result::eSuccess)
         {
-            log_error(std::format("createImageUnique failed: {}", vk_result_to_string(imgRes)), loc);
+            log_error(epochengine::format_text("createImageUnique failed: {}", vk_result_to_string(imgRes)), loc);
             throw std::runtime_error("Failed to create Vulkan texture image (" + vk_result_to_string(imgRes) + ").");
         }
 
@@ -384,7 +385,7 @@ namespace epochengine::vulkancontext
             findMemoryType(memReq.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
         if (memType == UINT32_MAX)
         {
-            log_error(std::format("findMemoryType failed for DeviceLocal. bits=0x{:08X}",
+            log_error(epochengine::format_text("findMemoryType failed for DeviceLocal. bits=0x{:08X}",
                 static_cast<std::uint32_t>(memReq.memoryTypeBits)), loc);
             throw std::runtime_error("No suitable memory type for texture image (DeviceLocal).");
         }
@@ -396,7 +397,7 @@ namespace epochengine::vulkancontext
         auto [memRes, mem] = device->allocateMemoryUnique(allocInfo);
         if (memRes != vk::Result::eSuccess)
         {
-            log_error(std::format("allocateMemoryUnique failed: {}", vk_result_to_string(memRes)), loc);
+            log_error(epochengine::format_text("allocateMemoryUnique failed: {}", vk_result_to_string(memRes)), loc);
             throw std::runtime_error("Failed to allocate texture image memory (" + vk_result_to_string(memRes) + ").");
         }
 
@@ -405,7 +406,7 @@ namespace epochengine::vulkancontext
         const vk::Result bindRes = device->bindImageMemory(*textureImage, *textureImageMemory, 0);
         if (bindRes != vk::Result::eSuccess)
         {
-            log_error(std::format("bindImageMemory failed: {}", vk_result_to_string(bindRes)), loc);
+            log_error(epochengine::format_text("bindImageMemory failed: {}", vk_result_to_string(bindRes)), loc);
             throw std::runtime_error("Failed to bind texture image memory (" + vk_result_to_string(bindRes) + ").");
         }
 
@@ -792,7 +793,7 @@ namespace epochengine::vulkancontext
 
 #if EPOCH_ENABLE_BACKEND_UPLOAD_CONFIRMATION_LOGS && EPOCH_ENABLE_VULKAN_CONFIRMATION_LOGS
         log_info(
-            std::format(
+            epochengine::format_text(
                 "uploaded gui atlas '{}' ({}x{}, version={})",
                 atlas.name,
                 entry.width,

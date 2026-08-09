@@ -31,6 +31,8 @@
 // Engine/src/epochgui/gui.engine.cpp
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -39,7 +41,6 @@ module;
 #include <cstring>
 #include <cmath>
 #include <filesystem>
-#include <format>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -1340,7 +1341,7 @@ namespace epochengine::gui
                 {
                     logger::warn(
                         "Epoch.GUI",
-                        std::format(
+                        epochengine::format_text(
                             "Unable to locate GUI font '{}'. Place it in the resolved example/runtime assets/fonts path or set EPOCH_GUI_FONT_PATH.",
                             kDefaultFontFile));
                     g_missingFontPathWarningLogged = true;
@@ -1354,7 +1355,7 @@ namespace epochengine::gui
                 {
                     logger::error(
                         "Epoch.GUI",
-                        std::format("Failed to load GUI font from '{}'", fontPath.string()));
+                        epochengine::format_text("Failed to load GUI font from '{}'", fontPath.string()));
                     g_failedFontLoadWarningLogged = true;
                 }
                 return;
@@ -1367,7 +1368,7 @@ namespace epochengine::gui
                 {
                     logger::error(
                         "Epoch.GUI",
-                        std::format("Font renderer returned no asset for '{}'", g_resources.font.fontName));
+                        epochengine::format_text("Font renderer returned no asset for '{}'", g_resources.font.fontName));
                     g_missingFontAssetWarningLogged = true;
                 }
                 return;

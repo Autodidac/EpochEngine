@@ -20,7 +20,7 @@
                 ? static_cast<int>(std::ceil(editor_update_restart_seconds_remaining(editor)))
                 : 0;
             const std::string restartButtonLabel = restartReady
-                ? std::format("Restart Now ({}s)", restartCountdownSeconds)
+                ? epochengine::format_text("Restart Now ({}s)", restartCountdownSeconds)
                 : std::string{ "Restart Now" };
             const gui::Vec2 modalSize = updateConfirmModalSize;
             const gui::Vec2 modalPos{
@@ -101,7 +101,7 @@
             emitWrapped(updateStatusLine, 10.0f);
             if (restartReady)
             {
-                emitWrapped(std::format("Epoch will restart automatically in {} second{}.",
+                emitWrapped(epochengine::format_text("Epoch will restart automatically in {} second{}.",
                     restartCountdownSeconds,
                     restartCountdownSeconds == 1 ? "" : "s"), 10.0f);
             }
@@ -114,7 +114,7 @@
                     : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready";
                 const std::string progressStatus = sourceWorkerRunning
                     ? (!sourceCancelRequested && !sourceCancelAvailable)
-                        ? std::format(
+                        ? epochengine::format_text(
                             "{} - cancel update available in {}s",
                             editor_source_worker_progress_status(editor, sourceCancelRequested),
                             editor_source_cancel_arm_seconds_remaining(editor))
@@ -124,7 +124,7 @@
                     : updateRunning
                         ? "downloading / staging"
                         : restartReady
-                            ? std::format("auto restart in {}s", restartCountdownSeconds)
+                            ? epochengine::format_text("auto restart in {}s", restartCountdownSeconds)
                             : "waiting";
                 gui::set_cursor({ contentX, cursorY });
                 gui::progress_bar(gui::ProgressBarOptions{

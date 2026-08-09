@@ -56,7 +56,6 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <format>
 #include <functional>
 #include <memory>
 #include <mutex>

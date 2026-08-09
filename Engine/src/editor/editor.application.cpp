@@ -36,6 +36,8 @@
  **************************************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <include/scripting.epoch_api.h>
 
 #include <algorithm>
@@ -48,7 +50,6 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <future>
 #include <initializer_list>
@@ -969,12 +970,12 @@ namespace epochengine
             auto built = authoring::scene::SceneDocument::from_snapshot(snapshot);
             if (!built)
             {
-                state.projectStatus = std::format(
+                state.projectStatus = epochengine::format_text(
                     "Scene document rebuild blocked (code {}).",
                     static_cast<unsigned>(built.code));
                 push_editor_log(
                     state,
-                    std::format("[scene] {}: {}", reason, state.projectStatus));
+                    epochengine::format_text("[scene] {}: {}", reason, state.projectStatus));
                 return false;
             }
 
@@ -984,7 +985,7 @@ namespace epochengine
                 state.projectStatus = "Scene document projection failed after a validated rebuild.";
                 push_editor_log(
                     state,
-                    std::format("[scene] {}: {}", reason, state.projectStatus));
+                    epochengine::format_text("[scene] {}: {}", reason, state.projectStatus));
                 return false;
             }
             return true;
@@ -1058,7 +1059,7 @@ namespace epochengine
             if (!committed)
             {
                 (void)project_scene_document_into_editor(state);
-                state.projectStatus = std::format(
+                state.projectStatus = epochengine::format_text(
                     "Scene transaction '{}' rejected (code {}).",
                     label,
                     static_cast<unsigned>(committed.code));
@@ -1649,19 +1650,19 @@ namespace epochengine
         #include "editor.update_runtime.inl"
         [[nodiscard]] static std::string format_ms(double seconds)
         {
-            return std::format("{:.2f} ms", seconds * 1000.0);
+            return epochengine::format_text("{:.2f} ms", seconds * 1000.0);
         }
 
         [[nodiscard]] static std::string format_seconds(double seconds)
         {
-            return std::format("{:.2f} s", seconds);
+            return epochengine::format_text("{:.2f} s", seconds);
         }
 
         [[nodiscard]] static std::string format_rate(double dt_seconds)
         {
             if (dt_seconds <= 0.0)
                 return "0 Hz";
-            return std::format("{:.0f} Hz", 1.0 / dt_seconds);
+            return epochengine::format_text("{:.0f} Hz", 1.0 / dt_seconds);
         }
 
         [[nodiscard]] static epochengine::core::time::simulation_stats timeline_stats_from_editor(
@@ -1940,11 +1941,11 @@ namespace epochengine
         [[nodiscard]] static std::string compiler_identity()
         {
 #if defined(__clang__)
-            return std::format("Clang {}.{}.{}", __clang_major__, __clang_minor__, __clang_patchlevel__);
+            return epochengine::format_text("Clang {}.{}.{}", __clang_major__, __clang_minor__, __clang_patchlevel__);
 #elif defined(_MSC_VER)
-            return std::format("MSVC {}", _MSC_VER);
+            return epochengine::format_text("MSVC {}", _MSC_VER);
 #elif defined(__GNUC__)
-            return std::format("GCC {}.{}.{}", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
+            return epochengine::format_text("GCC {}.{}.{}", __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__);
 #else
             return "Unknown compiler";
 #endif
@@ -1952,7 +1953,7 @@ namespace epochengine
 
         [[nodiscard]] static std::string language_mode_summary()
         {
-            return std::format("__cplusplus={} (C++23 baseline; latest validation is optional)",
+            return epochengine::format_text("__cplusplus={} (C++23 baseline; latest validation is optional)",
                 static_cast<long long>(__cplusplus));
         }
 
@@ -1967,7 +1968,7 @@ namespace epochengine
 
         [[nodiscard]] static std::string feature_probe_summary()
         {
-            return std::format("expected={} stacktrace={} execution={} contracts={} reflection={}",
+            return epochengine::format_text("expected={} stacktrace={} execution={} contracts={} reflection={}",
                 epochengine::core::has_expected ? "yes" : "no",
                 epochengine::core::has_stacktrace ? "yes" : "no",
                 epochengine::core::has_std_execution ? "yes" : "no",
@@ -2518,7 +2519,7 @@ namespace epochengine
                     ++ordinal;
             }
 
-            return std::format("{}_{:02}", base, ordinal);
+            return epochengine::format_text("{}_{:02}", base, ordinal);
         }
 
         [[nodiscard]] std::array<float, 3> next_entity_position(const EditorState& state, float baseY = 0.5f)
@@ -2734,7 +2735,7 @@ namespace epochengine
             {
                 push_editor_log(
                     state,
-                    std::format(
+                    epochengine::format_text(
                         "[plant] Loaded {} preview entities for Plant Lab tree-asset authoring.",
                         generatedCount));
             }
@@ -2762,7 +2763,7 @@ namespace epochengine
                 if (seed.category != "PlantLabPreview")
                     continue;
                 auto entity = editor_entity_from_seed(seed);
-                entity.name = std::format(
+                entity.name = epochengine::format_text(
                     "ForestAsset_{:02}_{}",
                     assetOrdinal,
                     seed.name);
@@ -2783,7 +2784,7 @@ namespace epochengine
             if (!create_editor_scene_entities(
                     state,
                     std::move(placed),
-                    std::format("Place Forest Factory asset {:02}", assetOrdinal)))
+                    epochengine::format_text("Place Forest Factory asset {:02}", assetOrdinal)))
             {
                 push_editor_log(
                     state,
@@ -2793,13 +2794,13 @@ namespace epochengine
 
             state.surfaceSettleFrames =
                 (std::max)(state.surfaceSettleFrames, 2);
-            state.projectStatus = std::format(
+            state.projectStatus = epochengine::format_text(
                 "Placed Forest Factory asset {:02} with {} scene objects.",
                 assetOrdinal,
                 placedCount);
             push_editor_log(
                 state,
-                std::format(
+                epochengine::format_text(
                     "[forest] Placed ForestAsset_{:02} into the active 3D scene with {} persistent objects.",
                     assetOrdinal,
                     placedCount));
@@ -3387,12 +3388,12 @@ namespace epochengine
 
             const std::size_t selectedIndex = (std::min)(state.selectedEntity, state.entities.size() - 1u);
             const auto& entity = state.entities[selectedIndex];
-            const std::string positionText = std::format(
+            const std::string positionText = epochengine::format_text(
                 "({:.1f}, {:.1f}, {:.1f})",
                 entity.position[0],
                 entity.position[1],
                 entity.position[2]);
-            return std::format(
+            return epochengine::format_text(
                 "In Epoch editor, project '{}' has {} entities. Selected entity is '{}' of type '{}' at {}. Suggest one concrete next edit and one gameplay follow-up.",
                 state.projectName,
                 state.entities.size(),
@@ -3403,7 +3404,7 @@ namespace epochengine
 
         [[nodiscard]] std::string build_ai_self_iteration_prompt(const EditorState& state)
         {
-            return std::format(
+            return epochengine::format_text(
                 "Plan one safe Epoch self-iteration pass. Active project: '{}' ({}). Project root: '{}'. Active script: '{}'. Project status: '{}'. Build status: '{}'. Keep the plan evidence-gated, editor-visible, and separate from the game scene unless the operator approves a game/editor change.",
                 state.projectName,
                 state.projectId,
@@ -3421,7 +3422,7 @@ namespace epochengine
             const std::string selected = state.entities.empty()
                 ? std::string("(none)")
                 : (state.entities[selectedIndex].name + " [" + state.entities[selectedIndex].type + "]");
-            return std::format(
+            return epochengine::format_text(
                 "Create one sandboxed 3D scene-harness exercise for OS AI. The selected model must edit or inspect visible primitives in a sandbox scene, produce build/tool/runtime evidence, and report what changed. It must not answer that it is working fine unless it cites concrete evidence paths. Active project: '{}' ({}), selected object: {}, object count: {}, active script: '{}'.",
                 state.projectName,
                 state.projectId,
@@ -3612,12 +3613,12 @@ namespace epochengine
                     continue;
 
                 if (mutableEntities == 0)
-                    firstMutable = entity.name + " yaw=" + std::format("{:.1f}", entity.rotation[1]);
+                    firstMutable = entity.name + " yaw=" + epochengine::format_text("{:.1f}", entity.rotation[1]);
                 yawSum += entity.rotation[1];
                 ++mutableEntities;
             }
 
-            return std::format(
+            return epochengine::format_text(
                 "project={} script={} entities={} mutable={} first_mutable={} yaw_sum={:.1f}",
                 state.projectId,
                 state.activeScript,
@@ -3657,7 +3658,7 @@ namespace epochengine
             const std::size_t rotated = rotate_script_target_entities(it->second, deltaDegrees);
             push_editor_log(
                 it->second,
-                std::format("[script] Rotated {} scene entities by {:.1f} degrees.", rotated, deltaDegrees));
+                epochengine::format_text("[script] Rotated {} scene entities by {:.1f} degrees.", rotated, deltaDegrees));
         }
 
         int script_queue_model_load_callback(void* userData, const char* debugName, const char* modelPath)
@@ -3993,13 +3994,13 @@ namespace epochengine
             const auto recommendation = scoreboard.best_recommendation();
             if (!recommendation.available)
             {
-                return std::format(
+                return epochengine::format_text(
                     "No recommendation yet ({} accepted / {} rejected samples).",
                     scoreboard.accepted_sample_count(),
                     scoreboard.rejected_sample_count());
             }
 
-            return std::format(
+            return epochengine::format_text(
                 "{} recommended for editor default: avg {:.1f}, recent {:.1f}, {} samples ({} accepted / {} rejected).",
                 std::string{ epochengine::context::backend_name(recommendation.backend) },
                 recommendation.average_score,
@@ -4062,7 +4063,7 @@ namespace epochengine
             if (score.accepted)
             {
                 const auto summary = storage.passiveContextScores.summary_for(score.backend);
-                editor.passiveContextScoreStatus = std::format(
+                editor.passiveContextScoreStatus = epochengine::format_text(
                     "{} single-context score {:.1f} (avg {:.1f}, recent {:.1f}, {} samples, {:.1f} FPS, {:.2f} ms jitter).",
                     renderer_name(ctx->type),
                     score.score,
@@ -4074,7 +4075,7 @@ namespace epochengine
             }
             else
             {
-                editor.passiveContextScoreStatus = std::format(
+                editor.passiveContextScoreStatus = epochengine::format_text(
                     "Paused: {} ({} live windows, {} routed/floating panels).",
                     std::string{ epochengine::context::rejection_name(score.rejection) },
                     observation.liveWindowCount,
@@ -4146,7 +4147,7 @@ namespace epochengine
             const auto candidate =
                 epochengine::capability::renderer_subsystem_profile_for(kind);
             const auto admission = renderer_admission(kind, policy);
-            std::string summary = std::format(
+            std::string summary = epochengine::format_text(
                 "{} | {} {}-{}",
                 policy.id,
                 epochengine::capability::admission_status_label(admission.status),
@@ -4165,7 +4166,7 @@ namespace epochengine
         {
             const auto budgets = epochengine::capability::renderer_profile_for(kind)
                 .recommended_budgets;
-            return std::format(
+            return epochengine::format_text(
                 "{}x{} | CPU {:.1f} ms | GPU {:.1f} ms | {} MiB local",
                 budgets.max_w,
                 budgets.max_h,
@@ -4180,7 +4181,7 @@ namespace epochengine
             const auto profile = renderer_capability_profile(ctx);
             const auto report = epochengine::renderer_capability_report_for(
                 renderer_backend_kind(ctx));
-            return std::format(
+            return epochengine::format_text(
                 "{}-{} | profile {} | presentation {}",
                 epochengine::capability::tier_code(profile.tier),
                 epochengine::capability::backend_code(profile.backend),
@@ -4238,7 +4239,7 @@ namespace epochengine
             const auto kind = renderer_backend_kind(ctx);
             const auto report = epochengine::renderer_capability_report_for(kind);
 
-            return std::format(
+            return epochengine::format_text(
                 "desc {} | graph {} | hook {} | live {} | presentation {} | sampled {} | scene surface {}",
                 epochengine::renderer_capability_status_label(report.descriptor_contract),
                 epochengine::renderer_capability_status_label(report.build_graph_proof),
@@ -4600,7 +4601,7 @@ namespace epochengine
 
         [[nodiscard]] std::string vec3_text(const std::array<float, 3>& value)
         {
-            return std::format("({:.1f}, {:.1f}, {:.1f})", value[0], value[1], value[2]);
+            return epochengine::format_text("({:.1f}, {:.1f}, {:.1f})", value[0], value[1], value[2]);
         }
 
         [[nodiscard]] std::string ellipsize(std::string_view text, std::size_t max_chars)
@@ -4637,7 +4638,7 @@ namespace epochengine
             if (!ctx)
                 return "13.5";
 
-            return std::format("{:.1f}", epochengine::previewgrid::camera_distance_for(ctx.get()));
+            return epochengine::format_text("{:.1f}", epochengine::previewgrid::camera_distance_for(ctx.get()));
         }
 
         [[nodiscard]] std::string backend_ownership_model(const std::shared_ptr<core::Context>& ctx)
@@ -4715,7 +4716,7 @@ namespace epochengine
                 });
             if (!saved)
             {
-                state.projectStatus = std::format(
+                state.projectStatus = epochengine::format_text(
                     "Scene save blocked ({}): {}",
                     scene::persistence::scene_persistence_status_name(saved.status),
                     saved.error.empty() ? std::string("no committed scene evidence") : saved.error);
@@ -4724,7 +4725,7 @@ namespace epochengine
             }
 
             state.sceneDocumentRevision = saved.evidence.revision;
-            state.projectStatus = std::format(
+            state.projectStatus = epochengine::format_text(
                 "Saved scene revision {} ({} bytes).",
                 saved.evidence.revision,
                 saved.evidence.bytes);
@@ -5220,7 +5221,7 @@ namespace epochengine
                 ec.clear();
                 const auto size = std::filesystem::file_size(resolvedPath, ec);
                 if (!ec)
-                    return std::format("ready ({} bytes)", size);
+                    return epochengine::format_text("ready ({} bytes)", size);
             }
 
             return "ready";
@@ -5517,7 +5518,7 @@ namespace epochengine
 
         [[nodiscard]] static std::string make_project_script_starter_text(std::string_view scriptId)
         {
-            return std::format(
+            return epochengine::format_text(
                 "#if __has_include(<scripting.epoch_api.h>)\n"
                 "#  include <scripting.epoch_api.h>\n"
                 "#elif __has_include(<include/scripting.epoch_api.h>)\n"
@@ -5599,7 +5600,7 @@ namespace epochengine
             const std::filesystem::path& buildLog,
             const std::filesystem::path& outputExe)
         {
-            return std::format(
+            return epochengine::format_text(
                 "You are the selected OS AI model helping Epoch through an engine-owned harness around selected Qwen/Nemotron model lanes and approved creative model package lanes, operating through editor tools, sandbox scenes, build evidence, and eval gates.\n"
                 "Review the latest project output evidence and produce exactly one safe self-iteration pass.\n"
                 "Do not claim anything is working unless you cite the evidence paths below.\n"
@@ -5657,7 +5658,7 @@ namespace epochengine
             if (ec)
                 return "Packet root unreadable; inspect workspace permissions";
 
-            return std::format("{} staged packet{}", packetCount, packetCount == 1 ? "" : "s");
+            return epochengine::format_text("{} staged packet{}", packetCount, packetCount == 1 ? "" : "s");
         }
 
         struct SeedObjectSummary
@@ -9191,7 +9192,7 @@ namespace epochengine
                 1.0));
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = "Timeline Playhead",
-                .status = std::format("{:.2f}s / {:.2f}s", editor.timelineState.playhead_seconds, editor.timelineState.duration_seconds),
+                .status = epochengine::format_text("{:.2f}s / {:.2f}s", editor.timelineState.playhead_seconds, editor.timelineState.duration_seconds),
                 .value = playheadValue,
                 .size = { width, compact ? 18.0f : 22.0f },
                 .show_percent = false
@@ -9202,7 +9203,7 @@ namespace epochengine
                 gui::property_row("[time] State", editor.timeSnapshot.paused ? "Paused" : "Running", 104.0f);
                 gui::property_row(
                     "[time] Step",
-                    std::format("{} / {} @ {}", editor.timeSnapshot.step_budget, editor.timeSnapshot.max_steps_per_frame, format_rate(editor.timeSnapshot.fixed_dt_seconds)),
+                    epochengine::format_text("{} / {} @ {}", editor.timeSnapshot.step_budget, editor.timeSnapshot.max_steps_per_frame, format_rate(editor.timeSnapshot.fixed_dt_seconds)),
                     104.0f);
                 return;
             }
@@ -9220,9 +9221,9 @@ namespace epochengine
             gui::property_row("[time] Accumulator", format_ms(editor.timeSnapshot.accumulator_seconds), 132.0f);
             gui::property_row(
                 "[time] Step budget",
-                std::format("{} / {}", editor.timeSnapshot.step_budget, editor.timeSnapshot.max_steps_per_frame),
+                epochengine::format_text("{} / {}", editor.timeSnapshot.step_budget, editor.timeSnapshot.max_steps_per_frame),
                 132.0f);
-            gui::property_row("[time] Time scale", std::format("{:.2f}x", editor.timeSnapshot.time_scale), 132.0f);
+            gui::property_row("[time] Time scale", epochengine::format_text("{:.2f}x", editor.timeSnapshot.time_scale), 132.0f);
             gui::property_row("[time] Pacing health", pacingHealth, 132.0f);
 
             const std::array timeButtons{
@@ -9690,7 +9691,7 @@ namespace epochengine
                 for (std::size_t assetIndex = 0; assetIndex < visibleAssetCards; ++assetIndex)
                 {
                     const auto& entry = assetEntries[assetIndex];
-                    const std::string buttonLabel = entry.label + (entry.directory ? "" : std::format("  [{} bytes]", entry.size));
+                    const std::string buttonLabel = entry.label + (entry.directory ? "" : epochengine::format_text("  [{} bytes]", entry.size));
                     if (gui::button(buttonLabel, { centerWidth, 28.0f }))
                     {
                         editor.selectedAssetPath = entry.path;
@@ -9858,8 +9859,8 @@ namespace epochengine
                 gui::property_row("[forest] Mode", profile.previewMode == epochengine::forest::ForestPreviewMode::Mode3D ? "3D" : "2D", 148.0f);
                 gui::property_row("[forest] Stage", std::string(epochengine::forest::stage_name(profile.editStage)), 148.0f);
                 gui::property_row("[forest] Seed", std::to_string(profile.seed.value), 148.0f);
-                gui::property_row("[forest] Time", std::format("{:.2f}s / {:.2f}s", profile.temporal.timeSeconds, profile.temporal.durationSeconds), 148.0f);
-                gui::property_row("[forest] Speed", std::format("{:.2f}x", profile.temporal.speed), 148.0f);
+                gui::property_row("[forest] Time", epochengine::format_text("{:.2f}s / {:.2f}s", profile.temporal.timeSeconds, profile.temporal.durationSeconds), 148.0f);
+                gui::property_row("[forest] Speed", epochengine::format_text("{:.2f}x", profile.temporal.speed), 148.0f);
                 gui::property_row("[forest] Nodes", std::to_string(stats.nodes), 148.0f);
                 gui::property_row("[forest] Branches", std::to_string(stats.branches), 148.0f);
                 gui::property_row("[forest] Leaves", std::to_string(stats.leaves), 148.0f);
@@ -9867,7 +9868,7 @@ namespace epochengine
                 gui::property_row("[forest] Verts", std::to_string(stats.vertices), 148.0f);
                 gui::property_row("[forest] Tris", std::to_string(stats.triangles), 148.0f);
                 gui::property_row("[forest] Voxel chunk",
-                    std::format(
+                    epochengine::format_text(
                         "{}x{}x{} @ {:.2f}m",
                         voxelSummary.chunk.cellsX,
                         voxelSummary.chunk.cellsY,
@@ -9877,7 +9878,7 @@ namespace epochengine
                 gui::property_row("[forest] Active voxels", std::to_string(voxelSummary.activeCells), 148.0f);
                 gui::property_row("[forest] Dense bytes", std::to_string(voxelSummary.denseBytes), 148.0f);
                 gui::property_row("[forest] Voxel split",
-                    std::format(
+                    epochengine::format_text(
                         "trunk {} | branch {} | foliage {}",
                         voxelSummary.trunkCells,
                         voxelSummary.branchCells,
@@ -9985,10 +9986,10 @@ namespace epochengine
                 gui::property_row("[timeline] Simulated", format_seconds(timelineStats.simulated_seconds), 132.0f);
                 gui::property_row("[timeline] Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
                 gui::property_row("[timeline] Step budget", std::to_string(timelineStats.step_budget), 132.0f);
-                gui::property_row("[timeline] Time scale", std::format("{:.2f}x", timelineStats.time_scale), 132.0f);
-                gui::property_row("[timeline] Playhead", std::format("{:.2f}s / frame {}", editor.timelineState.playhead_seconds, editor.timelineState.playhead_frame), 132.0f);
-                gui::property_row("[timeline] Duration", std::format("{:.2f}s", editor.timelineState.duration_seconds), 132.0f);
-                gui::property_row("[timeline] Tracks", std::format("{} enabled / {}", epochengine::timeline::enabled_track_count(editor.timelineTracks), editor.timelineTracks.size()), 132.0f);
+                gui::property_row("[timeline] Time scale", epochengine::format_text("{:.2f}x", timelineStats.time_scale), 132.0f);
+                gui::property_row("[timeline] Playhead", epochengine::format_text("{:.2f}s / frame {}", editor.timelineState.playhead_seconds, editor.timelineState.playhead_frame), 132.0f);
+                gui::property_row("[timeline] Duration", epochengine::format_text("{:.2f}s", editor.timelineState.duration_seconds), 132.0f);
+                gui::property_row("[timeline] Tracks", epochengine::format_text("{} enabled / {}", epochengine::timeline::enabled_track_count(editor.timelineTracks), editor.timelineTracks.size()), 132.0f);
                 gui::property_row("[timeline] Keys", std::to_string(editor.timelineEvents.size()), 132.0f);
                 const epochengine::timeline::TimelineViewConfig activeTimelineView{
                     .visible_start_seconds = (std::max)(0.0, editor.timelineState.playhead_seconds - 5.0),

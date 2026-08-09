@@ -37,6 +37,7 @@
  //    because your ContextType in your current modules is not an enum with those
  //    exact enumerators (or they are not visible here). Default handles it.
  //
+#include "core.format_text.hpp"
 //#include "pch.h"
 
 #include "../include/engine.config.hpp"
@@ -75,7 +76,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <format>
 #include <future>
 #include <fstream>
 #include <iostream>
@@ -1942,6 +1942,16 @@ namespace epochengine::core
         };
 
         log_editor_self_test_line("engine_contract_self_test.start=forest_package_timeline_snapshot");
+        check(
+            "core.format_portability",
+            epochengine::format_text(
+                "{} {:02} {:.2f} {:08X} {:p} {{ok}}",
+                "item",
+                7,
+                1.25,
+                0xABu,
+                0x2Au) == "item 07 1.25 000000AB 0x2a {ok}"
+            && epochengine::format_text("{:04}", -7) == "-007");
 
         check(
             "context.session_restore_readiness",
@@ -3453,7 +3463,7 @@ namespace epochengine::core
         const auto root = cli::capture_output_root();
         std::error_code ec{};
         std::filesystem::create_directories(root, ec);
-        return root / std::format("{}-parented-grid.bmp", cli::capture_output_stem());
+        return root / epochengine::format_text("{}-parented-grid.bmp", cli::capture_output_stem());
     }
 
     [[nodiscard]] inline bool write_top_down_bgra_as_bmp(

@@ -28,13 +28,13 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+#include "core.format_text.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <iomanip>
 #include <optional>
@@ -75,15 +75,15 @@ namespace
     }
 
     template <typename... Args>
-    void LogInfo(std::format_string<Args...> fmt, Args&&... args)
+    void LogInfo(std::string_view fmt, Args&&... args)
     {
-        LogInfo(std::format(fmt, std::forward<Args>(args)...));
+        LogInfo(epochengine::format_text(fmt, std::forward<Args>(args)...));
     }
 
     template <typename... Args>
-    void LogError(std::format_string<Args...> fmt, Args&&... args)
+    void LogError(std::string_view fmt, Args&&... args)
     {
-        LogError(std::format(fmt, std::forward<Args>(args)...));
+        LogError(epochengine::format_text(fmt, std::forward<Args>(args)...));
     }
 
     struct HarnessOptions

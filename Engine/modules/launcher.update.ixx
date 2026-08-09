@@ -30,12 +30,13 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <future>
 #include <optional>
@@ -532,8 +533,8 @@ export namespace epochengine::launcher_update
             const int minutes = clampedSeconds / 60;
             const int seconds = clampedSeconds % 60;
             if (minutes <= 0)
-                return std::format("{}s", seconds);
-            return std::format("{}m {:02}s", minutes, seconds);
+                return epochengine::format_text("{}s", seconds);
+            return epochengine::format_text("{}m {:02}s", minutes, seconds);
         }
 
         [[nodiscard]] std::string source_progress_phase() const
@@ -667,8 +668,8 @@ export namespace epochengine::launcher_update
                 const int seconds = static_cast<int>(std::ceil(restart_seconds_remaining()));
                 panel.title = packaged_restart_ready ? "Restart Epoch" : "Restart Source-Built Epoch";
                 panel.progress_label = "Update staged";
-                panel.progress_status = std::format("auto restart in {}s", seconds);
-                panel.action_label = std::format("Restart Now ({}s)", seconds);
+                panel.progress_status = epochengine::format_text("auto restart in {}s", seconds);
+                panel.action_label = epochengine::format_text("Restart Now ({}s)", seconds);
                 panel.action_enabled = true;
                 panel.action_choice = epochengine::menu::Choice::UpdatePanelRestart;
                 panel.restart_ready = true;
@@ -711,7 +712,7 @@ export namespace epochengine::launcher_update
                 }
                 else
                 {
-                    panel.progress_status = std::format(
+                    panel.progress_status = epochengine::format_text(
                         "{} - cancel update available in {}s",
                         source_progress_status(),
                         source_cancel_arm_seconds_remaining());

@@ -39,6 +39,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.popup_layout.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.version.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.stl_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\core.format_text.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)modules\sfml.compat.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />

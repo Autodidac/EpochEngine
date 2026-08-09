@@ -426,8 +426,8 @@
             const int minutes = clampedSeconds / 60;
             const int seconds = clampedSeconds % 60;
             if (minutes <= 0)
-                return std::format("{}s", seconds);
-            return std::format("{}m {:02}s", minutes, seconds);
+                return epochengine::format_text("{}s", seconds);
+            return epochengine::format_text("{}m {:02}s", minutes, seconds);
         }
 
         [[nodiscard]] std::string editor_source_worker_progress_phase(

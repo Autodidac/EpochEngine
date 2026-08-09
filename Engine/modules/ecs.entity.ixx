@@ -30,9 +30,10 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <string>
 #include <string_view>
-#include <format>
 
 export module ecs.entity;
 
@@ -79,7 +80,7 @@ namespace epochengine::ecs
 
         if (R.log && R.clk)
         {
-            R.log->log(std::format(
+            R.log->log(epochengine::format_text(
                 "[ECS] Entity {} spawned at {}",
                 e,
                 epochengine::timing::getCurrentTimeString()));
@@ -118,7 +119,7 @@ namespace epochengine::ecs
         auto& lc = get_component<LoggerComponent>(R, e);
         const std::string ts = epochengine::timing::getCurrentTimeString();
         epochengine::logger::get(lc.system).log(
-            std::format(
+            epochengine::format_text(
                 "[ECS] Entity {} moved to ({:.2f},{:.2f}) at {}",
                 e, pos.x, pos.y, ts),
             lc.min_level);
@@ -157,7 +158,7 @@ namespace epochengine::ecs
         auto& lc = get_component<LoggerComponent>(R, e);
         const std::string ts = epochengine::timing::getCurrentTimeString();
         epochengine::logger::get(lc.system).log(
-            std::format(
+            epochengine::format_text(
                 "[ECS] Entity {} rewound to ({:.2f},{:.2f}) at {}",
                 e, pos.x, pos.y, ts),
             lc.min_level);

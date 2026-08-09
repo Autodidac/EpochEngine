@@ -30,11 +30,12 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <chrono>
-#include <format>
 #include <functional>
 #include <memory>
 #include <string>
@@ -156,7 +157,7 @@ namespace epochengine::raylibcontext
             {
                 logger::warn(
                     "Raylib",
-                    std::format("raylib context not current at {} (current dc/rc != raylib dc/rc)", where));
+                    epochengine::format_text("raylib context not current at {} (current dc/rc != raylib dc/rc)", where));
             }
 #else
             (void)st; (void)where;
@@ -356,7 +357,7 @@ namespace epochengine::raylibcontext
             {
                 logger::warn(
                     "Raylib",
-                    std::format("Unsupported raylib capture format {}; expected RGBA8.", image.format));
+                    epochengine::format_text("Unsupported raylib capture format {}; expected RGBA8.", image.format));
                 epochengine::raylib_api::unload_image(image);
                 return;
             }
@@ -956,7 +957,7 @@ namespace epochengine::raylibcontext
 #if defined(_DEBUG) && EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
         logger::info(
             "Raylib",
-            std::format(
+            epochengine::format_text(
                 "Updated raylib GL context dc={:p} rc={:p}",
                 static_cast<const void*>(st.hdc),
                 static_cast<const void*>(st.hglrc)));
@@ -1014,7 +1015,7 @@ namespace epochengine::raylibcontext
 #if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS && EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
         logger::info(
             "Raylib",
-            std::format(
+            epochengine::format_text(
                 "Initialized. hwnd={:p} size={}x{}",
                 static_cast<const void*>(st.hwnd),
                 st.width,

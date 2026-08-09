@@ -30,12 +30,13 @@
  ***********************************************/
 module;
 
+#include "core.format_text.hpp"
+
 #include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <format>
 #include <memory>
 #include <mutex>
 #include <source_location>
@@ -168,7 +169,7 @@ export namespace epochengine::logger
             std::filesystem::create_directories(cfg.root_dir, ec);
             if (ec)
             {
-                throw std::runtime_error(std::format(
+                throw std::runtime_error(epochengine::format_text(
                     "Logger: could not create log directory '{}': {}",
                     cfg.root_dir.string(),
                     ec.message()));
@@ -180,7 +181,7 @@ export namespace epochengine::logger
             m_file.open(m_path, std::ios::out | std::ios::app);
             if (!m_file.is_open())
             {
-                throw std::runtime_error(std::format(
+                throw std::runtime_error(epochengine::format_text(
                     "Logger: could not open log file '{}'",
                     m_path.string()));
             }
@@ -204,7 +205,7 @@ export namespace epochengine::logger
 
             const auto file_name = std::string(detail::filename_only(loc.file_name()));
             const auto line = loc.line();
-            const auto repeat_key = std::format(
+            const auto repeat_key = epochengine::format_text(
                 "{}|{}|{}|{}|{}",
                 static_cast<int>(lvl),
                 include_src ? 1 : 0,
@@ -236,10 +237,10 @@ export namespace epochengine::logger
         void logf(
             const LogLevel lvl,
             const std::source_location loc,
-            std::format_string<Args...> fmt,
+            std::string_view fmt,
             Args&&... args)
         {
-            log(lvl, std::format(fmt, std::forward<Args>(args)...), loc);
+            log(lvl, epochengine::format_text(fmt, std::forward<Args>(args)...), loc);
         }
 
         [[nodiscard]] std::string_view system_name() const noexcept
@@ -284,7 +285,7 @@ export namespace epochengine::logger
 
             if (include_src)
             {
-                file_line = std::format(
+                file_line = epochengine::format_text(
                     "{} [{}] [{}] ({}:{}) - {}",
                     epochengine::core::time::system_time_string(),
                     detail::level_text(lvl),
@@ -293,7 +294,7 @@ export namespace epochengine::logger
                     line,
                     message);
 
-                console_message = std::format(
+                console_message = epochengine::format_text(
                     "({}:{}) - {}",
                     file_name,
                     line,
@@ -301,7 +302,7 @@ export namespace epochengine::logger
             }
             else
             {
-                file_line = std::format(
+                file_line = epochengine::format_text(
                     "{} [{}] [{}] - {}",
                     epochengine::core::time::system_time_string(),
                     detail::level_text(lvl),
@@ -335,7 +336,7 @@ export namespace epochengine::logger
                 m_repeat.include_source,
                 m_repeat.file_name,
                 m_repeat.line,
-                std::format(
+                epochengine::format_text(
                     "{} (repeated {} more times)",
                     m_repeat.message,
                     m_repeat.suppressed));
@@ -462,7 +463,7 @@ export namespace epochengine::logger
     inline void infof_loc(
         const std::string_view sys,
         const std::source_location loc,
-        std::format_string<Args...> fmt,
+        std::string_view fmt,
         Args&&... args)
     {
         hub().system(sys).logf(LogLevel::INFO, loc, fmt, std::forward<Args>(args)...);
@@ -472,7 +473,7 @@ export namespace epochengine::logger
     inline void warnf_loc(
         const std::string_view sys,
         const std::source_location loc,
-        std::format_string<Args...> fmt,
+        std::string_view fmt,
         Args&&... args)
     {
         hub().system(sys).logf(LogLevel::WARN, loc, fmt, std::forward<Args>(args)...);
@@ -482,7 +483,7 @@ export namespace epochengine::logger
     inline void errorf_loc(
         const std::string_view sys,
         const std::source_location loc,
-        std::format_string<Args...> fmt,
+        std::string_view fmt,
         Args&&... args)
     {
         hub().system(sys).logf(LogLevel::Error, loc, fmt, std::forward<Args>(args)...);

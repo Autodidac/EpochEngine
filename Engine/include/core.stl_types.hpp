@@ -40,7 +40,6 @@
 #include <cstdint>
 #include <deque>
 #include <expected>
-#include <format>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -263,11 +262,10 @@ namespace epochengine
     template <class T, class Alloc = std::allocator<T>>
     using small_vector = std::vector<T, Alloc>;
 
-    using format_args = std::format_args;
 } // namespace epochengine
 
 // ------------------------------------------------------------------------
-// std customizations (hash + formatters)
+// std customizations
 // ------------------------------------------------------------------------
 namespace std
 {
@@ -280,21 +278,4 @@ namespace std
         }
     };
 
-    template <>
-    struct formatter<epochengine::string_view, char> : formatter<std::string_view, char>
-    {
-        auto format(epochengine::string_view v, format_context& ctx) const
-        {
-            return formatter<std::string_view, char>::format(epochengine::to_std(v), ctx);
-        }
-    };
-
-    template <>
-    struct formatter<epochengine::string, char> : formatter<std::string_view, char>
-    {
-        auto format(const epochengine::string& v, format_context& ctx) const
-        {
-            return formatter<std::string_view, char>::format(epochengine::to_std(v), ctx);
-        }
-    };
 } // namespace std

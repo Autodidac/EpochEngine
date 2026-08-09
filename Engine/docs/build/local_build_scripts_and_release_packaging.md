@@ -301,6 +301,9 @@ Before publishing a Linux/WSL2 asset:
   and reject binaries or bundled libraries that require newer than
   `GLIBC_2.35`; download and start the hosted artifact on that baseline before
   publication
+- keep C++23 language mode independent from optional standard-library surface;
+  use the engine-owned `core.format` contract for production formatting so the
+  Ubuntu 22.04 libstdc++ baseline remains buildable
 - verify the Linux package reports the same version as the tag/source archive
 - verify `./epoch --version` from the staged package directory
 - smoke the no-args packaged entry locally under Linux/WSLg or a real Linux

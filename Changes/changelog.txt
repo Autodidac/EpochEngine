@@ -17,6 +17,10 @@
 - Pin the release-producing Linux runner to Ubuntu 22.04 and enforce a
   `GLIBC_2.35` maximum across the executable and bundled libraries so hosted
   packages remain runnable on the supported Linux baseline.
+- Replace the accidental `<format>` dependency with the engine-owned
+  `core.format` text contract, migrate logger/editor/renderer/update call sites,
+  and prove plain, padded, decimal, hexadecimal, pointer, and escaped formatting
+  on MSVC and the Ubuntu 22.04 Clang/libstdc++ baseline.
 - Ship the accumulated capability-tier foundation since v0.89.01: explicit
   sampled-image admission, project-scoped texture resources, immutable exact
   Canvas2D resource closure, deterministic texture artifacts, and stronger

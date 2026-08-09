@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 module;
 
+#include "core.format_text.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <format>
 #include <string>
 
 module editor.application;
@@ -111,7 +112,7 @@ namespace epochengine
             const auto& segment = geometry.segments[i];
             const float size = (std::clamp)(segment.radius * 2.1f * preview_scale, 0.055f, 0.16f);
             scene.entities.push_back({
-                std::format("PlantLabBranch_{:02}", branch_ordinal),
+                epochengine::format_text("PlantLabBranch_{:02}", branch_ordinal),
                 "ForestBranchJoint",
                 "PlantLabPreview",
                 scaled_position(segment.end),
@@ -134,7 +135,7 @@ namespace epochengine
             const auto& leaf = geometry.leaves[i];
             const float size = (std::clamp)(leaf.size * 1.15f * preview_scale, 0.10f, 0.24f);
             scene.entities.push_back({
-                std::format("PlantLabCanopy_{:02}", canopy_ordinal),
+                epochengine::format_text("PlantLabCanopy_{:02}", canopy_ordinal),
                 "ForestFoliageCluster",
                 "PlantLabPreview",
                 scaled_position(leaf.position),

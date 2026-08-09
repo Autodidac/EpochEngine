@@ -36,7 +36,6 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <format>
 #include <functional>
 #include <fstream>
 #include <iostream>

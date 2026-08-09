@@ -30,7 +30,8 @@
  ***********************************************/
 module;
 
-#include <format>
+#include "core.format_text.hpp"
+
 #include <string>
 #include <string_view>
 
@@ -55,9 +56,9 @@ namespace epochengine::ecs::_detail
     {
         if (!log || !clk) return;
         auto ts = timing::getCurrentTimeString();
-        log->log(std::format("[ECS] {}{} entity={} at {}",
+        log->log(epochengine::format_text("[ECS] {}{} entity={} at {}",
             action,
-            comp.empty() ? "" : std::format(":{}", comp),
+            comp.empty() ? "" : epochengine::format_text(":{}", comp),
             e, ts));
         events::push_event(events::Event{
             events::EventType::Custom,

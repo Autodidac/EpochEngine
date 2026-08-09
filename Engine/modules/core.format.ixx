@@ -30,27 +30,22 @@
  ***********************************************/
  // ============================================================================
 // modules/core.format.ixx
-// Tiny formatting helper around std::format / std::vformat.
+// Stable formatting facade over the dependency-free core formatter.
 // ============================================================================
 module;
 
+#include "core.format_text.hpp"
+
 #include "../include/core.stl_types.hpp"
-#include <format>
 
 export module core.format;
 
 export namespace epochengine::core::format
 {
-    // Backend: takes pre-built format_args.
-    [[nodiscard]] inline epochengine::string vstr(epochengine::string_view fmt, std::format_args args)
-    {
-        return epochengine::string{ std::vformat(epochengine::to_std(fmt), args) };
-    }
-
-    // Convenience: build args safely (lvalues) then call vstr.
     template <class... Args>
     [[nodiscard]] inline epochengine::string str(epochengine::string_view fmt, const Args&... args)
     {
-        return vstr(fmt, std::make_format_args(args...));
+        const std::string rendered = epochengine::format_text(epochengine::to_std(fmt), args...);
+        return epochengine::string{rendered};
     }
 }
