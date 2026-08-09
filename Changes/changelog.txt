@@ -1,5 +1,14 @@
 # Epoch Changelog
 
+## [v0.89.07] - Post-release source checkpoint
+
+- Advance canonical runtime version data and the updater-facing compatibility
+  metadata together so the sealed v0.89.06 runtime detects a genuine newer
+  source revision on `main` while the published package remains v0.89.06.
+- Preserve the verified Ubuntu 22.04/GLIBC 2.35 package baseline, exact hosted
+  dependency provenance, portable C++23 formatting, and complete Windows/Linux
+  release evidence from v0.89.06 without reopening updater behavior.
+
 ## [v0.89.06] - Canonical release staging and project resource spine
 
 - Unify hosted and local package staging on one canonical version reader so

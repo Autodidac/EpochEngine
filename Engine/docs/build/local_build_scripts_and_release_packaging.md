@@ -100,7 +100,8 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - sync with `origin/main` if the local branch has drifted
 - keep unrelated dirt out of the commit
 - commit only stable, verified changes
-- bump `Engine/modules/epoch.version.ixx`
+- bump canonical `Engine/modules/epoch.version.ixx` and mirror the source
+  identity in updater-facing `Engine/modules/engine.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
 - rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
@@ -215,6 +216,8 @@ Keep these identities separate:
 Version numbers belong in:
 
 - `Engine/modules/epoch.version.ixx`
+- `Engine/modules/engine.version.ixx` while published updaters consume that
+  compatibility surface for source-version discovery
 - README/public version badges
 - changelog/release notes
 - release tags
@@ -226,6 +229,11 @@ Version numbers do **not** belong in commit titles.
 `Engine/modules/epoch.version.ixx`. It emits the same zero-padded revision used
 by `GetEngineVersion()`. Hosted and local staging must consume that result
 instead of reconstructing a version string independently.
+
+`Engine/modules/engine.version.ixx` is a thin compatibility module, but its
+text is also the source-version endpoint used by published updaters. Keep its
+three source identity macros in lockstep with `epoch.version.ixx`; packaged
+version overrides remain release-staging inputs rather than source metadata.
 
 
 GitHub source archives should stay full source snapshots. Do not trim them down

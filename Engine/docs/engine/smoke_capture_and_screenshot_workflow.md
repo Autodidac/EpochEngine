@@ -306,7 +306,8 @@ The working commit/push pattern is:
 
 - sync with `origin/main`
 - keep unrelated dirt out of the pass
-- bump `epoch.version.ixx`
+- bump canonical `epoch.version.ixx` and mirror its source identity in the
+  updater-facing `engine.version.ixx` compatibility module
 - keep `Changes/roadmap.md` current when the steering surface changes
 - update README/docs/changelog when the behavior is user-visible
 - use a descriptive commit title without baking the version number into the
