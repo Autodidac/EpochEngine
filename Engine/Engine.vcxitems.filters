@@ -1270,13 +1270,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modulesproject.lifecycle.ixx">
-      <Filter>Module Filesepochproject</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx">
+      <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_admission.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx">

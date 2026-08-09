@@ -11,6 +11,15 @@ namespace epochengine::canvas2d_scene_contracts
 {
     ContractResult run() noexcept
     {
+        const auto resources =
+            canvas2d::scene_content::run_resource_closure_contract();
+        if (resources
+            != canvas2d::scene_content::ResourceClosureContractFailure::none)
+        {
+            return {false,
+                canvas2d::scene_content::resource_closure_contract_failure_name(
+                    resources)};
+        }
         const auto scene = canvas2d::scene_content::run_scene_content_contract();
         if (scene != canvas2d::scene_content::SceneContractFailure::none)
         {

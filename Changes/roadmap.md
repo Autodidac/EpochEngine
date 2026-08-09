@@ -137,19 +137,17 @@ Exit gate:
 
 Foundation status: renderer-neutral project/submission planning, deterministic
 batch compilation, tile validation, editor policy, and build-safe contracts are
-present. Deterministic `T0-CPU` raster, sampling/blending, final composition,
+present. Deterministic T0-CPU raster, sampling/blending, final composition,
 metrics, and image hashes are build-proven on MSVC and Clang. Bounded physical
-texture residency, cache recreation, deterministic temporal RGBA8 artifact
-compilation, artifact-integrity validation, runtime project asset-registry
-authentication, content-derived logical artifact revisions, Canvas2D CPU
-resource binding, optional residency acquisition, raster-to-residency
-presentation staging, OpenGL native texture hooks, the primary-context final
-compositor, and immutable semantic editor scene-slot routing are build-proven.
-Serialized artifact byte serialization/reading is build-proven. Project Library
-persistence, capability-derived admission, project-texture
-scene binding, native pixel
-comparison, sRGB/compressed/mip-chain execution, secondary GL share-group
-adapters, and built-project presentation remain delivery work.
+texture residency, deterministic RGBA8 artifact serialization, runtime project
+asset authentication, content-derived logical revisions, project-scoped CPU
+resource binding, optional residency, evidence-backed sampled-image admission,
+strict/experimental policy, cross-budget limit reduction, exact immutable scene
+closure, raster-to-residency presentation staging, OpenGL texture hooks, the
+primary compositor, and semantic editor scene-slot routing are build-proven.
+Project Library persistence, editor material binding, native pixel comparison,
+sRGB/compressed/mip-chain execution, secondary GL share-group adapters, and
+built-project presentation remain delivery work.
 
 Deliver:
 

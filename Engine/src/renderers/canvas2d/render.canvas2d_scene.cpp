@@ -139,24 +139,27 @@ namespace epochengine::canvas2d::scene_content
         if ((!bindings.textures.empty() || !bindings.clips.empty()) && !owner)
             return false;
 
-        std::unordered_set<std::uint64_t> logical_keys{};
+        std::unordered_set<
+            LogicalTextureReference, LogicalTextureReferenceHash> logical_keys{};
+        std::unordered_set<std::uint32_t> physical_keys{};
         std::unordered_set<std::uint32_t> clip_keys{};
         try
         {
             logical_keys.reserve(bindings.textures.size());
+            physical_keys.reserve(bindings.textures.size());
             clip_keys.reserve(bindings.clips.size());
             for (const cpu::TextureView& view : bindings.textures)
             {
                 if (!valid_texture_view(view))
                     return false;
-                const std::uint64_t identity = view.logical
-                    ? view.logical.asset_key ^ (view.logical.artifact_revision
-                        + 0x9e3779b97f4a7c15ull
-                        + (view.logical.asset_key << 6u)
-                        + (view.logical.asset_key >> 2u))
-                    : static_cast<std::uint64_t>(view.physical.value);
-                if (identity == 0 || !logical_keys.insert(identity).second)
+                if (view.logical && !logical_keys.insert(view.logical).second)
                     return false;
+                if (!view.logical
+                    && (!view.physical
+                        || !physical_keys.insert(view.physical.value).second))
+                {
+                    return false;
+                }
             }
             for (const cpu::ClipRect& clip : bindings.clips)
             {
@@ -175,7 +178,9 @@ namespace epochengine::canvas2d::scene_content
     {
         if (source_revision == 0 || canvas2d::validate(project) != ResultCode::success
             || !canvas2d::valid(camera) || !finite(clear_color)
-            || !finite(letterbox_color) || !resources.valid())
+            || !finite(letterbox_color)
+            || validate_resource_closure(sprites, resources)
+                != ResourceClosureCode::ready)
         {
             return false;
         }

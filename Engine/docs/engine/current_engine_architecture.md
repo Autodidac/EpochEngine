@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux
-runtime baseline is `v0.88.69`; active development source is `v0.88.81`.
+runtime baseline is `v0.89.01`; active development source is `v0.89.05`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -89,9 +89,10 @@ ship.
   top-left-to-GL coordinate conversion, and scoped GL state restoration.
   Build-safe family, staged-presentation, no-context refusal, immutable scene
   publication, semantic editor projection, and protected scene-slot routing
-  contracts pass. Operator-visible project textures, secondary GL share-group
-  adapters, serialized artifact admission, tilemap
-  authoring, and the built-project loop remain active gates.
+  contracts pass. Project-scoped texture identity, sampled-image admission, and
+  exact immutable resource closure are build-proven. Project Library persistence,
+  editor material binding, operator-visible native pixels, secondary GL share
+  groups, tilemap authoring, and the built-project loop remain active gates.
 - **Arcade scene-surface proof**: one shared attract-pattern contract feeds
   backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
   DirectX, and Software. Build contracts prove ownership/routing; visual and
@@ -99,7 +100,7 @@ ship.
 - **Path and cache ownership**: runtime assets and disposable cache resolve from
   executable-local roots. Updates, packages, models, atlases, and logs retain
   separate cache/storage boundaries.
-- **Release/update baseline**: the `v0.88.69` Windows/Linux release and updater
+- **Release/update baseline**: the `v0.89.01` Windows/Linux release and updater
   are sealed. Source work may advance without editing updater behavior, packaging,
   tags, or release assets unless the operator explicitly reopens that gate.
 - **Build lanes**: Visual Studio/MSBuild and root CMake remain aligned; Linux

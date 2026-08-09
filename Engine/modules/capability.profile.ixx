@@ -804,6 +804,7 @@ export namespace epochengine::capability
         voxels,
         signed_distance_field,
         sparse_tiles,
+        sampled_image,
         clusters,
         acceleration_structure,
         audio_stream,
@@ -892,7 +893,10 @@ export namespace epochengine::capability
             .subsystem = Subsystem::rendering,
             .capability = profile,
             .implementation_features = 0u,
-            .representations = representation_mask(DataRepresentation::triangles),
+            .representations = representation_mask(DataRepresentation::triangles)
+                | (profile.features.status(Feature::textures) != Status::missing
+                    ? representation_bit(DataRepresentation::sampled_image)
+                    : DataRepresentationMask{}),
             .quality = { 0u, quality },
             .determinism = backend == RendererBackendKind::null
                     || backend == RendererBackendKind::software
@@ -1419,7 +1423,8 @@ export namespace epochengine::capability
         missing_requirement_rejection = 1u << 13u,
         headless_reference_admission = 1u << 14u,
         software_fallback_policy = 1u << 15u,
-        unknown_renderer_cost = 1u << 16u
+        unknown_renderer_cost = 1u << 16u,
+        sampled_image_representation = 1u << 17u
     };
 
     struct ContractCheckReport final
@@ -1503,7 +1508,8 @@ export namespace epochengine::capability
             Subsystem::rendering,
             cpu,
             feature_mask(Feature::software_raster),
-            representation_mask(DataRepresentation::triangles),
+            representation_mask(
+                DataRepresentation::triangles, DataRepresentation::sampled_image),
             40u,
             Determinism::reference,
             CostModel{ 64ull * 1024ull * 1024ull, 4ull * 1024ull * 1024ull, 8000u, 100u, 5500u },
@@ -1513,7 +1519,8 @@ export namespace epochengine::capability
             Subsystem::rendering,
             gles,
             feature_mask(Feature::raster_pipeline),
-            representation_mask(DataRepresentation::triangles),
+            representation_mask(
+                DataRepresentation::triangles, DataRepresentation::sampled_image),
             60u,
             Determinism::repeatable,
             CostModel{ 96ull * 1024ull * 1024ull, 16ull * 1024ull * 1024ull, 3000u, 5000u, 4000u });
@@ -1531,7 +1538,8 @@ export namespace epochengine::capability
             Subsystem::rendering,
             vk,
             feature_mask(Feature::raster_pipeline),
-            representation_mask(DataRepresentation::triangles),
+            representation_mask(
+                DataRepresentation::triangles, DataRepresentation::sampled_image),
             90u,
             Determinism::repeatable,
             CostModel{ 192ull * 1024ull * 1024ull, 32ull * 1024ull * 1024ull, 700u, 12000u, 9000u });
@@ -1540,7 +1548,8 @@ export namespace epochengine::capability
             Subsystem::rendering,
             dx,
             feature_mask(Feature::raster_pipeline),
-            representation_mask(DataRepresentation::triangles),
+            representation_mask(
+                DataRepresentation::triangles, DataRepresentation::sampled_image),
             90u,
             Determinism::repeatable,
             CostModel{ 192ull * 1024ull * 1024ull, 32ull * 1024ull * 1024ull, 700u, 12000u, 9000u });
@@ -1714,6 +1723,23 @@ export namespace epochengine::capability
                 rejected.status == AdmissionStatus::rejected
                 && rejected.failure == MatchFailure::missing_feature
                 && (rejected.missing_features & feature_bit(Feature::textures)) != 0u);
+            Requirement sampled_image = portable;
+            sampled_image.accepted_representations =
+                representation_mask(DataRepresentation::sampled_image);
+            const RequirementAdmission sampled_admission =
+                assess_requirement(gles_render, sampled_image, true, true);
+            SubsystemProfile triangles_only = gles_render;
+            triangles_only.representations =
+                representation_mask(DataRepresentation::triangles);
+            const RequirementAdmission missing_sampled_image =
+                assess_requirement(triangles_only, sampled_image, true, true);
+            report.record(
+                ContractCheck::sampled_image_representation,
+                sampled_admission.status == AdmissionStatus::admitted
+                && missing_sampled_image.status == AdmissionStatus::rejected
+                && missing_sampled_image.failure
+                    == MatchFailure::unsupported_representation);
+
         }
 
         {

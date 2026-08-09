@@ -392,13 +392,15 @@ collisions, stale handles/revisions, equivalent-content temporal reuse,
 duplicate/missing bindings, cache recreation, retirement, and bounded metrics.
 Tilesets now depend on logical texture material intent rather than physical
 handles.
-Landed in v0.88.88: immutable semantic editor scene publication, protected
-OpenGL scene-slot routing, replacement-safe reader lifetime, explicit viewport
-sub-surfaces, context-retirement cleanup, and build-safe CPU shading proof.
-Next bind authenticated project textures into that publication, compare native
-output to the CPU reference, add serialized artifact admission and explicit GL
-share-group adapters, and broaden physical target/material execution without
-duplicating the renderer spine.
+Landed in v0.89.05: sampled-image capability admission, project-scoped texture
+services, and exact immutable scene resource closure. Contracts reject foreign
+registries with identical handle bits, unsupported or unevidenced providers,
+budget violations, duplicate/missing/stale/unexpected bindings, and failed
+replacement without mutating the published scene. Old readers retain their
+resource lifetime. Next persist serialized artifacts in the Project Library,
+bind logical project materials from the editor, compare native output to the CPU
+reference, and add explicit GL-family share-group adapters without duplicating
+the renderer spine.
 
 ### Phase 3: Tilemap Authoring
 

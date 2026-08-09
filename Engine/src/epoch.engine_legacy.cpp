@@ -2538,7 +2538,7 @@ namespace epochengine::core
             && audioContract.failure == epochengine::audio::AudioContractFailure::none);
         const auto capabilityContract =
             epochengine::capability::run_contract_checks();
-        constexpr std::uint32_t expectedCapabilityChecks = (1u << 17u) - 1u;
+        constexpr std::uint32_t expectedCapabilityChecks = (1u << 18u) - 1u;
         check(
             "capability.profile_selection",
             capabilityContract.passed()

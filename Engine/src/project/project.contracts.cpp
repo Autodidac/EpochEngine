@@ -6,6 +6,7 @@ module project.contracts;
 
 import project.asset_registry;
 import project.lifecycle;
+import project.texture_admission;
 import project.texture_resources;
 
 namespace epochengine::project_contracts
@@ -24,6 +25,15 @@ namespace epochengine::project_contracts
             return {
                 false,
                 project_textures::texture_resource_contract_failure_name(textures)};
+        }
+        const auto admission =
+            project_textures::project_texture_admission_contract_failure();
+        if (admission != project_textures::TextureAdmissionContractFailure::none)
+        {
+            return {
+                false,
+                project_textures::texture_admission_contract_failure_name(
+                    admission)};
         }
         const auto lifecycle =
             project_lifecycle::runtime_contract_failure();

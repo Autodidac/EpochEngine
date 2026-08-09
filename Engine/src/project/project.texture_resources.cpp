@@ -29,7 +29,7 @@ namespace epochengine::project_textures
         if (!registered)
             return TextureResourceContractFailure::registry;
 
-        TextureResourceService service{};
+        TextureResourceService service{registry};
         const PublicationResult published = service.publish(
             registry, registered.handle, artifact);
         if (!published)
@@ -45,8 +45,37 @@ namespace epochengine::project_textures
         if (!reused || reused.code != ResourceCode::already_published)
             return TextureResourceContractFailure::publication_reuse;
 
+        project_assets::AssetRegistry foreign{"epoch.canvas2d.foreign"};
+        const project_assets::RegistrationResult foreignTexture =
+            foreign.register_asset({
+                "Assets/Textures/checker.rgba",
+                project_assets::AssetKind::texture,
+                detail::asset_revision(source)});
+        if (!foreignTexture || foreignTexture.handle != registered.handle
+            || service.publish(foreign, foreignTexture.handle, artifact).code
+                != ResourceCode::project_identity_mismatch)
+        {
+            return TextureResourceContractFailure::project_identity;
+        }
+
+        const project_assets::RegistrationResult wrongKind = registry.register_asset({
+            "Assets/Scenes/checker.epoch",
+            project_assets::AssetKind::scene,
+            detail::asset_revision(source)});
+        if (!wrongKind
+            || service.publish(registry, wrongKind.handle, artifact).code
+                != ResourceCode::wrong_asset_kind)
+        {
+            return TextureResourceContractFailure::wrong_asset_kind;
+        }
+
         const std::array<canvas2d::LogicalTextureReference, 1> requested{
             published.logical};
+        if (service.bind_canvas2d(foreign, requested).code()
+                != ResourceCode::project_identity_mismatch)
+        {
+            return TextureResourceContractFailure::project_identity;
+        }
         Canvas2DResourceSet resources = service.bind_canvas2d(registry, requested);
         const canvas2d::cpu::ResourceBindings bindings = resources.bindings();
         if (!resources.valid() || resources.texture_count() != 1
@@ -86,6 +115,12 @@ namespace epochengine::project_textures
             {
                 return TextureResourceContractFailure::cache_recreation;
             }
+            if (service.acquire_resident(
+                    foreign, published.logical, recreated, selection).code
+                != ResourceCode::project_identity_mismatch)
+            {
+                return TextureResourceContractFailure::project_identity;
+            }
         }
 
         const project_assets::AssetRevision nextRevision{{{55, 66, 77, 88}}, 8};
@@ -96,8 +131,11 @@ namespace epochengine::project_textures
         {
             return TextureResourceContractFailure::stale_registry_revision;
         }
-        if (service.retire(registered.handle) != ResourceCode::ready
-            || service.retire(registered.handle) != ResourceCode::missing_publication)
+        if (service.retire(foreign, registered.handle)
+                != ResourceCode::project_identity_mismatch
+            || service.retire(registry, registered.handle) != ResourceCode::ready
+            || service.retire(registry, registered.handle)
+                != ResourceCode::missing_publication)
         {
             return TextureResourceContractFailure::retirement;
         }

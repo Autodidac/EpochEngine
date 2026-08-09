@@ -1,5 +1,23 @@
 # Epoch Changelog
 
+## [v0.89.05] - Project texture admission and immutable scene closure
+
+- Add sampled_image as an explicit capability representation and extend the
+  no-overclaim contract from 17 to 18 executed checks.
+- Add project.texture_admission with authenticated artifact validation,
+  strict/experimental policy, evidence gates, and effective dimension, sampled
+  image, resident-memory, and upload limits derived across project, platform,
+  and renderer budgets.
+- Bind each TextureResourceService to one project registry and reject foreign
+  publish, bind, residency, and retirement operations even when handle bits are
+  identical.
+- Make Canvas2D scene publication validate an exact immutable texture-resource
+  closure, reject duplicate, missing, stale-revision, and unexpected bindings
+  atomically, and retain old-reader resource lifetime across replacement.
+- Replace folded texture identities with collision-safe exact logical keys,
+  execute both new contracts through the engine self-test, and align the MSVC
+  shared project/filter metadata.
+
 ## [v0.89.04] - Trust boundary and editor ownership hardening
 
 - Move MCP capability grants and per-call approvals out of model-provided tool

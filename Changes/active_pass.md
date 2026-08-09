@@ -14,7 +14,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 
 The published `v0.89.01` Windows/Linux runtime, updater behavior, packaging,
 and stable multicontext branch are sealed. Development source continues from
-`v0.89.04`; do not alter release/updater code, handoff/build scripts, tags, or
+`v0.89.05`; do not alter release/updater code, handoff/build scripts, tags, or
 release assets unless the operator explicitly reopens that gate.
 Preserve these accepted source contracts:
 
@@ -91,15 +91,21 @@ The working tree contains these current or in-progress foundations:
   physical caches. It normalizes portable logical paths, rejects traversal and
   case-fold collisions, issues generation-checked handles and deterministic
   keys, and publishes explicit current source revisions;
-- `project.texture_resources` authenticates compiled texture source revision
-  against that registry, seals the full artifact identity, and issues Canvas2D
-  references from project asset key plus content-derived artifact revision.
-  Identical content reconstructed at a later temporal sequence reuses the same
-  compiled/cache identity;
-- the same texture service owns bounded decoded `T0-CPU` resource sets and may
-  acquire disposable native residency through `render.texture.artifact`.
-  Current execution remains an explicit linear RGBA8 mip-0 lane; unsupported
-  color-space, format, and mip requests fail closed;
+- project.texture_resources is bound to one validated project registry,
+  authenticates compiled texture source revision, seals full artifact identity,
+  and issues Canvas2D references from project asset key plus content-derived
+  artifact revision. Foreign project operations fail before handle resolution,
+  including identical generation/index handle bits;
+- the same project-bound service owns bounded decoded T0-CPU resource sets and
+  may acquire disposable native residency through render.texture.artifact.
+  Current execution remains an explicit linear RGBA8 mip-0 lane;
+- project.texture_admission validates authenticated artifacts against explicit
+  sampled-image representation evidence and derives effective dimension,
+  sampled-image, resident-memory, and upload limits across project, platform,
+  and renderer budgets. Strict policy rejects experimental providers;
+- render.canvas2d_scene publishes an immutable exact resource closure. Duplicate,
+  missing, stale-revision, invalid, and unexpected texture bindings fail
+  atomically while old readers retain their owning resource lifetime;
 - authored tilesets now carry logical texture material intent instead of a
   physical `TextureHandle`. Transient render-surface materials retain their
   explicit physical graph-output binding;
@@ -188,7 +194,7 @@ The working tree contains these current or in-progress foundations:
   and invokes that compositor in the protected live scene slot;
 - `project.lifecycle` centralizes Save, materialize, Build, Run, wait, and
   focus-existing-runtime decisions with generation-safe attempt tracking;
-- all 351 first-party C++ files follow the canonical one-dot owner grammar,
+- all 353 first-party C++ files follow the canonical one-dot owner grammar,
   exact module/file identity, and owned directory layout enforced by the source
   naming validator;
 - the launcher opens the three editor applications, selects a live context
@@ -210,37 +216,39 @@ Clang. Renderer-neutral residency, cache recreation, OpenGL-family hook routing,
 presentation packet staging, the compiled primary OpenGL compositor, and
 real-hook no-context refusal are build-proven on MSVC and managed Clang 22.
 MSVC contracts also prove deterministic temporal texture payload compilation,
-artifact-integrity rejection, project logical-identity mapping, cache reuse,
-backend recreation/reset, stale-handle rejection, and synchronous upload copy.
-A clean authoring-disabled managed Clang configuration independently proves the
-runtime artifact schema, hashing, and validator without authoring document/UI
-linkage. Immutable scene publication, replacement lifetime, semantic entity mapping, CPU
-shading, and protected OpenGL scene-slot routing are build-proven. Live OpenGL
-allocation/drawing, operator-visible pixels, filesystem integration for serialized artifacts,
-capability-derived texture admission, and secondary GL share-group adapters
-remain Partial.
+artifact-integrity rejection, project-scoped logical identity, exact sampled
+image admission, foreign-registry rejection, collision-safe resource keys,
+atomic immutable scene closure, cache reuse, backend recreation/reset,
+stale-handle rejection, and synchronous upload copy. A clean authoring-disabled
+managed Clang configuration independently proves the runtime artifact schema,
+hashing, and validator without authoring document/UI linkage. Immutable scene
+publication, replacement lifetime, semantic entity mapping, CPU shading, and
+protected OpenGL scene-slot routing are build-proven. Live OpenGL
+allocation/drawing, operator-visible project textures, Project Library
+filesystem integration, editor material binding, and secondary GL share-group
+adapters remain Partial.
 
 ## Completed Capability Checkpoint
 
-Source v0.88.89 establishes engine-wide source ownership, serialized texture
-artifacts, project lifecycle policy, and retains immutable per-context Canvas2D
-scene publication. It adds
-semantic editor entity projection, replacement-safe reader lifetime, protected
-OpenGL scene-slot routing, and context-retirement cleanup. It does not claim
-live native pixel correctness, project texture admission into that scene,
-secondary share groups, artifact filesystem/library integration, or built-game
-presentation.
+Source v0.89.05 establishes explicit sampled-image capability truth,
+evidence-backed texture admission, project-scoped texture publication and
+residency, and exact immutable Canvas2D resource closure. Debug contracts prove
+foreign-project rejection even for identical handle bits, strict versus
+experimental admission, budget reduction, duplicate/missing/stale/unexpected
+binding rejection, atomic publication failure, and replacement-safe old-reader
+lifetime. It does not claim Project Library filesystem persistence, live native
+pixel correctness, editor material assignment, secondary share groups, or
+built-game presentation.
 
 ## Immediate Implementation Order
 
-1. Compare live T1-GL scene-slot output against the T0-CPU reference and
-   verify resize, retirement, fallback, GUI replay, and present order.
-2. Bind authenticated project textures into immutable scene publication, then
-   add explicit SDL3/SFML3/Raylib3 share-group adapters.
-3. Add serialized compiled-artifact reading and capability-derived texture
-   admission without importing authoring UI into runtime products.
-4. Extend settings and controls in the same pass as each capability so users can
-   select project policy, inspect evidence, and tune budgets without stale UI.
+1. Persist serialized compiled artifacts in the Project Library and bind
+   authenticated project materials into immutable editor scene publication.
+2. Compare live T1-GL scene-slot pixels against the T0-CPU reference and verify
+   resize, retirement, fallback, GUI replay, and present order.
+3. Add explicit SDL3/SFML3/Raylib3 and secondary OpenGL share-group adapters.
+4. Extend settings and controls with project texture policy, evidence,
+   effective limits, and budget diagnostics.
 5. Expose SceneDocument undo/redo and transaction diagnostics through EpochGui
    controls after command ownership is proven in the live editor.
 

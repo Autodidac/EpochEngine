@@ -309,6 +309,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_admission.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx" />

@@ -32,6 +32,7 @@ export namespace epochengine::project_textures
         ready,
         already_published,
         invalid_registry,
+        project_identity_mismatch,
         invalid_asset,
         stale_asset,
         wrong_asset_kind,
@@ -58,6 +59,8 @@ export namespace epochengine::project_textures
         case ResourceCode::ready: return "ready";
         case ResourceCode::already_published: return "already_published";
         case ResourceCode::invalid_registry: return "invalid_registry";
+        case ResourceCode::project_identity_mismatch:
+            return "project_identity_mismatch";
         case ResourceCode::invalid_asset: return "invalid_asset";
         case ResourceCode::stale_asset: return "stale_asset";
         case ResourceCode::wrong_asset_kind: return "wrong_asset_kind";
@@ -254,14 +257,15 @@ export namespace epochengine::project_textures
     {
     public:
         explicit TextureResourceService(
+            const project_assets::AssetRegistry& registry,
             TextureResourceLimits limits = {}) noexcept
-            : limits_(limits)
+            : limits_(limits), project_key_(registry.valid() ? registry.project_key() : 0)
         {
         }
 
         [[nodiscard]] bool valid() const noexcept
         {
-            return limits_.valid();
+            return limits_.valid() && project_key_ != 0;
         }
 
         [[nodiscard]] const TextureResourceLimits& limits() const noexcept
@@ -285,6 +289,8 @@ export namespace epochengine::project_textures
             ++metrics_.publication_requests;
             if (!valid() || !registry.valid())
                 return reject_publication(ResourceCode::invalid_registry);
+            if (!owns(registry))
+                return reject_publication(ResourceCode::project_identity_mismatch);
             const project_assets::AssetRecord* const record = registry.resolve(asset);
             if (!record)
                 return reject_publication(asset ? ResourceCode::stale_asset
@@ -369,6 +375,7 @@ export namespace epochengine::project_textures
                     return reject_publication(ResourceCode::invalid_artifact);
 
                 Entry candidate{};
+                candidate.project_key = project_key_;
                 candidate.asset = asset;
                 candidate.source_revision = record->revision;
                 candidate.logical = logical;
@@ -400,11 +407,20 @@ export namespace epochengine::project_textures
         }
 
         [[nodiscard]] ResourceCode retire(
+            const project_assets::AssetRegistry& registry,
             project_assets::AssetHandle asset) noexcept
         {
+            if (!valid() || !registry.valid())
+                return reject_code(ResourceCode::invalid_registry);
+            if (!owns(registry))
+                return reject_code(ResourceCode::project_identity_mismatch);
             const auto found = std::find_if(
                 entries_.begin(), entries_.end(),
-                [asset](const Entry& candidate) { return candidate.asset == asset; });
+                [&](const Entry& candidate)
+                {
+                    return candidate.project_key == project_key_
+                        && candidate.asset == asset;
+                });
             if (found == entries_.end())
                 return ResourceCode::missing_publication;
             decoded_bytes_ -= found->decoded_bytes;
@@ -422,6 +438,11 @@ export namespace epochengine::project_textures
             if (!valid() || !registry.valid())
             {
                 result.code_ = reject_code(ResourceCode::invalid_registry);
+                return result;
+            }
+            if (!owns(registry))
+            {
+                result.code_ = reject_code(ResourceCode::project_identity_mismatch);
                 return result;
             }
             if (logicalTextures.size() > limits_.maximum_textures_per_resource_set)
@@ -488,6 +509,10 @@ export namespace epochengine::project_textures
             texture_artifact::ResidencySelection selection = {}) noexcept
         {
             ++metrics_.residency_requests;
+            if (!valid() || !registry.valid())
+                return reject_residency(ResourceCode::invalid_registry);
+            if (!owns(registry))
+                return reject_residency(ResourceCode::project_identity_mismatch);
             const Entry* const entry = resolve_entry(registry, logical);
             if (!entry)
                 return reject_residency(ResourceCode::missing_publication);
@@ -503,6 +528,7 @@ export namespace epochengine::project_textures
     private:
         struct Entry final
         {
+            std::uint64_t project_key{};
             project_assets::AssetHandle asset{};
             project_assets::AssetRevision source_revision{};
             canvas2d::LogicalTextureReference logical{};
@@ -517,6 +543,8 @@ export namespace epochengine::project_textures
             const project_assets::AssetRegistry& registry,
             canvas2d::LogicalTextureReference logical) const noexcept
         {
+            if (!owns(registry))
+                return nullptr;
             const project_assets::AssetRecord* const asset =
                 registry.find_by_key(logical.asset_key);
             if (!asset || asset->identity.kind != project_assets::AssetKind::texture)
@@ -525,11 +553,18 @@ export namespace epochengine::project_textures
                 entries_.begin(), entries_.end(),
                 [&](const Entry& candidate)
                 {
-                    return candidate.asset == asset->handle
+                    return candidate.project_key == project_key_
+                        && candidate.asset == asset->handle
                         && candidate.source_revision == asset->revision
                         && candidate.logical == logical;
                 });
             return found == entries_.end() ? nullptr : &*found;
+        }
+
+        [[nodiscard]] bool owns(
+            const project_assets::AssetRegistry& registry) const noexcept
+        {
+            return registry.valid() && registry.project_key() == project_key_;
         }
 
         [[nodiscard]] PublicationResult reject_publication(
@@ -553,6 +588,7 @@ export namespace epochengine::project_textures
         }
 
         TextureResourceLimits limits_{};
+        std::uint64_t project_key_{};
         std::vector<Entry> entries_{};
         TextureResourceMetrics metrics_{};
         std::uint64_t decoded_bytes_{};
@@ -566,6 +602,8 @@ export namespace epochengine::project_textures
         publication,
         content_revision,
         publication_reuse,
+        project_identity,
+        wrong_asset_kind,
         canvas_binding,
         duplicate_binding,
         residency,
@@ -587,6 +625,8 @@ export namespace epochengine::project_textures
         case TextureResourceContractFailure::publication: return "publication";
         case TextureResourceContractFailure::content_revision: return "content_revision";
         case TextureResourceContractFailure::publication_reuse: return "publication_reuse";
+        case TextureResourceContractFailure::project_identity: return "project_identity";
+        case TextureResourceContractFailure::wrong_asset_kind: return "wrong_asset_kind";
         case TextureResourceContractFailure::canvas_binding: return "canvas_binding";
         case TextureResourceContractFailure::duplicate_binding: return "duplicate_binding";
         case TextureResourceContractFailure::residency: return "residency";
