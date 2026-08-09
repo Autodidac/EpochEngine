@@ -1,7 +1,7 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$Version = '0.87.62',
-    [string]$OutputRoot = "C:\tmp\epoch_release_v$Version"
+    [string]$Version = '',
+    [string]$OutputRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -32,6 +32,19 @@ function Copy-FileSet {
 }
 
 $repo = [System.IO.Path]::GetFullPath($RepoRoot)
+$versionScript = Join-Path $repo 'Tools\ai\get_epoch_version.ps1'
+Require-Path -Path $versionScript -Label 'Epoch version reader'
+$sourceVersion = (& $versionScript -VersionModule (Join-Path $repo 'Engine\modules\epoch.version.ixx')).Trim()
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $Version = $sourceVersion
+}
+elseif ($Version -cne $sourceVersion) {
+    throw "Requested release version $Version does not match source version $sourceVersion."
+}
+if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
+    $OutputRoot = "C:\tmp\epoch_release_v$Version"
+}
+
 $releaseOutput = Join-Path $repo 'x64\Release'
 $assets = Join-Path $repo 'Engine\assets'
 $stageName = "epoch_win10_x64_v$Version"

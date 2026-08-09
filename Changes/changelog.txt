@@ -1,5 +1,27 @@
 # Epoch Changelog
 
+## [v0.89.06] - Canonical release staging and project resource spine
+
+- Unify hosted and local package staging on one canonical version reader so
+  single-digit revisions retain the zero padding reported by the runtime, tag,
+  asset filenames, checksums, and updater metadata.
+- Make both release staging scripts infer the source version, reject requested
+  version drift before touching build output, and replace silent Linux package
+  assertions with actionable RUNPATH, dependency, version, and contract errors.
+- Disable persisted GitHub checkout credentials in build-only workflows and
+  verify both pinned Ninja archives with stored SHA-512 values before
+  extraction.
+- Ship the accumulated capability-tier foundation since v0.89.01: explicit
+  sampled-image admission, project-scoped texture resources, immutable exact
+  Canvas2D resource closure, deterministic texture artifacts, and stronger
+  renderer-neutral project evidence.
+- Include the temporal morphology spine and preserve product ownership: Plant
+  Lab authors reusable tree and forest configurations, while Forest Factory
+  remains the standard-editor portal that places those outputs into scenes.
+- Include host-owned MCP authority, bounded tool calls, cancellation, evidence
+  retention, and operator-selected local model transport without claiming an
+  internal LLM or hidden autonomous write path.
+
 ## [v0.89.05] - Project texture admission and immutable scene closure
 
 - Add sampled_image as an explicit capability representation and extend the

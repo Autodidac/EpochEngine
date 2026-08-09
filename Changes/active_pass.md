@@ -12,10 +12,11 @@ This is the first gate in the two-month playable-2D critical path defined by
 
 ## Release Baseline
 
-The published `v0.89.01` Windows/Linux runtime, updater behavior, packaging,
-and stable multicontext branch are sealed. Development source continues from
-`v0.89.05`; do not alter release/updater code, handoff/build scripts, tags, or
-release assets unless the operator explicitly reopens that gate.
+The `v0.89.06` Windows/Linux runtime is the candidate for this explicitly
+reopened release gate. Source, packaged identity, staging validation, and public
+metadata must agree before publication. After verified Windows and Linux assets
+are published, reseal updater behavior, packaging, the release tag, and the
+stable multicontext branch before development advances to `v0.89.07`.
 Preserve these accepted source contracts:
 
 - normal editor operation owns one live backend; multicontext is diagnostic;
@@ -230,7 +231,7 @@ adapters remain Partial.
 
 ## Completed Capability Checkpoint
 
-Source v0.89.05 establishes explicit sampled-image capability truth,
+Source v0.89.06 establishes explicit sampled-image capability truth,
 evidence-backed texture admission, project-scoped texture publication and
 residency, and exact immutable Canvas2D resource closure. Debug contracts prove
 foreign-project rejection even for identical handle bits, strict versus

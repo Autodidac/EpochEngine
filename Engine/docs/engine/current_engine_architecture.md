@@ -2,8 +2,8 @@
 
 ## Snapshot
 
-Epoch is a C++23 module-first engine/editor. The published Windows/Linux
-runtime baseline is `v0.89.01`; active development source is `v0.89.05`.
+Epoch is a C++23 module-first engine/editor. The Windows/Linux release candidate
+and active development source are aligned at `v0.89.06` for package proof.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -100,9 +100,10 @@ ship.
 - **Path and cache ownership**: runtime assets and disposable cache resolve from
   executable-local roots. Updates, packages, models, atlases, and logs retain
   separate cache/storage boundaries.
-- **Release/update baseline**: the `v0.89.01` Windows/Linux release and updater
-  are sealed. Source work may advance without editing updater behavior, packaging,
-  tags, or release assets unless the operator explicitly reopens that gate.
+- **Release/update baseline**: the release gate is explicitly open for
+  `v0.89.06`. Canonical version extraction, Windows/Linux package staging, tag,
+  checksums, and startup evidence must agree before the updater and packaging
+  surfaces are resealed and source advances.
 - **Build lanes**: Visual Studio/MSBuild and root CMake remain aligned; Linux
   full-engine production proof uses current Clang, module-aware CMake/Ninja,
   vcpkg, package staging, contract checks, and bounded OpenGL smoke.

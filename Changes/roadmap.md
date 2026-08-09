@@ -30,7 +30,8 @@ architecture. It does not create a second design.
   but cannot consume the 2D delivery schedule unless shared contracts regress.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
-- The `v0.89.01` release/updater remains sealed unless explicitly reopened.
+- The `v0.89.06` release/updater becomes the sealed baseline after its Windows
+  and Linux packages pass staging, download-integrity, and startup proof.
 
 ## Current Foundation
 

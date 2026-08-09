@@ -222,6 +222,12 @@ Version numbers belong in:
 
 Version numbers do **not** belong in commit titles.
 
+`Tools/ai/get_epoch_version.ps1` is the canonical release-tooling reader for
+`Engine/modules/epoch.version.ixx`. It emits the same zero-padded revision used
+by `GetEngineVersion()`. Hosted and local staging must consume that result
+instead of reconstructing a version string independently.
+
+
 GitHub source archives should stay full source snapshots. Do not trim them down
 to match packaged runtime or updater-shell assets.
 

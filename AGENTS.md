@@ -84,7 +84,7 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- The published `v0.88.69` runtime release and its updater implementation are a
+- The published `v0.89.06` runtime release and its updater implementation are a
   sealed baseline. Do not edit updater code, updater UI, handoff/build scripts,
   packaging, release metadata, tags, or release assets unless the operator
   explicitly reopens that gate. Normal source-version advancement is allowed
@@ -155,7 +155,7 @@
   packaging command from the repo root:
 
   ```powershell
-  pwsh -NoProfile -File .\Tools\ai\stage_epoch_linux_release.ps1 -Version <version> -Configuration Clang-Release
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Tools\ai\stage_epoch_linux_release.ps1 -Version <version> -Configuration Clang-Release
   ```
 
   This command performs the approval-only staged OpenGL smoke in addition to
