@@ -14,6 +14,9 @@
 - Validate Linux dependency provenance against exact build and stage roots,
   including resolved equality for packaged SFML and Vulkan libraries, without
   rejecting the runner temporary directory that owns the valid package.
+- Pin the release-producing Linux runner to Ubuntu 22.04 and enforce a
+  `GLIBC_2.35` maximum across the executable and bundled libraries so hosted
+  packages remain runnable on the supported Linux baseline.
 - Ship the accumulated capability-tier foundation since v0.89.01: explicit
   sampled-image admission, project-scoped texture resources, immutable exact
   Canvas2D resource closure, deterministic texture artifacts, and stronger

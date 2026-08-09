@@ -153,6 +153,11 @@ for library in libsfml-graphics.so.3.0 libsfml-window.so.3.0 libsfml-system.so.3
         exit 1
     fi
 done
+max_glibc="$(readelf --version-info ./epoch ./lib/*.so* 2>/dev/null | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n1)"
+if [[ -z "$max_glibc" || "$(printf '%s\n' 'GLIBC_2.35' "$max_glibc" | sort -V | tail -n1)" != 'GLIBC_2.35' ]]; then
+    printf 'Packaged Linux runtime exceeds the GLIBC_2.35 baseline: %s\n' "$max_glibc" >&2
+    exit 1
+fi
 
 EPOCH_LOG_DIR='__LOGS__' ./epoch --version | grep -F 'Epoch v__VERSION__' >/dev/null
 EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null

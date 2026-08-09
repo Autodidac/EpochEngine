@@ -84,7 +84,7 @@ jobs:
               python -m cmake -E chdir "$GITHUB_WORKSPACE/build/ci"
               ctest --output-on-failure
           - name: linux-clang-engine
-            os: ubuntu-latest
+            os: ubuntu-22.04
             shell: bash
             install_linux_render_deps: true
             install_llvm_current: true
@@ -322,6 +322,11 @@ jobs:
               exit 1
             fi
           done
+          max_glibc="$(readelf --version-info ./epoch ./lib/*.so* 2>/dev/null | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | sort -Vu | tail -n1)"
+          if [[ -z "$max_glibc" || "$(printf '%s\n' 'GLIBC_2.35' "$max_glibc" | sort -V | tail -n1)" != 'GLIBC_2.35' ]]; then
+            printf 'Packaged Linux runtime exceeds the GLIBC_2.35 baseline: %s\n' "$max_glibc" >&2
+            exit 1
+          fi
           version_output="$(xvfb-run -a ./epoch --version 2>&1)"
           if ! grep -F "Epoch v$version" <<<"$version_output"; then
             printf 'Packaged version check failed. Expected Epoch v%s. Output:\n%s\n' "$version" "$version_output" >&2

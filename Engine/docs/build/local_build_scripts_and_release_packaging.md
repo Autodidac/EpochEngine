@@ -297,6 +297,10 @@ Before publishing a Linux/WSL2 asset:
   through `--bootstrap-current-toolchain`
 - do not publish the Linux package while the hosted `linux-clang-engine` build
   lane is failing
+- build the published Linux artifact on the pinned Ubuntu 22.04 release runner
+  and reject binaries or bundled libraries that require newer than
+  `GLIBC_2.35`; download and start the hosted artifact on that baseline before
+  publication
 - verify the Linux package reports the same version as the tag/source archive
 - verify `./epoch --version` from the staged package directory
 - smoke the no-args packaged entry locally under Linux/WSLg or a real Linux
