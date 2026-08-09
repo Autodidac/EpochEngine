@@ -118,6 +118,7 @@ Require-Path -Path (Join-Path $stage 'lib\libsfml-system.so.3.0') -Label 'Packag
 Require-Path -Path (Join-Path $stage 'lib\libvulkan.so.1') -Label 'Packaged Vulkan loader'
 
 $stageWsl = To-WslPath $stage
+$binaryRootWsl = To-WslPath $binaryRoot
 $outWsl = To-WslPath $resolvedOutput
 $tarWsl = To-WslPath $tarball
 $verifyLogsWsl = To-WslPath $verifyLogs
@@ -136,13 +137,22 @@ if grep -F 'not found' <<<"$ldd_output"; then
     echo 'Packaged Linux binary has unresolved shared libraries.' >&2
     exit 1
 fi
-if grep -E 'vcpkg_installed|/home/|/Users/|/work/' <<<"$ldd_output"; then
-    echo 'Packaged Linux binary resolved a dependency from a build-machine path.' >&2
+if grep -F 'vcpkg_installed' <<<"$ldd_output"; then
+    echo 'Packaged Linux binary resolved a dependency from vcpkg build output.' >&2
     exit 1
 fi
-vulkan_path="$(awk '/libvulkan\.so\.1 =>/ { print $3; exit }' <<<"$ldd_output")"
-test -n "$vulkan_path"
-test "$(readlink -f "$vulkan_path")" = "$(readlink -f ./lib/libvulkan.so.1)"
+if grep -F '__BUILD_ROOT__/' <<<"$ldd_output"; then
+    echo 'Packaged Linux binary resolved a dependency from the engine build root.' >&2
+    exit 1
+fi
+for library in libsfml-graphics.so.3.0 libsfml-window.so.3.0 libsfml-system.so.3.0 libvulkan.so.1; do
+    resolved="$(awk -v name="$library" '$1 == name && $2 == "=>" { print $3; exit }' <<<"$ldd_output")"
+    expected="__STAGE__/lib/$library"
+    if [[ -z "$resolved" || "$(readlink -f "$resolved")" != "$(readlink -f "$expected")" ]]; then
+        printf 'Packaged dependency %s resolved outside its staged lib directory: %s\n' "$library" "$resolved" >&2
+        exit 1
+    fi
+done
 
 EPOCH_LOG_DIR='__LOGS__' ./epoch --version | grep -F 'Epoch v__VERSION__' >/dev/null
 EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null
@@ -150,6 +160,7 @@ EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s \
     ./epoch --editor --renderer opengl --smoke
 '@
 $validationScript = $validationScript.Replace('__STAGE__', $stageWsl)
+$validationScript = $validationScript.Replace('__BUILD_ROOT__', $binaryRootWsl)
 $validationScript = $validationScript.Replace('__LOGS__', $verifyLogsWsl)
 $validationScript = $validationScript.Replace('__VERSION__', $Version)
 

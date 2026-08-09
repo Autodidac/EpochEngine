@@ -306,10 +306,22 @@ jobs:
             echo 'Packaged Linux binary has unresolved shared libraries.' >&2
             exit 1
           fi
-          if grep -E 'vcpkg_installed|/home/runner/work/' <<<"$ldd_output"; then
-            echo 'Packaged Linux binary resolved a dependency from the build workspace.' >&2
+          if grep -F 'vcpkg_installed' <<<"$ldd_output"; then
+            echo 'Packaged Linux binary resolved a dependency from vcpkg build output.' >&2
             exit 1
           fi
+          if grep -F "$GITHUB_WORKSPACE/" <<<"$ldd_output"; then
+            echo 'Packaged Linux binary resolved a dependency from GITHUB_WORKSPACE.' >&2
+            exit 1
+          fi
+          for library in libsfml-graphics.so.3.0 libsfml-window.so.3.0 libsfml-system.so.3.0 libvulkan.so.1; do
+            resolved="$(awk -v name="$library" '$1 == name && $2 == "=>" { print $3; exit }' <<<"$ldd_output")"
+            expected="$stage/lib/$library"
+            if [[ -z "$resolved" || "$(readlink -f "$resolved")" != "$(readlink -f "$expected")" ]]; then
+              printf 'Packaged dependency %s resolved outside its staged lib directory: %s\n' "$library" "$resolved" >&2
+              exit 1
+            fi
+          done
           version_output="$(xvfb-run -a ./epoch --version 2>&1)"
           if ! grep -F "Epoch v$version" <<<"$version_output"; then
             printf 'Packaged version check failed. Expected Epoch v%s. Output:\n%s\n' "$version" "$version_output" >&2

@@ -11,6 +11,9 @@
 - Disable persisted GitHub checkout credentials in build-only workflows and
   verify both pinned Ninja archives with stored SHA-512 values before
   extraction.
+- Validate Linux dependency provenance against exact build and stage roots,
+  including resolved equality for packaged SFML and Vulkan libraries, without
+  rejecting the runner temporary directory that owns the valid package.
 - Ship the accumulated capability-tier foundation since v0.89.01: explicit
   sampled-image admission, project-scoped texture resources, immutable exact
   Canvas2D resource closure, deterministic texture artifacts, and stronger
