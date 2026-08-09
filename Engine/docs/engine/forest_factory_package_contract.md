@@ -12,6 +12,10 @@ They may share deterministic morphology, temporal, voxel, asset, and GUI
 contracts, but they do not share a central editor surface and one never replaces
 the other.
 
+Plant Lab preview geometry carries `PlantLabPreview` authoring identity. Only an
+explicit Forest Factory placement operation converts an accepted asset preview
+into persistent `ForestFactory` project-scene entities.
+
 ## Provenance
 
 The Plant Lab integration source is:

@@ -176,6 +176,9 @@ export namespace epochengine::authoring::morphology
         bool truncated{};
     };
 
+    [[nodiscard]] std::uint64_t recompute_content_hash(
+        const Graph& graph) noexcept;
+
     enum class ValidationCode : std::uint8_t
     {
         valid,
@@ -676,49 +679,118 @@ export namespace epochengine::authoring::morphology
                 .lifetime = {birth, birth + recipe.growth.terminal_growth_seconds}});
         }
 
-        std::uint64_t hash = 14695981039346656037ull;
-        hash = mix_hash(hash, static_cast<std::uint64_t>(recipe.domain));
-        hash = mix_hash(hash, static_cast<std::uint64_t>(recipe.dimension));
-        hash = mix_hash(hash, recipe.growth.seed);
-        for (const Node& node : graph.nodes)
-        {
-            hash = mix_hash(hash, node.id.index);
-            hash = mix_hash(hash, node.parent.index);
-            hash = mix_hash(hash, float_bits(node.position.x));
-            hash = mix_hash(hash, float_bits(node.position.y));
-            hash = mix_hash(hash, float_bits(node.position.z));
-            hash = mix_hash(hash, float_bits(node.radius_meters));
-            hash = mix_hash(hash, float_bits(node.lifetime.birth_seconds));
-            hash = mix_hash(hash, float_bits(node.lifetime.end_seconds));
-        }
-        graph.content_hash = hash == 0u ? 1u : hash;
+        graph.content_hash = recompute_content_hash(graph);
         return graph;
     }
 
-    [[nodiscard]] inline std::uint64_t recompute_content_hash(const Graph& graph) noexcept
+    [[nodiscard]] std::uint64_t recompute_content_hash(const Graph& graph) noexcept
     {
         std::uint64_t hash = 14695981039346656037ull;
-        hash = mix_hash(hash, static_cast<std::uint64_t>(graph.recipe.domain));
-        hash = mix_hash(hash, static_cast<std::uint64_t>(graph.recipe.dimension));
-        hash = mix_hash(hash, graph.recipe.growth.seed);
+        const auto add_u64 = [&hash](std::uint64_t value) noexcept
+        {
+            hash = mix_hash(hash, value);
+        };
+        const auto add_float = [&add_u64](float value) noexcept
+        {
+            add_u64(float_bits(value));
+        };
+        const auto add_handle = [&add_u64](auto handle) noexcept
+        {
+            add_u64(static_cast<std::uint64_t>(handle.index));
+            add_u64(handle.generation);
+        };
+        const auto add_vector = [&add_float](voxel::Float3 value) noexcept
+        {
+            add_float(value.x);
+            add_float(value.y);
+            add_float(value.z);
+        };
+        const auto add_lifetime = [&add_float](TemporalRange range) noexcept
+        {
+            add_float(range.birth_seconds);
+            add_float(range.end_seconds);
+        };
+
+        const Recipe& recipe = graph.recipe;
+        const GrowthParameters& growth = recipe.growth;
+        add_u64(static_cast<std::uint64_t>(recipe.domain));
+        add_u64(static_cast<std::uint64_t>(recipe.dimension));
+        add_u64(growth.seed);
+        add_u64(growth.generations);
+        add_u64(growth.children_per_node);
+        add_float(growth.root_length_meters);
+        add_float(growth.segment_length_meters);
+        add_float(growth.length_decay);
+        add_float(growth.root_radius_meters);
+        add_float(growth.radius_decay);
+        add_float(growth.branch_angle_degrees);
+        add_float(growth.spread_degrees);
+        add_float(growth.twist_degrees);
+        add_float(growth.jitter_degrees);
+        add_float(growth.upward_bias);
+        add_float(growth.outward_bias);
+        add_float(growth.sag);
+        add_float(growth.sapling_pre_age_seconds);
+        add_float(growth.generation_delay_seconds);
+        add_float(growth.segment_growth_seconds);
+        add_float(growth.terminal_delay_seconds);
+        add_float(growth.terminal_growth_seconds);
+        add_u64(recipe.limits.maximum_depth);
+        add_u64(recipe.limits.maximum_children_per_node);
+        add_u64(recipe.limits.maximum_nodes);
+        add_u64(recipe.limits.maximum_segments);
+        add_u64(recipe.limits.maximum_terminals);
+        add_float(recipe.duration_seconds);
+        add_u64(graph.nodes.size());
+        add_u64(graph.segments.size());
+        add_u64(graph.terminals.size());
+        add_u64(graph.truncated ? 1u : 0u);
+
         for (const Node& node : graph.nodes)
         {
-            hash = mix_hash(hash, node.id.index);
-            hash = mix_hash(hash, node.parent.index);
-            hash = mix_hash(hash, float_bits(node.position.x));
-            hash = mix_hash(hash, float_bits(node.position.y));
-            hash = mix_hash(hash, float_bits(node.position.z));
-            hash = mix_hash(hash, float_bits(node.radius_meters));
-            hash = mix_hash(hash, float_bits(node.lifetime.birth_seconds));
-            hash = mix_hash(hash, float_bits(node.lifetime.end_seconds));
+            add_handle(node.id);
+            add_handle(node.parent);
+            add_u64(static_cast<std::uint64_t>(node.role));
+            add_u64(node.depth);
+            add_vector(node.position);
+            add_vector(node.tangent);
+            add_float(node.radius_meters);
+            add_lifetime(node.lifetime);
+        }
+        for (const Segment& segment : graph.segments)
+        {
+            add_handle(segment.id);
+            add_handle(segment.parent_node);
+            add_handle(segment.child_node);
+            add_vector(segment.start);
+            add_vector(segment.end);
+            add_vector(segment.tangent_start);
+            add_vector(segment.tangent_end);
+            add_float(segment.radius_start_meters);
+            add_float(segment.radius_end_meters);
+            add_u64(segment.depth);
+            add_lifetime(segment.lifetime);
+        }
+        for (const Terminal& terminal : graph.terminals)
+        {
+            add_handle(terminal.id);
+            add_handle(terminal.node);
+            add_u64(static_cast<std::uint64_t>(terminal.kind));
+            add_vector(terminal.position);
+            add_vector(terminal.outward);
+            add_vector(terminal.up);
+            add_float(terminal.scale_meters);
+            add_u64(terminal.variant);
+            add_lifetime(terminal.lifetime);
         }
         return hash == 0u ? 1u : hash;
     }
 
-    [[nodiscard]] inline ValidationResult validate(const Graph& graph) noexcept
+    [[nodiscard]] ValidationResult validate(const Graph& graph) noexcept
     {
         const ValidationResult recipe_result = validate(graph.recipe);
-        if (!recipe_result) return recipe_result;
+        if (!recipe_result)
+            return recipe_result;
         if (graph.nodes.empty() || graph.segments.empty())
             return {ValidationCode::invalid_identity};
         if (graph.nodes.size() > graph.recipe.limits.maximum_nodes ||
@@ -726,59 +798,108 @@ export namespace epochengine::authoring::morphology
             graph.terminals.size() > graph.recipe.limits.maximum_terminals)
             return {ValidationCode::budget_exceeded};
 
+        const auto same_vector = [](voxel::Float3 left, voxel::Float3 right) noexcept
+        {
+            return left.x == right.x && left.y == right.y && left.z == right.z;
+        };
+        const auto valid_lifetime = [](TemporalRange lifetime) noexcept
+        {
+            return std::isfinite(lifetime.birth_seconds) &&
+                std::isfinite(lifetime.end_seconds) &&
+                lifetime.end_seconds > lifetime.birth_seconds;
+        };
+
         for (std::size_t index = 0u; index < graph.nodes.size(); ++index)
         {
             const Node& node = graph.nodes[index];
-            if (!node.id.valid() || node.id.index != index)
+            if (!node.id.valid() || node.id.index != index || node.id.generation != 1u)
                 return {ValidationCode::invalid_identity, index};
-            if (index > 0u && (!node.parent.valid() || node.parent.index >= index))
-                return {ValidationCode::invalid_parent, index};
+            if (index == 0u)
+            {
+                if (node.parent != NodeId{} || node.role != NodeRole::root)
+                    return {ValidationCode::invalid_parent, index};
+            }
+            else
+            {
+                if (!node.parent.valid() || node.parent.index >= index ||
+                    node.parent != graph.nodes[node.parent.index].id)
+                    return {ValidationCode::invalid_parent, index};
+            }
+            if (static_cast<std::uint8_t>(node.role) >
+                    static_cast<std::uint8_t>(NodeRole::terminal) ||
+                (node.depth > graph.recipe.limits.maximum_depth &&
+                    node.depth - 1u > graph.recipe.limits.maximum_depth))
+                return {ValidationCode::invalid_identity, index};
             if (!finite(node.position) || !finite(node.tangent) ||
                 !std::isfinite(node.radius_meters) || !(node.radius_meters > 0.0f))
                 return {ValidationCode::non_finite_geometry, index};
-            if (!std::isfinite(node.lifetime.birth_seconds) ||
-                !std::isfinite(node.lifetime.end_seconds) ||
-                !(node.lifetime.end_seconds > node.lifetime.birth_seconds))
+            if (!valid_lifetime(node.lifetime))
                 return {ValidationCode::invalid_lifetime, index};
         }
+
         for (std::size_t index = 0u; index < graph.segments.size(); ++index)
         {
             const Segment& segment = graph.segments[index];
             if (!segment.id.valid() || segment.id.index != index ||
+                segment.id.generation != 1u ||
                 !segment.parent_node.valid() || !segment.child_node.valid())
                 return {ValidationCode::invalid_identity, index};
             if (segment.parent_node.index >= graph.nodes.size() ||
                 segment.child_node.index >= graph.nodes.size() ||
                 segment.parent_node.index >= segment.child_node.index)
                 return {ValidationCode::invalid_parent, index};
+
+            const Node& parent = graph.nodes[segment.parent_node.index];
+            const Node& child = graph.nodes[segment.child_node.index];
+            if (segment.parent_node != parent.id || segment.child_node != child.id ||
+                child.depth != parent.depth + 1u ||
+                segment.depth != parent.depth ||
+                !same_vector(segment.start, parent.position) ||
+                !same_vector(segment.end, child.position) ||
+                !same_vector(segment.tangent_start, parent.tangent) ||
+                !same_vector(segment.tangent_end, child.tangent))
+                return {ValidationCode::invalid_parent, index};
             if (!finite(segment.start) || !finite(segment.end) ||
                 !finite(segment.tangent_start) || !finite(segment.tangent_end) ||
+                !std::isfinite(segment.radius_start_meters) ||
+                !std::isfinite(segment.radius_end_meters) ||
                 !(segment.radius_start_meters > 0.0f) ||
                 !(segment.radius_end_meters > 0.0f))
                 return {ValidationCode::non_finite_geometry, index};
-            if (!(segment.lifetime.end_seconds > segment.lifetime.birth_seconds))
+            if (!valid_lifetime(segment.lifetime))
                 return {ValidationCode::invalid_lifetime, index};
         }
+
         for (std::size_t index = 0u; index < graph.terminals.size(); ++index)
         {
             const Terminal& terminal = graph.terminals[index];
             if (!terminal.id.valid() || terminal.id.index != index ||
+                terminal.id.generation != 1u ||
                 !terminal.node.valid() || terminal.node.index >= graph.nodes.size())
                 return {ValidationCode::invalid_identity, index};
+            if (terminal.node != graph.nodes[terminal.node.index].id)
+                return {ValidationCode::invalid_parent, index};
+            if (static_cast<std::uint8_t>(terminal.kind) >
+                static_cast<std::uint8_t>(TerminalKind::discharge))
+                return {ValidationCode::invalid_identity, index};
             if (!finite(terminal.position) || !finite(terminal.outward) ||
-                !finite(terminal.up) || !(terminal.scale_meters > 0.0f))
+                !finite(terminal.up) || !std::isfinite(terminal.scale_meters) ||
+                !(terminal.scale_meters > 0.0f))
                 return {ValidationCode::non_finite_geometry, index};
-            if (!(terminal.lifetime.end_seconds > terminal.lifetime.birth_seconds))
+            if (!valid_lifetime(terminal.lifetime))
                 return {ValidationCode::invalid_lifetime, index};
         }
+
         if (graph.content_hash == 0u || graph.content_hash != recompute_content_hash(graph))
             return {ValidationCode::content_hash_mismatch};
         return {};
     }
 
-    [[nodiscard]] inline Sample sample(const Graph& graph, float time_seconds)
+    [[nodiscard]] Sample sample(const Graph& graph, float time_seconds)
     {
         Sample result{};
+        if (!std::isfinite(time_seconds) || !validate(graph))
+            return result;
         result.time_seconds = (std::clamp)(time_seconds, 0.0f, graph.recipe.duration_seconds);
         result.segments.reserve(graph.segments.size());
         result.terminals.reserve(graph.terminals.size());
@@ -896,11 +1017,14 @@ export namespace epochengine::authoring::morphology
         bool deterministic{};
         bool temporal{};
         bool voxel_lod{};
+        bool identity_integrity{};
+        bool content_integrity{};
 
         [[nodiscard]] constexpr bool passed() const noexcept
         {
             return plant && vascular && respiratory && electrical &&
-                deterministic && temporal && voxel_lod;
+                deterministic && identity_integrity && content_integrity &&
+                temporal && voxel_lod;
         }
     };
 
@@ -921,6 +1045,22 @@ export namespace epochengine::authoring::morphology
         const Graph plant_again = build_graph(default_recipe(Domain::plant));
         report.deterministic = plant.content_hash == plant_again.content_hash &&
             plant.nodes.size() == plant_again.nodes.size();
+        Graph stale_identity = plant;
+        if (stale_identity.nodes.size() > 1u)
+        {
+            ++stale_identity.nodes[1].parent.generation;
+            stale_identity.content_hash = recompute_content_hash(stale_identity);
+            report.identity_integrity =
+                validate(stale_identity).code == ValidationCode::invalid_parent;
+        }
+        Graph mutated_content = plant;
+        if (!mutated_content.terminals.empty())
+        {
+            mutated_content.terminals.front().variant ^= 1u;
+            report.content_integrity =
+                validate(mutated_content).code == ValidationCode::content_hash_mismatch &&
+                sample(mutated_content, mutated_content.recipe.duration_seconds).segments.empty();
+        }
         const Sample early = sample(plant, 0.1f);
         const Sample late = sample(plant, plant.recipe.duration_seconds);
         report.temporal = !early.segments.empty() &&

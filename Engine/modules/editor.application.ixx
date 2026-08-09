@@ -169,10 +169,10 @@ export namespace epochengine
                 return &application;
         }
 
-        // Preserve launch compatibility with projects created before the
-        // dedicated vegetation designer was renamed Plant Lab.
+        // Preserve the old launch id without reopening the authoring editor:
+        // Forest Factory now belongs to the standard editor placement portal.
         if (project_id == "forestfactory")
-            return &plant_lab_editor_application();
+            return &standard_editor_application();
         return nullptr;
     }
 

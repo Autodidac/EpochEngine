@@ -82,9 +82,9 @@ namespace epochengine
             const float height = (std::max)(0.32f, (trunk.end.y - trunk.start.y) * preview_scale);
             const float width = (std::max)(0.12f, trunk.radius * 2.8f * preview_scale);
             scene.entities.push_back({
-                "ForestFactoryTrunk",
+                "PlantLabTrunk",
                 "ForestTrunk",
-                "ForestFactory",
+                "PlantLabPreview",
                 {
                     (trunk.start.x + trunk.end.x) * 0.5f * preview_scale,
                     (trunk.start.y + trunk.end.y) * 0.5f * preview_scale,
@@ -111,9 +111,9 @@ namespace epochengine
             const auto& segment = geometry.segments[i];
             const float size = (std::clamp)(segment.radius * 2.1f * preview_scale, 0.055f, 0.16f);
             scene.entities.push_back({
-                std::format("ForestFactoryBranch_{:02}", branch_ordinal),
+                std::format("PlantLabBranch_{:02}", branch_ordinal),
                 "ForestBranchJoint",
-                "ForestFactory",
+                "PlantLabPreview",
                 scaled_position(segment.end),
                 {},
                 { size, size, size },
@@ -134,9 +134,9 @@ namespace epochengine
             const auto& leaf = geometry.leaves[i];
             const float size = (std::clamp)(leaf.size * 1.15f * preview_scale, 0.10f, 0.24f);
             scene.entities.push_back({
-                std::format("ForestFactoryCanopy_{:02}", canopy_ordinal),
+                std::format("PlantLabCanopy_{:02}", canopy_ordinal),
                 "ForestFoliageCluster",
-                "ForestFactory",
+                "PlantLabPreview",
                 scaled_position(leaf.position),
                 {},
                 { size, size * 0.62f, size },

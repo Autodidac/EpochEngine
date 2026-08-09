@@ -14,7 +14,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 
 The published `v0.89.01` Windows/Linux runtime, updater behavior, packaging,
 and stable multicontext branch are sealed. Development source continues from
-`v0.89.03`; do not alter release/updater code, handoff/build scripts, tags, or
+`v0.89.04`; do not alter release/updater code, handoff/build scripts, tags, or
 release assets unless the operator explicitly reopens that gate.
 Preserve these accepted source contracts:
 
@@ -150,11 +150,13 @@ The working tree contains these current or in-progress foundations:
   Plant Lab, and GUI Editor own separate C++23 implementation units, canonical
   scene seeds, surface masks, camera/dock defaults, pane policy, and
   run/authoring permissions while reusing one editor shell and service spine;
-- Plant Lab remains a separate editor for custom tree assets and forest
-  configurations. It uses `authoring.morphology` for stable-ID deterministic
-  temporal branching. Forest Factory remains the placement portal in the
-  standard editor and consumes those outputs for browsing, scene import, and
-  placement; the shared spine does not merge their UI or ownership;
+- Plant Lab is the separate launcher editor for authoring custom tree assets and
+  reusable forest configurations. It uses `authoring.morphology` for stable-ID
+  deterministic temporal branching and owns `PlantLabPreview` authoring objects.
+  Forest Factory is the standard-editor placement portal. Its current
+  compatibility adapter demonstrates explicit placement from a default authored
+  preview; project-library browsing and compiled Plant Lab output import remain
+  unfinished. The two products do not merge surfaces, documents, or ownership;
 - `temporal.request` owns explicit global/sample time mapping, rates, anchors,
   forward/reverse/frozen direction, bounded exact/nearest/bracket observation,
   truth/reconstruction evidence, retained-history metrics, and

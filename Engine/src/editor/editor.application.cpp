@@ -2713,7 +2713,7 @@ namespace epochengine
                 const std::size_t selectedIndex = (std::min)(
                     state.selectedEntity,
                     state.entities.size() - 1u);
-                if (state.entities[selectedIndex].category != "ForestFactory")
+                if (state.entities[selectedIndex].category != "PlantLabPreview")
                     previousSelection = state.entities[selectedIndex].name;
             }
 
@@ -2721,13 +2721,13 @@ namespace epochengine
             const auto scene = make_plant_lab_editor_scene();
             for (const auto& seed : scene.entities)
             {
-                if (seed.category == "ForestFactory")
+                if (seed.category == "PlantLabPreview")
                     desired.push_back(editor_entity_from_seed(seed));
             }
             const std::size_t generatedCount = desired.size();
             if (synchronize_editor_scene_category(
                     state,
-                    "ForestFactory",
+                    "PlantLabPreview",
                     std::move(desired),
                     "Regenerate Plant Lab preview",
                     previousSelection))
@@ -2759,7 +2759,7 @@ namespace epochengine
             std::vector<EditorEntity> placed{};
             for (const auto& seed : source.entities)
             {
-                if (seed.category != "ForestFactory")
+                if (seed.category != "PlantLabPreview")
                     continue;
                 auto entity = editor_entity_from_seed(seed);
                 entity.name = std::format(
@@ -2769,6 +2769,7 @@ namespace epochengine
                 entity.position[0] += placementX;
                 entity.position[2] += placementZ;
                 entity.editorOnly = false;
+                entity.category = "ForestFactory";
                 placed.push_back(std::move(entity));
             }
             const std::size_t placedCount = placed.size();
@@ -2808,13 +2809,22 @@ namespace epochengine
         {
             return entity.category == "ForestFactory";
         }
-
-        [[nodiscard]] bool is_selected_forest_factory_entity(const EditorEntity& entity, bool selected) noexcept
+        [[nodiscard]] bool is_plant_lab_preview_entity(const EditorEntity& entity) noexcept
         {
-            return selected && is_forest_factory_entity(entity);
+            return entity.category == "PlantLabPreview";
         }
 
-        [[nodiscard]] epochengine::previewgrid::Vec3 forest_factory_color_for_entity(
+        [[nodiscard]] bool is_vegetation_entity(const EditorEntity& entity) noexcept
+        {
+            return is_forest_factory_entity(entity) || is_plant_lab_preview_entity(entity);
+        }
+
+        [[nodiscard]] bool is_selected_vegetation_entity(const EditorEntity& entity, bool selected) noexcept
+        {
+            return selected && is_vegetation_entity(entity);
+        }
+
+        [[nodiscard]] epochengine::previewgrid::Vec3 vegetation_color_for_entity(
             const EditorEntity& entity) noexcept
         {
             if (entity.type == "ForestTrunk")
@@ -2826,7 +2836,7 @@ namespace epochengine
             return epochengine::previewgrid::visual_rgb(epochengine::visuals::forest_default());
         }
 
-        [[nodiscard]] float forest_factory_radius_for_entity(const EditorEntity& entity) noexcept
+        [[nodiscard]] float vegetation_radius_for_entity(const EditorEntity& entity) noexcept
         {
             const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
             if (entity.type == "ForestTrunk")
@@ -2842,8 +2852,8 @@ namespace epochengine
             const EditorEntity& entity,
             bool selected) noexcept
         {
-            if (is_selected_forest_factory_entity(entity, selected))
-                return forest_factory_color_for_entity(entity);
+            if (is_selected_vegetation_entity(entity, selected))
+                return vegetation_color_for_entity(entity);
             if (selected)
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::object_selected());
             if (entity.type == "Light")
@@ -2852,8 +2862,8 @@ namespace epochengine
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::object_spawn());
             if (entity.type == "Camera")
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::object_camera());
-            if (entity.category == "ForestFactory")
-                return forest_factory_color_for_entity(entity);
+            if (is_vegetation_entity(entity))
+                return vegetation_color_for_entity(entity);
             if (entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name)
                 return { 0.08f, 0.92f, 0.64f };
             if (entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kCabinetBodySceneNode.name)
@@ -2876,8 +2886,8 @@ namespace epochengine
                 return 0.38f;
             if (entity.category == "World" || entity.type == "Level")
                 return 0.75f;
-            if (entity.category == "ForestFactory")
-                return forest_factory_radius_for_entity(entity);
+            if (is_vegetation_entity(entity))
+                return vegetation_radius_for_entity(entity);
             return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
         }
 
@@ -2911,14 +2921,14 @@ namespace epochengine
             const EditorEntity& entity,
             bool selected) noexcept
         {
-            if (is_selected_forest_factory_entity(entity, selected))
-                return forest_factory_color_for_entity(entity);
+            if (is_selected_vegetation_entity(entity, selected))
+                return vegetation_color_for_entity(entity);
             return marker_color_for_entity(entity, selected);
         }
 
         [[nodiscard]] bool marker_selected_for_entity(const EditorEntity& entity, bool selected) noexcept
         {
-            return selected && !is_forest_factory_entity(entity);
+            return selected && !is_vegetation_entity(entity);
         }
 
         [[nodiscard]] std::size_t visible_entity_count(const EditorState& state) noexcept
@@ -3064,7 +3074,7 @@ namespace epochengine
                     .radius = marker_radius_for_entity(entity),
                     .primitive = preview_primitive_for_entity(entity),
                     .selected = marker_selected_for_entity(entity, selected),
-                    .editorOnly = entity.editorOnly || entity.category == "Editor" || is_forest_factory_entity(entity),
+                    .editorOnly = entity.editorOnly || entity.category == "Editor" || is_plant_lab_preview_entity(entity),
                     .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name
                 });
             }
@@ -8809,12 +8819,15 @@ namespace epochengine
 
             auto inspectorMcpRecord = [&]() {
                 return epochengine::ai::McpCaptureRecord{
+                    .session_id = editor.projectId + "-manual-evidence",
+                    .call_id = "self-iteration-guidance",
                     .server = "editor",
                     .tool = "self-iteration-guidance",
                     .prompt = build_ai_self_iteration_prompt(editor),
                     .normalized_output = epochengine::ai::active_provider_summary(),
-                    .source_path = editor.projectScenePath.empty() ? editor.projectRoot : editor.projectScenePath
-                };
+                    .source_path = editor.projectScenePath.empty() ? editor.projectRoot : editor.projectScenePath,
+                    .state = epochengine::ai::McpCallState::succeeded,
+                    .error = epochengine::ai::McpErrorCode::none};
             };
 
             auto inspectorIterationPacket = [&]() {
@@ -8972,6 +8985,9 @@ namespace epochengine
             {
                 if (gui::button("Run AI Tool Harness", { inspectorWidth, 30.0f }))
                 {
+                    const std::uint64_t harnessOrdinal = editor.aiToolHarnessRunCount + 1u;
+                    const std::string harnessSessionId = editor.projectId + "-manual-harness";
+                    const std::string harnessCallId = "script-run-" + std::to_string(harnessOrdinal);
                     const std::string before = editor_tooling_state_summary(editor);
                     const auto build = editor_build_script(editor.activeScript, editor.projectRoot);
                     editor.scriptBuildStatus = build.summary;
@@ -8983,14 +8999,17 @@ namespace epochengine
                         : "Harness failed; inspect script build/run logs.";
 
                     epochengine::ai::append_tool_trace(epochengine::ai::McpCaptureRecord{
+                        .session_id = harnessSessionId,
+                        .call_id = harnessCallId,
                         .server = "editor",
-                        .tool = "ai-tool-harness",
+                        .tool = "script.run",
                         .prompt = std::string("Build and run selected editor tooling script: ") + editor.activeScript,
                         .normalized_output = std::string("build=") + (build.succeeded ? "pass" : "fail")
                             + "; run=" + (ran ? "pass" : "fail")
                             + "; before={" + before + "}; after={" + after + "}",
-                        .source_path = inspectorActiveScriptSource
-                    });
+                        .source_path = inspectorActiveScriptSource,
+                        .state = ran ? epochengine::ai::McpCallState::succeeded : epochengine::ai::McpCallState::failed,
+                        .error = ran ? epochengine::ai::McpErrorCode::none : epochengine::ai::McpErrorCode::execution_failed});
 
                     push_editor_log(editor, ran
                         ? "[ai-tool] Harness ran selected script and captured before/after state."
@@ -9886,7 +9905,7 @@ namespace epochengine
                             editor.entities.end(),
                             [](const EditorEntity& entity)
                             {
-                                return entity.name.rfind("ForestFactoryCanopy_", 0) == 0;
+                                return entity.name.rfind("PlantLabCanopy_", 0) == 0;
                             });
                         if (selected != editor.entities.end())
                         {

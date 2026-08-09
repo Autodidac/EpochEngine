@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.03-1F7A4C?style=for-the-badge" alt="Current development source v0.89.03" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.04-1F7A4C?style=for-the-badge" alt="Current development source v0.89.04" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.01-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.01" />
 </p>
 
@@ -76,7 +76,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.03`; the published stable Windows/Linux
+- Active development source is `v0.89.04`; the published stable Windows/Linux
   runtime is `v0.89.01`.
 - The accepted `v0.89.01` updater and packages are sealed while source development
   continues on the capability-tier and playable-2D plan.
@@ -118,9 +118,10 @@ For engine/tooling developers:
   seeds, surfaces, camera policy, panes, and run/authoring permissions.
 - Plant Lab is the separate custom-tree and forest-configuration authoring
   application. Forest Factory is the placement portal in the standard editor;
-  it browses those authored outputs and places/configures them in project
-  scenes. GUI Editor owns its canonical Canvas2D scene without legacy transform
-  rewriting.
+  its current default-asset adapter proves explicit scene placement, while
+  project-library browsing and compiled Plant Lab asset import remain the next
+  production slice. GUI Editor owns its canonical Canvas2D scene without legacy
+  transform rewriting.
 - One renderer owns the baked primary surface; secondary diagnostic contexts
   and application-compatible routed panes keep optional popout/redock.
 - Engine Arcade now uses a validated cabinet silhouette with screen and control

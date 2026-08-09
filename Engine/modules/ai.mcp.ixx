@@ -121,10 +121,22 @@ export namespace epochengine::ai
         std::string call_id{};
         std::string tool{};
         std::vector<McpArgument> arguments{};
-        McpToolCapability granted_capabilities{McpToolCapability::none};
         std::uint32_t step{};
-        bool operator_approved{};
         bool cancellation_requested{};
+    };
+
+    struct McpSessionAuthority final
+    {
+        std::string session_id{};
+        McpToolCapability granted_capabilities{McpToolCapability::none};
+        std::vector<std::string> approved_call_ids{};
+        bool cancellation_requested{};
+
+        [[nodiscard]] bool approves(std::string_view call_id) const noexcept
+        {
+            return std::find(approved_call_ids.begin(), approved_call_ids.end(), call_id) !=
+                approved_call_ids.end();
+        }
     };
 
     struct McpToolResult final
@@ -184,10 +196,16 @@ export namespace epochengine::ai
             return limits_;
         }
 
-        [[nodiscard]] McpValidation validate(const McpToolCall& call) const
+        [[nodiscard]] McpValidation validate(
+            const McpToolCall& call,
+            const McpSessionAuthority& authority) const
         {
             if (call.session_id.empty() || call.call_id.empty() || call.tool.empty())
                 return {McpErrorCode::invalid_request, "Session, call, and tool identity are required."};
+            if (authority.session_id.empty() || authority.session_id != call.session_id)
+                return {McpErrorCode::capability_denied, "Tool authority does not belong to this session."};
+            if (call.cancellation_requested || authority.cancellation_requested)
+                return {McpErrorCode::cancelled, "The tool call was cancelled before execution."};
             if (call.step >= limits_.maximum_session_steps)
                 return {McpErrorCode::budget_exhausted, "Session step budget is exhausted."};
             if (call.arguments.size() > limits_.maximum_arguments)
@@ -209,12 +227,10 @@ export namespace epochengine::ai
             const McpToolDescriptor* descriptor = find(call.tool);
             if (descriptor == nullptr || !descriptor->available)
                 return {McpErrorCode::unknown_tool, "Requested tool is unavailable."};
-            if (!has_capability(call.granted_capabilities, descriptor->capabilities))
+            if (!has_capability(authority.granted_capabilities, descriptor->capabilities))
                 return {McpErrorCode::capability_denied, "The session did not grant the tool capability."};
-            if (requires_operator_approval(descriptor->risk) && !call.operator_approved)
+            if (requires_operator_approval(descriptor->risk) && !authority.approves(call.call_id))
                 return {McpErrorCode::approval_required, "The tool requires visible operator approval."};
-            if (call.cancellation_requested)
-                return {McpErrorCode::cancelled, "The tool call was cancelled before execution."};
             return {};
         }
 
@@ -283,8 +299,8 @@ export namespace epochengine::ai
         std::string prompt{};
         std::string normalized_output{};
         std::string source_path{};
-        McpCallState state{McpCallState::succeeded};
-        McpErrorCode error{McpErrorCode::none};
+        McpCallState state{McpCallState::failed};
+        McpErrorCode error{McpErrorCode::evidence_missing};
     };
 
     [[nodiscard]] inline bool run_mcp_contract()
@@ -299,19 +315,29 @@ export namespace epochengine::ai
         McpToolCall inspect{
             .session_id = "contract-session",
             .call_id = "inspect-1",
-            .tool = "project.inspect",
+            .tool = "project.inspect"};
+        McpSessionAuthority authority{
+            .session_id = "contract-session",
             .granted_capabilities = McpToolCapability::inspect};
-        if (!registry.validate(inspect))
+        if (!registry.validate(inspect, authority))
             return false;
 
         McpToolCall build{
             .session_id = "contract-session",
             .call_id = "build-1",
-            .tool = "project.build",
-            .granted_capabilities = McpToolCapability::build | McpToolCapability::capture};
-        if (registry.validate(build).error != McpErrorCode::approval_required)
+            .tool = "project.build"};
+        authority.granted_capabilities = McpToolCapability::build | McpToolCapability::capture;
+        McpSessionAuthority foreign_authority = authority;
+        foreign_authority.session_id = "other-session";
+        if (registry.validate(build, foreign_authority).error != McpErrorCode::capability_denied)
             return false;
-        build.operator_approved = true;
-        return static_cast<bool>(registry.validate(build));
+        if (registry.validate(build, authority).error != McpErrorCode::approval_required)
+            return false;
+        authority.approved_call_ids.push_back(build.call_id);
+        McpSessionAuthority cancelled_authority = authority;
+        cancelled_authority.cancellation_requested = true;
+        if (registry.validate(build, cancelled_authority).error != McpErrorCode::cancelled)
+            return false;
+        return static_cast<bool>(registry.validate(build, authority));
     }
 }

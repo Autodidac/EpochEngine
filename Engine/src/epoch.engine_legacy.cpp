@@ -2001,6 +2001,19 @@ namespace epochengine::core
         const auto& standardApplication = epochengine::standard_editor_application();
         const auto& plantLabApplication = epochengine::plant_lab_editor_application();
         const auto& guiApplication = epochengine::gui_editor_application();
+        const bool plantLabPreviewIdentity = std::any_of(
+            plantLabApplicationScene.entities.begin(),
+            plantLabApplicationScene.entities.end(),
+            [](const epochengine::EditorSceneSeedEntity& entity)
+            {
+                return entity.category == "PlantLabPreview";
+            }) && std::none_of(
+                plantLabApplicationScene.entities.begin(),
+                plantLabApplicationScene.entities.end(),
+                [](const epochengine::EditorSceneSeedEntity& entity)
+                {
+                    return entity.category == "ForestFactory";
+                });
         check(
             "editor.application_scenes",
             epochengine::validate_editor_application(standardApplication, standardScene)
@@ -2008,11 +2021,14 @@ namespace epochengine::core
             && epochengine::validate_editor_application(guiApplication, guiApplicationScene));
         check(
             "editor.application_ownership",
-            epochengine::editor_application_for_project("projectlauncher") == &standardApplication
+            plantLabPreviewIdentity
+            && epochengine::editor_application_for_project("projectlauncher") == &standardApplication
             && epochengine::editor_application_for_project("plantlab") == &plantLabApplication
             && epochengine::editor_application_for_project("twodstudio") == &guiApplication
             && epochengine::editor_application_supports_surface(
                 standardApplication, epochengine::EditorApplicationSurface::ForestFactory)
+            && !epochengine::editor_application_supports_surface(
+                standardApplication, epochengine::EditorApplicationSurface::PlantLab)
             && epochengine::editor_application_supports_surface(
                 standardApplication, epochengine::EditorApplicationSurface::Game2D)
             && epochengine::editor_application_supports_surface(
@@ -2025,7 +2041,7 @@ namespace epochengine::core
                 guiApplication, epochengine::EditorApplicationSurface::Game2D)
             && !epochengine::editor_application_supports_surface(
                 guiApplication, epochengine::EditorApplicationSurface::Scene)
-            && epochengine::editor_application_for_project("forestfactory") == &plantLabApplication);
+            && epochengine::editor_application_for_project("forestfactory") == &standardApplication);
 
         auto forestProfile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
@@ -3119,12 +3135,15 @@ namespace epochengine::core
             "; evidence_paths=" + std::to_string(evidencePaths.size());
 
         epochengine::ai::append_tool_trace(epochengine::ai::McpCaptureRecord{
+            .session_id = projectId + "-cli-self-test",
+            .call_id = "project-test-1",
             .server = "epoch-editor-cli",
-            .tool = "editor-project-self-test",
+            .tool = "project.test",
             .prompt = "Run visible editor project self-test for " + projectId,
             .normalized_output = normalizedOutput,
-            .source_path = ensured.default_script_path.empty() ? ensured.manifest_path : ensured.default_script_path
-        });
+            .source_path = ensured.default_script_path.empty() ? ensured.manifest_path : ensured.default_script_path,
+            .state = verifierReady ? epochengine::ai::McpCallState::succeeded : epochengine::ai::McpCallState::failed,
+            .error = verifierReady ? epochengine::ai::McpErrorCode::none : epochengine::ai::McpErrorCode::execution_failed});
 
         epochengine::ai::IterationPacket packet{};
         packet.packet_name = projectId + "-cli-self-test";

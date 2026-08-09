@@ -33,7 +33,11 @@ model provider. The current contract provides:
   capability classes;
 - operator-approval gates for every write, child process, source edit, or
   network-sensitive action;
+- host-owned session authority containing granted capabilities and approved
+  call IDs; model/tool-call payloads cannot grant themselves either one;
 - cancellation plus argument, result, evidence, step, and time budgets;
+- fail-closed evidence records whose default state is failed/missing until an
+  explicit executor supplies a terminal result;
 - an in-process project tool registry covering inspect, create, save, document
   edit, script edit, build, run, test, capture, and diagnostics.
 

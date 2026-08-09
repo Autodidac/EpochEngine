@@ -2453,19 +2453,9 @@ namespace epochengine::ai
             return "OS AI model could not initialize. Confirm a local model is selected and the endpoint is reachable.";
 
         const auto reply = g_engineAi->submit(user_text);
-        if (is_promotable_assistant_text(reply.text))
+        if (!reply.text.empty() && !is_promotable_assistant_text(reply.text))
         {
-            append_tool_trace(McpCaptureRecord{
-                .server = "local-openai-compatible",
-                .tool = "chat",
-                .prompt = user_text,
-                .normalized_output = reply.text,
-                .source_path = active_model_manifest().manifest_path
-            });
-        }
-        else if (!reply.text.empty())
-        {
-            core::log::warn("ai", "Skipped non-promotable MCP chat capture.");
+            core::log::warn("ai", "Local model returned non-promotable assistant content.");
             return "Local model returned reasoning/debug text instead of final assistant content. Adjust the local model chat template or choose a content-producing OS model before using Engine AI chat.";
         }
         if (reply.text.empty())

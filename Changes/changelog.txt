@@ -1,5 +1,25 @@
 # Epoch Changelog
 
+## [v0.89.04] - Trust boundary and editor ownership hardening
+
+- Move MCP capability grants and per-call approvals out of model-provided tool
+  calls and into host-owned session authority; prove foreign-session rejection,
+  approval gates, cancellation, and successful approved execution.
+- Make retained MCP evidence fail closed by default, record explicit terminal
+  state for manual harness/CLI execution, and keep normal chat out of tool-trace
+  storage.
+- Expand morphology content identity across recipes, nodes, segments, terminals,
+  references, generations, geometry, and lifetimes; reject stale references and
+  mutated content before temporal sampling.
+- Give heavy exported morphology validation/sampling one module-owned definition
+  to avoid the MSVC importer ICE while preserving the public C++23 API.
+- Separate Plant Lab preview identity from Forest Factory placement identity,
+  route the legacy `forestfactory` launch ID to the standard editor, and prove
+  cross-application surface rejection.
+- Reclassify the standalone Extensions llama.cpp package as the plan-only
+  runtime contract it implements; its manifest validator and Release self-test
+  pass without fetching, building, or running an external model runtime.
+
 ## [v0.89.03] - Temporal morphology and operator-model MCP foundation
 
 - Add `authoring.morphology` with stable generation-checked nodes, segments,
