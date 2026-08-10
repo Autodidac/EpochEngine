@@ -363,6 +363,7 @@ set(EPOCH_SOURCES
     src/editor/editor.gui.cpp
     src/editor/editor.canvas2d_scene.cpp
     src/renderers/canvas2d/render.canvas2d_scene.cpp
+    src/renderers/canvas2d/render.canvas2d_evidence.cpp
     src/renderers/canvas2d/render.canvas2d_scene_contract.cpp
     src/renderers/canvas2d/canvas2d.scene_contracts.cpp
     src/utility.filewatch.cpp

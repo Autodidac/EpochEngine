@@ -1,5 +1,21 @@
 # Epoch Changelog
 
+## [v0.89.09] - Canvas2D native pixel evidence
+
+- Add `render.canvas2d_evidence` with deterministic top-left normalization,
+  bottom-left readback support, padded-row handling, canonical image hashing,
+  per-channel tolerance, bounded comparison, mismatch coordinates, and
+  build-safe exact/failure contracts.
+- Add a capture-lane-only OpenGL Canvas2D viewport readback after the native
+  compose draw. It compares the live viewport to the T0-CPU presentation after
+  capture warmup and publishes a queryable snapshot plus one evidence log.
+- Preserve normal frame cost and protected scene/GUI/present order. Evidence
+  readback is one-shot per scene/output identity and restores read framebuffer,
+  read buffer, pixel-pack buffer, alignment, row length, and row/column skips.
+- Prove safe no-context refusal without claiming live pixel parity; operator or
+  approved harness capture remains required to promote OpenGL presentation
+  evidence.
+
 ## [v0.89.08] - Project Library texture pipeline
 
 - Persist validated compiled texture artifacts beneath each project Library with

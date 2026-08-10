@@ -5,6 +5,7 @@
 module canvas2d.scene_contracts;
 
 import editor.canvas2d_scene;
+import render.canvas2d_evidence;
 import render.canvas2d_scene;
 
 namespace epochengine::canvas2d_scene_contracts
@@ -19,6 +20,15 @@ namespace epochengine::canvas2d_scene_contracts
             return {false,
                 canvas2d::scene_content::resource_closure_contract_failure_name(
                     resources)};
+        }
+        const auto evidence =
+            canvas2d::evidence::canvas2d_pixel_evidence_runtime_contract_failure();
+        if (evidence != canvas2d::evidence::PixelEvidenceContractFailure::none)
+        {
+            return {
+                false,
+                canvas2d::evidence::pixel_evidence_contract_failure_name(
+                    evidence)};
         }
         const auto scene = canvas2d::scene_content::run_scene_content_contract();
         if (scene != canvas2d::scene_content::SceneContractFailure::none)

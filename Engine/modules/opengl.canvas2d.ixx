@@ -9,6 +9,8 @@ module;
 #include <cstdint>
 #include <limits>
 #include <mutex>
+#include <new>
+#include <vector>
 
 #include "../include/engine.config.hpp"
 
@@ -20,6 +22,7 @@ export module opengl.canvas2d;
 
 import render.canvas2d;
 import render.canvas2d_cpu;
+import render.canvas2d_evidence;
 import render.canvas2d_presentation;
 import render.device;
 import render.device_opengl_family;
@@ -223,6 +226,61 @@ export namespace epochengine::openglcanvas2d
 #endif
             }
         };
+
+        struct ScopedReadbackState final
+        {
+            GLint read_framebuffer{};
+            GLint read_buffer{GL_BACK};
+            GLint pixel_pack_buffer{};
+            GLint pack_alignment{4};
+            GLint pack_row_length{};
+            GLint pack_skip_rows{};
+            GLint pack_skip_pixels{};
+
+            ScopedReadbackState() noexcept
+            {
+                glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer);
+                glGetIntegerv(GL_READ_BUFFER, &read_buffer);
+                glGetIntegerv(
+                    GL_PIXEL_PACK_BUFFER_BINDING,
+                    &pixel_pack_buffer);
+                glGetIntegerv(GL_PACK_ALIGNMENT, &pack_alignment);
+                glGetIntegerv(GL_PACK_ROW_LENGTH, &pack_row_length);
+                glGetIntegerv(GL_PACK_SKIP_ROWS, &pack_skip_rows);
+                glGetIntegerv(GL_PACK_SKIP_PIXELS, &pack_skip_pixels);
+            }
+
+            ScopedReadbackState(const ScopedReadbackState&) = delete;
+            ScopedReadbackState& operator=(const ScopedReadbackState&) = delete;
+
+            ~ScopedReadbackState() noexcept
+            {
+                glBindFramebuffer(
+                    GL_READ_FRAMEBUFFER,
+                    static_cast<GLuint>(read_framebuffer));
+                glReadBuffer(static_cast<GLenum>(read_buffer));
+                glBindBuffer(
+                    GL_PIXEL_PACK_BUFFER,
+                    static_cast<GLuint>(pixel_pack_buffer));
+                glPixelStorei(GL_PACK_ALIGNMENT, pack_alignment);
+                glPixelStorei(GL_PACK_ROW_LENGTH, pack_row_length);
+                glPixelStorei(GL_PACK_SKIP_ROWS, pack_skip_rows);
+                glPixelStorei(GL_PACK_SKIP_PIXELS, pack_skip_pixels);
+            }
+        };
+
+        [[nodiscard]] inline canvas2d::evidence::PixelEvidenceResult
+            evidence_failure(
+                const canvas2d::cpu::Image& reference,
+                canvas2d::evidence::PixelEvidenceCode code) noexcept
+        {
+            canvas2d::evidence::PixelEvidenceResult result{};
+            result.code = code;
+            result.extent = reference.extent;
+            result.reference_hash =
+                canvas2d::evidence::canonical_image_hash(reference);
+            return result;
+        }
 
         struct ScopedTextureParameters final
         {
@@ -466,6 +524,97 @@ export namespace epochengine::openglcanvas2d
         return true;
     }
 
+    [[nodiscard]] inline canvas2d::evidence::PixelEvidenceResult
+        compare_native_canvas2d(
+            PresentationBinding& binding,
+            const canvas2d::cpu::Image& reference,
+            std::uint64_t referenceHash,
+            canvas2d::presentation::PresentationSurface surface,
+            const canvas2d::evidence::PixelEvidencePolicy& policy = {})
+    {
+        using namespace canvas2d::evidence;
+        if (!static_cast<bool>(binding) || !reference.valid()
+            || !surface.valid_for(reference.extent))
+        {
+            return detail::evidence_failure(
+                reference,
+                PixelEvidenceCode::readback_unavailable);
+        }
+
+        auto& backend = *binding.backend;
+        openglcontext::PlatformGL::ScopedContext contextGuard;
+        if (!opengltextures::activate_backend_context(
+                backend,
+                contextGuard,
+                "compare Canvas2D pixels"))
+        {
+            return detail::evidence_failure(
+                reference,
+                PixelEvidenceCode::readback_unavailable);
+        }
+
+        const std::uint64_t pixelCount =
+            static_cast<std::uint64_t>(reference.extent.width)
+                * reference.extent.height;
+        if (!policy.valid() || pixelCount == 0
+            || pixelCount > policy.maximum_pixels
+            || pixelCount > (std::numeric_limits<std::size_t>::max)())
+        {
+            return detail::evidence_failure(
+                reference,
+                policy.valid()
+                    ? PixelEvidenceCode::capacity_exceeded
+                    : PixelEvidenceCode::invalid_policy);
+        }
+
+        try
+        {
+            std::vector<canvas2d::cpu::Rgba8> pixels(
+                static_cast<std::size_t>(pixelCount));
+            detail::ScopedReadbackState stateGuard{};
+            GLboolean doubleBuffered = GL_TRUE;
+            glGetBooleanv(GL_DOUBLEBUFFER, &doubleBuffered);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glReadBuffer(doubleBuffered == GL_TRUE ? GL_BACK : GL_FRONT);
+            glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
+            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+            glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+            glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+
+            const auto& viewport = surface.viewport;
+            const GLint readY =
+                static_cast<GLint>(surface.framebuffer_extent.height)
+                - static_cast<GLint>(viewport.y)
+                - static_cast<GLint>(viewport.height);
+            glFinish();
+            glReadPixels(
+                viewport.x,
+                readY,
+                static_cast<GLsizei>(viewport.width),
+                static_cast<GLsizei>(viewport.height),
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                pixels.data());
+
+            return compare_pixels(
+                reference,
+                referenceHash,
+                PixelReadbackView{
+                    reference.extent,
+                    reference.extent.width,
+                    pixels,
+                    PixelOrigin::bottom_left},
+                policy);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return detail::evidence_failure(
+                reference,
+                PixelEvidenceCode::allocation_failure);
+        }
+    }
+
     [[nodiscard]] inline canvas2d::presentation::NativePresentationHooks
         make_native_presentation_hooks(PresentationBinding& binding) noexcept
     {
@@ -523,6 +672,17 @@ export namespace epochengine::openglcanvas2d
                 raster_limits,
                 raster_policy,
                 presentation_policy);
+        }
+
+        [[nodiscard]] canvas2d::evidence::PixelEvidenceResult
+            compare_native(
+                const canvas2d::cpu::Image& reference,
+                std::uint64_t referenceHash,
+                canvas2d::presentation::PresentationSurface surface,
+                const canvas2d::evidence::PixelEvidencePolicy& policy = {})
+        {
+            return compare_native_canvas2d(
+                binding_, reference, referenceHash, surface, policy);
         }
 
         [[nodiscard]] bool reset_backend_epoch(std::uint64_t epoch) noexcept
@@ -585,8 +745,24 @@ export namespace epochengine::openglcanvas2d
             1};
         const bool refused = hooks.ready()
             && !hooks.present(hooks.user, packet);
+
+        canvas2d::cpu::Image reference{};
+        reference.extent = compose.viewport.output_surface;
+        reference.pixels.assign(
+            static_cast<std::size_t>(reference.extent.width)
+                * reference.extent.height,
+            canvas2d::cpu::Rgba8{0, 0, 0, 255});
+        const auto evidence = compare_native_canvas2d(
+            binding,
+            reference,
+            canvas2d::evidence::canonical_image_hash(reference),
+            canvas2d::presentation::full_surface(reference.extent));
+        const bool evidenceRefused = evidence.code
+            == canvas2d::evidence::PixelEvidenceCode::readback_unavailable;
+
         device.destroy(texture);
-        return refused && device.resolve_texture(texture) == nullptr;
+        return refused && evidenceRefused
+            && device.resolve_texture(texture) == nullptr;
     }
 }
 #endif

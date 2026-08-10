@@ -322,6 +322,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_cpu.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_evidence.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_presentation.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_scene.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d_scene.ixx" />
@@ -376,6 +377,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.canvas2d_scene.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_evidence.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\canvas2d.scene_contracts.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\core.context_command_queue.cpp" />

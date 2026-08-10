@@ -148,7 +148,8 @@ closure, raster-to-residency presentation staging, OpenGL texture hooks, the
 primary compositor, and semantic editor scene-slot routing are build-proven.
 Project Library persistence and editor material/resource binding are
 build-proven.
-Live Assets-browser assignment, native pixel comparison,
+The native pixel comparator and capture-only OpenGL readback are build-proven.
+Live Assets-browser assignment, approved native pixel capture,
 sRGB/compressed/mip-chain execution, secondary GL share-group adapters, and
 built-project presentation remain delivery work.
 

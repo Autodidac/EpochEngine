@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.08` so
+and stable multicontext branch are sealed. Development source is `v0.89.09` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -205,9 +205,15 @@ The working tree contains these current or in-progress foundations:
   texture validation, and scoped GL state restoration. An immutable per-context
   scene exchange now maps committed editor entities to semantic solid sprites
   and invokes that compositor in the protected live scene slot;
+- `render.canvas2d_evidence` compares canonical T0-CPU presentation images to
+  normalized native readback with explicit origin, stride, tolerance, hash,
+  budget, and mismatch metrics. The OpenGL scene adapter owns a capture-lane
+  one-shot viewport readback after warmup, restores all touched read/pixel-pack
+  state, publishes a queryable snapshot, and never runs that readback during
+  normal frames;
 - `project.lifecycle` centralizes Save, materialize, Build, Run, wait, and
   focus-existing-runtime decisions with generation-safe attempt tracking;
-- all 358 first-party C++ files follow the canonical one-dot owner grammar,
+- all 360 first-party C++ files follow the canonical one-dot owner grammar,
   exact module/file identity, and owned directory layout enforced by the source
   naming validator;
 - the launcher opens the three editor applications, selects a live context
@@ -230,6 +236,10 @@ has deterministic `T0-CPU` reference raster and image-hash proof on MSVC and
 Clang. Renderer-neutral residency, cache recreation, OpenGL-family hook routing,
 presentation packet staging, the compiled primary OpenGL compositor, and
 real-hook no-context refusal are build-proven on MSVC and managed Clang 22.
+Current MSVC contracts also prove origin/stride-aware pixel comparison, exact
+and tolerant mismatch accounting, hash validation, bounded failure, and safe
+OpenGL evidence refusal without a registered native context. The capture-lane
+readback is compiled but remains runtime-unproved until an approved capture.
 MSVC contracts also prove deterministic temporal texture payload compilation,
 artifact-integrity rejection, project-scoped logical identity, exact sampled
 image admission, foreign-registry rejection, collision-safe resource keys,
@@ -247,21 +257,25 @@ adapters remain Partial.
 
 ## Completed Capability Checkpoint
 
-Source v0.89.08 carries forward the v0.89.06 release baseline and closes the
+Source v0.89.09 carries forward the v0.89.06 release baseline and closes the
 first runtime texture consumption loop: deterministic compiled bytes persist in
 the project Library, reopen through authenticated project identity, publish
 decoded CPU resources, and enter immutable editor Canvas2D scenes through an
 owned exact resource lease. Debug contracts prove verified disk round trips,
 idempotent publication, project isolation, portable case-collision refusal,
 stale revision rejection, textured scene closure, and CPU raster output.
+The source also carries a one-shot OpenGL capture evidence path that compares
+the viewport against the canonical T0-CPU presentation without taxing normal
+frames.
 It does not claim live Assets-browser material assignment, native pixel
-correctness, secondary share groups, higher texture formats, or built-game
-presentation.
+correctness before capture evidence, secondary share groups, higher texture
+formats, or built-game presentation.
 
 ## Immediate Implementation Order
 
-1. Compare live T1-GL scene-slot pixels against the T0-CPU reference and verify
-   resize, retirement, fallback, GUI replay, and present order.
+1. Run the approved T1-GL capture lane, inspect its T0-CPU pixel evidence, and
+   verify resize, retirement, fallback, GUI replay, and present order before
+   promoting native presentation evidence.
 2. Connect the Assets browser/import path and scene material assignment to the
    project texture pipeline without storing physical residency in scene state.
 3. Add explicit SDL3/SFML3/Raylib3 and secondary OpenGL share-group adapters.

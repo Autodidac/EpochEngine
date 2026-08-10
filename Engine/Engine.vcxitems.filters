@@ -869,6 +869,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_evidence.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
@@ -1143,6 +1146,9 @@
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_cpu.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_evidence.ixx">
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_presentation.ixx">

@@ -139,6 +139,10 @@ release history belong in the changelog/archive, not architecture docs.
 - Native presentation evidence is context-specific. A primary OpenGL compositor
   does not imply SDL3, SFML3, or Raylib3 share-group compatibility, and a
   no-context refusal test does not imply visible pixel proof.
+- `render.canvas2d_evidence` owns origin/stride-aware bounded comparison
+  against the T0-CPU presentation. OpenGL has a capture-lane-only, one-shot
+  viewport readback with complete read/pixel-pack state restoration and safe
+  no-context refusal. It remains Partial until approved live capture evidence.
 - Atlases remain useful compatibility and batching caches; they are not canonical
   or universally modern/obsolete.
 - Source and meaningful history are portable. Library output and cache variants
