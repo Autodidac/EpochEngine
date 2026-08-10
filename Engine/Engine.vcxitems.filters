@@ -1273,8 +1273,14 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_artifact.ixx">
       <Filter>Module Files\epoch\authoring</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_import.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
       <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_textures.ixx">
+      <Filter>Module Files\epoch\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx">
       <Filter>Module Files\epoch\project</Filter>
@@ -1339,10 +1345,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_pipeline.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_textures.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact.cpp">
+      <Filter>Source Files\epochengine\assets\texture</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_import.cpp">
       <Filter>Source Files\epochengine\assets\texture</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp">

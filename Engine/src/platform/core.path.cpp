@@ -143,7 +143,8 @@ namespace epochengine::core::path
         const path root = candidate.lexically_normal();
         return exists_noerr(root / "Engine" / "CMakeLists.txt")
             && exists_noerr(root / "Engine" / "include" / "epoch.engine.hpp")
-            && exists_noerr(root / "Engine" / "examples" / "ConsoleApplication1" / "epoch.main.cpp");
+            && exists_noerr(root / "Engine" / "src" / "epoch.main.cpp")
+            && exists_noerr(root / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj");
     }
 
     path find_epoch_repo_root(const path& start)

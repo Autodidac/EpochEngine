@@ -50,8 +50,109 @@ export namespace epochengine::scene
     using Vec3 = std::array<float, 3>;
     using SceneObjectId = std::uint64_t;
 
-    inline constexpr std::uint32_t kSceneDocumentFormatVersion = 2u;
+    inline constexpr std::uint32_t kSceneDocumentFormatVersion = 3u;
     inline constexpr SceneObjectId kInvalidSceneObjectId = 0u;
+
+    enum class SceneTextureFilter : std::uint8_t
+    {
+        nearest,
+        linear
+    };
+
+    enum class SceneTextureAddress : std::uint8_t
+    {
+        clamp_to_edge,
+        repeat,
+        mirrored_repeat
+    };
+
+    enum class SceneTextureAlphaMode : std::uint8_t
+    {
+        opaque,
+        straight,
+        premultiplied,
+        cutout
+    };
+
+    enum class SceneTextureColorSpace : std::uint8_t
+    {
+        linear,
+        srgb
+    };
+
+    [[nodiscard]] inline bool valid_scene_asset_path(
+        std::string_view path) noexcept
+    {
+        if (path.empty() || path.front() == '/' || path.front() == '\\'
+            || path.find('\\') != std::string_view::npos
+            || path.find(':') != std::string_view::npos)
+        {
+            return false;
+        }
+
+        std::size_t begin = 0;
+        while (begin < path.size())
+        {
+            const std::size_t end = path.find('/', begin);
+            const std::string_view segment = path.substr(
+                begin,
+                end == std::string_view::npos
+                    ? path.size() - begin
+                    : end - begin);
+            if (segment.empty() || segment == "." || segment == "..")
+                return false;
+            for (const unsigned char character : segment)
+            {
+                if (character < 0x20u || character == 0x7fu)
+                    return false;
+            }
+            if (end == std::string_view::npos)
+                break;
+            begin = end + 1u;
+        }
+        return true;
+    }
+
+    struct SceneTextureMaterialSnapshot final
+    {
+        std::string logical_path{};
+        std::array<std::uint64_t, 4> artifact_key{};
+        std::uint64_t stable_key{};
+        SceneTextureFilter filter{SceneTextureFilter::linear};
+        SceneTextureAddress address_u{SceneTextureAddress::clamp_to_edge};
+        SceneTextureAddress address_v{SceneTextureAddress::clamp_to_edge};
+        SceneTextureAlphaMode alpha{SceneTextureAlphaMode::straight};
+        SceneTextureColorSpace color_space{SceneTextureColorSpace::srgb};
+        float alpha_cutoff{0.5f};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            const bool key_present = std::any_of(
+                artifact_key.begin(),
+                artifact_key.end(),
+                [](std::uint64_t word) { return word != 0u; });
+            return valid_scene_asset_path(logical_path)
+                && key_present
+                && stable_key != 0u
+                && static_cast<std::uint8_t>(filter)
+                    <= static_cast<std::uint8_t>(SceneTextureFilter::linear)
+                && static_cast<std::uint8_t>(address_u)
+                    <= static_cast<std::uint8_t>(SceneTextureAddress::mirrored_repeat)
+                && static_cast<std::uint8_t>(address_v)
+                    <= static_cast<std::uint8_t>(SceneTextureAddress::mirrored_repeat)
+                && static_cast<std::uint8_t>(alpha)
+                    <= static_cast<std::uint8_t>(SceneTextureAlphaMode::cutout)
+                && static_cast<std::uint8_t>(color_space)
+                    <= static_cast<std::uint8_t>(SceneTextureColorSpace::srgb)
+                && std::isfinite(alpha_cutoff)
+                && alpha_cutoff >= 0.0f
+                && alpha_cutoff <= 1.0f;
+        }
+
+        friend bool operator==(
+            const SceneTextureMaterialSnapshot&,
+            const SceneTextureMaterialSnapshot&) noexcept = default;
+    };
 
     [[nodiscard]] constexpr SceneObjectId stable_scene_object_id(
         std::string_view scene_id,
@@ -84,6 +185,7 @@ export namespace epochengine::scene
         Vec3 scale{ 1.0f, 1.0f, 1.0f };
         bool visible = true;
         bool editor_only = false;
+        std::optional<SceneTextureMaterialSnapshot> texture_material{};
     };
 
     struct SceneTimelineKey
@@ -134,6 +236,7 @@ export namespace epochengine::scene
         bool strings_bounded{};
         bool object_ids_valid{};
         bool object_ids_unique{};
+        bool materials_valid{};
         bool object_names_unique{};
         bool transforms_valid{};
         bool timeline_valid{};
@@ -147,6 +250,7 @@ export namespace epochengine::scene
                 && strings_bounded
                 && object_ids_valid
                 && object_ids_unique
+                && materials_valid
                 && object_names_unique
                 && transforms_valid
                 && timeline_valid
@@ -229,6 +333,7 @@ export namespace epochengine::scene
             && bounded(snapshot.support_tier);
         result.object_ids_valid = true;
         result.object_ids_unique = true;
+        result.materials_valid = true;
         result.object_names_unique = true;
         result.transforms_valid = true;
         result.timeline_valid = true;
@@ -258,6 +363,13 @@ export namespace epochengine::scene
                 && object.scale[0] > 0.0f
                 && object.scale[1] > 0.0f
                 && object.scale[2] > 0.0f;
+            if (object.texture_material)
+            {
+                result.strings_bounded = result.strings_bounded
+                    && bounded(object.texture_material->logical_path);
+                result.materials_valid = result.materials_valid
+                    && object.texture_material->valid();
+            }
         }
 
         std::unordered_set<std::string_view> packages{};

@@ -240,6 +240,17 @@ namespace epochengine::asset::texture
         }
 
     }
+    ContentHash deterministic_content_hash(
+        std::string_view domain,
+        std::span<const std::byte> bytes) noexcept
+    {
+        StableHash hash{};
+        hash.add_string("epoch.asset.content-hash.v1");
+        hash.add_string(domain);
+        hash.add_bytes(bytes.data(), bytes.size());
+        return hash.finish();
+    }
+
 
     std::string content_hash_hex(const ContentHash& hash)
     {

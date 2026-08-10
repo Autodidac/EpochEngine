@@ -237,10 +237,12 @@ the same engine-owned path.
   entities they need; starter cubes, grids, player starts, tray panels, fake
   tool panels, and vegetation props must be created only by explicit
   application/package actions or real scene data.
-- current `.epoch` scene/world files are metadata shells only. They must exist
-  and be surfaced as evidence, but the live preview/runtime object list is still
-  driven by `editor.scene.cpp` seed entities until scene-file loading,
-  serialization, and project-owned scene authoring are wired end-to-end
+- current `.epoch` scene/world files are canonical snapshot-format-3 project
+  documents. The editor production-loads them into `SceneDocument`, projects
+  the UI/render mirror from that document, atomically saves/reopens them, and
+  compiles the same semantic object/material revision for project runtime.
+  Seed entities remain creation defaults and migration fallback, not parallel
+  canonical state
 - repo-root `Projects/` is a generated local-project area. The editor can use
   project manifests, build logs, output paths, and `PROJECT_NOTES.md` there as
   evidence, but those files are not automatically promoted into tracked source
@@ -265,6 +267,11 @@ the same engine-owned path.
   primary script-control panel; it is the project asset browser shell while the
   bottom Assets dock temporarily exposes file/script detail until the thumbnail
   grid and bounded file tree land
+- the Assets workspace also owns one project texture controller: bounded BMP,
+  TGA, and P6 PPM discovery/import, atomic Library publication, exact restore,
+  selected-scene semantic material assignment, and diagnostics share the same
+  project pipeline used by runtime compilation; physical handles never enter
+  scene files
 - script source resolution should prefer the active project's local `scripts/`
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
@@ -285,11 +292,12 @@ the same engine-owned path.
 - generated child projects expose `--project-self-test` so Sandbox and
   ProjectLauncher output can be verified without opening GUI windows.
 - the checked-in engine exposes `--editor-project-self-test <id>` for the same
-  route from the real engine binary. Use `sandbox` for the self-iteration shell
-  and `projectlauncher` for the launcher shell before running the generated
-  child `--project-self-test`. The route now materializes, builds, runs the
-  generated child `--project-self-test`, stages a packet, appends tool capture,
-  and writes project notes. If the pass should bind to a local helper model, set
+  route from the real engine binary. The route materializes the selected
+  profile, production-loads its canonical scene, atomically saves it, reopens
+  and compares it, builds the child, then runs generated `--project-self-test`.
+  Supported profile IDs are `sandbox`, `platformer`, `twodstudio`, `plantlab`,
+  `projectlauncher`, and `softwarestudio`. Packet/tool evidence and project
+  notes remain additive. If the pass should bind to a local helper model, set
   `EPOCH_AI_MODEL` or a compatible explicit model variable before launch;
   discovery still remains separate from activation.
 - `--editor-ai-gate-self-test` runs the deterministic helper-review gate without
@@ -1171,11 +1179,13 @@ Run these from the repository root after building the editor runtime:
 .\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
 ```
 
-The first command materializes and builds the selected shell from the real
-engine binary. The second command proves the generated child output is runnable
-without opening GUI windows. The Sandbox route must report the
-engine-self-iteration sandbox identity; ProjectLauncher must report its launcher
-tool identity.
+The editor command materializes the selected shell, production-loads and
+atomically saves/reopens its canonical scene, builds the child, and runs its
+headless `--project-self-test`. A direct child command remains useful for
+isolating an already-built executable. Sandbox reports the engine-self-iteration
+identity; ProjectLauncher reports its launcher-tool identity. A GUI project
+external-run check should additionally launch its generated executable with the
+same `--scene`, `--backend`, and standalone arguments emitted by the editor.
 
 `--engine-validation-self-test` chains the registered project profile self-tests
 and the AI evidence gate in one non-GUI pass. It is intentionally broader than a

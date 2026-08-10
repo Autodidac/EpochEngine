@@ -42,19 +42,17 @@ artifact revisions, full source/artifact authentication, bounded owning CPU
 resource sets, optional residency acquisition, and logical-only tileset
 references. Equivalent content at a later temporal source sequence reuses the
 same artifact/cache identity.
-Source v0.88.88 adds the live semantic scene boundary: committed editor
-entities are projected into immutable per-context Canvas2D scene content with
-stable sprite identity, deterministic hashes, replacement generations, reader
-lifetime, retirement, and bounded metrics. The primary OpenGL adapter consumes
-that content inside the protected editor scene slot while retaining the legacy
-3D preview as a fail-safe and preserving GUI replay and present order.
-Build proof covers staged presentation, native adapter compilation, and safe
-no-context refusal. It proves semantic scene publication and protected
-scene-slot routing, but does
-not prove live native pixel correctness, authenticated project-texture scene
-binding, serialized artifact reading, capability admission, secondary GL share
-groups, backend parity, sRGB/compressed/mip-chain execution, or a built-game
-loop.
+Source v0.89.10 completes the first saved semantic texture path: project images
+compile into authenticated artifacts, persist in the Project Library, restore
+through exact logical identity, survive snapshot-format-3 save/reopen, and bind
+immutable Canvas2D resource leases. The primary OpenGL adapter consumes that
+content in the protected editor scene slot while preserving GUI replay and
+present order. Approved native capture exactly matches the T0-CPU image across
+1,178,872 pixels, and the generated GUI project passes the standalone external
+Run path.
+Interactive Assets-tab assignment, secondary GL share groups, non-OpenGL
+texture presentation, sRGB/compressed/mip-chain execution, tilemap authoring,
+and the complete built-game loop remain Partial.
 
 ## Product Contract
 
@@ -84,13 +82,13 @@ delay the baseline path. API names never imply capability.
   project registry supplies logical asset identity; the artifact supplies
   content identity and bytes; the residency cache supplies physical lifetime.
   None may synthesize or absorb the other two identities.
-- Compiled artifact schemas and readers must be runtime-owned and available
-  without authoring UI. Authoring owns compilation. `project.asset_registry`
-  now authenticates stable project identity and source revision, while
-  `project.texture_resources` validates in-memory artifacts and binds the first
-  linear RGBA8 base-mip CPU/residency lane. Serialized artifact reading and
-  capability-derived admission remain required before the complete
-  game/mobile/console/headless product boundary is present.
+- Compiled artifact schemas and readers are runtime-owned and available without
+  authoring UI. Authoring owns compilation. `project.asset_registry`
+  authenticates stable project identity/source revision; the Library and
+  pipeline provide serialized reads, restore, and atomic publication;
+  `project.texture_admission` applies capability/budget policy; and
+  `project.texture_resources` binds the first linear RGBA8 base-mip
+  CPU/residency lane. Broader formats and backend execution remain Partial.
 - Backend adapters own API objects, uploads, shaders, pipelines, render targets,
   synchronization, readback, and presentation evidence.
 - Input, physics, animation, and audio own their runtime state and publish
@@ -392,15 +390,14 @@ collisions, stale handles/revisions, equivalent-content temporal reuse,
 duplicate/missing bindings, cache recreation, retirement, and bounded metrics.
 Tilesets now depend on logical texture material intent rather than physical
 handles.
-Landed in v0.89.05: sampled-image capability admission, project-scoped texture
-services, and exact immutable scene resource closure. Contracts reject foreign
-registries with identical handle bits, unsupported or unevidenced providers,
-budget violations, duplicate/missing/stale/unexpected bindings, and failed
-replacement without mutating the published scene. Old readers retain their
-resource lifetime. Next persist serialized artifacts in the Project Library,
-bind logical project materials from the editor, compare native output to the CPU
-reference, and add explicit GL-family share-group adapters without duplicating
-the renderer spine.
+Landed through v0.89.10: sampled-image capability admission, project-scoped
+texture services, serialized Project Library persistence, bounded image import,
+semantic scene materials, exact immutable resource closure, snapshot save/reopen,
+runtime restoration, and exact OpenGL/T0-CPU capture evidence. Contracts reject
+foreign registries, unsupported providers, budget violations, stale or
+incomplete bindings, and failed replacement without mutating the published
+scene. Next complete interactive Assets assignment, tilemap authoring, and
+explicit GL-family/backend adapters without duplicating the renderer spine.
 
 ### Phase 3: Tilemap Authoring
 

@@ -82,6 +82,8 @@ export namespace epochengine::scene_runtime
         std::string category{};
         RuntimeTransform transform{};
         RuntimeEntityFlag flags{RuntimeEntityFlag::none};
+        std::optional<epochengine::scene::SceneTextureMaterialSnapshot>
+            texture_material{};
 
         [[nodiscard]] constexpr bool visible() const noexcept
         {
@@ -432,7 +434,8 @@ export namespace epochengine::scene_runtime
                         .rotation = source.rotation,
                         .scale = source.scale
                     },
-                    .flags = detail::source_flags(source)
+                    .flags = detail::source_flags(source),
+                    .texture_material = source.texture_material
                 });
 
                 if (const auto kind = detail::classify_light(source.type, source.category))

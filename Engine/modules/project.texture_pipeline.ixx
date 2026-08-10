@@ -139,6 +139,9 @@ export namespace epochengine::project_textures
         [[nodiscard]] TexturePipelineResult restore_latest(
             std::string_view logicalPath,
             const asset::texture::TextureCompileProfile& profile) noexcept;
+        [[nodiscard]] TexturePipelineResult restore_exact(
+            std::string_view logicalPath,
+            const asset::texture::ContentHash& artifactKey) noexcept;
 
         [[nodiscard]] Canvas2DLeaseResult bind_canvas2d(
             std::span<const canvas2d::LogicalTextureReference> logicalTextures) noexcept;

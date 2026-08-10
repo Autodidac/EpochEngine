@@ -141,16 +141,17 @@ temporal world:
   operations, transactions, undo/redo, and deterministic snapshot projection;
 - `scene.interaction` resolves ray hits, drag ownership, and Focus through stable
   object identity;
-- `scenesnapshot` and `sceneserializer` own canonical `epoch_snapshot 2` text;
-- `scene.persistence` validates, verifies, and atomically replaces scene files,
-  while old v1/editor text is accepted only as migration input;
-- `scene.runtime` compiles a validated snapshot revision into a deterministic,
+- `scenesnapshot` and `sceneserializer` own canonical `epoch_snapshot 3` text,
+  including semantic Canvas2D texture materials and migration-only v1/v2 reads;
+- `scene.persistence` validates, verifies, and atomically replaces scene files;
+- `scene.runtime` compiles the validated revision into a deterministic,
   renderer-neutral runtime projection.
 
-Explicit editor Save, Play, Build, and Run paths must commit valid scene evidence
-before continuing. The live editor entity collection still adapts existing UI
-code and is not yet the canonical mutation owner. The next integration step is
-to route those mutations through `SceneDocument` semantic commands.
+Explicit editor Save, Play, Build, and Run paths commit valid scene evidence
+before continuing. Live create, duplicate, delete, transform, material, helper,
+Canvas2D, Arcade, Plant Lab, and Forest Factory mutations enter `SceneDocument`
+semantic operations. The editor entity collection is a disposable UI/render
+projection rebuilt from that canonical document.
 
 ## Events And Transactions
 

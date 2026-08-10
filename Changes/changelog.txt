@@ -1,5 +1,30 @@
 # Epoch Changelog
 
+## [v0.89.10] - Saved project texture authoring and external-run proof
+
+- Add bounded uncompressed BMP, TGA, and P6 PPM import into deterministic
+  project texture artifacts, authenticated project identity, atomic Library
+  publication, decoded runtime resources, and exact Canvas2D leases.
+- Advance scene snapshots to format 3 with semantic texture-material identity;
+  save/reopen, undo/redo, runtime compilation, and legacy reads preserve logical
+  resources without making atlas slots or GPU handles canonical.
+- Add the World Outliner Assets workflow for source discovery, import, Library
+  restore, material assignment, diagnostics, and project-scoped texture state.
+- Make generated project self-tests production-load and atomically save/reopen
+  the scene before building. All six profiles pass materialization, save/reopen,
+  build, and generated child self-test; GUI Editor also passes the exact external
+  OpenGL Run arguments.
+- Stop normal generated projects from silently admitting Engine Arcade. Explicit
+  package activation still owns Arcade content and the deferred Extensions HUD
+  repair.
+- Fix OpenGL core-profile Canvas2D state restoration by using
+  `GL_FRONT_AND_BACK` for polygon mode. Prefer the live platform/render-thread
+  context for sprite batches, eliminating per-sprite logical-context churn.
+- Prove native OpenGL Canvas2D output against the T0-CPU reference across
+  1,178,872 pixels with zero outliers and zero channel error; final GUI Editor
+  and Assets captures contain no default Arcade geometry or GL error output.
+- Preserve the sealed v0.89.06 updater, packaging, release assets, and packaged
+  version defaults.
 ## [v0.89.09] - Canvas2D native pixel evidence
 
 - Add `render.canvas2d_evidence` with deterministic top-left normalization,

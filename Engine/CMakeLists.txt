@@ -362,6 +362,7 @@ set(EPOCH_SOURCES
     src/editor/editor.plant_lab.cpp
     src/editor/editor.gui.cpp
     src/editor/editor.canvas2d_scene.cpp
+    src/editor/editor.project_textures.cpp
     src/renderers/canvas2d/render.canvas2d_scene.cpp
     src/renderers/canvas2d/render.canvas2d_evidence.cpp
     src/renderers/canvas2d/render.canvas2d_scene_contract.cpp
@@ -374,6 +375,7 @@ set(EPOCH_SOURCES
     src/project/project.texture_pipeline.cpp
     src/project/project.contracts.cpp
     src/assets/texture/asset.texture_artifact.cpp
+    src/assets/texture/asset.texture_import.cpp
     src/core.assert.cpp
     src/core.env.cpp
     src/core.error.cpp

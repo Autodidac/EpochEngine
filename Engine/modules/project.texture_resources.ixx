@@ -284,7 +284,8 @@ export namespace epochengine::project_textures
         [[nodiscard]] PublicationResult publish(
             const project_assets::AssetRegistry& registry,
             project_assets::AssetHandle asset,
-            const asset::texture::CompiledTextureArtifact& artifact) noexcept
+            const asset::texture::CompiledTextureArtifact& artifact,
+            bool requireCurrentSourceRevision = true) noexcept
         {
             ++metrics_.publication_requests;
             if (!valid() || !registry.valid())
@@ -297,8 +298,10 @@ export namespace epochengine::project_textures
                                                 : ResourceCode::invalid_asset);
             if (record->identity.kind != project_assets::AssetKind::texture)
                 return reject_publication(ResourceCode::wrong_asset_kind);
-            if (record->revision
-                != detail::asset_revision(artifact.identity.source_revision))
+            const project_assets::AssetRevision artifactSourceRevision =
+                detail::asset_revision(artifact.identity.source_revision);
+            if (requireCurrentSourceRevision
+                && record->revision != artifactSourceRevision)
             {
                 return reject_publication(ResourceCode::source_revision_mismatch);
             }
@@ -324,7 +327,11 @@ export namespace epochengine::project_textures
 
             const auto existing = std::find_if(
                 entries_.begin(), entries_.end(),
-                [asset](const Entry& candidate) { return candidate.asset == asset; });
+                [asset, logical](const Entry& candidate)
+                {
+                    return candidate.asset == asset
+                        && candidate.logical == logical;
+                });
             const std::uint64_t replacedBytes = existing == entries_.end()
                 ? 0 : existing->decoded_bytes;
             if (decoded_bytes_ - replacedBytes > limits_.maximum_decoded_bytes
@@ -341,14 +348,15 @@ export namespace epochengine::project_textures
 
             for (const Entry& candidate : entries_)
             {
-                if (candidate.asset != asset && candidate.logical == logical
+                if (candidate.logical == logical
+                    && candidate.asset != asset
                     && candidate.artifact_key.words != artifact.identity.key.words)
                 {
                     return reject_publication(
                         ResourceCode::artifact_revision_collision);
                 }
             }
-            if (existing != entries_.end() && existing->logical == logical)
+            if (existing != entries_.end())
             {
                 if (existing->artifact_key.words != artifact.identity.key.words
                     || existing->payload_content.words != artifact.payload_content.words)
@@ -377,7 +385,7 @@ export namespace epochengine::project_textures
                 Entry candidate{};
                 candidate.project_key = project_key_;
                 candidate.asset = asset;
-                candidate.source_revision = record->revision;
+                candidate.source_revision = artifactSourceRevision;
                 candidate.logical = logical;
                 candidate.artifact_key = artifact.identity.key;
                 candidate.payload_content = artifact.payload_content;
@@ -414,17 +422,21 @@ export namespace epochengine::project_textures
                 return reject_code(ResourceCode::invalid_registry);
             if (!owns(registry))
                 return reject_code(ResourceCode::project_identity_mismatch);
-            const auto found = std::find_if(
+            const auto first = std::remove_if(
                 entries_.begin(), entries_.end(),
                 [&](const Entry& candidate)
                 {
-                    return candidate.project_key == project_key_
-                        && candidate.asset == asset;
+                    if (candidate.project_key != project_key_
+                        || candidate.asset != asset)
+                    {
+                        return false;
+                    }
+                    decoded_bytes_ -= candidate.decoded_bytes;
+                    return true;
                 });
-            if (found == entries_.end())
+            if (first == entries_.end())
                 return ResourceCode::missing_publication;
-            decoded_bytes_ -= found->decoded_bytes;
-            entries_.erase(found);
+            entries_.erase(first, entries_.end());
             return ResourceCode::ready;
         }
 
@@ -555,7 +567,6 @@ export namespace epochengine::project_textures
                 {
                     return candidate.project_key == project_key_
                         && candidate.asset == asset->handle
-                        && candidate.source_revision == asset->revision
                         && candidate.logical == logical;
                 });
             return found == entries_.end() ? nullptr : &*found;
@@ -608,7 +619,7 @@ export namespace epochengine::project_textures
         duplicate_binding,
         residency,
         cache_recreation,
-        stale_registry_revision,
+        historical_revision_retention,
         retirement,
         metrics
     };
@@ -631,8 +642,8 @@ export namespace epochengine::project_textures
         case TextureResourceContractFailure::duplicate_binding: return "duplicate_binding";
         case TextureResourceContractFailure::residency: return "residency";
         case TextureResourceContractFailure::cache_recreation: return "cache_recreation";
-        case TextureResourceContractFailure::stale_registry_revision:
-            return "stale_registry_revision";
+        case TextureResourceContractFailure::historical_revision_retention:
+            return "historical_revision_retention";
         case TextureResourceContractFailure::retirement: return "retirement";
         case TextureResourceContractFailure::metrics: return "metrics";
         }

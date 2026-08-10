@@ -2,12 +2,13 @@
 - Preserve the engine-wide one-dot C++ naming contract and run the naming
   validator with every source move; do not reintroduce generic bridge or flat
   root ownership.
-- Continue the temporal texture lane by wiring persisted
-  `asset.texture_artifact` Library output into Assets-browser import and
-  scene material assignment, rebuilding missing Library output from authoring
-  source, and admitting additional formats through capability evidence.
-- Finish project lifecycle integration so Save/materialize/Build/Run and child
-  process focus share generation-safe evidence in editor and generated projects.
+- Complete the click-driven temporal texture workflow over the existing
+  `asset.texture_artifact` import/Library/material pipeline: undo/redo,
+  save/reopen interaction proof, settings/cost visibility, cache rebuild, and
+  additional formats admitted through capability evidence.
+- Preserve the production project contract: every generated profile must
+  materialize, atomically save/reopen, build, and child-run. Finish shared
+  Play/Stop/Run focus and generation-safe process evidence in the visible UI.
 
 
 This file preserves durable operator intent and accepted constraints. The active
@@ -168,10 +169,20 @@ release history belong in the changelog/archive, not architecture docs.
 - Sampled RTT truth remains layered: descriptor, graph, hook/adapter, live
   allocation, scene-surface path, presentation, benchmark, and production
   evidence.
+- OpenGL state guards must use core-profile-valid selectors; polygon mode
+  restores both faces through `GL_FRONT_AND_BACK`. Backend sprite/resource
+  work uses the live platform context and render-thread context identity first,
+  with logical multicontext selection only as a no-current-context fallback.
+  Never hide stale GL errors by blaming the next draw call.
 - Engine Arcade remains the kernel-owned sampled-RTT consumer and procedural
   cabinet fallback. Its shared content contract must feed backend-owned sampled
   scene surfaces in every compiled context without leaking one API's ownership
   model into another. Optional reviewed cabinet assets stay extension-owned.
+- When `EpochEngineExtensions` is reachable again, repair the explicit Epoch
+  Arcade presentation: render one correctly oriented and aligned cabinet/screen
+  pair, eliminate duplicated or leaked yellow/blue HUD and debug geometry, and
+  prove both the normal scene path and sampled-RTT path in every supported
+  context. This is separate from default generated-project package admission.
 
 ## Backend Parity And Contexts
 

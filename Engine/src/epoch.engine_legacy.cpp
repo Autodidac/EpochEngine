@@ -126,7 +126,9 @@ import authoring.morphology;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
 import authoring.texture;
 #endif
+import asset.texture_import;
 import capability.profile;
+import editor.project_textures;
 import forest.factory;
 import package.registry;
 import physics.manager;
@@ -2680,6 +2682,23 @@ namespace epochengine::core
             std::string{"project.texture_spine."}
                 + std::string{projectTextureSpineContract.stage},
             projectTextureSpineContract.passed);
+        const auto textureImportContract =
+            epochengine::asset::texture::texture_import_contract_failure();
+        check(
+            std::string{"asset.texture_import."}
+                + std::string{epochengine::asset::texture::
+                    texture_import_contract_failure_name(textureImportContract)},
+            textureImportContract ==
+                epochengine::asset::texture::TextureImportContractFailure::none);
+        const auto projectTextureControllerContract =
+            epochengine::editor_project_textures::
+                project_texture_controller_contract_failure();
+        check(
+            std::string{"editor.project_textures."}
+                + std::string{epochengine::editor_project_textures::
+                    controller_contract_failure_name(projectTextureControllerContract)},
+            projectTextureControllerContract ==
+                epochengine::editor_project_textures::ControllerContractFailure::none);
         const auto textureResidencyContract =
             epochengine::texture_residency::texture_residency_runtime_contract_failure();
         check(
@@ -2977,7 +2996,7 @@ namespace epochengine::core
             && snapshot.timeline_keys.front().frame_index == 60u);
         check(
             "snapshot.serialize",
-            snapshotText.find("epoch_snapshot 2") != std::string::npos
+            snapshotText.find("epoch_snapshot 3") != std::string::npos
             && snapshotText.find("timeline \\\"contract\\\"") != std::string::npos
             && snapshotText.find("Persistent\\nLevel") != std::string::npos
             && snapshotText.find("payload\\tvalue") != std::string::npos
@@ -3088,6 +3107,40 @@ namespace epochengine::core
         if (!ensured.succeeded)
             return 2;
 
+        std::filesystem::path scenePath =
+            profile == nullptr
+                ? std::filesystem::path{}
+                : std::filesystem::path{ profile->scene_path };
+        if (scenePath.is_relative())
+        {
+            const auto runtimeRoot = epochengine::core::path::runtime_root_dir();
+            if (!runtimeRoot.empty())
+                scenePath = runtimeRoot / scenePath;
+        }
+        scenePath = scenePath.lexically_normal();
+
+        const auto loadedScene =
+            epochengine::scene::persistence::load_scene_snapshot(scenePath);
+        const auto savedScene = loadedScene.result
+            ? epochengine::scene::persistence::save_scene_snapshot_atomic(
+                scenePath,
+                loadedScene.snapshot)
+            : epochengine::scene::persistence::ScenePersistenceResult{};
+        const auto reopenedScene = savedScene
+            ? epochengine::scene::persistence::load_scene_snapshot(scenePath)
+            : epochengine::scene::persistence::SceneLoadResult{};
+        const bool sceneRoundTrip =
+            loadedScene.result
+            && savedScene
+            && reopenedScene.result
+            && epochengine::scene::persistence::scene_snapshot_semantically_equal(
+                loadedScene.snapshot,
+                reopenedScene.snapshot);
+        log_editor_self_test_line(
+            std::string("editor_project_self_test.save_reopen=")
+            + (sceneRoundTrip ? "pass" : "fail"));
+        log_editor_self_test_line(
+            "editor_project_self_test.scene=" + scenePath.generic_string());
         const auto build = epochengine::editor_build_project(ensured.root_path);
         log_editor_self_test_line(std::string("editor_project_self_test.build=") + (build.succeeded ? "pass" : "fail"));
         log_editor_self_test_line("editor_project_self_test.build_summary=" + build.summary);
@@ -7063,7 +7116,8 @@ namespace epochengine::core
                             std::string startup_scene_name = epochengine::core::cli::scene_name;
                             if (startup_scene_name.empty())
                                 startup_scene_name = read_environment_string("EPOCH_PROJECT_RUNTIME_SCENE");
-                            if (startup_scene_name.empty())
+                            if (startup_scene_name.empty()
+                                && startup_mode != SessionMode::Editor)
                             {
                                 const std::string project_id = read_environment_string("EPOCH_EDITOR_PROJECT_ID");
                                 if (!project_id.empty())
@@ -8273,7 +8327,9 @@ namespace epochengine::core
                     running = false;
                 }
 
-                if (cli::smoke_requested && !smoke_capture_taken && frame_count >= smoke_capture_frame)
+                if (cli::smoke_requested
+                    && cli::capture_requested
+                    && !smoke_capture_taken && frame_count >= smoke_capture_frame)
                 {
 #if defined(_WIN32)
                     if (!smoke_capture_armed)

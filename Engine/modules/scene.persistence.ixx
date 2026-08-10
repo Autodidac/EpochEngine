@@ -87,6 +87,7 @@ namespace epochengine::scene::persistence::detail
         append(validation.object_ids_valid, "object-ids");
         append(validation.object_ids_unique, "duplicate-object-ids");
         append(validation.object_names_unique, "duplicate-object-names");
+        append(validation.materials_valid, "materials");
         append(validation.transforms_valid, "transforms");
         append(validation.timeline_valid, "timeline");
         append(validation.packages_valid, "packages");
@@ -110,7 +111,8 @@ namespace epochengine::scene::persistence::detail
             && equal_vec3(lhs.rotation, rhs.rotation)
             && equal_vec3(lhs.scale, rhs.scale)
             && lhs.visible == rhs.visible
-            && lhs.editor_only == rhs.editor_only;
+            && lhs.editor_only == rhs.editor_only
+            && lhs.texture_material == rhs.texture_material;
     }
 
     [[nodiscard]] inline bool equal_timeline_key(

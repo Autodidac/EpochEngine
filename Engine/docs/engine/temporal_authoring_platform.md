@@ -186,11 +186,13 @@ asset IDs and semantic rename/move migration remain required before path changes
 can preserve the same identity.
 
 `project.texture_resources` is the bounded runtime consumption service for the
-first linear RGBA8 base-mip lane. It validates the registry revision and full
-artifact integrity before producing CPU resource views or requesting disposable
-residency. Serialized artifact reading, broader formats/mips, and
-capability-derived admission remain later work; authoring UI is not required by
-the service.
+first linear RGBA8 base-mip lane. It validates registry revision and complete
+artifact integrity before producing CPU views or disposable residency.
+`project.texture_library` and `project.texture_pipeline` own serialized reads,
+atomic publication, restore, and exact leases; `project.texture_admission` owns
+capability/budget policy. BMP, TGA, and P6 PPM import is present. Broader
+formats/mips, editable source-document serialization, and complete authoring UI
+remain later work.
 
 Required metrics include decoded/compressed bytes, resident/virtual bytes, tile
 count, mip cost, atlas padding, upload cost, history cost, compilation time, and

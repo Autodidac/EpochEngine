@@ -398,11 +398,90 @@ namespace epochengine::scene::detail
         return true;
     }
 
+    [[nodiscard]] inline bool parse_texture_material_payload(
+        std::string_view line,
+        std::size_t& position,
+        std::optional<SceneTextureMaterialSnapshot>& output,
+        std::size_t maximumStringBytes)
+    {
+        bool present{};
+        if (!parse_bool01(line, position, present))
+            return false;
+        if (!present)
+        {
+            output.reset();
+            return true;
+        }
+
+        SceneTextureMaterialSnapshot material{};
+        std::uint32_t filter{};
+        std::uint32_t addressU{};
+        std::uint32_t addressV{};
+        std::uint32_t alpha{};
+        std::uint32_t colorSpace{};
+        if (!consume_literal(line, position, " path ")
+            || !parse_quoted_value(
+                line,
+                position,
+                material.logical_path,
+                maximumStringBytes)
+            || !consume_literal(line, position, " key ")
+            || !parse_number_token(line, position, material.artifact_key[0])
+            || !consume_literal(line, position, ",")
+            || !parse_number_token(line, position, material.artifact_key[1])
+            || !consume_literal(line, position, ",")
+            || !parse_number_token(line, position, material.artifact_key[2])
+            || !consume_literal(line, position, ",")
+            || !parse_number_token(line, position, material.artifact_key[3])
+            || !consume_literal(line, position, " stable ")
+            || !parse_number_token(line, position, material.stable_key)
+            || !consume_literal(line, position, " filter ")
+            || !parse_number_token(line, position, filter)
+            || !consume_literal(line, position, " address_u ")
+            || !parse_number_token(line, position, addressU)
+            || !consume_literal(line, position, " address_v ")
+            || !parse_number_token(line, position, addressV)
+            || !consume_literal(line, position, " alpha ")
+            || !parse_number_token(line, position, alpha)
+            || !consume_literal(line, position, " color_space ")
+            || !parse_number_token(line, position, colorSpace)
+            || !consume_literal(line, position, " cutoff ")
+            || !parse_number_token(line, position, material.alpha_cutoff))
+        {
+            return false;
+        }
+
+        if (filter > static_cast<std::uint32_t>(SceneTextureFilter::linear)
+            || addressU > static_cast<std::uint32_t>(
+                SceneTextureAddress::mirrored_repeat)
+            || addressV > static_cast<std::uint32_t>(
+                SceneTextureAddress::mirrored_repeat)
+            || alpha > static_cast<std::uint32_t>(
+                SceneTextureAlphaMode::cutout)
+            || colorSpace > static_cast<std::uint32_t>(
+                SceneTextureColorSpace::srgb))
+        {
+            return false;
+        }
+
+        material.filter = static_cast<SceneTextureFilter>(filter);
+        material.address_u = static_cast<SceneTextureAddress>(addressU);
+        material.address_v = static_cast<SceneTextureAddress>(addressV);
+        material.alpha = static_cast<SceneTextureAlphaMode>(alpha);
+        material.color_space =
+            static_cast<SceneTextureColorSpace>(colorSpace);
+        if (!material.valid())
+            return false;
+        output = std::move(material);
+        return true;
+    }
+
     [[nodiscard]] inline bool parse_snapshot_object_line(
         std::string_view line,
         SceneObjectSnapshot& object,
         std::size_t maximumStringBytes,
-        bool hasStableId)
+        bool hasStableId,
+        bool hasTextureMaterial)
     {
         std::size_t position = 0;
         if (!consume_literal(line, position, "object "))
@@ -418,24 +497,36 @@ namespace epochengine::scene::detail
             }
         }
 
-        return parse_quoted_value(
+        if (!parse_quoted_value(
                 line, position, object.name, maximumStringBytes)
-            && consume_literal(line, position, " type ")
-            && parse_quoted_value(
+            || !consume_literal(line, position, " type ")
+            || !parse_quoted_value(
                 line, position, object.type, maximumStringBytes)
-            && consume_literal(line, position, " category ")
-            && parse_quoted_value(
+            || !consume_literal(line, position, " category ")
+            || !parse_quoted_value(
                 line, position, object.category, maximumStringBytes)
-            && consume_literal(line, position, " pos ")
-            && parse_compact_vec3(line, position, object.position)
-            && consume_literal(line, position, " rot ")
-            && parse_compact_vec3(line, position, object.rotation)
-            && consume_literal(line, position, " scale ")
-            && parse_compact_vec3(line, position, object.scale)
-            && consume_literal(line, position, " visible ")
-            && parse_bool01(line, position, object.visible)
-            && consume_literal(line, position, " editor_only ")
-            && parse_bool01(line, position, object.editor_only)
+            || !consume_literal(line, position, " pos ")
+            || !parse_compact_vec3(line, position, object.position)
+            || !consume_literal(line, position, " rot ")
+            || !parse_compact_vec3(line, position, object.rotation)
+            || !consume_literal(line, position, " scale ")
+            || !parse_compact_vec3(line, position, object.scale)
+            || !consume_literal(line, position, " visible ")
+            || !parse_bool01(line, position, object.visible)
+            || !consume_literal(line, position, " editor_only ")
+            || !parse_bool01(line, position, object.editor_only))
+        {
+            return false;
+        }
+
+        if (!hasTextureMaterial)
+            return position == line.size();
+        return consume_literal(line, position, " material ")
+            && parse_texture_material_payload(
+                line,
+                position,
+                object.texture_material,
+                maximumStringBytes)
             && position == line.size();
     }
 
@@ -757,7 +848,8 @@ namespace epochengine::scene::detail
     [[nodiscard]] inline SnapshotParseResult parse_v2_body(
         std::string_view text,
         std::size_t position,
-        const SnapshotTextLimits& limits)
+        const SnapshotTextLimits& limits,
+        bool hasTextureMaterial)
     {
         SceneSnapshot snapshot{};
         std::string_view line{};
@@ -851,7 +943,7 @@ namespace epochengine::scene::detail
             SceneObjectSnapshot object{};
             if (!read_line(text, position, line)
                 || !parse_snapshot_object_line(
-                    line, object, maximumStringBytes, true))
+                    line, object, maximumStringBytes, true, hasTextureMaterial))
             {
                 return failure(
                     "invalid v2 object line " + std::to_string(index));
@@ -932,7 +1024,7 @@ namespace epochengine::scene::detail
             SceneObjectSnapshot object{};
             if (!read_line(text, position, line)
                 || !parse_snapshot_object_line(
-                    line, object, maximumStringBytes, false))
+                    line, object, maximumStringBytes, false, false))
             {
                 return failure(
                     "invalid v1 object line " + std::to_string(index));
@@ -1032,7 +1124,7 @@ export namespace epochengine::scene
                 return {};
 
             detail::BoundedTextWriter writer{limits.maximum_text_bytes};
-            if (!writer.append("epoch_snapshot 2\n")
+            if (!writer.append("epoch_snapshot 3\n")
                 || !detail::append_quoted_line(
                     writer, "scene", snapshot.scene_id)
                 || !detail::append_quoted_line(
@@ -1088,10 +1180,56 @@ export namespace epochengine::scene
                     || !writer.append_integer(object.visible ? 1u : 0u)
                     || !writer.append(" editor_only ")
                     || !writer.append_integer(object.editor_only ? 1u : 0u)
-                    || !writer.append("\n"))
+                    || !writer.append(" material "))
                 {
                     return {};
                 }
+
+                if (!object.texture_material)
+                {
+                    if (!writer.append_integer(0u))
+                        return {};
+                }
+                else
+                {
+                    const SceneTextureMaterialSnapshot& material =
+                        *object.texture_material;
+                    if (!writer.append_integer(1u)
+                        || !writer.append(" path ")
+                        || !writer.append_quoted(material.logical_path)
+                        || !writer.append(" key ")
+                        || !writer.append_integer(material.artifact_key[0])
+                        || !writer.append(",")
+                        || !writer.append_integer(material.artifact_key[1])
+                        || !writer.append(",")
+                        || !writer.append_integer(material.artifact_key[2])
+                        || !writer.append(",")
+                        || !writer.append_integer(material.artifact_key[3])
+                        || !writer.append(" stable ")
+                        || !writer.append_integer(material.stable_key)
+                        || !writer.append(" filter ")
+                        || !writer.append_integer(
+                            static_cast<std::uint32_t>(material.filter))
+                        || !writer.append(" address_u ")
+                        || !writer.append_integer(
+                            static_cast<std::uint32_t>(material.address_u))
+                        || !writer.append(" address_v ")
+                        || !writer.append_integer(
+                            static_cast<std::uint32_t>(material.address_v))
+                        || !writer.append(" alpha ")
+                        || !writer.append_integer(
+                            static_cast<std::uint32_t>(material.alpha))
+                        || !writer.append(" color_space ")
+                        || !writer.append_integer(
+                            static_cast<std::uint32_t>(material.color_space))
+                        || !writer.append(" cutoff ")
+                        || !writer.append_floating(material.alpha_cutoff))
+                    {
+                        return {};
+                    }
+                }
+                if (!writer.append("\n"))
+                    return {};
             }
 
             if (!detail::append_number_line(
@@ -1141,8 +1279,10 @@ export namespace epochengine::scene
             std::string_view headerLine{};
             if (!detail::read_line(text, position, headerLine))
                 return detail::failure("missing snapshot header");
+            if (headerLine == "epoch_snapshot 3")
+                return detail::parse_v2_body(text, position, limits, true);
             if (headerLine == "epoch_snapshot 2")
-                return detail::parse_v2_body(text, position, limits);
+                return detail::parse_v2_body(text, position, limits, false);
             if (headerLine == "epoch_snapshot 1")
                 return detail::parse_v1_body(text, position, limits);
             return detail::failure("unsupported snapshot header");

@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.09` so
+and stable multicontext branch are sealed. Development source is `v0.89.10` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -108,6 +108,17 @@ The working tree contains these current or in-progress foundations:
   the asset registry, decoded runtime publication, restore-on-demand, and owned
   Canvas2D resource leases. Recreated pipelines recover the same logical
   project texture without preserving physical cache state;
+- `asset.texture_import` decodes bounded uncompressed BMP, TGA, and P6 PPM
+  sources into canonical RGBA8 artifacts. `editor.project_textures` owns one
+  project-scoped controller for source discovery, import, Library restore,
+  semantic scene assignment, and actionable diagnostics;
+- scene snapshot format 3 serializes semantic texture materials and exact
+  logical revisions. Runtime compilation and save/reopen rebuild physical
+  resources through the project pipeline instead of persisting cache handles;
+- the World Outliner Assets tab exposes project source discovery, import,
+  Library restore, and selected-scene material assignment through the same
+  controller; generated project scenes default to no Engine Arcade package
+  unless package admission is explicit;
 - `editor.canvas2d_scene` now accepts typed logical texture material intent and
   an exact immutable resource lease. Solid entities retain their fallback;
   missing, mismatched, duplicate, or unexpected project texture bindings are
@@ -238,8 +249,12 @@ presentation packet staging, the compiled primary OpenGL compositor, and
 real-hook no-context refusal are build-proven on MSVC and managed Clang 22.
 Current MSVC contracts also prove origin/stride-aware pixel comparison, exact
 and tolerant mismatch accounting, hash validation, bounded failure, and safe
-OpenGL evidence refusal without a registered native context. The capture-lane
-readback is compiled but remains runtime-unproved until an approved capture.
+OpenGL evidence refusal without a registered native context. Approved parented
+captures now prove the native OpenGL Canvas2D viewport exactly matches the
+canonical T0-CPU image across 1,178,872 pixels with zero outliers and zero
+channel error. The core-profile state guard restores polygon mode through
+`GL_FRONT_AND_BACK`; live platform/render-thread context ownership prevents
+sprite batches from selecting an unrelated logical context.
 MSVC contracts also prove deterministic temporal texture payload compilation,
 artifact-integrity rejection, project-scoped logical identity, exact sampled
 image admission, foreign-registry rejection, collision-safe resource keys,
@@ -250,39 +265,42 @@ editor scene raster publication. A clean authoring-disabled
 managed Clang configuration independently proves the runtime artifact schema,
 hashing, and validator without authoring document/UI linkage. Immutable scene
 publication, replacement lifetime, semantic entity mapping, CPU shading, and
-protected OpenGL scene-slot routing are build-proven. Live OpenGL
-allocation/drawing, operator-visible project textures, live
-Assets-browser import/material assignment, and secondary GL share-group
-adapters remain Partial.
+protected OpenGL scene-slot routing are build-proven. All six generated MSVC
+profiles now pass materialize, production save/reopen, build, and child-runtime
+self-test; GUI Editor also passes the exact standalone external Run arguments.
+Interactive Assets-tab import/material click proof, secondary GL share groups,
+and SDL3/SFML3/Raylib3 texture presentation adapters remain Partial.
 
 ## Completed Capability Checkpoint
 
-Source v0.89.09 carries forward the v0.89.06 release baseline and closes the
-first runtime texture consumption loop: deterministic compiled bytes persist in
-the project Library, reopen through authenticated project identity, publish
-decoded CPU resources, and enter immutable editor Canvas2D scenes through an
-owned exact resource lease. Debug contracts prove verified disk round trips,
-idempotent publication, project isolation, portable case-collision refusal,
-stale revision rejection, textured scene closure, and CPU raster output.
-The source also carries a one-shot OpenGL capture evidence path that compares
-the viewport against the canonical T0-CPU presentation without taxing normal
-frames.
-It does not claim live Assets-browser material assignment, native pixel
-correctness before capture evidence, secondary share groups, higher texture
-formats, or built-game presentation.
+Source v0.89.10 carries forward the sealed v0.89.06 release baseline and closes
+a complete saved-project texture/runtime slice. BMP, TGA, and P6 PPM sources
+compile into authenticated artifacts, publish atomically in the project
+Library, restore through stable logical identity, and bind semantic scene
+materials through exact immutable Canvas2D resource leases. Snapshot format 3
+preserves that intent through atomic save/reopen and runtime compilation.
+Approved OpenGL captures prove exact native/T0-CPU Canvas2D output. Final GUI
+Editor and Assets captures are free of default Arcade geometry and OpenGL
+errors. All six generated project profiles pass materialization, save/reopen,
+build, and child-runtime self-test; the generated GUI project additionally
+passes the editor-equivalent external Run arguments.
+This checkpoint does not claim a completed click-driven texture workflow,
+tilemap authoring, secondary GL share groups, SDL3/SFML3/Raylib3 texture
+presentation, higher texture formats, physics/audio gameplay, or the complete
+acceptance game.
 
 ## Immediate Implementation Order
 
-1. Run the approved T1-GL capture lane, inspect its T0-CPU pixel evidence, and
-   verify resize, retirement, fallback, GUI replay, and present order before
-   promoting native presentation evidence.
-2. Connect the Assets browser/import path and scene material assignment to the
-   project texture pipeline without storing physical residency in scene state.
-3. Add explicit SDL3/SFML3/Raylib3 and secondary OpenGL share-group adapters.
-4. Extend settings and controls with project texture policy, evidence,
-   effective limits, Library diagnostics, and budget usage.
-5. Expose SceneDocument undo/redo and transaction diagnostics through EpochGui
-   controls after command ownership is proven in the live editor.
+1. Complete and automate the Assets-tab import, material assignment, undo/redo,
+   and save/reopen interaction path over the existing project texture spine.
+2. Build tile palette, layer/chunk editing, placement, selection, and compiled
+   map output on the same scene/document command gateway.
+3. Add explicit SDL3/SFML3/Raylib3 and secondary OpenGL share-group texture
+   presentation adapters with honest unsupported evidence where necessary.
+4. Extend settings and controls with texture policy, effective limits, Library
+   diagnostics, cache budgets, and cost visibility.
+5. Move directly into configurable input and deterministic 2D physics once one
+   map can be authored, saved, reopened, built, and run without source edits.
 
 ## Backend Repair Within This Gate
 

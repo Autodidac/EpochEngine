@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.09-1F7A4C?style=for-the-badge" alt="Current development source v0.89.09" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.10-1F7A4C?style=for-the-badge" alt="Current development source v0.89.10" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.06-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.06" />
 </p>
 
@@ -76,7 +76,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.09`; the published stable Windows/Linux
+- Active development source is `v0.89.10`; the published stable Windows/Linux
   runtime is `v0.89.06`.
 - The accepted `v0.89.06` updater and packages are sealed while source development
   continues on the capability-tier and playable-2D plan.
@@ -107,20 +107,22 @@ For engine/tooling developers:
   Clang contract with authoring and texture-editor features disabled; authoring
   imports that same canonical artifact boundary when producing source content.
   `project.texture_library` persists verified compiled bytes beneath each
-  project Library, and `project.texture_pipeline` restores them through one
-  project-scoped registry/resource boundary into owned immutable Canvas2D
-  scene leases. The editor scene adapter accepts those logical texture
-  materials while retaining solid fallback and rejecting incomplete closures.
+  project Library, while bounded BMP, TGA, and P6 PPM import feeds one
+  `project.texture_pipeline` registry/resource boundary. Snapshot format 3
+  preserves semantic texture materials through atomic save/reopen and restores
+  exact owned Canvas2D leases without persisting physical cache handles. The
+  World Outliner Assets surface owns source discovery, import, Library restore,
+  assignment, and diagnostics over that same controller.
   The primary OpenGL adapter compiles a scoped, viewport-confined final
-  compositor with context-owned texture checks and complete GL state restoration.
-  An immutable per-context scene exchange now maps committed editor entities into
-  semantic Canvas2D sprites and presents them in the protected OpenGL scene slot;
-  `render.canvas2d_evidence` now owns deterministic CPU/native comparison,
-  and the OpenGL capture lane performs one warmup-gated, state-restoring
-  viewport readback per scene/output identity. It emits a queryable result and
-  evidence log without adding readback cost to normal frames;
-  approved live pixel capture and SDL3/SFML3/Raylib3 share-group adapters
-  remain the next proof gate.
+  compositor with context-owned texture checks and core-profile-valid state
+  restoration. An immutable per-context scene exchange maps committed editor
+  entities into semantic Canvas2D sprites and presents them in the protected
+  OpenGL scene slot. Approved capture evidence matches the T0-CPU reference
+  across 1,178,872 pixels with zero outliers and zero channel error.
+  All six generated profiles pass materialize, save/reopen, build, and child
+  self-test, and GUI Editor passes the equivalent standalone external Run.
+  Interactive texture assignment proof and SDL3/SFML3/Raylib3/share-group
+  presentation adapters remain the next texture gates.
 - The launcher directly opens three application profiles after a prelaunch
   context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
   services and one shell implementation but own separate source files, scene

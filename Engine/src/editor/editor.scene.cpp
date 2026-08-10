@@ -1258,6 +1258,19 @@ namespace
         if (const auto found = epochengine::core::path::find_epoch_repo_root(project_root); !found.empty())
             return found;
 
+        if (const auto found = ascend_to_repo_root(project_root); found)
+            return *found;
+
+        if (const auto found = ascend_to_repo_root(
+                epochengine::core::path::executable_path()); found)
+            return *found;
+
+        std::error_code currentPathError{};
+        const fs::path currentPath = fs::current_path(currentPathError);
+        if (!currentPathError)
+            if (const auto found = ascend_to_repo_root(currentPath); found)
+                return *found;
+
         if (const auto runtimeRoot = epochengine::core::path::runtime_root_dir(); !runtimeRoot.empty())
             return runtimeRoot;
 
@@ -1908,6 +1921,23 @@ namespace
         }
     }
 
+    [[nodiscard]] static bool replace_delimited_value(
+        std::string& text,
+        std::string_view prefix,
+        std::string_view suffix,
+        std::string_view value)
+    {
+        const std::size_t begin = text.find(prefix);
+        if (begin == std::string::npos)
+            return false;
+        const std::size_t valueBegin = begin + prefix.size();
+        const std::size_t end = text.find(suffix, valueBegin);
+        if (end == std::string::npos)
+            return false;
+        text.replace(valueBegin, end - valueBegin, value);
+        return true;
+    }
+
     [[nodiscard]] static constexpr std::string_view generated_child_project_debug_defines() noexcept
     {
         return "ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;%(PreprocessorDefinitions)";
@@ -1920,19 +1950,82 @@ namespace
 
     [[nodiscard]] static constexpr std::string_view generated_child_project_link_dependencies() noexcept
     {
-        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;%(AdditionalDependencies)";
+        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)";
     }
 
     [[nodiscard]] static bool repair_generated_windows_child_project_build_files(const fs::path& root)
     {
         const fs::path projectFile = generated_project_windows_vcxproj_path(root);
         const fs::path buildScript = generated_project_windows_build_script_path(root);
+        const fs::path repoRoot = resolve_epoch_repo_root(root);
+        if (!is_epoch_repo_root(repoRoot))
+            return false;
+        epochengine::logger::info("Editor.Scene",
+            "Generated child-project repair root: "
+            + repoRoot.generic_string());
+        const fs::path staticLibProject =
+            repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj";
+        const fs::path epochGuiProject =
+            repoRoot / "Engine" / "dep" / "EpochGui" / "EpochGui.vcxproj";
+        const std::string repoRootWindows = to_windows_path(repoRoot.string());
+        const std::string repoRootXml = xml_escape(repoRootWindows);
+        const std::string staticLibProjectXml =
+            xml_escape(to_windows_path(staticLibProject.string()));
+        const std::string epochGuiProjectXml =
+            xml_escape(to_windows_path(epochGuiProject.string()));
+        const std::string repoRootPowerShell =
+            powershell_escape_single_quoted(repoRootWindows);
+        const std::string vcpkgManifestRootPowerShell =
+            powershell_escape_single_quoted(to_windows_path((repoRoot / "Engine").string()));
+        const std::string projectReferenceProperties =
+            "SolutionDir=" + repoRootXml
+            + "\\;VcpkgManifestRoot=" + repoRootXml
+            + "\\Engine\\;EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1;PlatformToolset=v143";
+        const std::string epochGuiProjectReference =
+            "    <ProjectReference Include=\"" + epochGuiProjectXml + "\">\n"
+            "      <Project>{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}</Project>\n"
+            "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
+            "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
+            "      <AdditionalProperties>SolutionDir=" + repoRootXml
+                + "\\;PlatformToolset=v143</AdditionalProperties>\n"
+            "    </ProjectReference>\n";
 
         std::error_code ec;
         if (fs::exists(projectFile, ec) && !ec)
         {
             std::string projectText = read_text_file(projectFile);
             const std::string original = projectText;
+            const bool rootsRepaired =
+                replace_delimited_value(
+                    projectText,
+                    "<ProjectReference Include=\"",
+                    "\">",
+                    staticLibProjectXml)
+                && replace_delimited_value(
+                    projectText,
+                    "<AdditionalProperties>",
+                    "</AdditionalProperties>",
+                    projectReferenceProperties)
+                && replace_delimited_value(
+                    projectText,
+                    "<EpochRepoRoot>",
+                    "</EpochRepoRoot>",
+                    repoRootXml + "\\");
+            if (!rootsRepaired)
+                return false;
+            if (projectText.find(epochGuiProjectXml) == std::string::npos)
+            {
+                constexpr std::string_view groupEnd =
+                    "  </ItemGroup>\n  <PropertyGroup Label=\"Globals\">";
+                const std::size_t groupEndPosition = projectText.find(groupEnd);
+                if (groupEndPosition == std::string::npos)
+                    return false;
+                projectText.insert(groupEndPosition, epochGuiProjectReference);
+            }
+            replace_all(
+                projectText,
+                "StaticLib1.lib;%(AdditionalDependencies)",
+                "StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)");
             replace_all(projectText, "<PlatformToolset>v142</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<PlatformToolset>v145</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<LanguageStandard>stdcpplatest</LanguageStandard>", "<LanguageStandard>stdcpp23</LanguageStandard>");
@@ -1990,6 +2083,19 @@ namespace
         {
             std::string scriptText = read_text_file(buildScript);
             const std::string original = scriptText;
+            const bool scriptRootsRepaired =
+                replace_delimited_value(
+                    scriptText,
+                    "$repoRoot = '",
+                    "'",
+                    repoRootPowerShell)
+                && replace_delimited_value(
+                    scriptText,
+                    "$vcpkgManifestRoot = '",
+                    "'",
+                    vcpkgManifestRootPowerShell);
+            if (!scriptRootsRepaired)
+                return false;
             if (scriptText.find("'/p:PlatformToolset=v143'") == std::string::npos)
             {
                 replace_all(
@@ -2291,6 +2397,7 @@ namespace
         const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
         const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
         const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
+        const fs::path repoEpochGuiProject = (repoRoot / "Engine" / "dep" / "EpochGui" / "EpochGui.vcxproj").lexically_normal();
         const bool isSelfIterationSandbox = spec.project_id == "sandbox";
         const bool includeEngineArcadePackage = spec.include_engine_arcade_package && !isSelfIterationSandbox;
         const std::string kindText = isSelfIterationSandbox
@@ -2319,6 +2426,7 @@ namespace
         const std::string vcpkgManifestRootPowerShell = powershell_escape_single_quoted(
             to_windows_path((repoRoot / "Engine").string()));
         const std::string repoStaticLibProjectWin = xml_escape(to_windows_path(repoStaticLibProject.string()));
+        const std::string repoEpochGuiProjectWin = xml_escape(to_windows_path(repoEpochGuiProject.string()));
         const std::string manifestAbsoluteText = manifestAbsolute.generic_string();
         const std::string rootAbsoluteText = rootAbsolute.generic_string();
 
@@ -2580,6 +2688,12 @@ namespace
             "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
             "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;VcpkgManifestRoot=" + repoRootWin + "\\Engine\\;EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1;PlatformToolset=v143</AdditionalProperties>\n"
             "    </ProjectReference>\n"
+            "    <ProjectReference Include=\"" + repoEpochGuiProjectWin + "\">\n"
+            "      <Project>{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}</Project>\n"
+            "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
+            "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
+            "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;PlatformToolset=v143</AdditionalProperties>\n"
+            "    </ProjectReference>\n"
             "  </ItemGroup>\n"
             "  <PropertyGroup Label=\"Globals\">\n"
             "    <VCProjectVersion>17.0</VCProjectVersion>\n"
@@ -2654,7 +2768,7 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "  </ItemDefinitionGroup>\n"
@@ -2677,7 +2791,7 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "  </ItemDefinitionGroup>\n"
@@ -3031,6 +3145,24 @@ namespace epochengine
                 R"({"capability_profile":"portable})",
                 "capability_profile");
 
+        const ProjectShellSpec projectSpec{
+            .kind = EditorProjectKind::Game,
+            .project_name = "GUI Editor",
+            .project_id = "twodstudio",
+            .world_name = "TwoD_Main",
+            .template_family = "game-2d-project",
+            .script_id = "project_demo_bootstrap"
+        };
+        const std::string defaultWorld =
+            make_project_world_scene_text(projectSpec, "game", false);
+        const std::string arcadeWorld =
+            make_project_world_scene_text(projectSpec, "game", true);
+        const bool explicitPackageGate =
+            defaultWorld.find("engine_arcade") == std::string::npos
+            && defaultWorld.find("EngineArcade") == std::string::npos
+            && arcadeWorld.find("package \"engine_arcade\"") != std::string::npos
+            && arcadeWorld.find("EngineArcadeCabinetBody") != std::string::npos;
+
         return missing.state == JsonStringFieldState::missing
             && valid.state == JsonStringFieldState::present
             && valid.value == "portable"
@@ -3039,7 +3171,8 @@ namespace epochengine
             && !editor_project_capability_policy(unknown.value).has_value()
             && duplicate.state == JsonStringFieldState::malformed
             && wrongType.state == JsonStringFieldState::malformed
-            && unterminated.state == JsonStringFieldState::malformed;
+            && unterminated.state == JsonStringFieldState::malformed
+            && explicitPackageGate;
     }
 
     EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)
@@ -3064,7 +3197,7 @@ namespace epochengine
                 ? "Generated software/tool shell."
                 : "Generated game shell.",
             .demo_model_asset = std::string{},
-            .include_engine_arcade_package = kind == EditorProjectKind::Game,
+            .include_engine_arcade_package = false,
             .overwrite_existing = true
         });
     }
@@ -3090,8 +3223,6 @@ namespace epochengine
 
         const fs::path root = resolve_project_root_path(fs::path{ profile->root_path });
         const fs::path manifest = root / "project.epoch.json";
-        const fs::path engineArcadePackage = root / "assets" / "packages" / "engine_arcade.package.json";
-        const fs::path engineArcadeScript = root / "scripts" / "script.engine_arcade_scene.cpp";
         const fs::path buildScript = generated_project_windows_build_script_path(root);
         const fs::path entrySource = generated_project_entry_source_path(root);
         const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
@@ -3142,19 +3273,13 @@ namespace epochengine
             const std::string expectedKind = profile->id == "sandbox"
                 ? "engine-self-iteration-sandbox"
                 : std::string(profile->kind == EditorProjectKind::Tool ? "tool" : "game");
-            const bool expectsEngineArcadePackage = profile->kind == EditorProjectKind::Game && profile->id != "sandbox";
-            const bool engineArcadePackageReady =
-                !expectsEngineArcadePackage
-                || ((fs::exists(engineArcadePackage, ec) && !ec)
-                    && (fs::exists(engineArcadeScript, ec) && !ec));
             const bool manifestMatchesProfile =
                 manifestId && *manifestId == profile->id
                 && manifestKind && *manifestKind == expectedKind
                 && manifestScript && *manifestScript == profile->default_script
                 && manifestTemplate && *manifestTemplate == profile->template_family
                 && manifestDisplayName && *manifestDisplayName == profile->display_name
-                && manifestWindowsProject && *manifestWindowsProject == windowsProject.filename().generic_string()
-                && engineArcadePackageReady;
+                && manifestWindowsProject && *manifestWindowsProject == windowsProject.filename().generic_string();
 
             if (!manifestMatchesProfile)
             {
@@ -3170,7 +3295,7 @@ namespace epochengine
                     .description = std::string(profile->description),
                     .demo_model_asset = std::string(profile->demo_model_asset),
                     .capability_profile = std::string(profile->renderer_capability.id),
-                    .include_engine_arcade_package = profile->kind == EditorProjectKind::Game && profile->id != "sandbox",
+                    .include_engine_arcade_package = false,
                     .overwrite_existing = true
                 });
             }
@@ -3217,7 +3342,7 @@ namespace epochengine
             .description = std::string(profile->description),
             .demo_model_asset = std::string(profile->demo_model_asset),
             .capability_profile = std::string(profile->renderer_capability.id),
-            .include_engine_arcade_package = profile->kind == EditorProjectKind::Game && profile->id != "sandbox",
+            .include_engine_arcade_package = false,
             .overwrite_existing = false
         });
     }

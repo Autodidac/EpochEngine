@@ -124,6 +124,8 @@ export namespace epochengine::authoring::scene
             const SpawnComponent&) noexcept = default;
     };
 
+    using TextureMaterialComponent =
+        epochengine::scene::SceneTextureMaterialSnapshot;
     enum class ObjectKind : std::uint8_t
     {
         generic,
@@ -157,6 +159,7 @@ export namespace epochengine::authoring::scene
         std::optional<GroundComponent> ground{};
         std::optional<LightComponent> light{};
         std::optional<SpawnComponent> spawn{};
+        std::optional<TextureMaterialComponent> texture_material{};
     };
 
     struct SceneObject final
@@ -290,6 +293,7 @@ export namespace epochengine::authoring::scene
         invalid_ground,
         invalid_light,
         invalid_spawn,
+        invalid_texture_material,
         light_limit_exceeded,
         invalid_project_settings,
         unresolved_reference,
@@ -376,6 +380,12 @@ export namespace epochengine::authoring::scene
         std::optional<SpawnComponent> value{};
     };
 
+    struct TextureMaterialComponentChangedOperation final
+    {
+        ObjectHandle object{};
+        std::optional<TextureMaterialComponent> value{};
+    };
+
     struct ProjectSettingsChangedOperation final
     {
         ProjectSettings value{};
@@ -391,6 +401,7 @@ export namespace epochengine::authoring::scene
         GroundComponentChangedOperation,
         LightComponentChangedOperation,
         SpawnComponentChangedOperation,
+        TextureMaterialComponentChangedOperation,
         ProjectSettingsChangedOperation>;
 
     struct SceneTransaction final
@@ -881,6 +892,12 @@ export namespace epochengine::authoring::scene
                 bytes = saturating_add(bytes, ground_bytes(*object.ground));
             if (object.spawn)
                 bytes = saturating_add(bytes, string_bytes(object.spawn->role));
+            if (object.texture_material)
+            {
+                bytes = saturating_add(
+                    bytes,
+                    string_bytes(object.texture_material->logical_path));
+            }
             return bytes;
         }
     }
@@ -930,6 +947,7 @@ export namespace epochengine::authoring::scene
         converted.runtime_visible = source.visible && !source.editor_only;
         converted.editor_visible = source.visible;
         converted.editor_only = source.editor_only;
+        converted.texture_material = source.texture_material;
 
         switch (detail::snapshot_object_kind(source.type))
         {
@@ -1191,6 +1209,12 @@ export namespace epochengine::authoring::scene
             if (!detail::valid_transform(slot.object.transform))
             {
                 result.code = ResultCode::invalid_transform;
+                return result;
+            }
+            if (slot.object.texture_material
+                && !slot.object.texture_material->valid())
+            {
+                result.code = ResultCode::invalid_texture_material;
                 return result;
             }
             if (slot.object.editor_only && slot.object.runtime_visible)
@@ -1512,6 +1536,24 @@ export namespace epochengine::authoring::scene
             detail::append_integral(hash, object->runtime_visible);
             detail::append_integral(hash, object->editor_visible);
             detail::append_integral(hash, object->editor_only);
+            detail::append_integral(
+                hash,
+                object->texture_material.has_value());
+            if (object->texture_material)
+            {
+                const TextureMaterialComponent& material =
+                    *object->texture_material;
+                hash.append_string(material.logical_path);
+                for (const std::uint64_t word : material.artifact_key)
+                    detail::append_integral(hash, word);
+                detail::append_integral(hash, material.stable_key);
+                detail::append_integral(hash, material.filter);
+                detail::append_integral(hash, material.address_u);
+                detail::append_integral(hash, material.address_v);
+                detail::append_integral(hash, material.alpha);
+                detail::append_integral(hash, material.color_space);
+                hash.append_float(material.alpha_cutoff);
+            }
             detail::append_integral(hash, object_kind(*object));
 
             if (object->camera)
@@ -1773,6 +1815,25 @@ export namespace epochengine::authoring::scene
                     slot->object.spawn = value.value;
                     return ResultCode::success;
                 }
+                else if constexpr (
+                    std::is_same_v<
+                        Type,
+                        TextureMaterialComponentChangedOperation>)
+                {
+                    ObjectSlot* slot = resolve_slot(state, value.object);
+                    if (slot == nullptr)
+                    {
+                        return value.object.valid()
+                            ? ResultCode::stale_handle
+                            : ResultCode::invalid_handle;
+                    }
+                    inverse = TextureMaterialComponentChangedOperation{
+                        value.object,
+                        slot->object.texture_material
+                    };
+                    slot->object.texture_material = value.value;
+                    return ResultCode::success;
+                }
                 else
                 {
                     inverse = ProjectSettingsChangedOperation{state.project};
@@ -1828,6 +1889,18 @@ export namespace epochengine::authoring::scene
                         bytes = detail::saturating_add(
                             bytes,
                             detail::string_bytes(value.value->role));
+                    }
+                }
+                else if constexpr (
+                    std::is_same_v<
+                        Type,
+                        TextureMaterialComponentChangedOperation>)
+                {
+                    if (value.value)
+                    {
+                        bytes = detail::saturating_add(
+                            bytes,
+                            detail::string_bytes(value.value->logical_path));
                     }
                 }
                 return bytes;
@@ -2706,7 +2779,8 @@ export namespace epochengine::authoring::scene
                     source.transform.scale.z
                 },
                 .visible = source.editor_visible,
-                .editor_only = source.editor_only
+                .editor_only = source.editor_only,
+                .texture_material = source.texture_material
             });
         }
 
@@ -2737,6 +2811,8 @@ export namespace epochengine::authoring::scene
     struct SnapshotIngestionContractResult final
     {
         bool semantic_round_trip{};
+        bool texture_material_preserved{};
+        bool material_history_reversible{};
         bool stable_object_ids{};
         bool revision_preserved{};
         bool components_mapped{};
@@ -2748,6 +2824,8 @@ export namespace epochengine::authoring::scene
         [[nodiscard]] constexpr explicit operator bool() const noexcept
         {
             return semantic_round_trip &&
+                texture_material_preserved &&
+                material_history_reversible &&
                 stable_object_ids &&
                 revision_preserved &&
                 components_mapped &&
@@ -2784,7 +2862,8 @@ export namespace epochengine::authoring::scene
                 left.rotation == right.rotation &&
                 left.scale == right.scale &&
                 left.visible == right.visible &&
-                left.editor_only == right.editor_only;
+                left.editor_only == right.editor_only &&
+                left.texture_material == right.texture_material;
         }
 
         [[nodiscard]] inline bool same_snapshot_semantics(
@@ -2901,7 +2980,18 @@ export namespace epochengine::authoring::scene
                 .category = "Tests",
                 .position = {1.0f, 1.0f, 1.0f},
                 .visible = true,
-                .editor_only = false
+                .editor_only = false,
+                .texture_material = epochengine::scene::SceneTextureMaterialSnapshot{
+                    .logical_path = "Assets/Textures/contract.ppm",
+                    .artifact_key = {11u, 22u, 33u, 44u},
+                    .stable_key = 55u,
+                    .filter = epochengine::scene::SceneTextureFilter::linear,
+                    .address_u = epochengine::scene::SceneTextureAddress::repeat,
+                    .address_v = epochengine::scene::SceneTextureAddress::clamp_to_edge,
+                    .alpha = epochengine::scene::SceneTextureAlphaMode::opaque,
+                    .color_space = epochengine::scene::SceneTextureColorSpace::linear,
+                    .alpha_cutoff = 0.5f
+                }
             },
             SnapshotObject{
                 .id = 202,
@@ -2932,7 +3022,7 @@ export namespace epochengine::authoring::scene
             }
         };
 
-        const SceneDocumentBuildResult built =
+        SceneDocumentBuildResult built =
             SceneDocument::from_snapshot(source);
         SnapshotIngestionContractResult result{};
         if (built)
@@ -2947,6 +3037,9 @@ export namespace epochengine::authoring::scene
                     detail::same_snapshot_semantics(
                         source,
                         projected.snapshot);
+                result.texture_material_preserved =
+                    projected.snapshot.objects[4].texture_material ==
+                        source.objects[4].texture_material;
                 result.revision_preserved =
                     built->revision().sequence == source.revision &&
                     projected.snapshot.revision == source.revision;
@@ -3005,6 +3098,40 @@ export namespace epochengine::authoring::scene
                 metrics.applied_transactions == 0 &&
                 metrics.history_operations == 0 &&
                 metrics.retained_history_bytes == 0;
+
+            const std::optional<ObjectHandle> materialObject =
+                built->find({201u});
+            if (materialObject && source.objects[4].texture_material)
+            {
+                TextureMaterialComponent replacement =
+                    *source.objects[4].texture_material;
+                replacement.artifact_key[0] = 101u;
+                replacement.stable_key = 202u;
+                const TransactionResult changed = built->apply_transaction(
+                    std::array<SceneOperation, 1>{
+                        TextureMaterialComponentChangedOperation{
+                            *materialObject,
+                            replacement}},
+                    "Replace texture material");
+                const SnapshotProjectionResult afterChange =
+                    built->project_snapshot();
+                const TransactionResult undone = built->undo();
+                const SnapshotProjectionResult afterUndo =
+                    built->project_snapshot();
+                const TransactionResult redone = built->redo();
+                const SnapshotProjectionResult afterRedo =
+                    built->project_snapshot();
+                result.material_history_reversible =
+                    changed && afterChange &&
+                    afterChange.snapshot.objects[4].texture_material ==
+                        replacement &&
+                    undone && afterUndo &&
+                    afterUndo.snapshot.objects[4].texture_material ==
+                        source.objects[4].texture_material &&
+                    redone && afterRedo &&
+                    afterRedo.snapshot.objects[4].texture_material ==
+                        replacement;
+            }
         }
 
         epochengine::scene::SceneSnapshot duplicate = source;
@@ -3012,12 +3139,16 @@ export namespace epochengine::authoring::scene
         epochengine::scene::SceneSnapshot nonFinite = source;
         nonFinite.objects.front().scale[0] =
             (std::numeric_limits<float>::quiet_NaN)();
+        epochengine::scene::SceneSnapshot invalidMaterial = source;
+        invalidMaterial.objects[4].texture_material->logical_path =
+            "../outside.ppm";
         DocumentLimits bounded{};
         bounded.maximum_active_objects =
             static_cast<std::uint32_t>(source.objects.size() - 1);
         result.malformed_rejected =
             !SceneDocument::from_snapshot(duplicate) &&
             !SceneDocument::from_snapshot(nonFinite) &&
+            !SceneDocument::from_snapshot(invalidMaterial) &&
             !SceneDocument::from_snapshot(source, bounded);
         return result;
     }

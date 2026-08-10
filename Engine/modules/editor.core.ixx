@@ -272,6 +272,8 @@ namespace epochengine
         std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
         bool visible{ true };
         bool editor_only{ false };
+        std::optional<scene::SceneTextureMaterialSnapshot>
+            texture_material{};
     };
 
     export struct EditorCanvas2DProjectSnapshot

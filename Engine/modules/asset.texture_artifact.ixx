@@ -8,6 +8,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <string_view>
 #include <span>
 #include <string>
 #include <vector>
@@ -29,6 +30,10 @@ export namespace epochengine::asset::texture
             const ContentHash&,
             const ContentHash&) noexcept = default;
     };
+    [[nodiscard]] ContentHash deterministic_content_hash(
+        std::string_view domain,
+        std::span<const std::byte> bytes) noexcept;
+
 
     [[nodiscard]] std::string content_hash_hex(const ContentHash& hash);
 

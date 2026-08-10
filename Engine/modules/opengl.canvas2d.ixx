@@ -204,8 +204,8 @@ export namespace epochengine::openglcanvas2d
                 glDepthMask(depth_write);
                 glCullFace(static_cast<GLenum>(cull_face_mode));
                 glFrontFace(static_cast<GLenum>(front_face));
-                glPolygonMode(GL_FRONT, static_cast<GLenum>(polygon_mode[0]));
-                glPolygonMode(GL_BACK, static_cast<GLenum>(polygon_mode[1]));
+                // Core profiles restore both faces through the only valid selector.
+                glPolygonMode(GL_FRONT_AND_BACK, static_cast<GLenum>(polygon_mode[0]));
                 glColorMask(
                     color_write[0], color_write[1],
                     color_write[2], color_write[3]);

@@ -255,6 +255,104 @@ namespace epochengine::project_textures
         return restored;
     }
 
+    TexturePipelineResult ProjectTexturePipeline::restore_exact(
+        std::string_view logicalPath,
+        const asset::texture::ContentHash& artifactKey) noexcept
+    {
+        ++metrics_.restore_requests;
+        if (!valid())
+            return reject(PipelineCode::invalid_pipeline);
+        if (logicalPath.empty() || artifactKey.empty())
+            return reject(PipelineCode::invalid_path);
+
+        std::optional<std::string> canonical{};
+        try
+        {
+            canonical = project_assets::canonical_logical_path(
+                logicalPath,
+                limits_.registry);
+        }
+        catch (...)
+        {
+            return reject(PipelineCode::allocation_failure);
+        }
+        if (!canonical)
+            return reject(PipelineCode::invalid_path);
+
+        LoadedTextureArtifact loaded =
+            library_.load_exact(*canonical, artifactKey);
+        if (!loaded)
+        {
+            return reject(
+                PipelineCode::library_failure,
+                loaded.code);
+        }
+
+        const project_assets::AssetRevision artifactRevision =
+            asset_revision(loaded.artifact.identity.source_revision);
+        const project_assets::AssetRecord* record =
+            registry_.find_by_path(*canonical);
+        project_assets::AssetHandle handle{};
+        project_assets::RegistryCode registryCode{
+            project_assets::RegistryCode::unchanged};
+        if (!record)
+        {
+            const project_assets::RegistrationResult registered =
+                registry_.register_asset({
+                    *canonical,
+                    project_assets::AssetKind::texture,
+                    artifactRevision});
+            registryCode = registered.code;
+            handle = registered.handle;
+            if (!registered)
+            {
+                return reject(
+                    PipelineCode::registry_failure,
+                    loaded.code,
+                    registryCode);
+            }
+        }
+        else
+        {
+            if (record->identity.kind
+                != project_assets::AssetKind::texture)
+            {
+                return reject(
+                    PipelineCode::registry_failure,
+                    loaded.code,
+                    project_assets::RegistryCode::path_collision);
+            }
+            handle = record->handle;
+        }
+
+        const PublicationResult published = resources_.publish(
+            registry_,
+            handle,
+            loaded.artifact,
+            false);
+        if (!published || !accepted(published.code))
+        {
+            return reject(
+                PipelineCode::resource_failure,
+                loaded.code,
+                registryCode,
+                published.code);
+        }
+
+        ++metrics_.restorations;
+        const bool changed =
+            registryCode == project_assets::RegistryCode::ready
+            || published.code == ResourceCode::ready;
+        return {
+            changed ? PipelineCode::ready : PipelineCode::unchanged,
+            loaded.code,
+            registryCode,
+            published.code,
+            handle,
+            published.logical,
+            std::move(loaded.locator)};
+    }
+
     Canvas2DLeaseResult ProjectTexturePipeline::bind_canvas2d(
         std::span<const canvas2d::LogicalTextureReference> logicalTextures) noexcept
     {

@@ -126,10 +126,11 @@ namespace epochengine::project_textures
         const project_assets::AssetRevision nextRevision{{{55, 66, 77, 88}}, 8};
         if (registry.update_revision(registered.handle, nextRevision)
             != project_assets::RegistryCode::ready
-            || service.bind_canvas2d(registry, requested).code()
-                != ResourceCode::missing_publication)
+            || !service.bind_canvas2d(registry, requested).valid()
+            || service.publish(registry, registered.handle, artifact).code
+                != ResourceCode::source_revision_mismatch)
         {
-            return TextureResourceContractFailure::stale_registry_revision;
+            return TextureResourceContractFailure::historical_revision_retention;
         }
         if (service.retire(foreign, registered.handle)
                 != ResourceCode::project_identity_mismatch
@@ -142,7 +143,7 @@ namespace epochengine::project_textures
 
         const TextureResourceMetrics metrics = service.metrics();
         if (metrics.publications != 1 || metrics.publication_reuse != 1
-            || metrics.binding_requests < 3 || metrics.bound_textures != 1
+            || metrics.binding_requests < 4 || metrics.bound_textures != 2
             || metrics.residency_successes != 2 || metrics.decoded_bytes != 0
             || metrics.rejected_operations < 2)
         {

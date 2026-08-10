@@ -85,7 +85,12 @@ import context.type;
 import context.multiplexer;
 import input.engine;
 import epoch.cli;
+import asset.texture_import;
 import capability.profile;
+import platform.budgets;
+import project.texture_admission;
+import project.texture_pipeline;
+import project.texture_resources;
 import project.lifecycle;
 import scripting.system;
 import ai.engine;
@@ -96,6 +101,7 @@ import package.registry;
 import perf.tier;
 import render.arcade;
 import editor.canvas2d_scene;
+import editor.project_textures;
 import render.canvas2d;
 import render.canvas2d_scene;
 import render.device;
@@ -369,11 +375,14 @@ namespace epochengine
             std::array<float, 3> scale{ 1.0f, 1.0f, 1.0f };
             bool visible{ true };
             bool editorOnly{ false };
+            std::optional<scene::SceneTextureMaterialSnapshot>
+                textureMaterial{};
         };
 
-        [[nodiscard]] EditorWorkspaceTab initial_editor_workspace_tab() noexcept
+        [[nodiscard]] std::optional<EditorWorkspaceTab> requested_editor_workspace_tab() noexcept
         {
             const auto parse_workspace_tab = [](std::string_view value) noexcept
+                -> std::optional<EditorWorkspaceTab>
             {
                 if (value == "AI" || value == "ai" || value == "Ai")
                     return EditorWorkspaceTab::AI;
@@ -385,25 +394,30 @@ namespace epochengine
                     return EditorWorkspaceTab::Assets;
                 if (value == "Output" || value == "output")
                     return EditorWorkspaceTab::Output;
-                return EditorWorkspaceTab::Output;
+                return std::nullopt;
             };
 
 #if defined(_MSC_VER)
             char* rawValue = nullptr;
             std::size_t rawSize = 0;
             if (_dupenv_s(&rawValue, &rawSize, "EPOCH_EDITOR_START_WORKSPACE") != 0 || !rawValue)
-                return EditorWorkspaceTab::Output;
+                return std::nullopt;
 
-            const EditorWorkspaceTab tab = parse_workspace_tab(std::string_view{ rawValue });
+            const auto tab = parse_workspace_tab(std::string_view{ rawValue });
             std::free(rawValue);
             return tab;
 #else
             const char* const rawValue = std::getenv("EPOCH_EDITOR_START_WORKSPACE");
             if (!rawValue)
-                return EditorWorkspaceTab::Output;
+                return std::nullopt;
 
             return parse_workspace_tab(std::string_view{ rawValue });
 #endif
+        }
+
+        [[nodiscard]] EditorWorkspaceTab initial_editor_workspace_tab() noexcept
+        {
+            return requested_editor_workspace_tab().value_or(EditorWorkspaceTab::Output);
         }
 
         [[nodiscard]] EditorMainSurface initial_editor_main_surface(EditorWorkspaceTab workspace) noexcept
@@ -465,6 +479,10 @@ namespace epochengine
             double editorFrameLimitFps{ 120.0 };
             std::string selectedProjectFile{};
             std::string selectedAssetPath{};
+            std::unique_ptr<
+                editor_project_textures::ProjectTextureController>
+                projectTextures{};
+            std::string projectTextureStatus{"Select a BMP, TGA, or PPM source under Project/Assets."};
             std::vector<EditorEntity> entities{};
             authoring::scene::SceneDocument sceneDocument{};
             lighting::LightManager sceneLighting{ 128 };
@@ -706,6 +724,7 @@ namespace epochengine
                 object.scale = entity.scale;
                 object.visible = entity.visible;
                 object.editor_only = entity.editorOnly;
+                object.texture_material = entity.textureMaterial;
                 snapshot.objects.emplace_back(std::move(object));
             }
 
@@ -865,6 +884,10 @@ namespace epochengine
             std::unordered_map<const core::Context*, AiChat, ContextPtrHash, ContextPtrEq> chats{};
         };
 
+        [[nodiscard]]
+        editor_project_textures::ProjectTextureController*
+            project_texture_controller(EditorState& editor);
+
         struct EditorStorage
         {
             std::mutex mutex{};
@@ -947,7 +970,8 @@ namespace epochengine
                     .rotation = source.rotation,
                     .scale = source.scale,
                     .visible = source.visible,
-                    .editorOnly = source.editor_only
+                    .editorOnly = source.editor_only,
+                    .textureMaterial = source.texture_material
                 });
             }
             state.sceneDocumentRevision = projection.snapshot.revision;
@@ -1014,7 +1038,8 @@ namespace epochengine
                 .rotation = entity.rotation,
                 .scale = entity.scale,
                 .visible = entity.visible,
-                .editor_only = entity.editorOnly
+                .editor_only = entity.editorOnly,
+                .texture_material = entity.textureMaterial
             };
         }
 
@@ -1425,7 +1450,8 @@ namespace epochengine
                 .rotation = entity.rotation,
                 .scale = entity.scale,
                 .visible = entity.visible,
-                .editor_only = entity.editorOnly
+                .editor_only = entity.editorOnly,
+                .texture_material = entity.textureMaterial
             };
         }
 
@@ -1440,7 +1466,8 @@ namespace epochengine
                 .rotation = entity.rotation,
                 .scale = entity.scale,
                 .visible = entity.visible,
-                .editorOnly = entity.editor_only
+                .editorOnly = entity.editor_only,
+                .textureMaterial = entity.texture_material
             };
         }
 
@@ -2469,6 +2496,12 @@ namespace epochengine
             state.projectId = std::string(profile->id);
             state.projectName = std::string(profile->display_name);
             state.projectRoot = std::string(profile->root_path);
+            state.selectedProjectFile.clear();
+            state.selectedAssetPath.clear();
+            state.projectTextures.reset();
+            state.projectTextureStatus = "Select a BMP, TGA, or PPM source under Project/Assets.";
+            state.sceneDocument =
+                authoring::scene::SceneDocument{};
             state.projectScenePath = std::string(profile->scene_path);
             state.projectManifest = std::string(profile->manifest_path);
             state.projectTemplate = std::string(profile->template_family);
@@ -2985,9 +3018,109 @@ namespace epochengine
             state.sceneLightingDirty = false;
         }
 
+        [[nodiscard]] FilterMode canvas2d_filter(
+            scene::SceneTextureFilter filter) noexcept
+        {
+            return filter == scene::SceneTextureFilter::nearest
+                ? FilterMode::nearest
+                : FilterMode::linear;
+        }
+
+        [[nodiscard]] AddressMode canvas2d_address(
+            scene::SceneTextureAddress address) noexcept
+        {
+            switch (address)
+            {
+            case scene::SceneTextureAddress::repeat:
+                return AddressMode::repeat;
+            case scene::SceneTextureAddress::mirrored_repeat:
+                return AddressMode::mirrored_repeat;
+            case scene::SceneTextureAddress::clamp_to_edge:
+                return AddressMode::clamp_to_edge;
+            }
+            return AddressMode::clamp_to_edge;
+        }
+
+        [[nodiscard]] canvas2d::SpriteAlphaMode canvas2d_alpha(
+            scene::SceneTextureAlphaMode alpha) noexcept
+        {
+            switch (alpha)
+            {
+            case scene::SceneTextureAlphaMode::opaque:
+                return canvas2d::SpriteAlphaMode::opaque;
+            case scene::SceneTextureAlphaMode::straight:
+                return canvas2d::SpriteAlphaMode::straight;
+            case scene::SceneTextureAlphaMode::premultiplied:
+                return canvas2d::SpriteAlphaMode::premultiplied;
+            case scene::SceneTextureAlphaMode::cutout:
+                return canvas2d::SpriteAlphaMode::mask;
+            }
+            return canvas2d::SpriteAlphaMode::opaque;
+        }
+
+        [[nodiscard]] canvas2d::SpriteColorSpace canvas2d_color_space(
+            scene::SceneTextureColorSpace colorSpace) noexcept
+        {
+            return colorSpace == scene::SceneTextureColorSpace::srgb
+                ? canvas2d::SpriteColorSpace::srgb
+                : canvas2d::SpriteColorSpace::linear;
+        }
+
+        [[nodiscard]] std::uint32_t canvas2d_material_key(
+            std::uint64_t stableKey) noexcept
+        {
+            std::uint32_t result =
+                static_cast<std::uint32_t>(stableKey)
+                ^ static_cast<std::uint32_t>(stableKey >> 32u);
+            return result == 0u ? 1u : result;
+        }
+
+        [[nodiscard]] editor_canvas2d::MaterialView
+            canvas2d_material_view(
+                const scene::SceneTextureMaterialSnapshot& material,
+                std::span<const
+                    editor_project_textures::ResolvedTextureMaterial>
+                    resolved) noexcept
+        {
+            const auto found = std::find_if(
+                resolved.begin(),
+                resolved.end(),
+                [&](const auto& candidate)
+                {
+                    return candidate.material.logical_path
+                            == material.logical_path
+                        && candidate.material.artifact_key
+                            == material.artifact_key;
+                });
+            if (found == resolved.end())
+                return {};
+            const FilterMode filter =
+                canvas2d_filter(material.filter);
+            return {
+                .stable_key =
+                    canvas2d_material_key(material.stable_key),
+                .logical_texture = found->logical,
+                .sampler = {
+                    .min_filter = filter,
+                    .mag_filter = filter,
+                    .address_u =
+                        canvas2d_address(material.address_u),
+                    .address_v =
+                        canvas2d_address(material.address_v),
+                    .maximum_anisotropy = 1.0f,
+                    .mipmapped = false
+                },
+                .alpha = canvas2d_alpha(material.alpha),
+                .color_space =
+                    canvas2d_color_space(material.color_space),
+                .alpha_cutoff = material.alpha_cutoff
+            };
+        }
+
+
         void publish_editor_canvas2d_scene(
             const core::Context* ctx,
-            const EditorState& state) noexcept
+            EditorState& state) noexcept
         {
             if (!ctx || state.previewMode != core::ScenePreviewMode::Editor
                 || state.projectCameraMode != previewgrid::CameraMode::Canvas2D)
@@ -2998,6 +3131,44 @@ namespace epochengine
 
             try
             {
+                std::vector<scene::SceneTextureMaterialSnapshot>
+                    sourceMaterials{};
+                for (const EditorEntity& entity : state.entities)
+                {
+                    if (entity.textureMaterial)
+                        sourceMaterials.push_back(*entity.textureMaterial);
+                }
+
+                editor_project_textures::SceneTextureLeaseResult
+                    textureLease{};
+                if (!sourceMaterials.empty())
+                {
+                    auto* controller =
+                        project_texture_controller(state);
+                    if (!controller)
+                    {
+                        (void)canvas2d::scene_content::retire(ctx);
+                        return;
+                    }
+                    textureLease =
+                        controller->bind_scene_materials(sourceMaterials);
+                    if (!textureLease)
+                    {
+                        state.projectTextureStatus =
+                            epochengine::format_text(
+                                "Scene texture binding refused: {} | pipeline {} | resource {}.",
+                                editor_project_textures::controller_code_name(
+                                    textureLease.code),
+                                project_textures::pipeline_code_name(
+                                    textureLease.pipeline_code),
+                                project_textures::resource_code_name(
+                                    textureLease.resource_code));
+                        (void)canvas2d::scene_content::retire(ctx);
+                        return;
+                    }
+                }
+
+
                 std::vector<editor_canvas2d::EntityView> entities{};
                 entities.reserve(state.entities.size());
                 for (std::size_t index = 0; index < state.entities.size(); ++index)
@@ -3013,13 +3184,19 @@ namespace epochengine
                         .scale = entity.scale,
                         .visible = entity.visible,
                         .editor_only = entity.editorOnly,
-                        .selected = index == state.selectedEntity});
+                        .selected = index == state.selectedEntity,
+                        .material = entity.textureMaterial
+                            ? canvas2d_material_view(
+                                *entity.textureMaterial,
+                                textureLease.materials)
+                            : editor_canvas2d::MaterialView{}});
                 }
 
                 auto built = editor_canvas2d::build_scene(
                     editor_canvas2d::BuildRequest{
                         .project = canvas2d_runtime_settings(state.canvas2dProject),
                         .entities = entities,
+                        .resources = textureLease.lease,
                         .source_revision = (std::max)(
                             std::uint64_t{1},
                             state.sceneDocumentRevision),
@@ -4769,11 +4946,20 @@ namespace epochengine
                     .rotation = source.rotation,
                     .scale = source.scale,
                     .visible = source.visible,
-                    .editorOnly = source.editor_only
+                    .editorOnly = source.editor_only,
+                    .textureMaterial = source.texture_material
                 });
             }
 
             state.entities = std::move(entities);
+            if (!rebuild_editor_scene_document_from_snapshot(
+                    state,
+                    snapshot,
+                    "Load saved project scene"))
+            {
+                return false;
+            }
+
             state.sceneDocumentRevision = snapshot.revision;
             state.sceneLightingDirty = true;
             state.sceneInteractionDirty = true;
@@ -5306,7 +5492,7 @@ namespace epochengine
                 return "CODE";
             if (ext == ".epoch" || ext == ".json" || ext == ".txt" || ext == ".md")
                 return "TEXT";
-            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga")
+            if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".tga" || ext == ".ppm")
                 return "IMAGE";
             if (ext == ".gltf" || ext == ".glb" || ext == ".obj" || ext == ".fbx")
                 return "MODEL";
@@ -5391,6 +5577,248 @@ namespace epochengine
             }
 
             return entries;
+        }
+
+        [[nodiscard]]
+        editor_project_textures::ProjectTextureController*
+            project_texture_controller(EditorState& editor)
+        {
+            if (editor.projectTextures)
+                return editor.projectTextures.get();
+            try
+            {
+                editor.projectTextures = std::make_unique<
+                    editor_project_textures::ProjectTextureController>(
+                        editor.projectId,
+                        resolve_editor_path(
+                            std::filesystem::path{editor.projectRoot}));
+            }
+            catch (...)
+            {
+                editor.projectTextureStatus =
+                    "Texture controller allocation failed.";
+                return nullptr;
+            }
+            if (!editor.projectTextures->valid())
+            {
+                editor.projectTextureStatus =
+                    "Texture controller could not resolve the active project.";
+                editor.projectTextures.reset();
+                return nullptr;
+            }
+            return editor.projectTextures.get();
+        }
+
+        void import_selected_project_texture(
+            EditorState& editor,
+            const std::shared_ptr<core::Context>& ctx)
+        {
+            auto* controller = project_texture_controller(editor);
+            if (!controller)
+                return;
+            if (editor.selectedProjectFile.empty())
+            {
+                editor.projectTextureStatus =
+                    "Select a BMP, TGA, or PPM source under Project/Assets.";
+                return;
+            }
+
+            const RendererBackendKind backend = renderer_backend_kind(ctx);
+            const capability::SubsystemProfile renderer =
+                capability::renderer_subsystem_profile_for(backend);
+            const Budgets budgets =
+                renderer.capability.recommended_budgets;
+            const auto imported = controller->import_source(
+                resolve_editor_path(
+                    std::filesystem::path{editor.selectedProjectFile}),
+                renderer,
+                budgets);
+            if (!imported)
+            {
+                editor.projectTextureStatus = epochengine::format_text(
+                    "Texture import refused: {} | import {} | admission {} | pipeline {}.",
+                    editor_project_textures::controller_code_name(
+                        imported.code),
+                    asset::texture::texture_import_status_name(
+                        imported.import_status),
+                    project_textures::texture_admission_reason_name(
+                        imported.admission_reason),
+                    project_textures::pipeline_code_name(
+                        imported.pipeline_code));
+                push_editor_log(
+                    editor,
+                    "[assets] " + editor.projectTextureStatus);
+                return;
+            }
+
+            editor.selectedAssetPath = imported.entry->logical_path;
+            editor.projectTextureStatus = epochengine::format_text(
+                "{} imported as {} ({}x{}, {} KiB decoded).",
+                std::filesystem::path{
+                    imported.entry->source_path}.filename().string(),
+                imported.entry->logical_path,
+                imported.entry->width,
+                imported.entry->height,
+                imported.entry->decoded_bytes / 1024u);
+            push_editor_log(
+                editor,
+                "[assets] " + editor.projectTextureStatus);
+        }
+
+        void create_starter_project_texture(
+            EditorState& editor,
+            const std::shared_ptr<core::Context>& ctx)
+        {
+            try
+            {
+                const std::filesystem::path textureRoot =
+                    resolve_editor_path(
+                        std::filesystem::path{editor.projectRoot})
+                    / "Assets"
+                    / "Textures";
+                std::error_code error{};
+                std::filesystem::create_directories(textureRoot, error);
+                if (error)
+                {
+                    editor.projectTextureStatus =
+                        "Could not create Project/Assets/Textures.";
+                    return;
+                }
+
+                const std::filesystem::path source =
+                    textureRoot / "starter_checker.ppm";
+                if (!std::filesystem::exists(source, error))
+                {
+                    constexpr std::uint32_t width = 8u;
+                    constexpr std::uint32_t height = 8u;
+                    std::ofstream output(source, std::ios::binary);
+                    if (!output)
+                    {
+                        editor.projectTextureStatus =
+                            "Could not create starter_checker.ppm.";
+                        return;
+                    }
+                    output << "P6\n" << width << " " << height
+                        << "\n255\n";
+                    for (std::uint32_t y = 0u; y < height; ++y)
+                    {
+                        for (std::uint32_t x = 0u; x < width; ++x)
+                        {
+                            const bool bright =
+                                ((x / 2u) + (y / 2u)) % 2u == 0u;
+                            const std::array<unsigned char, 3> pixel =
+                                bright
+                                ? std::array<unsigned char, 3>{
+                                    236u, 238u, 241u}
+                                : std::array<unsigned char, 3>{
+                                    45u, 50u, 57u};
+                            output.write(
+                                reinterpret_cast<const char*>(
+                                    pixel.data()),
+                                static_cast<std::streamsize>(
+                                    pixel.size()));
+                        }
+                    }
+                    if (!output)
+                    {
+                        editor.projectTextureStatus =
+                            "Starter texture write did not complete.";
+                        return;
+                    }
+                }
+
+                editor.selectedProjectFile =
+                    display_project_path(source);
+                editor.selectedAssetPath =
+                    editor.selectedProjectFile;
+                import_selected_project_texture(editor, ctx);
+            }
+            catch (...)
+            {
+                editor.projectTextureStatus =
+                    "Starter texture creation failed safely.";
+            }
+        }
+
+        [[nodiscard]] bool selected_entity_accepts_canvas2d_material(
+            const EditorState& editor) noexcept
+        {
+            const auto index =
+                editor_entity_index(editor, editor.selectedEntityId);
+            if (!index)
+                return false;
+            const EditorEntity& entity = editor.entities[*index];
+            return entity.type != "Camera"
+                && entity.type != "Light"
+                && entity.type != "Spawn";
+        }
+
+        void assign_selected_project_texture(
+            EditorState& editor)
+        {
+            auto* controller = project_texture_controller(editor);
+            if (!controller)
+                return;
+            if (!selected_entity_accepts_canvas2d_material(editor))
+            {
+                editor.projectTextureStatus =
+                    "Select a renderable scene object before assigning a texture.";
+                return;
+            }
+            const auto material = controller->selected_material();
+            const auto handle = editor.sceneDocument.find(
+                authoring::scene::ObjectId{editor.selectedEntityId});
+            if (!material || !handle)
+            {
+                editor.projectTextureStatus =
+                    "Import and select a texture before assignment.";
+                return;
+            }
+
+            const std::array<authoring::scene::SceneOperation, 1>
+                operations{authoring::scene::
+                    TextureMaterialComponentChangedOperation{
+                        .object = *handle,
+                        .value = *material
+                    }};
+            if (apply_editor_scene_transaction(
+                    editor,
+                    operations,
+                    "Assign texture material",
+                    editor.selectedEntityId))
+            {
+                editor.projectTextureStatus = epochengine::format_text(
+                    "{} assigned to {}.",
+                    material->logical_path,
+                    editor.entities[editor.selectedEntity].name);
+            }
+        }
+
+        void clear_selected_project_texture(EditorState& editor)
+        {
+            const auto handle = editor.sceneDocument.find(
+                authoring::scene::ObjectId{editor.selectedEntityId});
+            if (!handle)
+            {
+                editor.projectTextureStatus =
+                    "Select a scene object before clearing its material.";
+                return;
+            }
+            const std::array<authoring::scene::SceneOperation, 1>
+                operations{authoring::scene::
+                    TextureMaterialComponentChangedOperation{
+                        .object = *handle,
+                        .value = std::nullopt
+                    }};
+            if (apply_editor_scene_transaction(
+                    editor,
+                    operations,
+                    "Clear texture material",
+                    editor.selectedEntityId))
+            {
+                editor.projectTextureStatus =
+                    "Selected object now uses its solid fallback material.";
+            }
         }
 
         [[nodiscard]] static std::vector<EditorBrowserEntry> collect_script_browser_entries(
@@ -6657,6 +7085,11 @@ namespace epochengine
                     set_project(it->second, requestedProjectId, false);
                 else
                     set_project(it->second, editor_default_project_profile().id, false);
+                if (const auto requestedWorkspace = requested_editor_workspace_tab())
+                {
+                    it->second.workspaceTab = *requestedWorkspace;
+                    it->second.mainSurface = initial_editor_main_surface(*requestedWorkspace);
+                }
                 if (ctx)
                     epochengine::previewgrid::set_camera_mode(ctx.get(), it->second.projectCameraMode);
                 push_editor_log(it->second, "[info] Editor scene initialized.");
@@ -6914,6 +7347,7 @@ namespace epochengine
         snapshot.log_lines = editor.logLines;
         snapshot.helpers_visible = editor.helpersVisible;
         snapshot.time_snapshot = editor.timeSnapshot;
+        snapshot.scene_document = capture_editor_scene_projection(editor);
         snapshot.time_control = snapshot_time_control(editor.timeControl);
         snapshot.preview_mode = snapshot_preview_mode(editor.previewMode);
         snapshot.workspace_tab = snapshot_workspace_tab(editor.workspaceTab);
@@ -6982,10 +7416,25 @@ namespace epochengine
         editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 120.0);
         editor.selectedProjectFile = snapshot.selected_project_file;
         editor.selectedAssetPath = snapshot.selected_asset_path;
+        editor.projectTextures.reset();
+        editor.projectTextureStatus = "Texture Library will reopen exact scene revisions on demand.";
         editor.entities.clear();
         editor.entities.reserve(snapshot.entities.size());
         for (const EditorContextSnapshotEntity& entity : snapshot.entities)
             editor.entities.emplace_back(restore_snapshot_entity(entity));
+        if (!snapshot.scene_document.scene_id.empty())
+        {
+            (void)rebuild_editor_scene_document_from_snapshot(
+                editor,
+                snapshot.scene_document,
+                "Restore context scene document");
+        }
+        else
+        {
+            (void)rebuild_editor_scene_document(
+                editor,
+                "Restore context scene mirror");
+        }
         normalize_editor_entity_ids(editor);
         editor.selectedEntityId = snapshot.selected_entity_id;
         if (const auto selected = editor_entity_index(editor, editor.selectedEntityId))
@@ -8690,6 +9139,42 @@ namespace epochengine
         {
             gui::label(std::string("Project Assets: ") + editor.projectName);
             gui::property_row("Root", display_project_path(editor.projectRoot), 64.0f);
+            const std::array textureSourceActions{
+                gui::InlineButtonSpec{
+                    .label = "Create Texture",
+                    .width = 118.0f},
+                gui::InlineButtonSpec{
+                    .label = "Import Selected",
+                    .width = 124.0f}
+            };
+            if (const auto action = gui::inline_button_row(
+                    textureSourceActions,
+                    26.0f,
+                    5.0f))
+            {
+                if (*action == 0u)
+                    create_starter_project_texture(editor, ctx);
+                else
+                    import_selected_project_texture(editor, ctx);
+            }
+            const std::array textureMaterialActions{
+                gui::InlineButtonSpec{
+                    .label = "Assign to Selection",
+                    .width = 142.0f},
+                gui::InlineButtonSpec{
+                    .label = "Clear Material",
+                    .width = 112.0f}
+            };
+            if (const auto action = gui::inline_button_row(
+                    textureMaterialActions,
+                    26.0f,
+                    5.0f))
+            {
+                if (*action == 0u)
+                    assign_selected_project_texture(editor);
+                else
+                    clear_selected_project_texture(editor);
+            }
             const auto entries = collect_project_browser_entries(editor.projectRoot);
             gui::property_row("Visible", std::to_string(entries.size()), 64.0f);
             for (const auto& entry : entries)
@@ -8712,6 +9197,32 @@ namespace epochengine
                 "Selected",
                 editor.selectedProjectFile.empty() ? std::string("(none)") : display_project_path(editor.selectedProjectFile),
                 64.0f);
+            gui::property_row(
+                "Texture",
+                editor.projectTextureStatus,
+                64.0f);
+            if (editor.projectTextures)
+            {
+                const auto catalog = editor.projectTextures->catalog();
+                gui::property_row(
+                    "Compiled",
+                    std::to_string(catalog.size()),
+                    64.0f);
+                for (const auto& texture : catalog)
+                {
+                    const bool selected =
+                        editor.projectTextures->selected_logical_path()
+                            == texture.logical_path;
+                    if (gui::button_selected(
+                            texture.logical_path,
+                            {outlinerWidth, 27.0f},
+                            selected))
+                    {
+                        (void)editor.projectTextures->select(
+                            texture.logical_path);
+                    }
+                }
+            }
         }
         else
         {

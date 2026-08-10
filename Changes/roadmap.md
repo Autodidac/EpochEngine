@@ -53,6 +53,13 @@ Current source or in-progress contracts include:
   CPU-canvas-output/native-presentation adapter, context-guarded OpenGL native
   texture hooks, and a compiled primary-context OpenGL compositor with scoped
   scene-surface and GL-state ownership;
+- project-scoped texture import, deterministic artifact/Library persistence,
+  decoded publication, restore-on-demand, semantic scene materials, snapshot
+  format 3, and one World Outliner Assets controller over the same logical
+  resource spine;
+- production project validation that materializes, atomically saves/reopens,
+  builds, and child-runs all six generated profiles, plus an exact standalone
+  external Run proof for the generated GUI project;
 - explicit request-driven temporal mapping and bounded observation history plus
   a temporal texture document/history/compiler/residency foundation;
 - reusable EpochGui text, primal multi-line document editing, font, image, input,
@@ -146,12 +153,13 @@ resource binding, optional residency, evidence-backed sampled-image admission,
 strict/experimental policy, cross-budget limit reduction, exact immutable scene
 closure, raster-to-residency presentation staging, OpenGL texture hooks, the
 primary compositor, and semantic editor scene-slot routing are build-proven.
-Project Library persistence and editor material/resource binding are
-build-proven.
-The native pixel comparator and capture-only OpenGL readback are build-proven.
-Live Assets-browser assignment, approved native pixel capture,
-sRGB/compressed/mip-chain execution, secondary GL share-group adapters, and
-built-project presentation remain delivery work.
+Project Library persistence, bounded BMP/TGA/P6 import, semantic scene
+materials, snapshot save/reopen, runtime restoration, and Assets-workspace
+controls are build-proven. Approved native capture proves exact OpenGL/T0-CPU
+Canvas2D parity across 1,178,872 pixels, and the generated GUI executable
+passes the editor-equivalent external Run path. Interactive Assets-tab click
+assignment, sRGB/compressed/mip-chain execution, secondary GL share-group
+adapters, and SDL3/SFML3/Raylib3 texture presentation remain delivery work.
 
 Deliver:
 

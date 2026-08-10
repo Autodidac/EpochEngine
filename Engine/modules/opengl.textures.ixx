@@ -395,7 +395,6 @@ export namespace epochengine::opengltextures
         GLint unpack_buffer{};
         GLint unpack_skip_pixels{};
         GLint unpack_skip_rows{};
-        GLboolean unpack_swap_bytes{GL_FALSE};
 
         ScopedNativeTextureState() noexcept
         {
@@ -405,11 +404,9 @@ export namespace epochengine::opengltextures
             glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpack_buffer);
             glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &unpack_skip_pixels);
             glGetIntegerv(GL_UNPACK_SKIP_ROWS, &unpack_skip_rows);
-            glGetBooleanv(GL_UNPACK_SWAP_BYTES, &unpack_swap_bytes);
             glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
             glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
             glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
-            glPixelStorei(GL_UNPACK_SWAP_BYTES, GL_FALSE);
         }
 
         ScopedNativeTextureState(const ScopedNativeTextureState&) = delete;
@@ -423,7 +420,6 @@ export namespace epochengine::opengltextures
             glPixelStorei(GL_UNPACK_ROW_LENGTH, unpack_row_length);
             glPixelStorei(GL_UNPACK_SKIP_PIXELS, unpack_skip_pixels);
             glPixelStorei(GL_UNPACK_SKIP_ROWS, unpack_skip_rows);
-            glPixelStorei(GL_UNPACK_SWAP_BYTES, unpack_swap_bytes);
         }
     };
 
@@ -1106,7 +1102,6 @@ export namespace epochengine::opengltextures
         std::span<const TextureAtlas* const> atlases,
         float x, float y, float width, float height) noexcept
     {
-        // (unchanged from your version)
         auto log_draw_skip = [](std::string_view) {};
 
         if (!handle.is_valid()) {
@@ -1117,14 +1112,15 @@ export namespace epochengine::opengltextures
         auto& backend = get_opengl_backend();
         epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
 
-        auto currentCtx = core::MultiContextManager::GetCurrent();
-        auto desired = detail::context_to_platform_context(currentCtx.get());
+        auto currentCtx = core::get_current_render_context();
+        if (!currentCtx)
+            currentCtx = core::MultiContextManager::GetCurrent();
         const auto current = epochengine::openglcontext::PlatformGL::get_current();
+        auto desired = current;
+        if (!desired.valid())
+            desired = detail::context_to_platform_context(currentCtx.get());
         if (!desired.valid()) {
             desired = detail::to_platform_context(backend.glState);
-        }
-        if (!desired.valid() && current.valid()) {
-            desired = current;
         }
 
         if (desired.valid() && current != desired) {
@@ -1247,11 +1243,6 @@ export namespace epochengine::opengltextures
             glUniform4f(pipe.uTransformLoc, ndc_x, ndc_y, ndc_w, ndc_h);
 
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-
-        const GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
-            logger::errorf_loc("OpenGL.DrawSprite", std::source_location::current(), "glDrawElements failed: 0x{:X}", static_cast<unsigned int>(err));
-        }
 
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);
