@@ -379,6 +379,34 @@ export namespace epochengine::project_assets
         }
     }
 
+    [[nodiscard]] inline std::optional<std::string> canonical_logical_path(
+        std::string_view source,
+        const RegistryLimits& limits = {})
+    {
+        if (!limits.valid())
+            return std::nullopt;
+        return detail::canonical_path(source, limits.maximum_path_bytes);
+    }
+
+    [[nodiscard]] inline std::uint64_t stable_project_identity(
+        std::string_view projectId,
+        const RegistryLimits& limits = {}) noexcept
+    {
+        return limits.valid() && detail::valid_project_id(projectId, limits)
+            ? detail::stable_project_key(projectId)
+            : 0;
+    }
+
+    [[nodiscard]] inline std::uint64_t stable_asset_identity(
+        std::uint64_t projectKey,
+        AssetKind kind,
+        std::string_view canonicalPath) noexcept
+    {
+        return projectKey != 0 && valid(kind) && !canonicalPath.empty()
+            ? detail::stable_asset_key(projectKey, kind, canonicalPath)
+            : 0;
+    }
+
     class AssetRegistry final
     {
     public:
@@ -390,7 +418,7 @@ export namespace epochengine::project_assets
             if (limits_.valid()
                 && detail::valid_project_id(project_id_, limits_))
             {
-                project_key_ = detail::stable_project_key(project_id_);
+                project_key_ = stable_project_identity(project_id_, limits_);
             }
         }
 
@@ -437,9 +465,9 @@ export namespace epochengine::project_assets
             std::optional<std::string> canonical{};
             try
             {
-                canonical = detail::canonical_path(
+                canonical = canonical_logical_path(
                     declaration.logical_path,
-                    limits_.maximum_path_bytes);
+                    limits_);
             }
             catch (...)
             {
@@ -448,7 +476,7 @@ export namespace epochengine::project_assets
             if (!canonical)
                 return reject(RegistryCode::invalid_path);
 
-            const std::uint64_t assetKey = detail::stable_asset_key(
+            const std::uint64_t assetKey = stable_asset_identity(
                 project_key_, declaration.kind, *canonical);
             for (std::uint32_t index = 0; index < slots_.size(); ++index)
             {
@@ -581,8 +609,7 @@ export namespace epochengine::project_assets
             std::optional<std::string> canonical{};
             try
             {
-                canonical = detail::canonical_path(
-                    logicalPath, limits_.maximum_path_bytes);
+                canonical = canonical_logical_path(logicalPath, limits_);
             }
             catch (...)
             {
@@ -592,8 +619,11 @@ export namespace epochengine::project_assets
                 return nullptr;
             for (const Slot& slot : slots_)
             {
-                if (slot.active && slot.record.canonical_path == *canonical)
+                if (slot.active && detail::portable_path_equal(
+                    slot.record.canonical_path, *canonical))
+                {
                     return &slot.record;
+                }
             }
             return nullptr;
         }

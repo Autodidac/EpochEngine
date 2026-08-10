@@ -1,5 +1,22 @@
 # Epoch Changelog
 
+## [v0.89.08] - Project Library texture pipeline
+
+- Persist validated compiled texture artifacts beneath each project Library with
+  deterministic project/path identity, bounded reads and scans, verified
+  temporary writes, atomic replacement, integrity checks, and portable
+  case-collision rejection.
+- Add one project-owned texture pipeline that coordinates Library persistence,
+  generation-checked asset registration, source-revision authentication,
+  decoded CPU publication, restore-on-demand behavior, and immutable Canvas2D
+  resource leases without making physical residency canonical.
+- Extend the editor Canvas2D scene adapter with logical texture material intent,
+  sampler/alpha/color policy, exact owned resource closure, solid fallback, and
+  build-safe textured raster proof.
+- Keep live Assets-browser import/material assignment, native pixel comparison,
+  secondary context share adapters, and higher texture formats explicitly
+  partial; preserve the sealed v0.89.06 updater and release baseline.
+
 ## [v0.89.07] - Post-release source checkpoint
 
 - Advance canonical runtime version data and the updater-facing compatibility

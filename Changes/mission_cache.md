@@ -2,9 +2,10 @@
 - Preserve the engine-wide one-dot C++ naming contract and run the naming
   validator with every source move; do not reintroduce generic bridge or flat
   root ownership.
-- Continue the temporal texture lane by persisting `asset.texture_artifact`
-  bytes under the project Library, rebuilding them from authoring source after
-  cache loss, and admitting formats through capability evidence.
+- Continue the temporal texture lane by wiring persisted
+  `asset.texture_artifact` Library output into Assets-browser import and
+  scene material assignment, rebuilding missing Library output from authoring
+  source, and admitting additional formats through capability evidence.
 - Finish project lifecycle integration so Save/materialize/Build/Run and child
   process focus share generation-safe evidence in editor and generated projects.
 
@@ -77,9 +78,10 @@ release history belong in the changelog/archive, not architecture docs.
   Canvas2D resource service. Capability admission requires sampled-image
   evidence and reduces project/platform/renderer limits. Immutable scene
   publication rejects incomplete or stale resource closures atomically and
-  preserves old-reader lifetime. Next persist Project Library artifacts, assign
-  those logical materials in the editor, and compare live native pixels to the
-  CPU oracle.
+  preserves old-reader lifetime. The project texture pipeline now persists,
+  reopens, authenticates, and leases compiled RGBA8 artifacts into immutable
+  editor Canvas2D publication. Next connect visible asset/material authoring and
+  compare live native pixels to the CPU oracle.
 - Extend the current tile descriptors with palettes, map objects, collision,
   visible-chunk culling, project persistence, and compiled runtime artifacts.
 - Add animation-frame selection and sprite culling without weakening stable draw
@@ -121,9 +123,10 @@ release history belong in the changelog/archive, not architecture docs.
   standalone residency cache and preserves backend epochs as disposable state.
 - Compiled artifact schema, stable hashing, and integrity validation are
   runtime-owned so game, mobile, console, server, and headless products can
-  consume compiled output while excluding authoring UI and history. Serialized
-  artifact reading and capability-derived admission remain the next
-  consumption gate.
+  consume compiled output while excluding authoring UI and history. Bounded
+  serialized artifact reading, Project Library persistence, runtime
+  authentication, and capability-derived admission are build-proven; visible
+  import/assignment and additional execution formats remain delivery work.
 - Standalone, atlas, bindless, and sparse representations are physical residency
   plans chosen by capability, budget, format, update rate, and workload.
 - The first physical cache contract supports sampled color resources through a

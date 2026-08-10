@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.07-1F7A4C?style=for-the-badge" alt="Current development source v0.89.07" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.08-1F7A4C?style=for-the-badge" alt="Current development source v0.89.08" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.06-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.06" />
 </p>
 
@@ -76,7 +76,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.07`; the published stable Windows/Linux
+- Active development source is `v0.89.08`; the published stable Windows/Linux
   runtime is `v0.89.06`.
 - The accepted `v0.89.06` updater and packages are sealed while source development
   continues on the capability-tier and playable-2D plan.
@@ -106,6 +106,11 @@ For engine/tooling developers:
   hashing, and integrity validator are runtime-owned and pass a standalone
   Clang contract with authoring and texture-editor features disabled; authoring
   imports that same canonical artifact boundary when producing source content.
+  `project.texture_library` persists verified compiled bytes beneath each
+  project Library, and `project.texture_pipeline` restores them through one
+  project-scoped registry/resource boundary into owned immutable Canvas2D
+  scene leases. The editor scene adapter accepts those logical texture
+  materials while retaining solid fallback and rejecting incomplete closures.
   The primary OpenGL adapter compiles a scoped, viewport-confined final
   compositor with context-owned texture checks and complete GL state restoration.
   An immutable per-context scene exchange now maps committed editor entities into

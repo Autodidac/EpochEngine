@@ -9,6 +9,7 @@ module;
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <memory>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
@@ -120,6 +121,7 @@ namespace epochengine::editor_canvas2d
         content.camera.pixel_snap = request.project.pixel_snap;
         content.camera.y_axis = canvas2d::CanvasYAxis::up;
         content.source_revision = request.source_revision;
+        content.resources = request.resources;
         const auto background = visuals::frame_background();
         const auto letterbox = visuals::scene_background();
         content.clear_color = {
@@ -173,10 +175,22 @@ namespace epochengine::editor_canvas2d
                 }
 
                 canvas2d::SpriteMaterialDeclaration material{};
-                material.stable_key = 1;
-                material.source = canvas2d::SpriteSourceKind::solid_color;
-                material.alpha = canvas2d::SpriteAlphaMode::opaque;
-                material.color_space = canvas2d::SpriteColorSpace::linear;
+                material.stable_key = entity.material.stable_key;
+                material.sampler = entity.material.sampler;
+                material.alpha = entity.material.alpha;
+                material.color_space = entity.material.color_space;
+                material.alpha_cutoff = entity.material.alpha_cutoff;
+                if (entity.material.logical_texture)
+                {
+                    material.source = canvas2d::SpriteSourceKind::texture;
+                    material.logical_texture = entity.material.logical_texture;
+                    ++result.diagnostics.textured_materials;
+                }
+                else
+                {
+                    material.source = canvas2d::SpriteSourceKind::solid_color;
+                    ++result.diagnostics.solid_materials;
+                }
 
                 canvas2d::SpriteSubmission sprite{};
                 sprite.sprite = handle;
@@ -199,6 +213,13 @@ namespace epochengine::editor_canvas2d
             return result;
         }
 
+        const auto closure = canvas2d::scene_content::validate_resource_closure(
+            content.sprites, content.resources);
+        if (closure != canvas2d::scene_content::ResourceClosureCode::ready)
+        {
+            result.code = BuildCode::invalid_resources;
+            return result;
+        }
         if (!content.valid())
         {
             result.code = BuildCode::invalid_scene;
@@ -220,6 +241,33 @@ namespace epochengine::editor_canvas2d
         canvas2d::ProjectSettings project{};
         project.logical_canvas = {64, 36};
         project.pixels_per_world_unit = 4.0f;
+        const canvas2d::LogicalTextureReference logical{17, 23};
+        using ContractPixels = std::array<canvas2d::cpu::Rgba8, 4>;
+        std::shared_ptr<const ContractPixels> pixels{};
+        try
+        {
+            pixels = std::make_shared<const ContractPixels>(ContractPixels{{
+                {255, 0, 0, 255},
+                {0, 255, 0, 255},
+                {0, 0, 255, 255},
+                {255, 255, 255, 255}}});
+        }
+        catch (...)
+        {
+            return ContractFailure::textured_material;
+        }
+        const std::array bindings{canvas2d::cpu::TextureView{
+            .logical = logical,
+            .extent = {2, 2},
+            .row_stride_pixels = 2,
+            .pixels = *pixels,
+            .color_space = canvas2d::SpriteColorSpace::linear,
+            .alpha_encoding = canvas2d::cpu::AlphaEncoding::straight}};
+        canvas2d::scene_content::ResourceLease resources{};
+        resources.owner = canvas2d::scene_content::ResourceLifetime::retain(
+            pixels);
+        resources.bindings = {bindings, {}};
+
         const std::array<EntityView, 4> entities{{
             EntityView{
                 .stable_id = 1,
@@ -233,7 +281,10 @@ namespace epochengine::editor_canvas2d
                 .generation = 1,
                 .type = "Spawn",
                 .category = "Gameplay",
-                .selected = true},
+                .selected = true,
+                .material = MaterialView{
+                    .stable_key = 23,
+                    .logical_texture = logical}},
             EntityView{
                 .stable_id = 3,
                 .generation = 1,
@@ -249,13 +300,16 @@ namespace epochengine::editor_canvas2d
         BuildResult built = build_scene(BuildRequest{
             .project = project,
             .entities = entities,
+            .resources = resources,
             .source_revision = 7,
             .include_helpers = true});
         if (!built)
             return ContractFailure::build;
         if (built.content.sprites.size() != 2
             || built.diagnostics.structural_entities != 1
-            || built.diagnostics.hidden_entities != 1)
+            || built.diagnostics.hidden_entities != 1
+            || built.diagnostics.solid_materials != 1
+            || built.diagnostics.textured_materials != 1)
         {
             return ContractFailure::filtering;
         }
@@ -267,13 +321,34 @@ namespace epochengine::editor_canvas2d
         {
             return ContractFailure::selected_color;
         }
+        if (built.content.sprites[1].material.source
+                != canvas2d::SpriteSourceKind::texture
+            || built.content.sprites[1].material.logical_texture != logical)
+        {
+            return ContractFailure::textured_material;
+        }
+        if (canvas2d::scene_content::validate_resource_closure(
+                built.content.sprites, built.content.resources)
+            != canvas2d::scene_content::ResourceClosureCode::ready)
+        {
+            return ContractFailure::resource_closure;
+        }
+
+        BuildRequest missingResources{
+            .project = project,
+            .entities = entities,
+            .source_revision = 8,
+            .include_helpers = true};
+        if (build_scene(missingResources).code != BuildCode::invalid_resources)
+            return ContractFailure::resource_closure;
 
         const int owner = 0;
         const auto published = canvas2d::scene_content::publish(
             &owner, std::move(built.content));
         const auto acquired = canvas2d::scene_content::acquire(&owner);
         const auto frame = canvas2d::scene_content::compile(acquired, {128, 72});
-        const auto raster = canvas2d::cpu::rasterize(frame);
+        const auto raster = canvas2d::cpu::rasterize(
+            frame, acquired.content->resources.bindings);
         (void)canvas2d::scene_content::retire(&owner);
         if (!published || !acquired || !frame || !raster)
             return ContractFailure::cpu_frame;

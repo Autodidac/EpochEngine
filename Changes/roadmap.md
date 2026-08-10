@@ -146,7 +146,9 @@ resource binding, optional residency, evidence-backed sampled-image admission,
 strict/experimental policy, cross-budget limit reduction, exact immutable scene
 closure, raster-to-residency presentation staging, OpenGL texture hooks, the
 primary compositor, and semantic editor scene-slot routing are build-proven.
-Project Library persistence, editor material binding, native pixel comparison,
+Project Library persistence and editor material/resource binding are
+build-proven.
+Live Assets-browser assignment, native pixel comparison,
 sRGB/compressed/mip-chain execution, secondary GL share-group adapters, and
 built-project presentation remain delivery work.
 

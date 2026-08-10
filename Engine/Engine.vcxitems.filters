@@ -1282,6 +1282,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_library.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_pipeline.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_admission.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
@@ -1319,6 +1325,12 @@
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_resources.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_library.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_pipeline.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp">

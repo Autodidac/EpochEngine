@@ -369,6 +369,8 @@ set(EPOCH_SOURCES
     src/font.renderer.cpp
     src/project/project.asset_registry.cpp
     src/project/project.texture_resources.cpp
+    src/project/project.texture_library.cpp
+    src/project/project.texture_pipeline.cpp
     src/project/project.contracts.cpp
     src/assets/texture/asset.texture_artifact.cpp
     src/core.assert.cpp
