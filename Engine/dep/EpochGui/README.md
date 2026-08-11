@@ -24,6 +24,25 @@ The core module provides:
 import epoch.gui;
 ```
 
+### `epoch.gui.tile_workspace`
+
+The tile-workspace module provides reusable authoring control state without
+owning project documents, render backends, native windows, or files:
+
+- tool and palette selection
+- virtualized palette rows
+- ordered layer selection and visibility state
+- bounded grid layout and cell hit testing
+- cursor-anchored zoom and clamped pan
+- renderer-neutral layout snapshots and metrics
+
+```cpp
+import epoch.gui.tile_workspace;
+```
+
+Applications bind this portable controller to their own temporal map document,
+persistence, rendering, and input adapters.
+
 ### `epoch.gui.font`
 
 The font module provides the built-in renderer-neutral fallback font:

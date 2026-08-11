@@ -290,6 +290,7 @@ add_library(epoch_gui STATIC
     src/epochgui/gui.popup_layout.cpp
     src/epochgui/gui.text_control.cpp
     dep/EpochGui/src/epochgui/text_editor.cpp
+    dep/EpochGui/src/epochgui/tile_workspace.cpp
 )
 
 target_sources(epoch_gui PUBLIC
@@ -297,6 +298,7 @@ target_sources(epoch_gui PUBLIC
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
         FILES
             ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx
+            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.tile_workspace.ixx
             ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.rounded_rect.ixx
 )
 
@@ -364,6 +366,7 @@ set(EPOCH_SOURCES
     src/editor/editor.gui.cpp
     src/editor/editor.canvas2d_scene.cpp
     src/editor/editor.project_textures.cpp
+    src/editor/editor.tilemap_workspace.cpp
     src/renderers/canvas2d/render.canvas2d_scene.cpp
     src/renderers/canvas2d/render.canvas2d_evidence.cpp
     src/renderers/canvas2d/render.canvas2d_scene_contract.cpp
@@ -373,6 +376,7 @@ set(EPOCH_SOURCES
     src/assets/tilemap/asset.tilemap_artifact.cpp
     src/project/project.tilemap_library.cpp
     src/project/project.tilemap_pipeline.cpp
+    src/project/project.tilemap_source.cpp
     src/utility.filewatch.cpp
     src/font.renderer.cpp
     src/project/project.asset_registry.cpp
@@ -1086,6 +1090,10 @@ endif()
 
 if(NOT EPOCH_ENABLE_AUTHORING_PLATFORM OR NOT EPOCH_ENABLE_TILEMAP_EDITOR)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])authoring\.tilemap\.ixx$]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])project\.tilemap_source\.ixx$]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])editor\.tilemap_workspace\.ixx$]])
+    set_source_files_properties(src/editor/editor.tilemap_workspace.cpp src/project/project.tilemap_source.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE)
 endif()
 
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])

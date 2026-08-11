@@ -129,6 +129,9 @@ import authoring.texture;
 import asset.texture_import;
 import capability.profile;
 import editor.project_textures;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+import editor.tilemap_workspace;
+#endif
 import forest.factory;
 import package.registry;
 import physics.manager;
@@ -2707,6 +2710,17 @@ namespace epochengine::core
                     controller_contract_failure_name(projectTextureControllerContract)},
             projectTextureControllerContract ==
                 epochengine::editor_project_textures::ControllerContractFailure::none);
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        const auto tilemapWorkspaceContract =
+            epochengine::editor_tilemaps::
+                tilemap_workspace_controller_contract_failure();
+        check(
+            std::string{"editor.tilemap_workspace."}
+                + std::string{epochengine::editor_tilemaps::
+                    controller_contract_failure_name(tilemapWorkspaceContract)},
+            tilemapWorkspaceContract ==
+                epochengine::editor_tilemaps::ControllerContractFailure::none);
+#endif
         const auto textureResidencyContract =
             epochengine::texture_residency::texture_residency_runtime_contract_failure();
         check(

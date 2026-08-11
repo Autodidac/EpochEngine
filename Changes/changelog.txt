@@ -1,6 +1,28 @@
 # Epoch Changelog
 
 
+## [v0.89.13] - Temporal tilemap authoring workspace
+
+- Add a reusable renderer-neutral EpochGui tile workspace controller for tools,
+  palette virtualization, layers, grid hit testing, pan/zoom, and bounded layout,
+  with standalone Debug/Release tests.
+- Add canonical project tilemap source ownership under Assets/Maps/*.epochmap
+  with bounded validation, verified temporary writes, atomic replacement, exact
+  reload, and separate compiled publication under Library/TileMaps.
+- Integrate the Game2D editor workspace with palette, layer, texture attachment,
+  pencil, eraser, fill, object, collision, undo/redo, diagnostics, and revision-
+  cached Canvas2D preview compilation.
+- Preserve unsaved serialized tilemap history and portable workspace view state
+  across whole-editor context replacement without preserving physical resources.
+- Make project Save/Run publication consume the same tilemap document and bind its
+  logical texture dependencies through the existing project texture pipeline.
+- Keep the editor feature compile-time optional. CMake Debug/Release, the complete
+  six-test contract suite, feature-off compilation, shared MSVC Debug/Release,
+  source naming, project XML, and standalone EpochGui tests pass.
+- External generated-project tilemap loading, cache-deletion regeneration, and
+  operator visual proof remain explicit follow-up. The published v0.89.06
+  updater and release remain sealed.
+
 ## [v0.89.12] - Temporal tilemap and project Library source checkpoint
 
 - Add a canonical tilemap authoring document with stable tileset, palette,

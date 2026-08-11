@@ -102,6 +102,9 @@ import perf.tier;
 import render.arcade;
 import editor.canvas2d_scene;
 import editor.project_textures;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+import editor.tilemap_workspace;
+#endif
 import render.canvas2d;
 import render.canvas2d_scene;
 import render.device;
@@ -179,7 +182,8 @@ namespace epochengine
         {
             World = 0,
             Assets,
-            Scripting
+            Scripting,
+            TileMap
         };
 
         using EditorMainSurface = EditorApplicationSurface;
@@ -484,6 +488,12 @@ namespace epochengine
                 editor_project_textures::ProjectTextureController>
                 projectTextures{};
             std::string projectTextureStatus{"Select a BMP, TGA, or PPM source under Project/Assets."};
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+            std::unique_ptr<editor_tilemaps::TileMapWorkspaceController>
+                tileMapWorkspace{};
+            std::string tileMapStatus{"Open the 2D Scene/UI workspace to create a map."};
+            std::uint32_t tileMapTileExtent{32u};
+#endif
             std::vector<EditorEntity> entities{};
             authoring::scene::SceneDocument sceneDocument{};
             lighting::LightManager sceneLighting{ 128 };
@@ -888,6 +898,12 @@ namespace epochengine
         [[nodiscard]]
         editor_project_textures::ProjectTextureController*
             project_texture_controller(EditorState& editor);
+
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        [[nodiscard]]
+        editor_tilemaps::TileMapWorkspaceController*
+            tilemap_workspace_controller(EditorState& editor);
+#endif
 
         struct EditorStorage
         {
@@ -2506,6 +2522,11 @@ namespace epochengine
             state.selectedAssetPath.clear();
             state.projectTextures.reset();
             state.projectTextureStatus = "Select a BMP, TGA, or PPM source under Project/Assets.";
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+            state.tileMapWorkspace.reset();
+            state.tileMapStatus = "Open the 2D Scene/UI workspace to create a map.";
+            state.tileMapTileExtent = 32u;
+#endif
             state.sceneDocument =
                 authoring::scene::SceneDocument{};
             state.projectScenePath = std::string(profile->scene_path);
@@ -3137,6 +3158,22 @@ namespace epochengine
 
             try
             {
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                editor_tilemaps::RuntimePreviewResult tileMapPreview{};
+                if (state.tileMapWorkspace
+                    && state.tileMapWorkspace->has_document())
+                {
+                    const double milliseconds = (std::clamp)(
+                        state.timeSnapshot.simulated_seconds * 1'000.0,
+                        0.0,
+                        static_cast<double>((std::numeric_limits<std::uint64_t>::max)()));
+                    tileMapPreview =
+                        state.tileMapWorkspace->compile_runtime_preview(
+                            static_cast<std::uint64_t>(milliseconds));
+                    state.tileMapStatus = std::string(
+                        state.tileMapWorkspace->status());
+                }
+#endif
                 std::vector<scene::SceneTextureMaterialSnapshot>
                     sourceMaterials{};
                 for (const EditorEntity& entity : state.entities)
@@ -3144,6 +3181,29 @@ namespace epochengine
                     if (entity.textureMaterial)
                         sourceMaterials.push_back(*entity.textureMaterial);
                 }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                if (tileMapPreview)
+                {
+                    sourceMaterials.reserve(
+                        sourceMaterials.size()
+                        + tileMapPreview.artifact->dependencies.size());
+                    for (const auto& dependency :
+                         tileMapPreview.artifact->dependencies)
+                    {
+                        sourceMaterials.push_back(
+                            scene::SceneTextureMaterialSnapshot{
+                                .logical_path = dependency.logical_path,
+                                .artifact_key = dependency.artifact_key,
+                                .stable_key = dependency.stable_material_key,
+                                .filter = scene::SceneTextureFilter::nearest,
+                                .address_u = scene::SceneTextureAddress::clamp_to_edge,
+                                .address_v = scene::SceneTextureAddress::clamp_to_edge,
+                                .alpha = scene::SceneTextureAlphaMode::premultiplied,
+                                .color_space = scene::SceneTextureColorSpace::srgb,
+                                .alpha_cutoff = dependency.alpha_cutoff});
+                    }
+                }
+#endif
 
                 editor_project_textures::SceneTextureLeaseResult
                     textureLease{};
@@ -3212,6 +3272,42 @@ namespace epochengine
                     (void)canvas2d::scene_content::retire(ctx);
                     return;
                 }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                if (tileMapPreview)
+                {
+                    const std::uint64_t maximumSprites =
+                        static_cast<std::uint64_t>(
+                            built.content.project.maximum_sprites_per_batch)
+                        * built.content.project.maximum_batches;
+                    if (tileMapPreview.visible.sprites.size()
+                        > maximumSprites - built.content.sprites.size())
+                    {
+                        state.tileMapStatus =
+                            "Tile-map preview exceeded the Canvas2D sprite budget.";
+                        (void)canvas2d::scene_content::retire(ctx);
+                        return;
+                    }
+                    built.content.sprites.reserve(
+                        built.content.sprites.size()
+                        + tileMapPreview.visible.sprites.size());
+                    built.content.sprites.insert(
+                        built.content.sprites.end(),
+                        std::make_move_iterator(
+                            tileMapPreview.visible.sprites.begin()),
+                        std::make_move_iterator(
+                            tileMapPreview.visible.sprites.end()));
+                    built.content.source_revision = (std::max)(
+                        built.content.source_revision,
+                        tileMapPreview.artifact->identity.source_revision.sequence);
+                    if (!built.content.valid())
+                    {
+                        state.tileMapStatus =
+                            "Tile-map preview failed Canvas2D resource validation.";
+                        (void)canvas2d::scene_content::retire(ctx);
+                        return;
+                    }
+                }
+#endif
                 (void)canvas2d::scene_content::publish(
                     ctx,
                     std::move(built.content));
@@ -4887,6 +4983,30 @@ namespace epochengine
             if (scenePath.empty())
                 return false;
 
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+            if (state.tileMapWorkspace
+                || state.mainSurface == EditorMainSurface::Game2D
+                || state.applicationKind == EditorApplicationKind::GuiEditor)
+            {
+                auto* tileMap = tilemap_workspace_controller(state);
+                if (!tileMap)
+                {
+                    state.projectStatus = state.tileMapStatus;
+                    push_editor_log(state, "[tilemap] " + state.tileMapStatus);
+                    return false;
+                }
+                const auto published = tileMap->save_and_publish();
+                state.tileMapStatus = std::string(tileMap->status());
+                if (!published)
+                {
+                    state.projectStatus = "Tile-map save blocked: "
+                        + state.tileMapStatus;
+                    push_editor_log(state, "[tilemap] " + state.projectStatus);
+                    return false;
+                }
+            }
+#endif
+
             synchronize_editor_selection(state);
             const scene::SceneSnapshot projection = capture_editor_scene_projection(state);
             const auto saved = scene::persistence::save_scene_snapshot_atomic(
@@ -5614,6 +5734,45 @@ namespace epochengine
             }
             return editor.projectTextures.get();
         }
+
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        [[nodiscard]]
+        editor_tilemaps::TileMapWorkspaceController*
+            tilemap_workspace_controller(EditorState& editor)
+        {
+            if (editor.tileMapWorkspace)
+                return editor.tileMapWorkspace.get();
+            try
+            {
+                editor.tileMapWorkspace = std::make_unique<
+                    editor_tilemaps::TileMapWorkspaceController>(
+                        editor.projectId,
+                        resolve_editor_path(
+                            std::filesystem::path{editor.projectRoot}),
+                        "Assets/Maps/main.epochmap");
+            }
+            catch (...)
+            {
+                editor.tileMapStatus = "Tile-map workspace allocation failed.";
+                return nullptr;
+            }
+            if (!editor.tileMapWorkspace->valid())
+            {
+                editor.tileMapStatus =
+                    "Tile-map workspace could not resolve the active project.";
+                editor.tileMapWorkspace.reset();
+                return nullptr;
+            }
+            const auto opened = editor.tileMapWorkspace->open_or_create();
+            editor.tileMapStatus = std::string(editor.tileMapWorkspace->status());
+            if (!opened)
+            {
+                editor.tileMapWorkspace.reset();
+                return nullptr;
+            }
+            return editor.tileMapWorkspace.get();
+        }
+#endif
 
         void import_selected_project_texture(
             EditorState& editor,
@@ -7564,6 +7723,28 @@ namespace epochengine
         snapshot.project_run_backend = editor.projectRunBackend;
         snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 60.0);
         snapshot.canvas2d_project = sanitize_canvas2d_project(editor.canvas2dProject);
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        snapshot.tile_map_tile_extent = editor.tileMapTileExtent;
+        if (editor.tileMapWorkspace
+            && editor.tileMapWorkspace->has_document())
+        {
+            auto serialized = editor.tileMapWorkspace->document()->serialize();
+            if (!serialized)
+            {
+                snapshot.valid = false;
+                return snapshot;
+            }
+            snapshot.tile_map_document = std::move(serialized.bytes);
+            snapshot.tile_map_dirty = editor.tileMapWorkspace->dirty();
+            const auto& tileMapView = editor.tileMapWorkspace->ui_state();
+            snapshot.tile_map_tool = static_cast<std::uint8_t>(tileMapView.tool);
+            snapshot.tile_map_selected_palette = tileMapView.selected_palette;
+            snapshot.tile_map_selected_layer = tileMapView.selected_layer;
+            snapshot.tile_map_zoom = tileMapView.zoom;
+            snapshot.tile_map_pan_x = tileMapView.pan.x;
+            snapshot.tile_map_pan_y = tileMapView.pan.y;
+        }
+#endif
         snapshot.project_camera_mode = static_cast<std::uint8_t>(editor.projectCameraMode);
         snapshot.input_profile_preset = static_cast<std::uint8_t>(editor.inputProfilePreset);
         snapshot.theme_preference = snapshot_theme_preference(editor.themePreference);
@@ -7650,6 +7831,39 @@ namespace epochengine
         editor.selectedAssetPath = snapshot.selected_asset_path;
         editor.projectTextures.reset();
         editor.projectTextureStatus = "Texture Library will reopen exact scene revisions on demand.";
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        editor.tileMapWorkspace.reset();
+        editor.tileMapStatus = "Tile-map workspace will reopen on demand.";
+        switch (snapshot.tile_map_tile_extent)
+        {
+        case 16u:
+        case 32u:
+        case 64u:
+            editor.tileMapTileExtent = snapshot.tile_map_tile_extent;
+            break;
+        default:
+            editor.tileMapTileExtent = 32u;
+            break;
+        }
+        if (!snapshot.tile_map_document.empty())
+        {
+            auto* tileMap = tilemap_workspace_controller(editor);
+            if (!tileMap
+                || !tileMap->restore_context_handoff(
+                    snapshot.tile_map_document,
+                    snapshot.tile_map_dirty))
+            {
+                return false;
+            }
+            tileMap->restore_view_state(
+                snapshot.tile_map_tool,
+                snapshot.tile_map_selected_palette,
+                snapshot.tile_map_selected_layer,
+                snapshot.tile_map_zoom,
+                {snapshot.tile_map_pan_x, snapshot.tile_map_pan_y});
+            editor.tileMapStatus = std::string(tileMap->status());
+        }
+#endif
         editor.entities.clear();
         editor.entities.reserve(snapshot.entities.size());
         for (const EditorContextSnapshotEntity& entity : snapshot.entities)
@@ -8663,6 +8877,9 @@ namespace epochengine
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Project;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                editor.outlinerToolTab = OutlinerToolTab::TileMap;
+#endif
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.projectCameraMode = previewgrid::CameraMode::Canvas2D;
                 if (ctx)
@@ -9298,11 +9515,20 @@ namespace epochengine
             .show_scrollbar = true
         });
         const float outlinerWidth = (std::max)(150.0f, outliner_size.x - 18.0f);
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        const std::array outlinerTabs{
+            gui::SegmentedButtonSpec{ .label = "World", .width = 68.0f, .active = editor.outlinerToolTab == OutlinerToolTab::World },
+            gui::SegmentedButtonSpec{ .label = "Assets", .width = 70.0f, .active = editor.outlinerToolTab == OutlinerToolTab::Assets },
+            gui::SegmentedButtonSpec{ .label = "Scripts", .width = 72.0f, .active = editor.outlinerToolTab == OutlinerToolTab::Scripting },
+            gui::SegmentedButtonSpec{ .label = "Map", .width = 58.0f, .active = editor.outlinerToolTab == OutlinerToolTab::TileMap }
+        };
+#else
         const std::array outlinerTabs{
             gui::SegmentedButtonSpec{ .label = "World", .width = 72.0f, .active = editor.outlinerToolTab == OutlinerToolTab::World },
             gui::SegmentedButtonSpec{ .label = "Assets", .width = 76.0f, .active = editor.outlinerToolTab == OutlinerToolTab::Assets },
             gui::SegmentedButtonSpec{ .label = "Scripting", .width = 92.0f, .active = editor.outlinerToolTab == OutlinerToolTab::Scripting }
         };
+#endif
         if (const auto selectedTab = gui::tab_bar(outlinerTabs, 26.0f, 2.0f))
             editor.outlinerToolTab = static_cast<OutlinerToolTab>(*selectedTab);
 
@@ -9498,6 +9724,105 @@ namespace epochengine
                 }
             }
         }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        else if (editor.outlinerToolTab == OutlinerToolTab::TileMap)
+        {
+            gui::label("Temporal Tile Map");
+            if (auto* tileMap = tilemap_workspace_controller(editor))
+            {
+                const auto map = tileMap->snapshot();
+                const auto metrics = tileMap->metrics();
+                gui::property_row("Source", std::string(tileMap->logical_path()), 66.0f);
+                gui::property_row(
+                    "Extent",
+                    epochengine::format_text(
+                        "{} x {} tiles",
+                        map.descriptor.extent_tiles.x,
+                        map.descriptor.extent_tiles.y),
+                    66.0f);
+                gui::property_row("Layers", std::to_string(map.layers.size()), 66.0f);
+                gui::property_row("Palette", std::to_string(map.palette.size()), 66.0f);
+
+                const std::array mapHistoryActions{
+                    gui::InlineButtonSpec{.label = "Save", .width = 70.0f},
+                    gui::InlineButtonSpec{.label = "Undo", .width = 70.0f},
+                    gui::InlineButtonSpec{.label = "Redo", .width = 70.0f}};
+                if (const auto action = gui::inline_button_row(
+                        mapHistoryActions, 26.0f, 4.0f))
+                {
+                    if (*action == 0u)
+                    {
+                        const auto saved = tileMap->save_and_publish();
+                        editor.tileMapStatus = std::string(tileMap->status());
+                        push_editor_log(
+                            editor,
+                            saved
+                                ? "[tilemap] Saved source and compiled artifact."
+                                : "[tilemap] Save/publish failed: "
+                                    + editor.tileMapStatus);
+                    }
+                    else if (*action == 1u)
+                    {
+                        (void)tileMap->undo();
+                        editor.tileMapStatus = std::string(tileMap->status());
+                    }
+                    else
+                    {
+                        (void)tileMap->redo();
+                        editor.tileMapStatus = std::string(tileMap->status());
+                    }
+                }
+
+                if (gui::button("Add Layer", {outlinerWidth, 26.0f}))
+                {
+                    (void)tileMap->create_layer(
+                        "Layer " + std::to_string(map.layers.size() + 1u));
+                    editor.tileMapStatus = std::string(tileMap->status());
+                }
+
+                const std::array tileExtentChoices{
+                    gui::SegmentedButtonSpec{"16 px", 68.0f, editor.tileMapTileExtent == 16u},
+                    gui::SegmentedButtonSpec{"32 px", 68.0f, editor.tileMapTileExtent == 32u},
+                    gui::SegmentedButtonSpec{"64 px", 68.0f, editor.tileMapTileExtent == 64u}};
+                if (const auto extent = gui::segmented_button_row(
+                        tileExtentChoices, 26.0f, 4.0f))
+                {
+                    constexpr std::array<std::uint32_t, 3> extents{16u, 32u, 64u};
+                    editor.tileMapTileExtent = extents[*extent];
+                }
+                if (gui::button("Attach Selected Texture", {outlinerWidth, 28.0f}))
+                {
+                    auto* textures = project_texture_controller(editor);
+                    const auto* selected = textures ? textures->selected() : nullptr;
+                    if (!textures || !selected)
+                    {
+                        editor.tileMapStatus =
+                            "Select a compiled project texture on the Assets tab first.";
+                    }
+                    else
+                    {
+                        (void)tileMap->attach_texture(
+                            *selected,
+                            textures->pipeline().project_key(),
+                            {editor.tileMapTileExtent, editor.tileMapTileExtent});
+                        editor.tileMapStatus = std::string(tileMap->status());
+                    }
+                }
+                gui::property_row(
+                    "Edits",
+                    epochengine::format_text(
+                        "{} mutations | {} painted",
+                        metrics.mutations,
+                        metrics.painted_cells),
+                    66.0f);
+                gui::wrapped_label(editor.tileMapStatus, outlinerWidth);
+            }
+            else
+            {
+                gui::wrapped_label(editor.tileMapStatus, outlinerWidth);
+            }
+        }
+#endif
         else
         {
             const std::string activeSource =
@@ -10103,6 +10428,24 @@ namespace epochengine
                 (std::max)(0, viewportRight - viewportX),
                 (std::max)(0, viewportBottom - viewportY)
             });
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+            if (editor.mainSurface == EditorMainSurface::Game2D)
+            {
+                if (auto* tileMap = tilemap_workspace_controller(editor))
+                {
+                    const auto tileMapFrame =
+                        editor_tilemaps::render_canvas_workspace(
+                            *tileMap,
+                            editor_tilemaps::CanvasRenderOptions{
+                                .viewport = result.scene_viewport,
+                                .interactive = true,
+                                .show_inspector = editor.showInspector});
+                    result.scene_input_captured = result.scene_input_captured
+                        || tileMapFrame.input_captured;
+                    editor.tileMapStatus = std::string(tileMap->status());
+                }
+            }
+#endif
             update_scene_object_interaction(ctx, editor, result);
             publish_editor_canvas2d_scene(ctx.get(), editor);
             publish_editor_preview_markers(ctx.get(), editor);

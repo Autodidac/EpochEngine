@@ -169,6 +169,7 @@
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.ixx" />
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.font.ixx" />
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.image.ixx" />
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.tile_workspace.ixx" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dockable_window.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp" />
@@ -177,6 +178,7 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_control.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_editor.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\tile_workspace.cpp" />
   </ItemGroup>
   <ItemGroup Condition="'$(EpochGuiEnableRoundedRect)'=='true'">
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.rounded_rect.ixx" />

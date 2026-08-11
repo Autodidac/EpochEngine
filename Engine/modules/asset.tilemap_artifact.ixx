@@ -31,6 +31,13 @@ export namespace epochengine::asset::tilemap
             return words == std::array<std::uint64_t, 4>{};
         }
 
+        friend constexpr bool operator==(
+            const ContentHash& left,
+            const ContentHash& right) noexcept
+        {
+            return left.words == right.words;
+        }
+
         friend constexpr auto operator<=>(
             const ContentHash&,
             const ContentHash&) noexcept = default;
@@ -44,6 +51,14 @@ export namespace epochengine::asset::tilemap
         [[nodiscard]] constexpr explicit operator bool() const noexcept
         {
             return !content.empty() && sequence != 0;
+        }
+
+        friend constexpr bool operator==(
+            const DocumentRevision& left,
+            const DocumentRevision& right) noexcept
+        {
+            return left.content.words == right.content.words
+                && left.sequence == right.sequence;
         }
 
         friend constexpr auto operator<=>(

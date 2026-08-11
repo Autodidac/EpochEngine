@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.89.01 LANGUAGES CXX)
+project(EpochGui VERSION 0.89.02 LANGUAGES CXX)
 
 option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
 option(EPOCHGUI_ENABLE_INPUT "Build the optional EpochGui fallback input adapter module." OFF)
@@ -43,6 +43,7 @@ set(EPOCHGUI_MODULES
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.ixx"
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.font.ixx"
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.image.ixx"
+    "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.tile_workspace.ixx"
 )
 
 set(EPOCHGUI_PUBLIC_HEADERS
@@ -67,6 +68,7 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_control.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_editor.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/tile_workspace.cpp"
 )
 
 if(EPOCHGUI_ENABLE_ROUNDED_RECT)
@@ -165,6 +167,19 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
     )
     add_test(NAME EpochGui.Image COMMAND EpochGuiImageTests)
+
+    add_executable(EpochGuiTileWorkspaceTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/tile_workspace_tests.cpp"
+    )
+    target_link_libraries(EpochGuiTileWorkspaceTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiTileWorkspaceTests PRIVATE cxx_std_23)
+    set_target_properties(EpochGuiTileWorkspaceTests PROPERTIES
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+    add_test(NAME EpochGui.TileWorkspace COMMAND EpochGuiTileWorkspaceTests)
+
 
     if(EPOCHGUI_ENABLE_ROUNDED_RECT)
         add_executable(EpochGuiRoundedRectTests

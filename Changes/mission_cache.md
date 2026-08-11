@@ -85,16 +85,23 @@ release history belong in the changelog/archive, not architecture docs.
   interaction automation cover import, selection, assignment, clear, undo/redo,
   save, and reopen over that same spine. Next prove that automation live and
   compare each native adapter against the CPU oracle.
-- `authoring.tilemap` now owns stable map meaning, sparse chunks, semantic
-  operations, bounded history, and deterministic compilation.
-- `asset.tilemap_artifact`, `project.tilemap_library`, and
-  `project.tilemap_pipeline` own bounded runtime bytes, exact project Library
-  persistence/restore, and stable registry identity. `render.canvas2d_tilemap`
-  owns visible-chunk culling, animation selection, transforms, deterministic
-  sprite ordering, collision records, and map-object output.
-- Next build the EpochGui palette/layer/object/collision workspace and bind exact
-  map artifact identity into scene snapshots, Play, Run, Build, and cache
-  recreation before starting the actor/physics loop.
+- authoring.tilemap owns stable map meaning, sparse chunks, semantic operations,
+  bounded history, undo/redo, and deterministic compilation.
+- asset.tilemap_artifact, project.tilemap_library, project.tilemap_pipeline, and
+  render.canvas2d_tilemap own bounded runtime bytes, exact Project Library
+  persistence/restore, stable asset identity, visible-chunk culling, animation,
+  deterministic sprite ordering, collision records, and map-object output.
+- project.tilemap_source owns canonical bounded Assets/Maps/*.epochmap source,
+  exact reload, verified temporary writes, and atomic replacement.
+- EpochGui owns reusable renderer-neutral tile workspace state and layout. The
+  Game2D adapter binds palette/layer/grid tools, texture attachment, semantic
+  edit operations, diagnostics, exact publication, and revision-cached preview.
+  Context replacement restores serialized unsaved map history and portable view
+  state without preserving physical resources.
+- Project Save and the current editor Run publication consume this document.
+  Next prove exact loading in generated standalone runtimes, restart persistence,
+  and Library regeneration after cache deletion before starting the actor and
+  physics loop.
 - Add configurable input actions and keyboard/controller bindings.
 - Add a deterministic fixed-step 2D solver adapter behind `physics.manager`.
 - Add a physical audio adapter behind `audio.manager` with buses and clean device

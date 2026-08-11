@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.12` so
+and stable multicontext branch are sealed. Development source is `v0.89.13` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -120,6 +120,16 @@ The working tree contains these current or in-progress foundations:
 - `render.canvas2d_tilemap` culls visible chunks and compiles deterministic
   animated, transformed, material-bound Canvas2D submissions plus collision
   and object outputs without exposing physical cache identity;
+- project.tilemap_source owns canonical bounded Assets/Maps/*.epochmap source
+  validation, exact reload, verified temporary writes, and atomic replacement;
+- editor.tilemap_workspace binds that source document to tilesets, virtualized
+  palettes, layers, grid editing, objects, collision, undo/redo, diagnostics,
+  exact Library publication, and revision-cached Canvas2D preview compilation;
+- EpochGui owns the renderer-neutral tile workspace state, hit testing, pan/zoom,
+  palette virtualization, layer selection, layout, and standalone tests. The
+  engine adapter owns project documents, persistence, drawing, and input;
+- whole-editor context replacement serializes unsaved tile history and portable
+  view state, then recreates disposable preview artifacts in the new context;
 - `asset.texture_import` decodes bounded uncompressed BMP, TGA, and P6 PPM
   sources into canonical RGBA8 artifacts. `editor.project_textures` owns one
   project-scoped controller for source discovery, import, Library restore,
@@ -292,35 +302,36 @@ in Debug and Release. Its live run and non-OpenGL pixel/switch evidence remain `
 
 ## Completed Capability Checkpoint
 
-Source v0.89.12 carries forward the sealed v0.89.06 release baseline, the
-saved-project texture/runtime slice, and exact OpenGL/T0-CPU Canvas2D proof.
-It adds the first canonical temporal tilemap vertical slice: stable authoring
-identity and semantic history compile into a deterministic runtime artifact,
-publish atomically through the project Library/asset registry, restore by exact
-or latest content identity, and produce culled Canvas2D submissions, collision
-records, and map objects without preserving physical cache state.
-All six generated project profiles retain their materialize, save/reopen,
-build, and child-runtime proof; GUI Editor retains the external Run proof.
-MSVC Debug/Release and CMake Debug builds and build-safe tilemap, project,
-Canvas2D, and engine contracts pass.
-This checkpoint does not claim the EpochGui tile palette/workspace, map binding
-in saved scene snapshots, live tilemap presentation, higher texture formats,
-actor input/physics/audio gameplay, non-OpenGL pixel parity, or the complete
-acceptance game.
-
+Source v0.89.13 carries forward the sealed v0.89.06 release baseline and the
+v0.89.12 temporal tilemap document/artifact/Library spine. It adds the first
+interactive Game2D map-authoring workspace over that spine: reusable EpochGui
+layout and control state, canonical Assets/Maps source ownership, palette and
+layer tools, texture attachment, pencil/eraser/fill/object/collision operations,
+undo/redo, diagnostics, exact compiled publication, and revision-cached
+Canvas2D preview compilation.
+Project Save and the current editor Run publication path consume the same
+temporal map document. Whole-editor context replacement preserves serialized
+unsaved history and portable workspace view state while rebuilding disposable
+preview state.
+CMake Debug and Release engine builds, the six-test contract suite, the
+tilemap-editor-off build and contract, shared MSVC Debug/Release builds and
+contracts, source naming, MSVC XML, and standalone EpochGui Debug/Release tests
+pass.
+This checkpoint does not claim operator visual proof, standalone generated
+project tilemap loading, cache-deletion regeneration, native non-OpenGL pixel
+parity, actor input/physics/audio gameplay, or the complete acceptance game.
 ## Immediate Implementation Order
 
-1. Build the EpochGui 2D palette/layer workspace over `authoring.tilemap`, with
-   placement, selection, collision/object editing, undo/redo, and diagnostics.
-2. Bind exact tilemap artifact identity into the saved scene/runtime projection
-   so Save, reopen, Play, Run, Build, and cache recreation consume one map.
-3. Add configurable actor input and the deterministic 2D solver adapter behind
-   `physics.manager`; then connect spawn, reset, pause, and map collisions.
-4. Run the bounded Assets/tilemap interaction and native presentation evidence
-   only when runtime proof is approved.
-5. Keep backend switch/resource soak and texture/cache settings moving in
-   parallel without delaying the playable map and actor loop.
-
+1. Load the exact compiled tilemap artifact in the generated standalone project
+   runtime, then prove cache deletion regenerates it from canonical map source.
+2. Add configurable actor actions and keyboard/controller bindings over the
+   existing project input profile.
+3. Add the deterministic fixed-step 2D solver adapter behind physics.manager,
+   then connect spawn, reset, pause, and authored map collision.
+4. Run approved map interaction, external Run, screenshot, and native
+   presentation evidence only when runtime proof is explicitly opened.
+5. Keep backend switch/resource soak and texture/cache controls moving in
+   parallel without delaying the playable actor loop.
 ## Backend Repair Within This Gate
 
 The source gate keeps previous operator evidence separate from the current
@@ -426,8 +437,8 @@ The active gate is accepted when:
 
 ## Next Gate
 
-Promote the sprite/tile descriptor foundation into executable runtime artifacts,
-then add configurable input, deterministic 2D physics, physical audio, and the
-editor tools needed to author the acceptance project. The canonical schedule is
-`Changes/roadmap.md`; durable follow-up is
-`Changes/mission_cache.md`.
+Prove that generated standalone projects load and regenerate the canonical map
+artifact, then add configurable input and deterministic 2D physics for the
+playable actor loop. Physical audio and sprite animation follow that accepted
+simulation slice. The canonical schedule is Changes/roadmap.md; durable
+follow-up is Changes/mission_cache.md.

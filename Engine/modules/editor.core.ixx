@@ -313,6 +313,15 @@ namespace epochengine
         double project_run_frame_limit_fps{ 60.0 };
         std::uint8_t project_camera_mode{ 0 };
         EditorCanvas2DProjectSnapshot canvas2d_project{};
+        std::vector<std::byte> tile_map_document{};
+        bool tile_map_dirty{};
+        std::uint32_t tile_map_tile_extent{32u};
+        std::uint8_t tile_map_tool{1u};
+        std::uint32_t tile_map_selected_palette{};
+        std::uint32_t tile_map_selected_layer{};
+        float tile_map_zoom{1.0f};
+        float tile_map_pan_x{};
+        float tile_map_pan_y{};
         std::uint8_t input_profile_preset{ 0 };
         gui::ThemePreference theme_preference{ gui::ThemePreference::FollowSystemDark };
         bool rounded_rectangles{ false };

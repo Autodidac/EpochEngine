@@ -62,8 +62,13 @@ Current source or in-progress contracts include:
 - canonical temporal tilemap documents with stable IDs, sparse chunks, semantic
   history, deterministic runtime artifacts, collision/object payloads, exact
   Project Library persistence, restore-on-demand, and visible Canvas2D
-  compilation. The EpochGui map workspace and scene/runtime binding remain
-  delivery work;
+  compilation;
+- a reusable EpochGui tile workspace plus the Game2D engine controller now own
+  palette/layer/grid state, texture attachment, map operations, diagnostics,
+  canonical Assets/Maps source, exact Library publication, revision-cached
+  preview, and context-handoff restoration. Generated standalone runtime map
+  loading, cache regeneration, and approved visual interaction remain delivery
+  work;
 - production project validation that materializes, atomically saves/reopens,
   builds, and child-runs all six generated profiles, plus an exact standalone
   external Run proof for the generated GUI project;
@@ -188,25 +193,29 @@ Exit gate:
 
 ### Week 4: Tilemap And Scene Authoring
 
-Foundation status: stable tilemap authoring identity, sparse chunks, semantic
+Foundation status: stable temporal map identity, sparse chunks, semantic
 operations, deterministic artifacts, bounded serialization/culling, animated
-Canvas2D submission, collision/object output, and exact Project Library
-restore are build-proven. No interactive map workspace is claimed yet.
+Canvas2D submission, collision/object output, exact Project Library restore,
+canonical Assets/Maps source, and the reusable EpochGui/Game2D authoring
+workspace are build-proven. Save and the current editor Run publication consume
+the same document; whole-editor context replacement restores unsaved map
+history and portable workspace state.
 
 Deliver:
 
-- build the EpochGui tile palette, tileset, layer, object, and collision tools;
-- bind exact map artifact identity into saved scene/runtime projection;
-- add hierarchy, asset/palette browser, inspector, placement, selection,
-  transform, delete, undo/redo, save/reopen, and cost diagnostics;
-- route every edit through tilemap/scene document operations;
-- ensure Play, Run, Build, and cache recreation consume the same compiled map.
+- load the exact compiled map revision in generated standalone project runtimes;
+- regenerate Library/TileMaps from canonical source after cache deletion;
+- complete object selection/transform/delete and hierarchy/inspector integration
+  through semantic map and scene operations;
+- prove save/reopen, Play, external Run, Build, interaction, and cost diagnostics
+  over one authored map;
+- capture approved visual evidence without weakening headless/game compile-out.
 
 Exit gate:
 
 - one map can be authored without editing source files;
-- authored map survives restart and compiles into a runtime artifact.
-
+- authored map survives restart, runs externally, and regenerates its disposable
+  compiled artifact from source.
 ### Week 5: Input And 2D Physics
 
 Deliver:

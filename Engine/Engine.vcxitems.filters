@@ -989,6 +989,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx">
       <Filter>Header Files\gui</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.tile_workspace.ixx">
+      <Filter>Module Files\epoch\gui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx">
       <Filter>Module Files\epoch\gui</Filter>
     </ClCompile>
@@ -1101,6 +1104,9 @@
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\tile_workspace.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp">
@@ -1303,6 +1309,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_textures.ixx">
       <Filter>Module Files\epoch\editor</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.tilemap_workspace.ixx">
+      <Filter>Module Files\epoch\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
@@ -1328,6 +1337,9 @@
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_pipeline.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx">
@@ -1378,7 +1390,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_pipeline.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_source.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_textures.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.tilemap_workspace.cpp">
       <Filter>Source Files\epochengine\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp">

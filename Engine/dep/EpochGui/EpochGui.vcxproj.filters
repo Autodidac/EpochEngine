@@ -24,6 +24,9 @@
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.image.ixx">
       <Filter>Module Files</Filter>
     </ClCompile>
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.tile_workspace.ixx">
+      <Filter>Module Files</Filter>
+    </ClCompile>
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.rounded_rect.ixx">
       <Filter>Module Files</Filter>
     </ClCompile>
@@ -58,6 +61,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_editor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\tile_workspace.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
