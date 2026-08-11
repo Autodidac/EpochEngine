@@ -13,6 +13,7 @@ import project.tilemap_pipeline;
 import project.tilemap_runtime;
 import project.input_profile;
 import project.actor2d_runtime;
+import project.sprite_animation;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import project.tilemap_source;
 #endif
@@ -69,7 +70,9 @@ namespace epochengine::project_contracts
                 false,
                 project_tilemap_runtime::contract_failure_name(
                     tilemapRuntime)};
-        }        const auto inputProfile =
+        }
+
+        const auto inputProfile =
             project_input::project_input_profile_contract_failure();
         if (inputProfile != project_input::ContractFailure::none)
         {
@@ -83,6 +86,17 @@ namespace epochengine::project_contracts
             return {
                 false,
                 project_actor2d::contract_failure_name(actor2d)};
+        }
+        const auto spriteAnimation =
+            project_sprite_animation::
+                project_sprite_animation_contract_failure();
+        if (spriteAnimation
+            != project_sprite_animation::ContractFailure::none)
+        {
+            return {
+                false,
+                project_sprite_animation::contract_failure_name(
+                    spriteAnimation)};
         }
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
         const auto tilemapSources =

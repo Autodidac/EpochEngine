@@ -229,7 +229,7 @@ export namespace epochengine::texture_artifact
         canvas2d::LogicalTextureReference logical,
         std::uint8_t mip_level = 0) noexcept
     {
-        using namespace authoring::texture;
+        using namespace asset::texture;
 
         if (!logical)
             return {TransferCode::invalid_logical_reference, {}};

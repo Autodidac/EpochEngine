@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.15-1F7A4C?style=for-the-badge" alt="Current development source v0.89.15" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.16-1F7A4C?style=for-the-badge" alt="Current development source v0.89.16" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.06-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.06" />
 </p>
 
@@ -76,7 +76,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.15`; the published stable Windows/Linux
+- Active development source is `v0.89.16`; the published stable Windows/Linux
   runtime is `v0.89.06`.
 - The accepted `v0.89.06` updater and packages are sealed while source development
   continues on the capability-tier and playable-2D plan.
@@ -88,8 +88,9 @@ For engine/tooling developers:
   authored, saved, reopened, run, and built through the normal project workflow.
 - Current source includes renderer-neutral math, bounded lighting, CPU ray
   queries, explicit request-driven temporal mapping/history, temporal texture
-  documents, deterministic physics/audio managers, sparse voxel and water
-  foundations, a canonical Tier-0 scene, and capability/evidence reporting.
+  documents, deterministic physics/audio managers and PCM mixing, optional
+  renderer-independent SDL3 audio output, sparse voxel and water foundations,
+  a canonical Tier-0 scene, and capability/evidence reporting.
 - `render.canvas2d` now owns validated project policy, pixel-aware camera and
   viewport plans, generation-checked sprite identity, logical texture/material
   declarations, deterministic quad batching, tile descriptors, immutable frame
@@ -132,8 +133,11 @@ For engine/tooling developers:
   chunk compilation are build-proven. The EpochGui palette/workspace, canonical
   map source, standalone restoration, and project input profile feed one
   deterministic fixed-step actor runtime with spawn, pause, reset, map collision,
-  snapshots, and Canvas2D publication. Controller polling, authored one-way and
-  slope semantics, animation, audio, and approved live interaction remain work.
+  snapshots, and Canvas2D publication. A canonical sprite-animation source and
+  compiled artifact now select idle/run/rise/fall frames deterministically, and
+  actor events drive process-owned jump/landing cues without tying audio lifetime
+  to a renderer context. Imported clip decoding, authored audio events, controller
+  polling, one-way/slope semantics, and approved live interaction remain work.
 - The launcher directly opens three application profiles after a prelaunch
   context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
   services and one shell implementation but own separate source files, scene

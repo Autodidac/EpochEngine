@@ -637,7 +637,7 @@ export namespace epochengine::sdlcontext
         if (ctx)
             ctx->onResize = sdlcontext.onResize;
 
-        if (static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
             logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
             return false;
@@ -650,7 +650,7 @@ export namespace epochengine::sdlcontext
         if (!props)
         {
             logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return false;
         }
 
@@ -669,7 +669,7 @@ export namespace epochengine::sdlcontext
         if (!sdlcontext.window)
         {
             logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return false;
         }
 
@@ -680,7 +680,7 @@ export namespace epochengine::sdlcontext
             {
                 logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
                 SDL_DestroyWindow(sdlcontext.window);
-                SDL_Quit();
+                SDL_QuitSubSystem(SDL_INIT_VIDEO);
                 return false;
             }
 
@@ -691,7 +691,7 @@ export namespace epochengine::sdlcontext
             {
                 logger::error("SDL", "Failed to retrieve HWND");
                 SDL_DestroyWindow(sdlcontext.window);
-                SDL_Quit();
+                SDL_QuitSubSystem(SDL_INIT_VIDEO);
                 return false;
             }
 
@@ -746,12 +746,11 @@ export namespace epochengine::sdlcontext
         {
             logger::error("SDL", std::string("SDL_CreateRenderer failed after fallbacks: ") + SDL_GetError());
             SDL_DestroyWindow(sdlcontext.window);
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return false;
         }
 
-        const int vsyncResult = SDL_SetRenderVSync(sdlcontext.renderer, 0);
-        if (vsyncResult != 0)
+        if (!SDL_SetRenderVSync(sdlcontext.renderer, 0))
         {
             const char* const sdlError = SDL_GetError();
             const bool hasDetail = sdlError && sdlError[0] != '\0';
@@ -991,7 +990,7 @@ export namespace epochengine::sdlcontext
             sdlcontext.window = nullptr;
         }
 
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
         sdlcontext.running = false;
         state::get_sdl_state().running = false;
         state::get_sdl_state().window.sdl_window = nullptr;

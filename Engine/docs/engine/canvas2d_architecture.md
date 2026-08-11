@@ -219,14 +219,18 @@ fixed-step 2D solver adapter owns integration, collision, contacts, layers, and
 masks. Canvas2D consumes immutable accepted transforms; it does not advance
 physics during rendering.
 
-Animation resolves an explicit project/simulation time to a stable frame or
-interpolation result. Sprite compilation stores animation identity and tables;
-physical UV placement is resolved later through texture residency.
+`project.sprite_animation` resolves explicit fixed-tick project time to a stable
+frame and event set. Its canonical source and compiled Library artifact retain
+logical texture identity, source rectangles, pivots, and playback policy;
+Canvas2D receives a sampled logical material/UV result and never stores physical
+residency handles. Compiled-only game builds restore the same artifact.
 
-Gameplay submits clip/source/bus events to `audio.manager`. A physical audio
-adapter consumes its mix plan. Rendering does not own audio devices, and clean
-audio failure must not invalidate scene or Canvas2D state.
-
+Gameplay submits clip/source/bus events to `audio.manager`; `audio.mixer` resolves
+bounded decoded PCM into deterministic output frames. `audio.playback_runtime`
+owns one optional SDL3 device for the process while Play scenes own only
+generation-checked sessions. Renderer replacement does not reopen the device,
+and unavailable, saturated, or failed output cannot invalidate scene or
+Canvas2D state.
 ## Render-Graph Composition
 
 Canvas2D contributes logical work to the shared render graph:

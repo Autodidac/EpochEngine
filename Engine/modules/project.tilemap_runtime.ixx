@@ -133,6 +133,8 @@ export namespace epochengine::project_tilemap_runtime
         project_tilemaps::TileMapPipelineResult map{};
         asset::tilemap::ArtifactIdentity artifact_identity{};
         canvas2d::scene_content::SceneContent scene{};
+        std::vector<asset::tilemap::TextureDependency> texture_dependencies{};
+        std::vector<asset::tilemap::CompiledTileSet> tile_sets{};
         std::vector<asset::tilemap::CollisionPrimitive> collision{};
         std::vector<canvas2d::tilemap_runtime::VisibleObject> objects{};
         std::string diagnostic{};

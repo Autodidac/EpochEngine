@@ -122,6 +122,12 @@ import core.timer;
 import ecs.world;
 
 import audio.manager;
+import audio.device;
+import audio.mixer;
+import audio.playback_runtime;
+#if EPOCH_ENABLE_PHYSICAL_AUDIO
+import audio.device_sdl;
+#endif
 import authoring.document;
 import authoring.morphology;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
@@ -176,6 +182,7 @@ import asset.tilemap_artifact;
 import render.canvas2d_tilemap;
 import project.input_profile;
 import project.actor2d_runtime;
+import project.sprite_animation;
 import render.texture_artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
@@ -2558,6 +2565,16 @@ namespace epochengine::core
             audioContract.passed
             && audioContract.checks_completed >= 6u
             && audioContract.failure == epochengine::audio::AudioContractFailure::none);
+        check(
+            "audio.mixer_pcm_contract",
+            epochengine::audio::contract::run_audio_mixer_contract() == 0);
+        check(
+            "audio.device_ownership_contract",
+            epochengine::audio::run_audio_device_contract_tests() == 0);
+        check(
+            "audio.playback_runtime_contract",
+            epochengine::audio::
+                run_audio_playback_runtime_contract_tests() == 0);
         const auto capabilityContract =
             epochengine::capability::run_contract_checks();
         constexpr std::uint32_t expectedCapabilityChecks = (1u << 18u) - 1u;
@@ -5717,6 +5734,108 @@ namespace epochengine::core
             return (runtimeRoot / path).lexically_normal();
         }
 
+        inline constexpr epochengine::audio::ClipId kActorJumpCue{
+            0x4550'4f43'485f'3244ull, 1u};
+        inline constexpr epochengine::audio::ClipId kActorLandCue{
+            0x4550'4f43'485f'3244ull, 2u};
+
+        epochengine::audio::PlaybackRuntime* g_processAudioRuntime{};
+
+        class ScopedProcessAudioRuntime final
+        {
+        public:
+            explicit ScopedProcessAudioRuntime(
+                epochengine::audio::PlaybackRuntime& runtime) noexcept
+                : previous_{std::exchange(g_processAudioRuntime, &runtime)}
+            {
+            }
+
+            ~ScopedProcessAudioRuntime()
+            {
+                g_processAudioRuntime = previous_;
+            }
+
+            ScopedProcessAudioRuntime(
+                const ScopedProcessAudioRuntime&) = delete;
+            ScopedProcessAudioRuntime& operator=(
+                const ScopedProcessAudioRuntime&) = delete;
+
+        private:
+            epochengine::audio::PlaybackRuntime* previous_{};
+        };
+
+        [[nodiscard]] std::uint64_t stable_project_audio_session_id(
+            std::string_view projectId) noexcept
+        {
+            std::uint64_t value{1469598103934665603ull};
+            for (const unsigned char byte : projectId)
+            {
+                value ^= byte;
+                value *= 1099511628211ull;
+            }
+            value ^= 0x4155'4449'4f5f'3244ull;
+            value *= 1099511628211ull;
+            return value == 0u ? 1u : value;
+        }
+
+        [[nodiscard]] epochengine::audio::OwnedPcmClip make_actor_tone(
+            epochengine::audio::ClipId id,
+            float frequency,
+            float durationSeconds,
+            float amplitude)
+        {
+            constexpr std::uint32_t sampleRate{48'000u};
+            constexpr double tau{6.283185307179586476925286766559};
+            const std::uint64_t frameCount = static_cast<std::uint64_t>(
+                std::llround(
+                    static_cast<double>(sampleRate) * durationSeconds));
+            epochengine::audio::OwnedPcmClip clip{
+                .id = id,
+                .format = {
+                    .sample_format =
+                        epochengine::audio::PcmSampleFormat::float32_interleaved,
+                    .channel_layout =
+                        epochengine::audio::PcmChannelLayout::mono,
+                    .sample_rate = sampleRate},
+                .frame_count = frameCount};
+            clip.interleaved_samples.resize(frameCount);
+            for (std::uint64_t frame = 0u; frame < frameCount; ++frame)
+            {
+                const double progress = frameCount <= 1u
+                    ? 1.0
+                    : static_cast<double>(frame)
+                        / static_cast<double>(frameCount - 1u);
+                const double phase = tau * static_cast<double>(frequency)
+                    * static_cast<double>(frame)
+                    / static_cast<double>(sampleRate);
+                const double envelope = (1.0 - progress)
+                    * (1.0 - progress);
+                clip.interleaved_samples[frame] = static_cast<float>(
+                    std::sin(phase) * envelope * amplitude);
+            }
+            return clip;
+        }
+
+        [[nodiscard]] epochengine::audio::PlaybackSessionRequest
+        make_actor_audio_session_request(std::string_view projectId)
+        {
+            epochengine::audio::PlaybackSessionRequest request{};
+            request.stable_session_id =
+                stable_project_audio_session_id(projectId);
+            request.request_physical_output =
+                EPOCH_ENABLE_PHYSICAL_AUDIO != 0;
+            request.cues.push_back({
+                .clip = make_actor_tone(
+                    kActorJumpCue, 660.0f, 0.095f, 0.24f),
+                .gain = 1.0f,
+                .looping = false});
+            request.cues.push_back({
+                .clip = make_actor_tone(
+                    kActorLandCue, 165.0f, 0.075f, 0.20f),
+                .gain = 1.0f,
+                .looping = false});
+            return request;
+        }
         struct PreparedProjectInput final
         {
             std::optional<epochengine::project_input::CompiledInputProfile> artifact{};
@@ -6044,11 +6163,56 @@ namespace epochengine::core
             return result;
         }
 
+        [[nodiscard]] std::optional<
+            epochengine::project_sprite_animation::DefaultActorSheet>
+        default_actor_sheet_from_tilemap(
+            const epochengine::project_tilemap_runtime::PreparedTileMap& map)
+        {
+            namespace sprite_animation =
+                epochengine::project_sprite_animation;
+            for (const auto& tileSet : map.tile_sets)
+            {
+                if (tileSet.dependency_index
+                        >= map.texture_dependencies.size()
+                    || tileSet.tile_count == 0u)
+                {
+                    continue;
+                }
+                const auto& dependency =
+                    map.texture_dependencies[tileSet.dependency_index];
+                sprite_animation::DefaultActorSheet result{};
+                result.material.logical_texture_path =
+                    dependency.logical_path;
+                result.material.texture_artifact_key =
+                    epochengine::asset::texture::ContentHash{
+                        dependency.artifact_key};
+                result.material.texture_artifact_revision =
+                    dependency.artifact_revision;
+                result.material.stable_material_key =
+                    dependency.stable_material_key;
+                result.material.texture_extent = {
+                    dependency.texture_extent.x,
+                    dependency.texture_extent.y};
+                result.tile_extent = {
+                    tileSet.tile_extent.x, tileSet.tile_extent.y};
+                result.grid = {tileSet.grid.x, tileSet.grid.y};
+                result.margin = {tileSet.margin.x, tileSet.margin.y};
+                result.spacing = {tileSet.spacing.x, tileSet.spacing.y};
+                result.tile_count = tileSet.tile_count;
+                if (result.valid())
+                    return result;
+            }
+            return std::nullopt;
+        }
+
         [[nodiscard]] epochengine::canvas2d::scene_content::SceneContent
         actor_canvas_scene(
             const epochengine::canvas2d::scene_content::SceneContent& base,
             const epochengine::project_actor2d::ActorConfiguration& configuration,
-            const epochengine::project_actor2d::ActorState& actor)
+            const epochengine::project_actor2d::ActorState& actor,
+            const epochengine::project_sprite_animation::RuntimeSpriteSample*
+                animation,
+            bool facingLeft)
         {
             namespace canvas2d = epochengine::canvas2d;
             auto scene = base;
@@ -6079,12 +6243,60 @@ namespace epochengine::core
                 : (actor.grounded
                     ? canvas2d::LinearColor{0.14f, 0.82f, 0.72f, 1.0f}
                     : canvas2d::LinearColor{0.20f, 0.62f, 1.0f, 1.0f});
+            if (animation && *animation)
+            {
+                const canvas2d::LogicalTextureReference logical{
+                    animation->material.texture_asset_key,
+                    animation->material.texture_artifact_revision};
+                const auto matchingMaterial = std::find_if(
+                    base.sprites.begin(),
+                    base.sprites.end(),
+                    [logical](const canvas2d::SpriteSubmission& candidate)
+                    {
+                        return candidate.material.source
+                                == canvas2d::SpriteSourceKind::texture
+                            && candidate.material.logical_texture == logical;
+                    });
+                if (matchingMaterial != base.sprites.end())
+                    sprite.material = matchingMaterial->material;
+                else
+                {
+                    sprite.material.stable_key =
+                        animation->material.stable_material_key;
+                    sprite.material.source =
+                        canvas2d::SpriteSourceKind::texture;
+                    sprite.material.logical_texture = logical;
+                    sprite.material.alpha =
+                        canvas2d::SpriteAlphaMode::premultiplied;
+                    sprite.material.color_space =
+                        canvas2d::SpriteColorSpace::srgb;
+                }
+                const float textureWidth = static_cast<float>(
+                    animation->material.texture_extent.x);
+                const float textureHeight = static_cast<float>(
+                    animation->material.texture_extent.y);
+                sprite.source_uv = {
+                    static_cast<float>(animation->source_rectangle.x)
+                        / textureWidth,
+                    static_cast<float>(animation->source_rectangle.y)
+                        / textureHeight,
+                    static_cast<float>(animation->source_rectangle.width)
+                        / textureWidth,
+                    static_cast<float>(animation->source_rectangle.height)
+                        / textureHeight};
+                sprite.tint = actor.paused
+                    ? canvas2d::LinearColor{0.72f, 0.72f, 0.72f, 1.0f}
+                    : canvas2d::LinearColor{1.0f, 1.0f, 1.0f, 1.0f};
+                sprite.flip_x = facingLeft;
+            }
             sprite.phase = canvas2d::SpritePhase::world;
             sprite.layer = actorLayer;
             sprite.stable_sequence = nextSequence;
             scene.sprites.push_back(sprite);
             scene.source_revision = base.source_revision
                 ^ (actor.revision * 0x9e3779b97f4a7c15ull);
+            if (animation && *animation)
+                scene.source_revision ^= animation->frame.value;
             if (scene.source_revision == 0u)
                 scene.source_revision = 1u;
             return scene;
@@ -6112,6 +6324,8 @@ namespace epochengine::core
                     *profile, runtimeRoot, profile->scene_path).generic_string();
                 m_tileMapPath = std::string(profile->tilemap_path);
                 m_inputProfilePath = std::string(profile->input_profile_path);
+                m_spriteAnimationPath =
+                    std::string(profile->sprite_animation_path);
                 m_worldName = std::string(profile->world_name);
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
@@ -6176,12 +6390,9 @@ namespace epochengine::core
                             if (collisionCode
                                 == epochengine::project_actor2d::ResultCode::ready)
                             {
-                                m_canvas2dScene = actor_canvas_scene(
-                                    m_tileMap->scene,
-                                    m_actorRuntime->configuration(),
-                                    m_actorRuntime->state());
-                                m_actorSceneRevision =
-                                    m_actorRuntime->state().revision;
+                                prepare_sprite_animations();
+                                begin_audio_session();
+                                refresh_actor_scene(true);
                             }
                             else
                             {
@@ -6206,6 +6417,7 @@ namespace epochengine::core
 
             ~ProjectPlayScene() override
             {
+                close_audio_session();
                 retire_canvas2d_scenes();
             }
 
@@ -6230,6 +6442,7 @@ namespace epochengine::core
                 m_lastFrame = now;
                 m_hasLastFrame = true;
                 advance_actor(dt);
+                advance_audio(dt);
 
                 int mx = 0;
                 int my = 0;
@@ -6383,7 +6596,7 @@ namespace epochengine::core
                     "Project Runtime Preview",
                     {24.0f, 24.0f},
                     {430.0f, m_actorRuntime
-                        ? 480.0f
+                        ? 590.0f
                         : (m_tileMapPath.empty() ? 210.0f : 272.0f)});
                 gui::label(std::string("Project: ") + m_projectName);
                 gui::label(std::string("World: ") + m_worldName);
@@ -6398,7 +6611,8 @@ namespace epochengine::core
                             + (m_tileMapStatus.empty()
                                 ? std::string("not prepared")
                                 : m_tileMapStatus),
-                        390.0f);                    if (!m_inputProfilePath.empty())
+                        390.0f);
+                    if (!m_inputProfilePath.empty())
                     {
                         gui::label(std::string("Input Profile: ")
                             + m_inputProfilePath);
@@ -6407,6 +6621,17 @@ namespace epochengine::core
                                 + (m_projectInputStatus.empty()
                                     ? std::string("not prepared")
                                     : m_projectInputStatus),
+                            390.0f);
+                    }
+                    if (!m_spriteAnimationPath.empty())
+                    {
+                        gui::label(std::string("Sprite Animations: ")
+                            + m_spriteAnimationPath);
+                        gui::wrapped_label(
+                            std::string("Animation Runtime: ")
+                                + (m_spriteAnimationStatus.empty()
+                                    ? std::string("not prepared")
+                                    : m_spriteAnimationStatus),
                             390.0f);
                     }
                     if (m_actorRuntime)
@@ -6424,6 +6649,12 @@ namespace epochengine::core
                         gui::label(
                             std::string("Contacts: ")
                             + std::to_string(metrics.contact_events));
+                        gui::wrapped_label(
+                            std::string("Audio: ")
+                                + (m_audioStatus.empty()
+                                    ? std::string("not active")
+                                    : m_audioStatus),
+                            390.0f);
                         if (gui::button(
                             actor.paused ? "Resume" : "Pause",
                             {190.0f, 30.0f}))
@@ -6432,7 +6663,12 @@ namespace epochengine::core
                                 !actor.paused);
                             m_actorStatus = std::string{
                                 epochengine::project_actor2d::result_code_name(code)};
-                            refresh_actor_scene();
+                            if (m_audioRuntime && m_audioSession)
+                            {
+                                (void)m_audioRuntime->set_paused(
+                                    m_audioSession, !actor.paused);
+                            }
+                            refresh_actor_scene(true);
                         }
                         if (gui::button("Reset Actor", {190.0f, 30.0f}))
                         {
@@ -6440,7 +6676,14 @@ namespace epochengine::core
                             m_actorStatus = std::string{
                                 epochengine::project_actor2d::result_code_name(code)};
                             m_actorAccumulator = 0.0;
-                            refresh_actor_scene();
+                            if (m_audioRuntime && m_audioSession)
+                            {
+                                (void)m_audioRuntime->reset(m_audioSession);
+                                (void)m_audioRuntime->set_paused(
+                                    m_audioSession,
+                                    m_actorRuntime->state().paused);
+                            }
+                            refresh_actor_scene(true);
                         }
                         if (gui::button("Return to Editor", {190.0f, 30.0f}))
                             returnToEditor = true;
@@ -6464,21 +6707,209 @@ namespace epochengine::core
             }
 
         private:
-            void refresh_actor_scene()
+            void prepare_sprite_animations()
+            {
+                if (!m_tileMap || m_spriteAnimationPath.empty())
+                {
+                    m_spriteAnimationStatus =
+                        "Project does not declare sprite animations.";
+                    return;
+                }
+                const auto fallback =
+                    default_actor_sheet_from_tilemap(*m_tileMap);
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_ANIMATION_EDITOR
+                const auto* fallbackSource =
+                    fallback ? &*fallback : nullptr;
+#else
+                const epochengine::project_sprite_animation::DefaultActorSheet*
+                    fallbackSource = nullptr;
+#endif
+                auto prepared =
+                    epochengine::project_sprite_animation::
+                        prepare_project_sprite_animations(
+                            m_projectId,
+                            std::filesystem::path{m_projectRoot},
+                            m_spriteAnimationPath,
+                            fallbackSource);
+                m_spriteAnimationStatus = prepared.diagnostic;
+                if (prepared)
+                    m_spriteAnimations = std::move(prepared.artifact);
+            }
+
+            void begin_audio_session()
+            {
+                if (!g_processAudioRuntime || m_audioSession)
+                    return;
+                const auto opened = g_processAudioRuntime->open_session(
+                    make_actor_audio_session_request(m_projectId));
+                if (!opened)
+                {
+                    m_audioStatus = std::string{"audio session "}
+                        + std::string{
+                            epochengine::audio::playback_runtime_code_name(
+                                opened.code)};
+                    return;
+                }
+                m_audioRuntime = g_processAudioRuntime;
+                m_audioSession = opened.handle;
+                const auto snapshot = m_audioRuntime->snapshot();
+                m_audioStatus = snapshot.device.state
+                        == epochengine::audio::AudioDeviceState::unavailable
+                    ? "logical audio ready; physical device unavailable"
+                    : std::string{"audio ready: "}
+                        + std::string{
+                            epochengine::audio::audio_device_state_name(
+                                snapshot.device.state)};
+            }
+
+            void close_audio_session() noexcept
+            {
+                if (m_audioRuntime && m_audioSession)
+                    (void)m_audioRuntime->close_session(m_audioSession);
+                m_audioSession = {};
+                m_audioRuntime = nullptr;
+            }
+
+            void handle_actor_audio_events(
+                std::span<const epochengine::project_actor2d::ActorEvent>
+                    events)
+            {
+                if (!m_audioRuntime || !m_audioSession)
+                    return;
+                for (const auto& event : events)
+                {
+                    using EventKind =
+                        epochengine::project_actor2d::ActorEventKind;
+                    epochengine::audio::PlaybackRuntimeCode code =
+                        epochengine::audio::PlaybackRuntimeCode::success;
+                    switch (event.kind)
+                    {
+                    case EventKind::jump_started:
+                        code = m_audioRuntime->trigger(
+                            m_audioSession, kActorJumpCue);
+                        break;
+                    case EventKind::landed:
+                        code = m_audioRuntime->trigger(
+                            m_audioSession, kActorLandCue);
+                        break;
+                    case EventKind::pause_changed:
+                        code = m_audioRuntime->set_paused(
+                            m_audioSession, event.enabled);
+                        break;
+                    case EventKind::reset:
+                        code = m_audioRuntime->reset(m_audioSession);
+                        break;
+                    case EventKind::left_ground:
+                        continue;
+                    }
+                    if (code !=
+                        epochengine::audio::PlaybackRuntimeCode::success)
+                    {
+                        m_audioStatus = std::string{"audio event "}
+                            + std::string{
+                                epochengine::audio::
+                                    playback_runtime_code_name(code)};
+                    }
+                }
+            }
+
+            void advance_audio(float frameSeconds)
+            {
+                if (!m_audioRuntime || !m_audioSession
+                    || !std::isfinite(frameSeconds)
+                    || frameSeconds <= 0.0f)
+                {
+                    return;
+                }
+                const auto advanced = m_audioRuntime->advance(
+                    m_audioSession,
+                    std::clamp(
+                        static_cast<double>(frameSeconds), 0.000'001, 0.25));
+                if (advanced.code
+                        == epochengine::audio::PlaybackRuntimeCode::
+                            physical_queue_saturated)
+                {
+                    m_audioStatus =
+                        "audio ready; physical queue applying backpressure";
+                }
+                else if (!advanced)
+                {
+                    m_audioStatus = std::string{"audio frame "}
+                        + std::string{
+                            epochengine::audio::playback_runtime_code_name(
+                                advanced.code)};
+                }
+            }
+
+            void refresh_actor_animation()
+            {
+                m_actorAnimationSample.reset();
+                if (!m_actorRuntime || !m_spriteAnimations)
+                    return;
+                const auto state = m_actorRuntime->state();
+                const auto pose =
+                    epochengine::project_sprite_animation::classify_actor_pose({
+                        .velocity_x = state.velocity_x,
+                        .velocity_y = state.velocity_y,
+                        .grounded = state.grounded,
+                        .paused = state.paused});
+                const auto animation =
+                    epochengine::project_sprite_animation::
+                        default_actor_animation_id(pose);
+                if (animation != m_actorAnimation
+                    || state.fixed_tick < m_actorAnimationStartTick)
+                {
+                    m_actorAnimation = animation;
+                    m_actorAnimationStartTick = state.fixed_tick;
+                }
+                const std::uint64_t relativeTick =
+                    state.fixed_tick - m_actorAnimationStartTick;
+                const std::int64_t sampleTick = relativeTick
+                        > static_cast<std::uint64_t>(
+                            (std::numeric_limits<std::int64_t>::max)())
+                    ? (std::numeric_limits<std::int64_t>::max)()
+                    : static_cast<std::int64_t>(relativeTick);
+                auto sample =
+                    epochengine::project_sprite_animation::sample_animation(
+                        *m_spriteAnimations,
+                        {
+                            .animation = animation,
+                            .tick = sampleTick,
+                            .direction = state.paused
+                                ? epochengine::project_sprite_animation::
+                                    TemporalDirection::frozen
+                                : epochengine::project_sprite_animation::
+                                    TemporalDirection::forward});
+                if (sample)
+                    m_actorAnimationSample = std::move(sample);
+                else
+                    m_spriteAnimationStatus =
+                        "sprite animation sample rejected";
+            }
+
+            void refresh_actor_scene(bool force = false)
             {
                 if (!m_actorRuntime || !m_tileMap)
                     return;
                 const auto state = m_actorRuntime->state();
-                if (m_canvas2dScene && m_actorSceneRevision == state.revision)
+                refresh_actor_animation();
+                if (!force && m_canvas2dScene
+                    && m_actorSceneRevision == state.revision)
+                {
                     return;
+                }
                 m_canvas2dScene = actor_canvas_scene(
                     m_tileMap->scene,
                     m_actorRuntime->configuration(),
-                    state);
+                    state,
+                    m_actorAnimationSample
+                        ? &*m_actorAnimationSample
+                        : nullptr,
+                    m_actorFacingLeft);
                 m_actorSceneRevision = state.revision;
             }
 
-            void advance_actor(float frameSeconds) noexcept
+            void advance_actor(float frameSeconds)
             {
                 if (!m_actorRuntime || !m_projectInput)
                     return;
@@ -6512,14 +6943,23 @@ namespace epochengine::core
                 m_actorAccumulator -= stepSeconds
                     * static_cast<double>(fixedSteps);
 
+                const auto actorInput =
+                    actor_input_frame(*m_projectInput, actions);
+                if (actorInput.move_x < -0.05)
+                    m_actorFacingLeft = true;
+                else if (actorInput.move_x > 0.05)
+                    m_actorFacingLeft = false;
                 const auto result = m_actorRuntime->advance(
-                    actor_input_frame(*m_projectInput, actions), fixedSteps);
+                    actorInput, fixedSteps);
                 m_actorStatus = std::string{
                     epochengine::project_actor2d::result_code_name(result.code)};
                 if (result.code == epochengine::project_actor2d::ResultCode::paused)
                     m_actorAccumulator = 0.0;
                 if (result)
+                {
+                    handle_actor_audio_events(result.events);
                     refresh_actor_scene();
+                }
             }
 
             void retire_canvas2d_scenes() noexcept
@@ -6539,6 +6979,9 @@ namespace epochengine::core
             std::string m_tileMapStatus{};
             std::string m_inputProfilePath{};
             std::string m_projectInputStatus{};
+            std::string m_spriteAnimationPath{};
+            std::string m_spriteAnimationStatus{};
+            std::string m_audioStatus{};
             std::string m_actorStatus{};
             std::string m_scenePath{};
             std::string m_worldName{};
@@ -6554,6 +6997,18 @@ namespace epochengine::core
                 m_tileMap{};
             std::optional<epochengine::project_input::CompiledInputProfile>
                 m_projectInput{};
+            std::optional<
+                epochengine::project_sprite_animation::
+                    CompiledSpriteAnimationArtifact>
+                m_spriteAnimations{};
+            std::optional<
+                epochengine::project_sprite_animation::RuntimeSpriteSample>
+                m_actorAnimationSample{};
+            epochengine::project_sprite_animation::AnimationId
+                m_actorAnimation{};
+            std::uint64_t m_actorAnimationStartTick{};
+            epochengine::audio::PlaybackRuntime* m_audioRuntime{};
+            epochengine::audio::PlaybackSessionHandle m_audioSession{};
             std::unique_ptr<epochengine::project_actor2d::ActorRuntime>
                 m_actorRuntime{};
             std::optional<epochengine::canvas2d::scene_content::SceneContent>
@@ -6561,6 +7016,7 @@ namespace epochengine::core
             double m_actorAccumulator{};
             std::uint64_t m_inputFrameIndex{};
             std::uint64_t m_actorSceneRevision{};
+            bool m_actorFacingLeft{};
             std::vector<ProjectRuntimeEntity> m_entities{};
             epochengine::lighting::LightingFrame m_lightingFrame{};
             timing::Clock::time_point m_lastFrame{};
@@ -6775,6 +7231,13 @@ namespace epochengine::core
         template <typename PumpFunc>
         int RunContextSessionLoop(MultiContextManager& mgr, PumpFunc&& pump_events, SessionMode startup_mode)
         {
+#if EPOCH_ENABLE_PHYSICAL_AUDIO
+            epochengine::audio::PlaybackRuntime processAudio{
+                epochengine::audio::make_sdl_audio_device_sink()};
+#else
+            epochengine::audio::PlaybackRuntime processAudio{};
+#endif
+            ScopedProcessAudioRuntime audioBinding{processAudio};
             std::unordered_map<Context*, ContextSession> sessions;
             std::vector<PendingEditorContextSnapshot> pendingEditorSwitchSnapshots;
 #if defined(_WIN32)

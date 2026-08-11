@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux runtime
-remains sealed at `v0.89.06`; active source development is `v0.89.15`.
+remains sealed at `v0.89.06`; active source development is `v0.89.16`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -92,9 +92,11 @@ ship.
   contracts pass. Project-scoped texture identity, sampled-image admission,
   exact immutable resource closure, Project Library persistence, temporal
   tilemap authoring/runtime compilation, deterministic input artifacts, fixed-
-  step 2D solving, and actor publication are build-proven. Operator-visible
-  native pixels, secondary GL share groups, live controller polling, physical
-  audio, sprite animation, advanced collision semantics, and the approved
+  step 2D solving, actor publication, deterministic sprite-animation artifacts,
+  compiled-only animation restore, PCM mixing, and renderer-independent
+  process-owned audio output are build-proven. Operator-visible native pixels,
+  secondary GL share groups, live controller polling, decoded project audio,
+  physical-device ear proof, advanced collision semantics, and the approved
   generated-child gameplay proof remain active gates.
 - **Arcade scene-surface proof**: one shared attract-pattern contract feeds
   backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
@@ -148,8 +150,8 @@ storage growth are proven.
 ## Current Gaps
 
 - Canonical snapshot persistence now owns validated scene save and runtime
-  projection, but project documents do not yet cover complete tilemap, texture,
-  animation, physics, and audio authoring/runtime handoff.
+  projection, but project documents do not yet cover complete texture, physics,
+  decoded-audio, or general animation authoring/runtime handoff.
 - Existing timeline, streaming-save, snapshot, and Video controls are precursor
   contracts, not the immutable event/page/branch temporal database.
 - Renderer context coverage is broader than renderer feature parity. Vulkan and
@@ -170,9 +172,9 @@ storage growth are proven.
 
 ## Current Priorities
 
-1. Complete the playable baseline 2D path: Canvas2D compose, sprite/runtime
-   artifacts, tilemap authoring, input, deterministic 2D physics, physical audio,
-   save/reopen, Play/Stop, Run, and Build.
+1. Complete the playable baseline 2D path: controller input/rebinding, authored
+   one-way/slope collision, decoded project audio and cue binding, save/reopen,
+   Play/Stop, Run, and Build over the accepted Canvas2D actor loop.
 2. Keep capability selection, settings, diagnostics, and project requirements
    aligned with proven T0-CPU and T1-GL behavior before broadening claims.
 3. Extend the proven protected Canvas2D scene-slot route through authenticated

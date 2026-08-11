@@ -124,6 +124,7 @@ import render.arcade;
 import scene.serializer;
 import scene.snapshot;
 import project.input_profile;
+import project.sprite_animation;
 
 namespace
 {
@@ -1007,6 +1008,7 @@ namespace
             .scene_path = "Projects/TwoDStudio/worlds/twod.epoch",
             .tilemap_path = "Assets/Maps/main.epochmap",
             .input_profile_path = "Assets/Config/input_profile.epochinput",
+            .sprite_animation_path = "Assets/Animations/sprite_animations.epochanim",
             .world_name = "TwoD_Main",
             .runtime_scene_id = "project:twodstudio",
             .manifest_path = "Projects/TwoDStudio/project.epoch.json",
@@ -1137,6 +1139,7 @@ namespace
         std::string scene_path{};
         std::string tilemap_path{};
         std::string input_profile_path{};
+        std::string sprite_animation_path{};
         std::string world_name{};
         std::string runtime_scene_id{};
         std::string manifest_path{};
@@ -1158,6 +1161,7 @@ namespace
                 .scene_path = scene_path,
                 .tilemap_path = tilemap_path,
                 .input_profile_path = input_profile_path,
+                .sprite_animation_path = sprite_animation_path,
                 .world_name = world_name,
                 .runtime_scene_id = runtime_scene_id,
                 .manifest_path = manifest_path,
@@ -1623,6 +1627,14 @@ namespace
         if (!profile.input_profile_path.empty()
             && profile.input_profile_path
                 != epochengine::project_input::canonical_source_path)
+        {
+            return std::nullopt;
+        }
+        profile.sprite_animation_path = extract_json_string_field(
+            manifestText, "sprite_animation").value_or("");
+        if (!profile.sprite_animation_path.empty()
+            && profile.sprite_animation_path
+                != epochengine::project_sprite_animation::canonical_source_path)
         {
             return std::nullopt;
         }
@@ -2255,6 +2267,7 @@ namespace
         std::string world_name{};
         std::string tilemap_path{};
         std::string input_profile_path{};
+        std::string sprite_animation_path{};
         std::string template_family{};
         std::string script_id{};
         std::string description{};
@@ -2533,6 +2546,18 @@ namespace
                 .summary = "Project input profile path must use the canonical Assets/Config location."
             };
         }
+        if (!spec.sprite_animation_path.empty()
+            && spec.sprite_animation_path
+                != epochengine::project_sprite_animation::canonical_source_path)
+        {
+            return EditorProjectCreationResult{
+                .succeeded = false,
+                .project_id = spec.project_id,
+                .root_path = root.generic_string(),
+                .manifest_path = manifest.generic_string(),
+                .summary = "Sprite animation path must use the canonical Assets/Animations location."
+            };
+        }
         const fs::path worldFile = spec.world_file.is_absolute()
             ? spec.world_file.lexically_normal()
             : resolve_repo_relative_path(spec.world_file, root);
@@ -2629,6 +2654,11 @@ namespace
         const std::string inputProfileManifestLine = spec.input_profile_path.empty()
             ? std::string{}
             : "  \"input_profile\": \"" + json_escape(spec.input_profile_path) + "\",\n";
+        const std::string spriteAnimationManifestLine =
+            spec.sprite_animation_path.empty()
+            ? std::string{}
+            : "  \"sprite_animation\": \""
+                + json_escape(spec.sprite_animation_path) + "\",\n";
         const std::string packageManifestLine = includeEngineArcadePackage
             ? std::string{ "  \"engine_asset_packages\": [\"engine_arcade\"],\n"
                 "  \"engine_arcade_default_scene\": \"" }
@@ -2649,6 +2679,11 @@ namespace
         const std::string readmeInputProfileLine = spec.input_profile_path.empty()
             ? std::string{}
             : "- Canonical input profile: " + spec.input_profile_path + "\n";
+        const std::string readmeSpriteAnimationLine =
+            spec.sprite_animation_path.empty()
+            ? std::string{}
+            : "- Canonical sprite animations: "
+                + spec.sprite_animation_path + "\n";
         const std::string readmePackageLine = includeEngineArcadePackage
             ? "- Engine asset package: engine_arcade (kernel-owned mini-runtime scenes for 512x512 render-to-texture arcade assets)\n"
             : std::string{};
@@ -2661,6 +2696,10 @@ namespace
         const std::string pathsInputProfileLine = spec.input_profile_path.empty()
             ? std::string{}
             : "input_profile=" + spec.input_profile_path + "\n";
+        const std::string pathsSpriteAnimationLine =
+            spec.sprite_animation_path.empty()
+            ? std::string{}
+            : "sprite_animation=" + spec.sprite_animation_path + "\n";
         const std::string pathsPackageLine = includeEngineArcadePackage
             ? "engine_arcade_package=" + engineArcadePackageFile.generic_string() + "\n"
               "engine_arcade_script=" + engineArcadeScriptFile.generic_string() + "\n"
@@ -2684,6 +2723,7 @@ namespace
             + demoModelLine
             + tileMapManifestLine
             + inputProfileManifestLine
+            + spriteAnimationManifestLine
             + packageManifestLine
             + "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
             "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
@@ -2709,6 +2749,7 @@ namespace
             + readmeDemoLine
             + readmeTileMapLine
             + readmeInputProfileLine
+            + readmeSpriteAnimationLine
             + readmePackageLine
             + "- Engine integration: " + integrationMode + "\n"
             "- Public include root: " + publicIncludeRoot + "\n"
@@ -2734,6 +2775,7 @@ namespace
             + pathsDemoLine
             + pathsTileMapLine
             + pathsInputProfileLine
+            + pathsSpriteAnimationLine
             + pathsPackageLine
             + "entry_source=" + entrySource.generic_string() + "\n"
             + "windows_project=" + windowsProject.generic_string() + "\n"
@@ -3340,6 +3382,8 @@ namespace epochengine
             .world_name = "TwoD_Main",
             .tilemap_path = "Assets/Maps/main.epochmap",
             .input_profile_path = "Assets/Config/input_profile.epochinput",
+            .sprite_animation_path =
+                "Assets/Animations/sprite_animations.epochanim",
             .template_family = "game-2d-project",
             .script_id = "project_demo_bootstrap"
         };
@@ -3559,6 +3603,7 @@ namespace epochengine
                     .world_name = std::string(profile->world_name),
                     .tilemap_path = std::string(profile->tilemap_path),
                     .input_profile_path = std::string(profile->input_profile_path),
+                    .sprite_animation_path = std::string(profile->sprite_animation_path),
                     .template_family = std::string(profile->template_family),
                     .script_id = std::string(profile->default_script),
                     .description = std::string(profile->description),
@@ -3636,6 +3681,7 @@ namespace epochengine
             .world_name = std::string(profile->world_name),
             .tilemap_path = std::string(profile->tilemap_path),
             .input_profile_path = std::string(profile->input_profile_path),
+            .sprite_animation_path = std::string(profile->sprite_animation_path),
             .template_family = std::string(profile->template_family),
             .script_id = std::string(profile->default_script),
             .description = std::string(profile->description),

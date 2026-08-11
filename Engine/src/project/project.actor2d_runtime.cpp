@@ -438,6 +438,7 @@ namespace epochengine::project_actor2d
             return result;
         }
 
+        result.events.reserve(static_cast<std::size_t>(fixedSteps) * 3u + 2u);
         const auto beforeSolver = impl_->solver.snapshot();
         const ActorState beforeState = impl_->state;
         const RuntimeMetrics beforeMetrics = impl_->metrics;
@@ -461,20 +462,34 @@ namespace epochengine::project_actor2d
         impl_->last_input_sequence = input.sequence;
         ++impl_->metrics.accepted_input_frames;
         impl_->pending_jump = impl_->pending_jump || input.jump_pressed;
+        std::uint32_t nextEventOrder{1u};
+        const auto appendEvent = [&](ActorEventKind kind, bool enabled = false)
+        {
+            result.events.push_back({
+                .kind = kind,
+                .stable_actor_id = impl_->configuration.stable_actor_id,
+                .fixed_tick = impl_->state.fixed_tick,
+                .order = nextEventOrder++,
+                .enabled = enabled
+            });
+        };
         if (input.pause_pressed)
         {
-            const ResultCode pauseCode = set_paused(!impl_->solver.paused());
+            const bool requestedPause = !impl_->solver.paused();
+            const ResultCode pauseCode = set_paused(requestedPause);
             if (pauseCode != ResultCode::ready
                 && pauseCode != ResultCode::paused)
             {
                 return rollback(pauseCode);
             }
+            appendEvent(ActorEventKind::pause_changed, requestedPause);
         }
         if (input.reset_pressed)
         {
             const ResultCode resetCode = reset();
             if (resetCode != ResultCode::ready)
                 return rollback(resetCode);
+            appendEvent(ActorEventKind::reset);
             result.code = ResultCode::ready;
             result.state = impl_->state;
             return result;
@@ -496,6 +511,12 @@ namespace epochengine::project_actor2d
             / static_cast<double>(impl_->configuration.fixed_steps_per_second);
         for (std::uint32_t step = 0u; step < fixedSteps; ++step)
         {
+            const ActorState beforeStep = impl_->state;
+            const bool jumpStarted =
+                impl_->configuration.movement == MovementMode::platformer
+                && step == 0u
+                && impl_->pending_jump
+                && beforeStep.grounded;
             const auto body = impl_->solver.body(impl_->actor);
             if (!body)
                 return rollback(ResultCode::solver_failure);
@@ -536,7 +557,7 @@ namespace epochengine::project_actor2d
                     velocity.x,
                     moveX * impl_->configuration.move_speed,
                     acceleration * deltaSeconds);
-                if (step == 0u && impl_->pending_jump && impl_->state.grounded)
+                if (jumpStarted)
                     velocity.y = -impl_->configuration.jump_speed;
                 velocity.y = (std::min)(
                     velocity.y,
@@ -566,6 +587,15 @@ namespace epochengine::project_actor2d
                 result.contacts);
             impl_->metrics.fixed_steps += advanced.steps_committed;
             impl_->sync_actor_state(true);
+            if (impl_->configuration.movement == MovementMode::platformer)
+            {
+                if (jumpStarted)
+                    appendEvent(ActorEventKind::jump_started);
+                if (beforeStep.grounded && !impl_->state.grounded)
+                    appendEvent(ActorEventKind::left_ground);
+                if (!beforeStep.grounded && impl_->state.grounded)
+                    appendEvent(ActorEventKind::landed);
+            }
             if (step == 0u)
                 impl_->pending_jump = false;
         }
@@ -728,6 +758,7 @@ namespace epochengine::project_actor2d
         case ContractFailure::hot_collision_reset_failed: return "hot_collision_reset_failed";
         case ContractFailure::stale_input_accepted: return "stale_input_accepted";
         case ContractFailure::resource_accounting_failed: return "resource_accounting_failed";
+        case ContractFailure::actor_event_failed: return "actor_event_failed";
         }
         return "unknown";
     }

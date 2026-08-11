@@ -38,6 +38,25 @@ namespace epochengine::project_actor2d
             }
             return runtime.state();
         }
+
+        [[nodiscard]] bool has_event(
+            const AdvanceResult& result,
+            ActorEventKind kind,
+            bool enabled = false) noexcept
+        {
+            for (const ActorEvent& event : result.events)
+            {
+                if (event.kind == kind
+                    && (kind != ActorEventKind::pause_changed
+                        || event.enabled == enabled)
+                    && event.stable_actor_id != 0u
+                    && event.order != 0u)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     ContractFailure run_contract() noexcept
@@ -97,27 +116,49 @@ namespace epochengine::project_actor2d
             .sequence = 121u,
             .pause_pressed = true});
         if (paused.code != ResultCode::paused || !paused.state.paused
-            || paused.steps_committed != 0u)
+            || paused.steps_committed != 0u
+            || !has_event(paused, ActorEventKind::pause_changed, true))
         {
             return ContractFailure::pause_failed;
         }
         const auto stale = first.advance({.sequence = 121u});
         if (stale.code != ResultCode::invalid_input)
             return ContractFailure::stale_input_accepted;
+        if (!stale.events.empty())
+            return ContractFailure::actor_event_failed;
         const auto resumed = first.advance({
             .sequence = 122u,
             .pause_pressed = true});
-        if (!resumed || resumed.state.paused)
+        if (!resumed || resumed.state.paused
+            || !has_event(resumed, ActorEventKind::pause_changed, false))
             return ContractFailure::pause_failed;
         const auto reset = first.advance({
             .sequence = 123u,
             .reset_pressed = true});
         if (!reset || !near(reset.state.x, 1.5) || !near(reset.state.y, 2.0)
-            || reset.state.fixed_tick != 0u)
+            || reset.state.fixed_tick != 0u
+            || !has_event(reset, ActorEventKind::reset))
         {
             return ContractFailure::reset_failed;
         }
 
+        ActorRuntime eventRuntime{};
+        if (eventRuntime.replace_collision(floor) != ResultCode::ready
+            || !settle_platformer(eventRuntime).grounded)
+        {
+            return ContractFailure::actor_event_failed;
+        }
+        const auto jump = eventRuntime.advance({
+            .sequence = 121u,
+            .jump_pressed = true
+        });
+        if (!jump
+            || !has_event(jump, ActorEventKind::jump_started)
+            || (jump.events.size() > 1u
+                && jump.events[1].order <= jump.events[0].order))
+        {
+            return ContractFailure::actor_event_failed;
+        }
         ActorConfiguration topDownConfiguration{};
         topDownConfiguration.movement = MovementMode::top_down;
         topDownConfiguration.spawn_x = 0.0;

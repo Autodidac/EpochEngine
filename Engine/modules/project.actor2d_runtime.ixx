@@ -124,6 +124,27 @@ export namespace epochengine::project_actor2d
             const ActorState&) noexcept = default;
     };
 
+    enum class ActorEventKind : std::uint8_t
+    {
+        jump_started,
+        left_ground,
+        landed,
+        reset,
+        pause_changed
+    };
+
+    struct ActorEvent final
+    {
+        ActorEventKind kind{ActorEventKind::jump_started};
+        std::uint64_t stable_actor_id{};
+        std::uint64_t fixed_tick{};
+        std::uint32_t order{};
+        bool enabled{};
+
+        friend constexpr bool operator==(
+            const ActorEvent&,
+            const ActorEvent&) noexcept = default;
+    };
     struct RuntimeMetrics final
     {
         std::uint64_t accepted_input_frames{};
@@ -146,6 +167,7 @@ export namespace epochengine::project_actor2d
         ActorState state{};
         std::uint32_t steps_committed{};
         std::uint32_t contacts{};
+        std::vector<ActorEvent> events{};
 
         [[nodiscard]] constexpr explicit operator bool() const noexcept
         {
@@ -219,7 +241,8 @@ export namespace epochengine::project_actor2d
         contradictory_snapshot_accepted,
         hot_collision_reset_failed,
         stale_input_accepted,
-        resource_accounting_failed
+        resource_accounting_failed,
+        actor_event_failed
     };
 
     [[nodiscard]] ContractFailure run_contract() noexcept;

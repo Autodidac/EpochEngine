@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.15` so
+and stable multicontext branch are sealed. Development source is `v0.89.16` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -59,7 +59,10 @@ The working tree contains these current or in-progress foundations:
   baseline with static, kinematic, and dynamic bodies; layer/mask filtering;
   stable contacts; bounded static maps; pause/reset; snapshots; and replay proof;
 - `audio.manager` owns clips, sources, buses, listener/spatial state, temporal
-  scheduling, mix plans, and metrics, but not physical output;
+  scheduling, mix plans, and metrics. `audio.mixer` resolves bounded decoded PCM
+  into deterministic stereo frames, `audio.device` owns the physical boundary,
+  and `audio.playback_runtime` keeps one optional SDL3 device alive across
+  renderer replacement while project scenes own generation-checked sessions;
 - `voxel.storage` and `water.system` own deterministic sparse/reference state
   without claiming native rendering;
 - `scene.tier0` and terrain foundations establish reusable default-scene data;
@@ -285,7 +288,7 @@ These facts are contracts, not blanket runtime claims. Current checkpoint proof
 includes MSVC Debug/Release editor builds and contracts, the managed Clang 22
 full-engine Release build against GCC 12/libstdc++12 on the Ubuntu 22.04/GLIBC
 2.35 baseline, all five no-display Linux engine CTests, the portable
-`core.format` contract, and 5/5 standalone EpochGui feature tests. Operator
+`core.format` contract, and 6/6 standalone EpochGui feature tests. Operator
 evidence proves correct filled scene orientation
 in SDL3, SFML3, DirectX, and Software. Current Raylib/Vulkan and repeated
 replacement regressions remain `Partial` pending fresh proof. The seven Arcade sampled scene-surface
@@ -321,28 +324,38 @@ in Debug and Release. Its live run and non-OpenGL pixel/switch evidence remain `
 
 ## Completed Capability Checkpoint
 
-Source v0.89.15 carries forward the sealed v0.89.06 release baseline and the
-v0.89.14 standalone temporal map runtime. It adds project-owned deterministic
+Source v0.89.16 carries forward the sealed v0.89.06 release baseline and the
+v0.89.15 actor runtime. It adds project-owned deterministic
+sprite-animation source/artifact persistence, compiled-only Library restore,
+idle/run/rise/fall sampling, and Canvas2D actor UV/flip publication. It also adds
+bounded deterministic PCM mixing, process-owned physical audio, and actor-event
+jump/landing playback that survives renderer replacement without duplicating
+the device. CMake physical-audio-off and SDL-renderer-off/physical-audio-on
+lanes prove that logical audio and renderer selection remain independently
+configurable. A full authoring-off engine build and aggregate contract also pass
+after removing a runtime texture-transfer namespace leak to `authoring.texture`.
+
+The previous checkpoint added project-owned deterministic
 input source/artifact codecs, a fixed-step 2D solver over `physics.manager`, and
 an actor runtime that consumes authored collision and publishes accepted state
 through the same Canvas2D project scene. Spawn, pause, reset, stable contacts,
 snapshots, bounded catch-up, source-first input compilation, and controller
 dead-zone persistence are build-safe contract proven. CMake Debug and Release
-builds, both complete nine-test suites, shared MSVC Debug and Release, both
+builds, complete 13/13 contract suites, shared MSVC Debug and Release, both
 aggregate engine self-tests, and the tilemap-disabled eight-test lane pass.
 Source naming, MSVC XML metadata, registration, diff hygiene, and version truth
 also pass at this checkpoint.
 This checkpoint does not claim operator visual proof, approved generated-child
 external Run evidence, native non-OpenGL pixel parity, live controller polling,
-authored one-way/slope collision, physical audio, sprite animation, or the
-complete acceptance game.
+authored one-way/slope collision, imported clip decoding, authored animation
+audio events, physical-device ear proof, or the complete acceptance game.
 
 ## Immediate Implementation Order
 
-1. Add the physical audio adapter and deterministic sprite-animation document
-   and runtime artifact over the accepted actor loop.
-2. Connect controller polling to the project input sampler and finish visible
+1. Connect controller polling to the project input sampler and finish visible
    key/controller rebinding without coupling project controls to editor input.
+2. Add decoded project clip import and authored animation/audio cue bindings over
+   the accepted mixer/device/session boundary.
 3. Promote authored one-way platform and slope semantics through tilemap
    artifacts, the solver, diagnostics, and replay contracts.
 4. Run approved map interaction, generated-child external Run, screenshot, and
@@ -457,7 +470,7 @@ The active gate is accepted when:
 
 ## Next Gate
 
-Add physical audio and deterministic sprite animation to the accepted actor
-loop, connect the controller polling adapter, and extend authored collision with
-one-way and slope semantics. The canonical schedule is
+Connect controller polling and visible rebinding, add decoded project audio
+assets and authored cue bindings, and extend authored collision with one-way and
+slope semantics. The canonical schedule is
 Changes/roadmap.md; durable follow-up is Changes/mission_cache.md.

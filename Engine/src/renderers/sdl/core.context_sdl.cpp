@@ -923,7 +923,7 @@ namespace
             && ::IsWindow(s_hostWindow) != FALSE;
 #endif
 
-        if (static_cast<int>(SDL_Init(SDL_INIT_VIDEO)) < 0)
+        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
@@ -939,7 +939,7 @@ namespace
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return;
         }
 
@@ -958,7 +958,7 @@ namespace
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return;
         }
 
@@ -969,7 +969,7 @@ namespace
             epochengine::logger::error("SDL", std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
             SDL_DestroyWindow(s_window);
             s_window = nullptr;
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return;
         }
 
@@ -986,7 +986,7 @@ namespace
             SDL_DestroyWindow(s_window);
             s_renderer = nullptr;
             s_window = nullptr;
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return;
         }
 
@@ -1000,7 +1000,7 @@ namespace
             SDL_DestroyWindow(s_window);
             s_renderer = nullptr;
             s_window = nullptr;
-            SDL_Quit();
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
             return;
         }
 
@@ -1168,7 +1168,7 @@ namespace
             SDL_DestroyWindow(s_window);
             s_window = nullptr;
         }
-        SDL_Quit();
+        SDL_QuitSubSystem(SDL_INIT_VIDEO);
 
 #if defined(_WIN32)
         s_hostWindow = nullptr;

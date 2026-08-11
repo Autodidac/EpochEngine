@@ -270,6 +270,8 @@ namespace epochengine::project_tilemap_runtime
             prepared.scene.source_revision = (std::max)(
                 std::uint64_t{1},
                 restored.artifact.identity.source_revision.sequence);
+            prepared.texture_dependencies = restored.artifact.dependencies;
+            prepared.tile_sets = restored.artifact.tile_sets;
             prepared.collision = std::move(visible.collision);
             prepared.objects = std::move(visible.objects);
             prepared.diagnostic = std::string{provenance_name(provenance)};

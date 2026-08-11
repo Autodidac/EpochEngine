@@ -1348,6 +1348,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.actor2d_runtime.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.sprite_animation.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
@@ -1372,6 +1375,18 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx">
       <Filter>Module Files\epoch\audio</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.mixer.ixx">
+      <Filter>Module Files\epoch\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device.ixx">
+      <Filter>Module Files\epoch\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device_sdl.ixx">
+      <Filter>Module Files\epoch\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.playback_runtime.ixx">
+      <Filter>Module Files\epoch\audio</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx">
       <Filter>Module Files\epoch\physics</Filter>
     </ClCompile>
@@ -1380,6 +1395,33 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp">
       <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer_contract.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_contract.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_sdl.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime_contract.cpp">
+      <Filter>Source Files\epochengine\audio</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.sprite_animation.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.sprite_animation_contract.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp">
       <Filter>Source Files\epochengine\physics</Filter>

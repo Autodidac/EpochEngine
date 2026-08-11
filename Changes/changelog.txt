@@ -1,5 +1,33 @@
 # Epoch Changelog
 
+## [v0.89.16] - Deterministic sprite animation and physical audio
+
+- Add `project.sprite_animation` with stable document, animation, frame, and
+  event identities; bounded validation; deterministic source/artifact codecs;
+  atomic source and Library publication; compiled-only restore; temporal frame
+  sampling; and canonical idle/run/rise/fall actor defaults.
+- Persist the canonical sprite-animation declaration in generated Game2D
+  manifests and publish sampled source rectangles, logical texture intent,
+  facing flips, and pose revisions through the existing Canvas2D actor scene.
+- Add `audio.mixer`, `audio.device`, and `audio.playback_runtime` with bounded PCM
+  ownership, deterministic stereo mixing, generation-checked project sessions,
+  queue backpressure, device diagnostics, and clean unavailable/failure paths.
+- Keep one optional SDL3 physical device process-owned across renderer switches;
+  ProjectPlayScene owns only a session lease and routes deterministic actor
+  jump, land, pause, and reset events without making OS audio state canonical.
+- Decouple `EPOCH_ENABLE_PHYSICAL_AUDIO` from the SDL renderer selection. Prove
+  physical-audio-off and SDL-renderer-off/physical-audio-on builds while keeping
+  logical scheduling, mixing, and compiled animation available in reduced games.
+- Repair `render.texture_artifact` to use the always-built `asset.texture`
+  namespace outside its authoring-only contract block, allowing the full engine
+  and aggregate contract to build with authoring and animation editing disabled.
+- Add focused mixer, device, playback-session, sprite-animation, and actor-event
+  contracts and include them in the aggregate engine self-test. Imported audio
+  decoding, authored cue binding, live controller polling, one-way/slope
+  collision, approved physical-device/visual proof, and the complete acceptance
+  game remain follow-up.
+- Keep the published v0.89.06 updater, release implementation, packages, and
+  stable identity sealed.
 
 ## [v0.89.15] - Deterministic 2D project actor runtime
 

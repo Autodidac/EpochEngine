@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.89.04`
+Current source version: `v0.89.16`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -25,7 +25,7 @@ building during the migration.
 | `EPOCH_ENABLE_MODEL_EDITOR` | On | Gate future mesh editing, procedural modeling, and sculpt implementation units. |
 | `EPOCH_ENABLE_NODE_EDITOR` | On | Gate the future shared typed node-graph editor and evaluator. |
 | `EPOCH_ENABLE_MATERIAL_EDITOR` | On | Gate future material graph authoring and preview units. |
-| `EPOCH_ENABLE_ANIMATION_EDITOR` | On | Gate future animation graph and timeline authoring units. |
+| `EPOCH_ENABLE_ANIMATION_EDITOR` | On | Permit canonical default animation source materialization; compiled runtime artifacts remain available when off. |
 | `EPOCH_ENABLE_AUTHORING_COLLABORATION` | Off | Gate future branch sharing, review, and collaboration contracts. Network/server activation remains separately human-gated. |
 | `EPOCH_ENABLE_AUTHORING_METRICS` | On | Gate future document, history, cache, GPU, and evaluation metrics. |
 
@@ -33,9 +33,13 @@ building during the migration.
 `authoring.texture` module, implementation, engine contract, and standalone
 texture contract target. Turning either off removes that authoring slice from a
 CMake product build while compiled texture artifacts remain a separate runtime
-concern. The model, node, material, animation, collaboration, and metrics options
-reserve stable build vocabulary until their implementation units land; they must
-not be advertised as reducing a product build yet.
+concern. Animation runtime artifacts and deterministic sampling are always-built;
+the authoring/animation pair only gates source materialization in the default
+project path. Physical audio is independent of `EPOCH_ENABLE_SDL`: disabling the
+SDL renderer does not disable an explicitly enabled SDL3 audio device, while
+disabling physical audio retains logical scheduling and PCM contract coverage.
+The model, node, material, collaboration, and metrics options reserve stable
+build vocabulary until their implementation units land.
 
 ## Entry points
 
@@ -125,7 +129,7 @@ override them locally in `engine.config.hpp`.
 ## Dependency notes
 
 - SFML builds require graphics, window, and system packages.
-- SDL builds require SDL3, and SDL image support where texture ingestion needs it.
+- SDL rendering or physical audio requires SDL3. SDL image support remains a
 - Raylib-only configurations still rely on the expected GL loader plumbing on
   desktop platforms.
 - Linux vcpkg defaults intentionally keep optional desktop/audio dependency

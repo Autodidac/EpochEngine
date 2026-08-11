@@ -42,7 +42,9 @@ Current source or in-progress contracts include:
   deterministic per-subsystem selection;
 - renderer-neutral math, bounded light frames/reference lighting, and CPU ray
   and voxel queries;
-- logical physics and audio managers with fixed scheduling/snapshot contracts;
+- logical physics and audio managers with fixed scheduling/snapshot contracts,
+  deterministic PCM mixing, a renderer-independent physical-device boundary,
+  and process-owned project playback sessions;
 - sparse voxel storage, analytic water queries, Tier-0 scene/terrain descriptors,
   and fail-closed package evidence policy;
 - sampled render-to-texture, render-device/resource descriptors, render graph,
@@ -75,6 +77,9 @@ Current source or in-progress contracts include:
   `physics.manager` and a renderer-neutral actor runtime now provide map
   collision, spawn, pause, reset, snapshots, bounded catch-up, stable contacts,
   and Canvas2D publication;
+- project-owned sprite-animation source/artifact codecs now provide stable
+  animation/frame/event identity, deterministic sampling, source-first
+  publication, compiled-only restore, and default actor locomotion selection;
 - production project validation that materializes, atomically saves/reopens,
   builds, and child-runs all six generated profiles, plus an exact standalone
   external Run proof for the generated GUI project;
@@ -247,11 +252,16 @@ Exit gate:
 
 ### Week 6: Audio, Animation, Run, And Build
 
-Deliver:
+Foundation status: deterministic PCM mixing, optional process-owned SDL3 output,
+device/session failure contracts, sprite-animation source/artifact persistence,
+compiled-only restore, deterministic idle/run/rise/fall frame selection, actor
+Canvas2D publication, and jump/landing cue routing are build-safe proven.
 
-- physical audio adapter consuming `audio.manager` frame plans;
-- clip import, buses, volume/mute, loop, event playback, and clean device failure;
-- sprite animation document/runtime artifact and deterministic frame selection;
+Remaining delivery:
+
+- decoded project clip import, authored buses, volume/mute controls, looping
+  ambient/music proof, and animation-event cue binding;
+- approved physical-device ear proof and repeated Play/Stop resource proof;
 - editor Play/Stop, external Run, and Build use the same scene and selected
   capability profile;
 - project output excludes unused editor/floating GUI/backends where configured.

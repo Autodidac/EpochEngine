@@ -173,6 +173,7 @@ namespace epochengine
         std::string_view scene_path{};
         std::string_view tilemap_path{};
         std::string_view input_profile_path{};
+        std::string_view sprite_animation_path{};
         std::string_view world_name{};
         std::string_view runtime_scene_id{};
         std::string_view manifest_path{};

@@ -113,8 +113,9 @@ release history belong in the changelog/archive, not architecture docs.
 - Prove actor Play/Stop, restart persistence, generated-child external Run,
   cache-deletion regeneration, and native presentation through approved runtime
   evidence. Build-safe tests are not visual proof.
-- Add a physical audio adapter behind `audio.manager` with buses and clean device
-  failure.
+- Keep the process-owned physical audio adapter behind `audio.manager` and
+  `audio.mixer`; add decoded project clips, authored bus/volume controls, looping
+  ambient/music, animation-event cue bindings, and approved device/restart proof.
 - The editor must author and persist the same scene that Play, Run, and Build
   consume.
 - Default project state should include useful camera, ground/map, light where the
@@ -306,7 +307,10 @@ release history belong in the changelog/archive, not architecture docs.
 - `physics.manager` owns bodies, deterministic bounded commands, fixed-domain
   commits, snapshots/restoration, and metrics. Solvers consume this spine.
 - `audio.manager` owns clips, sources, buses, listener/spatial state, temporal
-  policy, mix plans, and metrics. Physical adapters consume those plans.
+  policy, mix plans, and metrics. `audio.mixer` owns bounded decoded PCM and
+  deterministic frames; `audio.device` owns the optional physical sink;
+  `audio.playback_runtime` owns one process-level device and generation-checked
+  project sessions so renderer replacement cannot duplicate audio ownership.
 - `voxel.storage` owns deterministic sparse chunks/cells, budgets, atomic writes,
   hashes, snapshots, queries, negative coordinates, and metrics.
 - `water.system` owns stable water bodies, explicit-time analytic queries,

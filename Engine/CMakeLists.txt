@@ -25,6 +25,7 @@ option(EPOCH_ENABLE_MATERIAL_EDITOR "Gate material graph authoring and preview i
 option(EPOCH_ENABLE_ANIMATION_EDITOR "Gate animation graph and timeline authoring implementation units." ON)
 option(EPOCH_ENABLE_AUTHORING_COLLABORATION "Gate branch sharing, review, and collaborative authoring implementation units." OFF)
 option(EPOCH_ENABLE_AUTHORING_METRICS "Gate document, history, cache, GPU, and evaluation metrics implementation units." ON)
+option(EPOCH_ENABLE_PHYSICAL_AUDIO "Compile the renderer-independent physical audio adapter." ON)
 option(EPOCH_ALLOW_GCC_MODULE_ENGINE "Opt into the experimental full-engine GCC modules build on Linux." OFF)
 set(EPOCH_GLAD_PROVIDER "auto" CACHE STRING "Select the OpenGL loader provider: auto, vcpkg, or bundled.")
 set_property(CACHE EPOCH_GLAD_PROVIDER PROPERTY STRINGS auto vcpkg bundled)
@@ -174,6 +175,7 @@ function(epoch_print_build_summary)
     message(STATUS "  Authoring editors: texture=${EPOCH_ENABLE_TEXTURE_EDITOR}; tilemap=${EPOCH_ENABLE_TILEMAP_EDITOR}; model=${EPOCH_ENABLE_MODEL_EDITOR}; node=${EPOCH_ENABLE_NODE_EDITOR}; material=${EPOCH_ENABLE_MATERIAL_EDITOR}; animation=${EPOCH_ENABLE_ANIMATION_EDITOR}")
     message(STATUS "  Authoring collaboration: ${EPOCH_ENABLE_AUTHORING_COLLABORATION}")
     message(STATUS "  Authoring metrics: ${EPOCH_ENABLE_AUTHORING_METRICS}")
+    message(STATUS "  Physical audio: ${EPOCH_PHYSICAL_AUDIO_ACTIVE}")
     message(STATUS "  GCC full-engine module opt-in: ${EPOCH_ALLOW_GCC_MODULE_ENGINE}")
     message(STATUS "  GLAD provider requested: ${EPOCH_GLAD_PROVIDER}")
     if(DEFINED EPOCH_GLAD_RESOLVED_PROVIDER)
@@ -325,10 +327,18 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override pac
 
 set(EPOCH_SOURCES
     src/epoch.engine_legacy.cpp
+    src/audio/audio.device.cpp
+    src/audio/audio.device_contract.cpp
     src/audio/audio.manager.cpp
+    src/audio/audio.mixer.cpp
+    src/audio/audio.mixer_contract.cpp
+    src/audio/audio.playback_runtime.cpp
+    src/audio/audio.playback_runtime_contract.cpp
     src/physics/physics.manager.cpp
     src/physics/physics.solver2d.cpp
     src/physics/physics.solver2d_contract.cpp
+    src/project/project.sprite_animation.cpp
+    src/project/project.sprite_animation_contract.cpp
     src/renderers/core/core.context_command_queue.cpp
     src/renderers/core/engine.context.cpp
     src/renderers/directx/core.context_directx.cpp
@@ -457,6 +467,12 @@ if(MSVC)
     )
 
     target_compile_options(epoch PRIVATE /wd4251 /wd4275 /wd4834)
+
+    set_source_files_properties(
+        src/epoch.engine_legacy.cpp
+        PROPERTIES
+            COMPILE_OPTIONS "/bigobj;/Zm2000"
+    )
 
     set_source_files_properties(
         src/renderers/core/engine.context.cpp
@@ -742,6 +758,7 @@ epoch_option(REQUIRE_OPTIONAL_DEPENDENCIES OFF "Treat missing optional backend d
 
 set(EPOCH_RAYLIB_ACTIVE ${EPOCH_ENABLE_RAYLIB})
 set(EPOCH_SDL_ACTIVE ${EPOCH_ENABLE_SDL})
+set(EPOCH_PHYSICAL_AUDIO_ACTIVE ${EPOCH_ENABLE_PHYSICAL_AUDIO})
 set(EPOCH_SFML_ACTIVE ${EPOCH_ENABLE_SFML})
 set(EPOCH_VULKAN_ACTIVE ${EPOCH_ENABLE_VULKAN})
 set(EPOCH_OPENGL_ACTIVE ${EPOCH_ENABLE_OPENGL})
@@ -817,43 +834,52 @@ if(EPOCH_RAYLIB_ACTIVE)
     endif()
 endif()
 
-if(EPOCH_SDL_ACTIVE)
+set(EPOCH_SDL3_AVAILABLE OFF)
+if(EPOCH_SDL_ACTIVE OR EPOCH_PHYSICAL_AUDIO_ACTIVE)
     find_package(SDL3 CONFIG QUIET)
     if(SDL3_FOUND)
         target_link_libraries(epoch PRIVATE SDL3::SDL3)
+        set(EPOCH_SDL3_AVAILABLE ON)
     else()
         if(PkgConfig_FOUND)
             pkg_check_modules(SDL3 QUIET sdl3)
             if(SDL3_FOUND)
                 target_include_directories(epoch PRIVATE ${SDL3_INCLUDE_DIRS})
                 target_link_libraries(epoch PRIVATE ${SDL3_LIBRARIES})
+                set(EPOCH_SDL3_AVAILABLE ON)
             else()
                 if(EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES)
-                    message(FATAL_ERROR "SDL3 was not found. Install it via vcpkg or rerun with -DEPOCH_ENABLE_SDL=OFF.")
+                    message(FATAL_ERROR "SDL3 was not found. Install it via vcpkg or disable the requesting SDL renderer and physical audio features.")
                 else()
-                    message(WARNING "SDL3 was not found; the SDL backend will be disabled. Configure with -DEPOCH_ENABLE_SDL=OFF to silence this warning or enable EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES to treat it as an error.")
+                    message(WARNING "SDL3 was not found; the SDL backend and physical audio adapter will be disabled when requested.")
                     set(EPOCH_SDL_ACTIVE OFF)
                     set(EPOCH_ENABLE_SDL OFF CACHE BOOL "Enable the SDL backend" FORCE)
-                    set(EPOCH_ENABLE_SDL OFF CACHE BOOL "Compatibility alias for EPOCH_ENABLE_SDL" FORCE)
+                    set(EPOCH_PHYSICAL_AUDIO_ACTIVE OFF)
+                    set(EPOCH_ENABLE_PHYSICAL_AUDIO OFF CACHE BOOL "Compile the renderer-independent physical audio adapter." FORCE)
                 endif()
             endif()
         else()
             if(EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES)
-                message(FATAL_ERROR "SDL3 was not found. Install it via vcpkg or rerun with -DEPOCH_ENABLE_SDL=OFF.")
+                message(FATAL_ERROR "SDL3 was not found. Install it via vcpkg or disable the requesting SDL renderer and physical audio features.")
             else()
-                message(WARNING "SDL3 was not found; the SDL backend will be disabled. Configure with -DEPOCH_ENABLE_SDL=OFF to silence this warning or enable EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES to treat it as an error.")
+                message(WARNING "SDL3 was not found; the SDL backend and physical audio adapter will be disabled when requested.")
                 set(EPOCH_SDL_ACTIVE OFF)
                 set(EPOCH_ENABLE_SDL OFF CACHE BOOL "Enable the SDL backend" FORCE)
-                    set(EPOCH_ENABLE_SDL OFF CACHE BOOL "Compatibility alias for EPOCH_ENABLE_SDL" FORCE)
+                set(EPOCH_PHYSICAL_AUDIO_ACTIVE OFF)
+                set(EPOCH_ENABLE_PHYSICAL_AUDIO OFF CACHE BOOL "Compile the renderer-independent physical audio adapter." FORCE)
             endif()
         endif()
     endif()
 
-    if(EPOCH_SDL_ACTIVE)
+    if(EPOCH_SDL_ACTIVE AND EPOCH_SDL3_AVAILABLE)
         find_package(SDL3_image CONFIG QUIET)
         if(SDL3_image_FOUND)
             target_link_libraries(epoch PRIVATE SDL3_image::SDL3_image)
         endif()
+    endif()
+
+    if(EPOCH_PHYSICAL_AUDIO_ACTIVE AND EPOCH_SDL3_AVAILABLE)
+        target_sources(epoch PRIVATE src/audio/audio.device_sdl.cpp)
     endif()
 endif()
 
@@ -1084,6 +1110,10 @@ if(NOT EPOCH_SDL_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])sdl\.]])
 endif()
 
+if(NOT EPOCH_PHYSICAL_AUDIO_ACTIVE)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])audio\.device_sdl\.ixx$]])
+endif()
+
 if(NOT EPOCH_SFML_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])sfml\.]])
 endif()
@@ -1166,6 +1196,91 @@ target_sources(epoch PRIVATE
         FILES ${EPOCH_ACTIVE_MODULE_FILES}
 )
 if(BUILD_TESTING)
+    add_executable(epoch_audio_mixer_contract
+        src/audio/audio.manager.cpp
+        src/audio/audio.mixer.cpp
+        src/audio/audio.mixer_contract.cpp
+    )
+    target_sources(epoch_audio_mixer_contract PRIVATE
+        FILE_SET epoch_audio_mixer_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/audio.types.ixx
+                ${EPOCH_MODULE_DIR}/audio.manager.ixx
+                ${EPOCH_MODULE_DIR}/audio.mixer.ixx
+    )
+    target_include_directories(epoch_audio_mixer_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_audio_mixer_contract PRIVATE
+        EPOCH_AUDIO_MIXER_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_audio_mixer_contract)
+    epoch_apply_warnings(epoch_audio_mixer_contract)
+    epoch_apply_sanitizers(epoch_audio_mixer_contract)
+    add_test(
+        NAME epoch_audio_mixer_contract
+        COMMAND epoch_audio_mixer_contract
+    )
+
+    add_executable(epoch_audio_playback_runtime_contract
+        src/audio/audio.manager.cpp
+        src/audio/audio.mixer.cpp
+        src/audio/audio.device.cpp
+        src/audio/audio.playback_runtime.cpp
+        src/audio/audio.playback_runtime_contract.cpp
+    )
+    target_sources(epoch_audio_playback_runtime_contract PRIVATE
+        FILE_SET epoch_audio_playback_runtime_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/audio.types.ixx
+                ${EPOCH_MODULE_DIR}/audio.manager.ixx
+                ${EPOCH_MODULE_DIR}/audio.mixer.ixx
+                ${EPOCH_MODULE_DIR}/audio.device.ixx
+                ${EPOCH_MODULE_DIR}/audio.playback_runtime.ixx
+    )
+    target_include_directories(epoch_audio_playback_runtime_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_audio_playback_runtime_contract PRIVATE
+        EPOCH_AUDIO_PLAYBACK_RUNTIME_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_audio_playback_runtime_contract)
+    epoch_apply_warnings(epoch_audio_playback_runtime_contract)
+    epoch_apply_sanitizers(epoch_audio_playback_runtime_contract)
+    add_test(
+        NAME epoch_audio_playback_runtime_contract
+        COMMAND epoch_audio_playback_runtime_contract
+    )
+    add_executable(epoch_audio_device_contract
+        src/audio/audio.device.cpp
+        src/audio/audio.device_contract.cpp
+    )
+    target_sources(epoch_audio_device_contract PRIVATE
+        FILE_SET epoch_audio_device_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/audio.device.ixx
+    )
+    target_include_directories(epoch_audio_device_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_audio_device_contract PRIVATE
+        EPOCH_AUDIO_DEVICE_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_audio_device_contract)
+    epoch_apply_warnings(epoch_audio_device_contract)
+    epoch_apply_sanitizers(epoch_audio_device_contract)
+    add_test(
+        NAME epoch_audio_device_contract
+        COMMAND epoch_audio_device_contract
+    )
     add_executable(epoch_physics_manager_contract
         src/physics/physics.manager.cpp
         src/physics/physics.manager_contract.cpp
@@ -1219,6 +1334,36 @@ if(BUILD_TESTING)
         COMMAND epoch_physics_solver2d_contract
     )
 
+    add_executable(epoch_project_sprite_animation_contract
+        src/project/project.asset_registry.cpp
+        src/project/project.sprite_animation.cpp
+        src/project/project.sprite_animation_contract.cpp
+    )
+    target_sources(epoch_project_sprite_animation_contract PRIVATE
+        FILE_SET epoch_project_sprite_animation_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
+                ${EPOCH_MODULE_DIR}/authoring.document.ixx
+                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project.sprite_animation.ixx
+    )
+    target_include_directories(epoch_project_sprite_animation_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_project_sprite_animation_contract PRIVATE
+        EPOCH_PROJECT_SPRITE_ANIMATION_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_project_sprite_animation_contract)
+    epoch_apply_warnings(epoch_project_sprite_animation_contract)
+    epoch_apply_sanitizers(epoch_project_sprite_animation_contract)
+    add_test(
+        NAME epoch_project_sprite_animation_contract
+        COMMAND epoch_project_sprite_animation_contract
+    )
     add_executable(epoch_project_input_profile_contract
         src/project/project.asset_registry.cpp
         src/project/project.input_profile.cpp
@@ -1362,6 +1507,7 @@ target_compile_definitions(epoch PRIVATE
     EPOCH_ENABLE_ANIMATION_EDITOR=$<BOOL:${EPOCH_ENABLE_ANIMATION_EDITOR}>
     EPOCH_ENABLE_AUTHORING_COLLABORATION=$<BOOL:${EPOCH_ENABLE_AUTHORING_COLLABORATION}>
     EPOCH_ENABLE_AUTHORING_METRICS=$<BOOL:${EPOCH_ENABLE_AUTHORING_METRICS}>
+    EPOCH_ENABLE_PHYSICAL_AUDIO=$<BOOL:${EPOCH_PHYSICAL_AUDIO_ACTIVE}>
     $<$<BOOL:${EPOCH_RAYLIB_ACTIVE}>:EPOCH_FORCE_ENABLE_RAYLIB>
     $<$<NOT:$<BOOL:${EPOCH_RAYLIB_ACTIVE}>>:EPOCH_FORCE_DISABLE_RAYLIB>
     $<$<BOOL:${EPOCH_SDL_ACTIVE}>:EPOCH_FORCE_ENABLE_SDL>

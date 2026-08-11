@@ -866,7 +866,19 @@ the write ranges are explicitly isolated.
   evaluate fixed-point dead zones without coupling gameplay to editor shortcuts.
   ProjectPlayScene currently samples keyboard state; live controller polling and
   full rebinding UI remain explicit adapter work.
-- The non-GUI engine contract self-test now exercises the Forest Factory,
+- Generated Game2D projects also declare one canonical sprite-animation source
+  and compiled Library artifact. Authoring builds regenerate or materialize the
+  default idle/run/rise/fall sheet from authenticated map texture metadata;
+  game-only builds restore the compiled artifact without requiring animation UI.
+  ProjectPlayScene samples fixed-tick animation state and publishes logical
+  source rectangles and facing through the existing Canvas2D resource closure.
+- `RunContextSessionLoop` owns one `audio.playback_runtime` for the process.
+  Renderer/context replacement does not close or duplicate its optional SDL3
+  device. ProjectPlayScene acquires one generation-checked session, routes actor
+  jump/landing/pause/reset events, and releases only that session on stop.
+  Unavailable devices and queue backpressure remain visible diagnostics and are
+  nonfatal to project simulation. Imported project clips, authored cue bindings,
+  and live device/ear proof remain follow-up.- The non-GUI engine contract self-test now exercises the Forest Factory,
   package registry, streaming-save package, input profile, and scene snapshot
   serializer/parser contracts before the heavier project-profile and OS-AI
   validation gates. New timeline, package, model, or input contracts should join
