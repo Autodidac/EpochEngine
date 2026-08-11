@@ -81,8 +81,10 @@ release history belong in the changelog/archive, not architecture docs.
   publication rejects incomplete or stale resource closures atomically and
   preserves old-reader lifetime. The project texture pipeline now persists,
   reopens, authenticates, and leases compiled RGBA8 artifacts into immutable
-  editor Canvas2D publication. Next connect visible asset/material authoring and
-  compare live native pixels to the CPU oracle.
+  editor Canvas2D publication. The visible Assets controller and bounded
+  interaction automation cover import, selection, assignment, clear, undo/redo,
+  save, and reopen over that same spine. Next prove that automation live and
+  compare each native adapter against the CPU oracle.
 - Extend the current tile descriptors with palettes, map objects, collision,
   visible-chunk culling, project persistence, and compiled runtime artifacts.
 - Add animation-frame selection and sprite culling without weakening stable draw
@@ -127,7 +129,7 @@ release history belong in the changelog/archive, not architecture docs.
   consume compiled output while excluding authoring UI and history. Bounded
   serialized artifact reading, Project Library persistence, runtime
   authentication, and capability-derived admission are build-proven; visible
-  import/assignment and additional execution formats remain delivery work.
+  interaction evidence and additional execution formats remain delivery work.
 - Standalone, atlas, bindless, and sparse representations are physical residency
   plans chosen by capability, budget, format, update rate, and workload.
 - The first physical cache contract supports sampled color resources through a
@@ -137,13 +139,16 @@ release history belong in the changelog/archive, not architecture docs.
   artifact identity, and scene-surface bounds across one renderer-neutral
   boundary. Backend adapters consume the packet without exposing native handles
   to authoring state.
-- Native presentation evidence is context-specific. A primary OpenGL compositor
-  does not imply SDL3, SFML3, or Raylib3 share-group compatibility, and a
-  no-context refusal test does not imply visible pixel proof.
-- `render.canvas2d_evidence` owns origin/stride-aware bounded comparison
-  against the T0-CPU presentation. OpenGL has a capture-lane-only, one-shot
-  viewport readback with complete read/pixel-pack state restoration and safe
-  no-context refusal. It remains Partial until approved live capture evidence.
+- One shared scene-raster session now feeds OpenGL, SDL3, SFML3, Raylib3,
+  Vulkan, DirectX/D3D11, and Software presentation adapters. Build success proves
+  their source/module integration, not visible output, switch-cycle stability,
+  or performance.
+- Native presentation evidence is context-specific. Exact primary OpenGL pixel
+  evidence does not imply compatibility or parity in another context, share
+  group, API, or software surface, and safe refusal does not prove visible output.
+- `render.canvas2d_evidence` owns origin/stride-aware bounded comparison against
+  the T0-CPU presentation. OpenGL has approved exact live capture evidence;
+  other adapters remain `Partial` until equivalent bounded evidence is accepted.
 - Atlases remain useful compatibility and batching caches; they are not canonical
   or universally modern/obsolete.
 - Source and meaningful history are portable. Library output and cache variants
@@ -237,6 +242,10 @@ release history belong in the changelog/archive, not architecture docs.
 - EpochGui is the reusable portable C++23 module/static-library layer.
 - EpochGui owns backend-neutral text, font, image, input, selection, layout,
   popup, progress, rounded rectangle, panel, docking, and floating-window state.
+- `Engine/dep/EpochGui` is the engine's local integration copy. Reusable controls
+  land there first when required by an accepted slice; standalone-repository
+  synchronization is a deliberate later repository operation, never mixed Git
+  history or an unreviewed source copy.
 - `gui.engine` owns engine input translation, theme/font state, clipping, batches,
   top-layer replay, renderer drawing, native hosts, and project integration.
 - Games, mobile, console, generated runtime, and headless builds can retain only

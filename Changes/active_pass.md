@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.10` so
+and stable multicontext branch are sealed. Development source is `v0.89.11` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -222,9 +222,16 @@ The working tree contains these current or in-progress foundations:
   one-shot viewport readback after warmup, restores all touched read/pixel-pack
   state, publishes a queryable snapshot, and never runs that readback during
   normal frames;
+- `render.canvas2d_runtime` owns one generation/content/frame/output-aware scene
+  raster session shared by native adapters. OpenGL, SDL3, SFML3, Raylib3,
+  Vulkan, DirectX/D3D11, and Software consume the same immutable scene and
+  final-compose contract while retaining backend-owned upload, sampling,
+  blending, viewport, and teardown state. Vulkan reuses same-size residency and
+  commits mapped buffers transactionally; all seven adapters are MSVC
+  Debug/Release build-proven, while non-OpenGL live presentation remains `Partial`;
 - `project.lifecycle` centralizes Save, materialize, Build, Run, wait, and
   focus-existing-runtime decisions with generation-safe attempt tracking;
-- all 360 first-party C++ files follow the canonical one-dot owner grammar,
+- all 366 first-party C++ files follow the canonical one-dot owner grammar,
   exact module/file identity, and owned directory layout enforced by the source
   naming validator;
 - the launcher opens the three editor applications, selects a live context
@@ -239,8 +246,8 @@ full-engine Release build against GCC 12/libstdc++12 on the Ubuntu 22.04/GLIBC
 2.35 baseline, all five no-display Linux engine CTests, the portable
 `core.format` contract, and 5/5 standalone EpochGui feature tests. Operator
 evidence proves correct filled scene orientation
-in SDL3, SFML3, DirectX, and Software. Raylib/Vulkan orientation and repeated
-Vulkan replacement remain `Partial`. The seven Arcade sampled scene-surface
+in SDL3, SFML3, DirectX, and Software. Current Raylib/Vulkan and repeated
+replacement regressions remain `Partial` pending fresh proof. The seven Arcade sampled scene-surface
 implementations compile and pass build-safe contracts but remain `Partial` until
 the current source candidate receives visual and switch-cycle proof. Canvas2D
 has deterministic `T0-CPU` reference raster and image-hash proof on MSVC and
@@ -268,12 +275,12 @@ publication, replacement lifetime, semantic entity mapping, CPU shading, and
 protected OpenGL scene-slot routing are build-proven. All six generated MSVC
 profiles now pass materialize, production save/reopen, build, and child-runtime
 self-test; GUI Editor also passes the exact standalone external Run arguments.
-Interactive Assets-tab import/material click proof, secondary GL share groups,
-and SDL3/SFML3/Raylib3 texture presentation adapters remain Partial.
+The bounded Assets interaction command and all seven Canvas2D adapters compile
+in Debug and Release. Its live run and non-OpenGL pixel/switch evidence remain `Partial`.
 
 ## Completed Capability Checkpoint
 
-Source v0.89.10 carries forward the sealed v0.89.06 release baseline and closes
+Source v0.89.11 carries forward the sealed v0.89.06 release baseline and extends
 a complete saved-project texture/runtime slice. BMP, TGA, and P6 PPM sources
 compile into authenticated artifacts, publish atomically in the project
 Library, restore through stable logical identity, and bind semantic scene
@@ -284,41 +291,41 @@ Editor and Assets captures are free of default Arcade geometry and OpenGL
 errors. All six generated project profiles pass materialization, save/reopen,
 build, and child-runtime self-test; the generated GUI project additionally
 passes the editor-equivalent external Run arguments.
-This checkpoint does not claim a completed click-driven texture workflow,
-tilemap authoring, secondary GL share groups, SDL3/SFML3/Raylib3 texture
-presentation, higher texture formats, physics/audio gameplay, or the complete
-acceptance game.
+This checkpoint adds build-proven Canvas2D presentation adapters across every
+baseline context plus bounded interaction automation, but does not claim their
+live execution, tilemap authoring, higher texture formats, physics/audio
+gameplay, or the complete acceptance game.
 
 ## Immediate Implementation Order
 
-1. Complete and automate the Assets-tab import, material assignment, undo/redo,
-   and save/reopen interaction path over the existing project texture spine.
+1. Run and capture the bounded Assets import, assignment, undo/redo, and
+   save/reopen automation plus native presentation evidence when runtime proof
+   is approved.
 2. Build tile palette, layer/chunk editing, placement, selection, and compiled
    map output on the same scene/document command gateway.
-3. Add explicit SDL3/SFML3/Raylib3 and secondary OpenGL share-group texture
-   presentation adapters with honest unsupported evidence where necessary.
-4. Extend settings and controls with texture policy, effective limits, Library
-   diagnostics, cache budgets, and cost visibility.
+3. Add repeated switch/resource-soak coverage for all seven presentation paths.
+4. Continue settings and controls from the new texture/source/decoded/upload/
+   residency diagnostics into cache budgets and measured cost visibility.
 5. Move directly into configurable input and deterministic 2D physics once one
    map can be authored, saved, reopened, built, and run without source edits.
 
 ## Backend Repair Within This Gate
 
-Operator evidence proves correct filled editor scene orientation in SDL3, SFML3,
-DirectX, and Software. Raylib and Vulkan remained inside-out, and logs prove
-Vulkan retirement stopped after native-child destruction but before replacement
-creation.
+The source gate keeps previous operator evidence separate from the current
+Canvas2D adapter batch. Debug/Release builds prove integration, not pixels,
+orientation, teardown, or repeated replacement.
 
 - shared preview geometry defines the clockwise-outward object convention;
 - SDL3, SFML3, DirectX, and Software are accepted orientation references for
   their current projected/native paths;
-- Raylib rejects camera-facing back sides before projected fill;
-- Vulkan selects the corrected scene-solid front face while leaving line and
-  GUI pipelines uncullled;
-- Vulkan retirement atomically owns the application through device-idle cleanup
-  and destroys both graphics pipelines before the logical device;
-- queue, GUI replay, depth, and present order remain unchanged;
-- Raylib/Vulkan remain `Partial` until build and operator eye proof passes;
+- all Canvas2D adapters consume one immutable top-left/premultiplied compose
+  contract and retain backend-owned native resources;
+- Vulkan retains same-size image/descriptors, retires inactive state, and leaves
+  failed mapped allocations uncommitted;
+- Raylib defers texture destruction until its owning native context is current;
+- D3D11 honors tight-pitch uploads and RGBA letterbox clears;
+- queue drain, GUI replay, subpass, depth, and present order remain unchanged;
+- current Raylib/Vulkan and non-OpenGL presentation remain `Partial` until live proof;
 - this parity work must not delay the `T1-GL` 2D product unless shared contracts
   regress.
 
@@ -383,8 +390,9 @@ The active gate is accepted when:
 7. Canvas2D contracts prove deterministic ordering, scaling, blend/sampling,
    offscreen-compose planning, resource-binding validation, Project Library
    persistence/reopen, textured editor publication, and bounded failure.
-8. Renderer docs keep Raylib/Vulkan orientation and Vulkan repeated replacement
-   `Partial` until build and eye proof.
+8. Renderer docs keep current Raylib/Vulkan regression status, non-OpenGL
+   Canvas2D presentation, and repeated replacement `Partial` until live capture
+   and eye proof.
 9. Engine Arcade geometry is nondegenerate, camera-facing culling removes rear
    solids, and the sampled screen remains bound to the cabinet scene contract.
 10. Launcher actions open the standard editor, Plant Lab, and GUI Editor

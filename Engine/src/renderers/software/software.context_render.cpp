@@ -32,6 +32,9 @@ namespace epochengine::anativecontext
     {
         void refresh_dimensions(core::Context& ctx) noexcept;
         void render_scene_preview(const core::Context& ctx) noexcept;
+        [[nodiscard]] bool canvas2d_scene_changed(
+            const core::Context& ctx,
+            const core::RenderViewport& viewport) noexcept;
         bool same_viewport(
             const core::RenderViewport& lhs,
             const core::RenderViewport& rhs) noexcept;
@@ -86,10 +89,13 @@ namespace epochengine::anativecontext
         const bool sampledPreviewActive =
             previewMode == core::ScenePreviewMode::Editor
             && !epochengine::previewgrid::sampled_render_surface_markers_for(&ctx).empty();
+        const bool canvas2dSceneChanged =
+            detail::canvas2d_scene_changed(ctx, viewport);
         const bool sceneDirty =
             !sr.frameValid
             || hasPendingCommands
             || sampledPreviewActive
+            || canvas2dSceneChanged
             || !detail::same_viewport(viewport, sr.lastSceneViewport)
             || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode
             || cameraRevision != sr.lastCameraRevision;

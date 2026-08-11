@@ -170,6 +170,9 @@ export namespace epochengine::raylib_api
 
     extern const int pixelformat_rgba8;
     extern const int camera_perspective;
+    extern const int texture_filter_point;
+    extern const int texture_filter_bilinear;
+    extern const int blend_alpha_premultiply;
 
     void set_config_flags(unsigned int flags);
     void set_trace_log_level(int level);
@@ -205,6 +208,9 @@ export namespace epochengine::raylib_api
     void begin_mode_3d(const Camera3D& camera);
     void end_mode_3d();
     void draw_grid(int slices, float spacing);
+    void set_texture_filter(const Texture2D& texture, int filter);
+    void begin_blend_mode(int mode);
+    void end_blend_mode();
 
     void set_target_fps(int fps);
     void set_window_title(const char* title);

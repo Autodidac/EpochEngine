@@ -3,8 +3,11 @@ module;
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <include/engine.config.hpp>
 
@@ -39,6 +42,9 @@ import core.logger;
 import image.loader;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_presentation;
+import render.canvas2d_runtime;
+import render.device_sdl;
 import package.registry;
 import sdl.renderer;
 import sdl.state;
@@ -57,6 +63,360 @@ namespace
     HWND s_childWindow = nullptr;
     HWND s_dockParent = nullptr;
 #endif
+
+    enum class CanvasSceneStatus : std::uint8_t
+    {
+        missing_scene,
+        presented,
+        refused
+    };
+
+    class SdlCanvas2DPresenter final
+    {
+    public:
+        SdlCanvas2DPresenter(
+            const epochengine::core::Context* owner,
+            std::uint64_t backendEpoch)
+            : owner_(owner),
+              presenter_(
+                  device_,
+                  backendEpoch,
+                  {this, &SdlCanvas2DPresenter::dispatch_present})
+        {
+        }
+
+        [[nodiscard]] CanvasSceneStatus render(
+            const std::shared_ptr<epochengine::core::Context>& ctx,
+            const epochengine::core::RenderViewport& viewport)
+        {
+            if (!context_ready(ctx.get()))
+                return refuse("missing_or_stale_context");
+
+            const auto prepared = session_.prepare(
+                owner_,
+                {
+                    static_cast<std::uint32_t>(viewport.width),
+                    static_cast<std::uint32_t>(viewport.height)});
+            if (prepared.code
+                == epochengine::canvas2d::runtime::PrepareCode::missing_scene)
+            {
+                presenter_.retire_all();
+                refusal_logged_ = false;
+                return CanvasSceneStatus::missing_scene;
+            }
+            if ((prepared.code
+                    != epochengine::canvas2d::runtime::PrepareCode::ready
+                && prepared.code
+                    != epochengine::canvas2d::runtime::PrepareCode::reused)
+                || !prepared.frame || !prepared.raster)
+            {
+                return refuse(
+                    epochengine::canvas2d::runtime::prepare_code_name(
+                        prepared.code));
+            }
+
+            int framebufferWidth = 0;
+            int framebufferHeight = 0;
+            (void)SDL_GetCurrentRenderOutputSize(
+                s_renderer,
+                &framebufferWidth,
+                &framebufferHeight);
+            if (framebufferWidth <= 0 || framebufferHeight <= 0)
+                return refuse("invalid_framebuffer_extent");
+
+            const epochengine::canvas2d::presentation::PresentationSurface surface{
+                {
+                    static_cast<std::uint32_t>(framebufferWidth),
+                    static_cast<std::uint32_t>(framebufferHeight)},
+                {
+                    viewport.x,
+                    viewport.y,
+                    static_cast<std::uint32_t>(viewport.width),
+                    static_cast<std::uint32_t>(viewport.height)}};
+            try
+            {
+                const auto result = presenter_.present(
+                    *prepared.frame,
+                    *prepared.raster,
+                    surface);
+                if (result.code
+                    != epochengine::canvas2d::presentation::PresentationCode::presented)
+                {
+                    return refuse(
+                        epochengine::canvas2d::presentation::presentation_code_name(
+                            result.code));
+                }
+            }
+            catch (...)
+            {
+                return refuse("presentation_allocation_failure");
+            }
+
+            refusal_logged_ = false;
+            return CanvasSceneStatus::presented;
+        }
+
+        void retire() noexcept
+        {
+            presenter_.retire_all();
+            session_.reset();
+            owner_ = nullptr;
+            refusal_logged_ = false;
+        }
+
+        [[nodiscard]] const epochengine::core::Context* owner() const noexcept
+        {
+            return owner_;
+        }
+
+    private:
+        [[nodiscard]] static bool dispatch_present(
+            void* user,
+            const epochengine::canvas2d::presentation::NativePresentationPacket& packet)
+        {
+            auto* const self = static_cast<SdlCanvas2DPresenter*>(user);
+            return self && self->present_native(packet);
+        }
+
+        [[nodiscard]] bool context_ready(
+            const epochengine::core::Context* ctx) const noexcept
+        {
+            const auto& state = epochengine::sdlcontext::state::get_sdl_state();
+            return owner_ && ctx == owner_ && s_window && s_renderer && s_running
+                && epochengine::sdlcontext::sdl_renderer.renderer == s_renderer
+                && state.running && !state.renderFaulted && !state.shouldClose
+                && !state.window.get_should_close();
+        }
+
+        [[nodiscard]] bool present_native(
+            const epochengine::canvas2d::presentation::NativePresentationPacket& packet)
+        {
+            if (packet.texture.value == 0u || packet.compose == nullptr
+                || !context_ready(owner_)
+                || SDL_GetRenderTarget(s_renderer) != nullptr)
+            {
+                return false;
+            }
+
+            const epochengine::SdlTextureRecord* const record =
+                device_.resolve_texture(packet.texture);
+            if (!record || !record->texture || !record->ready
+                || record->desc.width != packet.image.extent.width
+                || record->desc.height != packet.image.extent.height)
+            {
+                return false;
+            }
+
+            int framebufferWidth = 0;
+            int framebufferHeight = 0;
+            (void)SDL_GetCurrentRenderOutputSize(
+                s_renderer,
+                &framebufferWidth,
+                &framebufferHeight);
+            if (framebufferWidth <= 0 || framebufferHeight <= 0
+                || static_cast<std::uint32_t>(framebufferWidth)
+                    != packet.surface.framebuffer_extent.width
+                || static_cast<std::uint32_t>(framebufferHeight)
+                    != packet.surface.framebuffer_extent.height)
+            {
+                return false;
+            }
+
+            const auto& compose = *packet.compose;
+            const auto& surface = packet.surface.viewport;
+            const auto& composeDestination = compose.viewport.clipped_destination;
+            const auto& visible = compose.viewport.visible_canvas;
+            constexpr auto maximumInt =
+                static_cast<std::uint32_t>((std::numeric_limits<int>::max)());
+            if (surface.width > maximumInt || surface.height > maximumInt
+                || composeDestination.empty() || composeDestination.x < 0 || composeDestination.y < 0
+                || composeDestination.width > maximumInt || composeDestination.height > maximumInt
+                || visible.width <= 0.0f || visible.height <= 0.0f)
+            {
+                return false;
+            }
+
+            const SDL_ScaleMode scaleMode =
+                compose.presentation_filter == epochengine::FilterMode::nearest
+                ? SDL_SCALEMODE_NEAREST
+                : SDL_SCALEMODE_LINEAR;
+            if (!SDL_SetTextureScaleMode(record->texture, scaleMode))
+                return false;
+
+            SDL_Rect previousClip{};
+            const bool previousClipEnabled = SDL_RenderClipEnabled(s_renderer);
+            if (previousClipEnabled
+                && !SDL_GetRenderClipRect(s_renderer, &previousClip))
+            {
+                return false;
+            }
+            Uint8 previousR = 0u;
+            Uint8 previousG = 0u;
+            Uint8 previousB = 0u;
+            Uint8 previousA = 0u;
+            SDL_BlendMode previousBlend = SDL_BLENDMODE_NONE;
+            if (!SDL_GetRenderDrawColor(
+                    s_renderer,
+                    &previousR,
+                    &previousG,
+                    &previousB,
+                    &previousA)
+                || !SDL_GetRenderDrawBlendMode(s_renderer, &previousBlend))
+            {
+                return false;
+            }
+
+            struct ScopedPresentationState final
+            {
+                SDL_Renderer* renderer{};
+                SDL_Rect clip{};
+                bool clipEnabled{};
+                Uint8 r{};
+                Uint8 g{};
+                Uint8 b{};
+                Uint8 a{};
+                SDL_BlendMode blend{SDL_BLENDMODE_NONE};
+
+                ~ScopedPresentationState()
+                {
+                    (void)SDL_SetRenderClipRect(
+                        renderer,
+                        clipEnabled ? &clip : nullptr);
+                    (void)SDL_SetRenderDrawColor(renderer, r, g, b, a);
+                    (void)SDL_SetRenderDrawBlendMode(renderer, blend);
+                }
+            } stateGuard{
+                s_renderer,
+                previousClip,
+                previousClipEnabled,
+                previousR,
+                previousG,
+                previousB,
+                previousA,
+                previousBlend};
+
+            const SDL_Rect surfaceClip{
+                surface.x,
+                surface.y,
+                static_cast<int>(surface.width),
+                static_cast<int>(surface.height)};
+            if (!SDL_SetRenderClipRect(s_renderer, &surfaceClip))
+                return false;
+
+            const SDL_FRect packetSurface{
+                static_cast<float>(surface.x),
+                static_cast<float>(surface.y),
+                static_cast<float>(surface.width),
+                static_cast<float>(surface.height)};
+            if (compose.clear_letterbox)
+            {
+                const auto toUnorm8 = [](float value) noexcept -> Uint8
+                {
+                    return static_cast<Uint8>(std::lround(
+                        (std::clamp)(value, 0.0f, 1.0f) * 255.0f));
+                };
+                if (!SDL_SetRenderDrawBlendMode(s_renderer, SDL_BLENDMODE_NONE)
+                    || !SDL_SetRenderDrawColor(
+                        s_renderer,
+                        toUnorm8(compose.letterbox_color.r),
+                        toUnorm8(compose.letterbox_color.g),
+                        toUnorm8(compose.letterbox_color.b),
+                        toUnorm8(compose.letterbox_color.a))
+                    || !SDL_RenderFillRect(s_renderer, &packetSurface))
+                {
+                    return false;
+                }
+            }
+
+            const SDL_FRect source{
+                visible.x,
+                visible.y,
+                visible.width,
+                visible.height};
+            const SDL_FRect nativeDestination{
+                static_cast<float>(surface.x)
+                    + static_cast<float>(composeDestination.x),
+                static_cast<float>(surface.y)
+                    + static_cast<float>(composeDestination.y),
+                static_cast<float>(composeDestination.width),
+                static_cast<float>(composeDestination.height)};
+            if (!SDL_RenderTexture(
+                    s_renderer,
+                    record->texture,
+                    &source,
+                    &nativeDestination))
+            {
+                epochengine::sdlcontext::check_sdl_error(
+                    "SDL_RenderTexture Canvas2D");
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] CanvasSceneStatus refuse(std::string_view reason)
+        {
+            if (!refusal_logged_)
+            {
+                epochengine::logger::warn(
+                    "SDL.Canvas2D",
+                    std::string("Presentation refused: ") + std::string(reason));
+                refusal_logged_ = true;
+            }
+            return CanvasSceneStatus::refused;
+        }
+
+        const epochengine::core::Context* owner_{};
+        epochengine::SdlRenderDevice device_{};
+        epochengine::canvas2d::runtime::SceneRasterSession session_{};
+        epochengine::canvas2d::presentation::Canvas2DPresenter presenter_;
+        bool refusal_logged_{};
+    };
+
+    std::unique_ptr<SdlCanvas2DPresenter> s_canvas2d_presenter{};
+    std::atomic<std::uint64_t> s_next_canvas2d_backend_epoch{1};
+
+    [[nodiscard]] CanvasSceneStatus render_canvas2d_scene(
+        const std::shared_ptr<epochengine::core::Context>& ctx,
+        const epochengine::core::RenderViewport& viewport)
+    {
+        if (!ctx)
+            return CanvasSceneStatus::refused;
+        if (s_canvas2d_presenter && s_canvas2d_presenter->owner() != ctx.get())
+        {
+            s_canvas2d_presenter->retire();
+            s_canvas2d_presenter.reset();
+        }
+        if (!s_canvas2d_presenter)
+        {
+            try
+            {
+                std::uint64_t epoch = s_next_canvas2d_backend_epoch.fetch_add(
+                    1,
+                    std::memory_order_relaxed);
+                if (epoch == 0u)
+                {
+                    epoch = s_next_canvas2d_backend_epoch.fetch_add(
+                        1,
+                        std::memory_order_relaxed);
+                }
+                s_canvas2d_presenter = std::make_unique<SdlCanvas2DPresenter>(
+                    ctx.get(),
+                    epoch);
+            }
+            catch (...)
+            {
+                return CanvasSceneStatus::refused;
+            }
+        }
+        return s_canvas2d_presenter->render(ctx, viewport);
+    }
+
+    void release_canvas2d_presenter() noexcept
+    {
+        if (s_canvas2d_presenter)
+            s_canvas2d_presenter->retire();
+        s_canvas2d_presenter.reset();
+    }
 
     std::uint32_t default_add_texture(
         epochengine::TextureAtlas&,
@@ -302,6 +662,13 @@ namespace
 
         SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
         (void)SDL_SetRenderClipRect(s_renderer, &clipRect);
+
+        const CanvasSceneStatus canvasStatus = render_canvas2d_scene(ctx, viewport);
+        if (canvasStatus != CanvasSceneStatus::missing_scene)
+        {
+            (void)SDL_SetRenderClipRect(s_renderer, nullptr);
+            return;
+        }
 
         const auto clearColor = epochengine::previewgrid::kClearColor;
         const SDL_FRect background{
@@ -755,6 +1122,7 @@ namespace
     void sdl_cleanup_adapter()
     {
         epochengine::atlasmanager::unregister_backend_uploader(epochengine::core::ContextType::SDL);
+        release_canvas2d_presenter();
         epochengine::sdltextures::clear_gpu_atlases();
         epochengine::sdltextures::sdl_renderer = nullptr;
 

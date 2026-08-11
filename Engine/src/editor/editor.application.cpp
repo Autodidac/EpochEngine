@@ -140,7 +140,8 @@ namespace epochengine
         {
             None = 0,
             SmartUpdate,
-            SourceUpdate
+            SourceUpdate,
+            AssetsInteractionProof
         };
 
         enum class EditorUpdateState : unsigned char
@@ -2403,6 +2404,11 @@ namespace epochengine
             {
                 consume();
                 return EditorAutomationCommand::SourceUpdate;
+            }
+            if (value == "assets-interaction-proof")
+            {
+                consume();
+                return EditorAutomationCommand::AssetsInteractionProof;
             }
 
             return EditorAutomationCommand::None;
@@ -5820,6 +5826,227 @@ namespace epochengine
                     "Selected object now uses its solid fallback material.";
             }
         }
+        [[nodiscard]] bool run_assets_interaction_proof(
+            EditorState& editor,
+            const std::shared_ptr<core::Context>& ctx)
+        {
+            namespace fs = std::filesystem;
+
+            static std::atomic<std::uint64_t> sequence{1u};
+            fs::path proofRoot{};
+            const auto trace_stage = [](std::string_view id, bool passed)
+            {
+                append_editor_automation_trace(
+                    std::string{"assets_interaction_proof."}
+                    + std::string{id}
+                    + "="
+                    + (passed ? "pass" : "fail"));
+                return passed;
+            };
+            const auto finish = [&](bool passed) noexcept
+            {
+                editor.projectTextures.reset();
+                if (!proofRoot.empty())
+                {
+                    std::error_code ignored{};
+                    fs::remove_all(proofRoot, ignored);
+                }
+                append_editor_automation_trace(
+                    std::string{"assets_interaction_proof.result="}
+                    + (passed ? "pass" : "fail"));
+                return passed;
+            };
+
+            try
+            {
+                std::error_code error{};
+                proofRoot = fs::temp_directory_path(error);
+                if (error || proofRoot.empty())
+                    return finish(false);
+                proofRoot /= "epoch_assets_interaction_proof_"
+                    + std::to_string(sequence.fetch_add(
+                        1u,
+                        std::memory_order_relaxed));
+                fs::create_directories(proofRoot / "Scenes", error);
+                if (error)
+                    return finish(false);
+
+                editor.projectRoot = proofRoot.generic_string();
+                editor.projectScenePath =
+                    (proofRoot / "Scenes" / "AssetsInteractionProof.epoch")
+                        .generic_string();
+                editor.projectTextures.reset();
+                editor.selectedProjectFile.clear();
+                editor.selectedAssetPath.clear();
+                editor.sceneDocument = authoring::scene::SceneDocument{};
+                editor.sceneDocumentRevision = 1u;
+                editor.entities.clear();
+                for (const auto& seed :
+                     editor_seed_entities_for_project(editor.projectId))
+                {
+                    editor.entities.push_back(
+                        editor_entity_from_seed(seed));
+                }
+                if (!trace_stage(
+                        "scene.prepare_isolated",
+                        !editor.entities.empty()
+                        && rebuild_editor_scene_document(
+                            editor,
+                            "Prepare isolated Assets interaction proof")))
+                {
+                    return finish(false);
+                }
+
+                bool selectedRenderable = false;
+                for (std::size_t index = 0u;
+                     index < editor.entities.size();
+                     ++index)
+                {
+                    const EditorEntity& entity = editor.entities[index];
+                    if (entity.type == "Camera"
+                        || entity.type == "Light"
+                        || entity.type == "Spawn")
+                    {
+                        continue;
+                    }
+                    select_editor_entity(editor, index);
+                    selectedRenderable = true;
+                    break;
+                }
+                if (!trace_stage(
+                        "scene.select_renderable",
+                        selectedRenderable
+                        && selected_entity_accepts_canvas2d_material(editor)))
+                {
+                    return finish(false);
+                }
+
+                create_starter_project_texture(editor, ctx);
+                auto* controller = project_texture_controller(editor);
+                const auto* imported =
+                    controller == nullptr ? nullptr : controller->selected();
+                if (!trace_stage(
+                        "assets.texture.create_import",
+                        imported != nullptr
+                        && static_cast<bool>(*imported)
+                        && imported->logical_path
+                            == "Assets/Textures/starter_checker.ppm"))
+                {
+                    return finish(false);
+                }
+
+                const auto selected =
+                    controller->select(imported->logical_path);
+                editor.selectedAssetPath = imported->logical_path;
+                if (!trace_stage(
+                        "assets.texture.select_compiled",
+                        static_cast<bool>(selected)
+                        && controller->selected() != nullptr
+                        && controller->selected()->artifact_key
+                            == imported->artifact_key))
+                {
+                    return finish(false);
+                }
+
+                const auto material = controller->selected_material();
+                assign_selected_project_texture(editor);
+                if (!trace_stage(
+                        "assets.texture.assign_to_selection",
+                        material.has_value()
+                        && editor.entities[editor.selectedEntity]
+                                .textureMaterial
+                            == material))
+                {
+                    return finish(false);
+                }
+
+                clear_selected_project_texture(editor);
+                if (!trace_stage(
+                        "assets.texture.clear_material",
+                        !editor.entities[editor.selectedEntity]
+                             .textureMaterial.has_value()))
+                {
+                    return finish(false);
+                }
+
+                const auto undone = editor.sceneDocument.undo();
+                const bool undoProjected =
+                    static_cast<bool>(undone)
+                    && project_scene_document_into_editor(editor);
+                if (!trace_stage(
+                        "scene.undo",
+                        undoProjected
+                        && editor.entities[editor.selectedEntity]
+                                .textureMaterial
+                            == material))
+                {
+                    return finish(false);
+                }
+
+                const auto redone = editor.sceneDocument.redo();
+                const bool redoProjected =
+                    static_cast<bool>(redone)
+                    && project_scene_document_into_editor(editor);
+                if (!trace_stage(
+                        "scene.redo",
+                        redoProjected
+                        && !editor.entities[editor.selectedEntity]
+                                .textureMaterial.has_value()))
+                {
+                    return finish(false);
+                }
+
+                const auto restoredForSave = editor.sceneDocument.undo();
+                if (!restoredForSave
+                    || !project_scene_document_into_editor(editor)
+                    || editor.entities[editor.selectedEntity].textureMaterial
+                        != material)
+                {
+                    trace_stage("scene.restore_assigned_for_save", false);
+                    return finish(false);
+                }
+                trace_stage("scene.restore_assigned_for_save", true);
+
+                const bool saved = save_editor_scene_snapshot(editor);
+                if (!saved)
+                {
+                    append_editor_automation_trace(
+                        std::string{"assets_interaction_proof.project.save_detail="}
+                        + editor.projectStatus);
+                }
+                if (!trace_stage(
+                        "project.save",
+                        saved))
+                {
+                    return finish(false);
+                }
+
+                clear_selected_project_texture(editor);
+                const bool clearedBeforeReopen =
+                    !editor.entities[editor.selectedEntity]
+                         .textureMaterial.has_value();
+                const bool reopened =
+                    clearedBeforeReopen
+                    && load_editor_scene_snapshot(editor);
+                if (!trace_stage(
+                        "project.reopen",
+                        reopened
+                        && editor.entities[editor.selectedEntity]
+                                .textureMaterial
+                            == material))
+                {
+                    return finish(false);
+                }
+
+                return finish(true);
+            }
+            catch (...)
+            {
+                append_editor_automation_trace(
+                    "assets_interaction_proof.exception=fail");
+                return finish(false);
+            }
+        }
 
         [[nodiscard]] static std::vector<EditorBrowserEntry> collect_script_browser_entries(
             std::string_view projectRoot,
@@ -7108,6 +7335,11 @@ namespace epochengine
                     it->second.autoUpdateCheckQueued = false;
                     push_editor_log(it->second, "[info] Auto command armed: source update.");
                 }
+                else if (it->second.automationCommand == EditorAutomationCommand::AssetsInteractionProof)
+                {
+                    it->second.autoUpdateCheckQueued = false;
+                    push_editor_log(it->second, "[info] Auto command armed: Assets interaction proof.");
+                }
             }
             return it->second;
         }
@@ -7796,6 +8028,20 @@ namespace epochengine
             return result;
 
         auto& editor = editor_state_for(ctx);
+        if (!editor.automationConsumed
+            && editor.automationCommand
+                == EditorAutomationCommand::AssetsInteractionProof)
+        {
+            editor.automationConsumed = true;
+            const bool passed =
+                run_assets_interaction_proof(editor, ctx);
+            result.command = EditorCommand::Exit;
+            result.command_argument = passed
+                ? "assets_interaction_proof_pass"
+                : "assets_interaction_proof_fail";
+            result.scene_input_captured = true;
+            return result;
+        }
         const auto& application = editor_application_profile(editor.applicationKind);
         if (!editor_application_supports_surface(application, editor.mainSurface))
             editor.mainSurface = application.default_surface;
@@ -9204,10 +9450,38 @@ namespace epochengine
             if (editor.projectTextures)
             {
                 const auto catalog = editor.projectTextures->catalog();
+                const auto textureMetrics = editor.projectTextures->metrics();
                 gui::property_row(
                     "Compiled",
                     std::to_string(catalog.size()),
                     64.0f);
+                gui::property_row(
+                    "Source bytes",
+                    epochengine::format_text(
+                        "{} KiB",
+                        textureMetrics.source_bytes / 1024u
+                            + (textureMetrics.source_bytes % 1024u != 0u
+                                ? 1u
+                                : 0u)),
+                    92.0f);
+                gui::property_row(
+                    "Decoded bytes",
+                    epochengine::format_text(
+                        "{} KiB",
+                        textureMetrics.decoded_bytes / 1024u
+                            + (textureMetrics.decoded_bytes % 1024u != 0u
+                                ? 1u
+                                : 0u)),
+                    92.0f);
+                gui::property_row(
+                    "Largest",
+                    textureMetrics.texture_count == 0u
+                        ? std::string{"(none)"}
+                        : epochengine::format_text(
+                            "{}x{}",
+                            textureMetrics.maximum_width,
+                            textureMetrics.maximum_height),
+                    92.0f);
                 for (const auto& texture : catalog)
                 {
                     const bool selected =
@@ -9994,6 +10268,40 @@ namespace epochengine
                 {
                     editor.canvas2dProject = sanitize_canvas2d_project(editor.canvas2dProject);
                     gui::label("Canvas2D Project");
+                    gui::property_row(
+                        "[texture] Policy",
+                        projectProfile.renderer_capability.allow_experimental
+                            ? "Experimental providers allowed"
+                            : "Validated providers only",
+                        132.0f);
+                    gui::property_row(
+                        "[texture] Upload budget",
+                        epochengine::format_text(
+                            "{} MiB/frame",
+                            renderer_capability_profile(ctx).recommended_budgets.upload_budget_bytes
+                                / (1024u * 1024u)),
+                        132.0f);
+                    gui::property_row(
+                        "[texture] Residency budget",
+                        epochengine::format_text(
+                            "{} MiB",
+                            renderer_capability_profile(ctx).recommended_budgets.vram_budget_bytes
+                                / (1024u * 1024u)),
+                        132.0f);
+                    if (auto* controller = project_texture_controller(editor))
+                    {
+                        const auto textureMetrics = controller->metrics();
+                        gui::property_row(
+                            "[texture] Library",
+                            epochengine::format_text(
+                                "{} textures | {} KiB decoded",
+                                textureMetrics.texture_count,
+                                textureMetrics.decoded_bytes / 1024u
+                                    + (textureMetrics.decoded_bytes % 1024u != 0u
+                                        ? 1u
+                                        : 0u)),
+                            132.0f);
+                    }
 
                     const auto resolutionChoices = canvas2d_resolution_choices();
                     std::vector<std::string_view> resolutionLabels;

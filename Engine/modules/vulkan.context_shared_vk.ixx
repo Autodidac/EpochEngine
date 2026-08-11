@@ -75,6 +75,8 @@ import :shared_context;
 import context.commandqueue;
 import core.context;
 import input.engine;
+import render.canvas2d;
+import render.canvas2d_runtime;
 import vulkan.camera;
 import atlas.texture;
 import sprite.handle;
@@ -105,6 +107,7 @@ namespace epochengine::vulkancontext
 
     export class Application
     {
+        struct Canvas2DContextState;
     public:
         struct GuiContextState;
 
@@ -123,6 +126,9 @@ namespace epochengine::vulkancontext
         void createGuiUniformBuffers();
         void updateGuiUniformBuffer(std::uint32_t currentImage);
         void createGuiPipeline();
+        void createCanvas2DPipeline(Canvas2DContextState& canvasState);
+        bool prepareCanvas2D() noexcept;
+        void recordCanvas2DCommands(vk::CommandBuffer cmd, std::uint32_t imageIndex);
         void recordCommandBuffer(std::uint32_t imageIndex);
         void recordGuiCommands(vk::CommandBuffer cmd, std::uint32_t imageIndex, struct GuiContextState& guiState);
 
@@ -134,7 +140,6 @@ namespace epochengine::vulkancontext
 
         void set_context(std::shared_ptr<epochengine::core::Context> ctx, void* nativeWindow);
         void set_active_context(const epochengine::core::Context* ctx);
-        void cleanup_gui_context(const epochengine::core::Context* ctx);
         bool should_stop_rendering() noexcept;
 
         vk::CommandBuffer getCurrentCommandBuffer() const
@@ -314,6 +319,7 @@ namespace epochengine::vulkancontext
         void createTextureSampler();
         void createArcadeRenderTarget();
         void destroyArcadeRenderTarget() noexcept;
+        void resetCanvas2DState(Canvas2DContextState& canvasState) noexcept;
         void createArcadeDescriptorSets();
         void recordArcadeRenderTexturePass(vk::CommandBuffer commandBuffer);
 
@@ -392,6 +398,39 @@ namespace epochengine::vulkancontext
             std::uint64_t version{ 0 };
             std::uint32_t width{ 0 };
             std::uint32_t height{ 0 };
+
+        };
+        struct Canvas2DContextState
+        {
+            canvas2d::runtime::SceneRasterSession session{};
+
+            vk::UniqueImage image{};
+            vk::UniqueDeviceMemory imageMemory{};
+            vk::UniqueImageView imageView{};
+            vk::UniqueSampler nearestSampler{};
+            vk::UniqueSampler linearSampler{};
+            vk::UniqueDescriptorPool descriptorPool{};
+            std::vector<vk::UniqueDescriptorSet> nearestDescriptorSets{};
+            std::vector<vk::UniqueDescriptorSet> linearDescriptorSets{};
+
+            vk::UniqueBuffer vertexBuffer{};
+            vk::UniqueDeviceMemory vertexBufferMemory{};
+            vk::UniqueBuffer indexBuffer{};
+            vk::UniqueDeviceMemory indexBufferMemory{};
+            vk::UniquePipeline pipeline{};
+
+            canvas2d::RectI surface{};
+            canvas2d::RectI destination{};
+            canvas2d::RectF visibleCanvas{};
+            canvas2d::LinearColor letterboxColor{};
+            FilterMode filter{ FilterMode::nearest };
+            canvas2d::CanvasExtent imageExtent{};
+            std::uint64_t contentHash{};
+            std::uint64_t canvasHash{};
+            std::uint64_t frameSequence{};
+            bool clearLetterbox{};
+            bool ready{};
+            bool refusalLogged{};
         };
 
         struct GuiContextState
@@ -410,6 +449,7 @@ namespace epochengine::vulkancontext
             std::vector<void*> guiUniformBuffersMapped;
             vk::UniquePipeline guiPipeline;
             std::vector<GuiDrawCommand> guiDraws{};
+            Canvas2DContextState canvas2d{};
         };
 
         std::unordered_map<const epochengine::core::Context*, GuiContextState> guiContexts{};

@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.10-1F7A4C?style=for-the-badge" alt="Current development source v0.89.10" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.11-1F7A4C?style=for-the-badge" alt="Current development source v0.89.11" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.06-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.06" />
 </p>
 
@@ -76,7 +76,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.10`; the published stable Windows/Linux
+- Active development source is `v0.89.11`; the published stable Windows/Linux
   runtime is `v0.89.06`.
 - The accepted `v0.89.06` updater and packages are sealed while source development
   continues on the capability-tier and playable-2D plan.
@@ -121,8 +121,12 @@ For engine/tooling developers:
   across 1,178,872 pixels with zero outliers and zero channel error.
   All six generated profiles pass materialize, save/reopen, build, and child
   self-test, and GUI Editor passes the equivalent standalone external Run.
-  Interactive texture assignment proof and SDL3/SFML3/Raylib3/share-group
-  presentation adapters remain the next texture gates.
+  One shared scene-raster session now feeds native Canvas2D adapters for OpenGL,
+  SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software. All seven adapters
+  compile in Debug and Release and preserve renderer-owned presentation state.
+  OpenGL retains exact live pixel evidence; the bounded Assets interaction
+  automation and the six other native paths remain `Partial` until approved live
+  capture, save/reopen, and repeated context-switch evidence passes.
 - The launcher directly opens three application profiles after a prelaunch
   context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
   services and one shell implementation but own separate source files, scene

@@ -26,8 +26,9 @@ architecture. It does not create a second design.
 - Project Save, materialize, Build, and Run decisions flow through
   `project.lifecycle` rather than widget-local state machines.
 - OpenGL proves portable techniques first without becoming engine architecture.
-- Vulkan, DirectX, SDL, SFML, Raylib, mobile, and advanced effects stay aligned
-  but cannot consume the 2D delivery schedule unless shared contracts regress.
+- Baseline 2D presentation parity across OpenGL, SDL3, SFML3, Raylib3, Vulkan,
+  DirectX/D3D11, and Software is a product gate. Advanced backend features,
+  mobile specialization, and effects cannot consume the playable-2D schedule.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
 - The `v0.89.06` release/updater becomes the sealed baseline after its Windows
@@ -51,8 +52,9 @@ Current source or in-progress contracts include:
   fixed-point coverage, final composition, metrics, and image hashes, plus a
   bounded generation-checked physical texture cache, a renderer-neutral
   CPU-canvas-output/native-presentation adapter, context-guarded OpenGL native
-  texture hooks, and a compiled primary-context OpenGL compositor with scoped
-  scene-surface and GL-state ownership;
+  texture hooks, a compiled primary-context OpenGL compositor with scoped
+  scene-surface and GL-state ownership, one shared scene-raster session, and
+  build-proven adapters for SDL3, SFML3, Raylib3, Vulkan, D3D11, and Software;
 - project-scoped texture import, deterministic artifact/Library persistence,
   decoded publication, restore-on-demand, semantic scene materials, snapshot
   format 3, and one World Outliner Assets controller over the same logical
@@ -157,9 +159,10 @@ Project Library persistence, bounded BMP/TGA/P6 import, semantic scene
 materials, snapshot save/reopen, runtime restoration, and Assets-workspace
 controls are build-proven. Approved native capture proves exact OpenGL/T0-CPU
 Canvas2D parity across 1,178,872 pixels, and the generated GUI executable
-passes the editor-equivalent external Run path. Interactive Assets-tab click
-assignment, sRGB/compressed/mip-chain execution, secondary GL share-group
-adapters, and SDL3/SFML3/Raylib3 texture presentation remain delivery work.
+passes the editor-equivalent external Run path. One shared raster session and
+native adapters for all seven baseline contexts pass MSVC Debug/Release builds
+and contracts. Approved live interaction, non-OpenGL pixel/switch evidence,
+secondary GL share groups, and sRGB/compressed/mip execution remain work.
 
 Deliver:
 

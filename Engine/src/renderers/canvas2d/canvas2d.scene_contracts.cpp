@@ -6,6 +6,7 @@ module canvas2d.scene_contracts;
 
 import editor.canvas2d_scene;
 import render.canvas2d_evidence;
+import render.canvas2d_runtime;
 import render.canvas2d_scene;
 
 namespace epochengine::canvas2d_scene_contracts
@@ -36,6 +37,14 @@ namespace epochengine::canvas2d_scene_contracts
             return {
                 false,
                 canvas2d::scene_content::scene_contract_failure_name(scene)};
+        }
+        const auto runtime =
+            canvas2d::runtime::run_scene_raster_session_contract();
+        if (runtime != canvas2d::runtime::RuntimeContractFailure::none)
+        {
+            return {
+                false,
+                canvas2d::runtime::runtime_contract_failure_name(runtime)};
         }
         const auto editor = editor_canvas2d::run_contract();
         if (editor != editor_canvas2d::ContractFailure::none)

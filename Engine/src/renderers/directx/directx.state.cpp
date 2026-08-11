@@ -193,6 +193,7 @@ namespace epochengine::directxcontext::detail
             safe_release(gpu.texture);
         }
         state.guiAtlases.clear();
+        release_canvas2d_state(state);
         release_arcade_screen_target(state);
         release_render_target(state);
         safe_release(state.spriteVertexBuffer);

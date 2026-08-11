@@ -16,7 +16,10 @@ param(
     [switch]$SkipMaximize,
     [switch]$SkipCloseProbe,
     [switch]$CaptureStartupProof,
-    [switch]$StartupOnly
+    [switch]$StartupOnly,
+    [switch]$AssetsInteractionProof,
+
+    [string]$ProjectProfile = 'twodstudio'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -824,6 +827,201 @@ if (-not (Test-Path $exe)) {
     } else {
         throw "Missing runtime at $exe"
     }
+}
+if ($AssetsInteractionProof) {
+    if ($ProjectProfile -notmatch '^[A-Za-z0-9_-]+$') {
+        throw "Invalid project profile '$ProjectProfile'."
+    }
+
+    function Invoke-EpochCliProbe(
+        [string[]]$Arguments,
+        [int]$TimeoutSeconds
+    ) {
+        $probeLogRoot = Join-Path $runtimeDir 'logs'
+        [System.IO.Directory]::CreateDirectory($probeLogRoot) | Out-Null
+        $probeId = [Guid]::NewGuid().ToString('N')
+        $stdoutPath = Join-Path $probeLogRoot ($probeId + '.stdout.log')
+        $stderrPath = Join-Path $probeLogRoot ($probeId + '.stderr.log')
+
+        try {
+            $probe = Start-Process `
+                -FilePath $exe `
+                -WorkingDirectory $runtimeDir `
+                -ArgumentList $Arguments `
+                -NoNewWindow `
+                -PassThru `
+                -RedirectStandardOutput $stdoutPath `
+                -RedirectStandardError $stderrPath
+            if (-not $probe) {
+                throw "Failed to launch Epoch CLI probe: $Arguments"
+            }
+
+            if (-not $probe.WaitForExit($TimeoutSeconds * 1000)) {
+                Stop-Process -Id $probe.Id -Force -ErrorAction SilentlyContinue
+                $probe.WaitForExit()
+                throw "Epoch CLI probe timed out: $Arguments"
+            }
+
+            $stdout = if (Test-Path $stdoutPath) {
+                Get-Content -LiteralPath $stdoutPath -Raw
+            } else {
+                ''
+            }
+            $stderr = if (Test-Path $stderrPath) {
+                Get-Content -LiteralPath $stderrPath -Raw
+            } else {
+                ''
+            }
+            [pscustomobject]@{
+                ExitCode = $probe.ExitCode
+                StandardOutput = $stdout
+                StandardError = $stderr
+            }
+        }
+        finally {
+            Remove-Item -LiteralPath $stdoutPath -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $stderrPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $tracePath = Join-Path $runtimeDir 'epoch_editor_auto_command.log'
+    if (Test-Path $tracePath) {
+        Remove-Item -LiteralPath $tracePath -Force
+    }
+
+    $automationInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $automationInfo.FileName = $exe
+    $automationInfo.WorkingDirectory = $runtimeDir
+    $automationInfo.Arguments = '--editor --backend opengl'
+    $automationInfo.UseShellExecute = $false
+    $automationInfo.CreateNoWindow = $true
+    $automationInfo.EnvironmentVariables['EPOCH_EDITOR_AUTO_COMMAND'] =
+        'assets-interaction-proof'
+    $automationInfo.EnvironmentVariables['EPOCH_EDITOR_PROJECT_ID'] =
+        $ProjectProfile
+
+    $automation = [System.Diagnostics.Process]::Start($automationInfo)
+    if (-not $automation) {
+        throw 'Failed to launch the semantic Assets interaction proof.'
+    }
+
+    try {
+        $deadline = (Get-Date).AddSeconds(90)
+        do {
+            Start-Sleep -Milliseconds 100
+            $automation.Refresh()
+            $traceReady =
+                (Test-Path $tracePath) -and
+                ((Get-Content -LiteralPath $tracePath -Raw) -match
+                    'assets_interaction_proof\.result=(pass|fail)')
+        } while (-not $traceReady -and -not $automation.HasExited -and
+            (Get-Date) -lt $deadline)
+
+        if (-not $traceReady) {
+            throw 'Semantic Assets interaction proof did not produce a bounded result.'
+        }
+    }
+    finally {
+        $automation.Refresh()
+        if (-not $automation.HasExited) {
+            [void]$automation.CloseMainWindow()
+            if (-not $automation.WaitForExit(2000)) {
+                $automation.Kill()
+                $automation.WaitForExit()
+            }
+        }
+    }
+
+    $assetTrace = Get-Content -LiteralPath $tracePath -Raw
+    $engineContract =
+        Invoke-EpochCliProbe @('--engine-contract-self-test') 300
+    $projectLifecycle =
+        Invoke-EpochCliProbe @(
+            '--editor-project-self-test',
+            $ProjectProfile
+        ) 1200
+
+    $semanticStages = @(
+        'scene.prepare_isolated',
+        'scene.select_renderable',
+        'assets.texture.create_import',
+        'assets.texture.select_compiled',
+        'assets.texture.assign_to_selection',
+        'assets.texture.clear_material',
+        'scene.undo',
+        'scene.redo',
+        'scene.restore_assigned_for_save',
+        'project.save',
+        'project.reopen'
+    )
+    $semanticChecks = [ordered]@{}
+    foreach ($stage in $semanticStages) {
+        $semanticChecks[$stage] =
+            $assetTrace -match (
+                [regex]::Escape(
+                    "assets_interaction_proof.$stage=pass"))
+    }
+
+    $engineOutput =
+        $engineContract.StandardOutput +
+        [Environment]::NewLine +
+        $engineContract.StandardError
+    $projectOutput =
+        $projectLifecycle.StandardOutput +
+        [Environment]::NewLine +
+        $projectLifecycle.StandardError
+    $checks = [ordered]@{
+        SemanticAssetsResult =
+            $assetTrace -match
+                'assets_interaction_proof\.result=pass'
+        EngineContract =
+            $engineContract.ExitCode -eq 0 -and
+            $engineOutput -match
+                'engine_contract_self_test\.result=pass'
+        ProjectMaterialize =
+            $projectLifecycle.ExitCode -eq 0 -and
+            $projectOutput -match
+                'editor_project_self_test\.materialize=pass'
+        ProjectSaveReopen =
+            $projectOutput -match
+                'editor_project_self_test\.save_reopen=pass'
+        ProjectBuild =
+            $projectOutput -match
+                'editor_project_self_test\.build=pass'
+        ExternalRun =
+            $projectOutput -match
+                'editor_project_self_test\.child_self_test=pass'
+    }
+    $allPassed =
+        -not ($semanticChecks.Values -contains $false) -and
+        -not ($checks.Values -contains $false)
+
+    if ([string]::IsNullOrWhiteSpace($OutputPath)) {
+        $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+        $OutputPath = Join-Path $runtimeDir (
+            "logs\assets_interaction_proof_$stamp.json")
+    }
+
+    $result = [pscustomobject]@{
+        Pass = $allPassed
+        Configuration = $Configuration
+        ProjectProfile = $ProjectProfile
+        SemanticControlIds = $semanticStages
+        SemanticChecks = $semanticChecks
+        Checks = $checks
+        AutomationTracePath = $tracePath
+        AutomationTrace = $assetTrace
+        EngineContractExitCode = $engineContract.ExitCode
+        EngineContractOutput = $engineOutput
+        ProjectLifecycleExitCode = $projectLifecycle.ExitCode
+        ProjectLifecycleOutput = $projectOutput
+    }
+    Save-Result -Result $result -Destination $OutputPath
+    Write-Output $OutputPath
+    if (-not $allPassed) {
+        throw "Assets interaction proof failed. Inspect $OutputPath"
+    }
+    return
 }
 
 $args = @('--editor')

@@ -64,6 +64,7 @@ import context.type;
 import atlas.texture;
 import render.preview_grid;
 import render.arcade;
+import render.canvas2d;
 
 
 namespace epochengine::vulkancontext
@@ -325,6 +326,7 @@ namespace epochengine::vulkancontext
         }
 
         cmd.nextSubpass(vk::SubpassContents::eInline);
+        recordCanvas2DCommands(cmd, imageIndex);
 
         if (auto* guiState = find_gui_state(bound_context()))
         {
@@ -336,6 +338,73 @@ namespace epochengine::vulkancontext
 
         if (cmd.end() != vk::Result::eSuccess)
             throw std::runtime_error("[ Vulkan ] - CommandBuffer::end failed.");
+    }
+
+    void Application::recordCanvas2DCommands(
+        vk::CommandBuffer cmd,
+        std::uint32_t imageIndex)
+    {
+        auto* guiState = find_gui_state(bound_context());
+        if (!guiState)
+            return;
+        const Canvas2DContextState& state = guiState->canvas2d;
+        const auto& descriptorSets = state.filter == FilterMode::nearest
+            ? state.nearestDescriptorSets
+            : state.linearDescriptorSets;
+        if (!state.ready || !state.pipeline || !state.vertexBuffer
+            || !state.indexBuffer || imageIndex >= descriptorSets.size())
+        {
+            return;
+        }
+
+        if (state.clearLetterbox)
+        {
+            vk::ClearAttachment attachment{};
+            attachment.aspectMask = vk::ImageAspectFlagBits::eColor;
+            attachment.colorAttachment = 0u;
+            attachment.clearValue.setColor(vk::ClearColorValue{std::array<float, 4>{
+                state.letterboxColor.r,
+                state.letterboxColor.g,
+                state.letterboxColor.b,
+                state.letterboxColor.a}});
+            vk::ClearRect clearRect{};
+            clearRect.rect.offset = vk::Offset2D{state.surface.x, state.surface.y};
+            clearRect.rect.extent = vk::Extent2D{
+                state.surface.width, state.surface.height};
+            clearRect.baseArrayLayer = 0u;
+            clearRect.layerCount = 1u;
+            cmd.clearAttachments(1u, &attachment, 1u, &clearRect);
+        }
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *state.pipeline);
+        vk::Viewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = static_cast<float>(swapChainExtent.height);
+        viewport.width = static_cast<float>(swapChainExtent.width);
+        viewport.height = -static_cast<float>(swapChainExtent.height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        cmd.setViewport(0u, viewport);
+
+        vk::Rect2D scissor{};
+        scissor.offset = vk::Offset2D{state.surface.x, state.surface.y};
+        scissor.extent = vk::Extent2D{state.surface.width, state.surface.height};
+        cmd.setScissor(0u, scissor);
+
+        const vk::Buffer vertexBuffers[]{*state.vertexBuffer};
+        constexpr vk::DeviceSize offsets[]{0u};
+        cmd.bindVertexBuffers(0u, 1u, vertexBuffers, offsets);
+        cmd.bindIndexBuffer(*state.indexBuffer, 0u, vk::IndexType::eUint32);
+        vk::DescriptorSet descriptorSet = *descriptorSets[imageIndex];
+        cmd.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            *pipelineLayout,
+            0u,
+            1u,
+            &descriptorSet,
+            0u,
+            nullptr);
+        cmd.drawIndexed(6u, 1u, 0u, 0, 0u);
     }
 
     void Application::enqueue_gui_draw(
@@ -582,6 +651,7 @@ namespace epochengine::vulkancontext
         }
 
         std::uint32_t imageIndex = 0;
+        (void)prepareCanvas2D();
         vk::Result acquireRes = device->acquireNextImageKHR(
             *swapChain,
             timeout,

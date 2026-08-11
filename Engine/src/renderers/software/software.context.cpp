@@ -35,6 +35,11 @@ import software.textures;
 namespace epochengine::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+    namespace detail
+    {
+        void reset_canvas2d_scene_renderer() noexcept;
+    }
+
     inline TexturePtr cubeTexture{};
 
 #if defined(_WIN32)
@@ -56,6 +61,7 @@ namespace epochengine::anativecontext
 
     void softrenderer_resize(int width, int height)
     {
+        detail::reset_canvas2d_scene_renderer();
         auto& sr = s_softrendererstate;
         sr.width = (std::max)(1, width);
         sr.height = (std::max)(1, height);
@@ -87,6 +93,7 @@ namespace epochengine::anativecontext
             return false;
         }
 
+        detail::reset_canvas2d_scene_renderer();
         auto& sr = s_softrendererstate;
         sr.width = static_cast<int>(w);
         sr.height = static_cast<int>(h);
@@ -185,6 +192,7 @@ namespace epochengine::anativecontext
 
     void softrenderer_cleanup(std::shared_ptr<core::Context>&)
     {
+        detail::reset_canvas2d_scene_renderer();
         auto& sr = s_softrendererstate;
 
         sr.framebuffer.clear();

@@ -572,4 +572,112 @@ namespace epochengine::vulkancontext
             throw std::runtime_error("[ Vulkan ] - createGuiPipeline failed.");
         guiState.guiPipeline = std::move(gp.value);
     }
+
+    void Application::createCanvas2DPipeline(Canvas2DContextState& canvasState)
+    {
+        if (canvasState.pipeline)
+            return;
+        if (!device || !renderPass || !pipelineLayout)
+            throw std::runtime_error("[ Vulkan ] - Canvas2D pipeline requires live render-pass state.");
+
+        const auto vertexCode = readFile("shaders/gui_vert.spv");
+        const auto fragmentCode = readFile("shaders/gui_frag.spv");
+
+        vk::ShaderModuleCreateInfo vertexInfo{};
+        vertexInfo.codeSize = vertexCode.size();
+        vertexInfo.pCode = reinterpret_cast<const std::uint32_t*>(vertexCode.data());
+        vk::ShaderModuleCreateInfo fragmentInfo{};
+        fragmentInfo.codeSize = fragmentCode.size();
+        fragmentInfo.pCode = reinterpret_cast<const std::uint32_t*>(fragmentCode.data());
+
+        auto vertexModule = device->createShaderModuleUnique(vertexInfo);
+        auto fragmentModule = device->createShaderModuleUnique(fragmentInfo);
+        if (vertexModule.result != vk::Result::eSuccess
+            || fragmentModule.result != vk::Result::eSuccess)
+        {
+            throw std::runtime_error("[ Vulkan ] - Canvas2D shader module creation failed.");
+        }
+
+        std::array<vk::PipelineShaderStageCreateInfo, 2> stages{};
+        stages[0].stage = vk::ShaderStageFlagBits::eVertex;
+        stages[0].module = *vertexModule.value;
+        stages[0].pName = "main";
+        stages[1].stage = vk::ShaderStageFlagBits::eFragment;
+        stages[1].module = *fragmentModule.value;
+        stages[1].pName = "main";
+
+        const auto binding = Vertex::getBindingDescription();
+        const auto attributes = Vertex::getAttributeDescriptions();
+        vk::PipelineVertexInputStateCreateInfo vertexInput{};
+        vertexInput.vertexBindingDescriptionCount = 1u;
+        vertexInput.pVertexBindingDescriptions = &binding;
+        vertexInput.vertexAttributeDescriptionCount =
+            static_cast<std::uint32_t>(attributes.size());
+        vertexInput.pVertexAttributeDescriptions = attributes.data();
+
+        vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+
+        vk::PipelineViewportStateCreateInfo viewportState{};
+        viewportState.viewportCount = 1u;
+        viewportState.scissorCount = 1u;
+        const std::array dynamicStates{
+            vk::DynamicState::eViewport,
+            vk::DynamicState::eScissor};
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.dynamicStateCount =
+            static_cast<std::uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        vk::PipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.polygonMode = vk::PolygonMode::eFill;
+        rasterizer.cullMode = vk::CullModeFlagBits::eNone;
+        rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
+        rasterizer.lineWidth = 1.0f;
+
+        vk::PipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+        vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.depthTestEnable = VK_FALSE;
+        depthStencil.depthWriteEnable = VK_FALSE;
+        depthStencil.depthCompareOp = vk::CompareOp::eAlways;
+
+        vk::PipelineColorBlendAttachmentState blend{};
+        blend.colorWriteMask = vk::ColorComponentFlagBits::eR
+            | vk::ColorComponentFlagBits::eG
+            | vk::ColorComponentFlagBits::eB
+            | vk::ColorComponentFlagBits::eA;
+        blend.blendEnable = VK_TRUE;
+        blend.srcColorBlendFactor = vk::BlendFactor::eOne;
+        blend.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blend.colorBlendOp = vk::BlendOp::eAdd;
+        blend.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+        blend.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+        blend.alphaBlendOp = vk::BlendOp::eAdd;
+        vk::PipelineColorBlendStateCreateInfo colorBlend{};
+        colorBlend.attachmentCount = 1u;
+        colorBlend.pAttachments = &blend;
+
+        vk::GraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.stageCount = static_cast<std::uint32_t>(stages.size());
+        pipelineInfo.pStages = stages.data();
+        pipelineInfo.pVertexInputState = &vertexInput;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlend;
+        pipelineInfo.pDynamicState = &dynamicState;
+        pipelineInfo.layout = *pipelineLayout;
+        pipelineInfo.renderPass = *renderPass;
+        pipelineInfo.subpass = 1u;
+
+        auto pipeline = device->createGraphicsPipelineUnique(
+            vk::PipelineCache{}, pipelineInfo);
+        if (pipeline.result != vk::Result::eSuccess)
+            throw std::runtime_error("[ Vulkan ] - Canvas2D pipeline creation failed.");
+        canvasState.pipeline = std::move(pipeline.value);
+    }
 }

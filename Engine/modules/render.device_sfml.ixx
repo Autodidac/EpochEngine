@@ -72,6 +72,14 @@ export namespace epochengine
         bool active = false;
     };
 
+    struct SfmlTextureRecord
+    {
+        TextureDesc desc{};
+        std::unique_ptr<sf::Texture> texture{};
+        bool active = false;
+        bool ready = false;
+    };
+
     struct SfmlMeshRecord
     {
         MeshDesc desc{};
@@ -211,6 +219,11 @@ export namespace epochengine
             m_context.set_render_textures(&m_render_textures);
         }
 
+        ~SfmlRenderDevice() override
+        {
+            retire_textures();
+        }
+
         std::string backend_name() const override { return "sfml3"; }
 
         RendererCapabilities capabilities() const noexcept override
@@ -227,7 +240,35 @@ export namespace epochengine
         }
 
         BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
-        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+        TextureHandle create_texture(const TextureDesc& desc) override
+        {
+            if (!runtime_renderer_available()
+                || desc.width == 0u || desc.height == 0u
+                || desc.width > maximum_texture_extent
+                || desc.height > maximum_texture_extent
+                || desc.mip_levels != 1u
+                || desc.format != TextureFormat::rgba8_unorm
+                || !desc.sampled || desc.storage || desc.render_target
+                || desc.depth_stencil || desc.sparse)
+            {
+                return {};
+            }
+
+            auto texture = std::make_unique<sf::Texture>();
+            if (!epochengine::sfml_compat::resize_texture(
+                    *texture,
+                    desc.width,
+                    desc.height))
+            {
+                return {};
+            }
+            texture->setSmooth(true);
+
+            const u32 slot = allocate_texture_slot();
+            m_textures[slot] = SfmlTextureRecord{
+                desc, std::move(texture), true, false};
+            return TextureHandle{slot + 1u};
+        }
         SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
         ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
         PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
@@ -288,8 +329,52 @@ export namespace epochengine
                 RenderTargetHandle{ handle_value } };
         }
 
+
+        bool upload_texture(
+            TextureHandle handle,
+            const TextureUploadDesc& upload) override
+        {
+            SfmlTextureRecord* const record = resolve_texture_mutable(handle);
+            const u32 tightPitch = record
+                ? record->desc.width * texture_format_bytes_per_texel(record->desc.format)
+                : 0u;
+            if (!record || !record->texture || !runtime_renderer_available()
+                || !valid(upload)
+                || upload.mip_level != 0u || upload.x != 0u || upload.y != 0u
+                || upload.width != record->desc.width
+                || upload.height != record->desc.height
+                || upload.format != record->desc.format
+                || (upload.row_pitch_bytes != 0u
+                    && upload.row_pitch_bytes != tightPitch))
+            {
+                return false;
+            }
+
+            sf::Image image{};
+            epochengine::sfml_compat::resize_image(
+                image,
+                record->desc.width,
+                record->desc.height,
+                static_cast<const std::uint8_t*>(upload.data));
+            if (!record->texture->loadFromImage(image))
+                return false;
+            record->ready = true;
+            return true;
+        }
+
+        [[nodiscard]] bool texture_ready(TextureHandle handle) const noexcept override
+        {
+            const SfmlTextureRecord* const record = resolve_texture(handle);
+            return record && record->texture && record->ready
+                && runtime_renderer_available();
+        }
         void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
-        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+        void destroy(TextureHandle handle) noexcept override
+        {
+            SfmlTextureRecord* const record = resolve_texture_mutable(handle);
+            if (record)
+                *record = {};
+        }
         void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
         void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
         void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
@@ -348,7 +433,10 @@ export namespace epochengine
 
         [[nodiscard]] bool runtime_renderer_available() const noexcept
         {
-            return epochengine::sfmlcontext::state::s_sfmlstate.get_sfml_window() != nullptr;
+            const auto& state = epochengine::sfmlcontext::state::s_sfmlstate;
+            sf::RenderWindow* const window = state.get_sfml_window();
+            return window && window->isOpen() && state.running
+                && !state.shouldClose && !state.window.get_should_close();
         }
 
         [[nodiscard]] const SfmlRenderTextureRecord* resolve_render_texture(RenderTargetHandle handle) const noexcept
@@ -362,6 +450,21 @@ export namespace epochengine
 
             const SfmlRenderTextureRecord& record = m_render_textures[index];
             return record.active ? &record : nullptr;
+        }
+
+        [[nodiscard]] const SfmlTextureRecord* resolve_texture(TextureHandle handle) const noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            const SfmlTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active ? &record : nullptr;
+        }
+
+        void retire_textures() noexcept
+        {
+            for (SfmlTextureRecord& record : m_textures)
+                record = {};
+            m_textures.clear();
         }
 
         [[nodiscard]] u32 render_texture_count() const noexcept
@@ -389,6 +492,8 @@ export namespace epochengine
         }
 
     private:
+        static constexpr u32 maximum_texture_extent = 16384u;
+
         [[nodiscard]] static u32 allocate_slot(std::vector<SfmlSlotRecord>& records)
         {
             for (u32 i = 0; i < static_cast<u32>(records.size()); ++i)
@@ -424,6 +529,26 @@ export namespace epochengine
 
             m_render_textures.push_back({});
             return static_cast<u32>(m_render_textures.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_texture_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_textures.size()); ++i)
+            {
+                if (!m_textures[i].active)
+                    return i;
+            }
+            m_textures.push_back({});
+            return static_cast<u32>(m_textures.size() - 1u);
+        }
+
+        [[nodiscard]] SfmlTextureRecord* resolve_texture_mutable(
+            TextureHandle handle) noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            SfmlTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active ? &record : nullptr;
         }
 
         [[nodiscard]] u32 allocate_binding_set_slot()
@@ -468,7 +593,7 @@ export namespace epochengine
         std::vector<SfmlMeshRecord> m_meshes{};
         std::vector<SfmlModelRecord> m_models{};
         std::vector<SfmlSlotRecord> m_buffers{};
-        std::vector<SfmlSlotRecord> m_textures{};
+        std::vector<SfmlTextureRecord> m_textures{};
         std::vector<SfmlSlotRecord> m_samplers{};
         std::vector<SfmlSlotRecord> m_shaders{};
         std::vector<SfmlSlotRecord> m_pipelines{};

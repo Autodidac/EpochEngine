@@ -662,6 +662,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx">
       <Filter>Module Files\epoch\core\context\backends\raylib</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_linux.ixx">
+      <Filter>Module Files\epoch\core\context\backends\raylib</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx">
       <Filter>Module Files\epoch\core\context\backends\raylib</Filter>
     </ClCompile>
@@ -1152,6 +1155,9 @@
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_presentation.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_runtime.ixx">
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_scene.ixx">

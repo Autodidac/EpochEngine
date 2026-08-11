@@ -375,15 +375,6 @@ namespace epochengine::vulkancontext
         activeGuiContext = ctx;
     }
 
-    void Application::cleanup_gui_context(const epochengine::core::Context* ctx)
-    {
-        if (!ctx)
-            return;
-
-        guiContexts.erase(ctx);
-        if (activeGuiContext == ctx)
-            activeGuiContext = nullptr;
-    }
 
     Application::GuiContextState& Application::gui_state_for_context(
         const epochengine::core::Context* ctx)
@@ -403,6 +394,7 @@ namespace epochengine::vulkancontext
     void Application::reset_gui_swapchain_state(GuiContextState& guiState)
     {
         guiState.guiPipeline.reset();
+        resetCanvas2DState(guiState.canvas2d);
         guiState.guiUniformBuffers.clear();
         guiState.guiUniformBuffersMemory.clear();
         guiState.guiUniformBuffersMapped.clear();

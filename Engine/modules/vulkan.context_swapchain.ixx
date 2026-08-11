@@ -292,6 +292,12 @@ namespace epochengine::vulkancontext
         }
 
         destroyArcadeRenderTarget();
+        for (auto& [contextKey, guiState] : guiContexts)
+        {
+            (void)contextKey;
+            reset_gui_swapchain_state(guiState);
+        }
+
 
         framebuffers.clear();
 
@@ -314,8 +320,6 @@ namespace epochengine::vulkancontext
         uniformBuffers.clear();
         uniformBuffersMemory.clear();
         uniformBuffersMapped.clear();
-        if (auto* guiState = find_gui_state(bound_context()))
-            reset_gui_swapchain_state(*guiState);
     }
 
     void Application::recreateSwapChain()

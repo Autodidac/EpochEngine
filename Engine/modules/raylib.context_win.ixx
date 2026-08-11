@@ -54,10 +54,21 @@ module;
 export module raylib.context_win;
 
 #if defined(_WIN32) && defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
+import raylib.state;
+#endif
+
+#if defined(_WIN32) && defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 
 export namespace epochengine::raylibcontext::win
 {
-    // Intentionally empty: Raylib no longer owns/reparents a window on Win32.
+    [[nodiscard]] inline bool native_context_is_current() noexcept
+    {
+        const auto& state = epochengine::raylibstate::s_raylibstate;
+        return state.hdc != nullptr
+            && state.hglrc != nullptr
+            && ::wglGetCurrentDC() == state.hdc
+            && ::wglGetCurrentContext() == state.hglrc;
+    }
 }
 
 #endif

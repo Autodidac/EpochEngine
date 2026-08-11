@@ -6,6 +6,7 @@ module;
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include <include/engine.config.hpp>
 
@@ -40,6 +41,9 @@ import image.loader;
 import package.registry;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_presentation;
+import render.canvas2d_runtime;
+import render.device_sfml;
 import sfml.state;
 import sfml.textures;
 
@@ -58,6 +62,313 @@ namespace
     HDC s_hdc = nullptr;
     HGLRC s_glContext = nullptr;
 #endif
+
+    enum class CanvasSceneStatus : std::uint8_t
+    {
+        missing_scene,
+        presented,
+        refused
+    };
+
+    class SfmlCanvas2DPresenter final
+    {
+    public:
+        SfmlCanvas2DPresenter(
+            const epochengine::core::Context* owner,
+            std::uint64_t backendEpoch)
+            : owner_(owner),
+              presenter_(
+                  device_,
+                  backendEpoch,
+                  {this, &SfmlCanvas2DPresenter::dispatch_present})
+        {
+        }
+
+        [[nodiscard]] CanvasSceneStatus render(
+            const std::shared_ptr<epochengine::core::Context>& ctx,
+            const epochengine::core::RenderViewport& viewport)
+        {
+            if (!context_ready(ctx.get()))
+                return refuse("missing_or_stale_context");
+
+            const auto prepared = session_.prepare(
+                owner_,
+                {
+                    static_cast<std::uint32_t>(viewport.width),
+                    static_cast<std::uint32_t>(viewport.height)});
+            if (prepared.code
+                == epochengine::canvas2d::runtime::PrepareCode::missing_scene)
+            {
+                presenter_.retire_all();
+                refusal_logged_ = false;
+                return CanvasSceneStatus::missing_scene;
+            }
+            if ((prepared.code
+                    != epochengine::canvas2d::runtime::PrepareCode::ready
+                && prepared.code
+                    != epochengine::canvas2d::runtime::PrepareCode::reused)
+                || !prepared.frame || !prepared.raster)
+            {
+                return refuse(
+                    epochengine::canvas2d::runtime::prepare_code_name(
+                        prepared.code));
+            }
+
+            const sf::Vector2u framebuffer = s_window->getSize();
+            if (framebuffer.x == 0u || framebuffer.y == 0u)
+                return refuse("invalid_framebuffer_extent");
+
+            const epochengine::canvas2d::presentation::PresentationSurface surface{
+                {framebuffer.x, framebuffer.y},
+                {
+                    viewport.x,
+                    viewport.y,
+                    static_cast<std::uint32_t>(viewport.width),
+                    static_cast<std::uint32_t>(viewport.height)}};
+            try
+            {
+                const auto result = presenter_.present(
+                    *prepared.frame,
+                    *prepared.raster,
+                    surface);
+                if (result.code
+                    != epochengine::canvas2d::presentation::PresentationCode::presented)
+                {
+                    return refuse(
+                        epochengine::canvas2d::presentation::presentation_code_name(
+                            result.code));
+                }
+            }
+            catch (...)
+            {
+                return refuse("presentation_allocation_failure");
+            }
+
+            refusal_logged_ = false;
+            return CanvasSceneStatus::presented;
+        }
+
+        void retire() noexcept
+        {
+            presenter_.retire_all();
+            session_.reset();
+            owner_ = nullptr;
+            refusal_logged_ = false;
+        }
+
+        [[nodiscard]] const epochengine::core::Context* owner() const noexcept
+        {
+            return owner_;
+        }
+
+    private:
+        [[nodiscard]] static bool dispatch_present(
+            void* user,
+            const epochengine::canvas2d::presentation::NativePresentationPacket& packet)
+        {
+            auto* const self = static_cast<SfmlCanvas2DPresenter*>(user);
+            return self && self->present_native(packet);
+        }
+
+        [[nodiscard]] bool context_ready(
+            const epochengine::core::Context* ctx) const noexcept
+        {
+            const auto& state = epochengine::sfmlcontext::state::s_sfmlstate;
+            return owner_ && ctx == owner_ && s_window && s_window->isOpen()
+                && state.get_sfml_window() == s_window.get() && state.running
+                && !state.shouldClose && !state.window.get_should_close();
+        }
+
+        [[nodiscard]] bool present_native(
+            const epochengine::canvas2d::presentation::NativePresentationPacket& packet)
+        {
+            if (packet.texture.value == 0u || packet.compose == nullptr
+                || !context_ready(owner_))
+                return false;
+
+            const epochengine::SfmlTextureRecord* const record =
+                device_.resolve_texture(packet.texture);
+            if (!record || !record->texture || !record->ready
+                || record->desc.width != packet.image.extent.width
+                || record->desc.height != packet.image.extent.height)
+            {
+                return false;
+            }
+
+            const sf::Vector2u framebuffer = s_window->getSize();
+            if (framebuffer.x != packet.surface.framebuffer_extent.width
+                || framebuffer.y != packet.surface.framebuffer_extent.height)
+            {
+                return false;
+            }
+
+            const auto& compose = *packet.compose;
+            const auto& destination = compose.viewport.clipped_destination;
+            const auto& visible = compose.viewport.visible_canvas;
+            if (destination.empty() || destination.x < 0 || destination.y < 0
+                || visible.width <= 0.0f || visible.height <= 0.0f)
+            {
+                return false;
+            }
+
+            const float invWidth = 1.0f / static_cast<float>(framebuffer.x);
+            const float invHeight = 1.0f / static_cast<float>(framebuffer.y);
+            const sf::FloatRect normalizedViewport =
+                epochengine::sfml_compat::float_rect(
+                    packet.surface.viewport.x * invWidth,
+                    packet.surface.viewport.y * invHeight,
+                    packet.surface.viewport.width * invWidth,
+                    packet.surface.viewport.height * invHeight);
+
+            const float outputWidth =
+                static_cast<float>(packet.surface.viewport.width);
+            const float outputHeight =
+                static_cast<float>(packet.surface.viewport.height);
+            const sf::Color white(255u, 255u, 255u, 255u);
+            const float left = static_cast<float>(destination.x);
+            const float top = static_cast<float>(destination.y);
+            const float right = left + static_cast<float>(destination.width);
+            const float bottom = top + static_cast<float>(destination.height);
+            const float u0 = visible.x;
+            const float v0 = visible.y;
+            const float u1 = visible.x + visible.width;
+            const float v1 = visible.y + visible.height;
+            sf::VertexArray content(sf::PrimitiveType::Triangles);
+            content.append(sf::Vertex({left, top}, white, {u0, v0}));
+            content.append(sf::Vertex({right, top}, white, {u1, v0}));
+            content.append(sf::Vertex({right, bottom}, white, {u1, v1}));
+            content.append(sf::Vertex({left, top}, white, {u0, v0}));
+            content.append(sf::Vertex({right, bottom}, white, {u1, v1}));
+            content.append(sf::Vertex({left, bottom}, white, {u0, v1}));
+
+            sf::VertexArray clearSurface(sf::PrimitiveType::Triangles);
+            sf::RenderStates clearStates{};
+            if (compose.clear_letterbox)
+            {
+                const auto toUnorm8 = [](float value) noexcept -> std::uint8_t
+                {
+                    return static_cast<std::uint8_t>(std::lround(
+                        (std::clamp)(value, 0.0f, 1.0f) * 255.0f));
+                };
+                const sf::Color letterbox(
+                    toUnorm8(compose.letterbox_color.r),
+                    toUnorm8(compose.letterbox_color.g),
+                    toUnorm8(compose.letterbox_color.b),
+                    toUnorm8(compose.letterbox_color.a));
+                clearSurface.append(sf::Vertex({0.0f, 0.0f}, letterbox));
+                clearSurface.append(sf::Vertex({outputWidth, 0.0f}, letterbox));
+                clearSurface.append(sf::Vertex(
+                    {outputWidth, outputHeight}, letterbox));
+                clearSurface.append(sf::Vertex({0.0f, 0.0f}, letterbox));
+                clearSurface.append(sf::Vertex(
+                    {outputWidth, outputHeight}, letterbox));
+                clearSurface.append(sf::Vertex({0.0f, outputHeight}, letterbox));
+                clearStates.blendMode = sf::BlendNone;
+            }
+
+            record->texture->setSmooth(
+                compose.presentation_filter
+                    != epochengine::FilterMode::nearest);
+            sf::RenderStates states{};
+            states.texture = record->texture.get();
+#if EPOCH_SFML_HAS_V3_API
+            states.blendMode = sf::BlendMode(
+                sf::BlendMode::Factor::One,
+                sf::BlendMode::Factor::OneMinusSrcAlpha,
+                sf::BlendMode::Equation::Add,
+                sf::BlendMode::Factor::One,
+                sf::BlendMode::Factor::OneMinusSrcAlpha,
+                sf::BlendMode::Equation::Add);
+#else
+            states.blendMode = sf::BlendMode(
+                sf::BlendMode::One,
+                sf::BlendMode::OneMinusSrcAlpha,
+                sf::BlendMode::Add,
+                sf::BlendMode::One,
+                sf::BlendMode::OneMinusSrcAlpha,
+                sf::BlendMode::Add);
+#endif
+
+            const sf::View previousView = s_window->getView();
+            sf::View canvasView{epochengine::sfml_compat::float_rect(
+                0.0f,
+                0.0f,
+                outputWidth,
+                outputHeight)};
+            canvasView.setViewport(normalizedViewport);
+            s_window->setView(canvasView);
+            if (compose.clear_letterbox)
+                s_window->draw(clearSurface, clearStates);
+            s_window->draw(content, states);
+            s_window->setView(previousView);
+            return true;
+        }
+
+        [[nodiscard]] CanvasSceneStatus refuse(std::string_view reason)
+        {
+            if (!refusal_logged_)
+            {
+                epochengine::logger::warn(
+                    "SFML.Canvas2D",
+                    std::string("Presentation refused: ") + std::string(reason));
+                refusal_logged_ = true;
+            }
+            return CanvasSceneStatus::refused;
+        }
+
+        const epochengine::core::Context* owner_{};
+        epochengine::SfmlRenderDevice device_{};
+        epochengine::canvas2d::runtime::SceneRasterSession session_{};
+        epochengine::canvas2d::presentation::Canvas2DPresenter presenter_;
+        bool refusal_logged_{};
+    };
+
+    std::unique_ptr<SfmlCanvas2DPresenter> s_canvas2d_presenter{};
+    std::atomic<std::uint64_t> s_next_canvas2d_backend_epoch{1};
+
+    [[nodiscard]] CanvasSceneStatus render_canvas2d_scene(
+        const std::shared_ptr<epochengine::core::Context>& ctx,
+        const epochengine::core::RenderViewport& viewport)
+    {
+        if (!ctx)
+            return CanvasSceneStatus::refused;
+        if (s_canvas2d_presenter && s_canvas2d_presenter->owner() != ctx.get())
+        {
+            s_canvas2d_presenter->retire();
+            s_canvas2d_presenter.reset();
+        }
+        if (!s_canvas2d_presenter)
+        {
+            try
+            {
+                std::uint64_t epoch = s_next_canvas2d_backend_epoch.fetch_add(
+                    1,
+                    std::memory_order_relaxed);
+                if (epoch == 0u)
+                {
+                    epoch = s_next_canvas2d_backend_epoch.fetch_add(
+                        1,
+                        std::memory_order_relaxed);
+                }
+                s_canvas2d_presenter =
+                    std::make_unique<SfmlCanvas2DPresenter>(
+                        ctx.get(),
+                        epoch);
+            }
+            catch (...)
+            {
+                return CanvasSceneStatus::refused;
+            }
+        }
+        return s_canvas2d_presenter->render(ctx, viewport);
+    }
+
+    void release_canvas2d_presenter() noexcept
+    {
+        if (s_canvas2d_presenter)
+            s_canvas2d_presenter->retire();
+        s_canvas2d_presenter.reset();
+    }
 
     std::uint32_t default_add_texture(
         epochengine::TextureAtlas&,
@@ -239,6 +550,10 @@ namespace
         if (!viewport.valid() || ctx->scene_preview_mode() != epochengine::core::ScenePreviewMode::Editor)
             return;
 
+
+        const CanvasSceneStatus canvasStatus = render_canvas2d_scene(ctx, viewport);
+        if (canvasStatus != CanvasSceneStatus::missing_scene)
+            return;
         const auto windowSize = s_window->getSize();
         if (windowSize.x == 0u || windowSize.y == 0u)
             return;
@@ -697,6 +1012,7 @@ namespace
     void sfml_cleanup_adapter()
     {
         epochengine::atlasmanager::unregister_backend_uploader(epochengine::core::ContextType::SFML);
+        release_canvas2d_presenter();
         if (s_window && s_window->isOpen())
             s_arcadePreviewSurface.reset(s_window.get());
         else

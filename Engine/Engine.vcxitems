@@ -106,6 +106,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.a2048_like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_linux.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\capability.profile.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.math.ixx" />
@@ -326,6 +327,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_cpu.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_evidence.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_presentation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_scene.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d_scene.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\canvas2d.scene_contracts.ixx" />

@@ -55,6 +55,10 @@ module;
 export module vulkan.context:texture;
 
 import :shared_vk;
+import core.context;
+import render.canvas2d;
+import render.canvas2d_cpu;
+import render.canvas2d_runtime;
 import core.logger;
 import core.path;
 import epoch.cli;
@@ -802,10 +806,503 @@ namespace epochengine::vulkancontext
             std::source_location::current());
 #endif
     }
-} // namespace epochengine::vulkancontext
 
-namespace epochengine::vulkantextures
-{
+    void Application::resetCanvas2DState(Canvas2DContextState& state) noexcept
+    {
+        state.ready = false;
+        state.pipeline.reset();
+        state.nearestDescriptorSets.clear();
+        state.linearDescriptorSets.clear();
+        state.descriptorPool.reset();
+        state.nearestSampler.reset();
+        state.linearSampler.reset();
+        state.imageView.reset();
+        state.image.reset();
+        state.imageMemory.reset();
+        state.indexBuffer.reset();
+        state.indexBufferMemory.reset();
+        state.vertexBuffer.reset();
+        state.vertexBufferMemory.reset();
+        state.session.reset();
+        state.surface = {};
+        state.destination = {};
+        state.visibleCanvas = {};
+        state.letterboxColor = {};
+        state.filter = FilterMode::nearest;
+        state.imageExtent = {};
+        state.contentHash = 0u;
+        state.canvasHash = 0u;
+        state.frameSequence = 0u;
+        state.clearLetterbox = false;
+        state.refusalLogged = false;
+    }
+
+    bool Application::prepareCanvas2D() noexcept {
+      const auto *ctx = bound_context();
+      if (!ctx || !device || !physicalDevice || !renderPass || !pipelineLayout)
+        return false;
+
+      Canvas2DContextState *statePtr = nullptr;
+
+      try {
+        auto &guiState = gui_state_for_context(ctx);
+        auto &state = guiState.canvas2d;
+        statePtr = &state;
+        state.ready = false;
+
+        const auto retireInactiveState = [&]() {
+          if (state.image || state.vertexBuffer || state.indexBuffer) {
+            if (graphicsQueue.waitIdle() != vk::Result::eSuccess)
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D retirement synchronization failed.");
+            resetCanvas2DState(state);
+          } else {
+            state.session.reset();
+            state.refusalLogged = false;
+          }
+        };
+
+        const auto sceneViewport = ctx->scene_viewport();
+        if (ctx->scene_preview_mode() != core::ScenePreviewMode::Editor ||
+            !sceneViewport.valid() || sceneViewport.x < 0 ||
+            sceneViewport.y < 0) {
+          retireInactiveState();
+          return false;
+        }
+
+        const std::uint64_t viewportRight =
+            static_cast<std::uint64_t>(sceneViewport.x) +
+            static_cast<std::uint32_t>(sceneViewport.width);
+        const std::uint64_t viewportBottom =
+            static_cast<std::uint64_t>(sceneViewport.y) +
+            static_cast<std::uint32_t>(sceneViewport.height);
+        if (viewportRight > swapChainExtent.width ||
+            viewportBottom > swapChainExtent.height) {
+          return false;
+        }
+
+        constexpr std::uint64_t maximumUploadBytes = 128ull * 1024ull * 1024ull;
+        canvas2d::cpu::RasterLimits rasterLimits{};
+        canvas2d::CanvasLimits canvasLimits{};
+        rasterLimits.maximum_canvas_pixels =
+            (std::min)(rasterLimits.maximum_canvas_pixels,
+                       maximumUploadBytes / sizeof(canvas2d::cpu::Rgba8));
+        const std::uint32_t deviceDimension =
+            physicalDevice.getProperties().limits.maxImageDimension2D;
+        const std::uint32_t boundedDimension =
+            (std::min)(std::uint32_t{16'384}, deviceDimension);
+        if (boundedDimension == 0u)
+          return false;
+        canvasLimits.maximum_canvas_dimension = boundedDimension;
+        canvasLimits.maximum_surface_dimension = boundedDimension;
+        canvasLimits.maximum_canvas_pixels = rasterLimits.maximum_canvas_pixels;
+        canvasLimits.maximum_surface_pixels =
+            rasterLimits.maximum_presentation_pixels;
+
+        const canvas2d::runtime::PreparedSceneView prepared =
+            state.session.prepare(
+                ctx,
+                {static_cast<std::uint32_t>(sceneViewport.width),
+                 static_cast<std::uint32_t>(sceneViewport.height)},
+                canvasLimits, rasterLimits);
+        if (prepared.code == canvas2d::runtime::PrepareCode::missing_scene) {
+          retireInactiveState();
+          return false;
+        }
+        if (!prepared || !prepared.frame || !prepared.raster) {
+          if (!state.refusalLogged) {
+            log_error(epochengine::format_text(
+                "Canvas2D prepare refused: {}",
+                canvas2d::runtime::prepare_code_name(prepared.code)));
+            state.refusalLogged = true;
+          }
+          return false;
+        }
+
+        const canvas2d::cpu::Image &image = prepared.raster->canvas;
+        const canvas2d::FinalComposePlan &compose = prepared.frame->compose;
+        const std::uint64_t uploadBytes =
+            static_cast<std::uint64_t>(image.pixels.size()) *
+            sizeof(canvas2d::cpu::Rgba8);
+        if (!image.valid() || prepared.raster->canvas_hash == 0u ||
+            uploadBytes == 0u || uploadBytes > maximumUploadBytes ||
+            image.extent.width > boundedDimension ||
+            image.extent.height > boundedDimension ||
+            compose.viewport.output_surface.width !=
+                static_cast<std::uint32_t>(sceneViewport.width) ||
+            compose.viewport.output_surface.height !=
+                static_cast<std::uint32_t>(sceneViewport.height) ||
+            compose.viewport.clipped_destination.empty()) {
+          if (!state.refusalLogged) {
+            log_error(
+                "Canvas2D prepare refused an invalid or oversized upload.");
+            state.refusalLogged = true;
+          }
+          return false;
+        }
+
+        const canvas2d::CanvasExtent previousImageExtent = state.imageExtent;
+        bool synchronized = false;
+        const bool residencyChanged =
+            state.imageExtent != image.extent || !state.image ||
+            !state.imageView ||
+            state.nearestDescriptorSets.size() != swapChainImages.size() ||
+            state.linearDescriptorSets.size() != swapChainImages.size();
+        const bool uploadChanged =
+            residencyChanged ||
+            state.canvasHash != prepared.raster->canvas_hash;
+        if (uploadChanged) {
+          vk::UniqueBuffer stagingBuffer{};
+          vk::UniqueDeviceMemory stagingMemory{};
+          std::tie(stagingBuffer, stagingMemory) =
+              createBuffer(static_cast<vk::DeviceSize>(uploadBytes),
+                           vk::BufferUsageFlagBits::eTransferSrc,
+                           vk::MemoryPropertyFlagBits::eHostVisible |
+                               vk::MemoryPropertyFlagBits::eHostCoherent);
+          auto [mapResult, mapped] = device->mapMemory(
+              *stagingMemory, 0u, static_cast<vk::DeviceSize>(uploadBytes));
+          if (mapResult != vk::Result::eSuccess || !mapped)
+            throw std::runtime_error(
+                "[ Vulkan ] - Canvas2D staging map failed.");
+          std::memcpy(mapped, image.pixels.data(),
+                      static_cast<std::size_t>(uploadBytes));
+          device->unmapMemory(*stagingMemory);
+
+          vk::UniqueImage nextImage{};
+          vk::UniqueDeviceMemory nextMemory{};
+          vk::Image uploadImage{};
+          if (residencyChanged) {
+            vk::ImageCreateInfo imageInfo{};
+            imageInfo.imageType = vk::ImageType::e2D;
+            imageInfo.format = vk::Format::eR8G8B8A8Unorm;
+            imageInfo.extent =
+                vk::Extent3D{image.extent.width, image.extent.height, 1u};
+            imageInfo.mipLevels = 1u;
+            imageInfo.arrayLayers = 1u;
+            imageInfo.samples = vk::SampleCountFlagBits::e1;
+            imageInfo.tiling = vk::ImageTiling::eOptimal;
+            imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst |
+                              vk::ImageUsageFlagBits::eSampled;
+            imageInfo.sharingMode = vk::SharingMode::eExclusive;
+            imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+            auto imageResult = device->createImageUnique(imageInfo);
+            if (imageResult.result != vk::Result::eSuccess ||
+                !imageResult.value)
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D image creation failed.");
+            nextImage = std::move(imageResult.value);
+
+            const vk::MemoryRequirements memoryRequirements =
+                device->getImageMemoryRequirements(*nextImage);
+            vk::MemoryAllocateInfo allocationInfo{};
+            allocationInfo.allocationSize = memoryRequirements.size;
+            allocationInfo.memoryTypeIndex =
+                findMemoryType(memoryRequirements.memoryTypeBits,
+                               vk::MemoryPropertyFlagBits::eDeviceLocal);
+            auto memoryResult = device->allocateMemoryUnique(allocationInfo);
+            if (memoryResult.result != vk::Result::eSuccess ||
+                !memoryResult.value)
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D image allocation failed.");
+            nextMemory = std::move(memoryResult.value);
+            if (device->bindImageMemory(*nextImage, *nextMemory, 0u) !=
+                vk::Result::eSuccess) {
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D image binding failed.");
+            }
+            uploadImage = *nextImage;
+          } else {
+            uploadImage = *state.image;
+          }
+
+          vk::UniqueCommandBuffer upload = beginSingleTimeCommands();
+          vk::ImageMemoryBarrier toTransfer{};
+          toTransfer.oldLayout = residencyChanged
+                                     ? vk::ImageLayout::eUndefined
+                                     : vk::ImageLayout::eShaderReadOnlyOptimal;
+          toTransfer.newLayout = vk::ImageLayout::eTransferDstOptimal;
+          toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+          toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+          toTransfer.image = uploadImage;
+          toTransfer.subresourceRange = vk::ImageSubresourceRange{
+              vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u};
+          toTransfer.srcAccessMask = residencyChanged
+                                         ? vk::AccessFlags{}
+                                         : vk::AccessFlagBits::eShaderRead;
+          toTransfer.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+          upload->pipelineBarrier(
+              residencyChanged ? vk::PipelineStageFlagBits::eTopOfPipe
+                               : vk::PipelineStageFlagBits::eFragmentShader,
+              vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr,
+              toTransfer);
+
+          vk::BufferImageCopy copy{};
+          copy.imageSubresource = vk::ImageSubresourceLayers{
+              vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u};
+          copy.imageExtent =
+              vk::Extent3D{image.extent.width, image.extent.height, 1u};
+          upload->copyBufferToImage(*stagingBuffer, uploadImage,
+                                    vk::ImageLayout::eTransferDstOptimal, copy);
+
+          vk::ImageMemoryBarrier toSample{};
+          toSample.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+          toSample.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+          toSample.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+          toSample.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+          toSample.image = uploadImage;
+          toSample.subresourceRange = toTransfer.subresourceRange;
+          toSample.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+          toSample.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+          upload->pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
+                                  vk::PipelineStageFlagBits::eFragmentShader,
+                                  {}, nullptr, nullptr, toSample);
+          endSingleTimeCommands(upload);
+          synchronized = true;
+
+          if (residencyChanged) {
+            vk::UniqueImageView nextView =
+                createImageViewUnique(*nextImage, vk::Format::eR8G8B8A8Unorm,
+                                      vk::ImageAspectFlagBits::eColor);
+            const auto createSampler = [&](vk::Filter filter) {
+              vk::SamplerCreateInfo samplerInfo{};
+              samplerInfo.magFilter = filter;
+              samplerInfo.minFilter = filter;
+              samplerInfo.mipmapMode = filter == vk::Filter::eNearest
+                                           ? vk::SamplerMipmapMode::eNearest
+                                           : vk::SamplerMipmapMode::eLinear;
+              samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+              samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+              samplerInfo.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+              samplerInfo.maxAnisotropy = 1.0f;
+              samplerInfo.compareOp = vk::CompareOp::eAlways;
+              samplerInfo.maxLod = 0.0f;
+              samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+              auto result = device->createSamplerUnique(samplerInfo);
+              if (result.result != vk::Result::eSuccess || !result.value)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D sampler creation failed.");
+              return std::move(result.value);
+            };
+            vk::UniqueSampler nextNearest = createSampler(vk::Filter::eNearest);
+            vk::UniqueSampler nextLinear = createSampler(vk::Filter::eLinear);
+
+            const std::uint32_t descriptorCount =
+                static_cast<std::uint32_t>(swapChainImages.size());
+            if (descriptorCount == 0u ||
+                guiState.guiUniformBuffers.size() != descriptorCount) {
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D descriptors require GUI uniforms.");
+            }
+            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            poolSizes[0] = {vk::DescriptorType::eUniformBuffer,
+                            descriptorCount * 2u};
+            poolSizes[1] = {vk::DescriptorType::eCombinedImageSampler,
+                            descriptorCount * 2u};
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.flags =
+                vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+            poolInfo.maxSets = descriptorCount * 2u;
+            poolInfo.poolSizeCount =
+                static_cast<std::uint32_t>(poolSizes.size());
+            poolInfo.pPoolSizes = poolSizes.data();
+            auto poolResult = device->createDescriptorPoolUnique(poolInfo);
+            if (poolResult.result != vk::Result::eSuccess || !poolResult.value)
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D descriptor pool creation failed.");
+            vk::UniqueDescriptorPool nextPool = std::move(poolResult.value);
+
+            std::vector<vk::DescriptorSetLayout> layouts(descriptorCount,
+                                                         *descriptorSetLayout);
+            const auto allocateSets = [&]() {
+              vk::DescriptorSetAllocateInfo descriptorInfo{};
+              descriptorInfo.descriptorPool = *nextPool;
+              descriptorInfo.descriptorSetCount = descriptorCount;
+              descriptorInfo.pSetLayouts = layouts.data();
+              auto result =
+                  device->allocateDescriptorSetsUnique(descriptorInfo);
+              if (result.result != vk::Result::eSuccess)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D descriptor allocation failed.");
+              return std::move(result.value);
+            };
+            auto nextNearestSets = allocateSets();
+            auto nextLinearSets = allocateSets();
+
+            const auto writeSets =
+                [&](std::vector<vk::UniqueDescriptorSet> &sets,
+                    vk::Sampler sampler) {
+                  for (std::uint32_t index = 0u; index < descriptorCount;
+                       ++index) {
+                    vk::DescriptorBufferInfo bufferInfo{
+                        *guiState.guiUniformBuffers[index], 0u,
+                        sizeof(UniformBufferObject)};
+                    vk::DescriptorImageInfo sampledImage{
+                        sampler, *nextView,
+                        vk::ImageLayout::eShaderReadOnlyOptimal};
+                    std::array<vk::WriteDescriptorSet, 2> writes{};
+                    writes[0].dstSet = *sets[index];
+                    writes[0].dstBinding = 0u;
+                    writes[0].descriptorCount = 1u;
+                    writes[0].descriptorType =
+                        vk::DescriptorType::eUniformBuffer;
+                    writes[0].pBufferInfo = &bufferInfo;
+                    writes[1].dstSet = *sets[index];
+                    writes[1].dstBinding = 1u;
+                    writes[1].descriptorCount = 1u;
+                    writes[1].descriptorType =
+                        vk::DescriptorType::eCombinedImageSampler;
+                    writes[1].pImageInfo = &sampledImage;
+                    device->updateDescriptorSets(writes, {});
+                  }
+                };
+            writeSets(nextNearestSets, *nextNearest);
+            writeSets(nextLinearSets, *nextLinear);
+
+            state.nearestDescriptorSets.clear();
+            state.linearDescriptorSets.clear();
+            state.descriptorPool.reset();
+            state.nearestSampler.reset();
+            state.linearSampler.reset();
+            state.imageView.reset();
+            state.image.reset();
+            state.imageMemory.reset();
+            state.image = std::move(nextImage);
+            state.imageMemory = std::move(nextMemory);
+            state.imageView = std::move(nextView);
+            state.nearestSampler = std::move(nextNearest);
+            state.linearSampler = std::move(nextLinear);
+            state.descriptorPool = std::move(nextPool);
+            state.nearestDescriptorSets = std::move(nextNearestSets);
+            state.linearDescriptorSets = std::move(nextLinearSets);
+          }
+          state.imageExtent = image.extent;
+          state.canvasHash = prepared.raster->canvas_hash;
+        }
+
+        createCanvas2DPipeline(state);
+
+        const canvas2d::RectI nextSurface{
+            sceneViewport.x, sceneViewport.y,
+            static_cast<std::uint32_t>(sceneViewport.width),
+            static_cast<std::uint32_t>(sceneViewport.height)};
+        const canvas2d::RectI nextDestination{
+            nextSurface.x + compose.viewport.clipped_destination.x,
+            nextSurface.y + compose.viewport.clipped_destination.y,
+            compose.viewport.clipped_destination.width,
+            compose.viewport.clipped_destination.height};
+        const bool geometryChanged =
+            !state.vertexBuffer || !state.indexBuffer ||
+            state.surface != nextSurface ||
+            state.destination != nextDestination ||
+            state.visibleCanvas != compose.viewport.visible_canvas ||
+            previousImageExtent != image.extent;
+        if (geometryChanged) {
+          if (!synchronized && (state.vertexBuffer || state.image)) {
+            if (graphicsQueue.waitIdle() != vk::Result::eSuccess)
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D geometry synchronization failed.");
+            synchronized = true;
+          }
+          if (!state.indexBuffer) {
+            auto [nextIndexBuffer, nextIndexMemory] =
+                createBuffer(sizeof(std::uint32_t) * 6u,
+                             vk::BufferUsageFlagBits::eIndexBuffer,
+                             vk::MemoryPropertyFlagBits::eHostVisible |
+                                 vk::MemoryPropertyFlagBits::eHostCoherent);
+            constexpr std::array<std::uint32_t, 6> indices{0u, 1u, 2u,
+                                                           2u, 3u, 0u};
+            auto [indexMapResult, indexMap] =
+                device->mapMemory(*nextIndexMemory, 0u, sizeof(indices));
+            if (indexMapResult != vk::Result::eSuccess || !indexMap)
+              throw std::runtime_error(
+                  "[ Vulkan ] - Canvas2D index map failed.");
+            std::memcpy(indexMap, indices.data(), sizeof(indices));
+            device->unmapMemory(*nextIndexMemory);
+            state.indexBuffer = std::move(nextIndexBuffer);
+            state.indexBufferMemory = std::move(nextIndexMemory);
+          }
+
+          const float x0 = static_cast<float>(nextDestination.x);
+          const float y0 = static_cast<float>(nextDestination.y);
+          const float x1 = x0 + static_cast<float>(nextDestination.width);
+          const float y1 = y0 + static_cast<float>(nextDestination.height);
+          const float u0 = compose.viewport.visible_canvas.x /
+                           static_cast<float>(image.extent.width);
+          const float v0 = compose.viewport.visible_canvas.y /
+                           static_cast<float>(image.extent.height);
+          const float u1 = (compose.viewport.visible_canvas.x +
+                            compose.viewport.visible_canvas.width) /
+                           static_cast<float>(image.extent.width);
+          const float v1 = (compose.viewport.visible_canvas.y +
+                            compose.viewport.visible_canvas.height) /
+                           static_cast<float>(image.extent.height);
+          const std::array<Vertex, 4> vertices{
+              {{{x0, y0, 0.0f}, {0.0f, 0.0f, 1.0f}, {u0, v0}},
+               {{x1, y0, 0.0f}, {0.0f, 0.0f, 1.0f}, {u1, v0}},
+               {{x1, y1, 0.0f}, {0.0f, 0.0f, 1.0f}, {u1, v1}},
+               {{x0, y1, 0.0f}, {0.0f, 0.0f, 1.0f}, {u0, v1}}}};
+          vk::UniqueBuffer nextVertexBuffer{};
+          vk::UniqueDeviceMemory nextVertexMemory{};
+          vk::DeviceMemory vertexMemory{};
+          if (!state.vertexBuffer) {
+            std::tie(nextVertexBuffer, nextVertexMemory) = createBuffer(
+                sizeof(vertices), vk::BufferUsageFlagBits::eVertexBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                    vk::MemoryPropertyFlagBits::eHostCoherent);
+            vertexMemory = *nextVertexMemory;
+          } else {
+            vertexMemory = *state.vertexBufferMemory;
+          }
+          auto [vertexMapResult, vertexMap] =
+              device->mapMemory(vertexMemory, 0u, sizeof(vertices));
+          if (vertexMapResult != vk::Result::eSuccess || !vertexMap)
+            throw std::runtime_error(
+                "[ Vulkan ] - Canvas2D vertex map failed.");
+          std::memcpy(vertexMap, vertices.data(), sizeof(vertices));
+          device->unmapMemory(vertexMemory);
+          if (nextVertexBuffer) {
+            state.vertexBuffer = std::move(nextVertexBuffer);
+            state.vertexBufferMemory = std::move(nextVertexMemory);
+          }
+        }
+
+        state.surface = nextSurface;
+        state.destination = nextDestination;
+        state.visibleCanvas = compose.viewport.visible_canvas;
+        state.letterboxColor = compose.letterbox_color;
+        state.filter = compose.presentation_filter;
+        state.contentHash = prepared.content_hash;
+        state.frameSequence = prepared.frame->frame_sequence;
+        state.clearLetterbox = compose.clear_letterbox;
+        state.ready = state.pipeline && state.vertexBuffer &&
+                      state.indexBuffer && state.imageView &&
+                      state.frameSequence != 0u && state.contentHash != 0u;
+        state.refusalLogged = false;
+        return state.ready;
+      } catch (const std::exception &error) {
+        if (!statePtr || !statePtr->refusalLogged) {
+          log_error(epochengine::format_text(
+              "Canvas2D Vulkan prepare failed: {}", error.what()));
+          if (statePtr)
+            statePtr->refusalLogged = true;
+        }
+        if (statePtr)
+          statePtr->ready = false;
+        return false;
+      } catch (...) {
+        if (!statePtr || !statePtr->refusalLogged) {
+          log_error("Canvas2D Vulkan prepare failed with an unknown error.");
+          if (statePtr)
+            statePtr->refusalLogged = true;
+        }
+        if (statePtr)
+          statePtr->ready = false;
+        return false;
+      }
+    }
+    } // namespace epochengine::vulkancontext
+
+    namespace epochengine::vulkantextures {
     void ensure_uploaded(const epochengine::TextureAtlas& atlas)
     {
         if (!epochengine::vulkancontext::has_vulkan_apps())
@@ -813,4 +1310,4 @@ namespace epochengine::vulkantextures
 
         (void)atlas;
     }
-}
+    } // namespace epochengine::vulkantextures

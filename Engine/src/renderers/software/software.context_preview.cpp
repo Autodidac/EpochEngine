@@ -1,8 +1,11 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
+#include <span>
 
 #include <include/engine.config.hpp>
 
@@ -12,11 +15,327 @@ import core.context;
 import software.state;
 import package.registry;
 import render.arcade;
+import render.canvas2d_cpu;
+import render.canvas2d_runtime;
 import render.preview_grid;
 
 namespace epochengine::anativecontext::detail
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+    struct Canvas2DBlitRegion final
+    {
+        int destinationX{};
+        int destinationY{};
+        int sourceX{};
+        int sourceY{};
+        int width{};
+        int height{};
+
+        [[nodiscard]] constexpr bool visible() const noexcept
+        {
+            return width > 0 && height > 0;
+        }
+    };
+
+    [[nodiscard]] constexpr Canvas2DBlitRegion canvas2d_blit_region(
+        int framebufferWidth,
+        int framebufferHeight,
+        const core::RenderViewport& viewport,
+        int sourceWidth,
+        int sourceHeight) noexcept
+    {
+        if (framebufferWidth <= 0 || framebufferHeight <= 0
+            || !viewport.valid() || sourceWidth != viewport.width
+            || sourceHeight != viewport.height)
+        {
+            return {};
+        }
+
+        const std::int64_t viewportRight = static_cast<std::int64_t>(viewport.x)
+            + static_cast<std::int64_t>(viewport.width);
+        const std::int64_t viewportBottom = static_cast<std::int64_t>(viewport.y)
+            + static_cast<std::int64_t>(viewport.height);
+        const std::int64_t clippedLeft = (std::max)(
+            std::int64_t{0}, static_cast<std::int64_t>(viewport.x));
+        const std::int64_t clippedTop = (std::max)(
+            std::int64_t{0}, static_cast<std::int64_t>(viewport.y));
+        const std::int64_t clippedRight = (std::min)(
+            static_cast<std::int64_t>(framebufferWidth), viewportRight);
+        const std::int64_t clippedBottom = (std::min)(
+            static_cast<std::int64_t>(framebufferHeight), viewportBottom);
+        if (clippedLeft >= clippedRight || clippedTop >= clippedBottom)
+            return {};
+
+        return {
+            static_cast<int>(clippedLeft),
+            static_cast<int>(clippedTop),
+            static_cast<int>(clippedLeft - viewport.x),
+            static_cast<int>(clippedTop - viewport.y),
+            static_cast<int>(clippedRight - clippedLeft),
+            static_cast<int>(clippedBottom - clippedTop)};
+    }
+
+    [[nodiscard]] constexpr std::uint32_t pack_canvas2d_pixel(
+        canvas2d::cpu::Rgba8 pixel) noexcept
+    {
+        return (static_cast<std::uint32_t>(pixel.a) << 24u)
+            | (static_cast<std::uint32_t>(pixel.r) << 16u)
+            | (static_cast<std::uint32_t>(pixel.g) << 8u)
+            | static_cast<std::uint32_t>(pixel.b);
+    }
+
+    [[nodiscard]] constexpr std::uint32_t blend_canvas2d_pixel(
+        canvas2d::cpu::Rgba8 source,
+        std::uint32_t destination) noexcept
+    {
+        const std::uint32_t inverseAlpha = 255u - source.a;
+        const auto source_over = [inverseAlpha](
+            std::uint32_t sourceChannel,
+            std::uint32_t destinationChannel) noexcept
+        {
+            return (std::min)(
+                255u,
+                sourceChannel
+                    + (destinationChannel * inverseAlpha + 127u) / 255u);
+        };
+        const std::uint32_t destinationAlpha = destination >> 24u;
+        const std::uint32_t destinationRed = (destination >> 16u) & 0xffu;
+        const std::uint32_t destinationGreen = (destination >> 8u) & 0xffu;
+        const std::uint32_t destinationBlue = destination & 0xffu;
+        return (source_over(source.a, destinationAlpha) << 24u)
+            | (source_over(source.r, destinationRed) << 16u)
+            | (source_over(source.g, destinationGreen) << 8u)
+            | source_over(source.b, destinationBlue);
+    }
+
+    static_assert(
+        blend_canvas2d_pixel({0u, 0u, 0u, 0u}, 0x7f123456u)
+            == 0x7f123456u);
+    static_assert(
+        blend_canvas2d_pixel({0x12u, 0x34u, 0x56u, 0xffu}, 0x7fabcdefu)
+            == 0xff123456u);
+    static_assert(
+        pack_canvas2d_pixel({0x12u, 0x34u, 0x56u, 0x78u}) == 0x78123456u);
+    static_assert([]
+    {
+        constexpr core::RenderViewport viewport{-2, 1, 5, 4};
+        constexpr Canvas2DBlitRegion region = canvas2d_blit_region(
+            4, 3, viewport, 5, 4);
+        return region.destinationX == 0 && region.destinationY == 1
+            && region.sourceX == 2 && region.sourceY == 0
+            && region.width == 3 && region.height == 2;
+    }());
+
+    [[nodiscard]] constexpr bool blit_canvas2d_surface(
+        std::span<std::uint32_t> framebuffer,
+        int framebufferWidth,
+        int framebufferHeight,
+        std::span<const canvas2d::cpu::Rgba8> source,
+        int sourceWidth,
+        int sourceHeight,
+        const core::RenderViewport& viewport) noexcept
+    {
+        if (framebufferWidth <= 0 || framebufferHeight <= 0
+            || sourceWidth <= 0 || sourceHeight <= 0)
+        {
+            return false;
+        }
+        const std::uint64_t requiredFramebuffer =
+            static_cast<std::uint64_t>(framebufferWidth)
+            * static_cast<std::uint64_t>(framebufferHeight);
+        const std::uint64_t requiredSource =
+            static_cast<std::uint64_t>(sourceWidth)
+            * static_cast<std::uint64_t>(sourceHeight);
+        if (requiredFramebuffer != framebuffer.size()
+            || requiredSource != source.size())
+        {
+            return false;
+        }
+
+        const Canvas2DBlitRegion region = canvas2d_blit_region(
+            framebufferWidth,
+            framebufferHeight,
+            viewport,
+            sourceWidth,
+            sourceHeight);
+        if (!region.visible())
+            return true;
+
+        for (int row = 0; row < region.height; ++row)
+        {
+            const std::size_t destinationOffset =
+                static_cast<std::size_t>(region.destinationY + row)
+                    * static_cast<std::size_t>(framebufferWidth)
+                + static_cast<std::size_t>(region.destinationX);
+            const std::size_t sourceOffset =
+                static_cast<std::size_t>(region.sourceY + row)
+                    * static_cast<std::size_t>(sourceWidth)
+                + static_cast<std::size_t>(region.sourceX);
+            for (int column = 0; column < region.width; ++column)
+            {
+                std::uint32_t& destination =
+                    framebuffer[destinationOffset + static_cast<std::size_t>(column)];
+                destination = blend_canvas2d_pixel(
+                    source[sourceOffset + static_cast<std::size_t>(column)],
+                    destination);
+            }
+        }
+        return true;
+    }
+
+    static_assert([]
+    {
+        constexpr std::uint32_t untouched = 0xAABBCCDDu;
+        std::array<std::uint32_t, 15> framebuffer{};
+        framebuffer.fill(untouched);
+        constexpr std::array<canvas2d::cpu::Rgba8, 4> source{{
+            {0x01u, 0x02u, 0x03u, 0x04u},
+            {0x11u, 0x22u, 0x33u, 0x44u},
+            {0x55u, 0x66u, 0x77u, 0x88u},
+            {0x99u, 0xAAu, 0xBBu, 0xCCu}
+        }};
+        constexpr core::RenderViewport viewport{3, 1, 2, 2};
+        return blit_canvas2d_surface(
+                framebuffer, 5, 3, source, 2, 2, viewport)
+            && framebuffer[8] == blend_canvas2d_pixel(source[0], untouched)
+            && framebuffer[9] == blend_canvas2d_pixel(source[1], untouched)
+            && framebuffer[13] == blend_canvas2d_pixel(source[2], untouched)
+            && framebuffer[14] == blend_canvas2d_pixel(source[3], untouched)
+            && framebuffer[7] == untouched
+            && (framebuffer[13] >> 24u) >= source[2].a;
+    }());
+
+    class SoftwareCanvas2DPresenter final
+    {
+    public:
+        [[nodiscard]] bool scene_changed(
+            const core::Context& ctx,
+            const core::RenderViewport& viewport) noexcept
+        {
+            std::scoped_lock lock(mutex_);
+            if (!viewport.valid()
+                || ctx.scene_preview_mode() != core::ScenePreviewMode::Editor)
+            {
+                return deactivate_locked();
+            }
+
+            const canvas2d::runtime::PreparedSceneView prepared =
+                session_.prepare(
+                    &ctx,
+                    {
+                        static_cast<std::uint32_t>(viewport.width),
+                        static_cast<std::uint32_t>(viewport.height)});
+            if (prepared.code == canvas2d::runtime::PrepareCode::ready)
+            {
+                active_ = true;
+                return true;
+            }
+            if (prepared.code == canvas2d::runtime::PrepareCode::reused)
+            {
+                active_ = true;
+                return false;
+            }
+            if (prepared.code == canvas2d::runtime::PrepareCode::missing_scene)
+                return deactivate_locked();
+
+            const bool changed = active_ || prepared.code
+                != canvas2d::runtime::PrepareCode::missing_scene;
+            active_ = false;
+            session_.reset();
+            return changed;
+        }
+
+        [[nodiscard]] bool render(
+            const core::Context& ctx,
+            const core::RenderViewport& viewport,
+            std::span<std::uint32_t> framebuffer,
+            int framebufferWidth,
+            int framebufferHeight) noexcept
+        {
+            std::scoped_lock lock(mutex_);
+            if (!viewport.valid())
+                return false;
+
+            const canvas2d::runtime::PreparedSceneView prepared =
+                session_.prepare(
+                    &ctx,
+                    {
+                        static_cast<std::uint32_t>(viewport.width),
+                        static_cast<std::uint32_t>(viewport.height)});
+            if (!prepared)
+            {
+                if (prepared.code != canvas2d::runtime::PrepareCode::missing_scene)
+                    session_.reset();
+                active_ = false;
+                return false;
+            }
+
+            const auto& presentation = prepared.raster->presentation;
+            active_ = true;
+            return presentation.valid()
+                && blit_canvas2d_surface(
+                    framebuffer,
+                    framebufferWidth,
+                    framebufferHeight,
+                    std::span<const canvas2d::cpu::Rgba8>{presentation.pixels},
+                    static_cast<int>(presentation.extent.width),
+                    static_cast<int>(presentation.extent.height),
+                    viewport);
+        }
+
+        void reset() noexcept
+        {
+            std::scoped_lock lock(mutex_);
+            session_.reset();
+            active_ = false;
+        }
+
+    private:
+        [[nodiscard]] bool deactivate_locked() noexcept
+        {
+            const bool changed = active_;
+            if (active_)
+                session_.reset();
+            active_ = false;
+            return changed;
+        }
+
+        std::mutex mutex_{};
+        canvas2d::runtime::SceneRasterSession session_{};
+        bool active_{};
+    };
+
+    [[nodiscard]] SoftwareCanvas2DPresenter& canvas2d_presenter() noexcept
+    {
+        static SoftwareCanvas2DPresenter presenter{};
+        return presenter;
+    }
+
+    [[nodiscard]] bool canvas2d_scene_changed(
+        const core::Context& ctx,
+        const core::RenderViewport& viewport) noexcept
+    {
+        return canvas2d_presenter().scene_changed(ctx, viewport);
+    }
+
+    void reset_canvas2d_scene_renderer() noexcept
+    {
+        canvas2d_presenter().reset();
+    }
+
+    [[nodiscard]] bool render_canvas2d_scene(
+        const core::Context& ctx,
+        const core::RenderViewport& viewport) noexcept
+    {
+        auto& sr = s_softrendererstate;
+        return canvas2d_presenter().render(
+            ctx,
+            viewport,
+            sr.framebuffer,
+            sr.width,
+            sr.height);
+    }
+
     void refresh_dimensions(core::Context& ctx) noexcept
     {
         auto& sr = s_softrendererstate;
@@ -407,6 +726,12 @@ namespace epochengine::anativecontext::detail
     {
         const auto viewport = ctx.scene_viewport();
         if (!viewport.valid() || ctx.scene_preview_mode() != core::ScenePreviewMode::Editor)
+        {
+            reset_canvas2d_scene_renderer();
+            return;
+        }
+
+        if (render_canvas2d_scene(ctx, viewport))
             return;
 
         const auto clearColor = epochengine::previewgrid::kClearColor;
@@ -549,6 +874,101 @@ namespace epochengine::anativecontext::detail
             && lhs.y == rhs.y
             && lhs.width == rhs.width
             && lhs.height == rhs.height;
+    }
+#endif
+}
+namespace epochengine::anativecontext
+{
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
+    SoftwareCanvas2DContractFailure software_canvas2d_backend_contract_failure() noexcept
+    {
+        if (canvas2d::runtime::run_scene_raster_session_contract()
+            != canvas2d::runtime::RuntimeContractFailure::none)
+        {
+            return SoftwareCanvas2DContractFailure::runtime_session;
+        }
+
+        constexpr std::uint32_t untouched = 0xAABBCCDDu;
+        constexpr core::RenderViewport clippedViewport{-1, 1, 3, 2};
+        const detail::Canvas2DBlitRegion clipped = detail::canvas2d_blit_region(
+            4, 4, clippedViewport, 3, 2);
+        if (clipped.destinationX != 0 || clipped.destinationY != 1
+            || clipped.sourceX != 1 || clipped.sourceY != 0
+            || clipped.width != 2 || clipped.height != 2)
+        {
+            return SoftwareCanvas2DContractFailure::clip_region;
+        }
+        if (detail::pack_canvas2d_pixel({0x11u, 0x22u, 0x33u, 0x44u})
+            != 0x44112233u)
+        {
+            return SoftwareCanvas2DContractFailure::color_packing;
+        }
+
+        std::array<std::uint32_t, 16> framebuffer{};
+        framebuffer.fill(untouched);
+        constexpr std::array<canvas2d::cpu::Rgba8, 6> source{{
+            {0x01u, 0x02u, 0x03u, 0x10u},
+            {0x11u, 0x12u, 0x13u, 0x20u},
+            {0x21u, 0x22u, 0x23u, 0x30u},
+            {0x31u, 0x32u, 0x33u, 0x40u},
+            {0x41u, 0x42u, 0x43u, 0x50u},
+            {0x51u, 0x52u, 0x53u, 0x60u}
+        }};
+        if (!detail::blit_canvas2d_surface(
+                framebuffer, 4, 4, source, 3, 2, clippedViewport)
+            || framebuffer[4] != detail::blend_canvas2d_pixel(source[1], untouched)
+            || framebuffer[5] != detail::blend_canvas2d_pixel(source[2], untouched)
+            || framebuffer[8] != detail::blend_canvas2d_pixel(source[4], untouched)
+            || framebuffer[9] != detail::blend_canvas2d_pixel(source[5], untouched)
+            || framebuffer[3] != untouched
+            || framebuffer[6] != untouched)
+        {
+            return SoftwareCanvas2DContractFailure::clipped_blit;
+        }
+        if ((framebuffer[4] >> 24u)
+                != (detail::blend_canvas2d_pixel(source[1], untouched) >> 24u)
+            || (framebuffer[8] >> 24u)
+                != (detail::blend_canvas2d_pixel(source[4], untouched) >> 24u))
+        {
+            return SoftwareCanvas2DContractFailure::alpha_composition;
+        }
+
+        std::array<std::uint32_t, 15> resized{};
+        resized.fill(untouched);
+        constexpr std::array<canvas2d::cpu::Rgba8, 4> resizedSource{{
+            {0x01u, 0x02u, 0x03u, 0x04u},
+            {0x11u, 0x22u, 0x33u, 0x44u},
+            {0x55u, 0x66u, 0x77u, 0x88u},
+            {0x99u, 0xAAu, 0xBBu, 0xCCu}
+        }};
+        constexpr core::RenderViewport resizedViewport{3, 1, 2, 2};
+        if (!detail::blit_canvas2d_surface(
+                resized, 5, 3, resizedSource, 2, 2, resizedViewport)
+            || resized[8] != detail::blend_canvas2d_pixel(resizedSource[0], untouched)
+            || resized[9] != detail::blend_canvas2d_pixel(resizedSource[1], untouched)
+            || resized[13] != detail::blend_canvas2d_pixel(resizedSource[2], untouched)
+            || resized[14] != detail::blend_canvas2d_pixel(resizedSource[3], untouched)
+            || resized[7] != untouched)
+        {
+            return SoftwareCanvas2DContractFailure::resize_blit;
+        }
+        return SoftwareCanvas2DContractFailure::none;
+    }
+
+    bool software_canvas2d_backend_contract() noexcept
+    {
+        return software_canvas2d_backend_contract_failure()
+            == SoftwareCanvas2DContractFailure::none;
+    }
+#else
+    SoftwareCanvas2DContractFailure software_canvas2d_backend_contract_failure() noexcept
+    {
+        return SoftwareCanvas2DContractFailure::none;
+    }
+
+    bool software_canvas2d_backend_contract() noexcept
+    {
+        return true;
     }
 #endif
 }

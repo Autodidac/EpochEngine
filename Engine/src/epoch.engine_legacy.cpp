@@ -2676,6 +2676,14 @@ namespace epochengine::core
             std::string{"render.canvas2d.scene."}
                 + std::string{canvasSceneContract.stage},
             canvasSceneContract.passed);
+        const auto softwareCanvasContract =
+            epochengine::anativecontext::software_canvas2d_backend_contract_failure();
+        check(
+            std::string{"render.canvas2d.software."}
+                + std::string{epochengine::anativecontext::
+                    software_canvas2d_contract_failure_name(softwareCanvasContract)},
+            softwareCanvasContract ==
+                epochengine::anativecontext::SoftwareCanvas2DContractFailure::none);
         const auto projectTextureSpineContract =
             epochengine::project_contracts::run_texture_spine_contract();
         check(

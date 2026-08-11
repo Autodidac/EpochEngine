@@ -33,16 +33,26 @@ module;
 #include "../include/engine.config.hpp"
 #include "../include/epoch.config.hpp"
 #include "../src/epoch.common.hpp"
+#include <algorithm>
+#include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
 export module render.device_raylib;
 
 import render.device;
+import core.context;
+import context.type;
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import raylib.api;
 import raylib.state;
+#if defined(_WIN32)
+import raylib.context_win;
+#else
+import raylib.context_linux;
+#endif
 #endif
 
 export namespace epochengine
@@ -65,6 +75,19 @@ export namespace epochengine
     struct RaylibSlotRecord
     {
         bool active = false;
+    };
+
+    struct RaylibTextureRecord
+    {
+        TextureDesc desc{};
+        epochengine::raylib_api::Texture2D texture{};
+        bool active = false;
+        bool pending_destroy = false;
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return active && texture.id != 0u;
+        }
     };
 
     struct RaylibMeshRecord
@@ -195,6 +218,16 @@ export namespace epochengine
             m_context.set_models(&m_models);
         }
 
+        ~RaylibRenderDevice() override
+        {
+            flush_pending_texture_destroys();
+            for (u32 index = 0; index < static_cast<u32>(m_textures.size()); ++index)
+            {
+                if (m_textures[index].active)
+                    destroy(TextureHandle{index + 1u});
+            }
+        }
+
         std::string backend_name() const override { return "raylib"; }
 
         RendererCapabilities capabilities() const noexcept override
@@ -211,7 +244,97 @@ export namespace epochengine
         }
 
         BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
-        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+
+        TextureHandle create_texture(const TextureDesc& desc) override
+        {
+            flush_pending_texture_destroys();
+            constexpr u32 maximumDimension = (std::min)(
+                static_cast<u32>((std::numeric_limits<int>::max)()),
+                (std::numeric_limits<u32>::max)() / 4u);
+            if (desc.width == 0u || desc.height == 0u
+                || desc.width > maximumDimension || desc.height > maximumDimension
+                || desc.mip_levels != 1u
+                || desc.format != TextureFormat::rgba8_unorm
+                || !desc.sampled || desc.storage || desc.render_target
+                || desc.depth_stencil || desc.sparse)
+            {
+                return {};
+            }
+
+            const u32 slot = allocate_texture_slot();
+            RaylibTextureRecord& record = m_textures[slot];
+            record.desc = desc;
+            record.texture = {};
+            record.active = true;
+            return TextureHandle{slot + 1u};
+        }
+
+        bool upload_texture(
+            TextureHandle handle,
+            const TextureUploadDesc& upload) override
+        {
+            flush_pending_texture_destroys();
+            RaylibTextureRecord* const record = resolve_texture_mutable(handle);
+            if (!record || !native_resource_context_available()
+                || !epochengine::valid(upload)
+                || upload.mip_level != 0u
+                || upload.x != 0u || upload.y != 0u
+                || upload.width != record->desc.width
+                || upload.height != record->desc.height
+                || upload.format != record->desc.format)
+            {
+                return false;
+            }
+
+            constexpr u32 bytesPerPixel = 4u;
+            const u32 tightRowBytes = upload.width * bytesPerPixel;
+            const u32 sourceRowBytes = upload.row_pitch_bytes == 0u
+                ? tightRowBytes
+                : upload.row_pitch_bytes;
+            if (sourceRowBytes < tightRowBytes)
+                return false;
+
+            const auto* source = static_cast<const std::uint8_t*>(upload.data);
+            std::vector<std::uint8_t> tightPixels{};
+            const void* imagePixels = source;
+            if (sourceRowBytes != tightRowBytes)
+            {
+                tightPixels.resize(
+                    static_cast<std::size_t>(tightRowBytes) * upload.height);
+                for (u32 row = 0; row < upload.height; ++row)
+                {
+                    std::memcpy(
+                        tightPixels.data() + static_cast<std::size_t>(row) * tightRowBytes,
+                        source + static_cast<std::size_t>(row) * sourceRowBytes,
+                        tightRowBytes);
+                }
+                imagePixels = tightPixels.data();
+            }
+
+            epochengine::raylib_api::Image image{};
+            image.data = const_cast<void*>(imagePixels);
+            image.width = static_cast<int>(upload.width);
+            image.height = static_cast<int>(upload.height);
+            image.mipmaps = 1;
+            image.format = epochengine::raylib_api::pixelformat_rgba8;
+            const epochengine::raylib_api::Texture2D uploaded =
+                epochengine::raylib_api::load_texture_from_image(image);
+            if (uploaded.id == 0u)
+                return false;
+
+            const epochengine::raylib_api::Texture2D retired = record->texture;
+            record->texture = uploaded;
+            if (retired.id != 0u)
+                epochengine::raylib_api::unload_texture(retired);
+            return true;
+        }
+
+        bool texture_ready(TextureHandle handle) const noexcept override
+        {
+            const RaylibTextureRecord* const record = resolve_texture(handle);
+            return record && record->ready() && native_resource_context_available();
+        }
+
         SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
         ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
         PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
@@ -278,7 +401,25 @@ export namespace epochengine
         }
 
         void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
-        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+
+        void destroy(TextureHandle handle) noexcept override
+        {
+            RaylibTextureRecord* const record = resolve_texture_mutable(handle);
+            if (!record)
+                return;
+
+            if (record->texture.id != 0u)
+            {
+                if (!native_resource_context_available())
+                {
+                    record->pending_destroy = true;
+                    return;
+                }
+                epochengine::raylib_api::unload_texture(record->texture);
+            }
+            *record = {};
+        }
+
         void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
         void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
         void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
@@ -388,7 +529,64 @@ export namespace epochengine
             return state.running && state.renderingActive;
         }
 
+        [[nodiscard]] bool native_resource_context_available(
+            const core::Context* expected = nullptr) const noexcept
+        {
+            const auto& state = epochengine::raylibstate::s_raylibstate;
+            if (!state.renderingActive || !state.owner_ctx
+                || !epochengine::raylib_api::is_window_ready()
+                || (expected && expected != state.owner_ctx))
+            {
+                return false;
+            }
+
+            const auto current = core::get_current_render_context();
+            if (!current || current.get() != state.owner_ctx
+                || current->type != core::ContextType::RayLib)
+            {
+                return false;
+            }
+
+#if defined(_WIN32)
+            return epochengine::raylibcontext::win::native_context_is_current();
+#else
+            return epochengine::raylibcontext::linux::native_context_is_current();
+#endif
+        }
+
+        [[nodiscard]] bool native_presentation_context_available(
+            const core::Context* expected) const noexcept
+        {
+            const auto& state = epochengine::raylibstate::s_raylibstate;
+            return native_resource_context_available(expected)
+                && state.running && state.frameActive && !state.frameInTextureMode;
+        }
+
+        [[nodiscard]] const RaylibTextureRecord* resolve_texture(
+            TextureHandle handle) const noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            const RaylibTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active && !record.pending_destroy ? &record : nullptr;
+        }
+
     private:
+        void flush_pending_texture_destroys() noexcept
+        {
+            if (!native_resource_context_available())
+                return;
+
+            for (RaylibTextureRecord& record : m_textures)
+            {
+                if (!record.active || !record.pending_destroy)
+                    continue;
+                if (record.texture.id != 0u)
+                    epochengine::raylib_api::unload_texture(record.texture);
+                record = {};
+            }
+        }
+
         [[nodiscard]] static u32 allocate_slot(std::vector<RaylibSlotRecord>& records)
         {
             for (u32 i = 0; i < static_cast<u32>(records.size()); ++i)
@@ -412,6 +610,27 @@ export namespace epochengine
             const u32 index = handle_value - 1u;
             if (index < records.size())
                 records[index] = {};
+        }
+
+        [[nodiscard]] u32 allocate_texture_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_textures.size()); ++i)
+            {
+                if (!m_textures[i].active)
+                    return i;
+            }
+
+            m_textures.push_back({});
+            return static_cast<u32>(m_textures.size() - 1u);
+        }
+
+        [[nodiscard]] RaylibTextureRecord* resolve_texture_mutable(
+            TextureHandle handle) noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            RaylibTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active && !record.pending_destroy ? &record : nullptr;
         }
 
         [[nodiscard]] u32 allocate_render_texture_slot()
@@ -464,7 +683,7 @@ export namespace epochengine
 
         RaylibCommandContext m_context{};
         std::vector<RaylibSlotRecord> m_buffers{};
-        std::vector<RaylibSlotRecord> m_textures{};
+        std::vector<RaylibTextureRecord> m_textures{};
         std::vector<RaylibSlotRecord> m_samplers{};
         std::vector<RaylibSlotRecord> m_shaders{};
         std::vector<RaylibSlotRecord> m_pipelines{};

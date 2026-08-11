@@ -1,5 +1,28 @@
 # Epoch Changelog
 
+## [v0.89.11] - Cross-backend Canvas2D presentation source checkpoint
+
+- Add one renderer-neutral `SceneRasterSession` that acquires immutable editor
+  scenes and reuses compiled frame/raster output by generation, content,
+  sequence, and output identity.
+- Present the same Canvas2D raster/compose contract through SDL3, SFML3,
+  Raylib3, Vulkan, DirectX/D3D11, and Software adapters with top-left
+  orientation, premultiplied alpha, nearest/linear sampling, viewport clipping,
+  resize handling, and backend-owned teardown. OpenGL remains the accepted
+  exact-pixel reference.
+- Make Vulkan retain same-size image and descriptor residency across pixel
+  updates, commit mapped geometry buffers only after successful initialization,
+  retire stale Canvas2D state, and keep all preparation inside its `noexcept`
+  failure boundary without changing protected render-pass/subpass order.
+- Add Assets interaction automation for import, select, assign, clear,
+  undo/redo, save, and reopen; isolate its project state and capture bounded CLI
+  output without inherited-pipe hangs.
+- Expose project texture source/decoded metrics plus effective upload/residency
+  limits in Assets and Canvas2D Settings diagnostics.
+- Keep source metadata at v0.89.11 while the published v0.89.06 updater,
+  packages, and release identity remain sealed. Debug/Release builds, contracts,
+  source naming, harness syntax, and shared-item XML pass; native non-OpenGL and
+  interaction evidence remain `Partial` pending approved live proof.
 ## [v0.89.10] - Saved project texture authoring and external-run proof
 
 - Add bounded uncompressed BMP, TGA, and P6 PPM import into deterministic

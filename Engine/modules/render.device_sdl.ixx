@@ -73,6 +73,14 @@ export namespace epochengine
         bool active = false;
     };
 
+    struct SdlTextureRecord
+    {
+        TextureDesc desc{};
+        SDL_Texture* texture = nullptr;
+        bool active = false;
+        bool ready = false;
+    };
+
     struct SdlMeshRecord
     {
         MeshDesc desc{};
@@ -233,6 +241,11 @@ export namespace epochengine
             m_context.set_render_textures(&m_render_textures);
         }
 
+        ~SdlRenderDevice() override
+        {
+            retire_textures();
+        }
+
         std::string backend_name() const override { return "sdl3"; }
 
         RendererCapabilities capabilities() const noexcept override
@@ -250,7 +263,59 @@ export namespace epochengine
         }
 
         BufferHandle create_buffer(const BufferDesc&) override { return BufferHandle{ allocate_slot(m_buffers) }; }
-        TextureHandle create_texture(const TextureDesc&) override { return TextureHandle{ allocate_slot(m_textures) }; }
+        TextureHandle create_texture(const TextureDesc& desc) override
+        {
+            SDL_Renderer* const renderer = epochengine::sdlcontext::sdl_renderer.renderer;
+            if (!renderer || epochengine::sdlcontext::state::get_sdl_state().renderFaulted
+                || desc.width == 0u || desc.height == 0u
+                || desc.width > maximum_texture_extent
+                || desc.height > maximum_texture_extent
+                || desc.mip_levels != 1u
+                || desc.format != TextureFormat::rgba8_unorm
+                || !desc.sampled || desc.storage || desc.render_target
+                || desc.depth_stencil || desc.sparse)
+            {
+                return {};
+            }
+
+            const u32 slot = allocate_texture_slot();
+            SDL_Texture* const texture = SDL_CreateTexture(
+                renderer,
+                SDL_PIXELFORMAT_RGBA32,
+                SDL_TEXTUREACCESS_STATIC,
+                static_cast<int>(desc.width),
+                static_cast<int>(desc.height));
+            if (!texture)
+            {
+                epochengine::sdlcontext::check_sdl_error("SDL_CreateTexture sampled texture");
+                return {};
+            }
+
+            const SDL_BlendMode premultipliedAlpha = SDL_ComposeCustomBlendMode(
+                SDL_BLENDFACTOR_ONE,
+                SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                SDL_BLENDOPERATION_ADD,
+                SDL_BLENDFACTOR_ONE,
+                SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                SDL_BLENDOPERATION_ADD);
+            if (!SDL_SetTextureBlendMode(texture, premultipliedAlpha))
+            {
+                epochengine::sdlcontext::check_sdl_error(
+                    "SDL_SetTextureBlendMode sampled texture");
+                SDL_DestroyTexture(texture);
+                return {};
+            }
+            if (!SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_LINEAR))
+            {
+                epochengine::sdlcontext::check_sdl_error(
+                    "SDL_SetTextureScaleMode sampled texture");
+                SDL_DestroyTexture(texture);
+                return {};
+            }
+
+            m_textures[slot] = SdlTextureRecord{desc, texture, true, false};
+            return TextureHandle{slot + 1u};
+        }
         SamplerHandle create_sampler(const SamplerDesc&) override { return SamplerHandle{ allocate_slot(m_samplers) }; }
         ShaderHandle create_shader(const ShaderDesc&) override { return ShaderHandle{ allocate_slot(m_shaders) }; }
         PipelineHandle create_pipeline(const PipelineDesc&) override { return PipelineHandle{ allocate_slot(m_pipelines) }; }
@@ -324,8 +389,55 @@ export namespace epochengine
                 RenderTargetHandle{ handle_value } };
         }
 
+
+        bool upload_texture(
+            TextureHandle handle,
+            const TextureUploadDesc& upload) override
+        {
+            SdlTextureRecord* const record = resolve_texture_mutable(handle);
+            const u32 tightPitch = record
+                ? record->desc.width * texture_format_bytes_per_texel(record->desc.format)
+                : 0u;
+            if (!record || !record->texture || !valid(upload)
+                || upload.mip_level != 0u || upload.x != 0u || upload.y != 0u
+                || upload.width != record->desc.width
+                || upload.height != record->desc.height
+                || upload.format != record->desc.format
+                || (upload.row_pitch_bytes != 0u
+                    && upload.row_pitch_bytes != tightPitch))
+            {
+                return false;
+            }
+
+            if (!SDL_UpdateTexture(
+                    record->texture,
+                    nullptr,
+                    upload.data,
+                    static_cast<int>(tightPitch)))
+            {
+                epochengine::sdlcontext::check_sdl_error("SDL_UpdateTexture sampled texture");
+                return false;
+            }
+            record->ready = true;
+            return true;
+        }
+
+        [[nodiscard]] bool texture_ready(TextureHandle handle) const noexcept override
+        {
+            const SdlTextureRecord* const record = resolve_texture(handle);
+            return record && record->texture && record->ready
+                && runtime_renderer_available();
+        }
         void destroy(BufferHandle handle) noexcept override { release_slot(m_buffers, handle.value); }
-        void destroy(TextureHandle handle) noexcept override { release_slot(m_textures, handle.value); }
+        void destroy(TextureHandle handle) noexcept override
+        {
+            SdlTextureRecord* const record = resolve_texture_mutable(handle);
+            if (!record)
+                return;
+            if (record->texture)
+                SDL_DestroyTexture(record->texture);
+            *record = {};
+        }
         void destroy(SamplerHandle handle) noexcept override { release_slot(m_samplers, handle.value); }
         void destroy(ShaderHandle handle) noexcept override { release_slot(m_shaders, handle.value); }
         void destroy(PipelineHandle handle) noexcept override { release_slot(m_pipelines, handle.value); }
@@ -404,6 +516,25 @@ export namespace epochengine
             return record.active ? &record : nullptr;
         }
 
+        [[nodiscard]] const SdlTextureRecord* resolve_texture(TextureHandle handle) const noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            const SdlTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active ? &record : nullptr;
+        }
+
+        void retire_textures() noexcept
+        {
+            for (SdlTextureRecord& record : m_textures)
+            {
+                if (record.texture)
+                    SDL_DestroyTexture(record.texture);
+                record = {};
+            }
+            m_textures.clear();
+        }
+
         [[nodiscard]] u32 render_texture_count() const noexcept
         {
             u32 count = 0;
@@ -429,6 +560,8 @@ export namespace epochengine
         }
 
     private:
+        static constexpr u32 maximum_texture_extent = 16384u;
+
         [[nodiscard]] static u32 allocate_slot(std::vector<SdlSlotRecord>& records)
         {
             for (u32 i = 0; i < static_cast<u32>(records.size()); ++i)
@@ -464,6 +597,26 @@ export namespace epochengine
 
             m_render_textures.push_back({});
             return static_cast<u32>(m_render_textures.size() - 1u);
+        }
+
+        [[nodiscard]] u32 allocate_texture_slot()
+        {
+            for (u32 i = 0; i < static_cast<u32>(m_textures.size()); ++i)
+            {
+                if (!m_textures[i].active)
+                    return i;
+            }
+            m_textures.push_back({});
+            return static_cast<u32>(m_textures.size() - 1u);
+        }
+
+        [[nodiscard]] SdlTextureRecord* resolve_texture_mutable(
+            TextureHandle handle) noexcept
+        {
+            if (!handle || handle.value > m_textures.size())
+                return nullptr;
+            SdlTextureRecord& record = m_textures[handle.value - 1u];
+            return record.active ? &record : nullptr;
         }
 
         [[nodiscard]] u32 allocate_binding_set_slot()
@@ -508,7 +661,7 @@ export namespace epochengine
         std::vector<SdlMeshRecord> m_meshes{};
         std::vector<SdlModelRecord> m_models{};
         std::vector<SdlSlotRecord> m_buffers{};
-        std::vector<SdlSlotRecord> m_textures{};
+        std::vector<SdlTextureRecord> m_textures{};
         std::vector<SdlSlotRecord> m_samplers{};
         std::vector<SdlSlotRecord> m_shaders{};
         std::vector<SdlSlotRecord> m_pipelines{};

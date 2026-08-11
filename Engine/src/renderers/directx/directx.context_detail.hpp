@@ -55,6 +55,7 @@ namespace epochengine::directxcontext::detail
         float r{};
         float g{};
         float b{};
+        float a{ 1.0f };
     };
 
     struct DirectXSpriteVertex
@@ -93,6 +94,8 @@ namespace epochengine::directxcontext::detail
         }
     };
 
+    struct DirectXCanvasState;
+
     struct DirectXState
     {
         HWND hwnd{};
@@ -120,6 +123,7 @@ namespace epochengine::directxcontext::detail
         std::size_t spriteVertexCapacity{};
         std::unordered_map<const TextureAtlas*, DirectXAtlasGPU> guiAtlases{};
         DirectXArcadeScreenTarget arcadeScreen{};
+        DirectXCanvasState* canvas2d{};
     };
 
     extern std::recursive_mutex g_directxMutex;
@@ -135,6 +139,10 @@ namespace epochengine::directxcontext::detail
     bool update_size(core::Context& ctx, DirectXState& state);
     void release_arcade_screen_target(DirectXState& state) noexcept;
     bool ensure_arcade_screen_target(DirectXState& state);
+    void release_canvas2d_state(DirectXState& state) noexcept;
+    bool render_canvas2d_scene(
+        const std::shared_ptr<core::Context>& ctx,
+        DirectXState& state) noexcept;
 
     D3D11_VIEWPORT full_window_viewport(const DirectXState& state) noexcept;
     D3D11_VIEWPORT scene_viewport_for(const core::Context& ctx, const DirectXState& state) noexcept;

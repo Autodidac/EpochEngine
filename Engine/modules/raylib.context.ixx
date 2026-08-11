@@ -90,6 +90,9 @@ import raylib.state;
 import raylib.textures;
 import raylib.renderer;
 import raylib.api;
+#if !defined(_WIN32)
+import raylib.context_linux;
+#endif
 
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
@@ -586,6 +589,9 @@ namespace epochengine::raylibcontext
                 st.frameInTextureMode = false;
             }
 
+            epochengine::raylibrenderer::release_canvas2d_scene_renderer(
+                st.owner_ctx);
+
             if (st.offscreen.id != 0)
             {
                 epochengine::raylib_api::unload_render_texture(st.offscreen);
@@ -615,6 +621,19 @@ namespace epochengine::raylibcontext
             const auto viewport = ctx->scene_viewport();
             if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
                 return;
+
+            const int framebufferWidth =
+                (std::max)(1, epochengine::raylib_api::get_render_width());
+            const int framebufferHeight =
+                (std::max)(1, epochengine::raylib_api::get_render_height());
+            if (epochengine::raylibrenderer::render_canvas2d_scene_content(
+                    ctx,
+                    viewport,
+                    framebufferWidth,
+                    framebufferHeight))
+            {
+                return;
+            }
 
             const auto sampledSurfaceMarkers =
                 epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
@@ -1034,7 +1053,7 @@ namespace epochengine::raylibcontext
 
         return detail::make_current(st.hdc, st.hglrc);
 #else
-        return true;
+        return linux::make_native_context_current();
 #endif
     }
 

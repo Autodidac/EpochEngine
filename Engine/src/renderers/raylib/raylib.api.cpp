@@ -152,6 +152,9 @@ namespace epochengine::raylib_api
 
     const int pixelformat_rgba8 = ::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
     const int camera_perspective = ::CAMERA_PERSPECTIVE;
+    const int texture_filter_point = ::TEXTURE_FILTER_POINT;
+    const int texture_filter_bilinear = ::TEXTURE_FILTER_BILINEAR;
+    const int blend_alpha_premultiply = ::BLEND_ALPHA_PREMULTIPLY;
 
     static ::Color to_rl(Color c) { return ::Color{ c.r, c.g, c.b, c.a }; }
     static ::Vector2 to_rl(Vector2 v) { return ::Vector2{ v.x, v.y }; }
@@ -251,6 +254,12 @@ namespace epochengine::raylib_api
     void begin_mode_3d(const Camera3D& camera) { ::BeginMode3D(to_rl(camera)); }
     void end_mode_3d() { ::EndMode3D(); }
     void draw_grid(int slices, float spacing) { ::DrawGrid(slices, spacing); }
+    void set_texture_filter(const Texture2D& texture, int filter)
+    {
+        ::SetTextureFilter(to_rl(texture), filter);
+    }
+    void begin_blend_mode(int mode) { ::BeginBlendMode(mode); }
+    void end_blend_mode() { ::EndBlendMode(); }
 
     void set_target_fps(int fps) { ::SetTargetFPS(fps); }
     void set_window_title(const char* title) { ::SetWindowTitle(title); }

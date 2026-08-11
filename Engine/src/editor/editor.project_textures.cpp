@@ -297,6 +297,39 @@ namespace epochengine::editor_project_textures
         return found == catalog_.end() ? nullptr : &*found;
     }
 
+    ControllerMetrics ProjectTextureController::metrics() const noexcept
+    {
+        ControllerMetrics result{};
+        result.texture_count = static_cast<std::uint32_t>((std::min)(
+            catalog_.size(),
+            static_cast<std::size_t>(
+                (std::numeric_limits<std::uint32_t>::max)())));
+        result.has_selection = selected() != nullptr;
+        const auto saturating_add = [](std::uint64_t left,
+                                       std::uint64_t right) noexcept
+        {
+            const std::uint64_t maximum =
+                (std::numeric_limits<std::uint64_t>::max)();
+            return right > maximum - left ? maximum : left + right;
+        };
+        for (const TextureCatalogEntry& entry : catalog_)
+        {
+            result.source_bytes = saturating_add(
+                result.source_bytes,
+                entry.source_bytes);
+            result.decoded_bytes = saturating_add(
+                result.decoded_bytes,
+                entry.decoded_bytes);
+            result.maximum_width = (std::max)(
+                result.maximum_width,
+                entry.width);
+            result.maximum_height = (std::max)(
+                result.maximum_height,
+                entry.height);
+        }
+        return result;
+    }
+
     ControllerResult ProjectTextureController::import_source(
         const fs::path& sourcePath,
         const capability::SubsystemProfile& renderer,
@@ -607,6 +640,16 @@ namespace epochengine::editor_project_textures
         const auto firstMaterial = controller.selected_material();
         if (!first || !firstMaterial || !firstMaterial->valid())
             return ControllerContractFailure::import;
+        const ControllerMetrics firstMetrics = controller.metrics();
+        if (firstMetrics.texture_count != 1u
+            || firstMetrics.source_bytes != first.entry->source_bytes
+            || firstMetrics.decoded_bytes != first.entry->decoded_bytes
+            || firstMetrics.maximum_width != first.entry->width
+            || firstMetrics.maximum_height != first.entry->height
+            || !firstMetrics.has_selection)
+        {
+            return ControllerContractFailure::metrics;
+        }
         if (firstMaterial->logical_path
                 != "Assets/Textures/sample.ppm"
             || firstMaterial->artifact_key
@@ -632,6 +675,16 @@ namespace epochengine::editor_project_textures
                 == firstMaterial->artifact_key)
         {
             return ControllerContractFailure::historical_revision;
+        }
+        const ControllerMetrics secondMetrics = controller.metrics();
+        if (secondMetrics.texture_count != 1u
+            || secondMetrics.source_bytes != second.entry->source_bytes
+            || secondMetrics.decoded_bytes != second.entry->decoded_bytes
+            || secondMetrics.maximum_width != second.entry->width
+            || secondMetrics.maximum_height != second.entry->height
+            || !secondMetrics.has_selection)
+        {
+            return ControllerContractFailure::metrics;
         }
 
         const std::array<scene::SceneTextureMaterialSnapshot, 2>

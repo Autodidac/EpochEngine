@@ -88,6 +88,16 @@ export namespace epochengine::editor_project_textures
         }
     };
 
+    struct ControllerMetrics final
+    {
+        std::uint64_t source_bytes{};
+        std::uint64_t decoded_bytes{};
+        std::uint32_t texture_count{};
+        std::uint32_t maximum_width{};
+        std::uint32_t maximum_height{};
+        bool has_selection{};
+    };
+
     struct ControllerResult final
     {
         ControllerCode code{ControllerCode::invalid_controller};
@@ -150,6 +160,7 @@ export namespace epochengine::editor_project_textures
         [[nodiscard]] std::span<const TextureCatalogEntry> catalog() const noexcept;
         [[nodiscard]] std::string_view selected_logical_path() const noexcept;
         [[nodiscard]] const TextureCatalogEntry* selected() const noexcept;
+        [[nodiscard]] ControllerMetrics metrics() const noexcept;
 
         [[nodiscard]] ControllerResult import_source(
             const std::filesystem::path& sourcePath,
@@ -189,6 +200,7 @@ export namespace epochengine::editor_project_textures
         temporary_project,
         outside_assets_rejection,
         import,
+        metrics,
         material_identity,
         exact_restore,
         lease,
@@ -208,6 +220,7 @@ export namespace epochengine::editor_project_textures
         case ControllerContractFailure::outside_assets_rejection:
             return "outside_assets_rejection";
         case ControllerContractFailure::import: return "import";
+        case ControllerContractFailure::metrics: return "metrics";
         case ControllerContractFailure::material_identity:
             return "material_identity";
         case ControllerContractFailure::exact_restore: return "exact_restore";

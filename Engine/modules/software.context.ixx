@@ -30,9 +30,11 @@
  ***********************************************/
 module;
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <span>
+#include <string_view>
 
 export module software.context;
 
@@ -43,6 +45,38 @@ import context.commandqueue;
 
 export namespace epochengine::anativecontext
 {
+    enum class SoftwareCanvas2DContractFailure : std::uint8_t
+    {
+        none,
+        runtime_session,
+        clip_region,
+        color_packing,
+        clipped_blit,
+        resize_blit,
+        alpha_composition
+    };
+
+    [[nodiscard]] constexpr std::string_view software_canvas2d_contract_failure_name(
+        SoftwareCanvas2DContractFailure failure) noexcept
+    {
+        switch (failure)
+        {
+        case SoftwareCanvas2DContractFailure::none: return "pass";
+        case SoftwareCanvas2DContractFailure::runtime_session: return "runtime_session";
+        case SoftwareCanvas2DContractFailure::clip_region: return "clip_region";
+        case SoftwareCanvas2DContractFailure::color_packing: return "color_packing";
+        case SoftwareCanvas2DContractFailure::clipped_blit: return "clipped_blit";
+        case SoftwareCanvas2DContractFailure::resize_blit: return "resize_blit";
+        case SoftwareCanvas2DContractFailure::alpha_composition:
+            return "alpha_composition";
+        }
+        return "unknown";
+    }
+
+    [[nodiscard]] SoftwareCanvas2DContractFailure
+        software_canvas2d_backend_contract_failure() noexcept;
+    [[nodiscard]] bool software_canvas2d_backend_contract() noexcept;
+
     int get_width();
     int get_height();
 
