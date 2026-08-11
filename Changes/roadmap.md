@@ -59,6 +59,11 @@ Current source or in-progress contracts include:
   decoded publication, restore-on-demand, semantic scene materials, snapshot
   format 3, and one World Outliner Assets controller over the same logical
   resource spine;
+- canonical temporal tilemap documents with stable IDs, sparse chunks, semantic
+  history, deterministic runtime artifacts, collision/object payloads, exact
+  Project Library persistence, restore-on-demand, and visible Canvas2D
+  compilation. The EpochGui map workspace and scene/runtime binding remain
+  delivery work;
 - production project validation that materializes, atomically saves/reopens,
   builds, and child-runs all six generated profiles, plus an exact standalone
   external Run proof for the generated GUI project;
@@ -183,15 +188,19 @@ Exit gate:
 
 ### Week 4: Tilemap And Scene Authoring
 
+Foundation status: stable tilemap authoring identity, sparse chunks, semantic
+operations, deterministic artifacts, bounded serialization/culling, animated
+Canvas2D submission, collision/object output, and exact Project Library
+restore are build-proven. No interactive map workspace is claimed yet.
+
 Deliver:
 
-- tile palette/tileset, tile layer, chunk, object, collision, and runtime artifact
-  contracts;
-- bounded culling and deterministic visible-chunk ordering;
-- a 2D workspace with hierarchy, asset/palette browser, inspector, placement,
-  selection, transform, delete, undo/redo, and save/reopen;
-- commands route through document operations instead of direct widget mutation;
-- editor controls use EpochGui and reflect capability/settings truth.
+- build the EpochGui tile palette, tileset, layer, object, and collision tools;
+- bind exact map artifact identity into saved scene/runtime projection;
+- add hierarchy, asset/palette browser, inspector, placement, selection,
+  transform, delete, undo/redo, save/reopen, and cost diagnostics;
+- route every edit through tilemap/scene document operations;
+- ensure Play, Run, Build, and cache recreation consume the same compiled map.
 
 Exit gate:
 

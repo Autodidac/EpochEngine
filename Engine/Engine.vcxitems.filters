@@ -1163,6 +1163,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_scene.ixx">
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_tilemap.ixx">
+      <Filter>Module Files\epoch\render</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d_scene.ixx">
       <Filter>Module Files\epoch\render</Filter>
     </ClCompile>
@@ -1256,6 +1259,9 @@
     <Filter Include="Source Files\epochengine\authoring\texture">
       <UniqueIdentifier>{0304862f-2d95-4308-b1a6-4d29bc847130}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\epochengine\authoring\tilemap">
+      <UniqueIdentifier>{c7f0a402-399c-4ee4-9008-2750e99a243f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\epochengine\project">
       <UniqueIdentifier>{2d012ae0-0465-4bca-a747-b94aa914e9be}</UniqueIdentifier>
     </Filter>
@@ -1264,6 +1270,9 @@
     </Filter>
     <Filter Include="Source Files\epochengine\assets\texture">
       <UniqueIdentifier>{61ae8cf2-2baa-4f61-88c5-0e5e651cbe69}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\assets\tilemap">
+      <UniqueIdentifier>{a00bb3bc-147a-4c4f-8f06-0d9ca345d056}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -1283,6 +1292,12 @@
       <Filter>Module Files\epoch\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.tilemap_artifact.ixx">
+      <Filter>Module Files\epoch\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.tilemap.ixx">
       <Filter>Module Files\epoch\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_textures.ixx">
@@ -1307,6 +1322,12 @@
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_admission.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_library.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_pipeline.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx">
@@ -1351,6 +1372,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_pipeline.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_library.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_pipeline.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_textures.cpp">
       <Filter>Source Files\epochengine\editor</Filter>
     </ClCompile>
@@ -1365,6 +1392,21 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp">
       <Filter>Source Files\epochengine\authoring\texture</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\tilemap\asset.tilemap_artifact.cpp">
+      <Filter>Source Files\epochengine\assets\tilemap</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_document.cpp">
+      <Filter>Source Files\epochengine\authoring\tilemap</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_contract.cpp">
+      <Filter>Source Files\epochengine\authoring\tilemap</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_tilemap.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_tilemap_contract.cpp">
+      <Filter>Source Files\epochengine</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

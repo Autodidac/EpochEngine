@@ -9,10 +9,11 @@ import project.lifecycle;
 import project.texture_admission;
 import project.texture_resources;
 import project.texture_pipeline;
+import project.tilemap_pipeline;
 
 namespace epochengine::project_contracts
 {
-    ContractResult run_texture_spine_contract() noexcept
+    ContractResult run_asset_spine_contract() noexcept
     {
         const auto registry =
             project_assets::project_asset_registry_runtime_contract_failure();
@@ -45,6 +46,16 @@ namespace epochengine::project_contracts
                 project_textures::texture_admission_contract_failure_name(
                     admission)};
         }
+        const auto tilemaps =
+            project_tilemaps::project_tilemap_pipeline_runtime_contract_failure();
+        if (tilemaps != project_tilemaps::TileMapPipelineContractFailure::none)
+        {
+            return {
+                false,
+                project_tilemaps::tilemap_pipeline_contract_failure_name(
+                    tilemaps)};
+        }
+
         const auto lifecycle =
             project_lifecycle::runtime_contract_failure();
         if (lifecycle != project_lifecycle::ContractFailure::none)

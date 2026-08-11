@@ -18,6 +18,7 @@ option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible 
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
 option(EPOCH_ENABLE_AUTHORING_PLATFORM "Gate the shared Epoch authoring-document and editor foundation as implementation units land." ON)
 option(EPOCH_ENABLE_TEXTURE_EDITOR "Gate texture painting, compositing, and texture-node authoring implementation units." ON)
+option(EPOCH_ENABLE_TILEMAP_EDITOR "Gate tile palette, sparse map authoring, and map compilation implementation units." ON)
 option(EPOCH_ENABLE_MODEL_EDITOR "Gate mesh editing, procedural modeling, and sculpt implementation units." ON)
 option(EPOCH_ENABLE_NODE_EDITOR "Gate the shared typed node-graph editor and evaluator implementation units." ON)
 option(EPOCH_ENABLE_MATERIAL_EDITOR "Gate material graph authoring and preview implementation units." ON)
@@ -170,7 +171,7 @@ function(epoch_print_build_summary)
     message(STATUS "  Sanitizers: ${EPOCH_ENABLE_SANITIZERS}")
     message(STATUS "  CI/headless-only: ${EPOCH_CI_HEADLESS_ONLY}")
     message(STATUS "  Authoring platform: ${EPOCH_ENABLE_AUTHORING_PLATFORM}")
-    message(STATUS "  Authoring editors: texture=${EPOCH_ENABLE_TEXTURE_EDITOR}; model=${EPOCH_ENABLE_MODEL_EDITOR}; node=${EPOCH_ENABLE_NODE_EDITOR}; material=${EPOCH_ENABLE_MATERIAL_EDITOR}; animation=${EPOCH_ENABLE_ANIMATION_EDITOR}")
+    message(STATUS "  Authoring editors: texture=${EPOCH_ENABLE_TEXTURE_EDITOR}; tilemap=${EPOCH_ENABLE_TILEMAP_EDITOR}; model=${EPOCH_ENABLE_MODEL_EDITOR}; node=${EPOCH_ENABLE_NODE_EDITOR}; material=${EPOCH_ENABLE_MATERIAL_EDITOR}; animation=${EPOCH_ENABLE_ANIMATION_EDITOR}")
     message(STATUS "  Authoring collaboration: ${EPOCH_ENABLE_AUTHORING_COLLABORATION}")
     message(STATUS "  Authoring metrics: ${EPOCH_ENABLE_AUTHORING_METRICS}")
     message(STATUS "  GCC full-engine module opt-in: ${EPOCH_ALLOW_GCC_MODULE_ENGINE}")
@@ -367,6 +368,11 @@ set(EPOCH_SOURCES
     src/renderers/canvas2d/render.canvas2d_evidence.cpp
     src/renderers/canvas2d/render.canvas2d_scene_contract.cpp
     src/renderers/canvas2d/canvas2d.scene_contracts.cpp
+    src/renderers/canvas2d/render.canvas2d_tilemap.cpp
+    src/renderers/canvas2d/render.canvas2d_tilemap_contract.cpp
+    src/assets/tilemap/asset.tilemap_artifact.cpp
+    src/project/project.tilemap_library.cpp
+    src/project/project.tilemap_pipeline.cpp
     src/utility.filewatch.cpp
     src/font.renderer.cpp
     src/project/project.asset_registry.cpp
@@ -414,6 +420,12 @@ if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
         src/authoring/texture/authoring.texture_document.cpp
     )
 endif()
+if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
+    list(APPEND EPOCH_SOURCES
+        src/authoring/tilemap/authoring.tilemap_document.cpp
+    )
+endif()
+
 
 add_executable(epoch ${EPOCH_SOURCES})
 if(WIN32)
@@ -1072,6 +1084,10 @@ if(NOT EPOCH_DIRECTX_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])directx\.]])
 endif()
 
+if(NOT EPOCH_ENABLE_AUTHORING_PLATFORM OR NOT EPOCH_ENABLE_TILEMAP_EDITOR)
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])authoring\.tilemap\.ixx$]])
+endif()
+
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
 
 if(NOT EPOCH_ENABLE_AUTHORING_PLATFORM OR NOT EPOCH_ENABLE_TEXTURE_EDITOR)
@@ -1187,6 +1203,37 @@ if(BUILD_TESTING)
             COMMAND epoch_authoring_texture_contract
         )
     endif()
+    if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
+        add_executable(epoch_authoring_tilemap_contract
+            src/assets/tilemap/asset.tilemap_artifact.cpp
+            src/authoring/tilemap/authoring.tilemap_document.cpp
+            src/authoring/tilemap/authoring.tilemap_contract.cpp
+        )
+        target_sources(epoch_authoring_tilemap_contract PRIVATE
+            FILE_SET epoch_authoring_tilemap_modules TYPE CXX_MODULES
+                BASE_DIRS ${EPOCH_MODULE_DIR}
+                FILES
+                    ${EPOCH_MODULE_DIR}/authoring.document.ixx
+                    ${EPOCH_MODULE_DIR}/asset.tilemap_artifact.ixx
+                    ${EPOCH_MODULE_DIR}/authoring.tilemap.ixx
+        )
+        target_include_directories(epoch_authoring_tilemap_contract PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        target_compile_definitions(epoch_authoring_tilemap_contract PRIVATE
+            EPOCH_AUTHORING_TILEMAP_CONTRACT_MAIN=1
+        )
+        epoch_apply_cxx_dialect(epoch_authoring_tilemap_contract)
+        epoch_apply_warnings(epoch_authoring_tilemap_contract)
+        epoch_apply_sanitizers(epoch_authoring_tilemap_contract)
+        add_test(
+            NAME epoch_authoring_tilemap_contract
+            COMMAND epoch_authoring_tilemap_contract
+        )
+    endif()
+
     add_test(
         NAME epoch_engine_contract
         COMMAND $<TARGET_FILE:epoch> --engine-contract-self-test
@@ -1205,6 +1252,7 @@ target_compile_definitions(epoch PRIVATE
     $<$<BOOL:${EPOCH_UPDATER_SHELL_BUILD}>:EPOCH_UPDATER_SHELL_BUILD=1>
     EPOCH_ENABLE_AUTHORING_PLATFORM=$<BOOL:${EPOCH_ENABLE_AUTHORING_PLATFORM}>
     EPOCH_ENABLE_TEXTURE_EDITOR=$<BOOL:${EPOCH_ENABLE_TEXTURE_EDITOR}>
+    EPOCH_ENABLE_TILEMAP_EDITOR=$<BOOL:${EPOCH_ENABLE_TILEMAP_EDITOR}>
     EPOCH_ENABLE_MODEL_EDITOR=$<BOOL:${EPOCH_ENABLE_MODEL_EDITOR}>
     EPOCH_ENABLE_NODE_EDITOR=$<BOOL:${EPOCH_ENABLE_NODE_EDITOR}>
     EPOCH_ENABLE_MATERIAL_EDITOR=$<BOOL:${EPOCH_ENABLE_MATERIAL_EDITOR}>

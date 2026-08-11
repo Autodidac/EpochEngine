@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.11` so
+and stable multicontext branch are sealed. Development source is `v0.89.12` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -108,6 +108,18 @@ The working tree contains these current or in-progress foundations:
   the asset registry, decoded runtime publication, restore-on-demand, and owned
   Canvas2D resource leases. Recreated pipelines recover the same logical
   project texture without preserving physical cache state;
+- `authoring.tilemap` owns stable tileset, palette, layer, cell, and object
+  identity; sparse chunks; semantic operations; bounded history; undo/redo;
+  deterministic snapshots; and reproducible compilation;
+- `asset.tilemap_artifact` owns the runtime schema, canonical hash and order,
+  bounded serialization, texture dependencies, collision/object payloads, and
+  malformed-input validation independently of editor/UI linkage;
+- `project.tilemap_library` and `project.tilemap_pipeline` atomically persist
+  exact compiled revisions beneath `<project>/Library/TileMaps`, restore
+  exact/latest state, and bind stable project asset identity;
+- `render.canvas2d_tilemap` culls visible chunks and compiles deterministic
+  animated, transformed, material-bound Canvas2D submissions plus collision
+  and object outputs without exposing physical cache identity;
 - `asset.texture_import` decodes bounded uncompressed BMP, TGA, and P6 PPM
   sources into canonical RGBA8 artifacts. `editor.project_textures` owns one
   project-scoped controller for source discovery, import, Library restore,
@@ -280,34 +292,34 @@ in Debug and Release. Its live run and non-OpenGL pixel/switch evidence remain `
 
 ## Completed Capability Checkpoint
 
-Source v0.89.11 carries forward the sealed v0.89.06 release baseline and extends
-a complete saved-project texture/runtime slice. BMP, TGA, and P6 PPM sources
-compile into authenticated artifacts, publish atomically in the project
-Library, restore through stable logical identity, and bind semantic scene
-materials through exact immutable Canvas2D resource leases. Snapshot format 3
-preserves that intent through atomic save/reopen and runtime compilation.
-Approved OpenGL captures prove exact native/T0-CPU Canvas2D output. Final GUI
-Editor and Assets captures are free of default Arcade geometry and OpenGL
-errors. All six generated project profiles pass materialization, save/reopen,
-build, and child-runtime self-test; the generated GUI project additionally
-passes the editor-equivalent external Run arguments.
-This checkpoint adds build-proven Canvas2D presentation adapters across every
-baseline context plus bounded interaction automation, but does not claim their
-live execution, tilemap authoring, higher texture formats, physics/audio
-gameplay, or the complete acceptance game.
+Source v0.89.12 carries forward the sealed v0.89.06 release baseline, the
+saved-project texture/runtime slice, and exact OpenGL/T0-CPU Canvas2D proof.
+It adds the first canonical temporal tilemap vertical slice: stable authoring
+identity and semantic history compile into a deterministic runtime artifact,
+publish atomically through the project Library/asset registry, restore by exact
+or latest content identity, and produce culled Canvas2D submissions, collision
+records, and map objects without preserving physical cache state.
+All six generated project profiles retain their materialize, save/reopen,
+build, and child-runtime proof; GUI Editor retains the external Run proof.
+MSVC Debug/Release and CMake Debug builds and build-safe tilemap, project,
+Canvas2D, and engine contracts pass.
+This checkpoint does not claim the EpochGui tile palette/workspace, map binding
+in saved scene snapshots, live tilemap presentation, higher texture formats,
+actor input/physics/audio gameplay, non-OpenGL pixel parity, or the complete
+acceptance game.
 
 ## Immediate Implementation Order
 
-1. Run and capture the bounded Assets import, assignment, undo/redo, and
-   save/reopen automation plus native presentation evidence when runtime proof
-   is approved.
-2. Build tile palette, layer/chunk editing, placement, selection, and compiled
-   map output on the same scene/document command gateway.
-3. Add repeated switch/resource-soak coverage for all seven presentation paths.
-4. Continue settings and controls from the new texture/source/decoded/upload/
-   residency diagnostics into cache budgets and measured cost visibility.
-5. Move directly into configurable input and deterministic 2D physics once one
-   map can be authored, saved, reopened, built, and run without source edits.
+1. Build the EpochGui 2D palette/layer workspace over `authoring.tilemap`, with
+   placement, selection, collision/object editing, undo/redo, and diagnostics.
+2. Bind exact tilemap artifact identity into the saved scene/runtime projection
+   so Save, reopen, Play, Run, Build, and cache recreation consume one map.
+3. Add configurable actor input and the deterministic 2D solver adapter behind
+   `physics.manager`; then connect spawn, reset, pause, and map collisions.
+4. Run the bounded Assets/tilemap interaction and native presentation evidence
+   only when runtime proof is approved.
+5. Keep backend switch/resource soak and texture/cache settings moving in
+   parallel without delaying the playable map and actor loop.
 
 ## Backend Repair Within This Gate
 
@@ -387,9 +399,10 @@ The active gate is accepted when:
    undo/redo, reproducible compilation, and physical-plan independence.
 6. Tier-0 scene tests prove selection, Focus, ground, light, spawn, save/reopen,
    and Run/Build use the same project-owned state.
-7. Canvas2D contracts prove deterministic ordering, scaling, blend/sampling,
-   offscreen-compose planning, resource-binding validation, Project Library
-   persistence/reopen, textured editor publication, and bounded failure.
+7. Canvas2D and tilemap contracts prove deterministic ordering, culling,
+   animation selection, transforms, collision/object output, blend/sampling,
+   resource-binding validation, exact Project Library persistence/reopen,
+   textured editor publication, and bounded malformed-input failure.
 8. Renderer docs keep current Raylib/Vulkan regression status, non-OpenGL
    Canvas2D presentation, and repeated replacement `Partial` until live capture
    and eye proof.

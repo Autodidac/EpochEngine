@@ -137,6 +137,10 @@ temporal world:
 
 - `authoring.document` owns generation-checked document handles, deterministic
   content revisions, and history policy;
+- `authoring.tilemap` applies the same separation to maps: stable source meaning
+  and semantic history compile into `asset.tilemap_artifact`; project Library
+  bytes and renderer submissions are reproducible derivatives, while texture
+  residency and backend handles remain disposable;
 - `scene.document` owns stable scene object handles, typed components, semantic
   operations, transactions, undo/redo, and deterministic snapshot projection;
 - `scene.interaction` resolves ray hits, drag ownership, and Focus through stable

@@ -16,5 +16,5 @@ export namespace epochengine::project_contracts
         std::string_view stage{"not_run"};
     };
 
-    [[nodiscard]] ContractResult run_texture_spine_contract() noexcept;
+    [[nodiscard]] ContractResult run_asset_spine_contract() noexcept;
 }

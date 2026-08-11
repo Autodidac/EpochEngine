@@ -2,12 +2,17 @@
  * Epoch Engine
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
+module;
+
+#include <compare>
+
 module canvas2d.scene_contracts;
 
 import editor.canvas2d_scene;
 import render.canvas2d_evidence;
 import render.canvas2d_runtime;
 import render.canvas2d_scene;
+import render.canvas2d_tilemap;
 
 namespace epochengine::canvas2d_scene_contracts
 {
@@ -22,6 +27,14 @@ namespace epochengine::canvas2d_scene_contracts
                 canvas2d::scene_content::resource_closure_contract_failure_name(
                     resources)};
         }
+        const auto tilemap = canvas2d::tilemap_runtime::run_contract();
+        if (tilemap != canvas2d::tilemap_runtime::ContractFailure::none)
+        {
+            return {
+                false,
+                canvas2d::tilemap_runtime::contract_failure_name(tilemap)};
+        }
+
         const auto evidence =
             canvas2d::evidence::canvas2d_pixel_evidence_runtime_contract_failure();
         if (evidence != canvas2d::evidence::PixelEvidenceContractFailure::none)

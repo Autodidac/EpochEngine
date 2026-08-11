@@ -83,7 +83,8 @@ export namespace epochengine::authoring
         particle_effect,
         audio_graph,
         simulation_graph,
-        generic_node_graph
+        generic_node_graph,
+        tilemap
     };
 
     [[nodiscard]] constexpr bool valid(DocumentKind kind) noexcept
@@ -99,6 +100,7 @@ export namespace epochengine::authoring
         case DocumentKind::audio_graph:
         case DocumentKind::simulation_graph:
         case DocumentKind::generic_node_graph:
+        case DocumentKind::tilemap:
             return true;
         case DocumentKind::invalid:
         default:
@@ -120,6 +122,7 @@ export namespace epochengine::authoring
         case DocumentKind::audio_graph: return "audio_graph";
         case DocumentKind::simulation_graph: return "simulation_graph";
         case DocumentKind::generic_node_graph: return "generic_node_graph";
+        case DocumentKind::tilemap: return "tilemap";
         case DocumentKind::invalid:
         default:
             return "invalid";

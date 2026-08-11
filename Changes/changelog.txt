@@ -1,5 +1,26 @@
 # Epoch Changelog
 
+
+## [v0.89.12] - Temporal tilemap and project Library source checkpoint
+
+- Add a canonical tilemap authoring document with stable tileset, palette,
+  layer, object, and cell identity; sparse chunks; semantic operations;
+  bounded history; deterministic undo/redo; and reproducible compilation.
+- Add the runtime-owned compiled tilemap artifact with deterministic hashing,
+  bounded serialization, collision/object payloads, dependency identity,
+  canonical ordering, animation-span validation, and malformed-input contracts.
+- Compile visible chunks into renderer-neutral Canvas2D sprite submissions with
+  deterministic culling, animation-frame selection, transforms, material
+  dependencies, collision output, and stable draw ordering.
+- Persist exact compiled revisions beneath `Library/TileMaps`, verify temporary
+  writes before atomic publication, restore exact/latest artifacts, and bind
+  project asset identity through the shared registry and Canvas2D pipeline.
+- Add a standalone tilemap authoring contract, integrate project/runtime
+  contracts, and register all source with CMake and MSVC metadata. CMake/MSVC
+  Debug and shared MSVC Release builds and build-safe contracts pass.
+- Keep the EpochGui 2D palette/workspace, saved-scene map binding, live
+  presentation, actor/input/physics, and acceptance-game loop explicitly
+  incomplete. The published v0.89.06 updater and release remain sealed.
 ## [v0.89.11] - Cross-backend Canvas2D presentation source checkpoint
 
 - Add one renderer-neutral `SceneRasterSession` that acquires immutable editor

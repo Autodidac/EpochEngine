@@ -2684,12 +2684,12 @@ namespace epochengine::core
                     software_canvas2d_contract_failure_name(softwareCanvasContract)},
             softwareCanvasContract ==
                 epochengine::anativecontext::SoftwareCanvas2DContractFailure::none);
-        const auto projectTextureSpineContract =
-            epochengine::project_contracts::run_texture_spine_contract();
+        const auto projectAssetSpineContract =
+            epochengine::project_contracts::run_asset_spine_contract();
         check(
-            std::string{"project.texture_spine."}
-                + std::string{projectTextureSpineContract.stage},
-            projectTextureSpineContract.passed);
+            std::string{"project.asset_spine."}
+                + std::string{projectAssetSpineContract.stage},
+            projectAssetSpineContract.passed);
         const auto textureImportContract =
             epochengine::asset::texture::texture_import_contract_failure();
         check(

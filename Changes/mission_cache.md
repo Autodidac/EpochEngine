@@ -85,10 +85,16 @@ release history belong in the changelog/archive, not architecture docs.
   interaction automation cover import, selection, assignment, clear, undo/redo,
   save, and reopen over that same spine. Next prove that automation live and
   compare each native adapter against the CPU oracle.
-- Extend the current tile descriptors with palettes, map objects, collision,
-  visible-chunk culling, project persistence, and compiled runtime artifacts.
-- Add animation-frame selection and sprite culling without weakening stable draw
-  order or exposing physical cache identity as authoring state.
+- `authoring.tilemap` now owns stable map meaning, sparse chunks, semantic
+  operations, bounded history, and deterministic compilation.
+- `asset.tilemap_artifact`, `project.tilemap_library`, and
+  `project.tilemap_pipeline` own bounded runtime bytes, exact project Library
+  persistence/restore, and stable registry identity. `render.canvas2d_tilemap`
+  owns visible-chunk culling, animation selection, transforms, deterministic
+  sprite ordering, collision records, and map-object output.
+- Next build the EpochGui palette/layer/object/collision workspace and bind exact
+  map artifact identity into scene snapshots, Play, Run, Build, and cache
+  recreation before starting the actor/physics loop.
 - Add configurable input actions and keyboard/controller bindings.
 - Add a deterministic fixed-step 2D solver adapter behind `physics.manager`.
 - Add a physical audio adapter behind `audio.manager` with buses and clean device
