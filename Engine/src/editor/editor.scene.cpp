@@ -119,9 +119,11 @@ module editor.core;
 import core.logger;
 import core.path;
 import package.registry;
+import platform.filesystem;
 import render.arcade;
 import scene.serializer;
 import scene.snapshot;
+import project.input_profile;
 
 namespace
 {
@@ -1004,6 +1006,7 @@ namespace
             .root_path = "Projects/TwoDStudio",
             .scene_path = "Projects/TwoDStudio/worlds/twod.epoch",
             .tilemap_path = "Assets/Maps/main.epochmap",
+            .input_profile_path = "Assets/Config/input_profile.epochinput",
             .world_name = "TwoD_Main",
             .runtime_scene_id = "project:twodstudio",
             .manifest_path = "Projects/TwoDStudio/project.epoch.json",
@@ -1133,6 +1136,7 @@ namespace
         std::string root_path{};
         std::string scene_path{};
         std::string tilemap_path{};
+        std::string input_profile_path{};
         std::string world_name{};
         std::string runtime_scene_id{};
         std::string manifest_path{};
@@ -1153,6 +1157,7 @@ namespace
                 .root_path = root_path,
                 .scene_path = scene_path,
                 .tilemap_path = tilemap_path,
+                .input_profile_path = input_profile_path,
                 .world_name = world_name,
                 .runtime_scene_id = runtime_scene_id,
                 .manifest_path = manifest_path,
@@ -1613,6 +1618,14 @@ namespace
         profile.scene_path = scenePath.generic_string();
         profile.tilemap_path = extract_json_string_field(
             manifestText, "tilemap").value_or("");
+        profile.input_profile_path = extract_json_string_field(
+            manifestText, "input_profile").value_or("");
+        if (!profile.input_profile_path.empty()
+            && profile.input_profile_path
+                != epochengine::project_input::canonical_source_path)
+        {
+            return std::nullopt;
+        }
         profile.world_name = parse_world_name(scenePath, profile.kind);
         profile.runtime_scene_id = "project:" + profile.id;
         profile.manifest_path = manifest_path.lexically_normal().generic_string();
@@ -1913,6 +1926,122 @@ namespace
         return write_text_file(path, text);
     }
 
+    [[nodiscard]] static std::optional<std::string>
+        migrated_project_input_manifest_text(
+            std::string_view original,
+            std::string_view expectedPath)
+    {
+        if (expectedPath.empty()
+            || expectedPath != epochengine::project_input::canonical_source_path)
+        {
+            return std::nullopt;
+        }
+        std::string text{original};
+        const JsonStringFieldResult field =
+            inspect_json_string_field(text, "input_profile");
+        if (field.state == JsonStringFieldState::present)
+        {
+            return field.value == expectedPath
+                ? std::optional<std::string>{std::move(text)}
+                : std::nullopt;
+        }
+        if (field.state != JsonStringFieldState::missing)
+            return std::nullopt;
+
+        const std::size_t open = text.find_first_not_of(" \t\r\n");
+        const std::size_t close = text.find_last_not_of(" \t\r\n");
+        if (open == std::string::npos || close == std::string::npos
+            || open >= close || text[open] != '{' || text[close] != '}')
+        {
+            return std::nullopt;
+        }
+        const std::size_t previous = text.find_last_not_of(
+            " \t\r\n", close - 1u);
+        if (previous == std::string::npos || text[previous] == ',')
+            return std::nullopt;
+
+        const std::string line =
+            (text[previous] == '{' ? "\n" : ",\n")
+            + std::string{"  \"input_profile\": \""}
+            + json_escape(expectedPath)
+            + "\"\n";
+        text.insert(close, line);
+
+        const JsonStringFieldResult migrated =
+            inspect_json_string_field(text, "input_profile");
+        if (migrated.state != JsonStringFieldState::present
+            || migrated.value != expectedPath)
+        {
+            return std::nullopt;
+        }
+        return text;
+    }
+
+    [[nodiscard]] static bool migrate_project_input_manifest(
+        const fs::path& manifest,
+        std::string_view expectedPath)
+    {
+        const auto migrated = migrated_project_input_manifest_text(
+            read_text_file(manifest), expectedPath);
+        if (!migrated)
+            return false;
+
+        fs::path temporary = manifest;
+        temporary += ".input-profile.tmp";
+        std::error_code ec;
+        fs::remove(temporary, ec);
+        ec.clear();
+        if (!write_text_file(temporary, *migrated)
+            || !epochengine::platform::filesystem::
+                atomic_replace_same_filesystem(temporary, manifest, ec))
+        {
+            std::error_code cleanup;
+            fs::remove(temporary, cleanup);
+            return false;
+        }
+        return true;
+    }
+    [[nodiscard]] static bool ensure_project_input_source(
+        std::string_view projectId,
+        const fs::path& root)
+    {
+        epochengine::project_input::ProjectInputProfileStore store{
+            std::string{projectId}, root};
+        if (!store.valid())
+            return false;
+        const auto loaded = store.load_source();
+        if (loaded)
+            return true;
+        if (loaded.code != epochengine::project_input::StoreCode::not_found)
+            return false;
+
+        epochengine::project_input::ProfileSource source{};
+        const auto artifact = store.load_artifact();
+        if (artifact)
+        {
+            source = {
+                .id = artifact.artifact.profile_id,
+                .display_name = artifact.artifact.display_name,
+                .revision = artifact.artifact.source_revision,
+                .actions = artifact.artifact.actions,
+                .bindings = artifact.artifact.bindings
+            };
+            if (epochengine::project_input::seal_profile_source(source)
+                != epochengine::project_input::ValidationCode::ready)
+            {
+                return false;
+            }
+        }
+        else if (artifact.code == epochengine::project_input::StoreCode::not_found)
+        {
+            source = epochengine::project_input::make_legacy_default_profile();
+        }
+        else
+        {
+            return false;
+        }
+        return static_cast<bool>(store.save_source(source));
+    }
     static void replace_all(std::string& text, std::string_view from, std::string_view to)
     {
         if (from.empty())
@@ -2125,6 +2254,7 @@ namespace
         fs::path world_file{};
         std::string world_name{};
         std::string tilemap_path{};
+        std::string input_profile_path{};
         std::string template_family{};
         std::string script_id{};
         std::string description{};
@@ -2391,12 +2521,27 @@ namespace
         const fs::path windowsBuildScript = generated_project_windows_build_script_path(root);
         const fs::path linuxBuildScript = generated_project_linux_build_script_path(root);
         const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
+        if (!spec.input_profile_path.empty()
+            && spec.input_profile_path
+                != epochengine::project_input::canonical_source_path)
+        {
+            return EditorProjectCreationResult{
+                .succeeded = false,
+                .project_id = spec.project_id,
+                .root_path = root.generic_string(),
+                .manifest_path = manifest.generic_string(),
+                .summary = "Project input profile path must use the canonical Assets/Config location."
+            };
+        }
         const fs::path worldFile = spec.world_file.is_absolute()
             ? spec.world_file.lexically_normal()
             : resolve_repo_relative_path(spec.world_file, root);
         const fs::path scriptFile = scripts / (spec.script_id + ".ascript.cpp");
         const fs::path engineArcadePackageFile = assetPackages / "engine_arcade.package.json";
         const fs::path engineArcadeScriptFile = scripts / "script.engine_arcade_scene.cpp";
+        const fs::path inputProfileFile = spec.input_profile_path.empty()
+            ? fs::path{}
+            : (root / fs::path{spec.input_profile_path}).lexically_normal();
         const fs::path repoRoot = resolve_epoch_repo_root(root);
         const fs::path rootAbsolute = fs::absolute(root).lexically_normal();
         const std::string artifactStem = generated_project_artifact_stem(root);
@@ -2481,6 +2626,9 @@ namespace
         const std::string tileMapManifestLine = spec.tilemap_path.empty()
             ? std::string{}
             : "  \"tilemap\": \"" + json_escape(spec.tilemap_path) + "\",\n";
+        const std::string inputProfileManifestLine = spec.input_profile_path.empty()
+            ? std::string{}
+            : "  \"input_profile\": \"" + json_escape(spec.input_profile_path) + "\",\n";
         const std::string packageManifestLine = includeEngineArcadePackage
             ? std::string{ "  \"engine_asset_packages\": [\"engine_arcade\"],\n"
                 "  \"engine_arcade_default_scene\": \"" }
@@ -2498,6 +2646,9 @@ namespace
         const std::string readmeTileMapLine = spec.tilemap_path.empty()
             ? std::string{}
             : "- Canonical tile map: " + spec.tilemap_path + "\n";
+        const std::string readmeInputProfileLine = spec.input_profile_path.empty()
+            ? std::string{}
+            : "- Canonical input profile: " + spec.input_profile_path + "\n";
         const std::string readmePackageLine = includeEngineArcadePackage
             ? "- Engine asset package: engine_arcade (kernel-owned mini-runtime scenes for 512x512 render-to-texture arcade assets)\n"
             : std::string{};
@@ -2507,6 +2658,9 @@ namespace
         const std::string pathsTileMapLine = spec.tilemap_path.empty()
             ? std::string{}
             : "tilemap=" + spec.tilemap_path + "\n";
+        const std::string pathsInputProfileLine = spec.input_profile_path.empty()
+            ? std::string{}
+            : "input_profile=" + spec.input_profile_path + "\n";
         const std::string pathsPackageLine = includeEngineArcadePackage
             ? "engine_arcade_package=" + engineArcadePackageFile.generic_string() + "\n"
               "engine_arcade_script=" + engineArcadeScriptFile.generic_string() + "\n"
@@ -2529,6 +2683,7 @@ namespace
             "  \"default_script\": \"" + json_escape(spec.script_id) + "\",\n"
             + demoModelLine
             + tileMapManifestLine
+            + inputProfileManifestLine
             + packageManifestLine
             + "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
             "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
@@ -2553,6 +2708,7 @@ namespace
             "- " + scriptLabel + ": " + scriptFile.filename().string() + "\n"
             + readmeDemoLine
             + readmeTileMapLine
+            + readmeInputProfileLine
             + readmePackageLine
             + "- Engine integration: " + integrationMode + "\n"
             "- Public include root: " + publicIncludeRoot + "\n"
@@ -2577,6 +2733,7 @@ namespace
             + "default_script=" + scriptFile.generic_string() + "\n"
             + pathsDemoLine
             + pathsTileMapLine
+            + pathsInputProfileLine
             + pathsPackageLine
             + "entry_source=" + entrySource.generic_string() + "\n"
             + "windows_project=" + windowsProject.generic_string() + "\n"
@@ -2586,6 +2743,15 @@ namespace
             + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
 
         const std::string worldText = make_project_world_scene_text(spec, kindText, includeEngineArcadePackage);
+
+        const auto defaultInputProfile =
+            epochengine::project_input::serialize_profile_source(
+                epochengine::project_input::make_legacy_default_profile());
+        const std::string defaultInputProfileBytes = defaultInputProfile
+            ? std::string{
+                reinterpret_cast<const char*>(defaultInputProfile.bytes.data()),
+                defaultInputProfile.bytes.size()}
+            : std::string{};
 
         const std::string scriptText = make_project_bootstrap_script_text(spec, scriptApiInclude);
         const std::string engineArcadeScriptText = make_engine_arcade_script_text(scriptApiInclude);
@@ -2933,6 +3099,10 @@ namespace
             && write_text_file_if_allowed(readme, readmeText, spec.overwrite_existing)
             && write_text_file_if_allowed(pathsFile, pathsText, spec.overwrite_existing)
             && write_text_file_if_allowed(worldFile, worldText, spec.overwrite_existing)
+            && (spec.input_profile_path.empty()
+                || (!defaultInputProfileBytes.empty()
+                    && write_text_file_if_allowed(
+                        inputProfileFile, defaultInputProfileBytes, false)))
             && write_text_file_if_allowed(scriptFile, scriptText, spec.overwrite_existing)
             && (!includeEngineArcadePackage || write_text_file_if_allowed(engineArcadePackageFile, engineArcadePackageText, spec.overwrite_existing))
             && (!includeEngineArcadePackage || write_text_file_if_allowed(engineArcadeScriptFile, engineArcadeScriptText, spec.overwrite_existing))
@@ -3169,6 +3339,7 @@ namespace epochengine
             .project_id = "twodstudio",
             .world_name = "TwoD_Main",
             .tilemap_path = "Assets/Maps/main.epochmap",
+            .input_profile_path = "Assets/Config/input_profile.epochinput",
             .template_family = "game-2d-project",
             .script_id = "project_demo_bootstrap"
         };
@@ -3182,6 +3353,37 @@ namespace epochengine
             && arcadeWorld.find("package \"engine_arcade\"") != std::string::npos
             && arcadeWorld.find("EngineArcadeCabinetBody") != std::string::npos;
 
+        constexpr std::string_view legacyManifest =
+            R"({"id":"twodstudio","display_name":"GUI Editor"})";
+        const auto migratedInput = migrated_project_input_manifest_text(
+            legacyManifest,
+            epochengine::project_input::canonical_source_path);
+        const auto emptyInput = migrated_project_input_manifest_text(
+            "{}",
+            epochengine::project_input::canonical_source_path);
+        const auto invalidInputPath = migrated_project_input_manifest_text(
+            legacyManifest,
+            "Assets/input.epochinput");
+        const auto danglingInput = migrated_project_input_manifest_text(
+            R"({"id":"twodstudio",})",
+            epochengine::project_input::canonical_source_path);
+        const auto nonObjectInput = migrated_project_input_manifest_text(
+            R"(["twodstudio"])",
+            epochengine::project_input::canonical_source_path);
+        const bool inputMigrationGate = migratedInput
+            && emptyInput
+            && migratedInput->find(
+                legacyManifest.substr(1u, legacyManifest.size() - 2u))
+                != std::string::npos
+            && inspect_json_string_field(
+                *migratedInput, "input_profile").value
+                == epochengine::project_input::canonical_source_path
+            && inspect_json_string_field(
+                *emptyInput, "input_profile").value
+                == epochengine::project_input::canonical_source_path
+            && !invalidInputPath
+            && !danglingInput
+            && !nonObjectInput;
         return missing.state == JsonStringFieldState::missing
             && valid.state == JsonStringFieldState::present
             && valid.value == "portable"
@@ -3191,7 +3393,8 @@ namespace epochengine
             && duplicate.state == JsonStringFieldState::malformed
             && wrongType.state == JsonStringFieldState::malformed
             && unterminated.state == JsonStringFieldState::malformed
-            && explicitPackageGate;
+            && explicitPackageGate
+            && inputMigrationGate;
     }
 
     EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)
@@ -3257,10 +3460,42 @@ namespace epochengine
             const auto manifestScript = extract_json_string_field(manifestText, "default_script");
             const auto manifestTemplate = extract_json_string_field(manifestText, "template_family");
             const auto manifestTileMap = extract_json_string_field(manifestText, "tilemap");
+            const JsonStringFieldResult inputProfileField =
+                inspect_json_string_field(manifestText, "input_profile");
+            const auto manifestInputProfile = inputProfileField.state
+                    == JsonStringFieldState::present
+                ? std::optional<std::string>{inputProfileField.value}
+                : std::nullopt;
             const auto manifestDisplayName = extract_json_string_field(manifestText, "display_name");
             const auto manifestWindowsProject = extract_json_string_field(manifestText, "windows_project");
             const JsonStringFieldResult capabilityField =
                 inspect_json_string_field(manifestText, "capability_profile");
+            if (inputProfileField.state == JsonStringFieldState::malformed)
+            {
+                return EditorProjectCreationResult{
+                    .succeeded = false,
+                    .project_id = std::string(profile->id),
+                    .root_path = root.generic_string(),
+                    .manifest_path = manifest.generic_string(),
+                    .summary = "Project manifest input_profile must be one unique JSON string.",
+                    .engine_integration_mode = std::string(profile->engine_integration_mode),
+                    .public_include_root = std::string(profile->public_include_root)
+                };
+            }
+            if (inputProfileField.state == JsonStringFieldState::present
+                && inputProfileField.value
+                    != epochengine::project_input::canonical_source_path)
+            {
+                return EditorProjectCreationResult{
+                    .succeeded = false,
+                    .project_id = std::string(profile->id),
+                    .root_path = root.generic_string(),
+                    .manifest_path = manifest.generic_string(),
+                    .summary = "Project manifest input_profile must use the canonical Assets/Config location.",
+                    .engine_integration_mode = std::string(profile->engine_integration_mode),
+                    .public_include_root = std::string(profile->public_include_root)
+                };
+            }
             if (capabilityField.state == JsonStringFieldState::malformed)
             {
                 return EditorProjectCreationResult{
@@ -3293,6 +3528,9 @@ namespace epochengine
             const std::string expectedKind = profile->id == "sandbox"
                 ? "engine-self-iteration-sandbox"
                 : std::string(profile->kind == EditorProjectKind::Tool ? "tool" : "game");
+            const bool missingLegacyInputProfile =
+                !profile->input_profile_path.empty()
+                && inputProfileField.state == JsonStringFieldState::missing;
             const bool manifestMatchesProfile =
                 manifestId && *manifestId == profile->id
                 && manifestKind && *manifestKind == expectedKind
@@ -3301,6 +3539,12 @@ namespace epochengine
                 && (profile->tilemap_path.empty()
                     ? !manifestTileMap
                     : manifestTileMap && *manifestTileMap == profile->tilemap_path)
+                && (profile->input_profile_path.empty()
+                    ? !manifestInputProfile
+                    : missingLegacyInputProfile
+                        || (manifestInputProfile
+                            && *manifestInputProfile
+                                == profile->input_profile_path))
                 && manifestDisplayName && *manifestDisplayName == profile->display_name
                 && manifestWindowsProject && *manifestWindowsProject == windowsProject.filename().generic_string();
 
@@ -3314,6 +3558,7 @@ namespace epochengine
                     .world_file = fs::path{ profile->scene_path },
                     .world_name = std::string(profile->world_name),
                     .tilemap_path = std::string(profile->tilemap_path),
+                    .input_profile_path = std::string(profile->input_profile_path),
                     .template_family = std::string(profile->template_family),
                     .script_id = std::string(profile->default_script),
                     .description = std::string(profile->description),
@@ -3322,6 +3567,34 @@ namespace epochengine
                     .include_engine_arcade_package = false,
                     .overwrite_existing = true
                 });
+            }
+
+            if (missingLegacyInputProfile
+                && !migrate_project_input_manifest(
+                    manifest, profile->input_profile_path))
+            {
+                return EditorProjectCreationResult{
+                    .succeeded = false,
+                    .project_id = std::string(profile->id),
+                    .root_path = root.generic_string(),
+                    .manifest_path = manifest.generic_string(),
+                    .summary = "Project shell exists, but its input-profile manifest migration failed.",
+                    .engine_integration_mode = std::string(profile->engine_integration_mode),
+                    .public_include_root = std::string(profile->public_include_root)
+                };
+            }
+            if (!profile->input_profile_path.empty()
+                && !ensure_project_input_source(profile->id, root))
+            {
+                return EditorProjectCreationResult{
+                    .succeeded = false,
+                    .project_id = std::string(profile->id),
+                    .root_path = root.generic_string(),
+                    .manifest_path = manifest.generic_string(),
+                    .summary = "Project shell exists, but its canonical input source is missing or invalid.",
+                    .engine_integration_mode = std::string(profile->engine_integration_mode),
+                    .public_include_root = std::string(profile->public_include_root)
+                };
             }
 
             if (!repair_generated_windows_child_project_build_files(root))
@@ -3362,6 +3635,7 @@ namespace epochengine
             .world_file = fs::path{ profile->scene_path },
             .world_name = std::string(profile->world_name),
             .tilemap_path = std::string(profile->tilemap_path),
+            .input_profile_path = std::string(profile->input_profile_path),
             .template_family = std::string(profile->template_family),
             .script_id = std::string(profile->default_script),
             .description = std::string(profile->description),
@@ -3372,6 +3646,145 @@ namespace epochengine
         });
     }
 
+    EditorProjectInputProfileSummary editor_project_input_profile_summary(
+        std::string_view project_id)
+    {
+        EditorProjectInputProfileSummary result{};
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile || profile->input_profile_path.empty())
+        {
+            result.diagnostic = "Project does not declare a runtime input profile.";
+            return result;
+        }
+
+        const fs::path root = resolve_project_root_path(
+            fs::path{profile->root_path});
+        epochengine::project_input::ProjectInputProfileStore store{
+            std::string{project_id}, root};
+        result.source_path = std::string{profile->input_profile_path};
+        if (!store.valid())
+        {
+            result.diagnostic = "Project input store is invalid.";
+            return result;
+        }
+
+        epochengine::project_input::ProfileSource source{};
+        const auto loaded = store.load_source();
+        if (loaded)
+        {
+            source = loaded.source;
+        }
+        else if (loaded.code == epochengine::project_input::StoreCode::not_found)
+        {
+            const auto artifact = store.load_artifact();
+            if (artifact)
+            {
+                source = {
+                    .id = artifact.artifact.profile_id,
+                    .display_name = artifact.artifact.display_name,
+                    .revision = artifact.artifact.source_revision,
+                    .actions = artifact.artifact.actions,
+                    .bindings = artifact.artifact.bindings
+                };
+                result.diagnostic =
+                    "Compiled profile is active; source can be materialized.";
+            }
+            else if (artifact.code == epochengine::project_input::StoreCode::not_found)
+            {
+                source = epochengine::project_input::make_legacy_default_profile();
+                result.diagnostic = "Default profile is ready to materialize.";
+            }
+            else
+            {
+                result.diagnostic = std::string{"Input artifact "}
+                    + std::string{epochengine::project_input::store_code_name(artifact.code)};
+                return result;
+            }
+        }
+        else
+        {
+            result.diagnostic = std::string{"Input source "}
+                + std::string{epochengine::project_input::store_code_name(loaded.code)};
+            return result;
+        }
+
+        result.ready = epochengine::project_input::validate_profile_source(source)
+            == epochengine::project_input::ValidationCode::ready;
+        result.display_name = source.display_name;
+        result.action_count = static_cast<std::uint32_t>(source.actions.size());
+        result.binding_count = static_cast<std::uint32_t>(source.bindings.size());
+        bool foundControllerAxis = false;
+        for (const auto& binding : source.bindings)
+        {
+            if (binding.device
+                != epochengine::project_input::BindingDevice::controller_axis)
+            {
+                continue;
+            }
+            if (!foundControllerAxis)
+            {
+                foundControllerAxis = true;
+                result.controller_dead_zone_q15 = binding.dead_zone_q15;
+            }
+            else if (result.controller_dead_zone_q15
+                != binding.dead_zone_q15)
+            {
+                result.uniform_controller_dead_zone = false;
+            }
+        }
+        if (result.diagnostic.empty())
+            result.diagnostic = result.ready ? "Project input source ready."
+                                             : "Project input source invalid.";
+        return result;
+    }
+    EditorProjectInputUpdateResult editor_reset_project_input_profile(
+        std::string_view project_id)
+    {
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile || profile->input_profile_path.empty())
+            return {false, "Project does not declare a runtime input profile."};
+
+        const fs::path root = resolve_project_root_path(
+            fs::path{profile->root_path});
+        epochengine::project_input::ProjectInputProfileStore store{
+            std::string{project_id}, root};
+        if (!store.valid())
+            return {false, "Project input store is invalid."};
+
+        std::uint64_t revision = 1u;
+        const auto loaded = store.load_source();
+        if (loaded)
+        {
+            if (loaded.source.revision.sequence
+                == (std::numeric_limits<std::uint64_t>::max)())
+            {
+                return {false, "Project input revision is exhausted."};
+            }
+            revision = loaded.source.revision.sequence + 1u;
+        }
+        else
+        {
+            const auto artifact = store.load_artifact();
+            if (artifact)
+            {
+                if (artifact.artifact.source_revision.sequence
+                    == (std::numeric_limits<std::uint64_t>::max)())
+                {
+                    return {false, "Project input revision is exhausted."};
+                }
+                revision = artifact.artifact.source_revision.sequence + 1u;
+            }
+        }
+
+        const auto saved = store.save_source(
+            epochengine::project_input::make_legacy_default_profile(revision));
+        return {
+            static_cast<bool>(saved),
+            static_cast<bool>(saved)
+                ? "Default project input profile restored."
+                : std::string{"Project input reset "}
+                    + std::string{epochengine::project_input::store_code_name(saved.code)}};
+    }
     EditorProjectBuildResult editor_build_project(std::string_view project_root)
     {
         if (project_root.empty())

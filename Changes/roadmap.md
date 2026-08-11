@@ -69,6 +69,12 @@ Current source or in-progress contracts include:
   preview, and context-handoff restoration. Generated standalone runtime map
   loading, cache regeneration, and approved visual interaction remain delivery
   work;
+- project-owned input source/artifact codecs now define stable actions,
+  keyboard/controller bindings, fixed-point dead zones, deterministic sampling,
+  and source-first restoration. A fixed-step AABB/circle solver over
+  `physics.manager` and a renderer-neutral actor runtime now provide map
+  collision, spawn, pause, reset, snapshots, bounded catch-up, stable contacts,
+  and Canvas2D publication;
 - production project validation that materializes, atomically saves/reopens,
   builds, and child-runs all six generated profiles, plus an exact standalone
   external Run proof for the generated GUI project;
@@ -219,14 +225,20 @@ Exit gate:
   compiled artifact from source.
 ### Week 5: Input And 2D Physics
 
-Deliver:
+Foundation status: project input source/artifact persistence, stable action and
+binding identity, keyboard/controller schemas, dead-zone policy, deterministic
+evaluation, fixed-step AABB/circle solving, body/filter/contact contracts, actor
+movement, authored map collision, spawn, reset, pause, snapshots, and Canvas2D
+publication are build-safe proven.
 
-- configurable actions, keyboard/controller bindings, dead zones, and project
-  input profile;
-- deterministic fixed-step 2D solver adapter behind `physics.manager`;
-- AABB/circle baseline shapes, body modes, layers/masks, contacts, and stable IDs;
-- actor movement, map collision, spawn, reset, and pause behavior;
-- physics controls and diagnostics aligned with actual solver support.
+Remaining delivery:
+
+- connect live controller polling to the project sampler and finish visible
+  keyboard/controller rebinding;
+- promote authored one-way platform and slope semantics through map artifacts,
+  solver behavior, diagnostics, and replay tests;
+- complete approved Play/Stop and repeated runtime proof without leaking or
+  duplicating bodies.
 
 Exit gate:
 

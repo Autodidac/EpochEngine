@@ -327,6 +327,8 @@ set(EPOCH_SOURCES
     src/epoch.engine_legacy.cpp
     src/audio/audio.manager.cpp
     src/physics/physics.manager.cpp
+    src/physics/physics.solver2d.cpp
+    src/physics/physics.solver2d_contract.cpp
     src/renderers/core/core.context_command_queue.cpp
     src/renderers/core/engine.context.cpp
     src/renderers/directx/core.context_directx.cpp
@@ -379,6 +381,10 @@ set(EPOCH_SOURCES
     src/project/project.tilemap_runtime.cpp
     src/project/project.tilemap_runtime_contract.cpp
     src/project/project.tilemap_source.cpp
+    src/project/project.input_profile.cpp
+    src/project/project.input_profile_contract.cpp
+    src/project/project.actor2d_runtime.cpp
+    src/project/project.actor2d_runtime_contract.cpp
     src/utility.filewatch.cpp
     src/font.renderer.cpp
     src/project/project.asset_registry.cpp
@@ -1183,6 +1189,93 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_physics_manager_contract
         COMMAND epoch_physics_manager_contract
+    )
+
+    add_executable(epoch_physics_solver2d_contract
+        src/physics/physics.manager.cpp
+        src/physics/physics.solver2d.cpp
+        src/physics/physics.solver2d_contract.cpp
+    )
+    target_sources(epoch_physics_solver2d_contract PRIVATE
+        FILE_SET epoch_physics_solver2d_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/physics.manager.ixx
+                ${EPOCH_MODULE_DIR}/physics.solver2d.ixx
+    )
+    target_include_directories(epoch_physics_solver2d_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_physics_solver2d_contract PRIVATE
+        EPOCH_PHYSICS_SOLVER2D_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_physics_solver2d_contract)
+    epoch_apply_warnings(epoch_physics_solver2d_contract)
+    epoch_apply_sanitizers(epoch_physics_solver2d_contract)
+    add_test(
+        NAME epoch_physics_solver2d_contract
+        COMMAND epoch_physics_solver2d_contract
+    )
+
+    add_executable(epoch_project_input_profile_contract
+        src/project/project.asset_registry.cpp
+        src/project/project.input_profile.cpp
+        src/project/project.input_profile_contract.cpp
+    )
+    target_sources(epoch_project_input_profile_contract PRIVATE
+        FILE_SET epoch_project_input_profile_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project.input_profile.ixx
+    )
+    target_include_directories(epoch_project_input_profile_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_project_input_profile_contract PRIVATE
+        EPOCH_PROJECT_INPUT_PROFILE_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_project_input_profile_contract)
+    epoch_apply_warnings(epoch_project_input_profile_contract)
+    epoch_apply_sanitizers(epoch_project_input_profile_contract)
+    add_test(
+        NAME epoch_project_input_profile_contract
+        COMMAND epoch_project_input_profile_contract
+    )
+
+    add_executable(epoch_project_actor2d_contract
+        src/physics/physics.manager.cpp
+        src/physics/physics.solver2d.cpp
+        src/project/project.actor2d_runtime.cpp
+        src/project/project.actor2d_runtime_contract.cpp
+    )
+    target_sources(epoch_project_actor2d_contract PRIVATE
+        FILE_SET epoch_project_actor2d_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/physics.manager.ixx
+                ${EPOCH_MODULE_DIR}/physics.solver2d.ixx
+                ${EPOCH_MODULE_DIR}/project.actor2d_runtime.ixx
+    )
+    target_include_directories(epoch_project_actor2d_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_project_actor2d_contract PRIVATE
+        EPOCH_PROJECT_ACTOR2D_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_project_actor2d_contract)
+    epoch_apply_warnings(epoch_project_actor2d_contract)
+    epoch_apply_sanitizers(epoch_project_actor2d_contract)
+    add_test(
+        NAME epoch_project_actor2d_contract
+        COMMAND epoch_project_actor2d_contract
     )
     if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
         add_executable(epoch_authoring_texture_contract

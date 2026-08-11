@@ -172,6 +172,7 @@ namespace epochengine
         std::string_view root_path{};
         std::string_view scene_path{};
         std::string_view tilemap_path{};
+        std::string_view input_profile_path{};
         std::string_view world_name{};
         std::string_view runtime_scene_id{};
         std::string_view manifest_path{};
@@ -184,6 +185,23 @@ namespace epochengine
         EditorProjectCapabilityPolicy renderer_capability{};
     };
 
+    export struct EditorProjectInputProfileSummary
+    {
+        bool ready{};
+        bool uniform_controller_dead_zone{true};
+        std::string display_name{};
+        std::string source_path{};
+        std::string diagnostic{};
+        std::uint32_t action_count{};
+        std::uint32_t binding_count{};
+        std::uint16_t controller_dead_zone_q15{};
+    };
+
+    export struct EditorProjectInputUpdateResult
+    {
+        bool succeeded{};
+        std::string summary{};
+    };
     export struct EditorScriptProfile
     {
         std::string_view id{};
@@ -381,7 +399,12 @@ namespace epochengine
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
     export [[nodiscard]] EditorProjectBuildResult editor_build_project(std::string_view project_root);
     export [[nodiscard]] EditorProjectModelSummary editor_project_model_summary(std::string_view project_id);
-    export [[nodiscard]] std::string editor_project_demo_model_path(std::string_view project_id);
+    export [[nodiscard]] EditorProjectInputProfileSummary
+        editor_project_input_profile_summary(std::string_view project_id);
+    export [[nodiscard]] EditorProjectInputUpdateResult
+        editor_reset_project_input_profile(std::string_view project_id);
+    export [[nodiscard]] std::string editor_project_demo_model_path(
+        std::string_view project_id);
     [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name, std::string_view project_root);
     [[nodiscard]] std::string editor_resolve_script_source_path(std::string_view script_name, std::string_view project_root = {});
     export void editor_set_time_snapshot(const core::Context* ctx, const EditorTimeSnapshot& snapshot);

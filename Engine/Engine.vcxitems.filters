@@ -1342,6 +1342,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_runtime.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.actor2d_runtime.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
@@ -1369,10 +1375,19 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx">
       <Filter>Module Files\epoch\physics</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.solver2d.ixx">
+      <Filter>Module Files\epoch\physics</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp">
       <Filter>Source Files\epochengine\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp">
+      <Filter>Source Files\epochengine\physics</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.solver2d.cpp">
+      <Filter>Source Files\epochengine\physics</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.solver2d_contract.cpp">
       <Filter>Source Files\epochengine\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset_registry.cpp">
@@ -1397,6 +1412,18 @@
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime_contract.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime_contract.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_source.cpp">

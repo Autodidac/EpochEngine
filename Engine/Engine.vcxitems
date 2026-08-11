@@ -323,11 +323,14 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_library.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_pipeline.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.actor2d_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.solver2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx" />
@@ -518,6 +521,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render.graph_epoch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.solver2d.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.solver2d_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_textures.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.tilemap_workspace.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp" />
@@ -529,6 +534,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_pipeline.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_source.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_import.cpp" />

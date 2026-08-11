@@ -99,11 +99,20 @@ release history belong in the changelog/archive, not architecture docs.
   Context replacement restores serialized unsaved map history and portable view
   state without preserving physical resources.
 - Project Save and the current editor Run publication consume this document.
-  Next prove exact loading in generated standalone runtimes, restart persistence,
-  and Library regeneration after cache deletion before starting the actor and
-  physics loop.
-- Add configurable input actions and keyboard/controller bindings.
-- Add a deterministic fixed-step 2D solver adapter behind `physics.manager`.
+  Standalone runtime preparation now regenerates canonical source or restores
+  exact Library artifacts and authenticated texture closure. Project input uses
+  its own canonical source/artifact pair with stable actions, keyboard/controller
+  bindings, fixed-point dead zones, and deterministic sampling.
+- `physics.solver2d` and `project.actor2d_runtime` now provide deterministic
+  fixed-step AABB/circle collision, stable contacts, map collision, spawn, pause,
+  reset, snapshots, bounded catch-up, and renderer-neutral Canvas2D publication.
+- Finish live controller polling and visible project rebinding. Keep the editor
+  camera profile separate from project input.
+- Add authored one-way platform and slope semantics; current map collision treats
+  accepted non-sensor records as full AABBs and must not be advertised otherwise.
+- Prove actor Play/Stop, restart persistence, generated-child external Run,
+  cache-deletion regeneration, and native presentation through approved runtime
+  evidence. Build-safe tests are not visual proof.
 - Add a physical audio adapter behind `audio.manager` with buses and clean device
   failure.
 - The editor must author and persist the same scene that Play, Run, and Build

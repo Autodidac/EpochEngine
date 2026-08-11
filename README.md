@@ -4,7 +4,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.14-1F7A4C?style=for-the-badge" alt="Current development source v0.89.14" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.15-1F7A4C?style=for-the-badge" alt="Current development source v0.89.15" />
   <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.06-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.06" />
 </p>
 
@@ -76,7 +76,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.14`; the published stable Windows/Linux
+- Active development source is `v0.89.15`; the published stable Windows/Linux
   runtime is `v0.89.06`.
 - The accepted `v0.89.06` updater and packages are sealed while source development
   continues on the capability-tier and playable-2D plan.
@@ -129,9 +129,11 @@ For engine/tooling developers:
   capture, save/reopen, and repeated context-switch evidence passes.
 - `authoring.tilemap` now provides stable semantic map editing and deterministic
   compiled artifacts; project Library publication/restore and Canvas2D visible
-  chunk compilation are build-proven. The EpochGui palette/workspace, saved
-  scene map binding, live presentation, and actor gameplay remain the immediate
-  delivery work.
+  chunk compilation are build-proven. The EpochGui palette/workspace, canonical
+  map source, standalone restoration, and project input profile feed one
+  deterministic fixed-step actor runtime with spawn, pause, reset, map collision,
+  snapshots, and Canvas2D publication. Controller polling, authored one-way and
+  slope semantics, animation, audio, and approved live interaction remain work.
 - The launcher directly opens three application profiles after a prelaunch
   context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
   services and one shell implementation but own separate source files, scene

@@ -860,8 +860,12 @@ the write ranges are explicitly isolated.
   right-click context menu, play-in-editor, timeline play/step, and package
   install actions with modifier-aware key bindings and mouse bindings. GUI
   surfaces should consume those named actions instead of hardcoding per-window
-  shortcuts, and project/package export should treat input profiles as explicit
-  opt-in data.
+  shortcuts. `project.input_profile` is the separate project/runtime contract:
+  generated Game2D projects persist canonical action and keyboard/controller
+  bindings under `Assets/Config`, compile reproducible Library artifacts, and
+  evaluate fixed-point dead zones without coupling gameplay to editor shortcuts.
+  ProjectPlayScene currently samples keyboard state; live controller polling and
+  full rebinding UI remain explicit adapter work.
 - The non-GUI engine contract self-test now exercises the Forest Factory,
   package registry, streaming-save package, input profile, and scene snapshot
   serializer/parser contracts before the heavier project-profile and OS-AI

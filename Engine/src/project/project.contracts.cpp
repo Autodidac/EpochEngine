@@ -11,6 +11,8 @@ import project.texture_resources;
 import project.texture_pipeline;
 import project.tilemap_pipeline;
 import project.tilemap_runtime;
+import project.input_profile;
+import project.actor2d_runtime;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import project.tilemap_source;
 #endif
@@ -67,6 +69,20 @@ namespace epochengine::project_contracts
                 false,
                 project_tilemap_runtime::contract_failure_name(
                     tilemapRuntime)};
+        }        const auto inputProfile =
+            project_input::project_input_profile_contract_failure();
+        if (inputProfile != project_input::ContractFailure::none)
+        {
+            return {
+                false,
+                project_input::contract_failure_name(inputProfile)};
+        }
+        const auto actor2d = project_actor2d::run_contract();
+        if (actor2d != project_actor2d::ContractFailure::none)
+        {
+            return {
+                false,
+                project_actor2d::contract_failure_name(actor2d)};
         }
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
         const auto tilemapSources =

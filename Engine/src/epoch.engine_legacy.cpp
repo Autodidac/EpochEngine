@@ -172,6 +172,10 @@ import render.texture_residency;
 import canvas2d.scene_contracts;
 import project.contracts;
 import project.tilemap_runtime;
+import asset.tilemap_artifact;
+import render.canvas2d_tilemap;
+import project.input_profile;
+import project.actor2d_runtime;
 import render.texture_artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
@@ -5713,6 +5717,378 @@ namespace epochengine::core
             return (runtimeRoot / path).lexically_normal();
         }
 
+        struct PreparedProjectInput final
+        {
+            std::optional<epochengine::project_input::CompiledInputProfile> artifact{};
+            std::string diagnostic{};
+        };
+
+        [[nodiscard]] PreparedProjectInput prepare_project_input(
+            std::string_view projectId,
+            const std::filesystem::path& projectRoot,
+            std::string_view declaredPath)
+        {
+            namespace project_input = epochengine::project_input;
+            PreparedProjectInput result{};
+            const std::string normalized = std::filesystem::path{declaredPath}
+                .lexically_normal().generic_string();
+            if (normalized != project_input::canonical_source_path)
+            {
+                result.diagnostic = "unsupported project input path";
+                return result;
+            }
+
+            project_input::ProjectInputProfileStore store{
+                std::string{projectId}, projectRoot};
+            if (!store.valid())
+            {
+                result.diagnostic = "invalid project input store";
+                return result;
+            }
+
+            std::error_code existsError{};
+            const bool sourceExists = std::filesystem::exists(
+                store.source_path(), existsError) && !existsError;
+            if (sourceExists)
+            {
+                const auto loaded = store.load_source();
+                if (!loaded)
+                {
+                    result.diagnostic = std::string{"source "}
+                        + std::string{project_input::store_code_name(loaded.code)};
+                    return result;
+                }
+                auto compiled = project_input::compile_profile(
+                    projectId, loaded.source);
+                if (!compiled)
+                {
+                    result.diagnostic = std::string{"compile "}
+                        + std::string{
+                            project_input::validation_code_name(compiled.code)};
+                    return result;
+                }
+                const auto published = store.publish_artifact(compiled.artifact);
+                result.diagnostic = published
+                    ? "source compiled and cached"
+                    : std::string{"source compiled; cache "}
+                        + std::string{project_input::store_code_name(published.code)};
+                result.artifact = std::move(compiled.artifact);
+                return result;
+            }
+            if (existsError)
+            {
+                result.diagnostic = "input source existence check failed";
+                return result;
+            }
+
+            const auto loadedArtifact = store.load_artifact();
+            if (loadedArtifact)
+            {
+                result.artifact = loadedArtifact.artifact;
+                result.diagnostic = "compiled project input restored";
+                return result;
+            }
+
+            auto fallback = project_input::compile_profile(
+                projectId, project_input::make_legacy_default_profile());
+            if (!fallback)
+            {
+                result.diagnostic = "default project input compile failed";
+                return result;
+            }
+            result.artifact = std::move(fallback.artifact);
+            result.diagnostic = "in-memory default input (source absent)";
+            return result;
+        }
+
+        [[nodiscard]] std::optional<input::Key> engine_key(
+            epochengine::project_input::KeyCode key) noexcept
+        {
+            using ProjectKey = epochengine::project_input::KeyCode;
+            switch (key)
+            {
+            case ProjectKey::a: return input::Key::A;
+            case ProjectKey::b: return input::Key::B;
+            case ProjectKey::c: return input::Key::C;
+            case ProjectKey::d: return input::Key::D;
+            case ProjectKey::e: return input::Key::E;
+            case ProjectKey::f: return input::Key::F;
+            case ProjectKey::g: return input::Key::G;
+            case ProjectKey::h: return input::Key::H;
+            case ProjectKey::i: return input::Key::I;
+            case ProjectKey::j: return input::Key::J;
+            case ProjectKey::k: return input::Key::K;
+            case ProjectKey::l: return input::Key::L;
+            case ProjectKey::m: return input::Key::M;
+            case ProjectKey::n: return input::Key::N;
+            case ProjectKey::o: return input::Key::O;
+            case ProjectKey::p: return input::Key::P;
+            case ProjectKey::q: return input::Key::Q;
+            case ProjectKey::r: return input::Key::R;
+            case ProjectKey::s: return input::Key::S;
+            case ProjectKey::t: return input::Key::T;
+            case ProjectKey::u: return input::Key::U;
+            case ProjectKey::v: return input::Key::V;
+            case ProjectKey::w: return input::Key::W;
+            case ProjectKey::x: return input::Key::X;
+            case ProjectKey::y: return input::Key::Y;
+            case ProjectKey::z: return input::Key::Z;
+            case ProjectKey::enter: return input::Key::Enter;
+            case ProjectKey::escape: return input::Key::Escape;
+            case ProjectKey::backspace: return input::Key::Backspace;
+            case ProjectKey::tab: return input::Key::Tab;
+            case ProjectKey::space: return input::Key::Space;
+            case ProjectKey::right: return input::Key::Right;
+            case ProjectKey::left: return input::Key::Left;
+            case ProjectKey::down: return input::Key::Down;
+            case ProjectKey::up: return input::Key::Up;
+            case ProjectKey::left_control: return input::Key::LeftControl;
+            case ProjectKey::left_shift: return input::Key::LeftShift;
+            case ProjectKey::left_alt: return input::Key::LeftAlt;
+            case ProjectKey::left_super: return input::Key::LeftSuper;
+            case ProjectKey::right_control: return input::Key::RightControl;
+            case ProjectKey::right_shift: return input::Key::RightShift;
+            case ProjectKey::right_alt: return input::Key::RightAlt;
+            case ProjectKey::right_super: return input::Key::RightSuper;
+            case ProjectKey::invalid:
+                break;
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] epochengine::project_input::ModifierMask
+        project_modifier_snapshot() noexcept
+        {
+            namespace project_input = epochengine::project_input;
+            project_input::ModifierMask result{};
+            if (input::is_key_held(input::Key::LeftShift)
+                || input::is_key_held(input::Key::RightShift))
+            {
+                result |= project_input::modifier_mask(
+                    project_input::Modifier::shift);
+            }
+            if (input::is_key_held(input::Key::LeftControl)
+                || input::is_key_held(input::Key::RightControl))
+            {
+                result |= project_input::modifier_mask(
+                    project_input::Modifier::control);
+            }
+            if (input::is_key_held(input::Key::LeftAlt)
+                || input::is_key_held(input::Key::RightAlt))
+            {
+                result |= project_input::modifier_mask(
+                    project_input::Modifier::alt);
+            }
+            if (input::is_key_held(input::Key::LeftSuper)
+                || input::is_key_held(input::Key::RightSuper))
+            {
+                result |= project_input::modifier_mask(
+                    project_input::Modifier::super);
+            }
+            return result;
+        }
+
+        [[nodiscard]] epochengine::project_input::InputSnapshot
+        project_input_snapshot(
+            const epochengine::project_input::CompiledInputProfile& profile,
+            std::uint64_t frameIndex)
+        {
+            namespace project_input = epochengine::project_input;
+            std::vector<project_input::KeyCode> keys{};
+            for (const auto& binding : profile.bindings)
+            {
+                if (binding.device != project_input::BindingDevice::keyboard)
+                    continue;
+                const auto key = static_cast<project_input::KeyCode>(binding.code);
+                if (engine_key(key))
+                    keys.push_back(key);
+            }
+            std::sort(keys.begin(), keys.end());
+            keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+
+            project_input::InputSnapshot snapshot{};
+            snapshot.frame_index = frameIndex;
+            snapshot.modifiers = project_modifier_snapshot();
+            snapshot.keyboard.reserve(keys.size());
+            for (const auto projectKey : keys)
+            {
+                const auto key = engine_key(projectKey);
+                if (!key)
+                    continue;
+                snapshot.keyboard.push_back({
+                    .key = projectKey,
+                    .held = input::is_key_held(*key),
+                    .pressed = input::is_key_down(*key)
+                });
+            }
+            return snapshot;
+        }
+
+        [[nodiscard]] epochengine::project_actor2d::FixedInputFrame
+        actor_input_frame(
+            const epochengine::project_input::CompiledInputProfile& profile,
+            const epochengine::project_input::ActionFrame& frame) noexcept
+        {
+            namespace project_input = epochengine::project_input;
+            epochengine::project_actor2d::FixedInputFrame result{};
+            result.sequence = frame.frame_index;
+            const auto action = [&](project_input::ActionSemantic semantic)
+                -> const project_input::ActionValue*
+            {
+                return project_input::find_action(frame, semantic, profile);
+            };
+            if (const auto* value = action(project_input::ActionSemantic::move_x))
+            {
+                result.move_x = static_cast<double>(value->value_q15)
+                    / static_cast<double>(project_input::normalized_unit);
+            }
+            if (const auto* value = action(project_input::ActionSemantic::move_y))
+            {
+                result.move_y = static_cast<double>(value->value_q15)
+                    / static_cast<double>(project_input::normalized_unit);
+            }
+            if (const auto* value = action(project_input::ActionSemantic::jump))
+                result.jump_pressed = value->pressed;
+            if (const auto* value = action(project_input::ActionSemantic::pause))
+                result.pause_pressed = value->pressed;
+            if (const auto* value = action(project_input::ActionSemantic::reset))
+                result.reset_pressed = value->pressed;
+            return result;
+        }
+
+        [[nodiscard]] std::uint64_t tile_collision_identity(
+            const epochengine::asset::tilemap::CollisionPrimitive& primitive,
+            std::uint64_t sequence) noexcept
+        {
+            std::uint64_t value = 1469598103934665603ull;
+            const auto mix = [&](std::uint64_t word)
+            {
+                value ^= word;
+                value *= 1099511628211ull;
+            };
+            mix(primitive.layer.value);
+            mix(primitive.palette_entry.value);
+            mix(primitive.cell_coordinate.x);
+            mix(primitive.cell_coordinate.y);
+            mix(static_cast<std::uint64_t>(primitive.kind));
+            mix(sequence);
+            return value == 0u ? sequence + 1u : value;
+        }
+
+        [[nodiscard]] epochengine::project_actor2d::StaticCollisionKind
+        actor_collision_kind(
+            epochengine::asset::tilemap::CollisionKind kind) noexcept
+        {
+            using AssetKind = epochengine::asset::tilemap::CollisionKind;
+            using ActorKind =
+                epochengine::project_actor2d::StaticCollisionKind;
+            switch (kind)
+            {
+            case AssetKind::full_cell:
+            case AssetKind::custom_box:
+                return ActorKind::solid_box;
+            case AssetKind::one_way_up:
+                return ActorKind::one_way_up;
+            case AssetKind::slope_up_right:
+                return ActorKind::slope_up_right;
+            case AssetKind::slope_down_right:
+                return ActorKind::slope_down_right;
+            case AssetKind::none:
+                return ActorKind::unsupported;
+            }
+            return ActorKind::unsupported;
+        }
+
+        [[nodiscard]] std::vector<epochengine::project_actor2d::StaticCollision>
+        actor_collision_from_tilemap(
+            std::span<const epochengine::asset::tilemap::CollisionPrimitive>
+                collision)
+        {
+            std::vector<epochengine::project_actor2d::StaticCollision> result{};
+            result.reserve(collision.size());
+            std::uint64_t sequence{};
+            for (const auto& primitive : collision)
+            {
+                ++sequence;
+                result.push_back({
+                    .stable_id = tile_collision_identity(primitive, sequence),
+                    .bounds = {
+                        primitive.world_bounds.x,
+                        primitive.world_bounds.y,
+                        primitive.world_bounds.width,
+                        primitive.world_bounds.height},
+                    .layer_bits = primitive.layer_bits,
+                    .mask_bits = primitive.mask_bits,
+                    .sensor = primitive.sensor,
+                    .kind = actor_collision_kind(primitive.kind)
+                });
+            }
+            return result;
+        }
+
+        [[nodiscard]] epochengine::project_actor2d::ActorConfiguration
+        actor_configuration_from_tilemap(
+            std::span<const epochengine::canvas2d::tilemap_runtime::VisibleObject>
+                objects) noexcept
+        {
+            epochengine::project_actor2d::ActorConfiguration result{};
+            for (const auto& object : objects)
+            {
+                if (object.type == "spawn" || object.name == "PlayerSpawn")
+                {
+                    result.spawn_x = object.position.x;
+                    result.spawn_y = object.position.y;
+                    break;
+                }
+            }
+            return result;
+        }
+
+        [[nodiscard]] epochengine::canvas2d::scene_content::SceneContent
+        actor_canvas_scene(
+            const epochengine::canvas2d::scene_content::SceneContent& base,
+            const epochengine::project_actor2d::ActorConfiguration& configuration,
+            const epochengine::project_actor2d::ActorState& actor)
+        {
+            namespace canvas2d = epochengine::canvas2d;
+            auto scene = base;
+            std::uint32_t nextSpriteIndex{};
+            std::uint64_t nextSequence{1u};
+            std::int32_t actorLayer{};
+            for (const auto& sprite : scene.sprites)
+            {
+                if (sprite.sprite.index != canvas2d::invalid_index)
+                    nextSpriteIndex = (std::max)(nextSpriteIndex, sprite.sprite.index + 1u);
+                nextSequence = (std::max)(nextSequence, sprite.stable_sequence + 1u);
+                actorLayer = (std::max)(actorLayer, sprite.layer + 1);
+            }
+
+            canvas2d::SpriteSubmission sprite{};
+            sprite.sprite = {nextSpriteIndex, 1u};
+            sprite.material.stable_key = 0xe001'0001u;
+            sprite.material.source = canvas2d::SpriteSourceKind::solid_color;
+            sprite.material.alpha = canvas2d::SpriteAlphaMode::opaque;
+            sprite.material.color_space = canvas2d::SpriteColorSpace::linear;
+            sprite.transform.position = {
+                static_cast<float>(actor.x), static_cast<float>(actor.y)};
+            sprite.transform.size = {
+                static_cast<float>(configuration.width),
+                static_cast<float>(configuration.height)};
+            sprite.tint = actor.paused
+                ? canvas2d::LinearColor{0.95f, 0.72f, 0.18f, 1.0f}
+                : (actor.grounded
+                    ? canvas2d::LinearColor{0.14f, 0.82f, 0.72f, 1.0f}
+                    : canvas2d::LinearColor{0.20f, 0.62f, 1.0f, 1.0f});
+            sprite.phase = canvas2d::SpritePhase::world;
+            sprite.layer = actorLayer;
+            sprite.stable_sequence = nextSequence;
+            scene.sprites.push_back(sprite);
+            scene.source_revision = base.source_revision
+                ^ (actor.revision * 0x9e3779b97f4a7c15ull);
+            if (scene.source_revision == 0u)
+                scene.source_revision = 1u;
+            return scene;
+        }
         class ProjectPlayScene final : public epochengine::scene::Scene
         {
         public:
@@ -5735,6 +6111,7 @@ namespace epochengine::core
                 m_scenePath = project_profile_path(
                     *profile, runtimeRoot, profile->scene_path).generic_string();
                 m_tileMapPath = std::string(profile->tilemap_path);
+                m_inputProfilePath = std::string(profile->input_profile_path);
                 m_worldName = std::string(profile->world_name);
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
@@ -5771,7 +6148,47 @@ namespace epochengine::core
                             epochengine::project_tilemap_runtime::SourcePolicy::prefer_source});
                     m_tileMapStatus = prepared.diagnostic;
                     if (prepared)
+                    {
                         m_tileMap = std::move(prepared);
+                        if (!m_inputProfilePath.empty())
+                        {
+                            auto input = prepare_project_input(
+                                m_projectId,
+                                std::filesystem::path{m_projectRoot},
+                                m_inputProfilePath);
+                            m_projectInputStatus = std::move(input.diagnostic);
+                            m_projectInput = std::move(input.artifact);
+                        }
+                        if (m_projectInput)
+                        {
+                            auto configuration = actor_configuration_from_tilemap(
+                                m_tileMap->objects);
+                            m_actorRuntime =
+                                std::make_unique<epochengine::project_actor2d::ActorRuntime>(
+                                    configuration);
+                            const auto collision = actor_collision_from_tilemap(
+                                m_tileMap->collision);
+                            const auto collisionCode =
+                                m_actorRuntime->replace_collision(collision);
+                            m_actorStatus = std::string{
+                                epochengine::project_actor2d::result_code_name(
+                                    collisionCode)};
+                            if (collisionCode
+                                == epochengine::project_actor2d::ResultCode::ready)
+                            {
+                                m_canvas2dScene = actor_canvas_scene(
+                                    m_tileMap->scene,
+                                    m_actorRuntime->configuration(),
+                                    m_actorRuntime->state());
+                                m_actorSceneRevision =
+                                    m_actorRuntime->state().revision;
+                            }
+                            else
+                            {
+                                m_actorRuntime.reset();
+                            }
+                        }
+                    }
                     else
                     {
                         m_tileMapStatus =
@@ -5812,6 +6229,7 @@ namespace epochengine::core
                     dt = std::chrono::duration<float>(now - m_lastFrame).count();
                 m_lastFrame = now;
                 m_hasLastFrame = true;
+                advance_actor(dt);
 
                 int mx = 0;
                 int my = 0;
@@ -5854,15 +6272,21 @@ namespace epochengine::core
                     const auto published = m_canvas2dPublished.find(ctx.get());
                     const auto acquired =
                         epochengine::canvas2d::scene_content::acquire(ctx.get());
-                    const bool needsPublication = m_tileMap
+                    const auto* desiredScene = m_canvas2dScene
+                        ? &*m_canvas2dScene
+                        : (m_tileMap ? &m_tileMap->scene : nullptr);
+                    const bool needsPublication = desiredScene
                         && (published == m_canvas2dPublished.end()
                             || !acquired
-                            || acquired.generation != published->second);
+                            || acquired.generation != published->second
+                            || !acquired.content
+                            || acquired.content->source_revision
+                                != desiredScene->source_revision);
                     if (needsPublication)
                     {
                         const auto publication =
                             epochengine::canvas2d::scene_content::publish(
-                                ctx.get(), m_tileMap->scene);
+                                ctx.get(), *desiredScene);
                         if (publication)
                             m_canvas2dPublished[ctx.get()] = publication.generation;
                         else
@@ -5953,11 +6377,14 @@ namespace epochengine::core
                 m_lookState.looking = mouse_right_down;
                 m_lookState.panning = mouse_left_down && !mouse_right_down;
 
+                bool returnToEditor = false;
                 gui::begin_top_layer();
                 gui::begin_window(
                     "Project Runtime Preview",
                     {24.0f, 24.0f},
-                    {430.0f, m_tileMapPath.empty() ? 210.0f : 272.0f});
+                    {430.0f, m_actorRuntime
+                        ? 480.0f
+                        : (m_tileMapPath.empty() ? 210.0f : 272.0f)});
                 gui::label(std::string("Project: ") + m_projectName);
                 gui::label(std::string("World: ") + m_worldName);
                 gui::label(std::string("Scene: ") + m_scenePath);
@@ -5971,7 +6398,53 @@ namespace epochengine::core
                             + (m_tileMapStatus.empty()
                                 ? std::string("not prepared")
                                 : m_tileMapStatus),
-                        390.0f);
+                        390.0f);                    if (!m_inputProfilePath.empty())
+                    {
+                        gui::label(std::string("Input Profile: ")
+                            + m_inputProfilePath);
+                        gui::wrapped_label(
+                            std::string("Input Runtime: ")
+                                + (m_projectInputStatus.empty()
+                                    ? std::string("not prepared")
+                                    : m_projectInputStatus),
+                            390.0f);
+                    }
+                    if (m_actorRuntime)
+                    {
+                        const auto actor = m_actorRuntime->state();
+                        const auto metrics = m_actorRuntime->metrics();
+                        gui::label(std::string("Actor: ") + m_actorStatus);
+                        gui::label(
+                            std::string("Position: ")
+                            + std::to_string(actor.x) + ", "
+                            + std::to_string(actor.y));
+                        gui::label(
+                            std::string("Physics Tick: ")
+                            + std::to_string(actor.fixed_tick));
+                        gui::label(
+                            std::string("Contacts: ")
+                            + std::to_string(metrics.contact_events));
+                        if (gui::button(
+                            actor.paused ? "Resume" : "Pause",
+                            {190.0f, 30.0f}))
+                        {
+                            const auto code = m_actorRuntime->set_paused(
+                                !actor.paused);
+                            m_actorStatus = std::string{
+                                epochengine::project_actor2d::result_code_name(code)};
+                            refresh_actor_scene();
+                        }
+                        if (gui::button("Reset Actor", {190.0f, 30.0f}))
+                        {
+                            const auto code = m_actorRuntime->reset();
+                            m_actorStatus = std::string{
+                                epochengine::project_actor2d::result_code_name(code)};
+                            m_actorAccumulator = 0.0;
+                            refresh_actor_scene();
+                        }
+                        if (gui::button("Return to Editor", {190.0f, 30.0f}))
+                            returnToEditor = true;
+                    }
                 }
                 gui::wrapped_label(
                     std::string("Demo model: ")
@@ -5982,16 +6455,73 @@ namespace epochengine::core
                     + (m_modelSummary.summary.empty() ? std::string("(unavailable)") : m_modelSummary.summary),
                     390.0f);
                 gui::wrapped_label(m_description, 390.0f);
-                gui::wrapped_label("Esc returns to the editor. WASD/QE move, arrows look, and Home resets the active project camera through the shared input profile.", 390.0f);
                 gui::end_window();
                 gui::end_top_layer();
 
                 gui::end_frame();
                 ctx->present_safe();
-                return true;
+                return !returnToEditor;
             }
 
         private:
+            void refresh_actor_scene()
+            {
+                if (!m_actorRuntime || !m_tileMap)
+                    return;
+                const auto state = m_actorRuntime->state();
+                if (m_canvas2dScene && m_actorSceneRevision == state.revision)
+                    return;
+                m_canvas2dScene = actor_canvas_scene(
+                    m_tileMap->scene,
+                    m_actorRuntime->configuration(),
+                    state);
+                m_actorSceneRevision = state.revision;
+            }
+
+            void advance_actor(float frameSeconds) noexcept
+            {
+                if (!m_actorRuntime || !m_projectInput)
+                    return;
+                if (m_inputFrameIndex
+                    == (std::numeric_limits<std::uint64_t>::max)())
+                {
+                    m_actorStatus = "input sequence exhausted";
+                    return;
+                }
+
+                ++m_inputFrameIndex;
+                const auto snapshot = project_input_snapshot(
+                    *m_projectInput, m_inputFrameIndex);
+                const auto actions =
+                    epochengine::project_input::evaluate_action_frame(
+                        *m_projectInput, snapshot);
+                if (!actions)
+                {
+                    m_actorStatus = "input evaluation rejected";
+                    return;
+                }
+
+                const double stepSeconds = 1.0
+                    / static_cast<double>(
+                        m_actorRuntime->configuration().fixed_steps_per_second);
+                m_actorAccumulator += std::clamp(
+                    static_cast<double>(frameSeconds), 0.0, 0.25);
+                std::uint32_t fixedSteps = static_cast<std::uint32_t>(
+                    std::floor(m_actorAccumulator / stepSeconds));
+                fixedSteps = (std::min)(fixedSteps, 8u);
+                m_actorAccumulator -= stepSeconds
+                    * static_cast<double>(fixedSteps);
+
+                const auto result = m_actorRuntime->advance(
+                    actor_input_frame(*m_projectInput, actions), fixedSteps);
+                m_actorStatus = std::string{
+                    epochengine::project_actor2d::result_code_name(result.code)};
+                if (result.code == epochengine::project_actor2d::ResultCode::paused)
+                    m_actorAccumulator = 0.0;
+                if (result)
+                    refresh_actor_scene();
+            }
+
             void retire_canvas2d_scenes() noexcept
             {
                 for (const auto& [owner, generation] : m_canvas2dPublished)
@@ -6007,6 +6537,9 @@ namespace epochengine::core
             std::string m_projectRoot{};
             std::string m_tileMapPath{};
             std::string m_tileMapStatus{};
+            std::string m_inputProfilePath{};
+            std::string m_projectInputStatus{};
+            std::string m_actorStatus{};
             std::string m_scenePath{};
             std::string m_worldName{};
             std::string m_scriptName{};
@@ -6019,6 +6552,15 @@ namespace epochengine::core
             std::optional<
                 epochengine::project_tilemap_runtime::PreparedTileMap>
                 m_tileMap{};
+            std::optional<epochengine::project_input::CompiledInputProfile>
+                m_projectInput{};
+            std::unique_ptr<epochengine::project_actor2d::ActorRuntime>
+                m_actorRuntime{};
+            std::optional<epochengine::canvas2d::scene_content::SceneContent>
+                m_canvas2dScene{};
+            double m_actorAccumulator{};
+            std::uint64_t m_inputFrameIndex{};
+            std::uint64_t m_actorSceneRevision{};
             std::vector<ProjectRuntimeEntity> m_entities{};
             epochengine::lighting::LightingFrame m_lightingFrame{};
             timing::Clock::time_point m_lastFrame{};

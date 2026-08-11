@@ -2,8 +2,8 @@
 
 ## Snapshot
 
-Epoch is a C++23 module-first engine/editor. The Windows/Linux release candidate
-and active development source are aligned at `v0.89.06` for package proof.
+Epoch is a C++23 module-first engine/editor. The published Windows/Linux runtime
+remains sealed at `v0.89.06`; active source development is `v0.89.15`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -89,10 +89,13 @@ ship.
   top-left-to-GL coordinate conversion, and scoped GL state restoration.
   Build-safe family, staged-presentation, no-context refusal, immutable scene
   publication, semantic editor projection, and protected scene-slot routing
-  contracts pass. Project-scoped texture identity, sampled-image admission, and
-  exact immutable resource closure are build-proven. Project Library persistence,
-  editor material binding, operator-visible native pixels, secondary GL share
-  groups, tilemap authoring, and the built-project loop remain active gates.
+  contracts pass. Project-scoped texture identity, sampled-image admission,
+  exact immutable resource closure, Project Library persistence, temporal
+  tilemap authoring/runtime compilation, deterministic input artifacts, fixed-
+  step 2D solving, and actor publication are build-proven. Operator-visible
+  native pixels, secondary GL share groups, live controller polling, physical
+  audio, sprite animation, advanced collision semantics, and the approved
+  generated-child gameplay proof remain active gates.
 - **Arcade scene-surface proof**: one shared attract-pattern contract feeds
   backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
   DirectX, and Software. Build contracts prove ownership/routing; visual and
@@ -100,10 +103,8 @@ ship.
 - **Path and cache ownership**: runtime assets and disposable cache resolve from
   executable-local roots. Updates, packages, models, atlases, and logs retain
   separate cache/storage boundaries.
-- **Release/update baseline**: the release gate is explicitly open for
-  `v0.89.06`. Canonical version extraction, Windows/Linux package staging, tag,
-  checksums, and startup evidence must agree before the updater and packaging
-  surfaces are resealed and source advances.
+- **Release/update baseline**: published `v0.89.06` updater, packaging, tag, and
+  runtime assets are sealed. Source advancement does not reopen that lane.
 - **Build lanes**: Visual Studio/MSBuild and root CMake remain aligned; Linux
   full-engine production proof uses current Clang, module-aware CMake/Ninja,
   vcpkg, package staging, contract checks, and bounded OpenGL smoke.

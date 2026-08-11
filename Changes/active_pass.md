@@ -13,7 +13,7 @@ This is the first gate in the two-month playable-2D critical path defined by
 ## Release Baseline
 
 The published `v0.89.06` Windows/Linux runtime, updater, packaging, release tag,
-and stable multicontext branch are sealed. Development source is `v0.89.14` so
+and stable multicontext branch are sealed. Development source is `v0.89.15` so
 the accepted runtime has a genuine newer-source update target without changing
 the packaged stable identity.
 Preserve these accepted source contracts:
@@ -54,8 +54,10 @@ The working tree contains these current or in-progress foundations:
 - `render.ray` owns validated CPU AABB, sphere, triangle, scene, and voxel-DDA
   queries; editor selection uses it and Focus changes the preview camera;
 - `physics.manager` owns stable bodies, bounded deterministic commands,
-  fixed-step commit boundaries, snapshots, restoration, and metrics, but not a
-  solver;
+  fixed-step commit boundaries, snapshots, restoration, and metrics;
+- `physics.solver2d` composes that manager into a deterministic AABB/circle
+  baseline with static, kinematic, and dynamic bodies; layer/mask filtering;
+  stable contacts; bounded static maps; pause/reset; snapshots; and replay proof;
 - `audio.manager` owns clips, sources, buses, listener/spatial state, temporal
   scheduling, mix plans, and metrics, but not physical output;
 - `voxel.storage` and `water.system` own deterministic sparse/reference state
@@ -133,6 +135,15 @@ The working tree contains these current or in-progress foundations:
   ProjectPlayScene resolves the executable project root, publishes the prepared
   map once per active context, and retires that context-owned scene on exit or
   mode replacement;
+- generated Game2D projects also own a canonical project input source and
+  compiled artifact. `project.input_profile` validates stable actions/bindings,
+  keyboard/controller schemas, fixed-point dead zones, deterministic codecs,
+  source-first publication, and legacy defaults without confusing editor-camera
+  shortcuts with project controls;
+- `project.actor2d_runtime` consumes evaluated action frames and authored map
+  collision through `physics.solver2d`. It owns fixed-step actor movement,
+  spawn, pause, reset, snapshots, bounded catch-up, stable contacts, and a
+  renderer-neutral state that ProjectPlayScene publishes as Canvas2D content;
 - EpochGui owns the renderer-neutral tile workspace state, hit testing, pan/zoom,
   palette virtualization, layer selection, layout, and standalone tests. The
   engine adapter owns project documents, persistence, drawing, and input;
@@ -261,7 +272,7 @@ The working tree contains these current or in-progress foundations:
   Debug/Release build-proven, while non-OpenGL live presentation remains `Partial`;
 - `project.lifecycle` centralizes Save, materialize, Build, Run, wait, and
   focus-existing-runtime decisions with generation-safe attempt tracking;
-- all 366 first-party C++ files follow the canonical one-dot owner grammar,
+- all first-party C++ files follow the canonical one-dot owner grammar,
   exact module/file identity, and owned directory layout enforced by the source
   naming validator;
 - the launcher opens the three editor applications, selects a live context
@@ -310,32 +321,30 @@ in Debug and Release. Its live run and non-OpenGL pixel/switch evidence remain `
 
 ## Completed Capability Checkpoint
 
-Source v0.89.14 carries forward the sealed v0.89.06 release baseline and the
-v0.89.13 temporal Game2D map-authoring workspace. It adds the project runtime
-boundary for the same map: exact map-artifact restoration, authenticated
-texture dependency recovery, immutable Canvas2D resource closure, derived world
-bounds, and per-context scene publication/retirement.
-Authoring-enabled runtimes rebuild Library/TileMaps from canonical
-Assets/Maps source. Authoring-disabled game builds restore the same compiled
-artifact and texture closure without importing editor document systems.
-Malformed canonical source fails closed even when an older compiled artifact is
-available. Generated manifests persist the map path and external project roots
-resolve beside the generated executable rather than against the engine checkout.
-CMake Debug and Release builds, both six-test suites, the tilemap-authoring-off
-build and contract, shared MSVC Debug/Release builds and contracts, source
-naming, and MSVC XML pass.
+Source v0.89.15 carries forward the sealed v0.89.06 release baseline and the
+v0.89.14 standalone temporal map runtime. It adds project-owned deterministic
+input source/artifact codecs, a fixed-step 2D solver over `physics.manager`, and
+an actor runtime that consumes authored collision and publishes accepted state
+through the same Canvas2D project scene. Spawn, pause, reset, stable contacts,
+snapshots, bounded catch-up, source-first input compilation, and controller
+dead-zone persistence are build-safe contract proven. CMake Debug and Release
+builds, both complete nine-test suites, shared MSVC Debug and Release, both
+aggregate engine self-tests, and the tilemap-disabled eight-test lane pass.
+Source naming, MSVC XML metadata, registration, diff hygiene, and version truth
+also pass at this checkpoint.
 This checkpoint does not claim operator visual proof, approved generated-child
-external Run evidence, native non-OpenGL pixel parity, actor
-input/physics/audio gameplay, or the complete acceptance game.
+external Run evidence, native non-OpenGL pixel parity, live controller polling,
+authored one-way/slope collision, physical audio, sprite animation, or the
+complete acceptance game.
 
 ## Immediate Implementation Order
 
-1. Add configurable actor actions, keyboard/controller bindings, dead zones,
-   and project-owned input serialization over the existing input profile.
-2. Add the deterministic fixed-step 2D solver adapter behind physics.manager,
-   then connect spawn, reset, pause, and authored map collision.
-3. Bind the accepted actor state to the prepared standalone Canvas2D scene
-   without making physical renderer resources canonical simulation state.
+1. Add the physical audio adapter and deterministic sprite-animation document
+   and runtime artifact over the accepted actor loop.
+2. Connect controller polling to the project input sampler and finish visible
+   key/controller rebinding without coupling project controls to editor input.
+3. Promote authored one-way platform and slope semantics through tilemap
+   artifacts, the solver, diagnostics, and replay contracts.
 4. Run approved map interaction, generated-child external Run, screenshot, and
    native presentation evidence only when runtime proof is explicitly opened.
 5. Keep backend switch/resource soak and texture/cache controls moving in
@@ -419,8 +428,10 @@ The active gate is accepted when:
    undo/redo, reproducible compilation, and physical-plan independence.
 6. Tier-0 scene tests prove selection, Focus, ground, light, spawn, save/reopen,
    and Run/Build use the same project-owned state.
-7. Canvas2D and tilemap contracts prove deterministic ordering, culling,
-   animation selection, transforms, collision/object output, blend/sampling,
+7. Canvas2D, tilemap, input, solver, and actor contracts prove deterministic
+   replay, source/artifact persistence, stable contacts, bounded stepping,
+   ordering, culling, animation selection, transforms, collision/object output,
+   blend/sampling,
    resource-binding validation, exact Project Library persistence/reopen,
    textured editor publication, and bounded malformed-input failure.
 8. Renderer docs keep current Raylib/Vulkan regression status, non-OpenGL
@@ -446,8 +457,7 @@ The active gate is accepted when:
 
 ## Next Gate
 
-Add configurable input and the deterministic fixed-step 2D solver behind
-physics.manager, then connect one actor to spawn, reset, pause, and authored map
-collision over the accepted standalone map runtime. Physical audio and sprite
-animation follow that simulation slice. The canonical schedule is
+Add physical audio and deterministic sprite animation to the accepted actor
+loop, connect the controller polling adapter, and extend authored collision with
+one-way and slope semantics. The canonical schedule is
 Changes/roadmap.md; durable follow-up is Changes/mission_cache.md.

@@ -1,6 +1,35 @@
 # Epoch Changelog
 
 
+## [v0.89.15] - Deterministic 2D project actor runtime
+
+- Add `project.input_profile` with stable action/binding identities,
+  keyboard/controller schemas, fixed-point dead zones, deterministic source and
+  artifact codecs, atomic publication, and legacy Game2D defaults.
+- Persist the canonical input profile in generated Game2D manifests and project
+  shells without overwriting authored source during repair. Report controller
+  dead-zone policy in Project Settings and expose explicit default restoration;
+  live controller polling and editing remain disabled until their adapter exists.
+- Add `physics.solver2d` over `physics.manager` with AABB/circle shapes,
+  static/kinematic/dynamic bodies, layer/mask filtering, stable contacts,
+  bounded maps, pause/reset, snapshots, and deterministic replay contracts.
+- Add `project.actor2d_runtime` with platformer/top-down motion, spawn, pause,
+  reset, bounded fixed-step catch-up, map collision, snapshots, and stable
+  renderer-neutral state.
+- Bind ProjectPlayScene to source-first input preparation, authored map collision,
+  fixed-step actor simulation, and revisioned Canvas2D publication without
+  making physical renderer state canonical.
+- Add standalone input, solver, and actor contract targets and include all three
+  in the aggregate engine contract. Live controller polling, one-way/slope
+  collision, sprite animation, physical audio, and visual proof remain explicit
+  follow-up.
+- Keep the published v0.89.06 updater, release implementation, packages, and
+  stable identity sealed.
+- Pass CMake Debug/Release builds and complete nine-test suites, shared MSVC
+  Debug/Release editor builds, both aggregate engine self-tests, the
+  tilemap-disabled eight-test lane, source naming, version truth, and MSVC XML
+  validation. Operator runtime and visual proof remain explicitly pending.
+
 ## [v0.89.14] - Standalone temporal tilemap runtime
 
 - Add project.tilemap_runtime as the shared runtime boundary from canonical map

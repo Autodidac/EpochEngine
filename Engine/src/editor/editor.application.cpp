@@ -10605,12 +10605,60 @@ namespace epochengine
                     input::set_active_profile(editor.inputProfilePreset);
                     push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
                 }
-                gui::property_row("[project] Input profile", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
-                gui::wrapped_label("Shared input actions currently drive editor preview cameras and in-editor/project runtime cameras. Key rebinding UI is the next promotion gate; profiles keep controls universal now.", centerWidth);
+                gui::property_row("[editor] Camera input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
                 if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
                 {
                     editor.canvas2dProject = sanitize_canvas2d_project(editor.canvas2dProject);
                     gui::label("Canvas2D Project");
+                    const auto projectInput =
+                        editor_project_input_profile_summary(editor.projectId);
+                    gui::property_row(
+                        "[input] Source",
+                        projectInput.source_path.empty()
+                            ? std::string{"Not declared"}
+                            : projectInput.source_path,
+                        132.0f);
+                    gui::property_row(
+                        "[input] Actions",
+                        epochengine::format_text(
+                            "{} actions | {} bindings",
+                            projectInput.action_count,
+                            projectInput.binding_count),
+                        132.0f);
+                    gui::property_row(
+                        "[input] Status",
+                        projectInput.diagnostic.empty()
+                            ? std::string{"Unavailable"}
+                            : projectInput.diagnostic,
+                        132.0f);
+                    if (projectInput.ready)
+                    {
+                        gui::property_row(
+                            "[input] Controller",
+                            "Bindings preserved; runtime polling adapter pending",
+                            132.0f);
+                        gui::property_row(
+                            "[input] Dead zone",
+                            epochengine::format_text(
+                                "{}% (read-only until controller polling lands)",
+                                (static_cast<std::uint32_t>(
+                                    projectInput.controller_dead_zone_q15) * 100u)
+                                    / 32'767u),
+                            132.0f);
+                    }
+                    if (!projectInput.source_path.empty()
+                        && gui::button(
+                            "Restore Default Project Input",
+                            {(std::min)(centerWidth, 260.0f), 30.0f}))
+                    {
+                        const auto reset = editor_reset_project_input_profile(
+                            editor.projectId);
+                        push_editor_log(
+                            editor,
+                            std::string{reset.succeeded
+                                ? "[input] " : "[input][ERROR] "}
+                                + reset.summary);
+                    }
                     gui::property_row(
                         "[texture] Policy",
                         projectProfile.renderer_capability.allow_experimental
