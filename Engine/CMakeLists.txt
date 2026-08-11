@@ -376,6 +376,8 @@ set(EPOCH_SOURCES
     src/assets/tilemap/asset.tilemap_artifact.cpp
     src/project/project.tilemap_library.cpp
     src/project/project.tilemap_pipeline.cpp
+    src/project/project.tilemap_runtime.cpp
+    src/project/project.tilemap_runtime_contract.cpp
     src/project/project.tilemap_source.cpp
     src/utility.filewatch.cpp
     src/font.renderer.cpp

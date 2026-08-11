@@ -107,6 +107,21 @@ export namespace epochengine::project_tilemaps
         }
     };
 
+    struct RestoredTileMapArtifact final
+    {
+        PipelineCode code{PipelineCode::invalid_pipeline};
+        TileMapPipelineResult map{};
+        asset::tilemap::CompiledTileMapArtifact artifact{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return (code == PipelineCode::ready
+                    || code == PipelineCode::unchanged)
+                && static_cast<bool>(map)
+                && static_cast<bool>(artifact.identity);
+        }
+    };
+
     class ProjectTileMapPipeline final
     {
     public:
@@ -131,6 +146,11 @@ export namespace epochengine::project_tilemaps
             std::string_view logicalPath,
             const asset::tilemap::ContentHash& artifactKey) noexcept;
         [[nodiscard]] TileMapPipelineResult restore_latest(
+            std::string_view logicalPath) noexcept;
+        [[nodiscard]] RestoredTileMapArtifact restore_exact_artifact(
+            std::string_view logicalPath,
+            const asset::tilemap::ContentHash& artifactKey) noexcept;
+        [[nodiscard]] RestoredTileMapArtifact restore_latest_artifact(
             std::string_view logicalPath) noexcept;
         [[nodiscard]] VisibleTileMapResult compile_visible_latest(
             std::string_view logicalPath,

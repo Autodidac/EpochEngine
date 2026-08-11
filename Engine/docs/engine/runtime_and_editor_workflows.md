@@ -367,6 +367,18 @@ the same engine-owned path.
   deterministic renderer-neutral projection. The live editor entity collection
   remains a transitional UI adapter until every mutation routes through
   `SceneDocument` semantic commands.
+- generated project manifests may declare one canonical `tilemap` path beneath
+  `Assets/Maps`. Canvas2D project runtime resolves that path from the actual
+  project root, not the engine checkout.
+- authoring-enabled runtimes load and compile canonical map source, atomically
+  publish its exact artifact beneath `Library/TileMaps`, restore authenticated
+  texture dependencies, and publish one immutable Canvas2D scene per context.
+  Game-only builds can compile out map authoring and restore the same exact
+  Library artifact. Missing source may fall back only under explicit
+  prefer-source policy; malformed source always fails closed.
+- map source and semantic history remain canonical, Library output is
+  reproducible, and Canvas2D scene/resource residency is disposable. Context
+  exit or replacement retires only the physical scene publication.
 - OS model package lanes are on-demand model assets. Qwen, Nemotron, Bonsai,
   FLUX, Wan, and TRELLIS weights are staged to executable-local `cache/models/`
   only after operator action, are not cloned for engine self-iteration, and are

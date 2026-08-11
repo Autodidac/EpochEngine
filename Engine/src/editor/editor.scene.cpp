@@ -1003,6 +1003,7 @@ namespace
             .display_name = "GUI Editor",
             .root_path = "Projects/TwoDStudio",
             .scene_path = "Projects/TwoDStudio/worlds/twod.epoch",
+            .tilemap_path = "Assets/Maps/main.epochmap",
             .world_name = "TwoD_Main",
             .runtime_scene_id = "project:twodstudio",
             .manifest_path = "Projects/TwoDStudio/project.epoch.json",
@@ -1131,6 +1132,7 @@ namespace
         std::string display_name{};
         std::string root_path{};
         std::string scene_path{};
+        std::string tilemap_path{};
         std::string world_name{};
         std::string runtime_scene_id{};
         std::string manifest_path{};
@@ -1150,6 +1152,7 @@ namespace
                 .display_name = display_name,
                 .root_path = root_path,
                 .scene_path = scene_path,
+                .tilemap_path = tilemap_path,
                 .world_name = world_name,
                 .runtime_scene_id = runtime_scene_id,
                 .manifest_path = manifest_path,
@@ -1608,6 +1611,8 @@ namespace
         }
         scenePath = scenePath.lexically_normal();
         profile.scene_path = scenePath.generic_string();
+        profile.tilemap_path = extract_json_string_field(
+            manifestText, "tilemap").value_or("");
         profile.world_name = parse_world_name(scenePath, profile.kind);
         profile.runtime_scene_id = "project:" + profile.id;
         profile.manifest_path = manifest_path.lexically_normal().generic_string();
@@ -2119,6 +2124,7 @@ namespace
         fs::path root{};
         fs::path world_file{};
         std::string world_name{};
+        std::string tilemap_path{};
         std::string template_family{};
         std::string script_id{};
         std::string description{};
@@ -2472,6 +2478,9 @@ namespace
         const std::string demoModelLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "  \"demo_model_asset\": \"" + json_escape(spec.demo_model_asset) + "\",\n";
+        const std::string tileMapManifestLine = spec.tilemap_path.empty()
+            ? std::string{}
+            : "  \"tilemap\": \"" + json_escape(spec.tilemap_path) + "\",\n";
         const std::string packageManifestLine = includeEngineArcadePackage
             ? std::string{ "  \"engine_asset_packages\": [\"engine_arcade\"],\n"
                 "  \"engine_arcade_default_scene\": \"" }
@@ -2486,12 +2495,18 @@ namespace
         const std::string readmeDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "- Demo model asset: " + spec.demo_model_asset + "\n";
+        const std::string readmeTileMapLine = spec.tilemap_path.empty()
+            ? std::string{}
+            : "- Canonical tile map: " + spec.tilemap_path + "\n";
         const std::string readmePackageLine = includeEngineArcadePackage
             ? "- Engine asset package: engine_arcade (kernel-owned mini-runtime scenes for 512x512 render-to-texture arcade assets)\n"
             : std::string{};
         const std::string pathsDemoLine = spec.demo_model_asset.empty()
             ? std::string{}
             : "demo_model_asset=" + spec.demo_model_asset + "\n";
+        const std::string pathsTileMapLine = spec.tilemap_path.empty()
+            ? std::string{}
+            : "tilemap=" + spec.tilemap_path + "\n";
         const std::string pathsPackageLine = includeEngineArcadePackage
             ? "engine_arcade_package=" + engineArcadePackageFile.generic_string() + "\n"
               "engine_arcade_script=" + engineArcadeScriptFile.generic_string() + "\n"
@@ -2513,6 +2528,7 @@ namespace
             "  \"scene\": \"" + json_escape(worldFile.generic_string()) + "\",\n"
             "  \"default_script\": \"" + json_escape(spec.script_id) + "\",\n"
             + demoModelLine
+            + tileMapManifestLine
             + packageManifestLine
             + "  \"engine_integration\": \"" + json_escape(integrationMode) + "\",\n"
             "  \"public_include_root\": \"" + json_escape(publicIncludeRoot) + "\",\n"
@@ -2536,6 +2552,7 @@ namespace
             "- Scene: " + worldFile.filename().string() + "\n"
             "- " + scriptLabel + ": " + scriptFile.filename().string() + "\n"
             + readmeDemoLine
+            + readmeTileMapLine
             + readmePackageLine
             + "- Engine integration: " + integrationMode + "\n"
             "- Public include root: " + publicIncludeRoot + "\n"
@@ -2559,6 +2576,7 @@ namespace
             + "scene=" + worldFile.generic_string() + "\n"
             + "default_script=" + scriptFile.generic_string() + "\n"
             + pathsDemoLine
+            + pathsTileMapLine
             + pathsPackageLine
             + "entry_source=" + entrySource.generic_string() + "\n"
             + "windows_project=" + windowsProject.generic_string() + "\n"
@@ -3150,6 +3168,7 @@ namespace epochengine
             .project_name = "GUI Editor",
             .project_id = "twodstudio",
             .world_name = "TwoD_Main",
+            .tilemap_path = "Assets/Maps/main.epochmap",
             .template_family = "game-2d-project",
             .script_id = "project_demo_bootstrap"
         };
@@ -3237,6 +3256,7 @@ namespace epochengine
             const auto manifestKind = extract_json_string_field(manifestText, "kind");
             const auto manifestScript = extract_json_string_field(manifestText, "default_script");
             const auto manifestTemplate = extract_json_string_field(manifestText, "template_family");
+            const auto manifestTileMap = extract_json_string_field(manifestText, "tilemap");
             const auto manifestDisplayName = extract_json_string_field(manifestText, "display_name");
             const auto manifestWindowsProject = extract_json_string_field(manifestText, "windows_project");
             const JsonStringFieldResult capabilityField =
@@ -3278,6 +3298,9 @@ namespace epochengine
                 && manifestKind && *manifestKind == expectedKind
                 && manifestScript && *manifestScript == profile->default_script
                 && manifestTemplate && *manifestTemplate == profile->template_family
+                && (profile->tilemap_path.empty()
+                    ? !manifestTileMap
+                    : manifestTileMap && *manifestTileMap == profile->tilemap_path)
                 && manifestDisplayName && *manifestDisplayName == profile->display_name
                 && manifestWindowsProject && *manifestWindowsProject == windowsProject.filename().generic_string();
 
@@ -3290,6 +3313,7 @@ namespace epochengine
                     .root = root,
                     .world_file = fs::path{ profile->scene_path },
                     .world_name = std::string(profile->world_name),
+                    .tilemap_path = std::string(profile->tilemap_path),
                     .template_family = std::string(profile->template_family),
                     .script_id = std::string(profile->default_script),
                     .description = std::string(profile->description),
@@ -3337,6 +3361,7 @@ namespace epochengine
             .root = root,
             .world_file = fs::path{ profile->scene_path },
             .world_name = std::string(profile->world_name),
+            .tilemap_path = std::string(profile->tilemap_path),
             .template_family = std::string(profile->template_family),
             .script_id = std::string(profile->default_script),
             .description = std::string(profile->description),

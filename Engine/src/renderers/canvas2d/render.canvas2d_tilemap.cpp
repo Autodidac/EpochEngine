@@ -253,6 +253,63 @@ namespace epochengine::canvas2d::tilemap_runtime
         }
     }
 
+    RectF artifact_world_bounds(
+        const asset::tilemap::CompiledTileMapArtifact& artifact) noexcept
+    {
+        if (!asset::tilemap::validate(artifact))
+            return {};
+
+        bool initialized = false;
+        RectF bounds{};
+        const auto include = [&](RectF value) noexcept
+        {
+            if (!detail::finite(value) || value.empty())
+                return;
+            if (!initialized)
+            {
+                bounds = value;
+                initialized = true;
+                return;
+            }
+            const float right = (std::max)(
+                bounds.x + bounds.width, value.x + value.width);
+            const float bottom = (std::max)(
+                bounds.y + bounds.height, value.y + value.height);
+            bounds.x = (std::min)(bounds.x, value.x);
+            bounds.y = (std::min)(bounds.y, value.y);
+            bounds.width = right - bounds.x;
+            bounds.height = bottom - bounds.y;
+        };
+
+        for (const auto& layer : artifact.layers)
+        {
+            include({
+                layer.world_origin.x,
+                layer.world_origin.y,
+                static_cast<float>(layer.extent_tiles.x)
+                    * layer.tile_world_extent.x,
+                static_cast<float>(layer.extent_tiles.y)
+                    * layer.tile_world_extent.y});
+        }
+        for (const auto& primitive : artifact.collision)
+        {
+            include({
+                primitive.world_bounds.x,
+                primitive.world_bounds.y,
+                primitive.world_bounds.width,
+                primitive.world_bounds.height});
+        }
+        for (const auto& object : artifact.objects)
+        {
+            include({
+                object.position.x - object.size.x * 0.5f,
+                object.position.y - object.size.y * 0.5f,
+                object.size.x,
+                object.size.y});
+        }
+        return initialized && detail::finite(bounds) ? bounds : RectF{};
+    }
+
     VisibleCompilation compile_visible(
         const asset::tilemap::CompiledTileMapArtifact& artifact,
         const ViewRequest& view,

@@ -1,6 +1,27 @@
 # Epoch Changelog
 
 
+## [v0.89.14] - Standalone temporal tilemap runtime
+
+- Add project.tilemap_runtime as the shared runtime boundary from canonical map
+  source or exact Library artifact to one validated Canvas2D scene, collision
+  set, object set, and authenticated texture-resource closure.
+- Regenerate Library/TileMaps from Assets/Maps in authoring-enabled builds while
+  preserving a compiled-only game path with tilemap authoring disabled.
+- Fail closed on malformed canonical source even when a stale compiled artifact
+  exists; exact map and texture identities are revalidated during cold restore.
+- Persist generated-project tilemap paths and resolve external runtime roots
+  beside the generated project rather than against the engine checkout.
+- Publish prepared Canvas2D content once per active context and retire it on
+  project exit or camera-mode replacement without preserving physical cache
+  identity.
+- Pass CMake and shared MSVC Debug/Release builds and contracts, the complete
+  Debug/Release six-test suites, authoring-off compilation/contracts, source
+  naming, and MSVC XML validation. Operator visual and generated-child external
+  Run proof remain explicitly pending.
+- Keep the published v0.89.06 updater, release implementation, packages, and
+  stable identity sealed.
+
 ## [v0.89.13] - Temporal tilemap authoring workspace
 
 - Add a reusable renderer-neutral EpochGui tile workspace controller for tools,

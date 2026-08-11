@@ -10,6 +10,7 @@ import project.texture_admission;
 import project.texture_resources;
 import project.texture_pipeline;
 import project.tilemap_pipeline;
+import project.tilemap_runtime;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import project.tilemap_source;
 #endif
@@ -57,6 +58,15 @@ namespace epochengine::project_contracts
                 false,
                 project_tilemaps::tilemap_pipeline_contract_failure_name(
                     tilemaps)};
+        }
+        const auto tilemapRuntime =
+            project_tilemap_runtime::run_contract();
+        if (tilemapRuntime != project_tilemap_runtime::ContractFailure::none)
+        {
+            return {
+                false,
+                project_tilemap_runtime::contract_failure_name(
+                    tilemapRuntime)};
         }
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
         const auto tilemapSources =

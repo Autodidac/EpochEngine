@@ -1339,6 +1339,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_pipeline.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_runtime.ixx">
+      <Filter>Module Files\epoch\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx">
       <Filter>Module Files\epoch\project</Filter>
     </ClCompile>
@@ -1388,6 +1391,12 @@
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_pipeline.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime_contract.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_source.cpp">

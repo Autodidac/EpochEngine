@@ -197,18 +197,19 @@ Foundation status: stable temporal map identity, sparse chunks, semantic
 operations, deterministic artifacts, bounded serialization/culling, animated
 Canvas2D submission, collision/object output, exact Project Library restore,
 canonical Assets/Maps source, and the reusable EpochGui/Game2D authoring
-workspace are build-proven. Save and the current editor Run publication consume
-the same document; whole-editor context replacement restores unsaved map
-history and portable workspace state.
+workspace are build-proven. Save and editor publication consume the same
+document; whole-editor context replacement restores unsaved history and
+portable workspace state. The standalone project runtime now regenerates the
+canonical source into Library/TileMaps when authoring is present and restores
+the exact map plus authenticated texture closure when authoring is compiled out.
+Malformed source cannot silently fall back to a stale compiled artifact.
 
-Deliver:
+Remaining delivery:
 
-- load the exact compiled map revision in generated standalone project runtimes;
-- regenerate Library/TileMaps from canonical source after cache deletion;
 - complete object selection/transform/delete and hierarchy/inspector integration
   through semantic map and scene operations;
-- prove save/reopen, Play, external Run, Build, interaction, and cost diagnostics
-  over one authored map;
+- prove save/reopen, Play, generated-child external Run, Build, interaction, and
+  cost diagnostics over one authored map;
 - capture approved visual evidence without weakening headless/game compile-out.
 
 Exit gate:

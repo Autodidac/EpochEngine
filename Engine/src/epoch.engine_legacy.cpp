@@ -114,6 +114,7 @@ import context.multiplexer;
 import context.type;
 import context.window;
 import core.context;
+import core.env;
 import core.logger;
 import core.path;
 import core.time;
@@ -164,11 +165,13 @@ import opengl.canvas2d;
 import opengl.textures;
 #endif
 import render.canvas2d;
+import render.canvas2d_scene;
 import render.canvas2d_cpu;
 import render.canvas2d_presentation;
 import render.texture_residency;
 import canvas2d.scene_contracts;
 import project.contracts;
+import project.tilemap_runtime;
 import render.texture_artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
@@ -5671,6 +5674,45 @@ namespace epochengine::core
             });
         }
 
+        [[nodiscard]] std::filesystem::path project_runtime_root(
+            const epochengine::EditorProjectProfile& profile)
+        {
+            const auto requestedId =
+                epochengine::core::env::get("EPOCH_EDITOR_PROJECT_ID");
+            const auto requestedRoot =
+                epochengine::core::env::get("EPOCH_EDITOR_PROJECT_ROOT");
+            if (requestedId && requestedRoot
+                && requestedId->impl == profile.id && !requestedRoot->empty())
+            {
+                return std::filesystem::path{requestedRoot->impl}.lexically_normal();
+            }
+            return resolve_runtime_scene_path(
+                std::filesystem::path{profile.root_path});
+        }
+
+        [[nodiscard]] std::filesystem::path project_profile_path(
+            const epochengine::EditorProjectProfile& profile,
+            const std::filesystem::path& runtimeRoot,
+            std::string_view declaredPath)
+        {
+            if (declaredPath.empty())
+                return {};
+            std::filesystem::path path{declaredPath};
+            if (path.is_absolute())
+                return path.lexically_normal();
+
+            const std::filesystem::path declaredRoot{profile.root_path};
+            const std::filesystem::path relative =
+                path.lexically_relative(declaredRoot);
+            if (!relative.empty()
+                && relative.native().find(
+                    std::filesystem::path{".."}.native()) != 0u)
+            {
+                return (runtimeRoot / relative).lexically_normal();
+            }
+            return (runtimeRoot / path).lexically_normal();
+        }
+
         class ProjectPlayScene final : public epochengine::scene::Scene
         {
         public:
@@ -5687,7 +5729,12 @@ namespace epochengine::core
 
                 m_projectId = std::string(profile->id);
                 m_projectName = std::string(profile->display_name);
-                m_scenePath = std::string(profile->scene_path);
+                const std::filesystem::path runtimeRoot =
+                    project_runtime_root(*profile);
+                m_projectRoot = runtimeRoot.generic_string();
+                m_scenePath = project_profile_path(
+                    *profile, runtimeRoot, profile->scene_path).generic_string();
+                m_tileMapPath = std::string(profile->tilemap_path);
                 m_worldName = std::string(profile->world_name);
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
@@ -5712,11 +5759,37 @@ namespace epochengine::core
                 }
                 m_lightingFrame = build_project_play_lighting(
                     std::span<const ProjectRuntimeEntity>{ m_entities.data(), m_entities.size() });
+                if (m_cameraMode == epochengine::previewgrid::CameraMode::Canvas2D
+                    && !m_tileMapPath.empty() && !m_projectRoot.empty())
+                {
+                    m_tileMapRuntime =
+                        std::make_unique<epochengine::project_tilemap_runtime::ProjectTileMapRuntime>(
+                            m_projectId, m_projectRoot);
+                    auto prepared = m_tileMapRuntime->prepare({
+                        .logical_path = m_tileMapPath,
+                        .source_policy =
+                            epochengine::project_tilemap_runtime::SourcePolicy::prefer_source});
+                    m_tileMapStatus = prepared.diagnostic;
+                    if (prepared)
+                        m_tileMap = std::move(prepared);
+                    else
+                    {
+                        m_tileMapStatus =
+                            std::string(epochengine::project_tilemap_runtime::runtime_code_name(
+                                prepared.code))
+                            + ": " + prepared.diagnostic;
+                    }
+                }
             }
 
             void load() override
             {
                 Scene::load();
+            }
+
+            ~ProjectPlayScene() override
+            {
+                retire_canvas2d_scenes();
             }
 
             bool frame(std::shared_ptr<epochengine::core::Context> ctx, epochengine::core::WindowData*) override
@@ -5728,6 +5801,8 @@ namespace epochengine::core
                 {
                     epochengine::previewgrid::clear_object_markers(ctx.get());
                     epochengine::previewgrid::clear_lighting_frame(ctx.get());
+                    (void)epochengine::canvas2d::scene_content::retire(ctx.get());
+                    m_canvas2dPublished.erase(ctx.get());
                     return false;
                 }
 
@@ -5772,11 +5847,49 @@ namespace epochengine::core
                     m_cameraApplied[ctx.get()] = true;
                 }
                 ctx->set_scene_viewport({ 0, 0, width, height });
-                publish_project_play_markers(ctx.get(), std::span<const ProjectRuntimeEntity>{
-                    m_entities.data(),
-                    m_entities.size()
-                });
-                epochengine::previewgrid::set_lighting_frame(ctx.get(), m_lightingFrame);
+                if (m_cameraMode == epochengine::previewgrid::CameraMode::Canvas2D)
+                {
+                    epochengine::previewgrid::clear_object_markers(ctx.get());
+                    epochengine::previewgrid::clear_lighting_frame(ctx.get());
+                    const auto published = m_canvas2dPublished.find(ctx.get());
+                    const auto acquired =
+                        epochengine::canvas2d::scene_content::acquire(ctx.get());
+                    const bool needsPublication = m_tileMap
+                        && (published == m_canvas2dPublished.end()
+                            || !acquired
+                            || acquired.generation != published->second);
+                    if (needsPublication)
+                    {
+                        const auto publication =
+                            epochengine::canvas2d::scene_content::publish(
+                                ctx.get(), m_tileMap->scene);
+                        if (publication)
+                            m_canvas2dPublished[ctx.get()] = publication.generation;
+                        else
+                        {
+                            m_tileMapStatus =
+                                std::string("scene publication ")
+                                + std::string(
+                                    epochengine::canvas2d::scene_content::scene_code_name(
+                                        publication.code));
+                        }
+                    }
+                    else if (!m_tileMap)
+                    {
+                        (void)epochengine::canvas2d::scene_content::retire(ctx.get());
+                    }
+                }
+                else
+                {
+                    (void)epochengine::canvas2d::scene_content::retire(ctx.get());
+                    m_canvas2dPublished.erase(ctx.get());
+                    publish_project_play_markers(ctx.get(), std::span<const ProjectRuntimeEntity>{
+                        m_entities.data(),
+                        m_entities.size()
+                    });
+                    epochengine::previewgrid::set_lighting_frame(
+                        ctx.get(), m_lightingFrame);
+                }
 
                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
 
@@ -5841,12 +5954,25 @@ namespace epochengine::core
                 m_lookState.panning = mouse_left_down && !mouse_right_down;
 
                 gui::begin_top_layer();
-                gui::begin_window("Project Runtime Preview", { 24.0f, 24.0f }, { 430.0f, 210.0f });
+                gui::begin_window(
+                    "Project Runtime Preview",
+                    {24.0f, 24.0f},
+                    {430.0f, m_tileMapPath.empty() ? 210.0f : 272.0f});
                 gui::label(std::string("Project: ") + m_projectName);
                 gui::label(std::string("World: ") + m_worldName);
                 gui::label(std::string("Scene: ") + m_scenePath);
                 gui::label(std::string("Script: ") + m_scriptName);
                 gui::label(std::string("Preview Objects: ") + std::to_string(visible_runtime_entity_count(m_entities)));
+                if (!m_tileMapPath.empty())
+                {
+                    gui::label(std::string("Tile Map: ") + m_tileMapPath);
+                    gui::wrapped_label(
+                        std::string("Tile Runtime: ")
+                            + (m_tileMapStatus.empty()
+                                ? std::string("not prepared")
+                                : m_tileMapStatus),
+                        390.0f);
+                }
                 gui::wrapped_label(
                     std::string("Demo model: ")
                     + (m_modelSummary.asset_path.empty() ? std::string("(none)") : m_modelSummary.asset_path),
@@ -5866,14 +5992,33 @@ namespace epochengine::core
             }
 
         private:
+            void retire_canvas2d_scenes() noexcept
+            {
+                for (const auto& [owner, generation] : m_canvas2dPublished)
+                {
+                    (void)generation;
+                    (void)epochengine::canvas2d::scene_content::retire(owner);
+                }
+                m_canvas2dPublished.clear();
+            }
+
             std::string m_projectId{};
             std::string m_projectName{};
+            std::string m_projectRoot{};
+            std::string m_tileMapPath{};
+            std::string m_tileMapStatus{};
             std::string m_scenePath{};
             std::string m_worldName{};
             std::string m_scriptName{};
             std::string m_description{};
             epochengine::EditorProjectModelSummary m_modelSummary{};
             epochengine::scene_runtime::SceneRuntime m_sceneRuntime{};
+            std::unique_ptr<
+                epochengine::project_tilemap_runtime::ProjectTileMapRuntime>
+                m_tileMapRuntime{};
+            std::optional<
+                epochengine::project_tilemap_runtime::PreparedTileMap>
+                m_tileMap{};
             std::vector<ProjectRuntimeEntity> m_entities{};
             epochengine::lighting::LightingFrame m_lightingFrame{};
             timing::Clock::time_point m_lastFrame{};
@@ -5881,6 +6026,7 @@ namespace epochengine::core
             epochengine::previewgrid::CameraMode m_cameraMode{ epochengine::previewgrid::CameraMode::Editor };
             input::ProfilePreset m_inputProfile{ input::ProfilePreset::EditorDefault };
             std::unordered_map<const void*, bool> m_cameraApplied{};
+            std::unordered_map<const void*, std::uint64_t> m_canvas2dPublished{};
             PreviewLookState m_lookState{};
         };
 

@@ -238,11 +238,22 @@ namespace epochengine::project_tilemaps
         std::string_view logicalPath,
         const asset::tilemap::ContentHash& artifactKey) noexcept
     {
+        return restore_exact_artifact(logicalPath, artifactKey).map;
+    }
+
+    RestoredTileMapArtifact ProjectTileMapPipeline::restore_exact_artifact(
+        std::string_view logicalPath,
+        const asset::tilemap::ContentHash& artifactKey) noexcept
+    {
         ++metrics_.restore_requests;
         LoadedTileMapArtifact loaded = library_.load_exact(
             logicalPath, artifactKey);
         if (!loaded)
-            return reject(PipelineCode::library_failure, loaded.code);
+        {
+            TileMapPipelineResult rejected = reject(
+                PipelineCode::library_failure, loaded.code);
+            return {rejected.code, std::move(rejected), {}};
+        }
         const std::string canonicalPath =
             loaded.locator.canonical_logical_path;
         TileMapPipelineResult result = activate(
@@ -252,16 +263,32 @@ namespace epochengine::project_tilemaps
             false);
         if (result)
             ++metrics_.restorations;
-        return result;
+        const PipelineCode code = result.code;
+        return {
+            code,
+            std::move(result),
+            code == PipelineCode::ready || code == PipelineCode::unchanged
+                ? std::move(loaded.artifact)
+                : asset::tilemap::CompiledTileMapArtifact{}};
     }
 
     TileMapPipelineResult ProjectTileMapPipeline::restore_latest(
         std::string_view logicalPath) noexcept
     {
+        return restore_latest_artifact(logicalPath).map;
+    }
+
+    RestoredTileMapArtifact ProjectTileMapPipeline::restore_latest_artifact(
+        std::string_view logicalPath) noexcept
+    {
         ++metrics_.restore_requests;
         LoadedTileMapArtifact loaded = library_.load_latest(logicalPath);
         if (!loaded)
-            return reject(PipelineCode::library_failure, loaded.code);
+        {
+            TileMapPipelineResult rejected = reject(
+                PipelineCode::library_failure, loaded.code);
+            return {rejected.code, std::move(rejected), {}};
+        }
         const std::string canonicalPath =
             loaded.locator.canonical_logical_path;
         TileMapPipelineResult result = activate(
@@ -271,7 +298,13 @@ namespace epochengine::project_tilemaps
             false);
         if (result)
             ++metrics_.restorations;
-        return result;
+        const PipelineCode code = result.code;
+        return {
+            code,
+            std::move(result),
+            code == PipelineCode::ready || code == PipelineCode::unchanged
+                ? std::move(loaded.artifact)
+                : asset::tilemap::CompiledTileMapArtifact{}};
     }
 
     VisibleTileMapResult ProjectTileMapPipeline::compile_visible_latest(

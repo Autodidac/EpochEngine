@@ -118,6 +118,9 @@ namespace epochengine::canvas2d::tilemap_runtime
         if (!asset::tilemap::validate(artifact))
             return ContractFailure::artifact_contract;
 
+        const RectF fullBounds = artifact_world_bounds(artifact);
+        if (fullBounds != RectF{-2.0f, -1.0f, 16.0f, 8.0f})
+            return ContractFailure::world_bounds;
         const ViewRequest view{
             .world_bounds = {-3.0f, -2.0f, 7.0f, 6.0f},
             .simulated_milliseconds = 1'000u};

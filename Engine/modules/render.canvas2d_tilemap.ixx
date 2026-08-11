@@ -116,6 +116,8 @@ export namespace epochengine::canvas2d::tilemap_runtime
         }
     };
 
+    [[nodiscard]] RectF artifact_world_bounds(
+        const asset::tilemap::CompiledTileMapArtifact& artifact) noexcept;
     [[nodiscard]] VisibleCompilation compile_visible(
         const asset::tilemap::CompiledTileMapArtifact& artifact,
         const ViewRequest& view,
@@ -135,6 +137,7 @@ export namespace epochengine::canvas2d::tilemap_runtime
         collision_filter,
         object_filter,
         capacity_bound,
+        world_bounds,
         invalid_view_accepted
     };
 
@@ -155,6 +158,7 @@ export namespace epochengine::canvas2d::tilemap_runtime
         case ContractFailure::collision_filter: return "collision_filter";
         case ContractFailure::object_filter: return "object_filter";
         case ContractFailure::capacity_bound: return "capacity_bound";
+        case ContractFailure::world_bounds: return "world_bounds";
         case ContractFailure::invalid_view_accepted:
             return "invalid_view_accepted";
         }
