@@ -24,8 +24,10 @@ module;
 
 module project.forest_library;
 
+import authoring.morphology;
 import core.sha256;
 import platform.filesystem;
+import voxel.field;
 
 namespace epochengine::project_forests
 {

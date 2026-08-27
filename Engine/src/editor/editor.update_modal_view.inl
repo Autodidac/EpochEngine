@@ -49,7 +49,7 @@
                     : (!updateRunning && !restartReady);
             const bool showPrimaryButton =
                 !updateRunning
-                && (flags.installableUpdate || restartReady || sourceWorkerRunning);
+                && (flags.checkFailed || flags.installableUpdate || restartReady || sourceWorkerRunning);
             const bool showAdvancedSourceButton =
                 updater::private_source_access_enabled() && !updateRunning && !restartReady;
             const editor_update_modal::ActionStrip actionStrip =
@@ -117,7 +117,9 @@
                     : sourceWorkerRunning
                     ? "Source rebuild"
                     : editor.updateProjectSourceDownloadPending ? "Project source"
-                    : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready";
+                    : updateRunning ? "Update"
+                    : restartReady ? "Update staged"
+                    : flags.checkFailed ? "Update check" : "Update ready";
                 const std::string progressStatus = sourceAuthorizationRunning
                     ? "approval / encrypted transfer"
                     : sourceWorkerRunning
@@ -133,14 +135,14 @@
                         ? "downloading / staging"
                         : restartReady
                             ? epochengine::format_text("auto restart in {}s", restartCountdownSeconds)
-                            : "waiting";
+                            : flags.checkFailed ? "failed - retry available" : "ready";
                 gui::set_cursor({ contentX, cursorY });
                 gui::progress_bar(gui::ProgressBarOptions{
                     .label = progressLabel,
                     .status = progressStatus,
                     .value = editor_update_progress_value(editor),
                     .size = { progressWidth, 22.0f },
-                    .show_percent = !sourceWorkerRunning,
+                    .show_percent = !sourceWorkerRunning && !flags.checkFailed,
                     .activity = updateRunning || sourceWorkerRunning,
                     .activity_phase = editor_update_activity_phase(editor)
                 });
@@ -178,6 +180,7 @@
                 }
                 const std::string primaryUpdateLabel = restartReady
                     ? restartButtonLabel
+                    : flags.checkFailed ? std::string{ "Retry Check" }
                     : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
                 if (showPrimaryButton)
                 {
@@ -190,7 +193,11 @@
                         }
                         else
                         {
-                            if (sourceOnlyUpdate)
+                            if (flags.checkFailed)
+                            {
+                                start_editor_update_check(editor);
+                            }
+                            else if (sourceOnlyUpdate)
                             {
                                 push_editor_log(editor, "[command] Source update confirmed from smart update modal.");
                                 start_editor_source_update_install(editor);
@@ -244,6 +251,7 @@
                 gui::set_cursor({ primaryButtonX, buttonY });
                 const std::string primaryUpdateLabel = restartReady
                     ? restartButtonLabel
+                    : flags.checkFailed ? std::string{ "Retry Check" }
                     : sourceOnlyUpdate ? std::string{ "Update From Source" } : std::string{ "Install Release" };
                 if (showPrimaryButton && gui::button(primaryUpdateLabel, { primaryButtonWidth, buttonHeight }))
                 {
@@ -253,7 +261,11 @@
                     }
                     else
                     {
-                        if (sourceOnlyUpdate)
+                        if (flags.checkFailed)
+                        {
+                            start_editor_update_check(editor);
+                        }
+                        else if (sourceOnlyUpdate)
                         {
                             push_editor_log(editor, "[command] Source update confirmed from smart update modal.");
                             start_editor_source_update_install(editor);

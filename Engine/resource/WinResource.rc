@@ -34,12 +34,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Epoch Engine"
             VALUE "FileDescription", "Epoch Editor"
-            VALUE "FileVersion", "0.89.28"
+            VALUE "FileVersion", "0.89.29"
             VALUE "InternalName", "EpochEditor"
             VALUE "LegalCopyright", "Copyright (c) 2026 Adam Rushford"
             VALUE "OriginalFilename", "EpochEditor.exe"
             VALUE "ProductName", "Epoch Engine"
-            VALUE "ProductVersion", "0.89.28"
+            VALUE "ProductVersion", "0.89.29"
         END
     END
     BLOCK "VarFileInfo"

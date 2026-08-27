@@ -216,7 +216,7 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
-        return {};
+        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/source-version";
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()

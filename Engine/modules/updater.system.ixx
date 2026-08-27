@@ -14,6 +14,7 @@ export namespace epochengine::updater
 {
     struct UpdateCommandResult
     {
+        bool operation_failed{ false };
         bool update_available{ false };
         bool packaged_update_available{ false };
         bool force_required{ false };
@@ -66,6 +67,7 @@ export namespace epochengine::updater
     };
 
     void cleanup_previous_update_artifacts();
+    bool update_discovery_contract_self_test();
     ProjectSourceDownloadResult download_project_source_code(const UpdateChannel& channel);
     std::filesystem::path source_update_log_path();
     std::filesystem::path update_handoff_log_path();

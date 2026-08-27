@@ -937,149 +937,489 @@ namespace epochengine::updater
             return out;
         }
 
-        [[nodiscard]] inline std::vector<std::string> extract_json_objects(const std::string_view text)
+        inline constexpr std::size_t k_release_json_max_input_bytes = 256u * 1024u;
+        inline constexpr std::size_t k_release_json_max_depth = 16u;
+        inline constexpr std::size_t k_release_json_max_array_items = 64u;
+        inline constexpr std::size_t k_release_json_max_string_bytes = 192u * 1024u;
+        inline constexpr std::size_t k_release_json_max_object_fields = 64u;
+        inline constexpr std::size_t k_release_json_max_field_bytes = 96u;
+
+        [[nodiscard]] inline bool json_space(const char ch) noexcept
+        {
+            return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
+        }
+
+        class BoundedJsonReader final
+        {
+          public:
+            explicit BoundedJsonReader(const std::string_view text) noexcept : text_{text} {}
+
+            [[nodiscard]] bool document() noexcept
+            {
+                if (text_.empty() || text_.size() > k_release_json_max_input_bytes)
+                    return false;
+                skip_space();
+                if (!value(0u))
+                    return false;
+                skip_space();
+                return position_ == text_.size();
+            }
+
+          private:
+            std::string_view text_;
+            std::size_t position_{};
+
+            void skip_space() noexcept
+            {
+                while (position_ < text_.size() && json_space(text_[position_]))
+                    ++position_;
+            }
+
+            [[nodiscard]] bool consume(const std::string_view token) noexcept
+            {
+                if (text_.substr(position_, token.size()) != token)
+                    return false;
+                position_ += token.size();
+                return true;
+            }
+
+            [[nodiscard]] bool string(const std::size_t maximum_bytes) noexcept
+            {
+                if (position_ >= text_.size() || text_[position_] != '"')
+                    return false;
+                const std::size_t content_start = ++position_;
+                bool escaping = false;
+                for (; position_ < text_.size(); ++position_)
+                {
+                    if (position_ - content_start > maximum_bytes)
+                        return false;
+                    const unsigned char ch = static_cast<unsigned char>(text_[position_]);
+                    if (escaping)
+                    {
+                        if (ch == 'u')
+                        {
+                            if (position_ + 4u >= text_.size())
+                                return false;
+                            for (std::size_t digit = 1u; digit <= 4u; ++digit)
+                            {
+                                const unsigned char hex =
+                                    static_cast<unsigned char>(text_[position_ + digit]);
+                                if (!((hex >= '0' && hex <= '9') || (hex >= 'a' && hex <= 'f') ||
+                                      (hex >= 'A' && hex <= 'F')))
+                                {
+                                    return false;
+                                }
+                            }
+                            position_ += 4u;
+                        }
+                        else if (ch != '"' && ch != '\\' && ch != '/' && ch != 'b' && ch != 'f' &&
+                                 ch != 'n' && ch != 'r' && ch != 't')
+                        {
+                            return false;
+                        }
+                        escaping = false;
+                    }
+                    else if (ch == '\\')
+                    {
+                        escaping = true;
+                    }
+                    else if (ch == '"')
+                    {
+                        ++position_;
+                        return true;
+                    }
+                    else if (ch < 0x20u)
+                    {
+                        return false;
+                    }
+                }
+                return false;
+            }
+
+            [[nodiscard]] bool number() noexcept
+            {
+                const std::size_t start = position_;
+                if (position_ < text_.size() && text_[position_] == '-')
+                    ++position_;
+                if (position_ >= text_.size())
+                    return false;
+                if (text_[position_] == '0')
+                {
+                    ++position_;
+                }
+                else
+                {
+                    if (text_[position_] < '1' || text_[position_] > '9')
+                        return false;
+                    while (position_ < text_.size() && text_[position_] >= '0' &&
+                           text_[position_] <= '9')
+                    {
+                        ++position_;
+                    }
+                }
+                if (position_ < text_.size() && text_[position_] == '.')
+                {
+                    ++position_;
+                    const std::size_t fractional_start = position_;
+                    while (position_ < text_.size() && text_[position_] >= '0' &&
+                           text_[position_] <= '9')
+                    {
+                        ++position_;
+                    }
+                    if (position_ == fractional_start)
+                        return false;
+                }
+                if (position_ < text_.size() &&
+                    (text_[position_] == 'e' || text_[position_] == 'E'))
+                {
+                    ++position_;
+                    if (position_ < text_.size() &&
+                        (text_[position_] == '+' || text_[position_] == '-'))
+                    {
+                        ++position_;
+                    }
+                    const std::size_t exponent_start = position_;
+                    while (position_ < text_.size() && text_[position_] >= '0' &&
+                           text_[position_] <= '9')
+                    {
+                        ++position_;
+                    }
+                    if (position_ == exponent_start)
+                        return false;
+                }
+                return position_ > start;
+            }
+
+            [[nodiscard]] bool object(const std::size_t depth) noexcept
+            {
+                if (depth > k_release_json_max_depth || position_ >= text_.size() ||
+                    text_[position_] != '{')
+                {
+                    return false;
+                }
+                ++position_;
+                skip_space();
+                if (position_ < text_.size() && text_[position_] == '}')
+                {
+                    ++position_;
+                    return true;
+                }
+
+                std::size_t fields = 0u;
+                for (;;)
+                {
+                    if (++fields > k_release_json_max_object_fields ||
+                        !string(k_release_json_max_field_bytes))
+                    {
+                        return false;
+                    }
+                    skip_space();
+                    if (position_ >= text_.size() || text_[position_] != ':')
+                        return false;
+                    ++position_;
+                    skip_space();
+                    if (!value(depth))
+                        return false;
+                    skip_space();
+                    if (position_ >= text_.size())
+                        return false;
+                    if (text_[position_] == '}')
+                    {
+                        ++position_;
+                        return true;
+                    }
+                    if (text_[position_] != ',')
+                        return false;
+                    ++position_;
+                    skip_space();
+                }
+            }
+
+            [[nodiscard]] bool array(const std::size_t depth) noexcept
+            {
+                if (depth > k_release_json_max_depth || position_ >= text_.size() ||
+                    text_[position_] != '[')
+                {
+                    return false;
+                }
+                ++position_;
+                skip_space();
+                if (position_ < text_.size() && text_[position_] == ']')
+                {
+                    ++position_;
+                    return true;
+                }
+
+                std::size_t items = 0u;
+                for (;;)
+                {
+                    if (++items > k_release_json_max_array_items || !value(depth))
+                        return false;
+                    skip_space();
+                    if (position_ >= text_.size())
+                        return false;
+                    if (text_[position_] == ']')
+                    {
+                        ++position_;
+                        return true;
+                    }
+                    if (text_[position_] != ',')
+                        return false;
+                    ++position_;
+                    skip_space();
+                }
+            }
+
+            [[nodiscard]] bool value(const std::size_t depth) noexcept
+            {
+                if (depth > k_release_json_max_depth || position_ >= text_.size())
+                    return false;
+                switch (text_[position_])
+                {
+                case '{':
+                    return object(depth + 1u);
+                case '[':
+                    return array(depth + 1u);
+                case '"':
+                    return string(k_release_json_max_string_bytes);
+                case 't':
+                    return consume("true");
+                case 'f':
+                    return consume("false");
+                case 'n':
+                    return consume("null");
+                default:
+                    return number();
+                }
+            }
+        };
+
+        [[nodiscard]] inline bool
+        json_document_within_release_limits(const std::string_view text) noexcept
+        {
+            return BoundedJsonReader{text}.document();
+        }
+
+        [[nodiscard]] inline std::optional<std::size_t>
+        json_string_end(const std::string_view text, const std::size_t open,
+                        const std::size_t maximum_bytes) noexcept
+        {
+            if (open >= text.size() || text[open] != '"')
+                return std::nullopt;
+            bool escaping = false;
+            for (std::size_t cursor = open + 1u; cursor < text.size(); ++cursor)
+            {
+                if (cursor - open - 1u > maximum_bytes)
+                    return std::nullopt;
+                const char ch = text[cursor];
+                if (escaping)
+                    escaping = false;
+                else if (ch == '\\')
+                    escaping = true;
+                else if (ch == '"')
+                    return cursor + 1u;
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] inline std::optional<std::size_t>
+        json_value_end(const std::string_view text, const std::size_t start) noexcept
+        {
+            if (start >= text.size())
+                return std::nullopt;
+            if (text[start] == '"')
+                return json_string_end(text, start, k_release_json_max_string_bytes);
+            if (text[start] != '{' && text[start] != '[')
+            {
+                std::size_t cursor = start;
+                while (cursor < text.size() && text[cursor] != ',' && text[cursor] != '}' &&
+                       text[cursor] != ']' && !json_space(text[cursor]))
+                {
+                    ++cursor;
+                }
+                return cursor == start ? std::nullopt : std::optional<std::size_t>{cursor};
+            }
+
+            std::array<char, k_release_json_max_depth> closing{};
+            std::size_t depth = 0u;
+            bool in_string = false;
+            bool escaping = false;
+            for (std::size_t cursor = start; cursor < text.size(); ++cursor)
+            {
+                const char ch = text[cursor];
+                if (in_string)
+                {
+                    if (escaping)
+                        escaping = false;
+                    else if (ch == '\\')
+                        escaping = true;
+                    else if (ch == '"')
+                        in_string = false;
+                    continue;
+                }
+                if (ch == '"')
+                {
+                    in_string = true;
+                    continue;
+                }
+                if (ch == '{' || ch == '[')
+                {
+                    if (depth >= closing.size())
+                        return std::nullopt;
+                    closing[depth++] = ch == '{' ? '}' : ']';
+                    continue;
+                }
+                if (ch == '}' || ch == ']')
+                {
+                    if (depth == 0u || closing[depth - 1u] != ch)
+                        return std::nullopt;
+                    if (--depth == 0u)
+                        return cursor + 1u;
+                }
+            }
+            return std::nullopt;
+        }
+
+        struct JsonMemberSpan final
+        {
+            std::size_t start{};
+            std::size_t end{};
+        };
+
+        [[nodiscard]] inline std::optional<JsonMemberSpan>
+        json_object_member_span(const std::string_view object_text,
+                                const std::string_view field_name) noexcept
+        {
+            if (field_name.empty() || field_name.size() > k_release_json_max_field_bytes ||
+                !json_document_within_release_limits(object_text))
+            {
+                return std::nullopt;
+            }
+            std::size_t cursor = 0u;
+            while (cursor < object_text.size() && json_space(object_text[cursor]))
+                ++cursor;
+            if (cursor >= object_text.size() || object_text[cursor] != '{')
+                return std::nullopt;
+            ++cursor;
+            std::optional<JsonMemberSpan> found;
+            std::size_t fields = 0u;
+            for (;;)
+            {
+                while (cursor < object_text.size() && json_space(object_text[cursor]))
+                    ++cursor;
+                if (cursor >= object_text.size() || object_text[cursor] == '}')
+                    return found;
+                if (++fields > k_release_json_max_object_fields || object_text[cursor] != '"')
+                    return std::nullopt;
+                const auto key_end =
+                    json_string_end(object_text, cursor, k_release_json_max_field_bytes);
+                if (!key_end)
+                    return std::nullopt;
+                const std::string_view key =
+                    object_text.substr(cursor + 1u, *key_end - cursor - 2u);
+                cursor = *key_end;
+                while (cursor < object_text.size() && json_space(object_text[cursor]))
+                    ++cursor;
+                if (cursor >= object_text.size() || object_text[cursor] != ':')
+                    return std::nullopt;
+                do
+                    ++cursor;
+                while (cursor < object_text.size() && json_space(object_text[cursor]));
+                const auto value_end = json_value_end(object_text, cursor);
+                if (!value_end)
+                    return std::nullopt;
+                if (key == field_name)
+                {
+                    if (found)
+                        return std::nullopt;
+                    found = JsonMemberSpan{cursor, *value_end};
+                }
+                cursor = *value_end;
+                while (cursor < object_text.size() && json_space(object_text[cursor]))
+                    ++cursor;
+                if (cursor >= object_text.size())
+                    return std::nullopt;
+                if (object_text[cursor] == '}')
+                    return found;
+                if (object_text[cursor] != ',')
+                    return std::nullopt;
+                ++cursor;
+            }
+        }
+
+        [[nodiscard]] inline std::vector<std::string>
+        extract_json_objects(const std::string_view array_text)
         {
             std::vector<std::string> objects;
-            bool in_string = false;
-            bool escaping = false;
-            int depth = 0;
-            std::size_t start = std::string_view::npos;
-
-            for (std::size_t i = 0; i < text.size(); ++i)
+            if (!json_document_within_release_limits(array_text))
+                return objects;
+            std::size_t cursor = 0u;
+            while (cursor < array_text.size() && json_space(array_text[cursor]))
+                ++cursor;
+            if (cursor >= array_text.size() || array_text[cursor] != '[')
+                return objects;
+            ++cursor;
+            while (cursor < array_text.size())
             {
-                const char ch = text[i];
-
-                if (in_string)
+                while (cursor < array_text.size() && json_space(array_text[cursor]))
+                    ++cursor;
+                if (cursor < array_text.size() && array_text[cursor] == ']')
+                    return objects;
+                if (objects.size() >= k_release_json_max_array_items ||
+                    cursor >= array_text.size() || array_text[cursor] != '{')
                 {
-                    if (escaping)
-                    {
-                        escaping = false;
-                    }
-                    else if (ch == '\\')
-                    {
-                        escaping = true;
-                    }
-                    else if (ch == '"')
-                    {
-                        in_string = false;
-                    }
-
-                    continue;
+                    return {};
                 }
-
-                if (ch == '"')
-                {
-                    in_string = true;
-                    continue;
-                }
-
-                if (ch == '{')
-                {
-                    if (depth == 0)
-                        start = i;
-                    ++depth;
-                    continue;
-                }
-
-                if (ch == '}')
-                {
-                    if (depth <= 0)
-                        continue;
-
-                    --depth;
-                    if (depth == 0 && start != std::string_view::npos)
-                    {
-                        objects.emplace_back(text.substr(start, i - start + 1));
-                        start = std::string_view::npos;
-                    }
-                }
+                const auto end = json_value_end(array_text, cursor);
+                if (!end)
+                    return {};
+                objects.emplace_back(array_text.substr(cursor, *end - cursor));
+                cursor = *end;
+                while (cursor < array_text.size() && json_space(array_text[cursor]))
+                    ++cursor;
+                if (cursor >= array_text.size())
+                    return {};
+                if (array_text[cursor] == ']')
+                    return objects;
+                if (array_text[cursor] != ',')
+                    return {};
+                ++cursor;
             }
-
-            return objects;
-        }
-
-        [[nodiscard]] inline std::string extract_json_string_field(
-            const std::string& object_text,
-            const char* field_name)
-        {
-            const std::string field_pattern =
-                std::string{ "\"" } + field_name + "\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"";
-
-            const std::regex field_regex(
-                field_pattern,
-                std::regex::optimize);
-
-            std::smatch match;
-            if (!std::regex_search(object_text, match, field_regex))
-                return {};
-
-            return unescape_json_string_basic(match[1].str());
-        }
-
-        [[nodiscard]] inline std::string extract_json_array_text(
-            const std::string& object_text,
-            const char* field_name)
-        {
-            const auto key = std::string{ "\"" } + field_name + "\"";
-            const auto key_pos = object_text.find(key);
-            if (key_pos == std::string::npos)
-                return {};
-
-            const auto open_pos = object_text.find('[', key_pos + key.size());
-            if (open_pos == std::string::npos)
-                return {};
-
-            bool in_string = false;
-            bool escaping = false;
-            int depth = 0;
-
-            for (std::size_t i = open_pos; i < object_text.size(); ++i)
-            {
-                const char ch = object_text[i];
-
-                if (in_string)
-                {
-                    if (escaping)
-                    {
-                        escaping = false;
-                    }
-                    else if (ch == '\\')
-                    {
-                        escaping = true;
-                    }
-                    else if (ch == '"')
-                    {
-                        in_string = false;
-                    }
-
-                    continue;
-                }
-
-                if (ch == '"')
-                {
-                    in_string = true;
-                    continue;
-                }
-
-                if (ch == '[')
-                {
-                    ++depth;
-                    continue;
-                }
-
-                if (ch == ']')
-                {
-                    --depth;
-                    if (depth == 0)
-                        return object_text.substr(open_pos, i - open_pos + 1);
-                }
-            }
-
             return {};
         }
 
-        [[nodiscard]] inline std::optional<std::vector<unsigned char>> decode_base64url(
-            const std::string_view encoded)
+        [[nodiscard]] inline std::string
+        extract_json_string_field(const std::string_view object_text,
+                                  const std::string_view field_name)
+        {
+            const auto span = json_object_member_span(object_text, field_name);
+            if (!span || object_text[span->start] != '"')
+                return {};
+            return unescape_json_string_basic(
+                std::string{object_text.substr(span->start + 1u, span->end - span->start - 2u)});
+        }
+
+        [[nodiscard]] inline std::string extract_json_array_text(const std::string_view object_text,
+                                                                 const std::string_view field_name)
+        {
+            const auto span = json_object_member_span(object_text, field_name);
+            if (!span || object_text[span->start] != '[')
+                return {};
+            return std::string{object_text.substr(span->start, span->end - span->start)};
+        }
+
+        [[nodiscard]] inline std::string
+        extract_json_object_text(const std::string_view object_text,
+                                 const std::string_view field_name)
+        {
+            const auto span = json_object_member_span(object_text, field_name);
+            if (!span || object_text[span->start] != '{')
+                return {};
+            return std::string{object_text.substr(span->start, span->end - span->start)};
+        }
+
+        [[nodiscard]] inline std::optional<std::vector<unsigned char>>
+        decode_base64url(const std::string_view encoded)
         {
             std::vector<unsigned char> decoded;
             decoded.reserve((encoded.size() * 3u) / 4u + 1u);
@@ -1167,23 +1507,29 @@ namespace epochengine::updater
             return verified;
         }
 
-        [[nodiscard]] inline std::optional<std::string> verified_release_integrity_payload(
-            const std::string& document)
+        [[nodiscard]] inline std::optional<std::string> verified_release_integrity_payload(const std::string &document)
         {
-            const std::string canonical_payload =
-                extract_json_string_field(document, "canonical_payload");
-            const std::string algorithm = extract_json_string_field(document, "algorithm");
-            const std::string key_id = extract_json_string_field(document, "key_id");
-            const std::string signature = extract_json_string_field(document, "value");
-
-            if (canonical_payload.empty()
-                || algorithm != PROJECT_RELEASE_SIGNING_ALGORITHM
-                || key_id != PROJECT_RELEASE_SIGNING_KEY_ID
-                || extract_json_string_field(canonical_payload, "schema")
-                    != PROJECT_RELEASE_INTEGRITY_SCHEMA)
+            if (!json_document_within_release_limits(document))
             {
-                log_error(
-                    "Release-integrity metadata is incomplete or uses an untrusted signing identity.");
+                log_error("Release-integrity metadata exceeds bounded JSON policy "
+                          "or is malformed.");
+                return std::nullopt;
+            }
+            const std::string canonical_payload = extract_json_string_field(document, "canonical_payload");
+            const std::string signature_object = extract_json_object_text(document, "signature");
+            const std::string algorithm = extract_json_string_field(signature_object, "algorithm");
+            const std::string key_id = extract_json_string_field(signature_object, "key_id");
+            const std::string signature = extract_json_string_field(signature_object, "value");
+
+            if (canonical_payload.empty() ||
+                !json_document_within_release_limits(canonical_payload) ||
+                algorithm != PROJECT_RELEASE_SIGNING_ALGORITHM ||
+                key_id != PROJECT_RELEASE_SIGNING_KEY_ID ||
+                extract_json_string_field(canonical_payload, "schema") !=
+                    PROJECT_RELEASE_INTEGRITY_SCHEMA)
+            {
+                log_error("Release-integrity metadata is incomplete or uses an "
+                          "untrusted signing identity.");
                 return std::nullopt;
             }
 
@@ -1193,8 +1539,8 @@ namespace epochengine::updater
                 return std::nullopt;
             }
 
-            log_info("Release-integrity Ed25519 signature verified with pinned key "
-                + key_id + ".");
+            log_info("Release-integrity Ed25519 signature verified with pinned key " + key_id +
+                     ".");
             return canonical_payload;
         }
 
@@ -1213,12 +1559,11 @@ namespace epochengine::updater
             std::vector<IntegrityAssetInfo> assets;
         };
 
-        [[nodiscard]] inline std::vector<IntegrityReleaseInfo> parse_release_integrity_payload(
-            const std::string& canonical_payload)
+        [[nodiscard]] inline std::vector<IntegrityReleaseInfo>
+        parse_release_integrity_payload(const std::string& canonical_payload)
         {
             std::vector<IntegrityReleaseInfo> releases;
-            const auto releases_array =
-                extract_json_array_text(canonical_payload, "releases");
+            const auto releases_array = extract_json_array_text(canonical_payload, "releases");
             if (releases_array.empty())
                 return releases;
 
@@ -5463,17 +5808,78 @@ namespace epochengine::updater
 
         const auto expected_sha256 =
             system_detail::resolve_expected_sha256(checksum_url, signed_sha256);
-        if (!expected_sha256
-            || !system_detail::verify_sha256(new_binary, *expected_sha256))
+        if (!expected_sha256 || !system_detail::verify_sha256(new_binary, *expected_sha256))
         {
-            system_detail::log_error(
-                "Downloaded update binary failed SHA-256 verification.");
+            system_detail::log_error("Downloaded update binary failed SHA-256 verification.");
             std::error_code ec;
             std::filesystem::remove(new_binary, ec);
             return false;
         }
 
         return replace_binary(target_binary, new_binary, handoff_mode);
+    }
+
+    bool update_discovery_contract_self_test()
+    {
+        const std::string padding(128u * 1024u, 'x');
+        const std::string document =
+            "{\"canonical_payload\":\"{\\\"schema\\\":\\\"epoch-test/v1\\\","
+            "\\\"padding\\\":\\\"" +
+            padding +
+            "\\\"}\","
+            "\"signature\":{\"algorithm\":\"Ed25519\","
+            "\"key_id\":\"test-key\",\"value\":\"test-signature\"}}";
+        const std::string payload =
+            system_detail::extract_json_string_field(document, "canonical_payload");
+        const std::string signature =
+            system_detail::extract_json_object_text(document, "signature");
+        std::string too_deep;
+        for (std::size_t depth = 0u; depth <= system_detail::k_release_json_max_depth; ++depth)
+        {
+            too_deep.push_back('[');
+        }
+        too_deep += "0";
+        for (std::size_t depth = 0u; depth <= system_detail::k_release_json_max_depth; ++depth)
+        {
+            too_deep.push_back(']');
+        }
+        std::string too_many_items = "[";
+        std::string too_many_fields = "{";
+        std::string too_long_string = "{\"value\":\"";
+        for (std::size_t index = 0u; index <= system_detail::k_release_json_max_array_items;
+             ++index)
+        {
+            if (index != 0u)
+            {
+                too_many_items.push_back(',');
+            }
+            too_many_items += "0";
+        }
+        for (std::size_t index = 0u; index <= system_detail::k_release_json_max_object_fields;
+             ++index)
+        {
+            if (index != 0u)
+                too_many_fields.push_back(',');
+            too_many_fields += "\"f" + std::to_string(index) + "\":0";
+        }
+        too_many_items.push_back(']');
+        too_many_fields.push_back('}');
+        too_long_string.append(system_detail::k_release_json_max_string_bytes + 1u, 'x');
+        too_long_string += "\"}";
+        const std::string too_large(system_detail::k_release_json_max_input_bytes + 1u, ' ');
+        return system_detail::json_document_within_release_limits(document) &&
+               payload.starts_with("{\"schema\":\"epoch-test/v1\"") && payload.ends_with("\"}") &&
+               payload.size() > padding.size() &&
+               system_detail::json_document_within_release_limits(payload) &&
+               system_detail::extract_json_string_field(signature, "algorithm") == "Ed25519" &&
+               system_detail::extract_json_string_field(signature, "key_id") == "test-key" &&
+               !system_detail::json_document_within_release_limits(too_deep) &&
+               !system_detail::json_document_within_release_limits(too_many_items) &&
+               !system_detail::json_document_within_release_limits(too_many_fields) &&
+               !system_detail::json_document_within_release_limits(too_long_string) &&
+               !system_detail::json_document_within_release_limits(too_large) &&
+               PROJECT_SOURCE_VERSION_URL() ==
+                   std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version";
     }
 
     std::filesystem::path source_update_log_path()
@@ -5493,9 +5899,9 @@ namespace epochengine::updater
         {
             return system_detail::source_update_session_active(system_detail::current_binary_path());
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
-            system_detail::log_error(std::string{ "Source update liveness check failed: " } + e.what());
+            system_detail::log_error(std::string{"Source update liveness check failed: "} + e.what());
             return false;
         }
         catch (...)
@@ -6335,11 +6741,22 @@ namespace epochengine::updater
             return result;
         }
 
-        if (!result.packaged_release_reason.empty() && !source_status.ok)
+        const bool packaged_discovery_complete = packaged_status.ok;
+        const bool source_discovery_complete =
+            channel.source_version_url.empty() || source_status.ok;
+        if (!packaged_discovery_complete || !source_discovery_complete)
         {
-            result.status_message =
-                result.packaged_release_reason
-                + " Source update availability could not be proven.";
+            result.operation_failed = true;
+            result.status_message = "Update check incomplete.";
+            if (!packaged_discovery_complete)
+            {
+                result.status_message += " " + (result.packaged_release_reason.empty()
+                    ? std::string{ "Packaged release discovery could not be verified." }
+                    : result.packaged_release_reason);
+            }
+            if (!source_discovery_complete)
+                result.status_message += " Source update availability could not be verified.";
+            result.status_message += " The installed runtime was not changed; retry the check.";
         }
         else if (!result.packaged_release_reason.empty())
         {
@@ -6347,7 +6764,7 @@ namespace epochengine::updater
         }
         else
         {
-            result.status_message = "Epoch is already current.";
+            result.status_message = "Epoch packaged runtime and main source are already current.";
         }
 
         return result;

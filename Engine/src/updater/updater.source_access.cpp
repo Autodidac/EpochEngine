@@ -11,6 +11,7 @@ module;
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -19,7 +20,6 @@ module;
 #include <limits>
 #include <mutex>
 #include <optional>
-#include <regex>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -159,53 +159,120 @@ namespace epochengine::updater
             return result;
         }
 
-        [[nodiscard]] inline std::optional<std::string> json_string_once(
-            const std::string& document,
-            const std::string_view field)
+        [[nodiscard]] inline bool json_space(const char ch) noexcept
         {
-            const std::regex pattern{
-                "\\\"" + std::string{ field }
-                    + "\\\"\\s*:\\s*\\\"((?:\\\\.|[^\\\"])*)\\\"",
-                std::regex::optimize
-            };
-            std::sregex_iterator it{ document.begin(), document.end(), pattern };
-            const std::sregex_iterator end{};
-            if (it == end)
-                return std::nullopt;
-            const auto match = *it;
-            if (++it != end)
-                return std::nullopt;
-            return unescape_json_ascii(match[1].str());
+            return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
         }
 
-        [[nodiscard]] inline std::optional<std::uint64_t> json_u64_once(
-            const std::string& document,
-            const std::string_view field)
+        [[nodiscard]] inline std::optional<std::size_t>
+        json_member_value_start(const std::string_view document, const std::string_view field,
+                                std::size_t& search) noexcept
         {
-            const std::regex pattern{
-                "\\\"" + std::string{ field } + "\\\"\\s*:\\s*([0-9]+)",
-                std::regex::optimize
-            };
-            std::sregex_iterator it{ document.begin(), document.end(), pattern };
-            const std::sregex_iterator end{};
-            if (it == end)
-                return std::nullopt;
-            const auto match = *it;
-            if (++it != end)
-                return std::nullopt;
-            try
+            while (search < document.size())
             {
-                return static_cast<std::uint64_t>(std::stoull(match[1].str()));
+                const std::size_t key_open = document.find('"', search);
+                if (key_open == std::string_view::npos)
+                    return std::nullopt;
+
+                bool escaping = false;
+                std::size_t key_close = key_open + 1u;
+                for (; key_close < document.size(); ++key_close)
+                {
+                    const char ch = document[key_close];
+                    if (escaping)
+                        escaping = false;
+                    else if (ch == '\\')
+                        escaping = true;
+                    else if (ch == '"')
+                        break;
+                }
+                if (key_close >= document.size())
+                    return std::nullopt;
+
+                search = key_close + 1u;
+                if (document.substr(key_open + 1u, key_close - key_open - 1u) != field)
+                    continue;
+
+                std::size_t value = key_close + 1u;
+                while (value < document.size() && json_space(document[value]))
+                    ++value;
+                if (value >= document.size() || document[value] != ':')
+                    continue;
+                do
+                    ++value;
+                while (value < document.size() && json_space(document[value]));
+                if (value >= document.size())
+                    return std::nullopt;
+                return value;
             }
-            catch (...)
-            {
-                return std::nullopt;
-            }
+            return std::nullopt;
         }
 
-        [[nodiscard]] inline std::optional<std::string> json_object_once(
-            const std::string& document,
-            const std::string_view field)
+        [[nodiscard]] inline std::optional<std::string>
+        json_string_once(const std::string& document, const std::string_view field)
+        {
+            std::optional<std::string> found;
+            std::size_t search = 0u;
+            while (const auto value_start = json_member_value_start(document, field, search))
+            {
+                if (document[*value_start] != '"')
+                    return std::nullopt;
+
+                bool escaping = false;
+                std::size_t value_end = *value_start + 1u;
+                for (; value_end < document.size(); ++value_end)
+                {
+                    const char ch = document[value_end];
+                    if (escaping)
+                        escaping = false;
+                    else if (ch == '\\')
+                        escaping = true;
+                    else if (ch == '"')
+                        break;
+                }
+                if (value_end >= document.size())
+                    return std::nullopt;
+
+                const auto value = unescape_json_ascii(std::string_view{document}.substr(
+                    *value_start + 1u, value_end - *value_start - 1u));
+                if (!value || found)
+                    return std::nullopt;
+                found = *value;
+                search = value_end + 1u;
+            }
+            return found;
+        }
+
+        [[nodiscard]] inline std::optional<std::uint64_t>
+        json_u64_once(const std::string& document, const std::string_view field)
+        {
+            std::optional<std::uint64_t> found;
+            std::size_t search = 0u;
+            while (const auto value_start = json_member_value_start(document, field, search))
+            {
+                std::size_t value_end = *value_start;
+                while (value_end < document.size() && document[value_end] >= '0' &&
+                       document[value_end] <= '9')
+                {
+                    ++value_end;
+                }
+                if (value_end == *value_start)
+                    return std::nullopt;
+
+                std::uint64_t value = 0u;
+                const char* first = document.data() + *value_start;
+                const char* last = document.data() + value_end;
+                const auto [parsed, ec] = std::from_chars(first, last, value);
+                if (ec != std::errc{} || parsed != last || found)
+                    return std::nullopt;
+                found = value;
+                search = value_end;
+            }
+            return found;
+        }
+
+        [[nodiscard]] inline std::optional<std::string>
+        json_object_once(const std::string& document, const std::string_view field)
         {
             const std::string key = "\"" + std::string{ field } + "\"";
             std::size_t search = 0u;
@@ -2410,6 +2477,12 @@ namespace epochengine::updater
             "\"x\":\"signing-x\",\"y\":\"signing-y\"}",
             "{\"crv\":\"P-256\",\"kty\":\"EC\","
             "\"x\":\"ephemeral-x\",\"y\":\"ephemeral-y\"}");
+        const std::string parser_padding(128u * 1024u, 'x');
+        const std::string parser_document =
+            "{\"status\":\"" + parser_padding + "\",\"expires_in\":300}";
+        const auto parser_status = json_string_once(parser_document, "status");
+        const auto parser_expiry = json_u64_once(parser_document, "expires_in");
+
         const bool policy_matches = private_source_access_enabled()
             ? !PROJECT_SOURCE_DEVICE_START_URL().empty()
                 && !PROJECT_SOURCE_DEVICE_TOKEN_URL().empty()
@@ -2418,6 +2491,10 @@ namespace epochengine::updater
                 && PROJECT_SOURCE_DEVICE_TOKEN_URL().empty()
                 && PROJECT_SOURCE_DEVICE_CHALLENGE_URL().empty();
         return opened && *opened == plaintext && !rejected
+            && parser_status && *parser_status == parser_padding
+            && parser_expiry && *parser_expiry == 300u
+            && !json_string_once("{\"status\":\"one\",\"status\":\"two\"}", "status")
+            && !json_u64_once("{\"expires_in\":1,\"expires_in\":2}", "expires_in")
             && contract_challenge == expected_challenge
             && contract_challenge_digest
             && encode_base64url(

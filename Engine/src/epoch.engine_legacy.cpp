@@ -2088,6 +2088,10 @@ namespace epochengine::core
             && epochengine::format_text("{:04}", -7) == "-007");
 
         check(
+            "updater.discovery_parser_policy",
+            epochengine::updater::update_discovery_contract_self_test());
+
+        check(
             "updater.private_source_crypto_policy",
             epochengine::updater::private_source_access_contract_self_test());
 

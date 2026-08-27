@@ -19244,6 +19244,7 @@ namespace epochengine
                 const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
 
                 return editor_update_modal::UpdateFlags{
+                    .checkFailed = editor.updateState == EditorUpdateState::Failed,
                     .sourceOnlyUpdate = sourceOnlyUpdate,
                     .sourceWorkerRunning = sourceWorkerRunning,
                     .updateRunning = updateRunning,

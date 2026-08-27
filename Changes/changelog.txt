@@ -1,8 +1,27 @@
 ## [v0.89.29] - Project-owned Forest source and Library persistence
-- Advance development source authority to `v0.89.29` while retaining the
-  packaged Windows/Linux/macOS runtime authority at `v0.89.28`. This creates an
-  encrypted source-rebuild update without advertising an unavailable or stale
-  newer binary.
+- Advance development source and the staged Windows/Linux runtime candidate to
+  `v0.89.29`. Keep signed `v0.89.28` as the published runtime until the reviewed
+  candidate receives an explicitly authorized Site publication; preserve
+  earlier runtime packages as immutable history.
+- Repair automatic update discovery. `PROJECT_SOURCE_VERSION_URL()` now reads
+  the Site-owned `/api/epoch/source-version` sentinel instead of remaining
+  empty, so Smart Update can select a genuinely newer source lane.
+- Replace recursive MSVC regular-expression parsing in signed release-integrity
+  and authenticated source protocol JSON with bounded deterministic scanners.
+  The build-safe contract exercises 128 KiB string fields and duplicate-field
+  refusal, eliminating the `regex_error(error_stack)` failure path.
+- Give updater exceptions and incomplete discovery an explicit failed state in
+  Debug and Release. The modal no longer claims Current / Waiting 0%; it keeps
+  the exact diagnostic visible, shows a failed progress state, and offers
+  Retry Check without starting a package or source worker.
+- Build the exact candidate with MSVC Debug/Release and managed Clang Release,
+  and pass the build-safe aggregate contract on all three outputs without
+  launching a GUI or renderer. Stage a root-level Windows ZIP (29,731,299
+  bytes, SHA-256
+  `65fdf23ea3567253122fca8de8ea172925c27e7614325d5208f4ed7ac92fdc46`)
+  and Linux tar.gz (31,114,697 bytes, SHA-256
+  `c6895b1b717d4bab2969ca9e3dba712da4e23e020bc4834877137e42bd5ec6b3`).
+  Linux renderer smoke remains explicitly skipped and native pixels unclaimed.
 - Add the project-owned Plant Lab persistence spine. `ForestAssetDocument`
   now publishes as a bounded, integrity-checked binary source under
   `Assets/Forest/*.epoch_forest`; the compiler emits a content-addressed,

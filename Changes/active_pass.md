@@ -10,8 +10,8 @@
   unavailable, no static source credential ships in Epoch or browser code, and
   a binary-only compile policy can remove all source lanes. EpochGui remains
   independently public.
-- Site v28 is live from exact Site commit `1b7e0b2236c2db6cf43228a5425e9431ba11d98e`
-  at deployment `appgdep_6a901ac57fc88191bbc974db18ccbdbc`, environment
+- Site v30 is live from exact Site commit `ce4fdbc995228fa99e92c55249b3ddec03cbb9fc`
+  at deployment `appgdep_6a90926dfa2c8191a081d9d62c4d237f`, environment
   revision 7. `/admin` is an owner-only CMS using direct Sign in with ChatGPT;
   native device codes are never CMS credentials. Extended native starts advertise
   `epoch-source-device-enroll/v1` only after every enrollment field validates;
@@ -19,18 +19,16 @@
   reject unknown devices, malformed requests, and challenge replay. The owner CMS
   exposes device revocation and anonymous aggregate download counts without
   storing identity, IP, token, or user-code telemetry. Public runtime
-  discovery/integrity remains
-  signed `v0.89.28`; the public legacy source sentinel remains `0.89.27`; public
+  discovery/integrity remains signed `v0.89.28`; the source sentinel is
+  `0.89.29`; public
   EpochEngine Git/source routes remain 404. Active private artifact
-  `epoch-engine-v0.89.28-8d9f9541b5f4` comes only from committed checkpoint
-  `8d9f9541b5f4bc55a7295c57fb7571beae47791a`: ciphertext is 59,726,694
-  bytes with SHA-256 `bade9212fc6167f73e9ce275a91737da33739d556ee8e4be38af40cf60c301be`;
-  authenticated plaintext is 59,726,678 bytes with SHA-256
-  `1d98e67565676bfe3af078e7e9afdaa28d418021136b4128c67ac7d25184bea5`.
-  Live Ed25519 manifest verification, client-JWK binding, P-256 ECDH/HKDF
-  unwrap, AES-256-GCM decrypt, and byte identity to the Git archive all pass.
-  Download-token replay fails 401 and consumed authorization replay fails 400.
-  The old `5f3613941a45` artifact remains inactive for rollback. No bearer,
+  `epoch-engine-v0.89.29-4aafad33d5b8` comes only from committed checkpoint
+  `4aafad33d5b8b1d21af2aca1dd7297c851f5f4db`: ciphertext is 59,801,345
+  bytes with SHA-256 `00112a8712ce4c8ab090d2e85308e6e732ace09224ae2a5ac02848b59f2bcd8c`;
+  authenticated plaintext is 59,801,329 bytes with SHA-256
+  `4d223a0e2123a372d14338b1811e7c31dff274002261c8428e06a00dbd823a45`.
+  Earlier v0.89.29, v0.89.28, and v0.89.27 artifacts remain inactive for
+  rollback. No bearer,
   private key, DEK, identity, device code, or private response is recorded here.
 - `updater.system` and `updater.source_access` now expose lean declarations-only module interfaces. Crypto/network work, updater orchestration, and the generated Windows worker live in separate implementation units. Full Windows Debug and Release editor targets build; their build-safe contracts pass, including `updater.private_source_crypto_policy`; the opt-in binary-only Debug build and contract also pass before restoring the normal source-enabled Debug output. No GUI was launched.
 - The editor main-surface row now uses an isolated compact workbench
@@ -289,12 +287,18 @@ staged Windows/Linux artifacts whose checksums are published and independently
 verified; do not convert build evidence into native interaction evidence.
 ## Release Baseline
 
-`v0.89.29` is the current development source authority; `v0.89.28` remains the
-latest fully published Windows/Linux runtime. Its post-rotation packages, cache-safe URLs,
-signed manifest, exact byte counts, SHA-256 values, and root-level Windows EXE
-were independently verified from the live Site edge. Published `v0.89.27` and
-immutable `v0.89.06` remain historical release assets, not the active
-packaged-version default. The independent historical
+`v0.89.29` is the current development source and locally staged Windows/Linux
+runtime candidate. MSVC Debug/Release and managed Clang Release builds plus
+their build-safe contracts pass; no GUI or renderer was launched. The Windows
+ZIP is 29,731,299 bytes with SHA-256
+`65fdf23ea3567253122fca8de8ea172925c27e7614325d5208f4ed7ac92fdc46`
+and contains `EpochEditor.exe` at archive root. The Linux tar.gz is 31,114,697
+bytes with SHA-256
+`c6895b1b717d4bab2969ca9e3dba712da4e23e020bc4834877137e42bd5ec6b3`;
+its renderer smoke was deliberately skipped, so native pixels remain
+unverified. Published signed runtime `v0.89.28`, historical `v0.89.27`, and
+immutable `v0.89.06` remain the live release assets until an explicitly
+authorized Site publication. The independent historical
 `multicontext-base-stable` branch remains fixed at
 `ad6c416d930b348a61bc37ceb7d4522742be084a`. EpochGui remains a public Site
 repository while EpochEngine development source
@@ -1252,8 +1256,8 @@ presentation, and Project Audio cue/music playback over one authored map. GUI
 runtime artifact work must reconcile the existing compiler/runtime contracts
 with the editor adapter before any completion claim.
 Bounded scene/GUI creation is the first host-authorized non-source AI lane; project save/build/run/test and broader document tools remain follow-up behind their existing human-owned authority. Preserve the
-verified `v0.89.28` runtime release, historical `v0.89.27` and `v0.89.06`
-assets, the exact
+verified published `v0.89.28` runtime release, staged `v0.89.29` candidate,
+historical `v0.89.27` and `v0.89.06` assets, the exact
 `multicontext-base-stable` ref, and the Site-hosted updater contract.
 The canonical schedule is
 `Changes/roadmap.md`; durable follow-up is `Changes/mission_cache.md`.

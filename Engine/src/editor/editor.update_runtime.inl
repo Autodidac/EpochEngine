@@ -242,6 +242,7 @@
             const bool sourceAttempted = false)
         {
             updater::UpdateCommandResult result{};
+            result.operation_failed = true;
             result.source_fallback_attempted = sourceAttempted;
             result.status_message = std::move(message);
             return result;
@@ -265,6 +266,7 @@
             if (!editor_update_result_has_installable_intent(clean))
                 clean = fallback;
 
+            clean.operation_failed = false;
             clean.update_performed = false;
             clean.packaged_update_performed = false;
             clean.packaged_handoff_staged = false;
@@ -1093,6 +1095,16 @@
                     editor.updateState = EditorUpdateState::Failed;
                     editor.updateSourceCancelRequested = false;
                     editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+                    return;
+                }
+
+                if (editor.lastUpdateCheck.operation_failed)
+                {
+                    editor.updateState = EditorUpdateState::Failed;
+                    editor.updateSourceCancelRequested = false;
+                    editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                    editor.showUpdateConfirmModal = true;
                     push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
                     return;
                 }

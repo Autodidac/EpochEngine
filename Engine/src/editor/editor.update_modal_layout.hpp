@@ -16,6 +16,7 @@ namespace epochengine::editor_update_modal
 
     struct UpdateFlags
     {
+        bool checkFailed = false;
         bool sourceOnlyUpdate = false;
         bool sourceWorkerRunning = false;
         bool updateRunning = false;
@@ -166,6 +167,9 @@ namespace epochengine::editor_update_modal
         if (flags.projectSourceDownload)
             return "Project source code is downloading into Epoch's project source cache.";
 
+        if (flags.checkFailed)
+            return "Epoch could not complete the update operation. No verified runtime replacement handoff was accepted.";
+
         if (!flags.installableUpdate && !flags.updateRunning && !flags.restartReady && !flags.sourceWorkerRunning)
             return "Epoch is already current for this packaged runtime. Authorized source build and project-source download remain separate options.";
 
@@ -179,6 +183,9 @@ namespace epochengine::editor_update_modal
         if (flags.projectSourceDownload)
             return "This cache lane does not update, rebuild, restart, or replace the running Epoch runtime.";
 
+        if (flags.checkFailed)
+            return "The running runtime remains unchanged. The exact failure remains visible above in Debug and Release builds.";
+
         if (!flags.installableUpdate && !flags.updateRunning && !flags.restartReady && !flags.sourceWorkerRunning)
             return "Smart Update checked packaged releases first; no newer compatible packaged runtime is available.";
 
@@ -191,6 +198,9 @@ namespace epochengine::editor_update_modal
     {
         if (flags.projectSourceDownload)
             return "Keep Epoch open while the source archive downloads and extracts into the project cache.";
+
+        if (flags.checkFailed)
+            return "Retry Check repeats signed package and source-version discovery. Source Options remains available for an explicit authorized source action.";
 
         if (flags.restartReady)
             return "The update is staged. Press Restart when you are ready to close Epoch and finish the hidden runtime replacement.";
@@ -259,7 +269,7 @@ namespace epochengine::editor_update_modal
                 : (!flags.updateRunning && !flags.restartReady);
         const bool showPrimaryButton =
             !flags.updateRunning
-            && (flags.installableUpdate || flags.restartReady || flags.sourceWorkerRunning);
+            && (flags.checkFailed || flags.installableUpdate || flags.restartReady || flags.sourceWorkerRunning);
         const bool showAdvancedSourceButton = !flags.updateRunning && !flags.restartReady;
 
         if (showCancelButton)
