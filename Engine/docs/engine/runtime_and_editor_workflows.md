@@ -63,9 +63,9 @@ the same engine-owned path.
   not claim non-exportability from protected-at-rest storage alone. Static source
   credentials, bearer tokens, and plaintext archive keys never ship in the
   executable or browser bundle.
-- Site v27 is live from exact Site commit
-  `e81d7781d0cdde2f26e5ad981c9e433b9bbbc106`, deployment
-  `appgdep_6a901360570c8191936ba5c581646ded`, environment revision 7. Its
+- Site v28 is live from exact Site commit
+  `1b7e0b2236c2db6cf43228a5425e9431ba11d98e`, deployment
+  `appgdep_6a901ac57fc88191bbc974db18ccbdbc`, environment revision 7. Its
   owner-only `/admin` CMS uses direct Sign in with ChatGPT and never accepts a
   native device code. Extended starts advertise
   `epoch-source-device-enroll/v1` only after all signing-JWK, client-nonce,
@@ -76,11 +76,17 @@ the same engine-owned path.
   devices later use short-lived persistent-key challenge/token exchanges with
   one-use replay refusal and owner CMS revocation. Successful runtime and
   encrypted-source downloads update only anonymous aggregate artifact, asset,
-  byte-count, and last-time metrics visible to the owner. The encrypted archive
-  remains hosted snapshot `5f3613941a45d8df1edd5881dc5035e61f688d98`
-  until the current committed tree is ingested. Offline decrypt is
-  byte-identical; live enrolled-device challenge, unwrap, decrypt, and replay
-  rejection require a fresh owner pairing, and no credentials are recorded.
+  byte-count, and last-time metrics visible to the owner. Active artifact
+  `epoch-engine-v0.89.28-8d9f9541b5f4` is a committed-tree-only Git archive of
+  `8d9f9541b5f4bc55a7295c57fb7571beae47791a`. Its live 59,726,694-byte
+  ciphertext hashes to
+  `bade9212fc6167f73e9ce275a91737da33739d556ee8e4be38af40cf60c301be`;
+  authenticated 59,726,678-byte plaintext hashes to
+  `1d98e67565676bfe3af078e7e9afdaa28d418021136b4128c67ac7d25184bea5`.
+  Owner-approved live proof verifies the signed manifest, client-key binding,
+  P-256 ECDH/HKDF unwrap, AES-256-GCM decrypt, and byte identity. Token replay
+  fails 401 and consumed authorization replay fails 400. The old artifact stays
+  inactive for rollback, and no credentials or private key material are recorded.
 - editor update checks must also prove the matching hosted build lane before
   surfacing an update: Windows waits for `windows-msvc`, Linux waits for
   `linux-clang-engine`, and pending/failing/missing job evidence withholds the

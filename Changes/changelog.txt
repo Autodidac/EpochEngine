@@ -61,6 +61,18 @@
   Record only anonymous aggregate runtime/source download counts and bytes in
   the owner-only CMS. Preserve signed runtime `v0.89.28`, the public
   `0.89.27` sentinel, and public EpochEngine Git/source 404 behavior.
+- Deploy Site v28 from exact Site commit
+  `1b7e0b2236c2db6cf43228a5425e9431ba11d98e` at deployment
+  `appgdep_6a901ac57fc88191bbc974db18ccbdbc`, environment revision 7. Export
+  exact Epoch commit `8d9f9541b5f4bc55a7295c57fb7571beae47791a`
+  through committed-tree-only Git archive semantics, encrypt it under the
+  private artifact boundary, and atomically activate
+  `epoch-engine-v0.89.28-8d9f9541b5f4` while retaining the old artifact for
+  rollback. Prove the live Ed25519 manifest, client-key binding, P-256 ECDH/HKDF
+  unwrap, AES-256-GCM decrypt, and byte identity to the committed archive.
+  Reject access-token replay with 401 and consumed-authorization replay with
+  400; keep public source/Git 404, runtime `v0.89.28`, and the legacy source
+  sentinel `0.89.27` unchanged.
 - Add the native half of persistent source-device authorization. First
   enrollment registers a signing-only ECDSA P-256 public key; each later source
   action signs a 60-second, request-bound server challenge and receives only a

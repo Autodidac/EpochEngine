@@ -10,8 +10,8 @@
   unavailable, no static source credential ships in Epoch or browser code, and
   a binary-only compile policy can remove all source lanes. EpochGui remains
   independently public.
-- Site v27 is live from exact Site commit `e81d7781d0cdde2f26e5ad981c9e433b9bbbc106`
-  at deployment `appgdep_6a901360570c8191936ba5c581646ded`, environment
+- Site v28 is live from exact Site commit `1b7e0b2236c2db6cf43228a5425e9431ba11d98e`
+  at deployment `appgdep_6a901ac57fc88191bbc974db18ccbdbc`, environment
   revision 7. `/admin` is an owner-only CMS using direct Sign in with ChatGPT;
   native device codes are never CMS credentials. Extended native starts advertise
   `epoch-source-device-enroll/v1` only after every enrollment field validates;
@@ -21,12 +21,17 @@
   storing identity, IP, token, or user-code telemetry. Public runtime
   discovery/integrity remains
   signed `v0.89.28`; the public legacy source sentinel remains `0.89.27`; public
-  EpochEngine Git/source routes remain 404. The encrypted private artifact still
-  represents hosted snapshot `5f3613941a45d8df1edd5881dc5035e61f688d98`,
-  not the new checkpoint until committed-tree-only ingestion completes. Offline
-  decrypt remains byte-identical; live enrolled-device challenge, unwrap,
-  decrypt, and replay proof requires a fresh owner pairing. No
-  token, key, account ID, user code, or private response is recorded here.
+  EpochEngine Git/source routes remain 404. Active private artifact
+  `epoch-engine-v0.89.28-8d9f9541b5f4` comes only from committed checkpoint
+  `8d9f9541b5f4bc55a7295c57fb7571beae47791a`: ciphertext is 59,726,694
+  bytes with SHA-256 `bade9212fc6167f73e9ce275a91737da33739d556ee8e4be38af40cf60c301be`;
+  authenticated plaintext is 59,726,678 bytes with SHA-256
+  `1d98e67565676bfe3af078e7e9afdaa28d418021136b4128c67ac7d25184bea5`.
+  Live Ed25519 manifest verification, client-JWK binding, P-256 ECDH/HKDF
+  unwrap, AES-256-GCM decrypt, and byte identity to the Git archive all pass.
+  Download-token replay fails 401 and consumed authorization replay fails 400.
+  The old `5f3613941a45` artifact remains inactive for rollback. No bearer,
+  private key, DEK, identity, device code, or private response is recorded here.
 - `updater.system` and `updater.source_access` now expose lean declarations-only module interfaces. Crypto/network work, updater orchestration, and the generated Windows worker live in separate implementation units. Full Windows Debug and Release editor targets build; their build-safe contracts pass, including `updater.private_source_crypto_policy`; the opt-in binary-only Debug build and contract also pass before restoring the normal source-enabled Debug output. No GUI was launched.
 - The editor main-surface row now uses an isolated compact workbench
   presentation: measured label widths, one connected inactive strip, bounded
