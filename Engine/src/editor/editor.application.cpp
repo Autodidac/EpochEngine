@@ -6826,10 +6826,35 @@ namespace epochengine
                     value.y * previewScale,
                     placementZ + value.z * previewScale};
             };
+            const auto segmentLength = [](const auto& segment) noexcept
+            {
+                const float x = segment.end.x - segment.start.x;
+                const float y = segment.end.y - segment.start.y;
+                const float z = segment.end.z - segment.start.z;
+                return std::sqrt(x * x + y * y + z * z);
+            };
+
+            const auto segmentRotation = [&](const auto& segment) noexcept
+            {
+                const float length = segmentLength(segment);
+                if (length <= 1.0e-6f)
+                    return std::array<float, 3>{};
+                const float inverseLength = 1.0f / length;
+                const float directionX = (segment.end.x - segment.start.x) * inverseLength;
+                const float directionY = (segment.end.y - segment.start.y) * inverseLength;
+                const float directionZ = (segment.end.z - segment.start.z) * inverseLength;
+                constexpr float radiansToDegrees = 57.295779513082320876f;
+                return std::array<float, 3>{
+                    std::atan2(directionZ, directionY) * radiansToDegrees,
+                    0.0f,
+                    -std::asin((std::clamp)(directionX, -1.0f, 1.0f)) * radiansToDegrees
+                };
+            };
             const auto appendEntity = [&](
                 std::string name,
                 std::string_view type,
                 std::array<float, 3> position,
+                std::array<float, 3> rotation,
                 std::array<float, 3> scale)
             {
                 EditorSceneSeedEntity seed{
@@ -6837,7 +6862,7 @@ namespace epochengine
                     std::string(type),
                     std::string(category),
                     position,
-                    {},
+                    rotation,
                     scale,
                     true,
                     editorOnly};
@@ -6850,23 +6875,19 @@ namespace epochengine
                 const auto& trunk = geometry.segments[0u];
                 const float height = (std::max)(
                     0.32f,
-                    (trunk.end.y - trunk.start.y) * previewScale);
+                    segmentLength(trunk) * previewScale);
                 const float width = (std::max)(
                     0.12f,
                     trunk.radius * 2.8f * previewScale);
                 appendEntity(
                     std::string(namePrefix) + "Trunk",
                     "ForestTrunk",
-                    {
-                        placementX
-                            + (trunk.start.x + trunk.end.x)
-                                * 0.5f * previewScale,
-                        (trunk.start.y + trunk.end.y)
-                            * 0.5f * previewScale,
-                        placementZ
-                            + (trunk.start.z + trunk.end.z)
-                                * 0.5f * previewScale
-                    },
+                    scaledPosition({
+                        (trunk.start.x + trunk.end.x) * 0.5f,
+                        (trunk.start.y + trunk.end.y) * 0.5f,
+                        (trunk.start.z + trunk.end.z) * 0.5f
+                    }),
+                    segmentRotation(trunk),
                     {width, height, width});
             }
 
@@ -6891,14 +6912,22 @@ namespace epochengine
                     segment.radius * 2.1f * previewScale,
                     0.055f,
                     0.16f);
+                const float length = (std::max)(
+                    0.08f,
+                    segmentLength(segment) * previewScale);
                 appendEntity(
                     epochengine::format_text(
                         "{}Branch_{:02}",
                         namePrefix,
                         branchOrdinal),
-                    "ForestBranchJoint",
-                    scaledPosition(segment.end),
-                    {size, size, size});
+                    "ForestBranchSegment",
+                    scaledPosition({
+                        (segment.start.x + segment.end.x) * 0.5f,
+                        (segment.start.y + segment.end.y) * 0.5f,
+                        (segment.start.z + segment.end.z) * 0.5f
+                    }),
+                    segmentRotation(segment),
+                    {size, length, size});
             }
 
             const std::size_t canopyBudget = (std::min)(
@@ -6927,6 +6956,7 @@ namespace epochengine
                         canopyOrdinal),
                     "ForestFoliageCluster",
                     scaledPosition(leaf.position),
+                    { 0.0f, static_cast<float>((canopyOrdinal * 137u) % 360u), 0.0f },
                     {size, size * 0.62f, size});
             }
             return entities;
@@ -7085,7 +7115,7 @@ namespace epochengine
         {
             if (entity.type == "ForestTrunk")
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::forest_trunk());
-            if (entity.type == "ForestBranchJoint")
+            if (entity.type == "ForestBranchSegment" || entity.type == "ForestBranchJoint")
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::forest_branch_joint());
             if (entity.type == "ForestFoliageCluster")
                 return epochengine::previewgrid::visual_rgb(epochengine::visuals::forest_foliage_cluster());
@@ -7097,7 +7127,7 @@ namespace epochengine
             const float scaleMax = (std::max)(entity.scale[0], (std::max)(entity.scale[1], entity.scale[2]));
             if (entity.type == "ForestTrunk")
                 return (std::clamp)(0.22f * scaleMax, 0.16f, 0.34f);
-            if (entity.type == "ForestBranchJoint")
+            if (entity.type == "ForestBranchSegment" || entity.type == "ForestBranchJoint")
                 return (std::clamp)(0.34f * scaleMax, 0.16f, 0.24f);
             if (entity.type == "ForestFoliageCluster")
                 return (std::clamp)(0.38f * scaleMax, 0.16f, 0.28f);
@@ -7164,7 +7194,7 @@ namespace epochengine
                 return epochengine::previewgrid::ObjectPreviewPrimitive::Canvas2D;
             if (entity.type == "ForestTrunk")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::ForestTrunk;
-            if (entity.type == "ForestBranchJoint")
+            if (entity.type == "ForestBranchSegment" || entity.type == "ForestBranchJoint")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::ForestBranch;
             if (entity.type == "ForestFoliageCluster")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::ForestLeafCluster;
@@ -7184,7 +7214,7 @@ namespace epochengine
 
         [[nodiscard]] bool marker_selected_for_entity(const EditorEntity& entity, bool selected) noexcept
         {
-            return selected && !is_vegetation_entity(entity);
+            return selected;
         }
 
         [[nodiscard]] std::size_t visible_entity_count(const EditorState& state) noexcept
@@ -7600,6 +7630,11 @@ namespace epochengine
                         entity.scale[0],
                         entity.scale[1],
                         entity.scale[2]
+                    },
+                    .rotationDegrees{
+                        entity.rotation[0],
+                        entity.rotation[1],
+                        entity.rotation[2]
                     },
                     .radius = marker_radius_for_entity(entity),
                     .primitive = preview_primitive_for_entity(entity),

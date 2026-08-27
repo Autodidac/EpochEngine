@@ -16,6 +16,18 @@
   makes Forest Factory package activation reference the canonical source and
   Library artifact. Debug and Release editor builds, both aggregate build-safe
   contracts, source-name validation, and diff checks pass; no GUI was launched.
+- Publish the v0.89.29 committed source tree through the authenticated,
+  encrypted Site source-update lane while keeping public runtime discovery and
+  signed package integrity on v0.89.28. Public EpochEngine Git/source routes
+  remain unavailable; older private source artifacts remain rollback-only.
+- Replace endpoint-cube Forest branches with midpoint-aligned segment entities.
+  Editor and project runtime markers now carry authored Euler rotation into the
+  one renderer-neutral preview stream used by OpenGL, SDL3, SFML3, Raylib3,
+  Vulkan, DirectX/D3D11, and Software. Shared oriented trunk, branch, leaf, and
+  selection geometry preserves semantic vegetation fill and adds a selected
+  outline without changing backend frame, queue-drain, GUI replay, or present
+  order. Debug/Release builds and aggregate contracts prove the rotated branch
+  solid/outline geometry; native pixels and repeated context evidence remain open.
 
 ## [v0.89.28] - Restricted source distribution and compact workbench navigation
 - Move EpochEngine toward a release-only public boundary. Remove anonymous

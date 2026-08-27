@@ -198,8 +198,12 @@ Source v0.89.29 contains these completed or intentionally partial contracts:
   revision. Integrity-checked project source serialization, content-addressed
   immutable Library publication, exact/latest restart reopen, and project-bound
   Publish/Reopen controls now share that identity; Forest Factory remains the
-  placement portal. Import, sparse voxel materialization, and live all-context
-  pixels remain delivery;
+  placement portal. The common editor/runtime projection maps compiled segments
+  to oriented midpoint/length solids and deterministic foliage transforms before
+  the shared geometry stream fans out to OpenGL, SDL3, SFML3, Raylib3, Vulkan,
+  DirectX/D3D11, and Software. Import, sparse voxel materialization,
+  mesh/impostor output, and approved live all-context
+  pixels/switch/resize/teardown remain delivery;
 - one logical active-editor authority in the Windows parent host, independent of
   physical context creation order or grid side; every physical context may
   undock/redock, and compatible routed pane popouts remain optional;

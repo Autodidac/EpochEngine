@@ -769,14 +769,18 @@ The working tree contains these current or in-progress foundations:
   scene seeds, surface masks, camera/dock defaults, pane policy, and
   run/authoring permissions while reusing one editor shell and service spine;
 - Plant Lab is the separate launcher editor for authoring custom tree assets and
-  reusable forest configurations. `ForestAssetDocument` now owns stable genome
-  identity, bounded semantic profile edits, undo/redo, revision and deterministic
-  content hash. Its compiler derives one validated morphology graph/time sample,
-  renderer-neutral preview, voxel LOD plan, and bounded voxel occupancy; Plant Lab
-  consumes that compiled artifact for `PlantLabPreview`. Forest Factory is the
-  standard-editor placement portal. A bounded source codec, project-library
-  publication, compiled Plant Lab output import, sparse voxel materialization,
-  interactive node editing, and accepted per-context pixels remain unfinished.
+  reusable forest configurations. `ForestAssetDocument` owns stable genome
+  identity, bounded semantic profile edits, undo/redo, deterministic revision and
+  content hash, an integrity-checked project source, and a content-addressed
+  immutable Library artifact. Its compiler derives one validated morphology
+  graph/time sample, renderer-neutral preview, voxel LOD plan, and bounded voxel
+  occupancy; Plant Lab reopens that project pair for `PlantLabPreview`, while
+  Forest Factory places the same revision. The common preview projection now
+  carries editor/runtime Euler transforms and represents trunks and branches as
+  oriented midpoint segments plus deterministically oriented foliage in every
+  active renderer context. Compiled output import, sparse voxel materialization,
+  interactive node editing, mesh/impostor output, and accepted per-context pixels
+  remain unfinished.
   The two products do not merge surfaces, documents, or ownership;
 - `temporal.request` owns explicit global/sample time mapping, rates, anchors,
   forward/reverse/frozen direction, bounded exact/nearest/bracket observation,
@@ -1013,9 +1017,13 @@ replacing the canonical source; exact/latest reopen verifies the embedded
 source and compiler-derived preview/voxel descriptor. The contract proves
 restart reopen, old-revision lookup, corruption refusal, and metrics. Project
 switches clear Plant Lab state, first access reopens a matching project pair,
-and explicit Publish/Reopen plus package activation use this same spine. Debug
-and Release editor builds and aggregate build-safe contracts pass; GUI eye testing remains
-separate.
+and explicit Publish/Reopen plus package activation use this same spine. The
+renderer-neutral marker contract now carries scene rotation; compiled branches
+use real midpoint/length transforms instead of endpoint cubes, and common
+oriented solid/selection geometry preserves vegetation color while exposing a
+selected outline. Debug and Release editor builds and aggregate build-safe
+contracts pass, including one rotated branch's exact solid/wire counts and
+non-axis-aligned extents. GUI and native pixel eye testing remain separate.
 
 ## Remaining Implementation Order
 
@@ -1029,9 +1037,11 @@ separate.
 3. Eye-test Project Audio import/edit/persistence, then prove looping ambient
    playback, jump/land cues, physical-device output, and repeated Play/Stop over
    the existing process-owned audio boundary.
-4. Keep the shared trunk/branch/leaf projection common to every active renderer
-   context, then gather approved native pixel, repeated-switch, resize, and
-   teardown evidence without changing protected frame or GUI replay order.
+4. The shared trunk/branch/leaf projection is source- and build-proven through
+   the one common geometry stream consumed by every active renderer context.
+   Gather approved native pixel, repeated-switch, resize, and teardown evidence
+   without changing protected frame, queue-drain, GUI replay, subpass, or present
+   order; keep the backend-specific evidence `Partial` until those runs complete.
 ## Backend Repair Within This Gate
 
 The source gate keeps previous operator evidence separate from the current

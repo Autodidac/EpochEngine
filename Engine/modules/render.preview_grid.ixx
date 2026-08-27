@@ -226,6 +226,7 @@ namespace epochengine::previewgrid
         Vec3 position{};
         Vec3 color{ visual_rgb(epochengine::visuals::object_default()) };
         Vec3 scale{ 1.0f, 1.0f, 1.0f };
+        Vec3 rotationDegrees{};
         float radius = 0.35f;
         ObjectPreviewPrimitive primitive{ ObjectPreviewPrimitive::Cube };
         bool selected = false;
@@ -362,6 +363,38 @@ namespace epochengine::previewgrid
     export [[nodiscard]] inline Vec3 scale(Vec3 value, float factor) noexcept
     {
         return { value.x * factor, value.y * factor, value.z * factor };
+    }
+
+    export [[nodiscard]] inline Vec3 rotate_euler_degrees(
+        Vec3 value,
+        Vec3 rotationDegrees) noexcept
+    {
+        constexpr float degreesToRadians = 0.01745329251994329577f;
+        const float x = rotationDegrees.x * degreesToRadians;
+        const float y = rotationDegrees.y * degreesToRadians;
+        const float z = rotationDegrees.z * degreesToRadians;
+        const float sinX = std::sin(x);
+        const float cosX = std::cos(x);
+        const float sinY = std::sin(y);
+        const float cosY = std::cos(y);
+        const float sinZ = std::sin(z);
+        const float cosZ = std::cos(z);
+
+        const Vec3 aroundZ{
+            value.x * cosZ - value.y * sinZ,
+            value.x * sinZ + value.y * cosZ,
+            value.z
+        };
+        const Vec3 aroundY{
+            aroundZ.x * cosY + aroundZ.z * sinY,
+            aroundZ.y,
+            -aroundZ.x * sinY + aroundZ.z * cosY
+        };
+        return {
+            aroundY.x,
+            aroundY.y * cosX - aroundY.z * sinX,
+            aroundY.y * sinX + aroundY.z * cosX
+        };
     }
 
     export [[nodiscard]] inline float dot(Vec3 lhs, Vec3 rhs) noexcept
@@ -590,6 +623,9 @@ namespace epochengine::previewgrid
             return lhs.position.x == rhs.position.x && lhs.position.y == rhs.position.y && lhs.position.z == rhs.position.z
                 && lhs.color.x == rhs.color.x && lhs.color.y == rhs.color.y && lhs.color.z == rhs.color.z
                 && lhs.scale.x == rhs.scale.x && lhs.scale.y == rhs.scale.y && lhs.scale.z == rhs.scale.z
+                && lhs.rotationDegrees.x == rhs.rotationDegrees.x
+                && lhs.rotationDegrees.y == rhs.rotationDegrees.y
+                && lhs.rotationDegrees.z == rhs.rotationDegrees.z
                 && lhs.radius == rhs.radius && lhs.primitive == rhs.primitive && lhs.selected == rhs.selected
                 && lhs.editorOnly == rhs.editorOnly && lhs.sampledRenderSurface == rhs.sampledRenderSurface;
         }
@@ -1920,6 +1956,37 @@ namespace epochengine::previewgrid
             push_line(c101, c111, sideColor);
             push_line(c001, c011, sideColor);
         };
+        auto push_oriented_box_edges = [&](Vec3 center, Vec3 half, Vec3 rotation, Vec3 color)
+        {
+            const auto point = [&](Vec3 local) noexcept
+            {
+                return add(center, rotate_euler_degrees(local, rotation));
+            };
+            const Vec3 c000 = point({ -half.x, -half.y, -half.z });
+            const Vec3 c001 = point({ -half.x, -half.y, half.z });
+            const Vec3 c010 = point({ -half.x, half.y, -half.z });
+            const Vec3 c011 = point({ -half.x, half.y, half.z });
+            const Vec3 c100 = point({ half.x, -half.y, -half.z });
+            const Vec3 c101 = point({ half.x, -half.y, half.z });
+            const Vec3 c110 = point({ half.x, half.y, -half.z });
+            const Vec3 c111 = point({ half.x, half.y, half.z });
+            const Vec3 topColor = lit(color, 1.18f);
+            const Vec3 sideColor = lit(color, 0.90f);
+            const Vec3 bottomColor = lit(color, 0.62f);
+
+            push_line(c000, c100, bottomColor);
+            push_line(c100, c101, bottomColor);
+            push_line(c101, c001, bottomColor);
+            push_line(c001, c000, bottomColor);
+            push_line(c010, c110, topColor);
+            push_line(c110, c111, topColor);
+            push_line(c111, c011, topColor);
+            push_line(c011, c010, topColor);
+            push_line(c000, c010, sideColor);
+            push_line(c100, c110, sideColor);
+            push_line(c101, c111, sideColor);
+            push_line(c001, c011, sideColor);
+        };
         auto push_leaf_diamond_edges = [&](Vec3 center, Vec3 half, Vec3 color)
         {
             const Vec3 top{ center.x, center.y + half.y, center.z };
@@ -2072,7 +2139,7 @@ namespace epochengine::previewgrid
                     half.y + 0.055f,
                     half.z + 0.055f
                 };
-                push_box_edges(center, selectedHalf, visual_rgb(epochengine::visuals::object_selected_outline()));
+                push_oriented_box_edges(center, selectedHalf, marker.rotationDegrees, visual_rgb(epochengine::visuals::object_selected_outline()));
             }
         }
 
@@ -2179,17 +2246,43 @@ namespace epochengine::previewgrid
             push_face(c000, c010, c011, c001, { -1.0f, 0.0f, 0.0f }, color);
             push_face(c101, c111, c110, c100, { 0.0f, 0.0f, -1.0f }, color);
         };
-        auto push_leaf_cluster = [&](Vec3 center, Vec3 half, Vec3 color)
+        auto push_oriented_box = [&](Vec3 center, Vec3 half, Vec3 rotation, Vec3 color)
+        {
+            const auto point = [&](Vec3 local) noexcept
+            {
+                return add(center, rotate_euler_degrees(local, rotation));
+            };
+            const Vec3 c000 = point({ -half.x, -half.y, -half.z });
+            const Vec3 c001 = point({ -half.x, -half.y, half.z });
+            const Vec3 c010 = point({ -half.x, half.y, -half.z });
+            const Vec3 c011 = point({ -half.x, half.y, half.z });
+            const Vec3 c100 = point({ half.x, -half.y, -half.z });
+            const Vec3 c101 = point({ half.x, -half.y, half.z });
+            const Vec3 c110 = point({ half.x, half.y, -half.z });
+            const Vec3 c111 = point({ half.x, half.y, half.z });
+
+            push_face(c010, c110, c111, c011, rotate_euler_degrees({ 0.0f, 1.0f, 0.0f }, rotation), color);
+            push_face(c000, c001, c101, c100, rotate_euler_degrees({ 0.0f, -1.0f, 0.0f }, rotation), color);
+            push_face(c001, c011, c111, c101, rotate_euler_degrees({ 0.0f, 0.0f, 1.0f }, rotation), color);
+            push_face(c100, c110, c010, c000, rotate_euler_degrees({ 1.0f, 0.0f, 0.0f }, rotation), color);
+            push_face(c000, c010, c011, c001, rotate_euler_degrees({ -1.0f, 0.0f, 0.0f }, rotation), color);
+            push_face(c101, c111, c110, c100, rotate_euler_degrees({ 0.0f, 0.0f, -1.0f }, rotation), color);
+        };
+        auto push_leaf_cluster = [&](Vec3 center, Vec3 half, Vec3 rotation, Vec3 color)
         {
             const Vec3 mainHalf{
                 (std::max)(0.04f, half.x * 0.72f),
                 (std::max)(0.02f, half.y * 0.38f),
                 (std::max)(0.04f, half.z * 0.72f)
             };
-            push_box(center, mainHalf, color);
-            push_box({ center.x + mainHalf.x * 0.68f, center.y + mainHalf.y * 0.58f, center.z - mainHalf.z * 0.18f }, scale(mainHalf, 0.58f), lit(color, 1.04f));
-            push_box({ center.x - mainHalf.x * 0.62f, center.y + mainHalf.y * 0.38f, center.z + mainHalf.z * 0.22f }, scale(mainHalf, 0.54f), lit(color, 0.94f));
-            push_box({ center.x, center.y + mainHalf.y * 0.74f, center.z + mainHalf.z * 0.62f }, scale(mainHalf, 0.45f), lit(color, 1.10f));
+            const auto offset = [&](Vec3 local) noexcept
+            {
+                return add(center, rotate_euler_degrees(local, rotation));
+            };
+            push_oriented_box(center, mainHalf, rotation, color);
+            push_oriented_box(offset({ mainHalf.x * 0.68f, mainHalf.y * 0.58f, -mainHalf.z * 0.18f }), scale(mainHalf, 0.58f), rotation, lit(color, 1.04f));
+            push_oriented_box(offset({ -mainHalf.x * 0.62f, mainHalf.y * 0.38f, mainHalf.z * 0.22f }), scale(mainHalf, 0.54f), rotation, lit(color, 0.94f));
+            push_oriented_box(offset({ 0.0f, mainHalf.y * 0.74f, mainHalf.z * 0.62f }), scale(mainHalf, 0.45f), rotation, lit(color, 1.10f));
         };
 
         for (const auto& marker : markers)
@@ -2198,7 +2291,11 @@ namespace epochengine::previewgrid
                 continue;
 
             const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
-            Vec3 color = marker.selected ? visual_rgb(epochengine::visuals::object_selected()) : marker.color;
+            const bool forestPrimitive =
+                marker.primitive == ObjectPreviewPrimitive::ForestTrunk
+                || marker.primitive == ObjectPreviewPrimitive::ForestBranch
+                || marker.primitive == ObjectPreviewPrimitive::ForestLeafCluster;
+            Vec3 color = marker.selected && !forestPrimitive ? visual_rgb(epochengine::visuals::object_selected()) : marker.color;
             if (marker.editorOnly && !marker.selected)
                 color = scale(color, epochengine::visuals::editor_solid_opacity_factor());
 
@@ -2225,11 +2322,11 @@ namespace epochengine::previewgrid
                 break;
             case ObjectPreviewPrimitive::Level:
                 half.y = (std::max)(0.05f, radius * 0.08f);
-                push_box(center, half, color);
+                push_oriented_box(center, half, marker.rotationDegrees, color);
                 break;
             case ObjectPreviewPrimitive::Canvas2D:
                 half.z = (std::max)(0.025f, radius * 0.04f);
-                push_box(center, half, color);
+                push_oriented_box(center, half, marker.rotationDegrees, color);
                 break;
             case ObjectPreviewPrimitive::EngineArcadeCabinet:
             {
@@ -2275,26 +2372,26 @@ namespace epochengine::previewgrid
                     (std::max)(0.08f, half.y * 0.48f),
                     (std::max)(0.025f, baseHalf.z * 0.68f)
                 };
-                push_box({ center.x, center.y - baseHalf.y * 0.38f, center.z }, baseHalf, color);
-                push_box({ center.x, center.y + upperHalf.y * 0.52f, center.z }, upperHalf, lit(color, 1.04f));
+                push_oriented_box(add(center, rotate_euler_degrees({ 0.0f, -baseHalf.y * 0.38f, 0.0f }, marker.rotationDegrees)), baseHalf, marker.rotationDegrees, color);
+                push_oriented_box(add(center, rotate_euler_degrees({ 0.0f, upperHalf.y * 0.52f, 0.0f }, marker.rotationDegrees)), upperHalf, marker.rotationDegrees, lit(color, 1.04f));
                 break;
             }
             case ObjectPreviewPrimitive::ForestBranch:
             {
-                const Vec3 jointHalf{
-                    (std::max)(0.025f, radius * 0.18f),
-                    (std::max)(0.025f, radius * 0.18f),
-                    (std::max)(0.025f, radius * 0.18f)
+                const Vec3 segmentHalf{
+                    (std::max)(0.025f, half.x),
+                    (std::max)(0.04f, half.y),
+                    (std::max)(0.025f, half.z)
                 };
-                push_box(center, jointHalf, color);
+                push_oriented_box(center, segmentHalf, marker.rotationDegrees, color);
                 break;
             }
             case ObjectPreviewPrimitive::ForestLeafCluster:
-                push_leaf_cluster(center, half, color);
+                push_leaf_cluster(center, half, marker.rotationDegrees, color);
                 break;
             case ObjectPreviewPrimitive::Cube:
             default:
-                push_box(center, half, color);
+                push_oriented_box(center, half, marker.rotationDegrees, color);
                 break;
             }
         }

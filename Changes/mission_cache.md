@@ -540,13 +540,16 @@ release history belong in the changelog/archive, not architecture docs.
   node/segment/terminal IDs, deterministic domain recipes, per-organ temporal
   sampling, and voxel LOD plans. `ForestAssetDocument` adds stable genome
   identity, bounded semantic profile edits, undo/redo, revision/content hashing,
-  and deterministic compilation into morphology, preview, voxel LOD, and bounded
-  occupancy. Plant Lab edits and previews one live document; Forest Factory can
-  place that same compiled revision in the active scene, and package staging
-  emits matching revision/hash/LOD evidence. A bounded source codec, atomic
-  project Library publication/reopen, typed node editing, sparse voxel
-  materialization, mesh/impostor compilation, and restart-safe placement remain
-  subsequent slices.
+  deterministic compilation into morphology, preview, voxel LOD, and bounded
+  occupancy, plus an integrity-checked project source and content-addressed
+  immutable Library artifact. Plant Lab publishes and reopens that pair; Forest
+  Factory places the same revision in the active scene, and package staging emits
+  matching revision/hash/LOD evidence. The common editor/runtime projection owns
+  Euler rotation and midpoint/length segments, so every active renderer consumes
+  the same oriented trunk/branch/leaf solids and selected outline without a
+  backend copy. Typed node editing, sparse voxel materialization,
+  mesh/impostor compilation, imported compiled output, and approved native
+  pixel/switch/resize/teardown evidence remain subsequent slices.
 - Material, model, effects, animation, general scene, collaboration, and broad UX
   phases follow in dependency order.
 - Previews are budgeted, cancellable, cacheable, generation-checked, lower

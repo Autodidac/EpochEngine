@@ -3254,6 +3254,52 @@ namespace epochengine::core
             && !forestLeafRoute.marker_wire
             && forestLeafRoute.selection_wire
             && !forestLeafRoute.sampled_surface);
+        int forestProjectionContext{};
+        const std::array<epochengine::previewgrid::ObjectMarker, 1> forestProjectionMarkers{{
+            epochengine::previewgrid::ObjectMarker{
+                .position{ 0.0f, 1.0f, 0.0f },
+                .color{ 0.42f, 0.70f, 0.32f },
+                .scale{ 0.16f, 1.40f, 0.16f },
+                .rotationDegrees{ 35.0f, 0.0f, -42.0f },
+                .radius = 0.20f,
+                .primitive = epochengine::previewgrid::ObjectPreviewPrimitive::ForestBranch,
+                .selected = true
+            }}};
+        epochengine::previewgrid::set_object_markers(&forestProjectionContext, std::span<const epochengine::previewgrid::ObjectMarker>{ forestProjectionMarkers });
+        const std::vector<epochengine::previewgrid::Vertex> forestProjectionSolid =
+            epochengine::previewgrid::object_solid_vertices_for(&forestProjectionContext);
+        const std::vector<epochengine::previewgrid::Vertex> forestProjectionWire =
+            epochengine::previewgrid::object_marker_vertices_for(&forestProjectionContext);
+        epochengine::previewgrid::clear_object_markers(&forestProjectionContext);
+
+        float forestProjectionExtentX{};
+        float forestProjectionExtentZ{};
+        if (!forestProjectionSolid.empty())
+        {
+            float minimumX = forestProjectionSolid.front().position.x;
+            float maximumX = minimumX;
+            float minimumZ = forestProjectionSolid.front().position.z;
+            float maximumZ = minimumZ;
+            for (const auto& vertex : forestProjectionSolid)
+            {
+                minimumX = (std::min)(minimumX, vertex.position.x);
+                maximumX = (std::max)(maximumX, vertex.position.x);
+                minimumZ = (std::min)(minimumZ, vertex.position.z);
+                maximumZ = (std::max)(maximumZ, vertex.position.z);
+            }
+            forestProjectionExtentX = maximumX - minimumX;
+            forestProjectionExtentZ = maximumZ - minimumZ;
+        }
+        const epochengine::previewgrid::Vec3 forestProjectedAxis =
+            epochengine::previewgrid::rotate_euler_degrees({ 0.0f, 1.0f, 0.0f }, { 35.0f, 0.0f, -42.0f });
+        check(
+            "render.forest_preview_projection",
+            forestProjectionSolid.size() == 36u
+            && forestProjectionWire.size() == 24u
+            && forestProjectionExtentX > 0.45f
+            && forestProjectionExtentZ > 0.35f
+            && std::abs(forestProjectedAxis.x) > 0.45f
+            && std::abs(forestProjectedAxis.z) > 0.35f);
         check("render.canvas2d.core", epochengine::canvas2d::canvas2d_runtime_contract());
         const auto cpuCanvasContract =
             epochengine::canvas2d::cpu::canvas2d_cpu_runtime_contract_failure();
@@ -6222,6 +6268,12 @@ namespace epochengine::core
         {
             if (selected)
                 return { 1.00f, 0.86f, 0.24f };
+            if (entity.type == "ForestTrunk")
+                return { 0.58f, 0.36f, 0.20f };
+            if (entity.type == "ForestBranchSegment" || entity.type == "ForestBranchJoint")
+                return { 0.42f, 0.70f, 0.32f };
+            if (entity.type == "ForestFoliageCluster")
+                return { 0.22f, 0.86f, 0.38f };
             if (entity.editor_only() || entity.category == "Editor")
                 return { 0.44f, 0.62f, 0.90f };
             if (entity.type == "Light")
@@ -6248,6 +6300,12 @@ namespace epochengine::core
                 return 0.32f;
             if (entity.type == "Camera")
                 return 0.38f;
+            if (entity.type == "ForestTrunk")
+                return (std::clamp)(0.22f * scaleMax, 0.16f, 0.34f);
+            if (entity.type == "ForestBranchSegment" || entity.type == "ForestBranchJoint")
+                return (std::clamp)(0.34f * scaleMax, 0.16f, 0.24f);
+            if (entity.type == "ForestFoliageCluster")
+                return (std::clamp)(0.38f * scaleMax, 0.16f, 0.28f);
             if (entity.category == "World" || entity.type == "Level")
                 return 0.75f;
             return (std::clamp)(0.34f * scaleMax, 0.24f, 1.20f);
@@ -6266,6 +6324,12 @@ namespace epochengine::core
                 return epochengine::previewgrid::ObjectPreviewPrimitive::EngineArcadeScreen;
             if (entity.type == "Canvas2D")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::Canvas2D;
+            if (entity.type == "ForestTrunk")
+                return epochengine::previewgrid::ObjectPreviewPrimitive::ForestTrunk;
+            if (entity.type == "ForestBranchSegment" || entity.type == "ForestBranchJoint")
+                return epochengine::previewgrid::ObjectPreviewPrimitive::ForestBranch;
+            if (entity.type == "ForestFoliageCluster")
+                return epochengine::previewgrid::ObjectPreviewPrimitive::ForestLeafCluster;
             if (entity.category == "World" || entity.type == "Level")
                 return epochengine::previewgrid::ObjectPreviewPrimitive::Level;
             return epochengine::previewgrid::ObjectPreviewPrimitive::Cube;
@@ -6351,6 +6415,10 @@ namespace epochengine::core
                     .position{ entity.transform.position[0], entity.transform.position[1], entity.transform.position[2] },
                     .color = runtime_marker_color_for_entity(entity, false),
                     .scale{ entity.transform.scale[0], entity.transform.scale[1], entity.transform.scale[2] },
+                    .rotationDegrees{ entity.transform.rotation[0],
+                        entity.transform.rotation[1],
+                        entity.transform.rotation[2]
+                    },
                     .radius = runtime_marker_radius_for_entity(entity),
                     .primitive = runtime_preview_primitive_for_entity(entity),
                     .selected = false,
