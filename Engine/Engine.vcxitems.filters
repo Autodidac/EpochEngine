@@ -1446,6 +1446,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx">
       <Filter>Module Files\epochengine\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.forest_library.ixx">
+      <Filter>Module Files\epochengine\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx">
       <Filter>Module Files\epochengine\project</Filter>
     </ClCompile>
@@ -1603,6 +1606,9 @@
       <Filter>Source Files\epochengine\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset_registry.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.forest_library.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_resources.cpp">

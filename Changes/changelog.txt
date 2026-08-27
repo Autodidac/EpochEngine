@@ -1,3 +1,22 @@
+## [v0.89.29] - Project-owned Forest source and Library persistence
+- Advance development source authority to `v0.89.29` while retaining the
+  packaged Windows/Linux/macOS runtime authority at `v0.89.28`. This creates an
+  encrypted source-rebuild update without advertising an unavailable or stale
+  newer binary.
+- Add the project-owned Plant Lab persistence spine. `ForestAssetDocument`
+  now publishes as a bounded, integrity-checked binary source under
+  `Assets/Forest/*.epoch_forest`; the compiler emits a content-addressed,
+  immutable descriptor under `Library/Forest`, and exact/latest loads verify
+  SHA-256, embedded source identity, compiler-derived preview geometry, voxel
+  LODs, and occupancy before admitting the artifact. Atomic source replacement,
+  immutable artifact publication, restart reopen, old-revision lookup, malformed
+  source/artifact rejection, and balanced metrics pass the build-safe contract.
+  Plant Lab state resets at project-session boundaries, automatically reopens a
+  matching source/artifact pair, exposes explicit Publish/Reopen controls, and
+  makes Forest Factory package activation reference the canonical source and
+  Library artifact. Debug and Release editor builds, both aggregate build-safe
+  contracts, source-name validation, and diff checks pass; no GUI was launched.
+
 ## [v0.89.28] - Restricted source distribution and compact workbench navigation
 - Move EpochEngine toward a release-only public boundary. Remove anonymous
   repository and source-snapshot URLs from the updater, keep packaged runtime

@@ -33,8 +33,8 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
   mobile specialization, and effects cannot consume the playable-2D schedule.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
-- `v0.89.28` is the current development source authority and latest fully
-  published runtime. Preserve `v0.89.27` and immutable `v0.89.06` as release
+- `v0.89.29` is the current development source authority; `v0.89.28` remains the
+  latest fully published runtime. Preserve `v0.89.27` and immutable `v0.89.06` as release
   history, and preserve
   `multicontext-base-stable` at exact commit
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Future release changes require a
@@ -42,7 +42,7 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
 
 ## Current Foundation
 
-Source v0.89.28 contains these completed or intentionally partial contracts:
+Source v0.89.29 contains these completed or intentionally partial contracts:
 
 - a stable renderer-neutral camera/view contract now carries logical view,
   scene, purpose, projection, orientation, clip, and revision state through
@@ -195,9 +195,11 @@ Source v0.89.28 contains these completed or intentionally partial contracts:
   editor for custom trees and forest configurations. A stable forest document
   now journals bounded semantic profile edits and compiles deterministic growth,
   renderer-neutral preview geometry, voxel LOD plans, and occupancy from one
-  revision; Forest Factory remains the placement portal inside the standard
-  editor. Source/Library persistence, import, sparse voxel materialization, and
-  live all-context pixels remain delivery;
+  revision. Integrity-checked project source serialization, content-addressed
+  immutable Library publication, exact/latest restart reopen, and project-bound
+  Publish/Reopen controls now share that identity; Forest Factory remains the
+  placement portal. Import, sparse voxel materialization, and live all-context
+  pixels remain delivery;
 - one logical active-editor authority in the Windows parent host, independent of
   physical context creation order or grid side; every physical context may
   undock/redock, and compatible routed pane popouts remain optional;
@@ -707,7 +709,8 @@ product value:
 - temporal forest documents whose semantic profile history compiles one
   morphology sample, renderer-neutral preview, voxel LOD plan, and occupancy;
   Plant Lab edits and previews the live document while Forest Factory places
-  the same compiled revision. Source codec and Library reopen remain next.
+  the same compiled revision. The project source codec and immutable Library
+  artifact now reopen exact/latest revisions across process restarts.
 
 The complete event-sourced world, persistent AI, collaboration, networking,
 planetary simulation, and shared multi-domain graph authoring remain future

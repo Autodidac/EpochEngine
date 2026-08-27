@@ -105,6 +105,7 @@ import project.texture_pipeline;
 import project.texture_resources;
 import project.texture_source;
 import project.asset_registry;
+import project.forest_library;
 import project.gui_library;
 import project.input_profile;
 import project.lifecycle;
@@ -929,11 +930,14 @@ namespace epochengine
             std::uint64_t projectTextureThumbnailAtlasSignature{};
             forest::ForestAssetDocument plantLabDocument{};
             forest::CompiledForestAsset plantLabCompiled{};
+            project_forests::ForestArtifactLocator plantLabPublishedArtifact{};
             std::uint64_t plantLabCompiledRevision{};
             std::uint64_t plantLabCompiledContentHash{};
             bool plantLabDocumentInitialized{};
             std::string plantLabStatus{
                 "Plant Lab document is ready to initialize."};
+            std::string plantLabAssetStatus{
+                "No project Plant Lab asset has been opened."};
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
             std::unique_ptr<editor_tilemaps::TileMapWorkspaceController>
                 tileMapWorkspace{};
@@ -3541,6 +3545,12 @@ namespace epochengine
             state.projectTextureThumbnails.clear();
             state.projectSourceTextureThumbnails.clear();
             state.projectTextureThumbnailAtlasSignature = 0u;
+            state.plantLabDocument = {};
+            state.plantLabCompiled = {};
+            state.plantLabPublishedArtifact = {};
+            state.plantLabCompiledRevision = 0u;
+            state.plantLabCompiledContentHash = 0u;
+            state.plantLabDocumentInitialized = false;
             state.aiAuthoringPlan = {};
             state.aiToolPlan = {};
             state.aiAuthoringAwaitingReply = false;
@@ -6643,13 +6653,81 @@ namespace epochengine
                 state,
                 "[package] Engine Arcade preview state removed.");
         }
+        inline constexpr std::string_view kDefaultPlantLabLogicalPath{
+            "Assets/Forest/default.epoch_forest"};
+
+        [[nodiscard]] bool reopen_plant_lab_project_asset(
+            EditorState& state,
+            bool reportMissing)
+        {
+            if (state.projectId.empty() || state.projectRoot.empty())
+            {
+                state.plantLabAssetStatus =
+                    "No active project can own a Plant Lab asset.";
+                return false;
+            }
+            project_forests::ForestAssetLibrary library{
+                state.projectId,
+                resolve_editor_path(std::filesystem::path{state.projectRoot})};
+            if (!library.valid())
+            {
+                state.plantLabAssetStatus =
+                    "The active project's Forest asset library is invalid.";
+                return false;
+            }
+            const auto source = library.load_source(
+                kDefaultPlantLabLogicalPath);
+            if (!source)
+            {
+                state.plantLabAssetStatus = source.code
+                        == project_forests::ForestLibraryCode::not_found
+                    ? "No published Plant Lab asset exists in this project yet."
+                    : epochengine::format_text(
+                        "Plant Lab source reopen failed: {}.",
+                        project_forests::forest_library_code_name(source.code));
+                if (reportMissing)
+                    push_editor_log(state, "[plant] " + state.plantLabAssetStatus);
+                return false;
+            }
+            const auto artifact = library.load_latest(
+                kDefaultPlantLabLogicalPath);
+            if (!artifact
+                || artifact.artifact.sourceRevision
+                    != source.document.revision
+                || artifact.artifact.sourceContentHash
+                    != source.document.contentHash)
+            {
+                state.plantLabAssetStatus = artifact
+                    ? "Plant Lab source and Library artifact revisions do not match."
+                    : epochengine::format_text(
+                        "Plant Lab artifact reopen failed: {}.",
+                        project_forests::forest_library_code_name(artifact.code));
+                push_editor_log(state, "[plant] " + state.plantLabAssetStatus);
+                return false;
+            }
+            state.plantLabDocument = source.document;
+            state.plantLabCompiled = artifact.artifact;
+            state.plantLabPublishedArtifact = artifact.locator;
+            state.plantLabCompiledRevision = source.document.revision;
+            state.plantLabCompiledContentHash = source.document.contentHash;
+            state.plantLabDocumentInitialized = true;
+            state.plantLabAssetStatus = epochengine::format_text(
+                "Reopened project Plant Lab revision {} from its verified Library artifact.",
+                source.document.revision);
+            if (reportMissing)
+                push_editor_log(state, "[plant] " + state.plantLabAssetStatus);
+            return true;
+        }
+
         [[nodiscard]] bool ensure_plant_lab_compiled_asset(EditorState& state)
         {
             if (!state.plantLabDocumentInitialized)
             {
-                state.plantLabDocument =
-                    forest::make_default_plant_lab_document();
-                state.plantLabDocumentInitialized = true;
+                if (!reopen_plant_lab_project_asset(state, false))
+                {
+                    state.plantLabDocument = forest::make_default_plant_lab_document();
+                    state.plantLabDocumentInitialized = true;
+                }
             }
 
             if (state.plantLabCompiledRevision !=
@@ -6680,6 +6758,50 @@ namespace epochengine
                 state.plantLabCompiled.preview.segmentCount,
                 state.plantLabCompiled.preview.leafCount,
                 state.plantLabCompiled.voxelLods.levels.size());
+            return true;
+        }
+        [[nodiscard]] bool publish_plant_lab_project_asset(EditorState& state)
+        {
+            if (!ensure_plant_lab_compiled_asset(state))
+            {
+                state.plantLabAssetStatus =
+                    "Plant Lab cannot publish an invalid compiled revision.";
+                return false;
+            }
+            project_forests::ForestAssetLibrary library{
+                state.projectId,
+                resolve_editor_path(std::filesystem::path{state.projectRoot})};
+            if (!library.valid())
+            {
+                state.plantLabAssetStatus =
+                    "The active project's Forest asset library is invalid.";
+                return false;
+            }
+            const auto publication = library.publish(
+                kDefaultPlantLabLogicalPath,
+                state.plantLabDocument);
+            if (!publication)
+            {
+                state.plantLabAssetStatus = epochengine::format_text(
+                    "Plant Lab publication failed: {}.",
+                    project_forests::forest_library_code_name(publication.code));
+                push_editor_log(state, "[plant] " + state.plantLabAssetStatus);
+                return false;
+            }
+            state.plantLabPublishedArtifact = publication.artifact;
+            state.plantLabAssetStatus = epochengine::format_text(
+                "{} project Plant Lab revision {} and verified its immutable Library artifact.",
+                publication.code == project_forests::ForestLibraryCode::unchanged
+                    ? "Reused"
+                    : "Published",
+                publication.artifact.source_revision);
+            push_editor_log(
+                state,
+                epochengine::format_text(
+                    "[plant] {} Source: {} | artifact: {}.",
+                    state.plantLabAssetStatus,
+                    display_project_path(publication.source.storage_path),
+                    display_project_path(publication.artifact.storage_path)));
             return true;
         }
         [[nodiscard]] std::vector<EditorEntity>
@@ -16002,6 +16124,12 @@ namespace epochengine
                 editor.packageInstallProgress = 0.0f;
                 return false;
             }
+            if (!publish_plant_lab_project_asset(editor))
+            {
+                editor.packageInstallStatus = editor.plantLabAssetStatus;
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
 
             const auto& document = editor.plantLabDocument;
             const auto& profile = document.profile;
@@ -16038,6 +16166,12 @@ namespace epochengine
                     epochengine::forest::kForestFactoryReferenceRepo);
             const std::string profileFile =
                 editor_json_escape(profilePath.generic_string());
+            const std::string canonicalSourceFile = editor_json_escape(
+                std::string{kDefaultPlantLabLogicalPath});
+            const std::string compiledArtifactFile = editor_json_escape(
+                editor.plantLabPublishedArtifact.storage_path
+                    .lexically_relative(projectRoot)
+                    .generic_string());
 
             {
                 std::ofstream out(
@@ -16067,6 +16201,8 @@ namespace epochengine
                        "\"emit compiled descriptors only after visible "
                        "package activation\",\n"
                     << "  \"default_profile\": \"" << profileFile << "\",\n"
+                    << "  \"canonical_source\": \"" << canonicalSourceFile << "\",\n"
+                    << "  \"compiled_artifact\": \"" << compiledArtifactFile << "\",\n"
                     << "  \"runtime_outputs\": ["
                        "\"preview_skeleton\", \"voxel_lod_plan\", "
                        "\"voxel_occupancy\"],\n"
@@ -16206,6 +16342,16 @@ namespace epochengine
                 editor.packageInstallProgress = 0.0f;
                 return false;
             }
+            ec.clear();
+            const auto artifactBytes = std::filesystem::file_size(
+                editor.plantLabPublishedArtifact.storage_path, ec);
+            if (ec || artifactBytes == 0u)
+            {
+                editor.packageInstallStatus =
+                    "Compiled Plant Lab Library artifact verification failed.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
 
             editor.packageInstallStatus = epochengine::format_text(
                 "Forest Factory package staged from Plant Lab revision {} "
@@ -16226,11 +16372,13 @@ namespace epochengine
             push_editor_log(
                 editor,
                 epochengine::format_text(
-                    "[package] Wrote Plant Lab revision {} (content "
-                    "{:016x}) to {}.",
+                    "[package] Staged Plant Lab revision {} (content "
+                    "{:016x}) from canonical source {} and Library artifact {}.",
                     compiled.sourceRevision,
                     compiled.sourceContentHash,
-                    display_project_path(profilePath)));
+                    std::string{kDefaultPlantLabLogicalPath},
+                    display_project_path(
+                        editor.plantLabPublishedArtifact.storage_path)));
             return true;
         }
         [[nodiscard]] std::string project_runtime_scene_id(const EditorState& editor)
@@ -27792,6 +27940,10 @@ namespace epochengine
                     editor.plantLabStatus,
                     148.0f);
                 gui::property_row(
+                    "[forest] Project asset",
+                    editor.plantLabAssetStatus,
+                    148.0f);
+                gui::property_row(
                     "[forest] Voxel LODs",
                     std::to_string(compiled.voxelLods.levels.size()),
                     148.0f);
@@ -28033,7 +28185,26 @@ namespace epochengine
                             refreshPlantLab();
                         }
                     }
-                }                if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
+                }
+
+                const std::array<gui::InlineButtonSpec, 2> persistenceActions{{
+                    {"Publish To Project", 178.0f},
+                    {"Reopen Published", 168.0f}
+                }};
+                if (const auto clicked = gui::inline_button_row(
+                        persistenceActions, 30.0f, 8.0f))
+                {
+                    if (*clicked == 0)
+                    {
+                        (void)publish_plant_lab_project_asset(editor);
+                    }
+                    else if (reopen_plant_lab_project_asset(editor, true))
+                    {
+                        ensure_plant_lab_preview_entities(editor);
+                    }
+                }
+
+                if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
                 {
                     editor.showPackageManagerModal = true;
                     editor.selectedPackageId = std::string(epochengine::package_registry::kEngineForestFactoryPackageId);

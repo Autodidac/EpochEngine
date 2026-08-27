@@ -144,6 +144,7 @@ import editor.workspace_layout;
 import editor.tilemap_workspace;
 #endif
 import forest.factory;
+import project.forest_library;
 import package.registry;
 import extension.catalog;
 #if EPOCH_ENABLE_NATIVE_EXTENSIONS
@@ -2578,6 +2579,15 @@ namespace epochengine::core
                 plantLabDefaultCompiled.graph.content_hash
             && plantLabEditedCompiled.voxelLods.source_content_hash ==
                 plantLabEditedCompiled.graph.content_hash);
+        const auto forestLibraryContract =
+            epochengine::project_forests::
+                project_forest_library_contract_failure();
+        check(
+            std::string{"project.forest_library."}
+                + std::string{epochengine::project_forests::
+                    forest_library_contract_failure_name(forestLibraryContract)},
+            forestLibraryContract ==
+                epochengine::project_forests::ForestLibraryContractFailure::none);
         const auto packageValidation = epochengine::package_registry::validate_registry();
         const auto* forestPackage = epochengine::package_registry::find(epochengine::package_registry::kEngineForestFactoryPackageId);
         const auto* bonsaiPackage = epochengine::package_registry::find(epochengine::package_registry::recommended_local_image_model_id());

@@ -53,9 +53,25 @@ electrical, coral, and generic branching structures. Those capabilities can
 serve future authoring tools without turning Forest Factory into a general
 morphology editor.
 
-The current slice is build-proven. Editable typed node UI, compiled morphology
-artifacts, sparse voxel rasterization, production mesh compilation, and physical
-texture/material outputs remain unfinished.
+The current document, compiler, and project-persistence slice is build-proven.
+Editable typed node UI, sparse voxel rasterization, production mesh compilation,
+and physical texture/material outputs remain unfinished.
+
+## Project Source And Library Authority
+
+`project.forest_library` owns the first canonical Plant Lab asset path:
+`Assets/Forest/*.epoch_forest`. The bounded binary source preserves stable
+genome identity, profile state, revision/content identity, and the complete
+semantic edit journal. Each publication compiles that exact source into a
+content-addressed immutable `Library/Forest` descriptor containing the admitted
+preview geometry, voxel LOD, and occupancy identity. Both formats carry SHA-256
+integrity and fail closed on malformed, oversized, mismatched, or corrupted
+content.
+
+The Library writes and verifies an immutable artifact before atomically
+replacing the canonical source. Exact and latest reopen remain available across
+process restarts; old artifact revisions stay addressable. Preview atlases and
+renderer resources are not serialized into either format.
 
 ## Forest Factory Placement Portal
 
@@ -100,10 +116,9 @@ morphology use beneath that adapter does not merge editor ownership.
 4. Add deterministic regeneration independent from time-only sampling.
 5. Rasterize selected samples into `SparseVoxelField` LODs and compile indexed
    mesh/material/impostor outputs.
-6. Save Plant Lab outputs to the asset registry and project library.
-7. Make Forest Factory browse those assets, place scene references, and edit
+6. Make Forest Factory browse those assets, place scene references, and edit
    placement/configuration overrides without opening Plant Lab internally.
-8. Add replay, boundedness, forward/reverse equivalence, placement persistence,
+7. Add replay, boundedness, forward/reverse equivalence, placement persistence,
    and Build/Run tests.
 
 Stable authoring documents and semantic operations are canonical. Atlases,

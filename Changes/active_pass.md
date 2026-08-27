@@ -1,5 +1,5 @@
 - EpochEngine source distribution is now a restricted development boundary for
-  `v0.89.28`. Smart Update is binary-first; authorized encrypted source is its
+  `v0.89.29`. Smart Update is binary-first; authorized encrypted source is its
   missing/failed-package fallback and remains available explicitly for a local
   rebuild or project-cache extraction. First native enrollment uses explicit
   browser approval; later access can use a short server challenge signed by a
@@ -138,7 +138,7 @@
 
 ## Gate
 
-Prepare the source-only v0.89.28 editor candidate around explicit project
+Prepare the source-only v0.89.29 editor candidate around explicit project
 sessions, launcher-owned authoring applications, semantic GUI deletion, and a
 process-owned physical controller boundary. The operator accepted the v0.89.23
 tile-collision eye test; the earlier GUI, Assets, Scripts, Systems, camera,
@@ -289,8 +289,8 @@ staged Windows/Linux artifacts whose checksums are published and independently
 verified; do not convert build evidence into native interaction evidence.
 ## Release Baseline
 
-`v0.89.28` is the current development source authority and the latest fully
-published Windows/Linux runtime. Its post-rotation packages, cache-safe URLs,
+`v0.89.29` is the current development source authority; `v0.89.28` remains the
+latest fully published Windows/Linux runtime. Its post-rotation packages, cache-safe URLs,
 signed manifest, exact byte counts, SHA-256 values, and root-level Windows EXE
 were independently verified from the live Site edge. Published `v0.89.27` and
 immutable `v0.89.06` remain historical release assets, not the active
@@ -1005,6 +1005,18 @@ bounds/index validity, helper-fill policy, and geometry-routing policy. No GUI p
 this repair, so six-pane startup, native grid and solid pixels, movement, and
 teardown remain operator eye-test gates.
 
+The Plant Lab persistence slice is now source- and build-proven. One project-
+scoped `forest_asset` identity owns a bounded, integrity-checked
+`Assets/Forest/*.epoch_forest` source and content-addressed immutable
+`Library/Forest` artifact. Publication verifies the artifact before atomically
+replacing the canonical source; exact/latest reopen verifies the embedded
+source and compiler-derived preview/voxel descriptor. The contract proves
+restart reopen, old-revision lookup, corruption refusal, and metrics. Project
+switches clear Plant Lab state, first access reopens a matching project pair,
+and explicit Publish/Reopen plus package activation use this same spine. Debug
+and Release editor builds and aggregate build-safe contracts pass; GUI eye testing remains
+separate.
+
 ## Remaining Implementation Order
 
 1. Eye-test keyboard/controller Project Controls, duplicate refusal, dead-zone
@@ -1017,11 +1029,7 @@ teardown remain operator eye-test gates.
 3. Eye-test Project Audio import/edit/persistence, then prove looping ambient
    playback, jump/land cues, physical-device output, and repeated Play/Stop over
    the existing process-owned audio boundary.
-4. Serialize `ForestAssetDocument`, atomically publish the compiled Plant Lab
-   artifact into the active project's Library, and reopen the exact source and
-   artifact across process restarts. Forest Factory already places the live
-   compiled revision without importing renderer cache state.
-5. Keep the shared trunk/branch/leaf projection common to every active renderer
+4. Keep the shared trunk/branch/leaf projection common to every active renderer
    context, then gather approved native pixel, repeated-switch, resize, and
    teardown evidence without changing protected frame or GUI replay order.
 ## Backend Repair Within This Gate
@@ -1088,7 +1096,7 @@ Do not use this gate to:
 - mutate historical `v0.89.06` assets or move
   `multicontext-base-stable` away from
   `ad6c416d930b348a61bc37ceb7d4522742be084a`; after publication, any change to
-  verified `v0.89.28` source or artifact bytes requires a fresh bounded release;
+  verified release source or artifact bytes requires a fresh bounded release;
 - claim native PBR, shadows, water, collision solving, physical audio, hardware
   ray query, or RT pipelines without implementation and proof;
 - start multiplayer, persistent unscripted AI, planetary terrain, or a broad 3D
@@ -1101,7 +1109,7 @@ Do not use this gate to:
 
 ## Acceptance
 
-The v0.89.28 source gate records these completed source contracts:
+The v0.89.29 source gate records these completed source contracts:
 
 - immutable proposal digest, separate review/operator approval, private permit
   issuance, one execution claim, expiry/reuse/cancellation refusal, trusted
@@ -1222,7 +1230,7 @@ multi-step dispatch, or complete OS filesystem transaction semantics.
 
 ## Next Gate
 
-Eye-test v0.89.28 monitor-aware launcher/editor geometry, project
+Eye-test v0.89.29 monitor-aware launcher/editor geometry, project
 open/switch/close, launcher-owned Plant Lab, dedicated GUI template Open/Save,
 embedded GUI placement/Delete/Undo/Redo, scene deselection/history, shared timeline controls,
 pane tab/window routing and recovery tabs, live controller-provider evidence, persisted

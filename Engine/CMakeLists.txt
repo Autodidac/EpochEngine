@@ -475,6 +475,7 @@ set(EPOCH_SOURCES
     src/utility.filewatch.cpp
     src/font.renderer.cpp
     src/project/project.asset_registry.cpp
+    src/project/project.forest_library.cpp
     src/project/project.texture_resources.cpp
     src/project/project.texture_library.cpp
     src/project/project.texture_pipeline.cpp

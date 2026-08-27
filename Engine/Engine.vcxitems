@@ -329,6 +329,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.forest_library.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_library.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_pipeline.ixx" />
@@ -590,6 +591,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.lifecycle_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset_registry.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.forest_library.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_resources.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_library.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_pipeline.cpp" />
