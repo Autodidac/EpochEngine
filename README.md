@@ -1,8 +1,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.29-1F7A4C?style=for-the-badge" alt="Current development source v0.89.29" />
-  <img src="https://img.shields.io/badge/Published_Runtime_Release-v0.89.28-2C6A8A?style=for-the-badge" alt="Published runtime release v0.89.28" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.30-1F7A4C?style=for-the-badge" alt="Current development source v0.89.30" />
+  <img src="https://img.shields.io/badge/Published_Runtime_Release-v0.89.29-2C6A8A?style=for-the-badge" alt="Published runtime release v0.89.29" />
 </p>
 
 EpochEngine development source is restricted. Public distribution is through
@@ -78,10 +78,10 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source and the staged Windows/Linux runtime candidate are
-  `v0.89.29`. The release Site's signed latest-release API is authoritative;
-  published `v0.89.28`, v0.89.27, and immutable v0.89.06 packages remain the
-  live and historical release evidence.
+- Active development source and the staged Windows/Linux update-test candidate
+  are `v0.89.30`. The release Site's signed latest-release API is authoritative;
+  published `v0.89.29`, v0.89.28, v0.89.27, and immutable v0.89.06 packages
+  remain the live and historical release evidence.
 - The public updater consumes Epoch-owned runtime releases, checksums, and build
   evidence from the ChatGPT Site instead of GitHub. Anonymous source discovery,
   source archives, and EpochEngine smart-Git are disabled.

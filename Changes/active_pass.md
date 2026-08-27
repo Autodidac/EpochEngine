@@ -1,5 +1,6 @@
 - EpochEngine source distribution is now a restricted development boundary for
-  `v0.89.29`. Smart Update is binary-first; authorized encrypted source is its
+  `v0.89.30`; the Site currently publishes `v0.89.29`. Smart Update is
+  binary-first; authorized encrypted source is its
   missing/failed-package fallback and remains available explicitly for a local
   rebuild or project-cache extraction. First native enrollment uses explicit
   browser approval; later access can use a short server challenge signed by a
@@ -10,23 +11,26 @@
   unavailable, no static source credential ships in Epoch or browser code, and
   a binary-only compile policy can remove all source lanes. EpochGui remains
   independently public.
-- Site v30 is live from exact Site commit `ce4fdbc995228fa99e92c55249b3ddec03cbb9fc`
-  at deployment `appgdep_6a90926dfa2c8191a081d9d62c4d237f`, environment
-  revision 7. `/admin` is an owner-only CMS using direct Sign in with ChatGPT;
+- Site v31 is live from exact Site commit `46be28d97a76d51c6b35d44fa7cd4a63f6b2c51e`
+  at environment revision 7. `/admin` is an owner-only CMS using direct Sign in
+  with ChatGPT;
   native device codes are never CMS credentials. Extended native starts advertise
   `epoch-source-device-enroll/v1` only after every enrollment field validates;
   legacy starts remain unchanged. Persistent ECDSA P-256 challenge/token routes
   reject unknown devices, malformed requests, and challenge replay. The owner CMS
   exposes device revocation and anonymous aggregate download counts without
   storing identity, IP, token, or user-code telemetry. Public runtime
-  discovery/integrity remains signed `v0.89.28`; the source sentinel is
-  `0.89.29`; public
-  EpochEngine Git/source routes remain 404. Active private artifact
-  `epoch-engine-v0.89.29-4aafad33d5b8` comes only from committed checkpoint
-  `4aafad33d5b8b1d21af2aca1dd7297c851f5f4db`: ciphertext is 59,801,345
-  bytes with SHA-256 `00112a8712ce4c8ab090d2e85308e6e732ace09224ae2a5ac02848b59f2bcd8c`;
-  authenticated plaintext is 59,801,329 bytes with SHA-256
-  `4d223a0e2123a372d14338b1811e7c31dff274002261c8428e06a00dbd823a45`.
+  discovery/integrity and the source sentinel are signed/published `v0.89.29`;
+  public EpochEngine Git/source routes remain 404. Active private artifact
+  `epoch-engine-v0.89.29-90805e528f3e` comes only from committed checkpoint
+  `90805e528f3e462fdd47aa9394620922e83db268`: ciphertext is 59,807,212
+  bytes with SHA-256 `30d035b99a9e6607491b78c44e45322729a66a1fe242a78abae81c03e37480aa`;
+  authenticated plaintext is 59,807,196 bytes with SHA-256
+  `bf2f411d95a49804a6d75799f31869e88ae229baf46578c43d3116db97bfd379`.
+  Published Windows v0.89.29 is 29,731,299 bytes with SHA-256
+  `65fdf23ea3567253122fca8de8ea172925c27e7614325d5208f4ed7ac92fdc46`;
+  Linux is 31,114,697 bytes with SHA-256
+  `c6895b1b717d4bab2969ca9e3dba712da4e23e020bc4834877137e42bd5ec6b3`.
   Earlier v0.89.29, v0.89.28, and v0.89.27 artifacts remain inactive for
   rollback. No bearer,
   private key, DEK, identity, device code, or private response is recorded here.
@@ -136,8 +140,10 @@
 
 ## Gate
 
-Prepare the source-only v0.89.29 editor candidate around explicit project
-sessions, launcher-owned authoring applications, semantic GUI deletion, and a
+Prepare the distinct v0.89.30 source-update visibility candidate so a published
+v0.89.29 editor can exercise authenticated source discovery and acquisition.
+Preserve the accepted editor work around explicit project sessions,
+launcher-owned authoring applications, semantic GUI deletion, and a
 process-owned physical controller boundary. The operator accepted the v0.89.23
 tile-collision eye test; the earlier GUI, Assets, Scripts, Systems, camera,
 workspace, and project-input surfaces remain protected checkpoints.
@@ -287,17 +293,17 @@ staged Windows/Linux artifacts whose checksums are published and independently
 verified; do not convert build evidence into native interaction evidence.
 ## Release Baseline
 
-`v0.89.29` is the current development source and locally staged Windows/Linux
+`v0.89.30` is the current development source and locally staged Windows/Linux
 runtime candidate. MSVC Debug/Release and managed Clang Release builds plus
 their build-safe contracts pass; no GUI or renderer was launched. The Windows
-ZIP is 29,731,299 bytes with SHA-256
-`65fdf23ea3567253122fca8de8ea172925c27e7614325d5208f4ed7ac92fdc46`
-and contains `EpochEditor.exe` at archive root. The Linux tar.gz is 31,114,697
+ZIP is 29,731,430 bytes with SHA-256
+`d1314a0900f085ab00c9c2f732b65f7b9ec8bc13c61439fb123c31d670a63bcd`
+and contains `EpochEditor.exe` at archive root. The Linux tar.gz is 31,114,081
 bytes with SHA-256
-`c6895b1b717d4bab2969ca9e3dba712da4e23e020bc4834877137e42bd5ec6b3`;
+`f1a00dc60ae9b16e223dac5d538fbe2347b974cc0a01d77625614f7b7f0e4520`;
 its renderer smoke was deliberately skipped, so native pixels remain
-unverified. Published signed runtime `v0.89.28`, historical `v0.89.27`, and
-immutable `v0.89.06` remain the live release assets until an explicitly
+unverified. Published signed runtime `v0.89.29`, historical `v0.89.28`,
+`v0.89.27`, and immutable `v0.89.06` remain the live release assets until an explicitly
 authorized Site publication. The independent historical
 `multicontext-base-stable` branch remains fixed at
 `ad6c416d930b348a61bc37ceb7d4522742be084a`. EpochGui remains a public Site
@@ -1123,7 +1129,7 @@ Do not use this gate to:
 
 ## Acceptance
 
-The v0.89.29 source gate records these completed source contracts:
+The v0.89.30 source gate records these completed source contracts:
 
 - immutable proposal digest, separate review/operator approval, private permit
   issuance, one execution claim, expiry/reuse/cancellation refusal, trusted
@@ -1244,7 +1250,7 @@ multi-step dispatch, or complete OS filesystem transaction semantics.
 
 ## Next Gate
 
-Eye-test v0.89.29 monitor-aware launcher/editor geometry, project
+Eye-test v0.89.30 monitor-aware launcher/editor geometry, project
 open/switch/close, launcher-owned Plant Lab, dedicated GUI template Open/Save,
 embedded GUI placement/Delete/Undo/Redo, scene deselection/history, shared timeline controls,
 pane tab/window routing and recovery tabs, live controller-provider evidence, persisted
@@ -1256,8 +1262,8 @@ presentation, and Project Audio cue/music playback over one authored map. GUI
 runtime artifact work must reconcile the existing compiler/runtime contracts
 with the editor adapter before any completion claim.
 Bounded scene/GUI creation is the first host-authorized non-source AI lane; project save/build/run/test and broader document tools remain follow-up behind their existing human-owned authority. Preserve the
-verified published `v0.89.28` runtime release, staged `v0.89.29` candidate,
-historical `v0.89.27` and `v0.89.06` assets, the exact
+verified published `v0.89.29` runtime release, staged `v0.89.30` candidate,
+historical `v0.89.28`, `v0.89.27`, and `v0.89.06` assets, the exact
 `multicontext-base-stable` ref, and the Site-hosted updater contract.
 The canonical schedule is
 `Changes/roadmap.md`; durable follow-up is `Changes/mission_cache.md`.

@@ -1,8 +1,32 @@
+## [v0.89.30] - Distinct source-update discovery candidate
+- Advance development source and both packaged-runtime identities to `v0.89.30`
+  so a published `v0.89.29` editor can observe and exercise a genuinely newer
+  source update instead of comparing equal versions. Keep Smart Update
+  binary-first; the authenticated encrypted source lane remains an explicit
+  choice and a missing/failed-package fallback.
+- Extend the updater build-safe discovery contract to prove both source and
+  packaged `v0.89.30` compare newer than `0.89.29` and match one another, while
+  retaining the bounded Site response parser and private-source crypto checks.
+- Correct the Windows numeric `FILEVERSION` and `PRODUCTVERSION` resource values,
+  which had remained at `0.89.28` even though the v0.89.29 strings were current;
+  the staged executable now reports file and product version `0.89.30`.
+- Build the exact candidate with MSVC Debug/Release and managed Clang 22.1.8
+  Release, and pass the build-safe aggregate contract on all three outputs
+  without launching a GUI or renderer. Stage a root-level Windows ZIP
+  (29,731,430 bytes, SHA-256
+  `d1314a0900f085ab00c9c2f732b65f7b9ec8bc13c61439fb123c31d670a63bcd`)
+  containing exactly one root `EpochEditor.exe`, and a Linux tar.gz (31,114,081
+  bytes, SHA-256
+  `f1a00dc60ae9b16e223dac5d538fbe2347b974cc0a01d77625614f7b7f0e4520`).
+  Linux renderer smoke remains explicitly skipped and native pixels unclaimed.
+- Preserve published `v0.89.29` and historical v0.89.28/v0.89.27/v0.89.06
+  artifacts until a separate explicitly authorized Site publication activates
+  the exact committed v0.89.30 source and packages.
+
 ## [v0.89.29] - Project-owned Forest source and Library persistence
-- Advance development source and the staged Windows/Linux runtime candidate to
-  `v0.89.29`. Keep signed `v0.89.28` as the published runtime until the reviewed
-  candidate receives an explicitly authorized Site publication; preserve
-  earlier runtime packages as immutable history.
+- Advance development source and the Windows/Linux runtime release to
+  `v0.89.29`. Publish it through the Epoch Site while preserving signed
+  v0.89.28, v0.89.27, and immutable v0.89.06 packages as release history.
 - Repair automatic update discovery. `PROJECT_SOURCE_VERSION_URL()` now reads
   the Site-owned `/api/epoch/source-version` sentinel instead of remaining
   empty, so Smart Update can select a genuinely newer source lane.
