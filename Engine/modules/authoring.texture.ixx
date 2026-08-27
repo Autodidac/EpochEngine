@@ -10,6 +10,7 @@ module;
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -153,7 +154,12 @@ export namespace epochengine::authoring::texture
         checkpoint_not_found,
         invalid_compile_profile,
         residency_unavailable,
-        arithmetic_overflow
+        allocation_failure,
+        arithmetic_overflow,
+        malformed_payload,
+        unsupported_schema,
+        serialized_budget_exceeded,
+        integrity_failure
     };
 
     enum class PixelFormat : std::uint8_t
@@ -254,6 +260,10 @@ export namespace epochengine::authoring::texture
         {
             return texels.empty();
         }
+
+        [[nodiscard]] friend bool operator==(
+            const TileSnapshot&,
+            const TileSnapshot&) noexcept = default;
     };
 
     enum class BlendMode : std::uint8_t
@@ -265,11 +275,55 @@ export namespace epochengine::authoring::texture
         subtract
     };
 
+    struct LayerTransformDescriptor final
+    {
+        std::int32_t offset_x_pixels{};
+        std::int32_t offset_y_pixels{};
+        bool mirror_x{};
+        bool mirror_y{};
+
+        [[nodiscard]] friend constexpr bool operator==(
+            const LayerTransformDescriptor&,
+            const LayerTransformDescriptor&) noexcept = default;
+    };
+
+    struct LayerFilterDescriptor final
+    {
+        std::int16_t brightness{};
+        bool grayscale{};
+        bool invert{};
+
+        [[nodiscard]] friend constexpr bool operator==(
+            const LayerFilterDescriptor&,
+            const LayerFilterDescriptor&) noexcept = default;
+    };
+
+    enum class LayerRole : std::uint8_t
+    {
+        content,
+        mask
+    };
+
+    struct LayerMaskBinding final
+    {
+        LayerHandle source{};
+        std::uint16_t strength{65'535};
+        bool invert{};
+
+        [[nodiscard]] friend constexpr bool operator==(
+            const LayerMaskBinding&,
+            const LayerMaskBinding&) noexcept = default;
+    };
+
     struct LayerDescriptor final
     {
         std::string name{ "Layer" };
+        LayerRole role{LayerRole::content};
         BlendMode blend{ BlendMode::normal };
         std::uint16_t opacity{ 65'535 };
+        LayerTransformDescriptor transform{};
+        LayerFilterDescriptor filter{};
+        LayerMaskBinding mask{};
         bool visible{ true };
         bool locked{};
 
@@ -288,9 +342,36 @@ export namespace epochengine::authoring::texture
         ContentHash content{};
     };
 
+    struct LayerSnapshot final
+    {
+        LayerHandle handle{};
+        LayerDescriptor descriptor{};
+        std::vector<TileSnapshot> tiles{};
+
+        [[nodiscard]] friend bool operator==(
+            const LayerSnapshot&,
+            const LayerSnapshot&) noexcept = default;
+    };
+
+    struct DocumentSnapshot final
+    {
+        DocumentHandle handle{};
+        BranchIdentity branch{};
+        CanvasDescriptor descriptor{};
+        HistoryPolicy history{};
+        DocumentRevision revision{};
+        TemporalPoint current_time{};
+        std::vector<LayerSnapshot> layers{};
+
+        [[nodiscard]] friend bool operator==(
+            const DocumentSnapshot&,
+            const DocumentSnapshot&) noexcept = default;
+    };
+
     enum class BrushProgram : std::uint8_t
     {
-        round_stamp_v1
+        round_stamp_v1,
+        round_path_v2
     };
 
     struct StrokeSample final
@@ -525,6 +606,18 @@ export namespace epochengine::authoring::texture
         }
     };
 
+    struct RestoreResult;
+    struct SnapshotSerializationResult final
+    {
+        ResultCode code{ ResultCode::malformed_payload };
+        std::vector<std::byte> bytes{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return code == ResultCode::success && !bytes.empty();
+        }
+    };
+
     class TextureDocument final
     {
     public:
@@ -541,6 +634,13 @@ export namespace epochengine::authoring::texture
 
         TextureDocument(const TextureDocument&) = delete;
         TextureDocument& operator=(const TextureDocument&) = delete;
+
+        [[nodiscard]] static RestoreResult restore(
+            const DocumentSnapshot& snapshot,
+            DocumentLimits limits = {}) noexcept;
+        [[nodiscard]] static RestoreResult deserialize(
+            std::span<const std::byte> bytes,
+            DocumentLimits limits = {}) noexcept;
 
         [[nodiscard]] bool valid() const noexcept;
         [[nodiscard]] DocumentHandle handle() const noexcept;
@@ -600,6 +700,11 @@ export namespace epochengine::authoring::texture
         [[nodiscard]] std::vector<OperationRecord>
             operation_records() const;
 
+        [[nodiscard]] DocumentSnapshot snapshot() const;
+        [[nodiscard]] SnapshotSerializationResult serialize(
+            std::uint64_t maximumBytes =
+                512ull * 1024ull * 1024ull) const noexcept;
+
         [[nodiscard]] CompiledTextureArtifactIdentity
             compiled_artifact_identity(
                 TextureCompileProfile profile) const noexcept;
@@ -610,6 +715,19 @@ export namespace epochengine::authoring::texture
     private:
         struct Impl;
         std::unique_ptr<Impl> impl_{};
+    };
+
+    struct RestoreResult final
+    {
+        ResultCode code{ ResultCode::invalid_document };
+        std::unique_ptr<TextureDocument> document{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return code == ResultCode::success
+                && document != nullptr
+                && document->valid();
+        }
     };
 
     [[nodiscard]] PhysicalResidencyPlan plan_physical_residency(

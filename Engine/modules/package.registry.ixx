@@ -155,7 +155,8 @@ export namespace epochengine::package_registry
         PayloadRejectReason reason{PayloadRejectReason::None};
     };
 
-    inline constexpr std::string_view kEpochEngineExtensionsRepo = "https://github.com/Autodidac/EpochEngineExtensions";
+    inline constexpr std::string_view kEpochEngineExtensionsRepo =
+        "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git";
     inline constexpr std::string_view kForestFactoryReferenceRepo = epochengine::forest::kForestFactoryReferenceRepo;
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
@@ -175,7 +176,8 @@ export namespace epochengine::package_registry
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
     inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";
     inline constexpr std::string_view kNemotronNanoPackageId = "os_model_nemotron_3_nano_4b_bf16";
-    inline constexpr std::string_view kQwenCoderPackageId = "os_model_qwen_27b";
+    inline constexpr std::string_view kQwenCoderPackageId =
+        "os_model_qwen_3_8_27b";
     inline constexpr std::string_view kBonsaiImageTernaryPackageId = "os_model_bonsai_image_ternary_4b_mlx_2bit";
     inline constexpr std::string_view kBonsaiImageBinaryPackageId = "os_model_bonsai_image_binary_4b_mlx_1bit";
 inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_klein_4b";
@@ -240,12 +242,12 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         },
         {
             .id = kQwenCoderPackageId,
-            .displayName = "Qwen 3.6 27B",
-            .summary = "Heavy OS coding/planning model lane. Weights download on demand into cache/models and may be included in projects only by explicit package opt-in.",
+            .displayName = "Qwen3.8 27B",
+            .summary = "Epoch-local coding/planning lane backed by a pinned Qwen3.8 GGUF. Projects may explicitly select it, keep AI off, or retain the external MCP/OpenAI-compatible provider.",
             .kind = PackageKind::ModelAsset,
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
-            .externalSourceRepo = "https://huggingface.co/Qwen/Qwen3.6-27B",
+            .externalSourceRepo = "https://github.com/QwenLM/Qwen3.8",
         },
         {
             .id = kBonsaiImageTernaryPackageId,
@@ -276,12 +278,12 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         },
         {
             .id = kLocalAiLlamaCppRuntimePackageId,
-            .displayName = "Local AI llama.cpp Runtime",
-            .summary = "Plan-only C++23 helper for locating llama-cli and validating a future pinned, human-approved offline build; GGUF licensing stays separate and no server is started.",
+            .displayName = "Epoch-local llama.cpp Runtime",
+            .summary = "Pinned executable-local llama.cpp runtime for direct child inference. It is a peer to the existing external provider, never starts a server, and is installed only by explicit operator action.",
             .kind = PackageKind::DownloadableSource,
             .activation = ActivationMode::DownloadedOptIn,
             .requiresHumanBuildGate = true,
-            .externalSourceRepo = kEpochEngineExtensionsRepo,
+            .externalSourceRepo = "https://github.com/ggml-org/llama.cpp",
         },
         {
             .id = "research_voxel_planetoid",

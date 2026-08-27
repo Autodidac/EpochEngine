@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <chrono>
+#include <source_location>
 
 #include <include/engine.config.hpp>
 
@@ -17,10 +19,13 @@
 #endif
 
 #include "opengl.context_detail.hpp"
+#include "opengl.frame_capture.hpp"
 #include "opengl.context_process_impl.hpp"
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import core.context;
+import core.logger;
+import telemetry.engine;
 import context.commandqueue;
 import opengl.context;
 import opengl.platform;
@@ -32,6 +37,9 @@ namespace epochengine::openglcontext
 {
     bool process_impl(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {
+        using FrameClock = std::chrono::steady_clock;
+        const auto framePhaseStart = FrameClock::now();
+
         if (!ctx)
             return false;
 
@@ -110,7 +118,69 @@ namespace epochengine::openglcontext
         opengl_render_active_frame(ctx, queue, fbW, fbH, windowId);
         if (ctx->windowData && ctx->windowData->get_should_close())
             return false;
+        const auto presentStart = FrameClock::now();
+        openglcapture::capture_frame_if_requested(
+            fbW, fbH, windowId);
         PlatformGL::swap_buffers(guard.target());
+        const auto presentEnd = FrameClock::now();
+
+        const double prepareAndDrawMs =
+            std::chrono::duration<double, std::milli>(
+                presentStart - framePhaseStart).count();
+        const double presentMs =
+            std::chrono::duration<double, std::milli>(
+                presentEnd - presentStart).count();
+        const telemetry::RendererTelemetryTags timingTags{
+            ctx->type,
+            windowId};
+        telemetry::emit_histogram_ms(
+            "renderer.opengl.prepare_draw_time_ms",
+            prepareAndDrawMs,
+            timingTags);
+        telemetry::emit_histogram_ms(
+            "renderer.opengl.swap_buffers_time_ms",
+            presentMs,
+            timingTags);
+
+        struct BoundedPhaseEvidence final
+        {
+            const core::Context* owner{};
+            FrameClock::time_point sampleStart{};
+            double prepareAndDrawTotalMs{};
+            double presentTotalMs{};
+            std::uint64_t samples{};
+            std::uint32_t reports{};
+        };
+        static thread_local BoundedPhaseEvidence phaseEvidence{};
+        if (phaseEvidence.owner != ctx.get())
+        {
+            phaseEvidence = {};
+            phaseEvidence.owner = ctx.get();
+            phaseEvidence.sampleStart = framePhaseStart;
+        }
+        phaseEvidence.prepareAndDrawTotalMs += prepareAndDrawMs;
+        phaseEvidence.presentTotalMs += presentMs;
+        ++phaseEvidence.samples;
+        if (phaseEvidence.reports < 6u
+            && presentEnd - phaseEvidence.sampleStart
+                >= std::chrono::seconds(1))
+        {
+            logger::get("OpenGL").logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Frame phases: prepare+draw {:.3f} ms | SwapBuffers {:.3f} ms | {} frames.",
+                phaseEvidence.prepareAndDrawTotalMs
+                    / static_cast<double>(phaseEvidence.samples),
+                phaseEvidence.presentTotalMs
+                    / static_cast<double>(phaseEvidence.samples),
+                phaseEvidence.samples);
+            phaseEvidence.sampleStart = presentEnd;
+            phaseEvidence.prepareAndDrawTotalMs = 0.0;
+            phaseEvidence.presentTotalMs = 0.0;
+            phaseEvidence.samples = 0u;
+            ++phaseEvidence.reports;
+        }
+
         ++glState.frameCount;
 
 #if defined(_WIN32)

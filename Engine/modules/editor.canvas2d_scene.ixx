@@ -27,6 +27,22 @@ export namespace epochengine::editor_canvas2d
         float alpha_cutoff{0.5f};
     };
 
+    struct GuiPresentationView final
+    {
+        std::array<float, 4> background{0.16f, 0.17f, 0.19f, 1.0f};
+        std::array<float, 4> foreground{0.94f, 0.94f, 0.94f, 1.0f};
+        std::array<float, 4> border{0.32f, 0.34f, 0.38f, 1.0f};
+        std::array<float, 4> accent{0.20f, 0.56f, 0.86f, 1.0f};
+        float border_width{1.0f};
+        float corner_radius{2.0f};
+        float opacity{1.0f};
+        bool authored{};
+        bool visible{true};
+        bool enabled{true};
+        bool focusable{};
+        bool accepts_pointer{};
+    };
+
     struct EntityView final
     {
         std::uint64_t stable_id{};
@@ -40,6 +56,7 @@ export namespace epochengine::editor_canvas2d
         bool editor_only{};
         bool selected{};
         MaterialView material{};
+        GuiPresentationView gui{};
     };
 
     struct BuildRequest final
@@ -89,6 +106,8 @@ export namespace epochengine::editor_canvas2d
         std::uint64_t helper_entities{};
         std::uint64_t solid_materials{};
         std::uint64_t textured_materials{};
+        std::uint64_t styled_gui_widgets{};
+        std::uint64_t disabled_gui_widgets{};
     };
 
     struct BuildResult final

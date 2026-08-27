@@ -143,6 +143,18 @@ export namespace epochengine::authoring
             return !empty();
         }
 
+        [[nodiscard]] friend constexpr bool operator==(
+            const ContentHash& left,
+            const ContentHash& right) noexcept
+        {
+            for (std::size_t index = 0u; index < left.words.size(); ++index)
+            {
+                if (left.words[index] != right.words[index])
+                    return false;
+            }
+            return true;
+        }
+
         [[nodiscard]] friend constexpr auto operator<=>(
             const ContentHash&,
             const ContentHash&) noexcept = default;

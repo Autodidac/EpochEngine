@@ -36,6 +36,7 @@ module;
 #include <memory>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -67,7 +68,7 @@ namespace epochengine
     {
         Game = 0,
         Tool,
-        EngineSelfIteration
+        EngineDevelopment
     };
 
     export enum class EditorCommand : unsigned char
@@ -174,6 +175,8 @@ namespace epochengine
         std::string_view tilemap_path{};
         std::string_view input_profile_path{};
         std::string_view sprite_animation_path{};
+        std::string_view audio_profile_path{};
+        std::string_view gui_path{};
         std::string_view world_name{};
         std::string_view runtime_scene_id{};
         std::string_view manifest_path{};
@@ -186,6 +189,26 @@ namespace epochengine
         EditorProjectCapabilityPolicy renderer_capability{};
     };
 
+    export enum class EditorProjectInputBindingKind : std::uint8_t
+    {
+        keyboard,
+        controller_button,
+        controller_axis
+    };
+
+    export struct EditorProjectInputBindingSummary
+    {
+        std::uint64_t stable_id{};
+        std::string action{};
+        std::string device{};
+        std::string source{};
+        std::uint16_t code{};
+        std::uint16_t dead_zone_q15{};
+        std::uint8_t controller_slot{};
+        EditorProjectInputBindingKind kind{
+            EditorProjectInputBindingKind::keyboard};
+    };
+
     export struct EditorProjectInputProfileSummary
     {
         bool ready{};
@@ -196,11 +219,79 @@ namespace epochengine
         std::uint32_t action_count{};
         std::uint32_t binding_count{};
         std::uint16_t controller_dead_zone_q15{};
+        std::vector<EditorProjectInputBindingSummary> bindings{};
     };
 
     export struct EditorProjectInputUpdateResult
     {
         bool succeeded{};
+        std::string summary{};
+    };
+    export enum class EditorProjectAudioCueSemantic : std::uint8_t
+    {
+        custom,
+        jump,
+        land,
+        music,
+        ambient,
+        user_interface
+    };
+
+    export struct EditorProjectAudioBusSummary
+    {
+        std::uint64_t stable_id{};
+        std::uint64_t parent_id{};
+        std::string name{};
+        std::string parent_name{};
+        float gain{1.0f};
+        bool muted{};
+    };
+
+    export struct EditorProjectAudioCueSummary
+    {
+        std::uint64_t stable_id{};
+        EditorProjectAudioCueSemantic semantic{
+            EditorProjectAudioCueSemantic::custom};
+        std::string semantic_name{};
+        std::string name{};
+        std::string logical_path{};
+        std::uint64_t bus_id{};
+        std::string bus_name{};
+        float gain{1.0f};
+        bool looping{};
+        bool autoplay{};
+        bool source_exists{};
+        std::uint64_t source_bytes{};
+    };
+
+    export struct EditorProjectAudioProfileSummary
+    {
+        bool ready{};
+        bool source_materialized{};
+        bool artifact_materialized{};
+        bool artifact_current{};
+        std::string source_path{};
+        std::string artifact_path{};
+        std::string diagnostic{};
+        std::uint64_t sequence{};
+        std::uint32_t bus_count{};
+        std::uint32_t cue_count{};
+        std::uint32_t missing_source_count{};
+        std::uint64_t source_bytes{};
+        std::vector<EditorProjectAudioBusSummary> buses{};
+        std::vector<EditorProjectAudioCueSummary> cues{};
+    };
+
+    export struct EditorProjectAudioUpdateResult
+    {
+        bool succeeded{};
+        bool changed{};
+        std::uint64_t stable_id{};
+        std::string logical_path{};
+        std::uint64_t decoded_bytes{};
+        std::uint64_t frame_count{};
+        std::uint32_t sample_rate{};
+        std::uint16_t channel_count{};
         std::string summary{};
     };
     export struct EditorScriptProfile
@@ -228,10 +319,19 @@ namespace epochengine
         std::string public_include_root{};
     };
 
+    export struct EditorProjectAdmissionResult
+    {
+        bool succeeded{ false };
+        std::string project_id{};
+        std::string manifest_path{};
+        std::string summary{};
+    };
+
     export struct EditorScriptBuildResult
     {
         bool succeeded{ false };
         std::string summary{};
+        bool cancelled{ false };
     };
 
     export struct EditorProjectBuildResult
@@ -240,6 +340,7 @@ namespace epochengine
         std::string summary{};
         std::string output_path{};
         std::string log_path{};
+        bool cancelled{ false };
     };
 
     export struct EditorProjectModelSummary
@@ -309,6 +410,13 @@ namespace epochengine
         bool pixel_snapping{ true };
     };
 
+    export struct EditorToolPaneSnapshot
+    {
+        std::string route{};
+        bool open{true};
+        std::uint8_t dock_region{};
+    };
+
     export struct EditorContextSnapshot
     {
         bool valid{ false };
@@ -344,7 +452,7 @@ namespace epochengine
         float tile_map_pan_y{};
         std::uint8_t input_profile_preset{ 0 };
         gui::ThemePreference theme_preference{ gui::ThemePreference::FollowSystemDark };
-        bool rounded_rectangles{ false };
+        bool rounded_rectangles{ true };
         double editor_frame_limit_fps{ 120.0 };
         std::string selected_project_file{};
         std::string selected_asset_path{};
@@ -360,7 +468,7 @@ namespace epochengine
         EditorWorkspaceTab workspace_tab{ EditorWorkspaceTab::Output };
         EditorWorkspaceTab dock_status_tab{ EditorWorkspaceTab::Output };
         std::uint8_t main_surface{ 0 };
-        float workspace_split{ 0.68f };
+        float bottom_grid_split{ 0.68f };
         float outliner_split{ 0.20f };
         float inspector_split{ 0.22f };
         float dock_split{ 0.24f };
@@ -368,6 +476,11 @@ namespace epochengine
         bool show_inspector{ true };
         bool show_console_dock{ true };
         bool show_ai_chat{ true };
+        std::vector<EditorToolPaneSnapshot> tool_panes{};
+        std::string active_left_pane_route{ "pane.world_outliner" };
+        std::string active_right_pane_route{ "pane.properties" };
+        std::string active_bottom_left_pane_route{ "pane.output" };
+        std::string active_bottom_right_pane_route{ "pane.ai_chat" };
         bool project_notes_visible{ false };
         std::uint8_t ai_workspace_domain{ 0 };
         EditorApplicationKind application_kind{ EditorApplicationKind::Standard };
@@ -380,6 +493,11 @@ namespace epochengine
 
     export EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
     export EditorFrameResult editor_run_context_panel(const std::shared_ptr<core::Context>& ctx, std::string_view route_id);
+    export [[nodiscard]] bool editor_open_project(
+        const std::shared_ptr<core::Context>& ctx,
+        std::string_view project_id);
+    export [[nodiscard]] bool editor_close_project(
+        const std::shared_ptr<core::Context>& ctx);
     export void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id);
     export void editor_load_application(
         const std::shared_ptr<core::Context>& ctx,
@@ -387,6 +505,8 @@ namespace epochengine
     export void editor_suppress_startup_update_check(const std::shared_ptr<core::Context>& ctx);
     export void editor_reset_transient_ui(const core::Context* ctx);
     export bool editor_run_script(const core::Context* ctx, std::string_view script_name);
+    export [[nodiscard]] EditorProjectAdmissionResult
+        editor_admit_project_manifest(std::string_view manifest_path);
     export [[nodiscard]] std::span<const EditorProjectProfile> editor_project_profiles() noexcept;
     export [[nodiscard]] const EditorProjectProfile& editor_default_project_profile() noexcept;
     export [[nodiscard]] const EditorProjectProfile* editor_find_project_profile(std::string_view project_id) noexcept;
@@ -399,19 +519,79 @@ namespace epochengine
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
     export [[nodiscard]] EditorProjectBuildResult editor_build_project(std::string_view project_root);
+    [[nodiscard]] EditorProjectBuildResult editor_build_project(
+        std::string_view project_root,
+        std::stop_token cancellation);
     export [[nodiscard]] EditorProjectModelSummary editor_project_model_summary(std::string_view project_id);
     export [[nodiscard]] EditorProjectInputProfileSummary
         editor_project_input_profile_summary(std::string_view project_id);
     export [[nodiscard]] EditorProjectInputUpdateResult
         editor_reset_project_input_profile(std::string_view project_id);
+    export [[nodiscard]] EditorProjectInputUpdateResult
+        editor_rebind_project_input(
+            std::string_view project_id,
+            std::uint64_t binding_id,
+            std::uint16_t key_code);
+    export [[nodiscard]] EditorProjectInputUpdateResult
+        editor_rebind_project_controller_button(
+            std::string_view project_id,
+            std::uint64_t binding_id,
+            std::uint16_t button_code,
+            std::uint8_t controller_slot);
+    export [[nodiscard]] EditorProjectInputUpdateResult
+        editor_rebind_project_controller_axis(
+            std::string_view project_id,
+            std::uint64_t binding_id,
+            std::uint16_t axis_code,
+            std::uint8_t controller_slot);
+    export [[nodiscard]] EditorProjectInputUpdateResult
+        editor_set_project_controller_dead_zone(
+            std::string_view project_id,
+            std::uint16_t dead_zone_q15);
+    export [[nodiscard]] EditorProjectAudioProfileSummary
+        editor_project_audio_profile_summary(std::string_view project_id);
+    export [[nodiscard]] EditorProjectAudioUpdateResult
+        editor_reset_project_audio_profile(std::string_view project_id);
+    export [[nodiscard]] EditorProjectAudioUpdateResult
+        editor_import_project_audio_cue(
+            std::string_view project_id,
+            std::string_view external_source_path);
+    export [[nodiscard]] EditorProjectAudioUpdateResult
+        editor_set_project_audio_bus_mix(
+            std::string_view project_id,
+            std::uint64_t bus_id,
+            float gain,
+            bool muted);
+    export [[nodiscard]] EditorProjectAudioUpdateResult
+        editor_configure_project_audio_cue(
+            std::string_view project_id,
+            std::uint64_t cue_id,
+            EditorProjectAudioCueSemantic semantic,
+            std::uint64_t bus_id,
+            float gain,
+            bool looping,
+            bool autoplay);
+    export [[nodiscard]] EditorProjectAudioUpdateResult
+        editor_remove_project_audio_cue(
+            std::string_view project_id,
+            std::uint64_t cue_id);
+    export [[nodiscard]] EditorProjectAudioUpdateResult
+        editor_validate_project_audio_profile(std::string_view project_id);
     export [[nodiscard]] std::string editor_project_demo_model_path(
         std::string_view project_id);
     [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name, std::string_view project_root);
+    [[nodiscard]] EditorScriptBuildResult editor_build_script(
+        std::string_view script_name,
+        std::string_view project_root,
+        std::stop_token cancellation);
     [[nodiscard]] std::string editor_resolve_script_source_path(std::string_view script_name, std::string_view project_root = {});
     export void editor_set_time_snapshot(const core::Context* ctx, const EditorTimeSnapshot& snapshot);
     export void editor_set_context_selection_status(const core::Context* ctx, std::string_view status);
     export void editor_mark_context_panel_detached(std::string_view route_id, bool detached);
     export void editor_notify_context_panel_closed(std::string_view route_id);
+    export void editor_redock_context_panel(
+        std::string_view route_id,
+        std::uint8_t dock_target);
     export [[nodiscard]] EditorTimeControl editor_time_control(const core::Context* ctx);
     export void editor_consume_time_step_request(const core::Context* ctx);
     export [[nodiscard]] EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx);

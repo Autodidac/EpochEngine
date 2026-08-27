@@ -74,6 +74,9 @@ export namespace epochengine
         EditorApplicationKind kind{ EditorApplicationKind::Standard };
         std::string_view id{};
         std::string_view display_name{};
+        // Optional startup project. Dedicated authoring applications such as
+        // Plant Lab own an editor scene without masquerading as a generated
+        // Epoch project.
         std::string_view project_id{};
         std::string_view scene_id{};
         std::string_view scene_source_path{};
@@ -126,6 +129,13 @@ export namespace epochengine
         return (application.surface_mask & editor_surface_bit(surface)) != 0u;
     }
 
+    [[nodiscard]] constexpr bool
+        editor_application_owns_dedicated_gui_workspace(
+            EditorApplicationKind kind) noexcept
+    {
+        return kind == EditorApplicationKind::GuiEditor;
+    }
+
     [[nodiscard]] inline const EditorApplicationProfile& editor_application_profile(
         EditorApplicationKind kind) noexcept
     {
@@ -165,9 +175,16 @@ export namespace epochengine
             EditorApplicationKind::GuiEditor })
         {
             const auto& application = editor_application_profile(kind);
-            if (application.project_id == project_id)
+            if (!project_id.empty()
+                && !application.project_id.empty()
+                && application.project_id == project_id)
                 return &application;
         }
+
+        // Legacy launcher/project ids remain accepted as application aliases,
+        // but they are not project profiles and are never materialized.
+        if (project_id == "plantlab")
+            return &plant_lab_editor_application();
 
         // Preserve the old launch id without reopening the authoring editor:
         // Forest Factory now belongs to the standard editor placement portal.
@@ -182,7 +199,6 @@ export namespace epochengine
     {
         if (application.id.empty()
             || application.display_name.empty()
-            || application.project_id.empty()
             || application.scene_id.empty()
             || application.scene_source_path.empty()
             || application.surface_mask == 0u

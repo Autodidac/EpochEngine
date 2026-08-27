@@ -15,6 +15,8 @@ module;
 
 module project.tilemap_pipeline;
 
+import render.canvas2d;
+
 namespace epochengine::project_tilemaps
 {
     namespace

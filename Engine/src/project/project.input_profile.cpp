@@ -337,14 +337,7 @@ namespace epochengine::project_input
 
         [[nodiscard]] constexpr bool valid_key(std::uint16_t code) noexcept
         {
-            return (code >= static_cast<std::uint16_t>(KeyCode::a)
-                    && code <= static_cast<std::uint16_t>(KeyCode::z))
-                || (code >= static_cast<std::uint16_t>(KeyCode::enter)
-                    && code <= static_cast<std::uint16_t>(KeyCode::space))
-                || (code >= static_cast<std::uint16_t>(KeyCode::right)
-                    && code <= static_cast<std::uint16_t>(KeyCode::up))
-                || (code >= static_cast<std::uint16_t>(KeyCode::left_control)
-                    && code <= static_cast<std::uint16_t>(KeyCode::right_super));
+            return valid_key_code(static_cast<KeyCode>(code));
         }
 
         [[nodiscard]] constexpr bool valid_controller_button(
@@ -947,6 +940,321 @@ namespace epochengine::project_input
         }
     }
 
+    [[nodiscard]] static ProfileEditResult commit_profile_edit(
+        ProfileSource source,
+        const ProfileLimits& limits) noexcept
+    {
+        if (source.revision.sequence
+            == (std::numeric_limits<std::uint64_t>::max)())
+        {
+            return {
+                ProfileEditCode::revision_exhausted,
+                ValidationCode::invalid_revision,
+                {}};
+        }
+        ++source.revision.sequence;
+        source.revision.content = {};
+        const ValidationCode sealed = seal_profile_source(source, limits);
+        if (sealed != ValidationCode::ready)
+        {
+            return {
+                ProfileEditCode::validation_failed,
+                sealed,
+                {}};
+        }
+        return {
+            ProfileEditCode::ready,
+            ValidationCode::ready,
+            std::move(source)};
+    }
+
+    ProfileEditResult rebind_keyboard(
+        ProfileSource source,
+        BindingId binding,
+        KeyCode key,
+        const ProfileLimits& limits) noexcept
+    {
+        try
+        {
+            const ValidationCode sourceCode =
+                validate_profile_source(source, limits);
+            if (sourceCode != ValidationCode::ready)
+            {
+                return {
+                    ProfileEditCode::invalid_source,
+                    sourceCode,
+                    {}};
+            }
+            if (!binding)
+            {
+                return {
+                    ProfileEditCode::invalid_binding,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (!valid_key_code(key))
+            {
+                return {
+                    ProfileEditCode::invalid_key,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            const auto found = std::find_if(
+                source.bindings.begin(),
+                source.bindings.end(),
+                [&](const BindingDefinition& candidate)
+                {
+                    return candidate.id == binding;
+                });
+            if (found == source.bindings.end())
+            {
+                return {
+                    ProfileEditCode::invalid_binding,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (found->device != BindingDevice::keyboard)
+            {
+                return {
+                    ProfileEditCode::unsupported_device,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            const auto code = static_cast<std::uint16_t>(key);
+            if (found->code == code)
+            {
+                return {
+                    ProfileEditCode::unchanged,
+                    ValidationCode::ready,
+                    std::move(source)};
+            }
+            found->code = code;
+            return commit_profile_edit(std::move(source), limits);
+        }
+        catch (...)
+        {
+            return {
+                ProfileEditCode::allocation_failure,
+                ValidationCode::allocation_failure,
+                {}};
+        }
+    }
+
+    ProfileEditResult rebind_controller_button(
+        ProfileSource source,
+        BindingId binding,
+        ControllerButton button,
+        std::uint8_t controllerSlot,
+        const ProfileLimits& limits) noexcept
+    {
+        try
+        {
+            const ValidationCode sourceCode =
+                validate_profile_source(source, limits);
+            if (sourceCode != ValidationCode::ready)
+                return {ProfileEditCode::invalid_source, sourceCode, {}};
+            if (!binding)
+            {
+                return {
+                    ProfileEditCode::invalid_binding,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (!valid_controller_button(
+                    static_cast<std::uint16_t>(button)))
+            {
+                return {
+                    ProfileEditCode::invalid_controller_button,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (controllerSlot >= limits.maximum_controller_slots)
+            {
+                return {
+                    ProfileEditCode::invalid_controller_slot,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            const auto found = std::find_if(
+                source.bindings.begin(), source.bindings.end(),
+                [&](const BindingDefinition& candidate)
+                {
+                    return candidate.id == binding;
+                });
+            if (found == source.bindings.end())
+            {
+                return {
+                    ProfileEditCode::invalid_binding,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (found->device != BindingDevice::controller_button)
+            {
+                return {
+                    ProfileEditCode::unsupported_device,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            const auto code = static_cast<std::uint16_t>(button);
+            if (found->code == code
+                && found->controller_slot == controllerSlot)
+            {
+                return {
+                    ProfileEditCode::unchanged,
+                    ValidationCode::ready,
+                    std::move(source)};
+            }
+            found->code = code;
+            found->controller_slot = controllerSlot;
+            return commit_profile_edit(std::move(source), limits);
+        }
+        catch (...)
+        {
+            return {
+                ProfileEditCode::allocation_failure,
+                ValidationCode::allocation_failure,
+                {}};
+        }
+    }
+
+    ProfileEditResult rebind_controller_axis(
+        ProfileSource source,
+        BindingId binding,
+        ControllerAxis axis,
+        std::uint8_t controllerSlot,
+        const ProfileLimits& limits) noexcept
+    {
+        try
+        {
+            const ValidationCode sourceCode =
+                validate_profile_source(source, limits);
+            if (sourceCode != ValidationCode::ready)
+                return {ProfileEditCode::invalid_source, sourceCode, {}};
+            if (!binding)
+            {
+                return {
+                    ProfileEditCode::invalid_binding,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (!valid_controller_axis(static_cast<std::uint16_t>(axis)))
+            {
+                return {
+                    ProfileEditCode::invalid_controller_axis,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (controllerSlot >= limits.maximum_controller_slots)
+            {
+                return {
+                    ProfileEditCode::invalid_controller_slot,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            const auto found = std::find_if(
+                source.bindings.begin(), source.bindings.end(),
+                [&](const BindingDefinition& candidate)
+                {
+                    return candidate.id == binding;
+                });
+            if (found == source.bindings.end())
+            {
+                return {
+                    ProfileEditCode::invalid_binding,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (found->device != BindingDevice::controller_axis)
+            {
+                return {
+                    ProfileEditCode::unsupported_device,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            const auto code = static_cast<std::uint16_t>(axis);
+            if (found->code == code
+                && found->controller_slot == controllerSlot)
+            {
+                return {
+                    ProfileEditCode::unchanged,
+                    ValidationCode::ready,
+                    std::move(source)};
+            }
+            found->code = code;
+            found->controller_slot = controllerSlot;
+            return commit_profile_edit(std::move(source), limits);
+        }
+        catch (...)
+        {
+            return {
+                ProfileEditCode::allocation_failure,
+                ValidationCode::allocation_failure,
+                {}};
+        }
+    }
+
+    ProfileEditResult set_controller_dead_zone(
+        ProfileSource source,
+        std::uint16_t deadZoneQ15,
+        const ProfileLimits& limits) noexcept
+    {
+        try
+        {
+            const ValidationCode sourceCode =
+                validate_profile_source(source, limits);
+            if (sourceCode != ValidationCode::ready)
+                return {ProfileEditCode::invalid_source, sourceCode, {}};
+            if (deadZoneQ15 >= normalized_unit)
+            {
+                return {
+                    ProfileEditCode::invalid_dead_zone,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+
+            bool foundAxis{};
+            bool changed{};
+            for (auto& candidate : source.bindings)
+            {
+                if (candidate.device != BindingDevice::controller_axis)
+                    continue;
+                foundAxis = true;
+                if (deadZoneQ15 >= candidate.saturation_q15)
+                {
+                    return {
+                        ProfileEditCode::invalid_dead_zone,
+                        ValidationCode::invalid_binding,
+                        {}};
+                }
+                changed = changed
+                    || candidate.dead_zone_q15 != deadZoneQ15;
+                candidate.dead_zone_q15 = deadZoneQ15;
+            }
+            if (!foundAxis)
+            {
+                return {
+                    ProfileEditCode::unsupported_device,
+                    ValidationCode::invalid_binding,
+                    {}};
+            }
+            if (!changed)
+            {
+                return {
+                    ProfileEditCode::unchanged,
+                    ValidationCode::ready,
+                    std::move(source)};
+            }
+            return commit_profile_edit(std::move(source), limits);
+        }
+        catch (...)
+        {
+            return {
+                ProfileEditCode::allocation_failure,
+                ValidationCode::allocation_failure,
+                {}};
+        }
+    }
+
     ProfileSource make_legacy_default_profile(
         std::uint64_t revisionSequence) noexcept
     {
@@ -1510,6 +1818,77 @@ namespace epochengine::project_input
         {
             return {EvaluationCode::allocation_failure, input.frame_index};
         }
+    }
+
+    InjectionCode inject_action_impulses(
+        const CompiledInputProfile& artifact,
+        ActionFrame& frame,
+        std::span<const ActionImpulse> impulses,
+        const ProfileLimits& limits) noexcept
+    {
+        if (validate_compiled_profile(artifact, limits)
+            != ValidationCode::ready)
+        {
+            return InjectionCode::invalid_artifact;
+        }
+        if (!frame || frame.actions.size() != artifact.actions.size())
+            return InjectionCode::invalid_frame;
+        if (impulses.size() > artifact.actions.size()
+            || impulses.size() > limits.maximum_actions)
+        {
+            return InjectionCode::action_limit_exceeded;
+        }
+
+        for (std::size_t index = 0u; index < impulses.size(); ++index)
+        {
+            const ActionImpulse& impulse = impulses[index];
+            if (!valid_semantic(impulse.semantic)
+                || impulse.value_q15 < -normalized_unit
+                || impulse.value_q15 > normalized_unit)
+            {
+                return InjectionCode::invalid_action;
+            }
+            for (std::size_t prior = 0u; prior < index; ++prior)
+            {
+                if (impulses[prior].semantic == impulse.semantic)
+                    return InjectionCode::duplicate_action;
+            }
+
+            const ActionId id = stable_action_id(impulse.semantic);
+            const auto artifactAction = std::find_if(
+                artifact.actions.begin(), artifact.actions.end(),
+                [&](const ActionDefinition& action)
+                {
+                    return action.id == id
+                        && action.semantic == impulse.semantic;
+                });
+            if (artifactAction == artifact.actions.end())
+                return InjectionCode::action_missing;
+            const auto frameAction = std::find_if(
+                frame.actions.begin(), frame.actions.end(),
+                [&](const ActionValue& action)
+                {
+                    return action.action == id;
+                });
+            if (frameAction == frame.actions.end())
+                return InjectionCode::invalid_frame;
+        }
+
+        for (const ActionImpulse& impulse : impulses)
+        {
+            const ActionId id = stable_action_id(impulse.semantic);
+            const auto frameAction = std::find_if(
+                frame.actions.begin(), frame.actions.end(),
+                [&](const ActionValue& action)
+                {
+                    return action.action == id;
+                });
+            frameAction->value_q15 = clamp_normalized(
+                static_cast<std::int64_t>(frameAction->value_q15)
+                    + impulse.value_q15);
+            frameAction->pressed = frameAction->pressed || impulse.pressed;
+        }
+        return InjectionCode::ready;
     }
 
     const ActionValue* find_action(

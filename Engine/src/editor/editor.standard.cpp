@@ -20,7 +20,7 @@ namespace epochengine
             .project_id = "projectlauncher",
             .scene_id = "editor:standard",
             .scene_source_path = "Engine/src/editor/editor.standard.cpp",
-            .purpose = "General scene, project, asset, timeline, AI, and system authoring.",
+            .purpose = "General scene, project, asset, timeline, and system authoring with dockable AI tools.",
             .default_surface = EditorApplicationSurface::Scene,
             .camera_policy = EditorCameraPolicy::Perspective,
             .initial_dock = EditorApplicationDock::Output,

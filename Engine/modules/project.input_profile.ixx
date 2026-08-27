@@ -194,6 +194,73 @@ export namespace epochengine::project_input
         right_super
     };
 
+    [[nodiscard]] constexpr bool valid_key_code(KeyCode key) noexcept
+    {
+        const auto code = static_cast<std::uint16_t>(key);
+        return (code >= static_cast<std::uint16_t>(KeyCode::a)
+                && code <= static_cast<std::uint16_t>(KeyCode::z))
+            || (code >= static_cast<std::uint16_t>(KeyCode::enter)
+                && code <= static_cast<std::uint16_t>(KeyCode::space))
+            || (code >= static_cast<std::uint16_t>(KeyCode::right)
+                && code <= static_cast<std::uint16_t>(KeyCode::up))
+            || (code >= static_cast<std::uint16_t>(KeyCode::left_control)
+                && code <= static_cast<std::uint16_t>(KeyCode::right_super));
+    }
+
+    [[nodiscard]] constexpr std::string_view key_code_name(
+        KeyCode key) noexcept
+    {
+        switch (key)
+        {
+        case KeyCode::a: return "A";
+        case KeyCode::b: return "B";
+        case KeyCode::c: return "C";
+        case KeyCode::d: return "D";
+        case KeyCode::e: return "E";
+        case KeyCode::f: return "F";
+        case KeyCode::g: return "G";
+        case KeyCode::h: return "H";
+        case KeyCode::i: return "I";
+        case KeyCode::j: return "J";
+        case KeyCode::k: return "K";
+        case KeyCode::l: return "L";
+        case KeyCode::m: return "M";
+        case KeyCode::n: return "N";
+        case KeyCode::o: return "O";
+        case KeyCode::p: return "P";
+        case KeyCode::q: return "Q";
+        case KeyCode::r: return "R";
+        case KeyCode::s: return "S";
+        case KeyCode::t: return "T";
+        case KeyCode::u: return "U";
+        case KeyCode::v: return "V";
+        case KeyCode::w: return "W";
+        case KeyCode::x: return "X";
+        case KeyCode::y: return "Y";
+        case KeyCode::z: return "Z";
+        case KeyCode::enter: return "Enter";
+        case KeyCode::escape: return "Escape";
+        case KeyCode::backspace: return "Backspace";
+        case KeyCode::tab: return "Tab";
+        case KeyCode::space: return "Space";
+        case KeyCode::right: return "Right";
+        case KeyCode::left: return "Left";
+        case KeyCode::down: return "Down";
+        case KeyCode::up: return "Up";
+        case KeyCode::left_control: return "Left Ctrl";
+        case KeyCode::left_shift: return "Left Shift";
+        case KeyCode::left_alt: return "Left Alt";
+        case KeyCode::left_super: return "Left Super";
+        case KeyCode::right_control: return "Right Ctrl";
+        case KeyCode::right_shift: return "Right Shift";
+        case KeyCode::right_alt: return "Right Alt";
+        case KeyCode::right_super: return "Right Super";
+        case KeyCode::invalid:
+            break;
+        }
+        return "Invalid";
+    }
+
     enum class ControllerButton : std::uint16_t
     {
         invalid,
@@ -224,6 +291,49 @@ export namespace epochengine::project_input
         left_trigger,
         right_trigger
     };
+
+    [[nodiscard]] constexpr std::string_view controller_button_name(
+        ControllerButton button) noexcept
+    {
+        switch (button)
+        {
+        case ControllerButton::south: return "South / A";
+        case ControllerButton::east: return "East / B";
+        case ControllerButton::west: return "West / X";
+        case ControllerButton::north: return "North / Y";
+        case ControllerButton::back: return "Back";
+        case ControllerButton::guide: return "Guide";
+        case ControllerButton::start: return "Start";
+        case ControllerButton::left_stick: return "Left Stick";
+        case ControllerButton::right_stick: return "Right Stick";
+        case ControllerButton::left_shoulder: return "Left Shoulder";
+        case ControllerButton::right_shoulder: return "Right Shoulder";
+        case ControllerButton::dpad_up: return "D-pad Up";
+        case ControllerButton::dpad_down: return "D-pad Down";
+        case ControllerButton::dpad_left: return "D-pad Left";
+        case ControllerButton::dpad_right: return "D-pad Right";
+        case ControllerButton::invalid:
+            break;
+        }
+        return "Invalid";
+    }
+
+    [[nodiscard]] constexpr std::string_view controller_axis_name(
+        ControllerAxis axis) noexcept
+    {
+        switch (axis)
+        {
+        case ControllerAxis::left_x: return "Left Stick X";
+        case ControllerAxis::left_y: return "Left Stick Y";
+        case ControllerAxis::right_x: return "Right Stick X";
+        case ControllerAxis::right_y: return "Right Stick Y";
+        case ControllerAxis::left_trigger: return "Left Trigger";
+        case ControllerAxis::right_trigger: return "Right Trigger";
+        case ControllerAxis::invalid:
+            break;
+        }
+        return "Invalid";
+    }
 
     enum class Modifier : std::uint8_t
     {
@@ -393,6 +503,18 @@ export namespace epochengine::project_input
         return "invalid";
     }
 
+    [[nodiscard]] constexpr ActionSemantic action_semantic_from_name(
+        std::string_view name) noexcept
+    {
+        if (name == "move_x") return ActionSemantic::move_x;
+        if (name == "move_y") return ActionSemantic::move_y;
+        if (name == "jump") return ActionSemantic::jump;
+        if (name == "interact") return ActionSemantic::interact;
+        if (name == "pause") return ActionSemantic::pause;
+        if (name == "reset") return ActionSemantic::reset;
+        return ActionSemantic::invalid;
+    }
+
     [[nodiscard]] ProfileId stable_profile_id(
         std::string_view stableName) noexcept;
     [[nodiscard]] ActionId stable_action_id(
@@ -408,6 +530,83 @@ export namespace epochengine::project_input
         const ProfileLimits& limits = {}) noexcept;
     [[nodiscard]] ValidationCode seal_profile_source(
         ProfileSource& source,
+        const ProfileLimits& limits = {}) noexcept;
+
+    enum class ProfileEditCode : std::uint8_t
+    {
+        ready,
+        unchanged,
+        invalid_source,
+        invalid_binding,
+        unsupported_device,
+        invalid_key,
+        invalid_controller_button,
+        invalid_controller_axis,
+        invalid_controller_slot,
+        invalid_dead_zone,
+        revision_exhausted,
+        validation_failed,
+        allocation_failure
+    };
+
+    [[nodiscard]] constexpr std::string_view profile_edit_code_name(
+        ProfileEditCode code) noexcept
+    {
+        switch (code)
+        {
+        case ProfileEditCode::ready: return "ready";
+        case ProfileEditCode::unchanged: return "unchanged";
+        case ProfileEditCode::invalid_source: return "invalid_source";
+        case ProfileEditCode::invalid_binding: return "invalid_binding";
+        case ProfileEditCode::unsupported_device: return "unsupported_device";
+        case ProfileEditCode::invalid_key: return "invalid_key";
+        case ProfileEditCode::invalid_controller_button:
+            return "invalid_controller_button";
+        case ProfileEditCode::invalid_controller_axis:
+            return "invalid_controller_axis";
+        case ProfileEditCode::invalid_controller_slot:
+            return "invalid_controller_slot";
+        case ProfileEditCode::invalid_dead_zone: return "invalid_dead_zone";
+        case ProfileEditCode::revision_exhausted: return "revision_exhausted";
+        case ProfileEditCode::validation_failed: return "validation_failed";
+        case ProfileEditCode::allocation_failure: return "allocation_failure";
+        }
+        return "unknown";
+    }
+
+    struct ProfileEditResult final
+    {
+        ProfileEditCode code{ProfileEditCode::invalid_source};
+        ValidationCode validation{ValidationCode::invalid_profile};
+        ProfileSource source{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return code == ProfileEditCode::ready
+                || code == ProfileEditCode::unchanged;
+        }
+    };
+
+    [[nodiscard]] ProfileEditResult rebind_keyboard(
+        ProfileSource source,
+        BindingId binding,
+        KeyCode key,
+        const ProfileLimits& limits = {}) noexcept;
+    [[nodiscard]] ProfileEditResult rebind_controller_button(
+        ProfileSource source,
+        BindingId binding,
+        ControllerButton button,
+        std::uint8_t controllerSlot,
+        const ProfileLimits& limits = {}) noexcept;
+    [[nodiscard]] ProfileEditResult rebind_controller_axis(
+        ProfileSource source,
+        BindingId binding,
+        ControllerAxis axis,
+        std::uint8_t controllerSlot,
+        const ProfileLimits& limits = {}) noexcept;
+    [[nodiscard]] ProfileEditResult set_controller_dead_zone(
+        ProfileSource source,
+        std::uint16_t deadZoneQ15,
         const ProfileLimits& limits = {}) noexcept;
     [[nodiscard]] ProfileSource make_legacy_default_profile(
         std::uint64_t revisionSequence = 1u) noexcept;
@@ -610,12 +809,56 @@ export namespace epochengine::project_input
             const ActionFrame&) noexcept = default;
     };
 
+    struct ActionImpulse final
+    {
+        ActionSemantic semantic{ActionSemantic::invalid};
+        std::int32_t value_q15{};
+        bool pressed{};
+
+        friend constexpr auto operator<=>(
+            const ActionImpulse&,
+            const ActionImpulse&) noexcept = default;
+    };
+
+    enum class InjectionCode : std::uint8_t
+    {
+        ready,
+        invalid_artifact,
+        invalid_frame,
+        action_limit_exceeded,
+        invalid_action,
+        action_missing,
+        duplicate_action
+    };
+
+    [[nodiscard]] constexpr std::string_view injection_code_name(
+        InjectionCode code) noexcept
+    {
+        switch (code)
+        {
+        case InjectionCode::ready: return "ready";
+        case InjectionCode::invalid_artifact: return "invalid_artifact";
+        case InjectionCode::invalid_frame: return "invalid_frame";
+        case InjectionCode::action_limit_exceeded:
+            return "action_limit_exceeded";
+        case InjectionCode::invalid_action: return "invalid_action";
+        case InjectionCode::action_missing: return "action_missing";
+        case InjectionCode::duplicate_action: return "duplicate_action";
+        }
+        return "unknown";
+    }
+
     [[nodiscard]] std::int32_t apply_axis_response(
         std::int32_t rawValueQ15,
         const BindingDefinition& binding) noexcept;
     [[nodiscard]] ActionFrame evaluate_action_frame(
         const CompiledInputProfile& artifact,
         const InputSnapshot& input,
+        const ProfileLimits& limits = {}) noexcept;
+    [[nodiscard]] InjectionCode inject_action_impulses(
+        const CompiledInputProfile& artifact,
+        ActionFrame& frame,
+        std::span<const ActionImpulse> impulses,
         const ProfileLimits& limits = {}) noexcept;
     [[nodiscard]] const ActionValue* find_action(
         const ActionFrame& frame,
@@ -792,8 +1035,12 @@ export namespace epochengine::project_input
         artifact_roundtrip,
         malformed_rejection,
         duplicate_rejection,
+        profile_rebind,
+        controller_rebind,
         dead_zone,
+        dead_zone_edit,
         deterministic_evaluation,
+        action_injection,
         modifier_evaluation,
         replay_identity,
         temporary_root,
@@ -817,9 +1064,13 @@ export namespace epochengine::project_input
             return "malformed_rejection";
         case ContractFailure::duplicate_rejection:
             return "duplicate_rejection";
+        case ContractFailure::profile_rebind: return "profile_rebind";
+        case ContractFailure::controller_rebind: return "controller_rebind";
         case ContractFailure::dead_zone: return "dead_zone";
+        case ContractFailure::dead_zone_edit: return "dead_zone_edit";
         case ContractFailure::deterministic_evaluation:
             return "deterministic_evaluation";
+        case ContractFailure::action_injection: return "action_injection";
         case ContractFailure::modifier_evaluation:
             return "modifier_evaluation";
         case ContractFailure::replay_identity: return "replay_identity";

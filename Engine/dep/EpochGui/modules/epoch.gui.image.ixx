@@ -110,6 +110,13 @@ export namespace epochengine::gui_lib::image
         std::string_view path,
         const ImageLimits& limits = {});
 
+    // Replicates source edges into a texture gutter so filtered atlas sampling
+    // cannot bleed neighboring entries into a sprite.
+    [[nodiscard]] ImageResult extrude_edge_gutter(
+        const Image& source,
+        std::uint32_t gutter,
+        const ImageLimits& limits = {});
+
     [[nodiscard]] RasterImageLayout make_raster_image_layout(
         const Image& image,
         Rect viewport,

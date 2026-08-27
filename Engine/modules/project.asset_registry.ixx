@@ -61,12 +61,13 @@ export namespace epochengine::project_assets
         material,
         script,
         binary,
-        tilemap
+        tilemap,
+        gui_document
     };
 
     [[nodiscard]] constexpr bool valid(AssetKind kind) noexcept
     {
-        return kind > AssetKind::invalid && kind <= AssetKind::tilemap;
+        return kind > AssetKind::invalid && kind <= AssetKind::gui_document;
     }
 
     [[nodiscard]] constexpr std::string_view asset_kind_name(
@@ -84,6 +85,7 @@ export namespace epochengine::project_assets
         case AssetKind::script: return "script";
         case AssetKind::binary: return "binary";
         case AssetKind::tilemap: return "tilemap";
+        case AssetKind::gui_document: return "gui_document";
         case AssetKind::invalid: break;
         }
         return "invalid";

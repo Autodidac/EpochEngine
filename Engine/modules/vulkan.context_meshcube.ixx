@@ -61,22 +61,19 @@ namespace epochengine::vulkancontext
     inline constexpr std::uint32_t kArcadeScreenIndexCount = 6u;
     static_assert(kArcadeScreenVertexCount == 4u && kArcadeScreenIndexCount == 6u);
 
-    namespace
+    [[nodiscard]] inline float preview_color_to_vulkan(float value) noexcept
     {
-        [[nodiscard]] inline float preview_color_to_vulkan(float value) noexcept
-        {
-            return std::pow((std::clamp)(value, 0.0f, 1.0f), 2.2f);
-        }
+        return std::pow((std::clamp)(value, 0.0f, 1.0f), 2.2f);
+    }
 
-        [[nodiscard]] inline std::array<float, 3> preview_color_to_vulkan(
-            const epochengine::previewgrid::Vec3& color) noexcept
-        {
-            return {
-                preview_color_to_vulkan(color.x),
-                preview_color_to_vulkan(color.y),
-                preview_color_to_vulkan(color.z)
-            };
-        }
+    [[nodiscard]] inline std::array<float, 3> preview_color_to_vulkan(
+        const epochengine::previewgrid::Vec3& color) noexcept
+    {
+        return {
+            preview_color_to_vulkan(color.x),
+            preview_color_to_vulkan(color.y),
+            preview_color_to_vulkan(color.z)
+        };
     }
 
     // Keep data local to this partition (NOT exported as symbols)
@@ -85,7 +82,8 @@ namespace epochengine::vulkancontext
     {
         std::vector<Vertex> out{};
         const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
-        const auto source = epochengine::previewgrid::grid_vertices();
+        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
+        const auto& source = gridGeometry->vertices;
         const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
         const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
@@ -151,8 +149,9 @@ namespace epochengine::vulkancontext
     {
         std::vector<std::uint16_t> out{};
         const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
-        const auto sourceVertices = epochengine::previewgrid::grid_vertices();
-        const auto sourceIndices = epochengine::previewgrid::grid_indices();
+        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
+        const auto& sourceVertices = gridGeometry->vertices;
+        const auto& sourceIndices = gridGeometry->indices;
         const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
         const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
         const bool hasArcadeScreen =

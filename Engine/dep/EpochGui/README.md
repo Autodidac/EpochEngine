@@ -2,6 +2,10 @@
 
 EpochGui is a portable C++23 GUI layout, input-adapter, raster-data, and geometry library used by EpochEngine and standalone applications.
 
+The current bundled and standalone source release is `v0.89.27`. EpochEngine
+mirrors this tree under `Engine/dep/EpochGui`; hosted publication verifies that
+the standalone repository and bundled tree remain identical.
+
 It owns reusable GUI state, layout calculations, hit testing, text-control behavior, docking metadata, an embedded fallback bitmap font, bounded PPM decoding, and optional renderer-neutral helpers. It does not own editor/runtime code, platform windows, OpenGL, or another rendering backend.
 
 ## Modules
@@ -16,8 +20,9 @@ The core module provides:
 - Loading-screen layout
 - Selectable rows and segmented controls
 - Popup placement and state
-- Docking and dockable-window state
+- Docking, dock guides, context insertion grids, and dockable-window state
 - Panel-host state
+- Reusable node-graph, system, tile, and virtualized asset-grid workspaces
 - Text editing, selection, navigation, and scrolling
 
 ```cpp
@@ -215,6 +220,10 @@ include/gui/                           Compatibility headers
 src/epochgui/                          Backend-neutral implementations
 tests/font_tests.cpp                   Embedded-font tests
 tests/image_tests.cpp                  PPM decoder and image-layout tests
+tests/dock_layout_tests.cpp            Dock-context grid and insertion tests
+tests/node_graph_workspace_tests.cpp   Node-graph workspace tests
+tests/system_workspace_tests.cpp       Systems workspace tests
+tests/asset_grid_tests.cpp             Virtualized asset-grid tests
 tests/text_control_tests.cpp           Core text-control tests
 tests/rounded_rect_tests.cpp           Optional rounded-geometry tests
 tests/input_tests.cpp                  Optional fallback-input tests

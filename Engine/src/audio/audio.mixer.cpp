@@ -87,11 +87,11 @@ namespace epochengine::audio
                 hard_maximum_sources_per_mix);
             limits.maximum_frames_per_clip = (std::clamp)(
                 limits.maximum_frames_per_clip,
-                1ull,
+                std::uint64_t{ 1 },
                 hard_maximum_frames_per_clip);
             limits.maximum_resident_samples = (std::clamp)(
                 limits.maximum_resident_samples,
-                1ull,
+                std::uint64_t{ 1 },
                 hard_maximum_resident_samples);
             limits.maximum_output_frames_per_mix = (std::clamp)(
                 limits.maximum_output_frames_per_mix,
@@ -697,7 +697,9 @@ namespace epochengine::audio
         const AudioMixRequest& request)
     {
         std::scoped_lock lock{ implementation_->mutex };
-        saturating_add(implementation_->cumulative.mix_requests, 1ull);
+        saturating_add(
+            implementation_->cumulative.mix_requests,
+            std::uint64_t{ 1 });
 
         MixedAudioFrame result{
             .code = AudioMixerCode::invalid_frame_plan,
@@ -720,7 +722,7 @@ namespace epochengine::audio
             result.code = validation;
             saturating_add(
                 implementation_->cumulative.rejected_mix_requests,
-                1ull);
+                std::uint64_t{ 1 });
             return result;
         }
 
@@ -850,12 +852,14 @@ namespace epochengine::audio
                     static_cast<std::size_t>(output_frame) * 2u;
                 accumulation[output_offset] += left * left_gain;
                 accumulation[output_offset + 1] += right * right_gain;
-                saturating_add(result.metrics.source_frames_sampled, 1ull);
+                saturating_add(
+                    result.metrics.source_frames_sampled,
+                    std::uint64_t{ 1 });
                 if (fraction > 0.0 && second_frame != first_frame)
                 {
                     saturating_add(
                         result.metrics.interpolated_source_frames,
-                        1ull);
+                        std::uint64_t{ 1 });
                 }
             }
         }
@@ -866,7 +870,9 @@ namespace epochengine::audio
             const double mixed = accumulation[index];
             const double clipped = (std::clamp)(mixed, -1.0, 1.0);
             if (clipped != mixed)
-                saturating_add(result.metrics.clipped_output_samples, 1ull);
+                saturating_add(
+                    result.metrics.clipped_output_samples,
+                    std::uint64_t{ 1 });
             result.interleaved_samples[index] = static_cast<float>(clipped);
         }
 
@@ -945,7 +951,9 @@ namespace epochengine::audio
         const std::uint64_t resets = implementation_->cumulative.resets;
         implementation_->cumulative = {};
         implementation_->cumulative.resets = resets;
-        saturating_add(implementation_->cumulative.resets, 1ull);
+        saturating_add(
+            implementation_->cumulative.resets,
+            std::uint64_t{ 1 });
         implementation_->refresh_residency_metrics();
     }
 

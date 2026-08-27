@@ -72,6 +72,96 @@ namespace epochengine::win32
 
 export namespace epochengine::sdlcontext::state
 {
+    struct PresentationDimensions
+    {
+        int logicalWidth{};
+        int logicalHeight{};
+        int framebufferWidth{};
+        int framebufferHeight{};
+
+        [[nodiscard]] constexpr bool valid() const noexcept
+        {
+            return logicalWidth > 0
+                && logicalHeight > 0
+                && framebufferWidth > 0
+                && framebufferHeight > 0;
+        }
+
+        [[nodiscard]] constexpr float pixel_scale_x() const noexcept
+        {
+            return valid()
+                ? static_cast<float>(framebufferWidth)
+                    / static_cast<float>(logicalWidth)
+                : 0.0f;
+        }
+
+        [[nodiscard]] constexpr float pixel_scale_y() const noexcept
+        {
+            return valid()
+                ? static_cast<float>(framebufferHeight)
+                    / static_cast<float>(logicalHeight)
+                : 0.0f;
+        }
+    };
+
+    [[nodiscard]] constexpr PresentationDimensions make_presentation_dimensions(
+        int logicalWidth,
+        int logicalHeight,
+        int framebufferWidth,
+        int framebufferHeight) noexcept
+    {
+        return {
+            logicalWidth,
+            logicalHeight,
+            framebufferWidth,
+            framebufferHeight};
+    }
+
+    [[nodiscard]] constexpr PresentationDimensions
+        make_display_scaled_presentation_dimensions(
+            int framebufferWidth,
+            int framebufferHeight,
+            float displayScale) noexcept
+    {
+        if (framebufferWidth <= 0
+            || framebufferHeight <= 0
+            || displayScale <= 0.0f
+            || displayScale > 16.0f)
+        {
+            return {};
+        }
+
+        return make_presentation_dimensions(
+            static_cast<int>(
+                static_cast<float>(framebufferWidth) / displayScale + 0.5f),
+            static_cast<int>(
+                static_cast<float>(framebufferHeight) / displayScale + 0.5f),
+            framebufferWidth,
+            framebufferHeight);
+    }
+
+    [[nodiscard]] constexpr int normalize_presented_coordinate(
+        int coordinate,
+        int logicalExtent,
+        int framebufferExtent) noexcept
+    {
+        if (logicalExtent <= 0
+            || framebufferExtent <= 0
+            || logicalExtent == framebufferExtent)
+        {
+            return coordinate;
+        }
+
+        const long long scaled =
+            static_cast<long long>(coordinate)
+            * static_cast<long long>(logicalExtent);
+        const long long half = framebufferExtent / 2;
+        return static_cast<int>(
+            scaled >= 0
+                ? (scaled + half) / framebufferExtent
+                : (scaled - half) / framebufferExtent);
+    }
+
     struct SDL3State
     {
         SDL3State()
@@ -115,6 +205,8 @@ export namespace epochengine::sdlcontext::state
         epochengine::timing::Timer fpsTimer = epochengine::timing::createTimer(1.0);
         int frameCount = 0;
 
+        // SDL's process-wide subsystem state is serialized by runtime_api_mutex().
+
 #if defined(_WIN32)
     private:
         epochengine::win32::WNDPROC oldWndProc_ = nullptr;
@@ -147,6 +239,7 @@ export namespace epochengine::sdlcontext::state
     };
 
     SDL3State& get_sdl_state() noexcept;
+    std::recursive_mutex& runtime_api_mutex() noexcept;
 }
 
 namespace epochengine::sdlcontext::state
@@ -155,6 +248,12 @@ namespace epochengine::sdlcontext::state
     {
         static SDL3State state{};
         return state;
+    }
+
+    inline std::recursive_mutex& runtime_api_mutex() noexcept
+    {
+        static std::recursive_mutex mutex{};
+        return mutex;
     }
 }
 

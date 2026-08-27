@@ -12,6 +12,7 @@ module;
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 module project.actor2d_runtime;
 
@@ -134,6 +135,23 @@ namespace epochengine::project_actor2d
         [[nodiscard]] std::vector<physics::StaticAabbPrimitive2D>
         solver_collision(std::span<const StaticCollision> collision)
         {
+            const auto solverKind = [](StaticCollisionKind kind)
+            {
+                switch (kind)
+                {
+                case StaticCollisionKind::solid_box:
+                    return physics::StaticPrimitive2DKind::solid_box;
+                case StaticCollisionKind::one_way_up:
+                    return physics::StaticPrimitive2DKind::one_way_up;
+                case StaticCollisionKind::slope_up_right:
+                    return physics::StaticPrimitive2DKind::slope_up_right;
+                case StaticCollisionKind::slope_down_right:
+                    return physics::StaticPrimitive2DKind::slope_down_right;
+                case StaticCollisionKind::unsupported:
+                    break;
+                }
+                return physics::StaticPrimitive2DKind::solid_box;
+            };
             std::vector<physics::StaticAabbPrimitive2D> result{};
             result.reserve(collision.size());
             for (const StaticCollision& surface : collision)
@@ -147,7 +165,8 @@ namespace epochengine::project_actor2d
                         .maximum = {
                             surface.bounds.x + surface.bounds.width,
                             surface.bounds.y + surface.bounds.height}},
-                    .filter = {surface.layer_bits, surface.mask_bits}
+                    .filter = {surface.layer_bits, surface.mask_bits},
+                    .kind = solverKind(surface.kind)
                 });
             }
             return result;
@@ -322,10 +341,15 @@ namespace epochengine::project_actor2d
         identities.reserve(collision.size());
         for (const StaticCollision& surface : collision)
         {
+            const bool supportedKind =
+                surface.kind == StaticCollisionKind::solid_box
+                || surface.kind == StaticCollisionKind::one_way_up
+                || surface.kind == StaticCollisionKind::slope_up_right
+                || surface.kind == StaticCollisionKind::slope_down_right;
             if (surface.stable_id == 0u || !valid_rect(surface.bounds)
                 || surface.layer_bits == 0u || surface.mask_bits == 0u
                 || surface.sensor
-                || surface.kind != StaticCollisionKind::solid_box
+                || !supportedKind
                 || !identities.insert(surface.stable_id).second)
             {
                 return ResultCode::invalid_collision;

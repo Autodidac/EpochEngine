@@ -21,7 +21,7 @@ namespace epochengine
             .kind = EditorApplicationKind::PlantLab,
             .id = "epoch.plant_lab",
             .display_name = "Plant Lab",
-            .project_id = "plantlab",
+            .project_id = {},
             .scene_id = "editor:plant_lab",
             .scene_source_path = "Engine/src/editor/editor.plant_lab.cpp",
             .purpose = "Procedural plant design, temporal growth authoring, preview, and Forest Factory asset output.",
@@ -31,7 +31,6 @@ namespace epochengine
             .surface_mask = editor_surface_mask(
                 EditorApplicationSurface::PlantLab,
                 EditorApplicationSurface::Assets,
-                EditorApplicationSurface::Project,
                 EditorApplicationSurface::Timeline),
             .panes = {
                 .outliner = true,
@@ -60,13 +59,9 @@ namespace epochengine
             }
         };
 
-        auto profile = forest::default_profile(forest::ForestPreset::Tree);
-        profile.config.targetHeightMeters = 4.2f;
-        profile.config.trunkRadiusMeters = 0.09f;
-        profile.branch.levels = 4u;
-        profile.branch.branchLengthMeters = 0.92f;
-        profile.branch.startHeightMeters = 0.24f;
-        const auto geometry = forest::build_preview_geometry(profile);
+        auto document = forest::make_default_plant_lab_document();
+        const auto compiledAsset = forest::compile_forest_asset(document);
+        const auto& geometry = compiledAsset.preview;
 
         constexpr float preview_scale = 0.58f;
         const auto scaled_position = [](const auto value) noexcept

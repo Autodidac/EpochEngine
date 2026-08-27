@@ -1,9 +1,6 @@
 module;
 
 #include <include/engine.config.hpp>
-#if defined(_MSC_VER)
-#include "opengl.frame_capture.hpp"
-#endif
 #include "opengl.context_process_impl.hpp"
 #include "opengl.scene_preview.hpp"
 
@@ -15,10 +12,8 @@ import core.context;
 import context.commandqueue;
 import context.multiplexer;
 import context.type;
+import opengl.textures;
 import gui.engine;
-#if !defined(_MSC_VER)
-import opengl.capture;
-#endif
 
 namespace epochengine::openglcontext
 {
@@ -53,12 +48,21 @@ namespace epochengine::openglcontext
         const bool overlayPriority = ctx->gui_overlay_priority();
         (void)queue.drain();
         if (!overlayPriority)
+        {
+            const bool spriteBatch =
+                opengltextures::begin_sprite_batch(ctx.get());
             (void)gui::render_deferred_batch(ctx.get());
+            if (spriteBatch)
+                opengltextures::end_sprite_batch();
+        }
         openglscene::render_scene_preview(ctx, framebufferWidth, framebufferHeight);
         (void)queue.drain();
+        const bool spriteBatch =
+            opengltextures::begin_sprite_batch(ctx.get());
         (void)gui::render_deferred_batch(ctx.get());
         (void)gui::render_top_layer_batch(ctx.get());
-        openglcapture::capture_frame_if_requested(framebufferWidth, framebufferHeight, windowId);
+        if (spriteBatch)
+            opengltextures::end_sprite_batch();
     }
 
     bool opengl_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)

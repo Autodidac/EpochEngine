@@ -213,7 +213,14 @@ namespace epochengine::gui_lib
                         filtered.push_back(value);
                     continue;
                 }
-                if (value == '\t' && !options.accept_tab)
+                if (value == '\t')
+                {
+                    if (options.accept_tab)
+                        filtered.push_back(value);
+                    continue;
+                }
+                const unsigned char byte = static_cast<unsigned char>(value);
+                if (byte < 0x20U || byte == 0x7fU)
                     continue;
                 filtered.push_back(value);
             }

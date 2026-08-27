@@ -31,36 +31,31 @@
 module;
 
 #include <string>
-#include <utility>
 #include <vector>
 
 export module ecs.components;
 
 import core.logger; // LogLevel lives here
+import core.math;
 import core.timer;   // Timer lives here
 
 export namespace epochengine::ecs
 {
     // ─── Position ─────────────────────────────────────────────────────────
-    struct Position
-    {
-        float x{ 0.0f };
-        float y{ 0.0f };
-    };
+    struct PositionDomain final {};
+    struct VelocityDomain final {};
+
+    using Position = core::math::Vector2<float, PositionDomain>;
 
     // ─── Velocity ─────────────────────────────────────────────────────────
-    struct Velocity
-    {
-        float dx{ 0.0f };
-        float dy{ 0.0f };
-    };
+    using Velocity = core::math::Vector2<float, VelocityDomain>;
 
     // ─── History ──────────────────────────────────────────────────────────
     // Each entity that needs rewind support keeps its past states here.
     // (Still trivial; if you later need time-stamped state, store time + state.)
     struct History
     {
-        std::vector<std::pair<float, float>> states;
+        std::vector<Position> states;
     };
 
     // ─── LoggerComponent ──────────────────────────────────────────────────

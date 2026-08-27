@@ -1,46 +1,75 @@
 {
   "$schema": "https://epoch.local/schemas/ai_control_loop.schema.json",
-  "name": "epoch_operator_model_tool_harness",
-  "status": "mcp_protocol_foundation_manual_dispatch",
-  "summary": "Operator-selected model plus bounded Epoch-owned project and engine tools. No internal model, model training, hidden watcher, or autonomous source write-through exists.",
+  "name": "epoch_operator_gated_development_harness",
+  "status": "policy_contract_not_live_autonomy",
+  "summary": "Operator-selected external model plus explicit planner, sandbox builder, trusted verifier, and human gate stages. No internal model, hidden watcher, automatic source application, or model self-attestation exists.",
   "model_runtime": {
     "ownership": "operator-selected external asset",
-    "transports": ["openai-compatible-local-api", "direct-llama-cli"],
+    "transports": [
+      "openai-compatible-local-api",
+      "direct-llama-cli"
+    ],
     "automatic_selection": false,
     "internal_training": false,
     "starts_server": false
   },
+  "source_context": {
+    "request_protocol": "EPOCH_SOURCE_CONTEXT_REQUEST_V1",
+    "maximum_paths": 4,
+    "path_review_reads_file_bytes": false,
+    "path_review_transmits_file_bytes": false,
+    "approved_byte_handoff_implemented": true,
+    "approved_handoff_scope": "reviewed_paths_only",
+    "approved_handoff_budget_bytes": 188416,
+    "stale_objective_rejected": true,
+    "directory_scan": false,
+    "proposal_protocol": "EPOCH_SOURCE_PROPOSAL_V1",
+    "exact_existing_file_evidence_required": true
+  },
   "mcp": {
     "transport": "in-process-registry",
     "network_listener": false,
-    "implemented": ["tool-descriptors", "capabilities", "calls", "results", "errors", "evidence", "cancellation", "budgets", "approval-validation"],
-    "pending": ["model-tool-call-parser", "multi-step-dispatch", "stdio-adapter"]
+    "implemented": [
+      "tool-descriptors",
+      "capabilities",
+      "calls",
+      "results",
+      "errors",
+      "evidence",
+      "cancellation",
+      "budgets",
+      "approval-validation",
+      "strict-single-call-active-project-tool-parser"
+    ],
+    "pending": [
+      "autonomous-multi-step-dispatch",
+      "stdio-adapter"
+    ]
   },
   "loop": [
     {
       "stage": "planner",
-      "input": "operator request plus active project and evidence",
-      "output": "bounded proposed tool calls"
-    },
-    {
-      "stage": "executor",
-      "input": "validated call plus required operator approval",
-      "output": "one tool result and evidence attachments"
+      "authority": "selected model proposes; operator scopes",
+      "input": "operator objective, current architecture contract, and explicitly approved evidence",
+      "output": "one bounded candidate or source-context request"
     },
     {
       "stage": "builder",
-      "input": "approved project or engine change",
-      "output": "compiler log and artifact evidence"
+      "authority": "guard permit plus exact sandbox transaction",
+      "input": "reviewed proposal digest and single-use permit",
+      "output": "disposable sandbox postimage and transaction evidence"
     },
     {
       "stage": "verifier",
-      "input": "tool results, tests, captures, diagnostics, and diffs",
-      "output": "pass, fail, cancellation, or blocked evidence"
+      "authority": "trusted host adapters only",
+      "input": "compiler, tests, analyzer, sanitizer, and optional visual evidence",
+      "output": "typed pass, repair, cancellation, or blocked evidence"
     },
     {
       "stage": "gate",
-      "input": "verifier output and operator review",
-      "output": "accept, revise, or discard"
+      "authority": "operator and risk-selected reviewer",
+      "input": "exact diff plus trusted verifier evidence",
+      "output": "stage exact live-promotion digest, request repair, or block"
     }
   ],
   "implemented_hooks": [
@@ -50,14 +79,30 @@
     "script build/run tool harness",
     "generated project self-test",
     "structured tool trace",
-    "bounded session packet",
-    "visible diagnostics"
+    "visible diagnostics",
+    "strict source-context request and proposal codecs",
+    "operator-approved reviewed-path source context handoff",
+    "disposable exact-content source sandbox",
+    "risk-classified iteration state-machine contract",
+    "two-action verified live-source promotion",
+    "strict single-call active-project tool planning",
+    "operator-reviewed model candidate",
+    "single-owner asynchronous Debug/Release compiler/contract plus asset-light HeadlessCI build/run evidence adapters",
+    "operator-approved full project-profile, generated-child, and AI-gate validation adapter"
+  ],
+  "pending_hooks": [
+    "additional test-suite evidence adapters",
+    "static-analyzer evidence adapter",
+    "sanitizer evidence adapter",
+    "architecture-review evidence adapter",
+    "visual-harness evidence adapter",
+    "frontier-review evidence adapter"
   ],
   "policy": [
     "Never allow blind repo write-through from planner or executor output.",
-    "Normal chat is not automatically captured or treated as training data.",
-    "Every write, child process, engine-source edit, and network-sensitive action requires the declared capability and visible approval.",
+    "Normal chat, build output, and tool output are not automatically captured or treated as training data.",
+    "Every write, child process, engine-source edit, and network-sensitive action requires declared capability and visible approval.",
     "No model may commit, push, release, start a listener, or grant itself permission.",
-    "Tool completion requires structured result and evidence, not model confidence."
+    "Tool completion requires structured trusted-host evidence, not model confidence."
   ]
 }

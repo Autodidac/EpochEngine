@@ -238,6 +238,73 @@ export namespace epochengine::openglcontext::PlatformGL
         return nullptr;
 #endif
     }
+    struct SwapIntervalStatus final
+    {
+        bool available{};
+        int interval{};
+    };
+
+
+    [[nodiscard]] inline bool set_swap_interval(int interval) noexcept
+    {
+#if defined(_WIN32)
+        using WglSwapIntervalProc = BOOL (WINAPI*)(int);
+        const auto setInterval = reinterpret_cast<WglSwapIntervalProc>(
+            get_proc_address("wglSwapIntervalEXT"));
+        return setInterval && setInterval(interval) == TRUE;
+#elif defined(__linux__)
+        using GlxSwapIntervalExtProc =
+            void (*)(Display*, GLXDrawable, int);
+        if (const auto setInterval =
+                reinterpret_cast<GlxSwapIntervalExtProc>(
+                    get_proc_address("glXSwapIntervalEXT")))
+        {
+            setInterval(
+                ::glXGetCurrentDisplay(),
+                ::glXGetCurrentDrawable(),
+                interval);
+            return true;
+        }
+
+        using GlxSwapIntervalMesaProc = int (*)(unsigned int);
+        if (interval >= 0)
+        {
+            if (const auto setInterval =
+                    reinterpret_cast<GlxSwapIntervalMesaProc>(
+                        get_proc_address("glXSwapIntervalMESA")))
+            {
+                return setInterval(static_cast<unsigned int>(interval)) == 0;
+            }
+        }
+
+        using GlxSwapIntervalSgiProc = int (*)(int);
+        if (interval > 0)
+            if (const auto setInterval =
+                    reinterpret_cast<GlxSwapIntervalSgiProc>(
+                        get_proc_address("glXSwapIntervalSGI")))
+                return setInterval(interval) == 0;
+        return false;
+#else
+        (void)interval;
+        return false;
+#endif
+    }
+    [[nodiscard]] inline SwapIntervalStatus
+        query_swap_interval() noexcept
+    {
+#if defined(_WIN32)
+        using WglGetSwapIntervalProc = int (WINAPI*)();
+        const auto getInterval =
+            reinterpret_cast<WglGetSwapIntervalProc>(
+                get_proc_address("wglGetSwapIntervalEXT"));
+        return getInterval
+            ? SwapIntervalStatus{true, getInterval()}
+            : SwapIntervalStatus{};
+#else
+        return {};
+#endif
+    }
+
 
     [[nodiscard]] inline bool load_raylib_gl_functions() noexcept
     {

@@ -152,6 +152,37 @@ namespace epochengine::gui
         Vec2 size{};
     };
 
+    export struct DragSurfaceState
+    {
+        Vec2 press_position{};
+        bool pending{};
+        bool dragging{};
+    };
+
+    export struct DragSurfaceOptions
+    {
+        Vec2 position{};
+        Vec2 size{};
+        float hit_padding{6.0f};
+        float minimum_hit_extent{32.0f};
+        float drag_threshold{4.0f};
+        bool enabled{true};
+    };
+
+    export struct DragSurfaceResult
+    {
+        Vec2 delta{};
+        bool hovered{};
+        bool pressed{};
+        bool dragging{};
+        bool released{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return dragging || released;
+        }
+    };
+
     export struct EditBoxResult
     {
         bool active{};
@@ -176,6 +207,23 @@ namespace epochengine::gui
         bool selected_all{};
     };
 
+    export struct ConsoleWindowActionSpec
+    {
+        std::string_view label{};
+        float width{};
+        bool enabled{ true };
+        bool activate_on_press{};
+    };
+
+    export enum class TextMessageRole : std::uint8_t
+    {
+        neutral,
+        user,
+        assistant,
+        system,
+        error
+    };
+
     export struct ConsoleWindowOptions
     {
         std::string_view title{};
@@ -183,6 +231,7 @@ namespace epochengine::gui
         Vec2 size{};
 
         const std::vector<std::string>& lines;
+        std::span<const TextMessageRole> line_roles{};
         std::size_t max_visible_lines{ 200 };
 
         std::string* input{ nullptr };
@@ -192,12 +241,30 @@ namespace epochengine::gui
         bool send_button_enabled{ true };
         float send_button_width{ 96.0f };
         std::string_view send_button_label{ "Send >" };
+        std::string_view task_label{};
+        std::string_view task_value{};
+        std::string* task_edit_buffer{ nullptr };
+        std::size_t task_max_input_chars{ 1024 };
+        bool task_editing{};
+        std::span<const ConsoleWindowActionSpec> task_actions{};
+        float task_action_gap{ 6.0f };
+        std::span<const ConsoleWindowActionSpec> header_actions{};
+        float header_action_gap{ 6.0f };
+        std::span<const ConsoleWindowActionSpec> message_actions{};
+        float message_action_gap{ 6.0f };
+        std::span<const ConsoleWindowActionSpec> footer_actions{};
+        float footer_action_gap{ 6.0f };
     };
 
     export struct ConsoleWindowResult
     {
         EditBoxResult input{};
+        EditBoxResult task_input{};
+        std::optional<std::size_t> task_action_index{};
         bool send_clicked{};
+        std::optional<std::size_t> header_action_index{};
+        std::optional<std::size_t> message_action_index{};
+        std::optional<std::size_t> footer_action_index{};
     };
 
     export struct ScrollTextPanelOptions
@@ -205,6 +272,7 @@ namespace epochengine::gui
         std::string_view id{};
         Vec2 size{};
         const std::vector<std::string>& lines;
+        std::span<const TextMessageRole> line_roles{};
         std::size_t max_line_chars{ 768 };
         bool selectable{ true };
         bool stick_to_bottom{ true };
@@ -225,6 +293,7 @@ namespace epochengine::gui
         float content_height{ 0.0f };
         bool draw_background{ false };
         bool show_scrollbar{ true };
+        bool capture_wheel{ true };
     };
 
     export struct ScrollAreaResult
@@ -300,6 +369,68 @@ namespace epochengine::gui
         top,
         bottom,
         center
+    };
+
+    export enum class DockGuideTarget : std::uint8_t
+    {
+        none,
+        left_tabs,
+        right_tabs,
+        bottom_left_tabs,
+        bottom_right_tabs,
+        left_context,
+        right_context,
+        float_window
+    };
+
+    export struct DockGuideOptions
+    {
+        WidgetBounds guide_bounds{};
+        WidgetBounds left_tabs_preview{};
+        WidgetBounds right_tabs_preview{};
+        WidgetBounds bottom_left_tabs_preview{};
+        WidgetBounds bottom_right_tabs_preview{};
+        WidgetBounds left_context_preview{};
+        WidgetBounds right_context_preview{};
+        WidgetBounds floating_preview{};
+        Vec2 pointer{};
+        float guide_extent{ 94.0f };
+        float guide_gap{ 8.0f };
+        bool allow_side_tabs{ true };
+        bool allow_bottom_tabs{ true };
+        bool allow_contexts{};
+        bool allow_float{ true };
+        bool center_context_guides_in_previews{};
+    };
+
+    export struct DockGuide
+    {
+        DockGuideTarget target{ DockGuideTarget::none };
+        WidgetBounds target_bounds{};
+        WidgetBounds preview_bounds{};
+        bool hovered{};
+    };
+
+    export struct DockGuideLayout
+    {
+        DockGuide guides[7]{};
+        std::uint32_t count{};
+        DockGuideTarget hovered_target{ DockGuideTarget::none };
+        WidgetBounds hovered_preview{};
+    };
+
+    export struct DockGuideOverlayOptions
+    {
+        std::string_view moving_label{};
+        std::string_view left_tabs_label{ "Left Tabs" };
+        std::string_view right_tabs_label{ "Right Tabs" };
+        std::string_view bottom_left_tabs_label{ "Bottom Left" };
+        std::string_view bottom_right_tabs_label{ "Bottom Right" };
+        std::string_view left_context_label{ "Left Context" };
+        std::string_view right_context_label{ "Right Context" };
+        std::string_view floating_label{ "Floating Window" };
+        WidgetBounds floating_preview{};
+        bool show_floating_preview{};
     };
 
     export enum class DockableWindowMode : std::uint8_t
@@ -411,10 +542,289 @@ namespace epochengine::gui
         bool active{};
     };
 
+    export enum class ImageFit : std::uint8_t
+    {
+        Stretch,
+        Contain
+    };
+
+    export struct ImageBoxOptions
+    {
+        std::string_view id{};
+        SpriteHandle sprite{};
+        Vec2 size{};
+        Vec2 source_size{};
+        std::string_view caption{};
+        ImageFit fit{ ImageFit::Contain };
+        bool interactive{};
+        bool selected{};
+        bool enabled{ true };
+    };
+
+    export struct ImageBoxResult
+    {
+        WidgetBounds bounds{};
+        WidgetBounds image_bounds{};
+        bool hovered{};
+        bool clicked{};
+        bool valid{};
+    };
+
+    export struct ImageButtonOptions
+    {
+        std::string_view id{};
+        SpriteHandle sprite{};
+        Vec2 size{};
+        Vec2 source_size{};
+        ImageFit fit{ ImageFit::Contain };
+        bool selected{};
+        bool enabled{ true };
+    };
+
+    export enum class AssetGridItemKind : std::uint8_t
+    {
+        Generic,
+        Folder,
+        Image,
+        Texture,
+        Material,
+        Model,
+        Audio,
+        Scene,
+        Document
+    };
+
+    export struct AssetGridItem
+    {
+        std::uint64_t id{};
+        std::string_view label{};
+        std::string_view detail{};
+        std::string_view search_terms{};
+        SpriteHandle image{};
+        Vec2 source_size{};
+        AssetGridItemKind kind{ AssetGridItemKind::Generic };
+        bool enabled{ true };
+    };
+
+    export inline constexpr std::size_t asset_grid_maximum_context_actions = 12u;
+
+    export struct ContextMenuActionSpec
+    {
+        std::string_view id{};
+        std::string_view label{};
+        bool enabled{ true };
+    };
+
+    export struct AssetGridOptions
+    {
+        std::string_view id{};
+        std::span<const AssetGridItem> items{};
+        std::span<const ContextMenuActionSpec> context_actions{};
+        std::string_view query{};
+        Vec2 size{ 640.0f, 360.0f };
+        Vec2 tile_size{ 144.0f, 164.0f };
+        Vec2 gap{ 8.0f, 8.0f };
+        Vec2 padding{ 8.0f, 8.0f };
+        float image_height{ 108.0f };
+        float scroll_offset{};
+        std::optional<std::uint64_t> selected_id{};
+        bool clear_selection_on_empty_press{ true };
+        bool enabled{ true };
+    };
+
+    export struct AssetGridResult
+    {
+        WidgetBounds bounds{};
+        std::optional<std::uint64_t> selected_id{};
+        std::optional<std::uint64_t> activated_id{};
+        std::optional<std::uint64_t> context_target_id{};
+        std::optional<std::string> selected_action_id{};
+        std::vector<std::uint64_t> visible_ids{};
+        std::size_t matched_count{};
+        std::size_t visible_count{};
+        float content_height{};
+        float scroll_offset{};
+        bool selection_changed{};
+        bool wheel_scrolled{};
+        bool context_menu_open{};
+        bool context_actions_truncated{};
+        bool truncated{};
+        bool valid{};
+    };
+
+    export enum class NodeGraphNodeRole : std::uint8_t
+    {
+        document,
+        container,
+        control,
+        action
+    };
+
+    export struct NodeGraphCanvasNode
+    {
+        std::uint64_t id{};
+        std::string_view title{};
+        std::string_view subtitle{};
+        Vec2 position{};
+        Vec2 size{ 132.0f, 48.0f };
+        NodeGraphNodeRole role{ NodeGraphNodeRole::control };
+        bool selected{};
+        bool enabled{ true };
+    };
+
+    export struct NodeGraphCanvasEdge
+    {
+        std::uint64_t id{};
+        std::uint64_t source_node{};
+        std::uint64_t target_node{};
+        Vec2 source{};
+        Vec2 target{};
+        bool selected{};
+        bool enabled{ true };
+    };
+
+    export struct NodeGraphCanvasOptions
+    {
+        std::string_view id{};
+        Vec2 size{ 480.0f, 300.0f };
+        std::span<const NodeGraphCanvasNode> nodes{};
+        std::span<const NodeGraphCanvasEdge> edges{};
+        float grid_step{ 24.0f };
+        bool interactive{ true };
+        bool allow_node_movement{ true };
+        bool allow_connections{};
+        bool allow_disconnection{};
+        bool fit_to_content{};
+        bool reset_view{};
+        bool enabled{ true };
+    };
+
+    export struct NodeGraphCanvasNodeMove
+    {
+        std::uint64_t id{};
+        Vec2 delta{};
+    };
+
+    export struct NodeGraphCanvasConnection
+    {
+        std::uint64_t source_node{};
+        std::uint64_t target_node{};
+    };
+
+    export struct NodeGraphCanvasResult
+    {
+        WidgetBounds bounds{};
+        std::optional<std::uint64_t> clicked_node{};
+        std::optional<std::uint64_t> clicked_edge{};
+        std::vector<std::uint64_t> selected_nodes{};
+        std::vector<std::uint64_t> disconnected_edges{};
+        std::vector<NodeGraphCanvasNodeMove> moved_nodes{};
+        std::optional<NodeGraphCanvasConnection> connection{};
+        Vec2 pan{};
+        float zoom{ 1.0f };
+        bool hovered{};
+        bool clicked_background{};
+        bool selection_changed{};
+        bool view_changed{};
+        bool layout_changed{};
+        bool valid{};
+    };
+
+    export struct SliderOptions
+    {
+        std::string_view id{};
+        std::string_view label{};
+        float minimum{};
+        float maximum{ 1.0f };
+        float value{};
+        float step{ 0.01f };
+        Vec2 size{ 180.0f, 28.0f };
+        bool enabled{ true };
+    };
+
+    export struct SliderResult
+    {
+        WidgetBounds bounds{};
+        float value{};
+        bool hovered{};
+        bool changed{};
+    };
+
+    export inline constexpr std::size_t runtime_surface_batch_maximum_entries = 1'024u;
+    export inline constexpr std::size_t runtime_surface_identifier_maximum_bytes = 240u;
+    export inline constexpr std::uint32_t runtime_surface_maximum_extent = 4096u;
+    export inline constexpr std::size_t runtime_surface_batch_maximum_rgba_bytes =
+        64u * 1024u * 1024u;
+
+    export struct RuntimeSurfaceDescriptor
+    {
+        std::string_view id{};
+        std::span<const std::uint8_t> rgba_pixels{};
+        std::uint32_t width{};
+        std::uint32_t height{};
+    };
+
+    export enum class RuntimeSurfaceBatchStatus : std::uint8_t
+    {
+        Ready,
+        Empty,
+        BatchLimitExceeded,
+        InvalidDescriptor,
+        DuplicateIdentifier,
+        ByteBudgetExceeded,
+        ResourceUnavailable,
+        AtlasMutationFailed,
+        UploadFailed
+    };
+
+    export struct RuntimeSurfaceAtlasResult
+    {
+        std::vector<SpriteHandle> handles{};
+        std::size_t descriptor_count{};
+        std::size_t accepted_count{};
+        std::size_t added_count{};
+        std::size_t replaced_count{};
+        std::size_t unchanged_count{};
+        RuntimeSurfaceBatchStatus status{ RuntimeSurfaceBatchStatus::Empty };
+        bool uploaded{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return status == RuntimeSurfaceBatchStatus::Ready
+                && accepted_count == descriptor_count
+                && handles.size() == descriptor_count
+                && uploaded;
+        }
+    };
+    export struct TabButtonSpec
+    {
+        std::string_view id{};
+        std::string_view label{};
+        float width{};
+        bool active{};
+        bool closable{};
+        bool dirty{};
+        bool enabled{ true };
+    };
+
+    export enum class TabBarPresentation : std::uint8_t
+    {
+        Document,
+        Workbench
+    };
+
+    export struct TabBarResult
+    {
+        std::optional<std::size_t> pressed_index{};
+        std::optional<std::size_t> selected_index{};
+        std::optional<std::size_t> closed_index{};
+    };
+
     export struct InlineButtonSpec
     {
         std::string_view label{};
         float width{};
+        bool enabled{ true };
     };
 
     export struct SelectBoxOptions
@@ -483,6 +893,8 @@ namespace epochengine::gui
     export bool render_deferred_batch(core::Context* ctx) noexcept;
     export bool render_top_layer_batch(core::Context* ctx) noexcept;
     export std::uint64_t deferred_batch_generation(const core::Context* ctx) noexcept;
+    export std::uint64_t top_layer_batch_generation(const core::Context* ctx) noexcept;
+    export std::uint64_t replayed_top_layer_batch_generation(const core::Context* ctx) noexcept;
 
     export void begin_frame(const std::shared_ptr<core::Context>& ctx,
         float dt,
@@ -492,11 +904,15 @@ namespace epochengine::gui
     export void end_frame() noexcept;
     export Vec2 mouse_position() noexcept;
     export bool is_mouse_down() noexcept;
+    export DragSurfaceResult drag_surface(
+        DragSurfaceState& state,
+        const DragSurfaceOptions& options) noexcept;
     export bool was_mouse_pressed() noexcept;
     export bool was_mouse_released() noexcept;
     export bool is_mouse_right_down() noexcept;
     export bool was_mouse_right_pressed() noexcept;
     export bool was_mouse_right_released() noexcept;
+    export bool keyboard_input_captured() noexcept;
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background) noexcept;
@@ -509,6 +925,11 @@ namespace epochengine::gui
         FloatingWindowState& state,
         const FloatingWindowOptions& options) noexcept;
     export void end_floating_window() noexcept;
+    export DockGuideLayout make_dock_guide_layout(
+        const DockGuideOptions& options) noexcept;
+    export void render_dock_guide_overlay(
+        const DockGuideLayout& layout,
+        const DockGuideOverlayOptions& options = {}) noexcept;
     export DockableWindowResult update_dockable_window(
         DockableWindowHostState& host,
         DockableWindowState& state,
@@ -518,6 +939,10 @@ namespace epochengine::gui
         DockableWindowHostState& host,
         DockableWindowState& state) noexcept;
     export WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept;
+    export void selection_outline(
+        Vec2 position,
+        Vec2 size,
+        float thickness = 2.0f) noexcept;
     export void panel_rect(Vec2 position, Vec2 size) noexcept;
     export void titlebar_rect(Vec2 position, Vec2 size) noexcept;
     export void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept;
@@ -538,13 +963,22 @@ namespace epochengine::gui
     export bool toggle_switch(std::string_view label, bool& value, Vec2 size = { 160.0f, 28.0f }) noexcept;
     export bool text_link(std::string_view label, Vec2 size, bool selected = false) noexcept;
     export bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept;
+    export ImageBoxResult image_box(const ImageBoxOptions& options) noexcept;
+    export bool image_button(const ImageButtonOptions& options) noexcept;
     export bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept;
     export void image(const SpriteHandle& sprite, Vec2 size) noexcept;
+    export AssetGridResult asset_grid(const AssetGridOptions& options) noexcept;
+    export NodeGraphCanvasResult node_graph_canvas(
+        const NodeGraphCanvasOptions& options) noexcept;
+    export SliderResult slider(const SliderOptions& options) noexcept;
     export [[nodiscard]] SpriteHandle register_runtime_surface(
         std::string_view id,
         std::span<const std::uint8_t> rgba_pixels,
         std::uint32_t width,
         std::uint32_t height) noexcept;
+    export [[nodiscard]] RuntimeSurfaceAtlasResult register_runtime_surface_atlas(
+        std::span<const RuntimeSurfaceDescriptor> surfaces) noexcept;
+    export [[nodiscard]] bool run_runtime_surface_contract() noexcept;
     export std::optional<std::size_t> segmented_button_row(
         std::span<const SegmentedButtonSpec> items,
         float height = 26.0f,
@@ -553,6 +987,11 @@ namespace epochengine::gui
         std::span<const SegmentedButtonSpec> tabs,
         float height = 28.0f,
         float gap = 2.0f) noexcept;
+    export TabBarResult tab_bar_buttons(
+        std::span<const TabButtonSpec> tabs,
+        float height = 30.0f,
+        float gap = 1.0f,
+        TabBarPresentation presentation = TabBarPresentation::Document) noexcept;
     export std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height = 24.0f,

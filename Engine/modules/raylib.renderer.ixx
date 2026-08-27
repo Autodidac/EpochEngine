@@ -54,6 +54,7 @@ import sprite.handle;
 import raylib.api;
 import render.canvas2d;
 import render.canvas2d_cpu;
+import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
 import render.device;
@@ -263,6 +264,8 @@ namespace epochengine::raylibrenderer
         {
             std::mutex mutex{};
             RaylibRenderDevice device{};
+            canvas2d::limits::NativeExecutionLimits executionLimits{
+                canvas2d::limits::for_backend(RendererBackendKind::raylib3)};
             PresentationBinding binding{};
             std::unique_ptr<canvas2d::presentation::Canvas2DPresenter> presenter{};
             canvas2d::runtime::SceneRasterSession rasterSession{};
@@ -272,13 +275,16 @@ namespace epochengine::raylibrenderer
                 std::uint64_t backendEpoch)
                 : binding{&device, owner}
             {
+                if (!executionLimits.valid())
+                    return;
                 presenter =
                     std::make_unique<canvas2d::presentation::Canvas2DPresenter>(
                         device,
                         backendEpoch,
                         canvas2d::presentation::NativePresentationHooks{
                             &binding,
-                            &present_native_canvas2d});
+                            &present_native_canvas2d},
+                        executionLimits.residency);
             }
 
             [[nodiscard]] bool render(
@@ -294,7 +300,11 @@ namespace epochengine::raylibrenderer
                 }
 
                 const canvas2d::runtime::PreparedSceneView prepared =
-                    rasterSession.prepare(binding.owner, output);
+                    rasterSession.prepare(
+                        binding.owner,
+                        output,
+                        executionLimits.canvas,
+                        executionLimits.raster);
                 if (!prepared)
                 {
                     if (prepared.code

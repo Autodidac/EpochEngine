@@ -78,6 +78,9 @@
   <PropertyGroup Condition="'$(EpochUpdaterShell)'=='true'">
     <EpochExtraDefines>EPOCH_UPDATER_SHELL_BUILD=1;$(EpochExtraDefines)</EpochExtraDefines>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(EpochBinaryOnlyDistribution)'=='true'">
+    <EpochExtraDefines>EPOCH_BINARY_ONLY_DISTRIBUTION=1;$(EpochExtraDefines)</EpochExtraDefines>
+  </PropertyGroup>
   <PropertyGroup Condition="'$(EpochVersionOverrideMajor)' != '' and '$(EpochVersionOverrideMinor)' != '' and '$(EpochVersionOverrideRevision)' != ''">
     <EpochExtraDefines>EPOCH_OVERRIDE_VERSION_MAJOR=$(EpochVersionOverrideMajor);EPOCH_OVERRIDE_VERSION_MINOR=$(EpochVersionOverrideMinor);EPOCH_OVERRIDE_VERSION_REVISION=$(EpochVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
   </PropertyGroup>
@@ -130,7 +133,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;%(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -149,7 +152,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;%(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
@@ -169,12 +172,12 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp23</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <AdditionalModuleDependencies>
       </AdditionalModuleDependencies>
       <ProgramDataBaseFileName>$(IntDir)$(TargetName).pdb</ProgramDataBaseFileName>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /bigobj %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -200,12 +203,12 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <LanguageStandard>stdcpp23</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
       <AdditionalModuleDependencies>
       </AdditionalModuleDependencies>
       <ProgramDataBaseFileName>$(IntDir)$(TargetName).pdb</ProgramDataBaseFileName>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /bigobj %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>

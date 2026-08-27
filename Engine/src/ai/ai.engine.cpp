@@ -40,6 +40,7 @@ module;
 #else
 #   include <fcntl.h>
 #   include <signal.h>
+#   include <sys/resource.h>
 #   include <sys/types.h>
 #   include <sys/wait.h>
 #   include <unistd.h>
@@ -49,14 +50,20 @@ module;
 #endif
 
 #include <algorithm>
+#include <atomic>
+#include <array>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <initializer_list>
 #include <cstdio>
 #include <cstdlib>
 #include <cctype>
 #include <cstdint>
 #include <ctime>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -68,7 +75,7 @@ module;
 module ai.engine;
 
 import ai.runtime;
-import ai.dataset;
+
 import ai.session;
 import ai.mcp;
 import ai.eval;
@@ -79,7 +86,16 @@ namespace epochengine::ai
 {
     namespace
     {
-        EngineAiModel* g_engineAi = nullptr;
+        std::recursive_mutex g_aiStateMutex{};
+        std::mutex g_aiRequestMutex{};
+        std::atomic_uint64_t g_aiRequestCancellationGeneration{1u};
+        thread_local std::uint64_t g_aiRequestStartCancellationGeneration{1u};
+        std::atomic_uint64_t g_directInferenceOutputSequence{1u};
+#if defined(_WIN32)
+        std::mutex g_activeAiWinHttpMutex{};
+        HINTERNET g_activeAiWinHttpRequest{};
+#endif
+        std::shared_ptr<EngineAiModel> g_engineAi{};
         ProviderMode g_providerMode = ProviderMode::OpenSourceLocal;
         static std::string read_env_var(const char* name)
         {
@@ -160,10 +176,16 @@ namespace epochengine::ai
         std::string g_directExecutable = trim_env_value(read_env_var("EPOCH_LLAMA_CPP_EXECUTABLE"));
         std::string g_directModel = trim_env_value(read_env_var("EPOCH_AI_MODEL_PATH"));
         bool g_runtimePreferenceLoaded = false;
+        std::string g_loadedProjectAiProfile{};
+        bool g_modelUseConfirmedForSession = false;
 
         static std::string executable_cache_bucket(std::string_view bucket)
         {
             const auto runtimeRoot = epochengine::core::path::runtime_root_dir();
+            const auto executableRoot = epochengine::core::path::executable_dir();
+            if (!executableRoot.empty())
+                return (executableRoot / "cache" / std::string{ bucket }).generic_string();
+
             if (!runtimeRoot.empty())
                 return (runtimeRoot / "cache" / std::string{ bucket }).generic_string();
 
@@ -306,38 +328,144 @@ namespace epochengine::ai
             return out;
         }
 
+
+        [[nodiscard]] static int json_hex_digit(char value) noexcept
+        {
+            if (value >= '0' && value <= '9')
+                return value - '0';
+            if (value >= 'a' && value <= 'f')
+                return value - 'a' + 10;
+            if (value >= 'A' && value <= 'F')
+                return value - 'A' + 10;
+            return -1;
+        }
+
+        [[nodiscard]] static bool append_utf8_code_point(
+            std::string& output,
+            std::uint32_t codePoint)
+        {
+            if (codePoint > 0x10ffffu
+                || (codePoint >= 0xd800u && codePoint <= 0xdfffu))
+            {
+                return false;
+            }
+            if (codePoint <= 0x7fu)
+            {
+                output.push_back(static_cast<char>(codePoint));
+            }
+            else if (codePoint <= 0x7ffu)
+            {
+                output.push_back(static_cast<char>(0xc0u | (codePoint >> 6u)));
+                output.push_back(static_cast<char>(0x80u | (codePoint & 0x3fu)));
+            }
+            else if (codePoint <= 0xffffu)
+            {
+                output.push_back(static_cast<char>(0xe0u | (codePoint >> 12u)));
+                output.push_back(static_cast<char>(
+                    0x80u | ((codePoint >> 6u) & 0x3fu)));
+                output.push_back(static_cast<char>(0x80u | (codePoint & 0x3fu)));
+            }
+            else
+            {
+                output.push_back(static_cast<char>(0xf0u | (codePoint >> 18u)));
+                output.push_back(static_cast<char>(
+                    0x80u | ((codePoint >> 12u) & 0x3fu)));
+                output.push_back(static_cast<char>(
+                    0x80u | ((codePoint >> 6u) & 0x3fu)));
+                output.push_back(static_cast<char>(0x80u | (codePoint & 0x3fu)));
+            }
+            return true;
+        }
+
+        [[nodiscard]] static bool json_character_is_escaped(
+            std::string_view source,
+            std::size_t index,
+            std::size_t stringBegin) noexcept
+        {
+            std::size_t slashCount{};
+            while (index > stringBegin && source[index - 1u] == '\\')
+            {
+                --index;
+                ++slashCount;
+            }
+            return (slashCount & 1u) != 0u;
+        }
+
         static std::string json_unescape(std::string_view s)
         {
             std::string out;
             out.reserve(s.size());
             for (std::size_t i = 0; i < s.size(); ++i)
             {
-                char c = s[i];
-                if (c != '\\')
+                const unsigned char byte = static_cast<unsigned char>(s[i]);
+                if (byte < 0x20u)
+                    return {};
+                if (s[i] != '\\')
                 {
-                    out.push_back(c);
+                    out.push_back(s[i]);
                     continue;
                 }
-                if (i + 1 >= s.size())
-                    break;
-                char n = s[++i];
-                switch (n)
+                if (++i >= s.size())
+                    return {};
+
+                const char escaped = s[i];
+                switch (escaped)
                 {
                 case '\\': out.push_back('\\'); break;
                 case '"':  out.push_back('"'); break;
+                case '/':  out.push_back('/'); break;
                 case 'n':  out.push_back('\n'); break;
                 case 'r':  out.push_back('\r'); break;
                 case 't':  out.push_back('\t'); break;
                 case 'b':  out.push_back('\b'); break;
                 case 'f':  out.push_back('\f'); break;
                 case 'u':
-                    // Minimal: skip \uXXXX (keep as '?')
-                    if (i + 4 < s.size()) i += 4;
-                    out.push_back('?');
+                {
+                    if (i + 4u >= s.size())
+                        return {};
+                    std::uint32_t codePoint{};
+                    for (std::size_t digit = 0u; digit < 4u; ++digit)
+                    {
+                        const int value = json_hex_digit(s[i + 1u + digit]);
+                        if (value < 0)
+                            return {};
+                        codePoint = (codePoint << 4u)
+                            | static_cast<std::uint32_t>(value);
+                    }
+                    i += 4u;
+                    if (codePoint >= 0xd800u && codePoint <= 0xdbffu)
+                    {
+                        if (i + 6u >= s.size() || s[i + 1u] != '\\'
+                            || s[i + 2u] != 'u')
+                        {
+                            return {};
+                        }
+                        std::uint32_t low{};
+                        for (std::size_t digit = 0u; digit < 4u; ++digit)
+                        {
+                            const int value = json_hex_digit(s[i + 3u + digit]);
+                            if (value < 0)
+                                return {};
+                            low = (low << 4u)
+                                | static_cast<std::uint32_t>(value);
+                        }
+                        if (low < 0xdc00u || low > 0xdfffu)
+                            return {};
+                        codePoint = 0x10000u
+                            + ((codePoint - 0xd800u) << 10u)
+                            + (low - 0xdc00u);
+                        i += 6u;
+                    }
+                    else if (codePoint >= 0xdc00u && codePoint <= 0xdfffu)
+                    {
+                        return {};
+                    }
+                    if (!append_utf8_code_point(out, codePoint))
+                        return {};
                     break;
+                }
                 default:
-                    out.push_back(n);
-                    break;
+                    return {};
                 }
             }
             return out;
@@ -514,7 +642,177 @@ namespace epochengine::ai
             std::error_code ec;
             return !path.empty() && std::filesystem::is_regular_file(path, ec);
         }
+        [[nodiscard]] static bool regular_file_with_size(
+            const std::filesystem::path& path,
+            std::uint64_t expectedBytes)
+        {
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(path, ec) || ec)
+                return false;
+            const auto bytes = std::filesystem::file_size(path, ec);
+            return !ec && bytes == expectedBytes;
+        }
 
+        [[nodiscard]] static std::filesystem::path
+            epoch_local_llama_cpp_root_path()
+        {
+            return std::filesystem::path{executable_cache_bucket("packages")}
+                / std::string{kEpochLocalLlamaCppRuntimePackageId};
+        }
+
+        [[nodiscard]] static std::filesystem::path
+            epoch_local_llama_cpp_executable_path()
+        {
+            std::filesystem::path path = epoch_local_llama_cpp_root_path()
+                / "versions" / std::string{kEpochLocalLlamaCppRelease} / "bin";
+#if defined(_WIN32)
+            path /= "llama-cli.exe";
+#else
+            path /= "llama-cli";
+#endif
+            return path;
+        }
+
+        [[nodiscard]] static std::filesystem::path
+            epoch_local_qwen38_root_path()
+        {
+            return std::filesystem::path{executable_cache_bucket("models")}
+                / std::string{kEpochLocalQwen38ModelPackageId};
+        }
+
+        [[nodiscard]] static std::filesystem::path
+            epoch_local_qwen38_model_path()
+        {
+            return epoch_local_qwen38_root_path()
+                / std::string{kEpochLocalQwen38ModelFile};
+        }
+
+        [[nodiscard]] static bool receipt_contains(
+            const std::filesystem::path& path,
+            std::initializer_list<std::string_view> fields)
+        {
+            const std::string receipt = read_small_text_file(path, 64u * 1024u);
+            return !receipt.empty()
+                && std::all_of(fields.begin(), fields.end(),
+                    [&](std::string_view field)
+                    {
+                        return receipt.find(field) != std::string::npos;
+                    });
+        }
+
+        [[nodiscard]] static bool json_key_occurs_once(
+            std::string_view text,
+            std::string_view key)
+        {
+            const std::string token = "\"" + std::string{key} + "\"";
+            const std::size_t first = text.find(token);
+            return first != std::string_view::npos
+                && text.find(token, first + token.size())
+                    == std::string_view::npos;
+        }
+
+        [[nodiscard]] static bool canonical_project_ai_safety_fields(
+            std::string_view text)
+        {
+            return json_key_occurs_once(text, "schema")
+                && text.find(
+                    "\"schema\": \"epoch.project.ai.v1\"")
+                    != std::string_view::npos
+                && json_key_occurs_once(text, "provider")
+                && json_key_occurs_once(text, "auto_start")
+                && text.find("\"auto_start\": false")
+                    != std::string_view::npos
+                && json_key_occurs_once(text, "server_or_listener")
+                && text.find("\"server_or_listener\": false")
+                    != std::string_view::npos
+                && json_key_occurs_once(text, "engine_source_write")
+                && text.find("\"engine_source_write\": false")
+                    != std::string_view::npos
+                && json_key_occurs_once(
+                    text, "operator_approval_per_iteration")
+                && text.find(
+                    "\"operator_approval_per_iteration\": true")
+                    != std::string_view::npos;
+        }
+
+        static void apply_project_ai_profile_if_present()
+        {
+            const std::string configured =
+                trim_env_value(read_env_var("EPOCH_PROJECT_AI_PROFILE"));
+            if (configured.empty()
+                || configured == g_loadedProjectAiProfile)
+                return;
+
+            const std::filesystem::path profilePath{configured};
+            const std::string profile =
+                read_small_text_file(profilePath, 64u * 1024u);
+            if (profile.empty())
+                return;
+
+            g_loadedProjectAiProfile =
+                std::filesystem::absolute(profilePath).generic_string();
+            if (!canonical_project_ai_safety_fields(profile))
+            {
+                g_engineAi.reset();
+                g_modelUseConfirmedForSession = false;
+                g_modelDetectionStatus =
+                    "Project AI profile rejected: required safety fields are missing or malformed.";
+                return;
+            }
+
+            if (profile.find("\"provider\": \"disabled\"")
+                != std::string_view::npos)
+            {
+                g_engineAi.reset();
+                g_modelUseConfirmedForSession = false;
+                g_modelDetectionStatus =
+                    "Project AI is disabled by its explicit project profile.";
+                return;
+            }
+
+            if (profile.find(
+                    "\"provider\": \"epoch_local_qwen38\"")
+                != std::string_view::npos)
+            {
+                const EpochLocalAiInstallStatus installed =
+                    epoch_local_ai_install_status();
+                if (!installed.ready())
+                {
+                    g_engineAi.reset();
+                    g_modelUseConfirmedForSession = false;
+                    g_modelDetectionStatus = installed.message;
+                    return;
+                }
+                g_localTransport =
+                    LocalInferenceTransport::LlamaCppCli;
+                g_directExecutable = installed.runtime_executable;
+                g_directModel = installed.model_file;
+                g_selectedModel =
+                    std::string{kEpochLocalQwen38ModelFile};
+                g_modelUseConfirmedForSession = true;
+                g_modelDetectionStatus =
+                    "Project selected the installed Epoch-local Qwen3.8 provider.";
+                return;
+            }
+
+            if (profile.find("\"provider\": \"external_mcp\"")
+                != std::string_view::npos)
+            {
+                g_localTransport =
+                    LocalInferenceTransport::OpenAiCompatible;
+                g_modelUseConfirmedForSession =
+                    !g_selectedModel.empty();
+                g_modelDetectionStatus = g_selectedModel.empty()
+                    ? "Project selected external MCP/OpenAI-compatible inference; choose the operator-managed model."
+                    : "Project selected the existing external MCP/OpenAI-compatible provider.";
+                return;
+            }
+
+            g_engineAi.reset();
+            g_modelUseConfirmedForSession = false;
+            g_modelDetectionStatus =
+                "Project AI profile rejected: provider must be disabled, epoch_local_qwen38, or external_mcp.";
+        }
         [[nodiscard]] static std::filesystem::path find_path_executable(std::string_view name)
         {
             const std::filesystem::path requested{std::string{name}};
@@ -555,6 +853,9 @@ namespace epochengine::ai
         {
             if (regular_file(g_directExecutable))
                 return std::filesystem::absolute(g_directExecutable);
+            if (const auto installed = epoch_local_llama_cpp_executable_path();
+                regular_file(installed))
+                return std::filesystem::absolute(installed);
 
             const std::filesystem::path cacheRoot{executable_cache_bucket("packages")};
             constexpr std::string_view names[] = {
@@ -583,6 +884,9 @@ namespace epochengine::ai
         {
             if (regular_file(g_directModel))
                 return std::filesystem::absolute(g_directModel);
+            if (const auto installed = epoch_local_qwen38_model_path();
+                regular_file_with_size(installed, kEpochLocalQwen38ModelBytes))
+                return std::filesystem::absolute(installed);
 
             const std::filesystem::path root{executable_cache_bucket("models")};
             std::error_code ec;
@@ -667,6 +971,33 @@ namespace epochengine::ai
             return out;
         }
 
+        [[nodiscard]] static bool register_active_ai_winhttp_request(HINTERNET request)
+        {
+            const std::lock_guard lock{g_activeAiWinHttpMutex};
+            if (g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
+                != g_aiRequestStartCancellationGeneration)
+            {
+                return false;
+            }
+            g_activeAiWinHttpRequest = request;
+            return true;
+        }
+
+        [[nodiscard]] static bool release_active_ai_winhttp_request(HINTERNET request)
+        {
+            const std::lock_guard lock{g_activeAiWinHttpMutex};
+            if (g_activeAiWinHttpRequest != request)
+                return false;
+            g_activeAiWinHttpRequest = nullptr;
+            return true;
+        }
+
+        static void close_active_ai_winhttp_request(HINTERNET request)
+        {
+            if (release_active_ai_winhttp_request(request))
+                WinHttpCloseHandle(request);
+        }
+
         static std::string winhttp_post_json(const std::string& url, const std::string& body_utf8, const std::vector<std::pair<std::string, std::string>>& headers)
         {
             const auto u = crack_url(url);
@@ -675,7 +1006,9 @@ namespace epochengine::ai
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
-            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 180000);
+            // A local model must not hold an editor request forever. The
+            // editor owns retry and milestone policy above this transport.
+            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 90000);
 
             HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
             if (!hConnect)
@@ -693,6 +1026,18 @@ namespace epochengine::ai
                 WinHttpCloseHandle(hSession);
                 throw std::runtime_error("WinHTTP: WinHttpOpenRequest failed");
             }
+
+            if (!register_active_ai_winhttp_request(hRequest))
+            {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error("WinHTTP: local-model request cancelled before dispatch");
+            }
+            const auto closeRequest = [&]() noexcept
+            {
+                close_active_ai_winhttp_request(hRequest);
+            };
 
             // Default headers
             std::wstring hdr = L"Content-Type: application/json\r\nAccept: application/json\r\n";
@@ -724,7 +1069,7 @@ namespace epochengine::ai
 
             if (!ok)
             {
-                WinHttpCloseHandle(hRequest);
+                closeRequest();
                 WinHttpCloseHandle(hConnect);
                 WinHttpCloseHandle(hSession);
                 throw std::runtime_error("WinHTTP: WinHttpSendRequest failed");
@@ -732,7 +1077,7 @@ namespace epochengine::ai
 
             if (!WinHttpReceiveResponse(hRequest, nullptr))
             {
-                WinHttpCloseHandle(hRequest);
+                closeRequest();
                 WinHttpCloseHandle(hConnect);
                 WinHttpCloseHandle(hSession);
                 throw std::runtime_error("WinHTTP: WinHttpReceiveResponse failed");
@@ -744,7 +1089,7 @@ namespace epochengine::ai
                 DWORD avail = 0;
                 if (!WinHttpQueryDataAvailable(hRequest, &avail))
                 {
-                    WinHttpCloseHandle(hRequest);
+                    closeRequest();
                     WinHttpCloseHandle(hConnect);
                     WinHttpCloseHandle(hSession);
                     throw std::runtime_error("WinHTTP: WinHttpQueryDataAvailable failed");
@@ -755,7 +1100,7 @@ namespace epochengine::ai
                 DWORD read = 0;
                 if (!WinHttpReadData(hRequest, buf.data(), avail, &read))
                 {
-                    WinHttpCloseHandle(hRequest);
+                    closeRequest();
                     WinHttpCloseHandle(hConnect);
                     WinHttpCloseHandle(hSession);
                     throw std::runtime_error("WinHTTP: WinHttpReadData failed");
@@ -764,7 +1109,7 @@ namespace epochengine::ai
                 resp += buf;
             }
 
-            WinHttpCloseHandle(hRequest);
+            closeRequest();
             WinHttpCloseHandle(hConnect);
             WinHttpCloseHandle(hSession);
             return resp;
@@ -778,7 +1123,7 @@ namespace epochengine::ai
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
-            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 180000);
+            (void)WinHttpSetTimeouts(hSession, 2000, 2000, 3000, 5000);
 
             HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
             if (!hConnect)
@@ -882,6 +1227,15 @@ namespace epochengine::ai
             return bytes;
         }
 
+        static int curl_ai_request_progress(
+            void*, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+        {
+            return g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
+                    == g_aiRequestStartCancellationGeneration
+                ? 0
+                : 1;
+        }
+
         static std::string http_post_json(const std::string& url,
             const std::string& body_utf8,
             const std::vector<std::pair<std::string, std::string>>& headers)
@@ -911,11 +1265,17 @@ namespace epochengine::ai
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 120000L);
+            curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+            curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curl_ai_request_progress);
 
             const CURLcode code = curl_easy_perform(curl);
             if (code != CURLE_OK)
             {
-                const std::string err = std::string("CURL: curl_easy_perform failed: ") + curl_easy_strerror(code);
+                const std::string err = code == CURLE_ABORTED_BY_CALLBACK
+                    ? "CURL: local-model request cancelled"
+                    : std::string("CURL: curl_easy_perform failed: ") + curl_easy_strerror(code);
                 curl_slist_free_all(request_headers);
                 curl_easy_cleanup(curl);
                 throw std::runtime_error(err);
@@ -962,6 +1322,8 @@ namespace epochengine::ai
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2000L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 5000L);
 
             const CURLcode code = curl_easy_perform(curl);
             if (code != CURLE_OK)
@@ -1019,7 +1381,7 @@ namespace epochengine::ai
                 for (std::size_t i = q; i < sv.size(); ++i)
                 {
                     const char c = sv[i];
-                    if (c == '"' && (i == q || sv[i - 1] != '\\'))
+                    if (c == '"' && !json_character_is_escaped(sv, i, q))
                     {
                         pos = i + 1;
                         break;
@@ -1090,7 +1452,7 @@ namespace epochengine::ai
             for (std::size_t i = q; i < sv.size(); ++i)
             {
                 const char c = sv[i];
-                if (c == '"' && (i == q || sv[i - 1] != '\\'))
+                if (c == '"' && !json_character_is_escaped(sv, i, q))
                     return trim(json_unescape(raw));
                 raw.push_back(c);
             }
@@ -1122,6 +1484,237 @@ namespace epochengine::ai
                 return outputText;
 
             return {};
+        }
+
+        [[nodiscard]] static std::string normalize_assistant_text(std::string_view text)
+        {
+            struct ReasoningWrapper final
+            {
+                std::string_view opening{};
+                std::string_view closing{};
+            };
+            constexpr std::array wrappers{
+                ReasoningWrapper{ "<think>", "</think>" },
+                ReasoningWrapper{ "<analysis>", "</analysis>" },
+                ReasoningWrapper{ "<reasoning>", "</reasoning>" }
+            };
+
+            std::string candidate = trim(text);
+            for (;;)
+            {
+                const std::string lower = lowercase_ascii(candidate);
+                bool removed = false;
+                for (const ReasoningWrapper& wrapper : wrappers)
+                {
+                    if (!starts_with_text(lower, wrapper.opening))
+                        continue;
+
+                    const std::size_t closing = lower.find(
+                        wrapper.closing,
+                        wrapper.opening.size());
+                    if (closing == std::string::npos)
+                        return {};
+
+                    candidate = trim(std::string_view{candidate}.substr(
+                        closing + wrapper.closing.size()));
+                    removed = true;
+                    break;
+                }
+                if (!removed)
+                    break;
+            }
+
+            const std::string lower = lowercase_ascii(candidate);
+            if (starts_with_text(lower, "<final>"))
+            {
+                constexpr std::size_t openingSize = 7u;
+                constexpr std::size_t closingSize = 8u;
+                const std::size_t closing = lower.rfind("</final>");
+                if (closing == std::string::npos
+                    || !trim(std::string_view{candidate}.substr(closing + closingSize)).empty())
+                {
+                    return {};
+                }
+                candidate = trim(std::string_view{candidate}.substr(
+                    openingSize,
+                    closing - openingSize));
+            }
+            return candidate;
+        }
+        [[nodiscard]] static std::string normalize_direct_llama_cpp_text(
+            std::string_view text)
+        {
+            std::string candidate = trim(text);
+            for (;;)
+            {
+                const std::size_t lastLineBegin = candidate.rfind('\n');
+                const std::string lastLine = trim(
+                    lastLineBegin == std::string::npos
+                        ? std::string_view{candidate}
+                        : std::string_view{candidate}.substr(lastLineBegin + 1u));
+                if (lowercase_ascii(lastLine) != "exiting...")
+                    break;
+
+                candidate = trim(
+                    lastLineBegin == std::string::npos
+                        ? std::string_view{}
+                        : std::string_view{candidate}.substr(0u, lastLineBegin));
+            }
+
+            const std::string lower = lowercase_ascii(candidate);
+            constexpr std::string_view endThinking{"[end thinking]"};
+            const std::size_t thinkingEnd = lower.rfind(endThinking);
+            if (thinkingEnd != std::string::npos)
+            {
+                candidate = trim(std::string_view{candidate}.substr(
+                    thinkingEnd + endThinking.size()));
+            }
+            else if (lower.find("[start thinking]") != std::string::npos)
+            {
+                return {};
+            }
+            return normalize_assistant_text(candidate);
+        }
+
+        [[nodiscard]] static std::string normalize_lf(std::string_view text)
+        {
+            std::string normalized;
+            normalized.reserve(text.size());
+            for (const char character : text)
+            {
+                if (character != '\r')
+                    normalized.push_back(character);
+            }
+            return normalized;
+        }
+
+        [[nodiscard]] static std::string
+            normalize_direct_llama_cpp_transcript(
+                std::string_view transcript,
+                std::string_view userText)
+        {
+            const std::string normalizedTranscript = normalize_lf(transcript);
+            const std::string normalizedUserText = normalize_lf(userText);
+            std::string expectedPrefix{"User:\n"};
+            expectedPrefix += normalizedUserText;
+            expectedPrefix += "\n\nAssistant:\n";
+            if (!starts_with_text(normalizedTranscript, expectedPrefix))
+                return {};
+
+            return normalize_direct_llama_cpp_text(
+                std::string_view{normalizedTranscript}.substr(
+                    expectedPrefix.size()));
+        }
+
+        [[nodiscard]] static std::size_t strict_source_reply_offset(
+            std::string_view reply) noexcept
+        {
+            const auto lineFramedOffset =
+                [&](const std::string_view header) noexcept
+                {
+                    std::size_t offset = reply.find(header);
+                    while (offset != std::string_view::npos)
+                    {
+                        const std::size_t end = offset + header.size();
+                        if ((offset == 0u || reply[offset - 1u] == '\n')
+                            && (end == reply.size() || reply[end] == '\n'))
+                        {
+                            return offset;
+                        }
+                        offset = reply.find(header, offset + 1u);
+                    }
+                    return std::string_view::npos;
+                };
+
+            static constexpr std::array<std::string_view, 3>
+                structuredHeaders{
+                "EPOCH_SOURCE_PATCH_PROPOSAL_V1",
+                "EPOCH_SOURCE_PROPOSAL_V1",
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1"};
+            for (const std::string_view header : structuredHeaders)
+            {
+                const std::size_t offset = lineFramedOffset(header);
+                if (offset != std::string_view::npos)
+                    return offset;
+            }
+            return lineFramedOffset(
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1");
+        }
+
+        [[nodiscard]] static std::size_t strict_source_reply_end(
+            std::string_view reply,
+            const std::size_t packetOffset) noexcept
+        {
+            const std::string_view packet = reply.substr(packetOffset);
+            std::string_view terminator{};
+            if (packet.starts_with("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
+                || packet.starts_with("EPOCH_SOURCE_PROPOSAL_V1"))
+            {
+                terminator = "end_proposal";
+            }
+            else if (packet.starts_with("EPOCH_SOURCE_CONTEXT_REQUEST_V1"))
+            {
+                terminator = "end_request";
+            }
+            else if (packet.starts_with(
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1"))
+            {
+                terminator = "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1";
+            }
+            else
+            {
+                return std::string_view::npos;
+            }
+
+            std::size_t offset = reply.find(terminator, packetOffset);
+            while (offset != std::string_view::npos)
+            {
+                const std::size_t end = offset + terminator.size();
+                if ((offset == packetOffset || reply[offset - 1u] == '\n')
+                    && (end == reply.size() || reply[end] == '\n'))
+                    return end;
+                offset = reply.find(terminator, offset + 1u);
+            }
+            return std::string_view::npos;
+        }
+
+        [[nodiscard]] static std::string
+            normalize_direct_llama_cpp_source_transcript(
+                std::string_view transcript,
+                std::string_view userText)
+        {
+            std::string direct = normalize_direct_llama_cpp_transcript(
+                transcript, userText);
+            if (direct.empty())
+            {
+                direct = normalize_direct_llama_cpp_text(
+                    normalize_lf(transcript));
+                constexpr std::string_view assistantPrefix{"Assistant:\n"};
+                if (starts_with_text(direct, assistantPrefix))
+                {
+                    direct = normalize_direct_llama_cpp_text(
+                        std::string_view{direct}.substr(
+                            assistantPrefix.size()));
+                }
+            }
+            const std::size_t packetOffset =
+                strict_source_reply_offset(direct);
+            if (packetOffset == std::string::npos)
+                return {};
+
+            const std::size_t packetEnd = strict_source_reply_end(
+                direct, packetOffset);
+            const std::size_t packetSize = packetEnd == std::string_view::npos
+                ? std::string_view::npos
+                : packetEnd - packetOffset;
+            std::string packet = trim(
+                std::string_view{direct}.substr(packetOffset, packetSize));
+            if (packet.ends_with("\n```"))
+            {
+                packet = trim(std::string_view{packet}.substr(
+                    0u, packet.size() - 4u));
+            }
+            return packet;
         }
 
         [[nodiscard]] static bool has_hidden_reasoning_without_visible_content(const std::string& response)
@@ -1168,6 +1761,14 @@ namespace epochengine::ai
                 || contains_text(lower, "the user asks:")
                 || contains_text(lower, "must reply with correct english grammar")
                 || contains_text(lower, "not mimic bad grammar")
+                || contains_text(lower, "<think>")
+                || contains_text(lower, "</think>")
+                || contains_text(lower, "<analysis>")
+                || contains_text(lower, "</analysis>")
+                || contains_text(lower, "<reasoning>")
+                || contains_text(lower, "</reasoning>")
+                || contains_text(lower, "[start thinking]")
+                || contains_text(lower, "[end thinking]")
                 || contains_text(lower, "hidden reasoning"))
             {
                 return false;
@@ -1217,7 +1818,7 @@ namespace epochengine::ai
                 for (std::size_t i = type_q; i < sv.size(); ++i)
                 {
                     const char c = sv[i];
-                    if (c == '"' && sv[i - 1] != '\\')
+                    if (c == '"' && !json_character_is_escaped(sv, i, type_q))
                     {
                         itemEnd = i + 1;
                         break;
@@ -1244,7 +1845,7 @@ namespace epochengine::ai
                 for (std::size_t i = q; i < sv.size(); ++i)
                 {
                     char c = sv[i];
-                    if (c == '"' && (i == q || sv[i - 1] != '\\'))
+                    if (c == '"' && !json_character_is_escaped(sv, i, q))
                     {
                         pos = i + 1;
                         break;
@@ -1276,28 +1877,38 @@ namespace epochengine::ai
             std::string_view model,
             std::string_view system_prompt,
             std::string_view input,
-            const std::vector<std::pair<std::string, std::string>>& headers)
+            const std::vector<std::pair<std::string, std::string>>& headers,
+            std::size_t maximumTokens)
         {
-            const auto build_body = [&](bool includeReasoning) -> std::string
+            const auto build_body = [&](bool recoveryRequest) -> std::string
             {
+                std::string requestInput{input};
+                if (recoveryRequest)
+                {
+                    requestInput =
+                        "Return only the final assistant answer. Do not expose analysis, reasoning, debug text, or drafting notes.\n"
+                        "Original request:\n" + requestInput;
+                }
+                if (contains_text(lowercase_ascii(model), "qwen"))
+                    requestInput += "\n/no_think";
+
                 std::string body;
                 body.reserve(256 + input.size());
                 body += "{";
-                (void)includeReasoning;
                 body += "\"model\":\"" + json_escape(model) + "\",";
                 body += "\"messages\":[";
                 body += "{\"role\":\"system\",\"content\":\"" + json_escape(system_prompt) + "\"},";
-                body += "{\"role\":\"user\",\"content\":\"" + json_escape(input) + "\"}";
+                body += "{\"role\":\"user\",\"content\":\"" + json_escape(requestInput) + "\"}";
                 body += "],";
-                body += "\"max_tokens\":768,";
+                body += "\"max_tokens\":" + std::to_string(maximumTokens) + ",";
                 body += "\"stream\":false";
                 body += "}";
                 return body;
             };
 
-            const auto request_once = [&](bool includeReasoning, std::string* rawResponse) -> std::string
+            const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
-                const std::string body = build_body(includeReasoning);
+                const std::string body = build_body(recoveryRequest);
 #if defined(_WIN32)
                 const std::string resp = winhttp_post_json(endpoint_full, body, headers);
 #elif defined(EPOCH_HAS_CURL)
@@ -1310,15 +1921,15 @@ namespace epochengine::ai
 #endif
                 if (rawResponse)
                     *rawResponse = resp;
-                std::string parsed = trim(extract_lmstudio_message_content(resp));
+                std::string parsed = normalize_assistant_text(extract_lmstudio_message_content(resp));
                 if (parsed.empty())
-                    parsed = trim(extract_openai_choice_message_content(resp));
+                    parsed = normalize_assistant_text(extract_openai_choice_message_content(resp));
                 if (parsed.empty())
                 {
                     std::string_view sv{ resp };
-                    parsed = trim(extract_json_string_field_after(sv, "\"content\""));
+                    parsed = normalize_assistant_text(extract_json_string_field_after(sv, "\"content\""));
                     if (parsed.empty())
-                        parsed = trim(extract_json_string_field_after(sv, "\"text\""));
+                        parsed = normalize_assistant_text(extract_json_string_field_after(sv, "\"text\""));
                 }
                 if (!parsed.empty())
                     return parsed;
@@ -1350,7 +1961,7 @@ namespace epochengine::ai
             {
                 std::string rawResponse{};
                 std::string reply = request_once(false, &rawResponse);
-                if (!reply.empty())
+                if (is_promotable_assistant_text(reply))
                     return reply;
 
                 const std::string error = extract_json_error_message(rawResponse);
@@ -1359,6 +1970,28 @@ namespace epochengine::ai
                     core::log::warn("ai", epochengine::string_view{error.data(), error.size()});
                     return std::string("Local model API error: ") + error;
                 }
+
+                if (!rawResponse.empty()
+                    && (!reply.empty()
+                        || has_hidden_reasoning_without_visible_content(rawResponse)))
+                {
+                    core::log::warn(
+                        "ai",
+                        "Local model reply lacked promotable final content; retrying once with an explicit final-answer request.");
+                    rawResponse.clear();
+                    reply = request_once(true, &rawResponse);
+                    if (is_promotable_assistant_text(reply))
+                        return reply;
+
+                    const std::string retryError = extract_json_error_message(rawResponse);
+                    if (!retryError.empty())
+                    {
+                        core::log::warn("ai", epochengine::string_view{retryError.data(), retryError.size()});
+                        return std::string("Local model API error: ") + retryError;
+                    }
+                }
+                if (!reply.empty())
+                    return reply;
                 if (has_hidden_reasoning_without_visible_content(rawResponse))
                     return "Local model returned hidden reasoning without visible assistant content. Select a content-producing model or disable reasoning export before using OS AI chat.";
                 return "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response.";
@@ -1378,6 +2011,7 @@ namespace epochengine::ai
             int exit_code{-1};
             bool launched{};
             bool timed_out{};
+            bool cancelled{};
         };
 
         constexpr std::size_t kMaximumInferenceOutputBytes = 16u * 1024u * 1024u;
@@ -1467,7 +2101,8 @@ namespace epochengine::ai
             PROCESS_INFORMATION process{};
             capture.launched = CreateProcessW(
                 executable.wstring().c_str(), command.data(), nullptr, nullptr, TRUE,
-                CREATE_NO_WINDOW, nullptr, executable.parent_path().wstring().c_str(),
+                CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS, nullptr,
+                executable.parent_path().wstring().c_str(),
                 &startup, &process) != FALSE;
             CloseHandle(writePipe);
             if (!capture.launched)
@@ -1491,7 +2126,15 @@ namespace epochengine::ai
                     append_process_output(capture.output, buffer, read);
                 }
                 running = WaitForSingleObject(process.hProcess, 20u) == WAIT_TIMEOUT;
-                if (running && std::chrono::steady_clock::now() >= deadline)
+                if (running && g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
+                    != g_aiRequestStartCancellationGeneration)
+                {
+                    capture.cancelled = true;
+                    TerminateProcess(process.hProcess, 125u);
+                    WaitForSingleObject(process.hProcess, 5000u);
+                    running = false;
+                }
+                else if (running && std::chrono::steady_clock::now() >= deadline)
                 {
                     capture.timed_out = true;
                     TerminateProcess(process.hProcess, 124u);
@@ -1535,6 +2178,7 @@ namespace epochengine::ai
                 dup2(outputPipe[1], STDERR_FILENO);
                 close(outputPipe[0]);
                 close(outputPipe[1]);
+                (void)setpriority(PRIO_PROCESS, 0, 5);
 
                 std::vector<std::string> owned;
                 owned.reserve(arguments.size() + 1u);
@@ -1571,7 +2215,18 @@ namespace epochengine::ai
 
                 const pid_t waited = waitpid(child, &status, WNOHANG);
                 running = waited == 0;
-                if (running && std::chrono::steady_clock::now() >= deadline)
+                if (running && g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
+                    != g_aiRequestStartCancellationGeneration)
+                {
+                    capture.cancelled = true;
+                    kill(child, SIGTERM);
+                    std::this_thread::sleep_for(std::chrono::milliseconds{250});
+                    if (waitpid(child, &status, WNOHANG) == 0)
+                        kill(child, SIGKILL);
+                    waitpid(child, &status, 0);
+                    running = false;
+                }
+                else if (running && std::chrono::steady_clock::now() >= deadline)
                 {
                     capture.timed_out = true;
                     kill(child, SIGTERM);
@@ -1598,10 +2253,21 @@ namespace epochengine::ai
         }
 #endif
 
-        [[nodiscard]] static std::string llama_cpp_complete(
-            const EngineAiModel::Config& config,
-            std::string_view systemPrompt,
-            std::string_view userText)
+        [[nodiscard]] static unsigned int
+            responsive_direct_thread_count(unsigned int logicalThreads) noexcept
+        {
+            if (logicalThreads == 0u)
+                logicalThreads = 1u;
+            return (std::max)(
+                1u, (logicalThreads + 1u) / 2u);
+        }
+
+        [[nodiscard]] static std::vector<std::string>
+            direct_llama_cpp_file_arguments(
+                const EngineAiModel::Config& config,
+                const std::filesystem::path& outputPath,
+                const std::filesystem::path& systemPromptPath,
+                const std::filesystem::path& userPromptPath)
         {
             std::vector<std::string> arguments{
                 "--model", config.model,
@@ -1610,8 +2276,13 @@ namespace epochengine::ai
                 "--no-display-prompt",
                 "--no-show-timings",
                 "--single-turn",
-                "--system-prompt", std::string{systemPrompt},
-                "--prompt", std::string{userText},
+                "--simple-io",
+                "--color", "off",
+                "--reasoning", "off",
+                "--reasoning-budget", "0",
+                "--output-file", outputPath.generic_string(),
+                "--system-prompt-file", systemPromptPath.generic_string(),
+                "--file", userPromptPath.generic_string(),
                 "--ctx-size", std::to_string(config.context_tokens),
                 "--n-predict", std::to_string(config.output_tokens),
                 "--gpu-layers", std::to_string(config.gpu_layers)
@@ -1620,23 +2291,151 @@ namespace epochengine::ai
             {
                 arguments.push_back("--threads");
                 arguments.push_back(std::to_string(config.threads));
+                arguments.push_back("--threads-batch");
+                arguments.push_back(std::to_string(config.threads));
             }
+            return arguments;
+        }
+
+        [[nodiscard]] static bool
+            direct_llama_cpp_prompt_file_arguments_contract()
+        {
+            EngineAiModel::Config config{};
+            config.model = "model.gguf";
+            config.context_tokens = 65'536u;
+            config.output_tokens = 32'768u;
+            config.threads = 12u;
+            const std::filesystem::path outputPath{"response.txt"};
+            const std::filesystem::path systemPath{"system.txt"};
+            const std::filesystem::path userPath{"user.txt"};
+            const auto arguments = direct_llama_cpp_file_arguments(
+                config, outputPath, systemPath, userPath);
+            const auto hasPair = [&](std::string_view flag,
+                                     std::string_view value)
+            {
+                for (std::size_t index = 0u; index + 1u < arguments.size(); ++index)
+                {
+                    if (arguments[index] == flag && arguments[index + 1u] == value)
+                        return true;
+                }
+                return false;
+            };
+            return hasPair("--output-file", "response.txt")
+                && hasPair("--system-prompt-file", "system.txt")
+                && hasPair("--file", "user.txt")
+                && hasPair("--threads", "12")
+                && hasPair("--threads-batch", "12")
+                && responsive_direct_thread_count(24u) == 12u
+                && responsive_direct_thread_count(0u) == 1u
+                && std::ranges::find(arguments, "--prompt") == arguments.end()
+                && std::ranges::find(arguments, "--system-prompt")
+                    == arguments.end();
+        }
+
+        [[nodiscard]] static std::string llama_cpp_complete(
+            const EngineAiModel::Config& config,
+            std::string_view systemPrompt,
+            std::string_view userText,
+            bool allowStrictSourcePacket)
+        {
+            const std::filesystem::path outputRoot =
+                std::filesystem::path{executable_cache_bucket("ai")}
+                    / "transient";
+            std::error_code outputError;
+            std::filesystem::create_directories(outputRoot, outputError);
+            if (outputError)
+                return "Direct llama.cpp inference could not prepare its transient response path.";
+
+            const std::uint64_t sequence =
+                g_directInferenceOutputSequence.fetch_add(
+                    1u, std::memory_order_relaxed);
+            const std::uint64_t clock =
+                static_cast<std::uint64_t>(
+                    std::chrono::steady_clock::now()
+                        .time_since_epoch().count());
+            const std::string transientStem = "llama-cli-"
+                + std::to_string(clock) + "-" + std::to_string(sequence);
+            const std::filesystem::path outputPath =
+                outputRoot / (transientStem + "-response.txt");
+            const std::filesystem::path systemPromptPath =
+                outputRoot / (transientStem + "-system.txt");
+            const std::filesystem::path userPromptPath =
+                outputRoot / (transientStem + "-user.txt");
+            for (const auto& path :
+                std::array{outputPath, systemPromptPath, userPromptPath})
+            {
+                std::filesystem::remove(path, outputError);
+                outputError.clear();
+            }
+
+            struct ScopedTransientFiles final
+            {
+                ~ScopedTransientFiles()
+                {
+                    std::error_code ignored;
+                    for (const auto& path : paths)
+                    {
+                        std::filesystem::remove(path, ignored);
+                        ignored.clear();
+                    }
+                }
+                std::array<std::filesystem::path, 3u> paths{};
+            };
+            const ScopedTransientFiles transientCleanup{{
+                outputPath, systemPromptPath, userPromptPath}};
+
+            const auto writePrompt = [](const std::filesystem::path& path,
+                                        std::string_view text)
+            {
+                std::ofstream stream{
+                    path, std::ios::binary | std::ios::trunc};
+                if (!stream)
+                    return false;
+                stream.write(
+                    text.data(), static_cast<std::streamsize>(text.size()));
+                return stream.good();
+            };
+            if (!writePrompt(systemPromptPath, systemPrompt)
+                || !writePrompt(userPromptPath, userText))
+            {
+                return "Direct llama.cpp inference could not prepare its transient prompt files.";
+            }
+            const std::vector<std::string> arguments =
+                direct_llama_cpp_file_arguments(
+                    config, outputPath, systemPromptPath, userPromptPath);
 
             ProcessCapture capture = capture_process(
                 std::filesystem::path{config.executable}, arguments,
                 std::chrono::seconds{config.timeout_seconds});
             if (!capture.launched)
                 return "Direct llama.cpp inference could not start. Check the configured llama-cli executable.";
+            if (capture.cancelled)
+                return "Direct llama.cpp inference was cancelled.";
             if (capture.timed_out)
                 return "Direct llama.cpp inference exceeded its time budget and was stopped.";
             if (capture.exit_code != 0)
             {
-                const std::string detail = trim(capture.output);
+                const std::string captured = trim(capture.output);
+                const std::string detail = captured.substr(
+                    0u, (std::min)(captured.size(), std::size_t{2048u}));
                 return "Direct llama.cpp inference failed with exit code "
                     + std::to_string(capture.exit_code)
                     + (detail.empty() ? std::string{"."} : std::string{": "} + detail);
             }
-            return trim(capture.output);
+            const std::string transcript = read_small_text_file(
+                outputPath, kMaximumInferenceOutputBytes);
+            const std::string reply = allowStrictSourcePacket
+                ? normalize_direct_llama_cpp_source_transcript(
+                    transcript, userText)
+                : normalize_direct_llama_cpp_transcript(
+                    transcript, userText);
+            if (reply.empty())
+            {
+                return transcript.empty()
+                    ? "Direct llama.cpp inference returned no parseable assistant content: the response file was empty."
+                    : "Direct llama.cpp inference returned no parseable assistant content: no framed assistant turn or strict source packet was found.";
+            }
+            return reply;
         }
         static std::string build_transcript(std::string_view system_prompt, std::string_view user_text)
         {
@@ -1658,24 +2457,12 @@ namespace epochengine::ai
         if (m_cfg.best_of == 0)
             m_cfg.best_of = 1;
 
-        if (m_cfg.backend == "llama_cpp_cli")
-        {
-            g_localTransport = LocalInferenceTransport::LlamaCppCli;
-            g_directExecutable = m_cfg.executable;
-            g_directModel = m_cfg.model;
-        }
-        else
+        if (m_cfg.backend != "llama_cpp_cli")
         {
             m_cfg.backend = "openai_chat";
             m_endpoint_full = normalize_openai_chat_endpoint(m_cfg.endpoint);
             m_cfg.model = resolve_model_name(m_cfg.endpoint, m_cfg.model);
-            g_localTransport = LocalInferenceTransport::OpenAiCompatible;
-            g_selectedEndpoint = m_cfg.endpoint;
         }
-        g_providerMode = ProviderMode::OpenSourceLocal;
-        g_selectedModel = m_cfg.backend == "llama_cpp_cli"
-            ? std::filesystem::path{m_cfg.model}.filename().string()
-            : m_cfg.model;
         if (!m_cfg.model.empty())
         {
             std::string msg = "OS AI model: ";
@@ -1684,43 +2471,97 @@ namespace epochengine::ai
         }
     }
 
-    EngineAiReply EngineAiModel::submit(std::string_view user_input)
+    EngineAiReply EngineAiModel::submit(
+        std::string_view user_input,
+        InferenceWorkload workload)
     {
         EngineAiReply out{};
+        const InferenceBudget budget = inference_budget(workload);
+        if (!budget.valid() || user_input.empty()
+            || user_input.size() > budget.maximum_prompt_bytes)
+        {
+            core::log::warn(
+                "ai",
+                "Local-model request rejected because its workload budget or prompt size is invalid.");
+            return out;
+        }
 
-        const std::string sys =
-            "You are the selected open-source OS AI model.\n"
-            "Epoch is a C++23 game engine, editor, renderer, tooling, and AI self-iteration codebase; never interpret engine tasks as vehicle repair.\n"
+        Config effective = m_cfg;
+        effective.context_tokens = budget.context_tokens;
+        effective.output_tokens = budget.output_tokens;
+        effective.timeout_seconds = budget.timeout_seconds;
+        if (workload == InferenceWorkload::source_iteration
+            && effective.backend == "llama_cpp_cli")
+        {
+            effective.gpu_layers = 0;
+        }
+
+        std::string sys = effective.backend == "llama_cpp_cli"
+            ? "You are an operator-selected Epoch-local OS AI model invoked directly by Epoch through llama.cpp.\n"
+            : "You are an operator-selected external OS AI model connected to Epoch through an operator-managed endpoint.\n";
+        sys +=
+            "Epoch is a C++23 game engine, editor, renderer, and tooling host. Model compute may be Epoch-local or offloaded to an external machine; both use the same host-owned MCP authority, approval, and evidence boundaries. Epoch never trains or self-trains the selected model.\n"
             "Rules:\n"
-            " - Reply with correct English grammar.\n"
-            " - Capitalize the first letter of the response.\n"
-            " - Do not mimic the user's bad grammar.\n"
-            " - Put only the final answer in assistant content; do not include or rely on hidden reasoning.\n"
-            " - Stay grounded in the current Epoch editor/project context.\n"
-            " - Prefer concrete editor, scene, engine, and C++ guidance that teaches the OS AI harness what to do next.\n"
-            " - MCP tool calls are bounded requests; Epoch validates and executes them, then returns structured evidence to the selected model.\n"
-            " - If asked whether Epoch, OS AI, or a development pass is working, cite the visible tool, build, scene, packet, log, or capture evidence that proves it.\n"
-            " - Treat sandboxed 3D scene work as a harness exercise: name the intended edit, tool call, evidence, and pass/fail condition.\n"
-            " - Keep self-iteration separate from normal ProjectLauncher game/software editing unless the operator explicitly asks to change the project/editor scene.\n"
-            " - When suggesting project or file work, keep it relevant to the active engine/runtime context instead of drifting into generic setup advice.\n";
+            " - Reply with correct English grammar and put only the final answer in assistant content.\n"
+            " - Stay grounded in the current visible Epoch editor/project context.\n"
+            " - Project authoring may change only the active scene or GUI through validated semantic calls and explicit operator approval.\n"
+            " - Guarded engine development is a separate disposable sandbox lane with source proposals, builds, tests, evidence, and review gates.\n"
+            " - Evidence review diagnoses existing output; it is not a source proposal and must not claim files were changed.\n"
+            " - The operator's personal AI development is external to Epoch. Never access, modify, train from, or collect data from it.\n"
+            " - Runtime exchanges, chat, scene edits, traces, and captures are operational evidence, never automatic training data.\n"
+            " - MCP tool calls are bounded requests independent of model location; Epoch validates and executes them, then returns structured evidence.\n"
+            " - Cite visible tool, build, scene, packet, log, or capture evidence before claiming a pass works.\n"
+            " - Never create a server, listener, port bind, hidden control surface, or model bypass without explicit operator action.\n";
+        if (workload == InferenceWorkload::source_iteration)
+        {
+            sys +=
+                " - Guarded source iteration is a machine protocol, not a prose answer. The first response line must be an EPOCH_SOURCE_ protocol header from the request. "
+                "If evidence is insufficient, return exactly EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1 and nothing else. "
+                "Otherwise return one bounded atomic proposal and never claim that Epoch staged, built, tested, or promoted it.\n";
+        }
 
-        const std::size_t n = std::max<std::size_t>(1, m_cfg.best_of);
+        const std::size_t n = std::max<std::size_t>(1, effective.best_of);
 
         // No scorer is active in this lane; first non-empty assistant content wins.
         for (std::size_t i = 0; i < n; ++i)
         {
-            std::string txt = m_cfg.backend == "llama_cpp_cli"
-                ? llama_cpp_complete(m_cfg, sys, user_input)
+            std::string txt = effective.backend == "llama_cpp_cli"
+                ? llama_cpp_complete(
+                    effective, sys, user_input,
+                    workload == InferenceWorkload::source_iteration)
                 : openai_chat_complete(
                     m_endpoint_full,
-                    m_cfg.model,
+                    effective.model,
                     sys,
                     build_transcript(sys, user_input),
-                    {});
+                    {},
+                    effective.output_tokens);
+
+            if (workload == InferenceWorkload::source_iteration
+                && effective.backend != "llama_cpp_cli")
+            {
+                // OpenAI-compatible servers may wrap one otherwise valid
+                // machine packet in a Markdown fence or short prose. Reuse
+                // the bounded line-framed extractor from the direct runtime;
+                // proposal decoding, grounding, review, and approval remain
+                // mandatory after extraction.
+                if (std::string packet =
+                        normalize_direct_llama_cpp_source_transcript(
+                            txt, user_input);
+                    !packet.empty())
+                    txt = std::move(packet);
+            }
 
             txt = trim(txt);
             if (txt.empty())
                 continue;
+            if (txt.size() > budget.maximum_reply_bytes)
+            {
+                core::log::warn(
+                    "ai",
+                    "Local-model reply exceeded the bounded workload response size and was rejected.");
+                continue;
+            }
 
             Candidate c{ txt, 0.0 };
             out.alternatives.push_back(c);
@@ -1738,10 +2579,17 @@ namespace epochengine::ai
 
     void init_engine_ai()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         if (g_engineAi)
             return;
 
         restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_modelUseConfirmedForSession)
+        {
+            core::log::info("ai", "OS AI model not initialized: model use awaits session confirmation.");
+            return;
+        }
         if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
         {
             if (const auto executable = discover_llama_executable(); !executable.empty())
@@ -1755,11 +2603,12 @@ namespace epochengine::ai
                 return;
             }
 
-            g_engineAi = new EngineAiModel({
+            g_engineAi = std::make_shared<EngineAiModel>(EngineAiModel::Config{
                 .backend = "llama_cpp_cli",
                 .model = g_directModel,
                 .executable = g_directExecutable,
-                .threads = (std::max)(1u, std::thread::hardware_concurrency()),
+                .threads = responsive_direct_thread_count(
+                    std::thread::hardware_concurrency()),
                 .context_tokens = 4096,
                 .output_tokens = 512,
                 .gpu_layers = -1,
@@ -1772,15 +2621,13 @@ namespace epochengine::ai
         else
         {
             restore_selected_model_preference_if_needed();
-            if (g_detectedModels.empty() && g_modelDetectionStatus == "Not scanned.")
-                (void)refresh_detected_models();
             if (g_selectedModel.empty())
             {
                 core::log::info("ai", "OS AI model not initialized: no local model selected.");
                 return;
             }
 
-            g_engineAi = new EngineAiModel({
+            g_engineAi = std::make_shared<EngineAiModel>(EngineAiModel::Config{
                 .backend = "openai_chat",
                 .endpoint = g_selectedEndpoint,
                 .model = g_selectedModel,
@@ -1813,9 +2660,25 @@ namespace epochengine::ai
     }
     void shutdown_engine_ai()
     {
-        delete g_engineAi;
-        g_engineAi = nullptr;
+        cancel_engine_ai_request();
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        g_engineAi.reset();
         core::log::info("ai", "OS AI model shutdown");
+    }
+
+    void cancel_engine_ai_request() noexcept
+    {
+        g_aiRequestCancellationGeneration.fetch_add(1u, std::memory_order_acq_rel);
+#if defined(_WIN32)
+        HINTERNET activeRequest{};
+        {
+            const std::lock_guard lock{g_activeAiWinHttpMutex};
+            activeRequest = g_activeAiWinHttpRequest;
+            g_activeAiWinHttpRequest = nullptr;
+        }
+        if (activeRequest)
+            WinHttpCloseHandle(activeRequest);
+#endif
     }
 
 
@@ -1828,19 +2691,9 @@ namespace epochengine::ai
         return {};
     }
 
-    std::string research_staging_root()
+    std::string review_fixtures_root()
     {
-        return default_workspace_root() + "/research/staged";
-    }
-
-    std::string iteration_packet_root()
-    {
-        return default_workspace_root() + "/ai/iterations";
-    }
-
-    std::string curated_datasets_root()
-    {
-        return "Engine/ai/datasets/curated";
+        return "Engine/ai/evals/fixtures";
     }
 
     std::string evals_root()
@@ -1883,13 +2736,106 @@ namespace epochengine::ai
         return executable_cache_bucket("ai");
     }
 
+    std::string epoch_local_llama_cpp_root()
+    {
+        return epoch_local_llama_cpp_root_path().generic_string();
+    }
+
+    std::string epoch_local_llama_cpp_executable()
+    {
+        return epoch_local_llama_cpp_executable_path().generic_string();
+    }
+
+    std::string epoch_local_qwen38_root()
+    {
+        return epoch_local_qwen38_root_path().generic_string();
+    }
+
+    std::string epoch_local_qwen38_model()
+    {
+        return epoch_local_qwen38_model_path().generic_string();
+    }
+
+    EpochLocalAiInstallStatus epoch_local_ai_install_status()
+    {
+        EpochLocalAiInstallStatus status{};
+        const auto runtimeRoot = epoch_local_llama_cpp_root_path();
+        const auto runtimeExecutable = epoch_local_llama_cpp_executable_path();
+        const auto modelRoot = epoch_local_qwen38_root_path();
+        const auto modelFile = epoch_local_qwen38_model_path();
+        status.runtime_root = runtimeRoot.generic_string();
+        status.runtime_executable = runtimeExecutable.generic_string();
+        status.model_root = modelRoot.generic_string();
+        status.model_file = modelFile.generic_string();
+        status.runtime_executable_ready = regular_file(runtimeExecutable);
+        status.model_file_ready = regular_file_with_size(
+            modelFile, kEpochLocalQwen38ModelBytes);
+        status.runtime_receipt_ready = receipt_contains(
+            runtimeRoot / "installed.runtime.json",
+            {kEpochLocalLlamaCppRelease,
+             kEpochLocalLlamaCppRevision,
+             kEpochLocalLlamaCppArtifact,
+             kEpochLocalLlamaCppArtifactSha256});
+        status.model_receipt_ready = receipt_contains(
+            modelRoot / "installed.model.json",
+            {kEpochLocalQwen38ModelRevision,
+             kEpochLocalQwen38ModelFile,
+             kEpochLocalQwen38ModelSha256});
+
+        if (status.ready())
+        {
+            status.message =
+                "Epoch-local Qwen3.8 and llama.cpp are installed and integrity-receipted.";
+        }
+        else if (!status.runtime_executable_ready
+            || !status.runtime_receipt_ready)
+        {
+            status.message =
+                "Epoch-local llama.cpp is not installed from the pinned artifact.";
+        }
+        else
+        {
+            status.message =
+                "Epoch-local Qwen3.8 is not installed from the pinned GGUF artifact.";
+        }
+        return status;
+    }
+
+    bool epoch_local_ai_install_contract() noexcept
+    {
+        const std::filesystem::path executableRoot =
+            epochengine::core::path::executable_dir();
+        const bool executableLocalCache = executableRoot.empty()
+            || (epoch_local_llama_cpp_root_path()
+                    == executableRoot / "cache" / "packages"
+                        / std::string{kEpochLocalLlamaCppRuntimePackageId}
+                && epoch_local_qwen38_root_path()
+                    == executableRoot / "cache" / "models"
+                        / std::string{kEpochLocalQwen38ModelPackageId});
+
+        return executableLocalCache
+            && kEpochLocalQwen38ModelPackageId
+                == std::string_view{"os_model_qwen_3_8_27b"}
+            && kEpochLocalLlamaCppRuntimePackageId
+                == std::string_view{"local_ai_llama_cpp_runtime"}
+            && kEpochLocalLlamaCppRevision.size() == 40u
+            && kEpochLocalQwen38ModelRevision.size() == 40u
+            && kEpochLocalLlamaCppArtifactSha256.size() == 64u
+            && kEpochLocalQwen38ModelSha256.size() == 64u
+            && kEpochLocalQwen38ModelBytes > 16'000'000'000ull
+            && kEpochLocalQwen38ModelUrl.starts_with("https://")
+            && kEpochLocalLlamaCppArtifact.find(
+                kEpochLocalLlamaCppRelease) != std::string_view::npos;
+    }
     ProviderMode current_provider_mode() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         return g_providerMode;
     }
 
     LocalInferenceTransport current_local_inference_transport() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         return g_localTransport;
     }
@@ -1899,7 +2845,7 @@ namespace epochengine::ai
         switch (transport)
         {
         case LocalInferenceTransport::OpenAiCompatible:
-            return "Local OpenAI-compatible API";
+            return "External model endpoint + Epoch MCP";
         case LocalInferenceTransport::LlamaCppCli:
             return "Direct llama.cpp CLI";
         }
@@ -1908,6 +2854,7 @@ namespace epochengine::ai
 
     DirectRuntimeStatus direct_runtime_status()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         DirectRuntimeStatus status{};
         status.executable = g_directExecutable;
@@ -1928,13 +2875,15 @@ namespace epochengine::ai
 
     DirectRuntimeStatus discover_direct_runtime()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         if (const auto executable = discover_llama_executable(); !executable.empty())
             g_directExecutable = executable.generic_string();
         if (const auto model = discover_gguf_model(); !model.empty())
             g_directModel = model.generic_string();
         const DirectRuntimeStatus status = direct_runtime_status();
-        g_modelDetectionStatus = status.message;
+        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+            g_modelDetectionStatus = status.message;
         return status;
     }
 
@@ -1944,14 +2893,17 @@ namespace epochengine::ai
         const std::filesystem::path modelPath{trim(model)};
         if (!regular_file(executablePath) || !regular_file(modelPath) || modelPath.extension() != ".gguf")
         {
+            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
             g_modelDetectionStatus = "Direct runtime selection rejected: choose an existing llama-cli executable and GGUF model.";
             return false;
         }
 
-        shutdown_engine_ai();
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        g_engineAi.reset();
         g_directExecutable = std::filesystem::absolute(executablePath).generic_string();
         g_directModel = std::filesystem::absolute(modelPath).generic_string();
         g_localTransport = LocalInferenceTransport::LlamaCppCli;
+        g_modelUseConfirmedForSession = true;
         g_selectedModel = modelPath.filename().string();
         persist_runtime_preference();
         init_engine_ai();
@@ -1960,14 +2912,33 @@ namespace epochengine::ai
 
     void select_openai_compatible_runtime()
     {
-        shutdown_engine_ai();
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        g_engineAi.reset();
         g_localTransport = LocalInferenceTransport::OpenAiCompatible;
+        g_modelUseConfirmedForSession = false;
+        if (!g_detectedModels.empty())
+        {
+            g_modelDetectionStatus =
+                "Detected " + std::to_string(g_detectedModels.size())
+                + " local API model(s); model use requires operator confirmation.";
+        }
+        else if (!g_selectedModel.empty())
+        {
+            g_modelDetectionStatus =
+                "Configured local API model: " + g_selectedModel;
+        }
+        else
+        {
+            g_modelDetectionStatus =
+                "Local API selected; model inventory has not been scanned.";
+        }
         persist_runtime_preference();
         init_engine_ai();
     }
 
     std::string active_model_name()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
             return g_directModel.empty() ? std::string{} : std::filesystem::path{g_directModel}.filename().string();
@@ -1977,6 +2948,7 @@ namespace epochengine::ai
 
     std::string active_provider_summary()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         std::string summary = std::string(local_inference_transport_name(g_localTransport));
         const std::string modelName = active_model_name();
@@ -1990,11 +2962,13 @@ namespace epochengine::ai
 
     std::vector<std::string> detected_model_names()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         return g_detectedModels;
     }
 
     std::string model_detection_status()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         if (g_localTransport == LocalInferenceTransport::OpenAiCompatible)
             restore_selected_model_preference_if_needed();
@@ -2003,12 +2977,26 @@ namespace epochengine::ai
 
     bool is_engine_ai_initialized() noexcept
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         return g_engineAi != nullptr;
+    }
+
+    bool is_model_use_confirmed() noexcept
+    {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        return g_modelUseConfirmedForSession;
     }
 
     std::string model_connection_status()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
+        if (!g_modelUseConfirmedForSession)
+        {
+            return active_model_name().empty()
+                ? "No local model is configured."
+                : "Configured model awaits confirmation for this session.";
+        }
         if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
         {
             const auto status = direct_runtime_status();
@@ -2033,52 +3021,65 @@ namespace epochengine::ai
     }
     std::vector<std::string> refresh_detected_models()
     {
-        restore_runtime_preference_if_needed();
-        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+        std::string endpoint;
         {
-            const auto status = discover_direct_runtime();
-            g_detectedModels.clear();
-            if (status.model_ready)
-                g_detectedModels.push_back(std::filesystem::path{status.model}.filename().string());
+            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+            restore_runtime_preference_if_needed();
+            if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+            {
+                const auto status = discover_direct_runtime();
+                g_detectedModels.clear();
+                if (status.model_ready)
+                    g_detectedModels.push_back(std::filesystem::path{status.model}.filename().string());
+                return g_detectedModels;
+            }
+            restore_selected_model_preference_if_needed();
+            endpoint = g_selectedEndpoint;
+        }
+
+        std::vector<std::string> detected = fetch_detected_models(endpoint);
+
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        if (g_localTransport != LocalInferenceTransport::OpenAiCompatible
+            || g_selectedEndpoint != endpoint)
+        {
             return g_detectedModels;
         }
-        restore_selected_model_preference_if_needed();
-        g_detectedModels = fetch_detected_models(g_selectedEndpoint);
+
+        g_detectedModels = std::move(detected);
         if (g_detectedModels.empty())
         {
             g_modelDetectionStatus = g_selectedModel.empty()
                 ? "No local models detected. Start LM Studio, Ollama, or another OpenAI-compatible API and check endpoint."
                 : "Configured model '" + g_selectedModel + "' is selected, but no local model inventory was detected at the endpoint.";
         }
-        else
+        else if (!g_selectedModel.empty())
         {
-            if (!g_selectedModel.empty())
+            const bool selectedAvailable =
+                std::find(g_detectedModels.begin(), g_detectedModels.end(), g_selectedModel) != g_detectedModels.end();
+            if (selectedAvailable)
             {
-                const bool selectedAvailable =
-                    std::find(g_detectedModels.begin(), g_detectedModels.end(), g_selectedModel) != g_detectedModels.end();
-                if (selectedAvailable)
-                {
-                    if (!g_engineAi)
-                        init_engine_ai();
+                if (g_modelUseConfirmedForSession && !g_engineAi)
+                    init_engine_ai();
 
-                    g_modelDetectionStatus = g_engineAi
-                        ? "Selected and initialized model client: " + g_selectedModel
-                        : "Selected model: " + g_selectedModel + " (" + std::to_string(g_detectedModels.size()) + " local model(s) detected), but client init failed.";
-                    persist_selected_model_preference(g_selectedModel);
-                }
-                else
-                {
-                    const std::string staleModel = g_selectedModel;
-                    delete g_engineAi;
-                    g_engineAi = nullptr;
-                    g_modelDetectionStatus =
-                        "Selected model '" + staleModel + "' was not reported by the endpoint; keeping the operator preference. Choose another detected model to replace it.";
-                }
+                g_modelDetectionStatus = !g_modelUseConfirmedForSession
+                    ? "Configured model is available and awaits session confirmation: " + g_selectedModel
+                    : g_engineAi
+                    ? "Selected and initialized model client: " + g_selectedModel
+                    : "Selected model: " + g_selectedModel + " (" + std::to_string(g_detectedModels.size()) + " local model(s) detected), but client init failed.";
+                persist_selected_model_preference(g_selectedModel);
             }
             else
             {
-                g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); choose the exact OS AI model to enable chat/tooling.";
+                const std::string staleModel = g_selectedModel;
+                g_engineAi.reset();
+                g_modelDetectionStatus =
+                    "Selected model '" + staleModel + "' was not reported by the endpoint; keeping the operator preference. Choose another detected model to replace it.";
             }
+        }
+        else
+        {
+            g_modelDetectionStatus = "Detected " + std::to_string(g_detectedModels.size()) + " local model(s); choose the exact OS AI model to enable chat/tooling.";
         }
 
         return g_detectedModels;
@@ -2087,25 +3088,40 @@ namespace epochengine::ai
     bool select_active_model(std::string_view model_id)
     {
         if (current_local_inference_transport() == LocalInferenceTransport::LlamaCppCli)
-            return select_direct_runtime(g_directExecutable, g_directModel);
+        {
+            std::string executable;
+            std::string model;
+            {
+                const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+                executable = g_directExecutable;
+                model = g_directModel;
+            }
+            return select_direct_runtime(executable, model);
+        }
 
         const std::string selected = trim(model_id);
         if (selected.empty())
             return false;
 
-        restore_selected_model_preference_if_needed();
-        if (g_detectedModels.empty())
-            g_detectedModels = fetch_detected_models(g_selectedEndpoint);
+        bool inventoryMissing = false;
+        {
+            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+            restore_selected_model_preference_if_needed();
+            inventoryMissing = g_detectedModels.empty();
+        }
+        if (inventoryMissing)
+            (void)refresh_detected_models();
 
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         if (std::find(g_detectedModels.begin(), g_detectedModels.end(), selected) == g_detectedModels.end())
         {
             g_modelDetectionStatus = "Could not select OS model '" + selected + "' because the endpoint did not report it.";
             return false;
         }
 
-        delete g_engineAi;
-        g_engineAi = nullptr;
+        g_engineAi.reset();
         g_selectedModel = selected;
+        g_modelUseConfirmedForSession = true;
         persist_selected_model_preference(selected);
         init_engine_ai();
         g_modelDetectionStatus = g_engineAi
@@ -2120,6 +3136,7 @@ namespace epochengine::ai
 
     ModelManifest active_model_manifest()
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         restore_runtime_preference_if_needed();
         if (g_localTransport == LocalInferenceTransport::OpenAiCompatible)
             restore_selected_model_preference_if_needed();
@@ -2136,6 +3153,12 @@ namespace epochengine::ai
 
         manifest.display_name = selectedModel;
         manifest.manifest_path = manifests_root() + "/open_source_model_provider.json";
+        const InferenceBudget sourceBudget =
+            inference_budget(InferenceWorkload::source_iteration);
+        manifest.host_context_budget_tokens = sourceBudget.context_tokens;
+        manifest.host_output_budget_tokens = sourceBudget.output_tokens;
+        manifest.source_iteration_budget_available =
+            manifest.available && sourceBudget.valid();
 
         return manifest;
     }
@@ -2149,7 +3172,7 @@ namespace epochengine::ai
             .session_root = local_session_root(),
             .model_root = local_model_root(),
             .cache_root = local_cache_root(),
-            .curated_dataset_root = curated_datasets_root(),
+            .review_fixture_root = review_fixtures_root(),
             .eval_root = evals_root()
         };
     }
@@ -2185,165 +3208,6 @@ namespace epochengine::ai
         }
     }
 
-    std::string stage_iteration_packet(const IterationPacket& packet)
-    {
-        const std::string packetSlug = slugify(
-            packet.packet_name.empty()
-                ? (packet.project_id.empty() ? std::string("epoch-iteration") : packet.project_id + "-iteration")
-                : packet.packet_name);
-        const std::string timestamp = utc_timestamp_slug();
-        const std::filesystem::path packetDir =
-            std::filesystem::path(iteration_packet_root()) / (packetSlug + "-" + timestamp);
-        const std::filesystem::path jsonFile = packetDir / "iteration.json";
-        const std::filesystem::path taskFile = packetDir / "task.md";
-
-        std::ostringstream json;
-        json << "{\n";
-        json << "  \"status\": \"staged\",\n";
-        json << "  \"created_utc\": \"" << json_escape(timestamp) << "\",\n";
-        json << "  \"packet_name\": \"" << json_escape(packet.packet_name) << "\",\n";
-        json << "  \"task_prompt\": \"" << json_escape(packet.task_prompt) << "\",\n";
-        json << "  \"assistant_hint\": \"" << json_escape(packet.assistant_hint) << "\",\n";
-        json << "  \"operator_notes\": \"" << json_escape(packet.operator_notes) << "\",\n";
-        json << "  \"control_loop_stage\": \"" << json_escape(packet.control_loop_stage) << "\",\n";
-        json << "  \"review_gate_state\": \"" << json_escape(packet.review_gate_state) << "\",\n";
-        json << "  \"review_gate_evidence\": \"" << json_escape(packet.review_gate_evidence) << "\",\n";
-        json << "  \"project_id\": \"" << json_escape(packet.project_id) << "\",\n";
-        json << "  \"project_name\": \"" << json_escape(packet.project_name) << "\",\n";
-        json << "  \"scene_id\": \"" << json_escape(packet.scene_id) << "\",\n";
-        json << "  \"project_root\": \"" << json_escape(packet.project_root) << "\",\n";
-        json << "  \"scene_path\": \"" << json_escape(packet.scene_path) << "\",\n";
-        json << "  \"active_script\": \"" << json_escape(packet.active_script) << "\",\n";
-        json << "  \"build_log_path\": \"" << json_escape(packet.build_log_path) << "\",\n";
-        json << "  \"output_path\": \"" << json_escape(packet.output_path) << "\",\n";
-        json << "  \"provider_summary\": \"" << json_escape(packet.provider_summary) << "\",\n";
-        json << "  \"active_model\": \"" << json_escape(packet.active_model) << "\",\n";
-        json << "  \"manifest_path\": \"" << json_escape(packet.manifest_path) << "\",\n";
-        json << "  \"workspace_root\": \"" << json_escape(packet.workspace_root) << "\",\n";
-        json << "  \"model_exchange_path\": \"" << json_escape(packet.model_exchange_path) << "\",\n";
-        json << "  \"tool_trace_path\": \"" << json_escape(packet.tool_trace_path) << "\",\n";
-        json << "  \"session_root\": \"" << json_escape(packet.session_root) << "\",\n";
-        json << "  \"model_root\": \"" << json_escape(packet.model_root) << "\",\n";
-        json << "  \"cache_root\": \"" << json_escape(packet.cache_root) << "\",\n";
-        json << "  \"curated_dataset_root\": \"" << json_escape(packet.curated_dataset_root) << "\",\n";
-        json << "  \"eval_root\": \"" << json_escape(packet.eval_root) << "\",\n";
-        json << "  \"evidence_paths\": [";
-        for (std::size_t i = 0; i < packet.evidence_paths.size(); ++i)
-        {
-            if (i != 0)
-                json << ", ";
-            json << "\"" << json_escape(packet.evidence_paths[i]) << "\"";
-        }
-        json << "]\n";
-        json << "}\n";
-
-        std::ostringstream task;
-        task << "# " << (packet.packet_name.empty() ? "Epoch Iteration Packet" : packet.packet_name) << "\n\n";
-        task << "## Task Prompt\n" << (packet.task_prompt.empty() ? "(empty)" : packet.task_prompt) << "\n\n";
-        task << "## Assistant Hint\n" << (packet.assistant_hint.empty() ? "(none)" : packet.assistant_hint) << "\n\n";
-        task << "## Operator Notes\n" << (packet.operator_notes.empty() ? "(none)" : packet.operator_notes) << "\n\n";
-        task << "## Self-Iteration Loop\n";
-        task << "- Stage: " << (packet.control_loop_stage.empty() ? "(unknown)" : packet.control_loop_stage) << "\n";
-        task << "- Review gate: " << (packet.review_gate_state.empty() ? "(unknown)" : packet.review_gate_state) << "\n";
-        task << "- Evidence: " << (packet.review_gate_evidence.empty() ? "(none)" : packet.review_gate_evidence) << "\n";
-        task << "- Contract: planner -> executor -> builder -> verifier -> gate; staged packets only, no blind write-through.\n\n";
-        task << "## Runtime Snapshot\n";
-        task << "- Provider: " << packet.provider_summary << "\n";
-        task << "- Active model: " << (packet.active_model.empty() ? "(none selected)" : packet.active_model) << "\n";
-        task << "- Manifest: " << packet.manifest_path << "\n";
-        task << "- Workspace root: " << packet.workspace_root << "\n";
-        task << "- Raw capture: " << packet.model_exchange_path << "\n";
-        task << "- Tool evidence capture: " << packet.tool_trace_path << "\n";
-        task << "- Curated datasets: " << packet.curated_dataset_root << "\n";
-        task << "- Eval root: " << packet.eval_root << "\n";
-        task << "- Checkpoints: " << packet.session_root << "\n";
-        task << "- Local models: " << packet.model_root << "\n";
-        task << "- Cache: " << packet.cache_root << "\n\n";
-        task << "## Project Snapshot\n";
-        task << "- Project id: " << packet.project_id << "\n";
-        task << "- Project name: " << packet.project_name << "\n";
-        task << "- Scene id: " << packet.scene_id << "\n";
-        task << "- Project root: " << packet.project_root << "\n";
-        task << "- Scene path: " << packet.scene_path << "\n";
-        task << "- Active script: " << packet.active_script << "\n";
-        task << "- Build log: " << packet.build_log_path << "\n";
-        task << "- Output path: " << packet.output_path << "\n\n";
-        task << "## Evidence Paths\n";
-        if (packet.evidence_paths.empty())
-        {
-            task << "- (none)\n";
-        }
-        else
-        {
-            for (const auto& path : packet.evidence_paths)
-                task << "- " << path << "\n";
-        }
-
-        if (!write_text_file(jsonFile, json.str()) || !write_text_file(taskFile, task.str()))
-            return {};
-
-        std::string msg = "AI staged iteration packet: ";
-        msg += packetDir.string();
-        core::log::info("ai", epochengine::string_view{msg.data(), msg.size()});
-        return packetDir.string();
-    }
-
-    bool promote_dataset_record(const DatasetRecord& record, std::string_view dataset_name)
-    {
-        const std::filesystem::path datasetFile =
-            std::filesystem::path(curated_datasets_root()) / (slugify(dataset_name) + ".jsonl");
-
-        std::ostringstream oss;
-        oss << "{";
-        oss << "\"prompt\":\"" << json_escape(record.prompt) << "\",";
-        oss << "\"answer\":\"" << json_escape(record.answer) << "\",";
-        oss << "\"source\":\"" << json_escape(record.source) << "\",";
-        oss << "\"role\":\"" << json_escape(record.role) << "\",";
-        oss << "\"tags\":[";
-        for (std::size_t i = 0; i < record.tags.size(); ++i)
-        {
-            if (i != 0)
-                oss << ",";
-            oss << "\"" << json_escape(record.tags[i]) << "\"";
-        }
-        oss << "]";
-        oss << "}";
-
-        return append_jsonl_line(datasetFile, oss.str());
-    }
-
-    bool promote_tool_trace_record(const McpCaptureRecord& record, std::string_view dataset_name)
-    {
-        std::string source = record.server;
-        if (!record.tool.empty())
-        {
-            if (!source.empty())
-                source += ":";
-            source += record.tool;
-        }
-        if (!record.source_path.empty())
-        {
-            if (!source.empty())
-                source += ":";
-            source += record.source_path;
-        }
-
-        std::vector<std::string> tags{
-            "mcp-capture",
-            slugify(record.server),
-            slugify(record.tool)
-        };
-        if (!record.source_path.empty())
-            tags.push_back("scene-guidance");
-
-        return promote_dataset_record(DatasetRecord{
-            .prompt = record.prompt,
-            .answer = record.normalized_output,
-            .source = std::move(source),
-            .role = "assistant",
-            .tags = std::move(tags)
-        }, dataset_name);
-    }
 
     bool promote_eval_case(const EvalCase& record, std::string_view suite_name)
     {
@@ -2362,6 +3226,31 @@ namespace epochengine::ai
 
         return write_text_file(evalFile, oss.str());
     }
+
+    std::string normalize_assistant_reply(std::string_view reply)
+    {
+        return normalize_assistant_text(reply);
+    }
+    std::string normalize_direct_llama_cpp_reply(
+        std::string_view transcript,
+        std::string_view userText)
+    {
+        return normalize_direct_llama_cpp_transcript(transcript, userText);
+    }
+
+    std::string normalize_direct_llama_cpp_source_reply(
+        std::string_view transcript,
+        std::string_view userText)
+    {
+        return normalize_direct_llama_cpp_source_transcript(
+            transcript, userText);
+    }
+
+    bool direct_llama_cpp_prompt_transport_contract()
+    {
+        return direct_llama_cpp_prompt_file_arguments_contract();
+    }
+
 
     bool is_promotable_assistant_reply(std::string_view reply)
     {
@@ -2443,24 +3332,69 @@ namespace epochengine::ai
         return result;
     }
 
-    std::string send_to_engine_ai(const std::string& user_text)
+    std::string send_to_engine_ai(
+        const std::string& user_text,
+        InferenceWorkload workload)
     {
-        if (g_selectedModel.empty())
-            return "No AI model selected. Open Workspace > AI, scan local models, and choose a model before running chat/tooling.";
+        const InferenceBudget budget = inference_budget(workload);
+        if (!budget.valid())
+            return "The selected local-model workload has an invalid host budget.";
+        if (user_text.empty() || user_text.size() > budget.maximum_prompt_bytes)
+        {
+            return "The local-model request is empty or exceeds its bounded host prompt budget.";
+        }
 
-        if (!g_engineAi) init_engine_ai();
-        if (!g_engineAi)
+        const std::uint64_t requestCancellationGeneration =
+            g_aiRequestCancellationGeneration.load(std::memory_order_acquire);
+
+        std::shared_ptr<EngineAiModel> client;
+        std::string selectedModel;
+        std::string selectedEndpoint;
+        {
+            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+            if (!g_modelUseConfirmedForSession || g_selectedModel.empty())
+                return "No local AI model has been confirmed for this session. Confirm a discovered model before sending a request.";
+
+            if (!g_engineAi)
+                init_engine_ai();
+            client = g_engineAi;
+            selectedModel = g_selectedModel;
+            selectedEndpoint = g_selectedEndpoint;
+        }
+        if (!client)
             return "OS AI model could not initialize. Confirm a local model is selected and the endpoint is reachable.";
 
-        const auto reply = g_engineAi->submit(user_text);
+        EngineAiReply reply{};
+        {
+            const std::lock_guard<std::mutex> requestLock{g_aiRequestMutex};
+            if (g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
+                != requestCancellationGeneration)
+            {
+                return "Local-model request cancelled before execution.";
+            }
+            g_aiRequestStartCancellationGeneration = requestCancellationGeneration;
+            reply = client->submit(user_text, workload);
+        }
+        const std::string loweredReply = lowercase_ascii(reply.text);
+        if (starts_with_text(loweredReply,
+                "direct llama.cpp inference could not")
+            || starts_with_text(loweredReply,
+                "direct llama.cpp inference exceeded")
+            || starts_with_text(loweredReply,
+                "direct llama.cpp inference was cancelled")
+            || starts_with_text(loweredReply,
+                "direct llama.cpp inference returned no parseable"))
+        {
+            return reply.text;
+        }
         if (!reply.text.empty() && !is_promotable_assistant_text(reply.text))
         {
             core::log::warn("ai", "Local model returned non-promotable assistant content.");
             return "Local model returned reasoning/debug text instead of final assistant content. Adjust the local model chat template or choose a content-producing OS model before using Engine AI chat.";
         }
         if (reply.text.empty())
-            return std::string("No decodable reply from selected local model '") + g_selectedModel
-                + "' at " + g_selectedEndpoint
+            return std::string("No decodable reply from selected local model '") + selectedModel
+                + "' at " + selectedEndpoint
                 + ". Check the endpoint/model selection and retry.";
         return reply.text;
     }

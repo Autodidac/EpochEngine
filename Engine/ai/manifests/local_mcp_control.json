@@ -4,7 +4,7 @@
   "provider": "operator-selected-model-independent",
   "transport": "in-process-registry",
   "trace": "workspace/tool_trace.jsonl",
-  "model_selection": "operator-selected-external-model",
+  "model_selection": "operator-selected-epoch-local-or-external-model",
   "network_listener": false,
   "repo_safe_manifest": true,
   "status": "protocol-foundation",
@@ -14,10 +14,11 @@
     "operator-approval-gates",
     "cancellation",
     "bounded-calls-and-results",
-    "structured-evidence"
+    "structured-evidence",
+    "model-tool-call-parser",
+    "single-step-dispatch"
   ],
   "pending": [
-    "model-tool-call-parser",
     "multi-step-dispatch",
     "stdio-adapter"
   ]

@@ -152,6 +152,7 @@ namespace epochengine::raylib_api
 
     const int pixelformat_rgba8 = ::PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
     const int camera_perspective = ::CAMERA_PERSPECTIVE;
+    const int camera_orthographic = ::CAMERA_ORTHOGRAPHIC;
     const int texture_filter_point = ::TEXTURE_FILTER_POINT;
     const int texture_filter_bilinear = ::TEXTURE_FILTER_BILINEAR;
     const int blend_alpha_premultiply = ::BLEND_ALPHA_PREMULTIPLY;

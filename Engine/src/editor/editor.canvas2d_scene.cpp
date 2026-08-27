@@ -35,17 +35,49 @@ namespace epochengine::editor_canvas2d
             return entity.type == "Level" || entity.type == "Canvas2D";
         }
 
+        [[nodiscard]] constexpr bool gui_widget(
+            const EntityView& entity) noexcept
+        {
+            return entity.type.starts_with("Gui")
+                || entity.category == "UI";
+        }
+
         [[nodiscard]] constexpr visuals::Rgb color_for(
             const EntityView& entity) noexcept
         {
             if (entity.selected)
                 return visuals::object_selected();
+            if (entity.gui.authored)
+            {
+                const auto& color = entity.type == "GuiText"
+                    ? entity.gui.foreground
+                    : entity.gui.background;
+                return {color[0], color[1], color[2]};
+            }
             if (entity.type == "Light")
                 return visuals::object_light();
             if (entity.type == "Spawn")
                 return visuals::object_spawn();
             if (entity.type == "Camera")
                 return visuals::object_camera();
+            if (entity.type == "GuiPanel")
+                return {0.16f, 0.22f, 0.29f};
+            if (entity.type == "GuiButton")
+                return {0.12f, 0.48f, 0.72f};
+            if (entity.type == "GuiText")
+                return {0.76f, 0.82f, 0.90f};
+            if (entity.type == "GuiImage")
+                return {0.52f, 0.36f, 0.68f};
+            if (entity.type == "GuiImageButton")
+                return {0.18f, 0.58f, 0.66f};
+            if (entity.type == "GuiTabSet")
+                return {0.46f, 0.40f, 0.72f};
+            if (entity.type == "GuiTextInput")
+                return {0.25f, 0.46f, 0.40f};
+            if (entity.type == "GuiSlider")
+                return {0.75f, 0.48f, 0.18f};
+            if (entity.type == "GuiScrollArea")
+                return {0.20f, 0.28f, 0.36f};
             if (entity.category == "World" || entity.type == "Ground")
                 return visuals::object_world();
             if (entity.editor_only || entity.category == "Editor")
@@ -83,19 +115,62 @@ namespace epochengine::editor_canvas2d
         }
 
         [[nodiscard]] constexpr canvas2d::LinearColor linear_color(
+            const EntityView& entity,
             visuals::Rgb color) noexcept
         {
-            return {color.r, color.g, color.b, 1.0f};
+            const float enabledOpacity =
+                entity.gui.enabled ? 1.0f : 0.55f;
+            const float alpha = entity.gui.authored
+                ? (std::clamp)(
+                    entity.gui.opacity
+                        * entity.gui.background[3]
+                        * enabledOpacity,
+                    0.0f,
+                    1.0f)
+                : 1.0f;
+            if (entity.material.logical_texture
+                && (entity.type == "GuiImage"
+                    || entity.type == "GuiImageButton"))
+            {
+                return {1.0f, 1.0f, 1.0f, alpha};
+            }
+            return {color.r, color.g, color.b, alpha};
         }
 
         [[nodiscard]] constexpr canvas2d::SpritePhase phase_for(
             const EntityView& entity) noexcept
         {
-            if (entity.type == "Ground")
+            if (entity.type == "Ground"
+                || entity.type == "GuiPanel"
+                || entity.type == "GuiScrollArea")
+            {
                 return canvas2d::SpritePhase::background;
-            if (helper(entity))
+            }
+            if (helper(entity) || entity.type == "GuiText")
                 return canvas2d::SpritePhase::overlay;
             return canvas2d::SpritePhase::world;
+        }
+
+        [[nodiscard]] constexpr std::int32_t order_for(
+            const EntityView& entity) noexcept
+        {
+            if (entity.type == "Ground")
+                return -1'000;
+            if (entity.type == "GuiSafeArea")
+                return -120;
+            if (entity.type == "GuiPanel")
+                return -100;
+            if (entity.type == "GuiScrollArea")
+                return -80;
+            if (entity.type == "GuiImage")
+                return -20;
+            if (entity.type == "GuiTabSet")
+                return 20;
+            if (entity.type == "GuiImageButton")
+                return 30;
+            if (entity.type == "GuiText")
+                return 100;
+            return 0;
         }
     }
 
@@ -158,6 +233,12 @@ namespace epochengine::editor_canvas2d
                     if (!request.include_helpers)
                         continue;
                 }
+                if (entity.gui.authored && gui_widget(entity))
+                {
+                    ++result.diagnostics.styled_gui_widgets;
+                    if (!entity.gui.enabled)
+                        ++result.diagnostics.disabled_gui_widgets;
+                }
                 if (entity.stable_id == 0 || entity.generation == 0)
                 {
                     result.code = BuildCode::invalid_identity;
@@ -200,9 +281,9 @@ namespace epochengine::editor_canvas2d
                 sprite.transform.size = size_for(entity);
                 sprite.transform.rotation_radians = entity.rotation[2]
                     * std::numbers::pi_v<float> / 180.0f;
-                sprite.tint = linear_color(color_for(entity));
+                sprite.tint = linear_color(entity, color_for(entity));
                 sprite.phase = phase_for(entity);
-                sprite.order = entity.type == "Ground" ? -1'000 : 0;
+                sprite.order = order_for(entity);
                 sprite.stable_sequence = entity.stable_id;
                 content.sprites.push_back(sprite);
             }

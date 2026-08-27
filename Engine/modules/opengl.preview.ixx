@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -264,11 +264,15 @@ export namespace epochengine::openglpreview
         state.sceneVao = 0;
         state.sceneVbo = 0;
         state.sceneEbo = 0;
+        state.sceneGridSignature = 0;
+        state.sceneGridIndexCount = 0;
         state.sceneMarkerVao = 0;
         state.sceneMarkerVbo = 0;
     }
 
-    inline bool ensure_scene_preview_pipeline(epochengine::openglstate::OpenGL4State& state)
+    inline bool ensure_scene_preview_pipeline(
+        const core::Context* ctx,
+        epochengine::openglstate::OpenGL4State& state)
     {
         if (state.sceneShader
             && state.sceneVao
@@ -347,8 +351,9 @@ void main() {
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
 
-        const auto vertices = epochengine::previewgrid::grid_vertices();
-        const auto indices = epochengine::previewgrid::grid_indices();
+        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
+        const auto& vertices = gridGeometry->vertices;
+        const auto& indices = gridGeometry->indices;
 
         glGenVertexArrays(1, &state.sceneVao);
         glGenBuffers(1, &state.sceneVbo);
@@ -360,13 +365,13 @@ void main() {
             GL_ARRAY_BUFFER,
             static_cast<GLsizeiptr>(vertices.size() * sizeof(vertices[0])),
             vertices.data(),
-            GL_STATIC_DRAW);
+            GL_DYNAMIC_DRAW);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
         glBufferData(
             GL_ELEMENT_ARRAY_BUFFER,
             static_cast<GLsizeiptr>(indices.size() * sizeof(indices[0])),
             indices.data(),
-            GL_STATIC_DRAW);
+            GL_DYNAMIC_DRAW);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(
             0,
@@ -384,6 +389,8 @@ void main() {
             static_cast<GLsizei>(sizeof(epochengine::previewgrid::Vertex)),
             reinterpret_cast<void*>(offsetof(epochengine::previewgrid::Vertex, color)));
         glBindVertexArray(0);
+        state.sceneGridSignature = gridGeometry->signature;
+        state.sceneGridIndexCount = static_cast<GLsizei>(indices.size());
 
         glGenVertexArrays(1, &state.sceneMarkerVao);
         glGenBuffers(1, &state.sceneMarkerVbo);
@@ -765,7 +772,7 @@ void main() {
         glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        if (previewMode == core::ScenePreviewMode::Editor && ensure_scene_preview_pipeline(state))
+        if (previewMode == core::ScenePreviewMode::Editor && ensure_scene_preview_pipeline(ctx, state))
         {
             const auto camera = epochengine::previewgrid::camera_for(ctx);
             const float aspect = viewportHeight > 0
@@ -784,13 +791,36 @@ void main() {
             glUseProgram(state.sceneShader);
             glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
 
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
+            if (state.sceneGridSignature != gridGeometry->signature)
+            {
+                glBindVertexArray(state.sceneVao);
+                glBindBuffer(GL_ARRAY_BUFFER, state.sceneVbo);
+                glBufferData(
+                    GL_ARRAY_BUFFER,
+                    static_cast<GLsizeiptr>(
+                        gridGeometry->vertices.size() * sizeof(gridGeometry->vertices[0])),
+                    gridGeometry->vertices.data(),
+                    GL_DYNAMIC_DRAW);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
+                glBufferData(
+                    GL_ELEMENT_ARRAY_BUFFER,
+                    static_cast<GLsizeiptr>(
+                        gridGeometry->indices.size() * sizeof(gridGeometry->indices[0])),
+                    gridGeometry->indices.data(),
+                    GL_DYNAMIC_DRAW);
+                state.sceneGridSignature = gridGeometry->signature;
+                state.sceneGridIndexCount =
+                    static_cast<GLsizei>(gridGeometry->indices.size());
+            }
+
             // The grid is visual reference, not depth authority. Let objects draw over it
             // deterministically instead of fighting coplanar/near-coplanar helper pixels.
             glDepthMask(GL_FALSE);
             glBindVertexArray(state.sceneVao);
             glDrawElements(
                 GL_LINES,
-                static_cast<GLsizei>(epochengine::previewgrid::grid_indices().size()),
+                state.sceneGridIndexCount,
                 GL_UNSIGNED_INT,
                 nullptr);
 

@@ -4,6 +4,7 @@
  ************************************************/
 module;
 
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -209,6 +210,165 @@ namespace epochengine::project_input
             return ContractFailure::duplicate_rejection;
         }
 
+        const BindingDefinition* resetBinding = find_binding(
+            compiled.artifact,
+            ActionSemantic::reset,
+            BindingDevice::keyboard);
+        const BindingDefinition* controllerAxisBinding = find_binding(
+            compiled.artifact,
+            ActionSemantic::move_x,
+            BindingDevice::controller_axis);
+        if (!resetBinding || !controllerAxisBinding)
+            return ContractFailure::profile_rebind;
+        const auto rebound = rebind_keyboard(
+            source, resetBinding->id, KeyCode::t, limits);
+        if (!rebound
+            || rebound.code != ProfileEditCode::ready
+            || rebound.source.revision.sequence != source.revision.sequence + 1u
+            || rebound.source.revision.content == source.revision.content)
+        {
+            return ContractFailure::profile_rebind;
+        }
+        const auto reboundArtifact = compile_profile(
+            "input-profile-contract", rebound.source, limits);
+        InputSnapshot reboundInput{};
+        reboundInput.frame_index = 9u;
+        reboundInput.keyboard.push_back({KeyCode::t, true, true});
+        const auto reboundFrame = reboundArtifact
+            ? evaluate_action_frame(
+                reboundArtifact.artifact, reboundInput, limits)
+            : ActionFrame{};
+        const auto* reboundReset = reboundArtifact
+            ? find_action(
+                reboundFrame,
+                ActionSemantic::reset,
+                reboundArtifact.artifact)
+            : nullptr;
+        if (!reboundArtifact || !reboundFrame || !reboundReset
+            || reboundReset->value_q15 != normalized_unit
+            || !reboundReset->pressed)
+        {
+            return ContractFailure::profile_rebind;
+        }
+        const auto controllerRebind = rebind_keyboard(
+            source, controllerAxisBinding->id, KeyCode::t, limits);
+        const auto duplicateRebind = rebind_keyboard(
+            source, resetBinding->id, KeyCode::e, limits);
+        if (controllerRebind.code != ProfileEditCode::unsupported_device
+            || duplicateRebind.code != ProfileEditCode::validation_failed
+            || duplicateRebind.validation
+                != ValidationCode::duplicate_binding_source)
+        {
+            return ContractFailure::profile_rebind;
+        }
+
+        const BindingDefinition* jumpControllerBinding = find_binding(
+            compiled.artifact,
+            ActionSemantic::jump,
+            BindingDevice::controller_button);
+        if (!jumpControllerBinding)
+            return ContractFailure::controller_rebind;
+        const auto controllerButtonRebound = rebind_controller_button(
+            source,
+            jumpControllerBinding->id,
+            ControllerButton::east,
+            1u,
+            limits);
+        const auto controllerAxisRebound = rebind_controller_axis(
+            source,
+            controllerAxisBinding->id,
+            ControllerAxis::right_x,
+            2u,
+            limits);
+        const auto wrongControllerKind = rebind_controller_axis(
+            source,
+            jumpControllerBinding->id,
+            ControllerAxis::right_x,
+            0u,
+            limits);
+        const auto duplicateControllerSource = rebind_controller_button(
+            source,
+            jumpControllerBinding->id,
+            ControllerButton::west,
+            0u,
+            limits);
+        const auto invalidControllerSlot = rebind_controller_button(
+            source,
+            jumpControllerBinding->id,
+            ControllerButton::east,
+            static_cast<std::uint8_t>(limits.maximum_controller_slots),
+            limits);
+        const auto controllerButtonArtifact = controllerButtonRebound
+            ? compile_profile(
+                "input-profile-contract",
+                controllerButtonRebound.source,
+                limits)
+            : CompiledProfileResult{};
+        InputSnapshot controllerButtonInput{};
+        controllerButtonInput.frame_index = 10u;
+        controllerButtonInput.controller_buttons.push_back({
+            1u, ControllerButton::east, true, true});
+        const auto controllerButtonFrame = controllerButtonArtifact
+            ? evaluate_action_frame(
+                controllerButtonArtifact.artifact,
+                controllerButtonInput,
+                limits)
+            : ActionFrame{};
+        const auto* controllerJump = controllerButtonArtifact
+            ? find_action(
+                controllerButtonFrame,
+                ActionSemantic::jump,
+                controllerButtonArtifact.artifact)
+            : nullptr;
+        if (!controllerButtonRebound || !controllerAxisRebound
+            || controllerButtonRebound.source.revision.sequence
+                != source.revision.sequence + 1u
+            || controllerAxisRebound.source.revision.sequence
+                != source.revision.sequence + 1u
+            || wrongControllerKind.code != ProfileEditCode::unsupported_device
+            || duplicateControllerSource.code
+                != ProfileEditCode::validation_failed
+            || duplicateControllerSource.validation
+                != ValidationCode::duplicate_binding_source
+            || invalidControllerSlot.code
+                != ProfileEditCode::invalid_controller_slot
+            || !controllerButtonArtifact || !controllerButtonFrame
+            || !controllerJump
+            || controllerJump->value_q15 != normalized_unit
+            || !controllerJump->pressed)
+        {
+            return ContractFailure::controller_rebind;
+        }
+
+        constexpr std::uint16_t editedDeadZone{6'000u};
+        const auto deadZoneEdited = set_controller_dead_zone(
+            source, editedDeadZone, limits);
+        const auto deadZoneUnchanged = deadZoneEdited
+            ? set_controller_dead_zone(
+                deadZoneEdited.source, editedDeadZone, limits)
+            : ProfileEditResult{};
+        const auto deadZoneInvalid = set_controller_dead_zone(
+            source,
+            static_cast<std::uint16_t>(normalized_unit),
+            limits);
+        bool allAxesEdited = deadZoneEdited
+            && std::all_of(
+                deadZoneEdited.source.bindings.begin(),
+                deadZoneEdited.source.bindings.end(),
+                [editedDeadZone](const BindingDefinition& binding)
+                {
+                    return binding.device != BindingDevice::controller_axis
+                        || binding.dead_zone_q15 == editedDeadZone;
+                });
+        if (!deadZoneEdited || !allAxesEdited
+            || deadZoneEdited.source.revision.sequence
+                != source.revision.sequence + 1u
+            || deadZoneUnchanged.code != ProfileEditCode::unchanged
+            || deadZoneInvalid.code != ProfileEditCode::invalid_dead_zone)
+        {
+            return ContractFailure::dead_zone_edit;
+        }
+
         const BindingDefinition* moveAxis = find_binding(
             compiled.artifact,
             ActionSemantic::move_x,
@@ -258,6 +418,43 @@ namespace epochengine::project_input
             || jump->value_q15 != normalized_unit || !jump->pressed)
         {
             return ContractFailure::deterministic_evaluation;
+        }
+
+        ActionFrame injectedFrame = evaluate_action_frame(
+            compiled.artifact, InputSnapshot{.frame_index = 11u}, limits);
+        constexpr std::array impulses{
+            ActionImpulse{ActionSemantic::move_x, -16'384, false},
+            ActionImpulse{ActionSemantic::interact, normalized_unit, true}};
+        if (inject_action_impulses(
+                compiled.artifact, injectedFrame, impulses, limits)
+                != InjectionCode::ready)
+        {
+            return ContractFailure::action_injection;
+        }
+        const ActionValue* injectedMove = find_action(
+            injectedFrame, ActionSemantic::move_x, compiled.artifact);
+        const ActionValue* injectedInteract = find_action(
+            injectedFrame, ActionSemantic::interact, compiled.artifact);
+        constexpr std::array duplicateImpulses{
+            ActionImpulse{ActionSemantic::jump, normalized_unit, true},
+            ActionImpulse{ActionSemantic::jump, normalized_unit, true}};
+        ActionFrame rejectedFrame = injectedFrame;
+        if (!injectedMove || injectedMove->value_q15 != -16'384
+            || !injectedInteract
+            || injectedInteract->value_q15 != normalized_unit
+            || !injectedInteract->pressed
+            || action_semantic_from_name("move_x")
+                != ActionSemantic::move_x
+            || action_semantic_from_name("project.move_x")
+                != ActionSemantic::invalid
+            || inject_action_impulses(
+                    compiled.artifact,
+                    rejectedFrame,
+                    duplicateImpulses,
+                    limits) != InjectionCode::duplicate_action
+            || rejectedFrame != injectedFrame)
+        {
+            return ContractFailure::action_injection;
         }
 
         ProfileSource modified = source;
@@ -377,6 +574,39 @@ namespace epochengine::project_input
             || metrics.bytes_read == 0u || metrics.bytes_written == 0u)
         {
             return ContractFailure::metrics;
+        }
+
+        ContractRoot editedRoot{};
+        if (!editedRoot.valid())
+            return ContractFailure::temporary_root;
+        ProjectInputProfileStore editedStore{
+            "input-profile-contract", editedRoot.path};
+        if (!editedStore.save_source(rebound.source)
+            || !editedStore.publish_artifact(reboundArtifact.artifact))
+        {
+            return ContractFailure::profile_rebind;
+        }
+        ProjectInputProfileStore reopenedEditedStore{
+            "input-profile-contract", editedRoot.path};
+        const auto reopenedEditedSource = reopenedEditedStore.load_source();
+        const auto reopenedEditedArtifact = reopenedEditedStore.load_artifact();
+        if (!reopenedEditedSource || !reopenedEditedArtifact
+            || reopenedEditedSource.source != rebound.source
+            || reopenedEditedArtifact.artifact != reboundArtifact.artifact)
+        {
+            return ContractFailure::profile_rebind;
+        }
+        const auto reopenedReboundFrame = evaluate_action_frame(
+            reopenedEditedArtifact.artifact, reboundInput, limits);
+        const auto* reopenedReboundReset = find_action(
+            reopenedReboundFrame,
+            ActionSemantic::reset,
+            reopenedEditedArtifact.artifact);
+        if (!reopenedReboundFrame || !reopenedReboundReset
+            || reopenedReboundReset->value_q15 != normalized_unit
+            || !reopenedReboundReset->pressed)
+        {
+            return ContractFailure::profile_rebind;
         }
 
         if (!write_malformed_file(reopenedStore.source_path()))

@@ -170,6 +170,7 @@ export namespace epochengine::raylib_api
 
     extern const int pixelformat_rgba8;
     extern const int camera_perspective;
+    extern const int camera_orthographic;
     extern const int texture_filter_point;
     extern const int texture_filter_bilinear;
     extern const int blend_alpha_premultiply;

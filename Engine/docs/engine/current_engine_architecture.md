@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux runtime
-remains sealed at `v0.89.06`; active source development is `v0.89.16`.
+remains sealed at `v0.89.06`; active source development is `v0.89.21`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -19,11 +19,12 @@ ship.
 - **Renderer contexts**: DirectX/D3D11, OpenGL, Vulkan, SDL, SFML, Raylib, and
   Software have engine-owned context paths. Backend feature depth still follows
   `renderer_feature_matrix.md`; context availability does not imply feature parity.
-- **Primary editor surface**: the Windows parent host elects exactly one baked
-  renderer surface. The first context owns it; launcher preselection or a live
-  context switch transfers it only after state restoration, while missing
-  targets use serialized replacement in the same slot. The primary cannot
-  undock; secondary diagnostic contexts and routed panes retain popout/redock.
+- **Active editor authority**: the Windows parent host assigns exactly one
+  logical active-editor authority, independent of renderer-context creation
+  order, parent-grid side, or dock state. Launcher preselection or a live switch
+  transfers authority only after state restoration; missing targets use a
+  serialized replacement transaction. Every physical renderer context may
+  undock/redock, and routed panes retain the same capability.
 - **Vulkan retirement ownership**: the application registry lends shared
   lifetime to callbacks and atomically transfers the final owner to retirement.
   Device idle precedes GUI, pipeline, swapchain, and device destruction; every
@@ -63,16 +64,67 @@ ship.
   active-editor and selected project-run admission separately. Missing legacy
   manifest policy defaults to portable without regeneration; invalid policy
   fails closed.
+- **Guarded development execution**: `ai.development_guard` owns immutable
+  proposal identity, review, approval, bounded lifetimes, a private guard-issued
+  capability, one execution claim, and verified terminal evidence.
+  `editor.ai_development_controller` uses trusted monotonic production time,
+  serializes dispatch, and stages only strict
+  `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block data.
+  `ai.development_proposal_codec` accepts bounded one-to-four-file source intent
+  while the host owns canonical roots, full preimages/postimages, hashes, risk,
+  and all authority. Raw model reply bytes remain separate from
+  display-normalized text.
+  Direct llama transport selects one preferred line-framed structured envelope
+  and matching terminator before strict decode; transcript commentary stays
+  outside that envelope. Completed source generations are routed once, with at
+  most two automatic host-diagnosed correction attempts. Prompt examples use
+  host-reviewed paths and exact quoted bytes only when their search is unique in
+  reviewed evidence.
+
+  `ai.development_executor` is the bounded exact-content
+  engine/project source writer: it verifies approved preimages/postimages,
+  creates and flushes exclusive same-directory temporaries, revalidates before
+  commit, verifies results, and reports rollback evidence. It cannot commit,
+  push, release, mutate the sealed updater, or grant model authority.
+- **Observable editor operations**: one shared `editor.task_scheduler` runs AI
+  evidence builds, selected script builds, project builds, and the approved tool
+  harness through `taskgraph.dotsystem`. The Systems workspace presents that
+  scheduler as read-only Live Scheduler evidence with accepted, queued, started,
+  and finished timestamps plus queue/run totals and peaks. Its editable Learning
+  Graph is a separate `authoring.task_graph` document with no live execution
+  authority. Registry timing is sampled only while the Systems surface is
+  active, snapshot/projection work is revision-cached, and fixed-size Time chart
+  surfaces replace atlas pixels in place.
+- **Project and script evidence**: `project.lifecycle` defines a strict
+  generation-stamped path for selected project, committed scene, materialized
+  shell, build inputs, build attempt, verified artifact, and runtime. The
+  production editor owns the same ledger from project selection through atomic
+  scene save, shell materialization, asynchronous build settlement, and external
+  Run. Completion rechecks inputs and the accepted executable SHA-256; stale,
+  failed, changed, or cross-project artifacts fail closed.
+  `platform.child_process` owns the fixed-capacity native boundary for external
+  Run: stable handles, exact arguments, project/artifact correlation, exclusive
+  runtime groups, PID/elapsed/exit evidence, Focus, graceful Stop, and forced
+  Stop. Linux uses `fork`/`execv` with an isolated process group rather than a
+  shell command. `scripting.compiler`
+  compiles one C++23 shared-library candidate
+  at a time, revalidates source and output ownership, verifies the candidate,
+  publishes by same-filesystem atomic replacement, and re-verifies the published
+  artifact. Script Build remains distinct from Project Build/Run.
 - **Temporal texture compilation boundary**: `authoring.texture` compiles sparse
   layer documents into deterministic owning RGBA8 mip artifacts and validates
   identity, dimensions, per-mip content, aggregate bytes, and payload digest.
   `asset.texture_artifact` owns the always-built artifact schema and
   validator; `render.texture.artifact` maps sealed linear RGBA8 mip 0 into the
-  shared standalone residency cache. `project.asset_registry` and
-  `project.texture_resources` authenticate in-memory project/source/artifact
-  identity, own bounded CPU bindings, and optionally acquire residency without
-  authoring UI. Serialized artifact reading and capability-derived admission remain. sRGB-native storage, compression, whole mip-chain upload, atlas,
-  bindless, sparse, and streaming execution remain fail-closed or planned.
+  shared standalone residency cache. `project.asset_registry`,
+  `project.texture_library`, `project.texture_pipeline`, and
+  `project.texture_resources` authenticate project/source/artifact identity,
+  persist and restore exact compiled revisions, own bounded CPU bindings, apply
+  capability-derived admission, and optionally acquire residency without making
+  cache state canonical. Interactive texture-document editing, persistent
+  rename/move migration, sRGB-native storage, compression, whole mip-chain
+  upload, atlas, bindless, sparse, and streaming execution remain incomplete or
+  fail-closed.
 - **Canvas2D planning spine**: `render.canvas2d` validates project policy,
   pixel-aware camera/viewport mapping, stable sprite identity, logical texture
   materials, deterministic batching, tile descriptors, immutable submissions,
@@ -84,7 +136,7 @@ ship.
   upload, readiness, and destruction hooks. `render.canvas2d_presentation`
   verifies complete raster/frame identity, full byte-derived content identity,
   residency acquisition, explicit image semantics, and native surface bounds.
-  `opengl.canvas2d` provides a compiled primary-context final compositor with
+  `opengl.canvas2d` provides a compiled active-editor final compositor with
   context-owned texture validation, viewport-confined clear/draw work,
   top-left-to-GL coordinate conversion, and scoped GL state restoration.
   Build-safe family, staged-presentation, no-context refusal, immutable scene
@@ -94,10 +146,12 @@ ship.
   tilemap authoring/runtime compilation, deterministic input artifacts, fixed-
   step 2D solving, actor publication, deterministic sprite-animation artifacts,
   compiled-only animation restore, PCM mixing, and renderer-independent
-  process-owned audio output are build-proven. Operator-visible native pixels,
-  secondary GL share groups, live controller polling, decoded project audio,
-  physical-device ear proof, advanced collision semantics, and the approved
-  generated-child gameplay proof remain active gates.
+  process-owned audio output are build-proven. Content-addressed decoded project
+  WAV import, canonical bus/cue controls, actor event binding, authored
+  one-way/slope collision, and renderer-neutral controller sampling are also
+  build-proven. Operator-visible native pixels, secondary GL share groups,
+  physical controller/audio proof, and the approved generated-child gameplay
+  proof remain active gates.
 - **Arcade scene-surface proof**: one shared attract-pattern contract feeds
   backend-owned sampled surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan,
   DirectX, and Software. Build contracts prove ownership/routing; visual and
@@ -149,9 +203,14 @@ storage growth are proven.
 
 ## Current Gaps
 
-- Canonical snapshot persistence now owns validated scene save and runtime
-  projection, but project documents do not yet cover complete texture, physics,
-  decoded-audio, or general animation authoring/runtime handoff.
+- Canonical snapshot persistence and project pipelines cover semantic texture
+  materials, tilemaps, input profiles, deterministic actor physics, and sprite
+  animation through build-safe save/reopen and runtime preparation. Canonical
+  project audio now covers decoded WAV import, bus/cue controls, semantic actor
+  bindings, immutable decoded Library publication, integrity rejection, and
+  artifact-only runtime preparation. Interactive texture editing, broader
+  physics authoring, general animation authoring, and native project-audio proof
+  remain incomplete.
 - Existing timeline, streaming-save, snapshot, and Video controls are precursor
   contracts, not the immutable event/page/branch temporal database.
 - Renderer context coverage is broader than renderer feature parity. Vulkan and
@@ -169,18 +228,25 @@ storage growth are proven.
   extensions remain explicit human-gated capabilities.
 - OS AI remains operator-selected external tooling with evidence and promotion
   gates; it is not authoritative simulation and cannot silently activate itself.
+  The exact-content executor narrows approved writes but is not an OS transaction:
+  hostile external-writer exclusion, directory crash journaling/durability, and
+  complete ACL/xattr/alternate-stream metadata preservation remain unproved.
+- The v0.89.21 AI and Systems surfaces are source/contract-complete for this
+  checkpoint, but no GUI screenshot, responsiveness, or operator eye proof is
+  claimed.
 
 ## Current Priorities
 
-1. Complete the playable baseline 2D path: controller input/rebinding, authored
-   one-way/slope collision, decoded project audio and cue binding, save/reopen,
-   Play/Stop, Run, and Build over the accepted Canvas2D actor loop.
+1. Complete native proof for the playable baseline 2D path: controller
+   input/rebinding, authored one-way/slope collision, project audio/cue binding,
+   save/reopen, Play/Stop, Run, and Build over the accepted Canvas2D actor loop.
 2. Keep capability selection, settings, diagnostics, and project requirements
    aligned with proven T0-CPU and T1-GL behavior before broadening claims.
-3. Extend the proven protected Canvas2D scene-slot route through authenticated
-   project textures, serialized artifact reading, and capability-derived
-   admission, then continue through sRGB, compression, mip-chain, atlas,
-   bindless, sparse, and streaming policies only as evidence permits.
+3. Turn the build-proven texture/tilemap path into a complete interactive
+   workflow: texture document editing and assignment; tile palette, layers,
+   chunks, collision, compilation, save/reopen, and live pixels. Continue into
+   sRGB, compression, mip-chain, atlas, bindless, sparse, and streaming policies
+   only as evidence permits.
 4. Continue EpochGui controls and desktop docking without making floating hosts
    mandatory for game, mobile, console, or headless products.
 5. Preserve the sealed runtime/updater baseline while Debug, Release, Clang, and

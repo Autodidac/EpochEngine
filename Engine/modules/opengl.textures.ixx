@@ -36,6 +36,7 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -330,7 +331,16 @@ export namespace epochengine::opengltextures
         epochengine::openglcontext::PlatformGL::ScopedContext& contextGuard,
         std::string_view tag) noexcept
     {
-        const auto platformCtx = detail::to_platform_context(backend.glState);
+        auto platformCtx = epochengine::openglcontext::PlatformGL::get_current();
+        if (!platformCtx.valid())
+        {
+            auto currentCtx = core::get_current_render_context();
+            if (!currentCtx)
+                currentCtx = core::MultiContextManager::GetCurrent();
+            platformCtx = detail::context_to_platform_context(currentCtx.get());
+        }
+        if (!platformCtx.valid())
+            platformCtx = detail::to_platform_context(backend.glState);
         if (!platformCtx.valid())
         {
             logger::warnf_loc("OpenGL.RTT", std::source_location::current(), "{} skipped: no native GL context is registered.", tag);
@@ -458,7 +468,7 @@ export namespace epochengine::opengltextures
         if (!activate_backend_context(backend, contextGuard, "allocate texture"))
             return allocation;
 
-        const auto platformContext = detail::to_platform_context(backend.glState);
+        const auto platformContext = contextGuard.target();
         const void* const contextKey = platform_context_key(platformContext);
         if (!contextKey)
             return allocation;
@@ -553,7 +563,7 @@ export namespace epochengine::opengltextures
         if (!activate_backend_context(backend, contextGuard, "upload texture"))
             return false;
 
-        const auto platformContext = detail::to_platform_context(backend.glState);
+        const auto platformContext = contextGuard.target();
         const void* const contextKey = platform_context_key(platformContext);
         if (!contextKey || contextKey != record.native_context_key)
             return false;
@@ -606,7 +616,7 @@ export namespace epochengine::opengltextures
             return;
         }
 
-        const auto platformContext = detail::to_platform_context(backend.glState);
+        const auto platformContext = contextGuard.target();
         const void* const contextKey = platform_context_key(platformContext);
         std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
         const auto it = backend.native_textures.find(key);
@@ -1097,6 +1107,246 @@ export namespace epochengine::opengltextures
 
         return static_cast<uint32_t>(tex);
     }
+    struct SpriteBatchTexture final
+    {
+        const TextureAtlas* atlas{};
+        std::uint64_t version{};
+        GLuint texture{};
+        bool sampling_configured{};
+    };
+
+    struct SpriteBatchState final
+    {
+        const core::Context* owner{};
+        BackendData* backend{};
+        epochengine::openglstate::OpenGL4State* gl_state{};
+        epochengine::openglcontext::PlatformGL::PlatformGLContext
+            platform_context{};
+        int framebuffer_width{};
+        int framebuffer_height{};
+        GLuint bound_texture{};
+        std::vector<SpriteBatchTexture> textures{};
+        bool active{};
+    };
+
+    inline thread_local SpriteBatchState sprite_batch_state{};
+
+    inline void submit_resolved_sprite(
+        const AtlasRegion& region,
+        float x,
+        float y,
+        float width,
+        float height,
+        int framebufferWidth,
+        int framebufferHeight) noexcept
+    {
+        auto& pipe = epochengine::openglquad::quad_pipeline_state();
+        const float u0 = region.u1;
+        const float du = region.u2 - region.u1;
+        const float v0 = 1.0f - region.v1;
+        const float dv = region.v1 - region.v2;
+        if (pipe.uUVRegionLoc >= 0)
+            glUniform4f(pipe.uUVRegionLoc, u0, v0, du, dv);
+
+        const float flippedY =
+            static_cast<float>(framebufferHeight)
+            - (y + height * 0.5f);
+        const float ndcX =
+            ((x + width * 0.5f)
+                / static_cast<float>(framebufferWidth))
+                * 2.0f
+            - 1.0f;
+        const float ndcY =
+            (flippedY / static_cast<float>(framebufferHeight))
+                * 2.0f
+            - 1.0f;
+        const float ndcWidth =
+            (width / static_cast<float>(framebufferWidth)) * 2.0f;
+        const float ndcHeight =
+            (height / static_cast<float>(framebufferHeight)) * 2.0f;
+        if (pipe.uTransformLoc >= 0)
+        {
+            glUniform4f(
+                pipe.uTransformLoc,
+                ndcX,
+                ndcY,
+                ndcWidth,
+                ndcHeight);
+        }
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+    }
+
+    [[nodiscard]] inline bool begin_sprite_batch(
+        const core::Context* ctx) noexcept
+    {
+        auto& batch = sprite_batch_state;
+        if (!ctx || batch.active)
+            return false;
+
+        const auto current =
+            epochengine::openglcontext::PlatformGL::get_current();
+        auto desired = detail::context_to_platform_context(ctx);
+        if (!desired.valid())
+            desired = current;
+        if (!current.valid() || current != desired)
+            return false;
+
+        auto& backend = get_opengl_backend();
+        auto& glState =
+            state_for_platform_context(backend, desired, ctx);
+        if (!ensure_created_pipeline(glState))
+            return false;
+
+        int framebufferWidth = static_cast<int>(glState.width);
+        int framebufferHeight = static_cast<int>(glState.height);
+        if (ctx->framebufferWidth > 0 && ctx->framebufferHeight > 0)
+        {
+            framebufferWidth = ctx->framebufferWidth;
+            framebufferHeight = ctx->framebufferHeight;
+        }
+        if (framebufferWidth <= 0 || framebufferHeight <= 0)
+            return false;
+
+        glState.width = static_cast<unsigned int>(framebufferWidth);
+        glState.height = static_cast<unsigned int>(framebufferHeight);
+        batch.owner = ctx;
+        batch.backend = &backend;
+        batch.gl_state = &glState;
+        batch.platform_context = desired;
+        batch.framebuffer_width = framebufferWidth;
+        batch.framebuffer_height = framebufferHeight;
+        batch.bound_texture = 0;
+        batch.textures.clear();
+
+        auto& pipe = epochengine::openglquad::quad_pipeline_state();
+        glViewport(0, 0, framebufferWidth, framebufferHeight);
+        glDisable(GL_SCISSOR_TEST);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glActiveTexture(GL_TEXTURE0);
+        glUseProgram(pipe.shader);
+        glBindVertexArray(pipe.vao);
+        batch.active = true;
+        return true;
+    }
+
+    inline void end_sprite_batch() noexcept
+    {
+        auto& batch = sprite_batch_state;
+        if (!batch.active)
+            return;
+
+        glBindVertexArray(0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_BLEND);
+        batch.owner = nullptr;
+        batch.backend = nullptr;
+        batch.gl_state = nullptr;
+        batch.platform_context = {};
+        batch.framebuffer_width = 0;
+        batch.framebuffer_height = 0;
+        batch.bound_texture = 0;
+        batch.textures.clear();
+        batch.active = false;
+    }
+
+    inline void draw_sprite_in_active_batch(
+        SpriteHandle handle,
+        std::span<const TextureAtlas* const> atlases,
+        float x,
+        float y,
+        float width,
+        float height) noexcept
+    {
+        auto& batch = sprite_batch_state;
+        const int atlasIndex = static_cast<int>(handle.atlasIndex);
+        const int localIndex = static_cast<int>(handle.localIndex);
+        if (atlasIndex < 0
+            || atlasIndex >= static_cast<int>(atlases.size()))
+            return;
+        const TextureAtlas* atlas = atlases[atlasIndex];
+        if (!atlas)
+            return;
+
+        AtlasRegion region{};
+        if (!atlas->try_get_entry_info(localIndex, region))
+            return;
+
+        auto texture = std::ranges::find_if(
+            batch.textures,
+            [atlas](const SpriteBatchTexture& candidate)
+            {
+                return candidate.atlas == atlas
+                    && candidate.version == atlas->version;
+            });
+        if (texture == batch.textures.end())
+        {
+            ensure_uploaded_for_context(
+                *batch.backend,
+                *batch.gl_state,
+                batch.platform_context,
+                *atlas);
+            GLuint handleValue = 0;
+            {
+                std::lock_guard<std::mutex> gpuLock(
+                    batch.backend->gpuMutex);
+                auto& atlasMap = atlas_map_for_platform_context(
+                    *batch.backend,
+                    batch.platform_context);
+                const auto found = atlasMap.find(atlas);
+                if (found == atlasMap.end()
+                    || found->second.version != atlas->version)
+
+                    return;
+                handleValue = found->second.textureHandle;
+            }
+            if (handleValue == 0)
+                return;
+            batch.textures.push_back(SpriteBatchTexture{
+                atlas,
+                atlas->version,
+                handleValue,
+                false});
+            texture = std::prev(batch.textures.end());
+        }
+
+        if (batch.bound_texture != texture->texture)
+        {
+            glBindTexture(GL_TEXTURE_2D, texture->texture);
+            batch.bound_texture = texture->texture;
+        }
+        if (!texture->sampling_configured)
+        {
+            glTexParameteri(
+                GL_TEXTURE_2D,
+                GL_TEXTURE_MIN_FILTER,
+                GL_NEAREST);
+            glTexParameteri(
+                GL_TEXTURE_2D,
+                GL_TEXTURE_MAG_FILTER,
+                GL_NEAREST);
+            glTexParameteri(
+                GL_TEXTURE_2D,
+                GL_TEXTURE_WRAP_S,
+                GL_CLAMP_TO_EDGE);
+            glTexParameteri(
+                GL_TEXTURE_2D,
+                GL_TEXTURE_WRAP_T,
+                GL_CLAMP_TO_EDGE);
+            texture->sampling_configured = true;
+        }
+        submit_resolved_sprite(
+            region,
+            x,
+            y,
+            width,
+            height,
+            batch.framebuffer_width,
+            batch.framebuffer_height);
+    }
+
 
     inline void draw_sprite(SpriteHandle handle,
         std::span<const TextureAtlas* const> atlases,
@@ -1109,6 +1359,13 @@ export namespace epochengine::opengltextures
             return;
         }
 
+
+        if (sprite_batch_state.active)
+        {
+            draw_sprite_in_active_batch(
+                handle, atlases, x, y, width, height);
+            return;
+        }
         auto& backend = get_opengl_backend();
         epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
 
@@ -1219,30 +1476,11 @@ export namespace epochengine::opengltextures
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        const float drawWidth = width;
-        const float drawHeight = height;
-        const float drawX = x;
-        const float drawY = y;
-
-        const float u0 = region.u1;
-        const float du = region.u2 - region.u1;
-        const float v0 = 1.0f - region.v1;
-        const float dv = region.v1 - region.v2;
-
-        if (pipe.uUVRegionLoc >= 0)
-            glUniform4f(pipe.uUVRegionLoc, u0, v0, du, dv);
-
-        float flippedY = h - (drawY + drawHeight * 0.5f);
-
-        float ndc_x = ((drawX + drawWidth * 0.5f) / float(w)) * 2.f - 1.f;
-        float ndc_y = (flippedY / float(h)) * 2.f - 1.f;
-        float ndc_w = (drawWidth / float(w)) * 2.f;
-        float ndc_h = (drawHeight / float(h)) * 2.f;
-
-        if (pipe.uTransformLoc >= 0)
-            glUniform4f(pipe.uTransformLoc, ndc_x, ndc_y, ndc_w, ndc_h);
-
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+        submit_resolved_sprite(
+            region,
+            x, y,
+            width, height,
+            w, h);
 
         glBindVertexArray(0);
         glBindTexture(GL_TEXTURE_2D, 0);

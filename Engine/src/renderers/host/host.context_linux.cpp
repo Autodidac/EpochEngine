@@ -86,6 +86,7 @@ import epoch.cli;
 import telemetry.engine;
 import systems.registry;
 import perf.tier;
+import platform.budgets;
 
 // ---- helpers ----
 import utility.string_converter;     // epochengine::text::narrow_utf8
@@ -161,6 +162,70 @@ namespace
         constexpr std::string_view kLogSys = "Context.Multiplexer.Linux";
         constexpr int kDefaultWidth = 800;
         constexpr int kDefaultHeight = 600;
+
+        struct DesktopWorkArea final
+        {
+            int x{};
+            int y{};
+            int width{kDefaultWidth};
+            int height{kDefaultHeight};
+        };
+
+        [[nodiscard]] DesktopWorkArea desktop_work_area(
+            Display* display,
+            int screen) noexcept
+        {
+            DesktopWorkArea result{};
+            if (!display)
+                return result;
+
+            result.width = (std::max)(1, DisplayWidth(display, screen));
+            result.height = (std::max)(1, DisplayHeight(display, screen));
+
+            const Atom workAreaAtom = XInternAtom(
+                display, "_NET_WORKAREA", True);
+            if (workAreaAtom == None)
+                return result;
+
+            Atom actualType = None;
+            int actualFormat = 0;
+            unsigned long itemCount = 0;
+            unsigned long bytesAfter = 0;
+            unsigned char* property = nullptr;
+            const int status = XGetWindowProperty(
+                display,
+                RootWindow(display, screen),
+                workAreaAtom,
+                0,
+                4,
+                False,
+                XA_CARDINAL,
+                &actualType,
+                &actualFormat,
+                &itemCount,
+                &bytesAfter,
+                &property);
+            if (status != Success || actualType != XA_CARDINAL
+                || actualFormat != 32 || itemCount < 4 || !property)
+            {
+                if (property)
+                    XFree(property);
+                return result;
+            }
+
+            const auto* values = reinterpret_cast<const unsigned long*>(
+                property);
+            if (values[2] > 0 && values[3] > 0)
+            {
+                result.x = static_cast<int>(values[0]);
+                result.y = static_cast<int>(values[1]);
+                result.width = static_cast<int>(values[2]);
+                result.height = static_cast<int>(values[3]);
+            }
+            XFree(property);
+            return result;
+        }
+
 
         std::once_flag g_xlibInitFlag;
         bool g_xlibInitialized = false;
@@ -448,8 +513,8 @@ namespace
             RayLibWinCount + SDLWinCount + SFMLWinCount + VulkanWinCount + OpenGLWinCount + SoftwareWinCount;
         const bool effectiveParented = false;
         const bool singleWindow = (totalRequested == 1);
-        const int initialWidth = singleWindow ? cli::window_width : kDefaultWidth;
-        const int initialHeight = singleWindow ? cli::window_height : kDefaultHeight;
+        int initialWidth = singleWindow ? cli::window_width : kDefaultWidth;
+        int initialHeight = singleWindow ? cli::window_height : kDefaultHeight;
 
         if (totalRequested <= 0)
             return false;
@@ -491,6 +556,29 @@ namespace
 
         screen = DefaultScreen(display);
         global_display = display;
+
+        const DesktopWorkArea workArea = desktop_work_area(display, screen);
+        if (singleWindow && parented && !cli::updater_shell_requested
+            && !cli::window_width_overridden
+            && !cli::window_height_overridden)
+        {
+            const auto desktopPolicy =
+                epochengine::platform::recommended_desktop_window(
+                    epochengine::perf::tier_from_env(),
+                    static_cast<std::uint32_t>(workArea.width),
+                    static_cast<std::uint32_t>(workArea.height),
+                    static_cast<std::uint32_t>(
+                        std::thread::hardware_concurrency()));
+            initialWidth = static_cast<int>(desktopPolicy.client_width);
+            initialHeight = static_cast<int>(desktopPolicy.client_height);
+        }
+        const int initialX = singleWindow
+            ? workArea.x + (std::max)(0, (workArea.width - initialWidth) / 2)
+            : 0;
+        const int initialY = singleWindow
+            ? workArea.y + (std::max)(0, (workArea.height - initialHeight) / 2)
+            : 0;
+
 
         int fbCount = 0;
         static int visualAttribs[] = {
@@ -575,7 +663,7 @@ namespace
                     ::Window win = XCreateWindow(
                         display,
                         RootWindow(display, screen),
-                        0, 0,
+                        initialX, initialY,
                         initialWidth, initialHeight,
                         0,
                         visualInfo.depth,

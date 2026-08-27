@@ -87,7 +87,8 @@ namespace epochengine::font
 
     bool FontRenderer::load_font(const std::string& name,
         const std::string& path,
-        float size_pt)
+        float size_pt,
+        FontColor color)
     {
         if (loaded_fonts_.contains(name))
             return false;
@@ -102,7 +103,7 @@ namespace epochengine::font
         FontMetrics metrics{};
         std::unordered_map<std::uint64_t, float> kerning_pairs{};
 
-        if (!load_and_bake_font(path, size_pt, baked_glyphs, metrics, kerning_pairs, raw_texture))
+        if (!load_and_bake_font(path, size_pt, baked_glyphs, metrics, kerning_pairs, raw_texture, color))
         {
             logger::error("FontRenderer", epochengine::format_text("Failed to bake font '{}' from '{}'", name, path));
             return false;
@@ -244,7 +245,8 @@ namespace epochengine::font
         std::vector<std::pair<char32_t, BakedGlyph>>& out_glyphs,
         FontMetrics& out_metrics,
         std::unordered_map<std::uint64_t, float>& out_kerning,
-        Texture& out_texture)
+        Texture& out_texture,
+        FontColor color)
     {
         out_glyphs.clear();
         out_kerning.clear();
@@ -304,9 +306,17 @@ namespace epochengine::font
 
         stbtt_PackSetOversampling(&pack_context, 2, 2);
 
-        const std::array<std::pair<int, int>, 2> ranges_info{ {
+        const std::array<std::pair<int, int>, 10> ranges_info{ {
             {32, 126},
-            {160, 255}
+            {160, 255},
+            {0x0100, 0x017F}, // Latin Extended-A
+            {0x0370, 0x03FF}, // Greek and Coptic
+            {0x0400, 0x04FF}, // Cyrillic
+            {0x2000, 0x206F}, // General Punctuation
+            {0x20A0, 0x20CF}, // Currency Symbols
+            {0x2190, 0x21FF}, // Arrows
+            {0x2500, 0x257F}, // Box Drawing
+            {0x2580, 0x259F}  // Block Elements
         } };
 
         std::size_t total_chars = 0;
@@ -370,10 +380,11 @@ namespace epochengine::font
             {
                 const unsigned char alpha = mono_bitmap[static_cast<std::size_t>(y) * pack_width + x];
                 const std::size_t idx = (static_cast<std::size_t>(y) * out_texture.width + x) * 4;
-                out_texture.pixels[idx + 0] = 255;
-                out_texture.pixels[idx + 1] = 255;
-                out_texture.pixels[idx + 2] = 255;
-                out_texture.pixels[idx + 3] = alpha;
+                out_texture.pixels[idx + 0] = color.r;
+                out_texture.pixels[idx + 1] = color.g;
+                out_texture.pixels[idx + 2] = color.b;
+                out_texture.pixels[idx + 3] = static_cast<unsigned char>(
+                    (static_cast<unsigned int>(alpha) * color.a) / 255u);
             }
         }
 
@@ -417,8 +428,12 @@ namespace epochengine::font
             out_kerning.reserve(out_glyphs.size() * 4);
             for (const auto& [left_cp, _] : out_glyphs)
             {
+                if (left_cp > 0xFFu)
+                    continue;
                 for (const auto& [right_cp, __] : out_glyphs)
                 {
+                    if (right_cp > 0xFFu)
+                        continue;
                     const int kern = stbtt_GetCodepointKernAdvance(&font,
                         static_cast<int>(left_cp),
                         static_cast<int>(right_cp));

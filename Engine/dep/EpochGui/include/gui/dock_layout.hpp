@@ -2,7 +2,10 @@
 
 #include "floating_window.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace epochengine::gui_lib
 {
@@ -16,6 +19,219 @@ namespace epochengine::gui_lib
         center
     };
 
+    enum class DockGuideTarget : std::uint8_t
+    {
+        none = 0,
+        left_tabs = 1,
+        right_tabs = 2,
+        bottom_left_tabs = 3,
+        bottom_right_tabs = 4,
+        before_context = 5,
+        after_context = 6,
+        float_window = 7,
+
+        // Compatibility aliases for existing hosts. New code uses insertion order.
+        left_context = before_context,
+        right_context = after_context
+    };
+
+    struct DockGuideOptions
+    {
+        Rect guide_bounds{};
+        Rect left_tabs_preview{};
+        Rect right_tabs_preview{};
+        Rect bottom_left_tabs_preview{};
+        Rect bottom_right_tabs_preview{};
+        Rect left_context_preview{};
+        Rect right_context_preview{};
+        Rect floating_preview{};
+        Vec2 pointer{};
+        float guide_extent{ 94.0f };
+        float guide_gap{ 8.0f };
+        bool allow_side_tabs{ true };
+        bool allow_bottom_tabs{ true };
+        bool allow_contexts{};
+        bool allow_float{ true };
+        bool center_context_guides_in_previews{};
+    };
+
+    struct DockGuide
+    {
+        DockGuideTarget target{ DockGuideTarget::none };
+        Rect target_bounds{};
+        Rect preview_bounds{};
+        bool hovered{};
+    };
+
+    struct DockGuideLayout
+    {
+        DockGuide guides[7]{};
+        std::uint32_t count{};
+        DockGuideTarget hovered_target{ DockGuideTarget::none };
+        Rect hovered_preview{};
+    };
+
+    inline constexpr std::uint32_t maximum_context_grid_items{ 64U };
+    inline constexpr std::uint32_t maximum_context_insertion_highlights{
+        maximum_context_grid_items * 2U
+    };
+    inline constexpr std::uint32_t invalid_context_grid_index{
+        (std::numeric_limits<std::uint32_t>::max)()
+    };
+
+    enum class DockInsertionPosition : std::uint8_t
+    {
+        before,
+        after
+    };
+
+    struct DockContextGridOptions
+    {
+        const Rect* item_previews{};
+        std::uint32_t item_count{};
+        Vec2 pointer{};
+        float highlight_extent{ 12.0f };
+        std::uint32_t column_count{ 3U };
+    };
+
+    struct DockContextInsertionHighlight
+    {
+        DockInsertionPosition position{ DockInsertionPosition::before };
+        Rect target_bounds{};
+        Rect preview_bounds{};
+        std::uint32_t context_item_index{ invalid_context_grid_index };
+        std::uint32_t insertion_index{ invalid_context_grid_index };
+        std::uint32_t row_index{ invalid_context_grid_index };
+        std::uint32_t column_index{ invalid_context_grid_index };
+        bool hovered{};
+    };
+
+    struct DockContextGridLayout
+    {
+        DockContextInsertionHighlight highlights[maximum_context_insertion_highlights]{};
+        std::uint32_t count{};
+        std::uint32_t row_count{};
+        std::uint32_t column_count{};
+        std::uint32_t hovered_context_item_index{ invalid_context_grid_index };
+        std::uint32_t hovered_insertion_index{ invalid_context_grid_index };
+        std::uint32_t hovered_row_index{ invalid_context_grid_index };
+        std::uint32_t hovered_column_index{ invalid_context_grid_index };
+        DockInsertionPosition hovered_position{ DockInsertionPosition::before };
+        bool has_hovered_insertion{};
+    };
+
+    [[nodiscard]] inline DockContextGridLayout make_dock_context_grid_layout(
+        const DockContextGridOptions& options) noexcept
+    {
+        DockContextGridLayout layout{};
+        if (options.item_previews == nullptr || options.item_count == 0U)
+            return layout;
+
+        const std::uint32_t itemCount =
+            std::min(options.item_count, maximum_context_grid_items);
+        const std::uint32_t requestedColumns =
+            options.column_count == 0U ? 1U : options.column_count;
+        layout.column_count = std::min(requestedColumns, itemCount);
+        layout.row_count =
+            (itemCount + layout.column_count - 1U) / layout.column_count;
+
+        const float extent = std::max(1.0f, options.highlight_extent);
+        const auto append = [&](DockInsertionPosition position,
+                                const Rect& target,
+                                const Rect& preview,
+                                std::uint32_t contextItemIndex,
+                                std::uint32_t insertionIndex,
+                                std::uint32_t rowIndex,
+                                std::uint32_t columnIndex) noexcept
+        {
+            if (layout.count >= maximum_context_insertion_highlights)
+                return;
+
+            layout.highlights[layout.count++] = DockContextInsertionHighlight{
+                position,
+                target,
+                preview,
+                contextItemIndex,
+                insertionIndex,
+                rowIndex,
+                columnIndex,
+                false
+            };
+        };
+
+        for (std::uint32_t index = 0U; index < itemCount; ++index)
+        {
+            const Rect preview = options.item_previews[index];
+            if (preview.size.x <= 0.0f || preview.size.y <= 0.0f)
+                continue;
+
+            const std::uint32_t rowIndex = index / layout.column_count;
+            const std::uint32_t columnIndex = index % layout.column_count;
+            const float beforeWidth = std::min(extent, preview.size.x);
+            const float afterWidth = std::min(extent, preview.size.x);
+            const Rect beforeTarget{
+                preview.position,
+                { beforeWidth, preview.size.y }
+            };
+            const Rect afterTarget{
+                {
+                    preview.position.x + preview.size.x - afterWidth,
+                    preview.position.y
+                },
+                { afterWidth, preview.size.y }
+            };
+
+            append(DockInsertionPosition::before,
+                   beforeTarget,
+                   preview,
+                   index,
+                   index,
+                   rowIndex,
+                   columnIndex);
+            append(DockInsertionPosition::after,
+                   afterTarget,
+                   preview,
+                   index,
+                   index + 1U,
+                   rowIndex,
+                   columnIndex);
+        }
+
+        float bestDistance = (std::numeric_limits<float>::max)();
+        std::uint32_t hoveredHighlightIndex = invalid_context_grid_index;
+        for (std::uint32_t index = 0U; index < layout.count; ++index)
+        {
+            const auto& highlight = layout.highlights[index];
+            if (!contains(highlight.target_bounds, options.pointer))
+                continue;
+
+            const float edgeX =
+                highlight.position == DockInsertionPosition::before
+                    ? highlight.preview_bounds.position.x
+                    : highlight.preview_bounds.position.x
+                        + highlight.preview_bounds.size.x;
+            const float distance = std::abs(options.pointer.x - edgeX);
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                hoveredHighlightIndex = index;
+            }
+        }
+
+        if (hoveredHighlightIndex != invalid_context_grid_index)
+        {
+            auto& hovered = layout.highlights[hoveredHighlightIndex];
+            hovered.hovered = true;
+            layout.hovered_context_item_index = hovered.context_item_index;
+            layout.hovered_insertion_index = hovered.insertion_index;
+            layout.hovered_row_index = hovered.row_index;
+            layout.hovered_column_index = hovered.column_index;
+            layout.hovered_position = hovered.position;
+            layout.has_hovered_insertion = true;
+        }
+
+        return layout;
+    }
     struct DockPaneState
     {
         std::uint32_t id{};
@@ -117,6 +333,8 @@ namespace epochengine::gui_lib
 
     [[nodiscard]] const DockLayoutController& dock_layout_controller() noexcept;
     [[nodiscard]] bool is_valid_dock_slot(DockSlot slot) noexcept;
+    [[nodiscard]] DockGuideLayout make_dock_guide_layout(
+        const DockGuideOptions& options) noexcept;
     [[nodiscard]] bool dock_pane_requests_context_window(const DockPaneState& pane) noexcept;
     [[nodiscard]] DockPaneLayout make_dock_pane_layout(
         const DockPaneState& pane,

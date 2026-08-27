@@ -45,7 +45,7 @@ Great renaming conversions
 Examples and tooling
 - `Engine/examples/ConsoleApplication1/`
 - `Engine/build.sh`, `Engine/run.sh`, `Engine/install.sh`, `Engine/clean.sh`
-- `Engine/ai/` curated AI datasets, schemas, evals, manifests, and prompts
+- `Engine/ai/` external-model policy, reviewed eval fixtures, schemas, manifests, and prompts
 
 Migration notes
 - `Engine/docs/engine/legacy_feature_map.md` legacy-to-active feature ownership map

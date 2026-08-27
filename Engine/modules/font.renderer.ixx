@@ -107,6 +107,14 @@ namespace epochengine::font
         }
     };
 
+    export struct FontColor
+    {
+        std::uint8_t r{255};
+        std::uint8_t g{255};
+        std::uint8_t b{255};
+        std::uint8_t a{255};
+    };
+
    export class FontRenderer
     {
     public:
@@ -114,7 +122,8 @@ namespace epochengine::font
 
         bool load_font(const std::string& name,
             const std::string& path,
-            float size_pt);
+            float size_pt,
+            FontColor color = {});
 
         [[nodiscard]] const FontAsset* get_font(const std::string& name) const noexcept;
 
@@ -141,7 +150,8 @@ namespace epochengine::font
             std::vector<std::pair<char32_t, BakedGlyph>>& out_glyphs,
             FontMetrics& out_metrics,
             std::unordered_map<std::uint64_t, float>& out_kerning,
-            Texture& out_texture);
+            Texture& out_texture,
+            FontColor color);
 
         logger::Logger* logger_{};
         std::unordered_map<std::string, FontAsset> loaded_fonts_;

@@ -411,8 +411,9 @@ export namespace epochengine::sfmlcontext
                 camera.up);
             const auto mvp = epochengine::previewgrid::multiply(proj, view);
 
-            const auto vertices = epochengine::previewgrid::grid_vertices();
-            const auto indices = epochengine::previewgrid::grid_indices();
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+            const auto& vertices = gridGeometry->vertices;
+            const auto& indices = gridGeometry->indices;
             sf::VertexArray lines(sf::PrimitiveType::Lines);
 
             for (std::size_t i = 0; i + 1 < indices.size(); i += 2)

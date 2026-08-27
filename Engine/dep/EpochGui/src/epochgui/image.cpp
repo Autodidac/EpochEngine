@@ -356,6 +356,56 @@ namespace epochengine::gui_lib::image
         return result;
     }
 
+    ImageResult extrude_edge_gutter(
+        const Image& source,
+        std::uint32_t gutter,
+        const ImageLimits& limits)
+    {
+        ImageResult result{};
+        if (!source.valid())
+        {
+            result.error = ImageError::invalid_dimensions;
+            return result;
+        }
+
+        if (gutter > ((std::numeric_limits<std::uint32_t>::max)() - source.width) / 2U
+            || gutter > ((std::numeric_limits<std::uint32_t>::max)() - source.height) / 2U)
+        {
+            result.error = ImageError::invalid_dimensions;
+            return result;
+        }
+
+        const std::uint32_t width = source.width + gutter * 2U;
+        const std::uint32_t height = source.height + gutter * 2U;
+        std::size_t pixel_count{};
+        if (!validate_dimensions(width, height, limits, pixel_count, result.error))
+            return result;
+
+        result.image.width = width;
+        result.image.height = height;
+        result.image.source = source.source;
+        result.image.encoding = source.encoding;
+        result.image.pixels.resize(pixel_count);
+
+        for (std::uint32_t y = 0; y < height; ++y)
+        {
+            const std::uint32_t source_y = std::clamp(
+                y,
+                gutter,
+                gutter + source.height - 1U) - gutter;
+            for (std::uint32_t x = 0; x < width; ++x)
+            {
+                const std::uint32_t source_x = std::clamp(
+                    x,
+                    gutter,
+                    gutter + source.width - 1U) - gutter;
+                result.image.pixels[static_cast<std::size_t>(y) * width + x] =
+                    source.pixels[static_cast<std::size_t>(source_y) * source.width + source_x];
+            }
+        }
+        return result;
+    }
+
     RasterImageLayout make_raster_image_layout(
         const Image& image,
         Rect viewport,

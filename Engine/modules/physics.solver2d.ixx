@@ -84,11 +84,20 @@ export namespace epochengine::physics
             const CollisionFilter2D&) noexcept = default;
     };
 
+    enum class StaticPrimitive2DKind : std::uint8_t
+    {
+        solid_box,
+        one_way_up,
+        slope_up_right,
+        slope_down_right
+    };
+
     struct StaticAabbPrimitive2D final
     {
         std::uint64_t stable_id{};
         Aabb2 bounds{};
         CollisionFilter2D filter{};
+        StaticPrimitive2DKind kind{ StaticPrimitive2DKind::solid_box };
 
         [[nodiscard]] friend constexpr bool operator==(
             const StaticAabbPrimitive2D&,

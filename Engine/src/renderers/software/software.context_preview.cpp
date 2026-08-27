@@ -16,7 +16,9 @@ import software.state;
 import package.registry;
 import render.arcade;
 import render.canvas2d_cpu;
+import render.canvas2d_limits;
 import render.canvas2d_runtime;
+import render.device;
 import render.preview_grid;
 
 namespace epochengine::anativecontext::detail
@@ -224,7 +226,9 @@ namespace epochengine::anativecontext::detail
                     &ctx,
                     {
                         static_cast<std::uint32_t>(viewport.width),
-                        static_cast<std::uint32_t>(viewport.height)});
+                        static_cast<std::uint32_t>(viewport.height)},
+                    execution_limits_.canvas,
+                    execution_limits_.raster);
             if (prepared.code == canvas2d::runtime::PrepareCode::ready)
             {
                 active_ = true;
@@ -261,7 +265,9 @@ namespace epochengine::anativecontext::detail
                     &ctx,
                     {
                         static_cast<std::uint32_t>(viewport.width),
-                        static_cast<std::uint32_t>(viewport.height)});
+                        static_cast<std::uint32_t>(viewport.height)},
+                    execution_limits_.canvas,
+                    execution_limits_.raster);
             if (!prepared)
             {
                 if (prepared.code != canvas2d::runtime::PrepareCode::missing_scene)
@@ -301,6 +307,8 @@ namespace epochengine::anativecontext::detail
         }
 
         std::mutex mutex_{};
+        canvas2d::limits::NativeExecutionLimits execution_limits_{
+            canvas2d::limits::for_backend(RendererBackendKind::software)};
         canvas2d::runtime::SceneRasterSession session_{};
         bool active_{};
     };
@@ -752,8 +760,9 @@ namespace epochengine::anativecontext::detail
             camera.target,
             camera.up);
         const auto mvp = epochengine::previewgrid::multiply(proj, view);
-        const auto vertices = epochengine::previewgrid::grid_vertices();
-        const auto indices = epochengine::previewgrid::grid_indices();
+        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(&ctx);
+        const auto& vertices = gridGeometry->vertices;
+        const auto& indices = gridGeometry->indices;
 
         for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
         {

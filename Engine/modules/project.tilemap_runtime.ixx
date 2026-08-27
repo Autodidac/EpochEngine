@@ -187,6 +187,7 @@ export namespace epochengine::project_tilemap_runtime
         source_regeneration,
         library_artifact_missing,
         resource_closure,
+        visible_resource_selection,
         compiled_only_restore,
         source_required_gate,
         malformed_source_gate,
@@ -209,6 +210,8 @@ export namespace epochengine::project_tilemap_runtime
         case ContractFailure::library_artifact_missing:
             return "library_artifact_missing";
         case ContractFailure::resource_closure: return "resource_closure";
+        case ContractFailure::visible_resource_selection:
+            return "visible_resource_selection";
         case ContractFailure::compiled_only_restore:
             return "compiled_only_restore";
         case ContractFailure::source_required_gate:

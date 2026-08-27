@@ -245,6 +245,7 @@ export namespace epochengine
         [[nodiscard]] AtlasPixelSnapshot snapshot_pixels() const;
 
         std::optional<AtlasEntry> add_entry(const std::string& id, const Texture& tex);
+        std::optional<AtlasEntry> replace_entry_pixels(const std::string& id, const Texture& tex);
         std::optional<AtlasEntry> add_slice_entry(const std::string& id, int x, int y, int w, int h);
         std::optional<AtlasRegion> get_region(const std::string& id) const;
         void rebuild_pixels() const;
@@ -320,6 +321,50 @@ namespace epochengine
         logger::infof_loc("Epoch.Atlas", std::source_location::current(), "Added '{}' at ({}, {}) EntryIndex={}", id, x, y, entryIndex);
 #endif
         return entry;
+    }
+
+
+    inline std::optional<AtlasEntry> TextureAtlas::replace_entry_pixels(
+        const std::string& id,
+        const Texture& tex)
+    {
+        if (tex.width == 0 || tex.height == 0
+            || tex.pixels.size()
+                != static_cast<size_t>(tex.width)
+                    * static_cast<size_t>(tex.height) * 4u)
+        {
+            return std::nullopt;
+        }
+
+        std::unique_lock<std::recursive_mutex> lock(entriesMutex);
+        const auto found = std::find_if(
+            entries.begin(), entries.end(), [&id](const AtlasEntry& entry)
+            {
+                return entry.name == id;
+            });
+        if (found == entries.end()
+            || found->texWidth != tex.width
+            || found->texHeight != tex.height
+            || found->region.width != tex.width
+            || found->region.height != tex.height)
+        {
+            return std::nullopt;
+        }
+
+        const u32 stride = width * 4u;
+        for (u32 row = 0u; row < tex.height; ++row)
+        {
+            u8* destination = pixel_data.data()
+                + ((found->region.y + row) * stride)
+                + (found->region.x * 4u);
+            const u8* source = tex.pixels.data()
+                + (static_cast<size_t>(row) * tex.width * 4u);
+            std::copy_n(source, static_cast<size_t>(tex.width) * 4u,
+                destination);
+        }
+        found->pixels = tex.pixels;
+        ++version;
+        return *found;
     }
 
     inline u64 TextureAtlas::current_version() const

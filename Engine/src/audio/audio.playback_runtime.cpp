@@ -5,6 +5,7 @@
 module;
 
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -61,9 +62,16 @@ namespace epochengine::audio
 
     struct PlaybackRuntime::Implementation final
     {
+        struct Bus final
+        {
+            LogicalResourceId id{};
+            BusHandle handle{};
+        };
+
         struct Cue final
         {
             ClipId id{};
+            LogicalResourceId bus{};
             SourceHandle source{};
         };
 
@@ -98,6 +106,21 @@ namespace epochengine::audio
             return found == cues.end() ? nullptr : &*found;
         }
 
+        [[nodiscard]] Bus* find_bus(LogicalResourceId id) noexcept
+        {
+            const auto found = std::find_if(buses.begin(), buses.end(),
+                [id](const Bus& bus) noexcept { return bus.id == id; });
+            return found == buses.end() ? nullptr : &*found;
+        }
+
+        [[nodiscard]] const Bus* find_bus(
+            LogicalResourceId id) const noexcept
+        {
+            const auto found = std::find_if(buses.begin(), buses.end(),
+                [id](const Bus& bus) noexcept { return bus.id == id; });
+            return found == buses.end() ? nullptr : &*found;
+        }
+
         [[nodiscard]] PlaybackRuntimeCode queue_for_all(
             bool pause,
             bool resetCursor)
@@ -127,6 +150,7 @@ namespace epochengine::audio
         AudioManager manager{};
         AudioMixer mixer;
         PhysicalAudioDevice device;
+        std::vector<Bus> buses{};
         std::vector<Cue> cues{};
         PlaybackSessionHandle handle{};
         std::uint64_t generation{};
@@ -166,9 +190,56 @@ namespace epochengine::audio
         if (implementation.active)
             return {.code = PlaybackRuntimeCode::busy};
         if (request.stable_session_id == 0u || request.cues.empty()
-            || request.cues.size() > implementation.mixer.limits().maximum_clips)
+            || request.cues.size()
+                > implementation.mixer.limits().maximum_clips
+            || request.buses.size() + 1u
+                > implementation.manager.limits().maximum_buses
+            || request.buses.size() + 1u
+                > implementation.mixer.limits().maximum_bus_bindings)
         {
             return {.code = PlaybackRuntimeCode::invalid_request};
+        }
+
+        for (std::size_t index = 0; index < request.buses.size(); ++index)
+        {
+            const PlaybackBusDefinition& bus = request.buses[index];
+            if (!bus.id.valid() || !std::isfinite(bus.gain)
+                || bus.gain < 0.0f || bus.gain > 16.0f
+                || bus.parent == bus.id)
+            {
+                return {.code = PlaybackRuntimeCode::invalid_request};
+            }
+
+            const auto duplicate = std::find_if(
+                request.buses.begin(),
+                request.buses.begin()
+                    + static_cast<std::ptrdiff_t>(index),
+                [&bus](const PlaybackBusDefinition& previous) noexcept
+                {
+                    return previous.id == bus.id;
+                });
+            if (duplicate != request.buses.begin()
+                    + static_cast<std::ptrdiff_t>(index))
+            {
+                return {.code = PlaybackRuntimeCode::bus_rejected};
+            }
+
+            if (bus.parent.valid())
+            {
+                const auto parent = std::find_if(
+                    request.buses.begin(),
+                    request.buses.begin()
+                        + static_cast<std::ptrdiff_t>(index),
+                    [&bus](const PlaybackBusDefinition& previous) noexcept
+                    {
+                        return previous.id == bus.parent;
+                    });
+                if (parent == request.buses.begin()
+                        + static_cast<std::ptrdiff_t>(index))
+                {
+                    return {.code = PlaybackRuntimeCode::bus_rejected};
+                }
+            }
         }
 
         for (std::size_t index = 0; index < request.cues.size(); ++index)
@@ -184,10 +255,24 @@ namespace epochengine::audio
                 if (request.cues[previous].clip.id == cue.clip.id)
                     return {.code = PlaybackRuntimeCode::duplicate_cue};
             }
+            if (cue.bus.valid())
+            {
+                const auto route = std::find_if(
+                    request.buses.begin(),
+                    request.buses.end(),
+                    [&cue](const PlaybackBusDefinition& bus) noexcept
+                    {
+                        return bus.id == cue.bus;
+                    });
+                if (route == request.buses.end())
+                    return {.code = PlaybackRuntimeCode::bus_rejected};
+            }
         }
 
+        std::vector<Implementation::Bus> buses{};
         std::vector<ClipId> registered{};
         std::vector<SourceHandle> sources{};
+        buses.reserve(request.buses.size());
         registered.reserve(request.cues.size());
         sources.reserve(request.cues.size());
         const auto rollback = [&]() noexcept
@@ -196,10 +281,84 @@ namespace epochengine::audio
                 (void)implementation.manager.destroy_source(source);
             for (ClipId clip : registered)
                 (void)implementation.mixer.unregister_clip(clip);
+            for (auto bus = buses.rbegin(); bus != buses.rend(); ++bus)
+            {
+                (void)implementation.mixer.unbind_bus(bus->id);
+                (void)implementation.manager.destroy_bus(bus->handle);
+            }
         };
 
+        for (const PlaybackBusDefinition& definition : request.buses)
+        {
+            BusHandle parent = implementation.manager.master_bus();
+            if (definition.parent.valid())
+            {
+                const auto found = std::find_if(
+                    buses.begin(),
+                    buses.end(),
+                    [&definition](const Implementation::Bus& bus) noexcept
+                    {
+                        return bus.id == definition.parent;
+                    });
+                if (found == buses.end())
+                {
+                    rollback();
+                    return {.code = PlaybackRuntimeCode::bus_rejected};
+                }
+                parent = found->handle;
+            }
+
+            const auto created = implementation.manager.create_bus({
+                .id = definition.id,
+                .parent = parent,
+                .gain = definition.gain,
+                .muted = definition.muted});
+            if (!created.succeeded()
+                || implementation.mixer.bind_bus({
+                    definition.id, created.handle})
+                    != AudioMixerCode::success)
+            {
+                if (created.succeeded())
+                    (void)implementation.manager.destroy_bus(created.handle);
+                rollback();
+                return {.code = PlaybackRuntimeCode::bus_rejected};
+            }
+            buses.push_back({definition.id, created.handle});
+        }
+
+        const auto master =
+            implementation.manager.bus_snapshot(
+                implementation.manager.master_bus());
+        if (!master)
+        {
+            rollback();
+            return {.code = PlaybackRuntimeCode::bus_rejected};
+        }
+
+        std::vector<LogicalResourceId> cueBuses{};
+        cueBuses.reserve(request.cues.size());
         for (PlaybackCueDefinition& cue : request.cues)
         {
+            BusHandle route = implementation.manager.master_bus();
+            LogicalResourceId routeId = master->id;
+            if (cue.bus.valid())
+            {
+                const auto found = std::find_if(
+                    buses.begin(),
+                    buses.end(),
+                    [&cue](const Implementation::Bus& bus) noexcept
+                    {
+                        return bus.id == cue.bus;
+                    });
+                if (found == buses.end())
+                {
+                    rollback();
+                    return {.code = PlaybackRuntimeCode::bus_rejected};
+                }
+                route = found->handle;
+                routeId = found->id;
+            }
+
             const ClipResource resource = clip_resource(cue.clip);
             const ClipId id = cue.clip.id;
             if (implementation.mixer.register_clip(std::move(cue.clip))
@@ -211,23 +370,27 @@ namespace epochengine::audio
             registered.push_back(id);
             const auto source = implementation.manager.create_source({
                 .clip = resource,
-                .bus = implementation.manager.master_bus(),
+                .bus = route,
                 .gain = cue.gain,
                 .pitch = 1.0f,
-                .looping = cue.looping
-            });
+                .looping = cue.looping});
             if (!source.succeeded())
             {
                 rollback();
                 return {.code = PlaybackRuntimeCode::source_rejected};
             }
             sources.push_back(source.handle);
+            cueBuses.push_back(routeId);
         }
 
+        implementation.buses = std::move(buses);
         implementation.cues.clear();
         implementation.cues.reserve(registered.size());
         for (std::size_t index = 0; index < registered.size(); ++index)
-            implementation.cues.push_back({registered[index], sources[index]});
+        {
+            implementation.cues.push_back({
+                registered[index], cueBuses[index], sources[index]});
+        }
         implementation.generation = next_generation(implementation.generation);
         implementation.handle = {implementation.generation};
         implementation.stableSessionId = request.stable_session_id;
@@ -236,6 +399,8 @@ namespace epochengine::audio
         implementation.physicalRequested = request.request_physical_output;
         ++implementation.metrics.sessions_opened;
         implementation.metrics.cues_registered += implementation.cues.size();
+        implementation.metrics.buses_registered +=
+            implementation.buses.size();
 
         if (request.request_physical_output
             && implementation.device.state() != AudioDeviceState::ready)
@@ -244,8 +409,7 @@ namespace epochengine::audio
                 .sample_rate = output_sample_rate,
                 .channel_count = output_channels,
                 .maximum_submission_frames = 12'000,
-                .maximum_queued_frames = 24'000
-            });
+                .maximum_queued_frames = 24'000});
             if (opened != AudioDeviceCode::success
                 && opened != AudioDeviceCode::already_open
                 && opened != AudioDeviceCode::unavailable)
@@ -258,10 +422,8 @@ namespace epochengine::audio
         implementation.diagnostic = "audio playback session is ready";
         return {
             .code = PlaybackRuntimeCode::success,
-            .handle = implementation.handle
-        };
+            .handle = implementation.handle};
     }
-
     PlaybackRuntimeCode PlaybackRuntime::trigger(
         PlaybackSessionHandle session,
         ClipId cue,
@@ -290,6 +452,52 @@ namespace epochengine::audio
             return PlaybackRuntimeCode::command_rejected;
         }
         ++implementation.metrics.triggers_accepted;
+        return PlaybackRuntimeCode::success;
+    }
+
+    PlaybackRuntimeCode PlaybackRuntime::set_bus_gain(
+        PlaybackSessionHandle session,
+        LogicalResourceId bus,
+        float gain)
+    {
+        auto& implementation = *implementation_;
+        if (!implementation.valid(session))
+            return PlaybackRuntimeCode::invalid_session;
+        const Implementation::Bus* found = implementation.find_bus(bus);
+        if (!found || !std::isfinite(gain) || gain < 0.0f || gain > 16.0f)
+            return PlaybackRuntimeCode::invalid_request;
+        const CommandReceipt receipt = implementation.manager.submit({
+            .target_frame = implementation.frameIndex + 1u,
+            .order_group = 0u,
+            .payload = SetBusGainCommand{
+                .bus = found->handle,
+                .gain = gain}});
+        if (!receipt.accepted())
+            return PlaybackRuntimeCode::command_rejected;
+        ++implementation.metrics.bus_control_transitions;
+        return PlaybackRuntimeCode::success;
+    }
+
+    PlaybackRuntimeCode PlaybackRuntime::set_bus_muted(
+        PlaybackSessionHandle session,
+        LogicalResourceId bus,
+        bool muted)
+    {
+        auto& implementation = *implementation_;
+        if (!implementation.valid(session))
+            return PlaybackRuntimeCode::invalid_session;
+        const Implementation::Bus* found = implementation.find_bus(bus);
+        if (!found)
+            return PlaybackRuntimeCode::invalid_request;
+        const CommandReceipt receipt = implementation.manager.submit({
+            .target_frame = implementation.frameIndex + 1u,
+            .order_group = 0u,
+            .payload = SetBusMuteCommand{
+                .bus = found->handle,
+                .muted = muted}});
+        if (!receipt.accepted())
+            return PlaybackRuntimeCode::command_rejected;
+        ++implementation.metrics.bus_control_transitions;
         return PlaybackRuntimeCode::success;
     }
 
@@ -424,6 +632,14 @@ namespace epochengine::audio
             (void)implementation.mixer.unregister_clip(cue.id);
         }
         implementation.cues.clear();
+        for (auto bus = implementation.buses.rbegin();
+            bus != implementation.buses.rend();
+            ++bus)
+        {
+            (void)implementation.mixer.unbind_bus(bus->id);
+            (void)implementation.manager.destroy_bus(bus->handle);
+        }
+        implementation.buses.clear();
         if (implementation.device.state() == AudioDeviceState::ready
             || implementation.device.state() == AudioDeviceState::paused)
         {
@@ -459,6 +675,9 @@ namespace epochengine::audio
         result.cues.reserve(implementation.cues.size());
         for (const Implementation::Cue& cue : implementation.cues)
             result.cues.push_back(cue.id);
+        result.buses.reserve(implementation.buses.size());
+        for (const Implementation::Bus& bus : implementation.buses)
+            result.buses.push_back(bus.id);
         return result;
     }
 

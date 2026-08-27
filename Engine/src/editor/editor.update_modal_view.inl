@@ -12,6 +12,7 @@
                 || (editor.updateSourceInstallPending && updater::source_update_worker_active());
             const bool sourceCancelRequested = editor.updateSourceCancelRequested;
             const bool sourceCancelAvailable = sourceWorkerRunning && editor_source_cancel_available(editor);
+            const bool sourceAuthorizationRunning = editor_private_source_access_pending(editor);
             const bool updateRunning = editor.updateCheckPending.has_value() || sourceWorkerRunning;
             const bool restartReady = editor.updateState == EditorUpdateState::RestartReady;
             if (restartReady)
@@ -37,17 +38,20 @@
             const float contentRight = modalPos.x + modalSize.x - modalContentInset;
             const float contentWidth = (std::max)(1.0f, contentRight - contentX);
             const editor_update_modal::UpdateFlags flags = update_modal_flags();
-            const float cancelButtonWidth = sourceWorkerRunning ? 148.0f : 120.0f;
+            const float cancelButtonWidth = (sourceWorkerRunning || sourceAuthorizationRunning) ? 148.0f : 120.0f;
             const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
             const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
             const bool showCancelButton =
-                sourceWorkerRunning
+                sourceAuthorizationRunning
+                    ? !sourceCancelRequested
+                : sourceWorkerRunning
                     ? (!sourceCancelRequested && sourceCancelAvailable)
                     : (!updateRunning && !restartReady);
             const bool showPrimaryButton =
                 !updateRunning
                 && (flags.installableUpdate || restartReady || sourceWorkerRunning);
-            const bool showAdvancedSourceButton = !updateRunning && !restartReady;
+            const bool showAdvancedSourceButton =
+                updater::private_source_access_enabled() && !updateRunning && !restartReady;
             const editor_update_modal::ActionStrip actionStrip =
                 editor_update_modal::update_action_strip(flags, contentWidth);
             const float actionStripHeight = actionStrip.height;
@@ -108,11 +112,15 @@
             if (cursorY + 22.0f <= contentBottom)
             {
                 const float progressWidth = (std::max)(1.0f, (std::min)(contentWidth, 560.0f));
-                const std::string progressLabel = sourceWorkerRunning
+                const std::string progressLabel = sourceAuthorizationRunning
+                    ? "Source authorization"
+                    : sourceWorkerRunning
                     ? "Source rebuild"
                     : editor.updateProjectSourceDownloadPending ? "Project source"
                     : updateRunning ? "Update" : restartReady ? "Update staged" : "Update ready";
-                const std::string progressStatus = sourceWorkerRunning
+                const std::string progressStatus = sourceAuthorizationRunning
+                    ? "approval / encrypted transfer"
+                    : sourceWorkerRunning
                     ? (!sourceCancelRequested && !sourceCancelAvailable)
                         ? epochengine::format_text(
                             "{} - cancel update available in {}s",
@@ -147,7 +155,14 @@
                 if (showCancelButton)
                 {
                     gui::set_cursor({ contentX, stackedButtonY });
-                    if (sourceWorkerRunning)
+                    if (sourceAuthorizationRunning)
+                    {
+                        if (gui::button("Cancel Source Access", { contentWidth, buttonHeight }))
+                        {
+                            request_editor_private_source_access_cancel(editor);
+                        }
+                    }
+                    else if (sourceWorkerRunning)
                     {
                         if (gui::button("Cancel Update", { contentWidth, buttonHeight }))
                         {
@@ -192,18 +207,25 @@
                 if (showAdvancedSourceButton)
                 {
                     gui::set_cursor({ contentX, stackedButtonY });
-                    if (gui::button("Project Source...", { contentWidth, buttonHeight }))
+                    if (gui::button("Source Options...", { contentWidth, buttonHeight }))
                     {
                         editor.showUpdateConfirmModal = false;
                         editor.showSourceUpdateConfirmModal = true;
-                        push_editor_log(editor, "[command] Project source code download requested. Awaiting confirmation.");
+                        push_editor_log(editor, "[command] Authorized source options requested.");
                     }
                 }
             }
             else
             {
                 gui::set_cursor({ contentX, buttonY });
-                if (showCancelButton && sourceWorkerRunning)
+                if (showCancelButton && sourceAuthorizationRunning)
+                {
+                    if (gui::button("Cancel Source Access", { cancelButtonWidth, buttonHeight }))
+                    {
+                        request_editor_private_source_access_cancel(editor);
+                    }
+                }
+                else if (showCancelButton && sourceWorkerRunning)
                 {
                     if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
                     {
@@ -245,11 +267,11 @@
                 }
                 const float advancedButtonX = (std::max)(contentX, contentRight - advancedButtonWidth);
                 gui::set_cursor({ advancedButtonX, buttonY });
-                if (showAdvancedSourceButton && gui::button("Project Source...", { advancedButtonWidth, buttonHeight }))
+                if (showAdvancedSourceButton && gui::button("Source Options...", { advancedButtonWidth, buttonHeight }))
                 {
                     editor.showUpdateConfirmModal = false;
                     editor.showSourceUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Project source code download requested. Awaiting confirmation.");
+                    push_editor_log(editor, "[command] Authorized source options requested.");
                 }
             }
             gui::end_modal_window();
@@ -275,10 +297,24 @@
                 editor_update_modal::source_action_strip(contentWidth);
             const float sourceActionStripHeight = sourceActionStrip.height;
             const bool sourceActionStripStacked = sourceActionStrip.stacked;
+            const std::string pairDeviceLabel =
+                updater::private_source_device_registered()
+                    ? "Re-pair This Device"
+                    : "Pair This Device";
+            const auto armDevicePairing = [&]() {
+                updater::reset_private_source_device_registration();
+                editor.updateStatus =
+                    "Device pairing is armed. Choose Build / Update From Source "
+                    "or Download Source Project to begin explicit browser enrollment.";
+                push_editor_log(
+                    editor,
+                    "[command] Source-device pairing armed; waiting for an explicit "
+                    "source action.");
+            };
             const float actionBaseY = modalPos.y + modalSize.y - sourceActionStripHeight - editor_update_modal::kButtonBottomPad;
             const float contentBottom = (std::max)(modalPos.y + 64.0f, actionBaseY - editor_update_modal::kButtonTopPad);
             gui::begin_modal_window(gui::ModalWindowOptions{
-                .title = "Project Source Code Download",
+                .title = "Authorized Source Options",
                 .position = modalPos,
                 .size = modalSize,
                 .viewport_size = { w, h },
@@ -308,10 +344,18 @@
                 }
                 actionY += buttonHeight + buttonStackGap;
                 gui::set_cursor({ actionX, actionY });
-                if (gui::button("Cancel", { contentWidth, buttonHeight }))
+                if (gui::button(pairDeviceLabel, { contentWidth, buttonHeight }))
+                {
+                    armDevicePairing();
+                }
+                actionY += buttonHeight + buttonStackGap;
+                gui::set_cursor({ actionX, actionY });
+                if (gui::button("Build / Update From Source", { contentWidth, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
-                    push_editor_log(editor, "[command] Project source code download canceled.");
+                    editor.showUpdateConfirmModal = true;
+                    push_editor_log(editor, "[command] Authorized source build confirmed.");
+                    start_editor_source_update_install(editor);
                 }
                 actionY += buttonHeight + buttonStackGap;
                 gui::set_cursor({ actionX, actionY });
@@ -326,18 +370,25 @@
             else
             {
                 gui::set_cursor({ actionX, actionY });
-                if (gui::button("Back", { 120.0f, buttonHeight }))
+                if (gui::button("Back", { 104.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
                     editor.showUpdateConfirmModal = true;
                 }
-                gui::set_cursor({ actionX + 120.0f + buttonGap, actionY });
-                if (gui::button("Cancel", { 120.0f, buttonHeight }))
+                gui::set_cursor({ actionX + 104.0f + buttonGap, actionY });
+                if (gui::button(pairDeviceLabel, { 168.0f, buttonHeight }))
+                {
+                    armDevicePairing();
+                }
+                gui::set_cursor({ actionX + 104.0f + 168.0f + 2.0f * buttonGap, actionY });
+                if (gui::button("Build / Update From Source", { 208.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
-                    push_editor_log(editor, "[command] Project source code download canceled.");
+                    editor.showUpdateConfirmModal = true;
+                    push_editor_log(editor, "[command] Authorized source build confirmed.");
+                    start_editor_source_update_install(editor);
                 }
-                gui::set_cursor({ actionX + 240.0f + 2.0f * buttonGap, actionY });
+                gui::set_cursor({ actionX + 104.0f + 168.0f + 208.0f + 3.0f * buttonGap, actionY });
                 if (gui::button("Download Source Project", { 220.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
@@ -375,6 +426,8 @@
                 push_editor_log(editor, "[command] Auto command triggered: project source code download.");
                 append_editor_automation_trace("triggered source-update");
                 start_editor_project_source_code_download(editor);
+                break;
+            case EditorAutomationCommand::AssetsInteractionProof:
                 break;
             case EditorAutomationCommand::None:
                 break;

@@ -4,7 +4,11 @@
  ************************************************/
 module;
 
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 module project.actor2d_runtime;
@@ -79,7 +83,7 @@ namespace epochengine::project_actor2d
         }
 
         StaticCollision unsupported = floor_surface();
-        unsupported.kind = StaticCollisionKind::one_way_up;
+        unsupported.kind = StaticCollisionKind::unsupported;
         if (ActorRuntime::validate_collision(
                 std::span<const StaticCollision>{&unsupported, 1u}, 8u)
             == ResultCode::ready)
@@ -93,6 +97,31 @@ namespace epochengine::project_actor2d
             == ResultCode::ready)
         {
             return ContractFailure::invalid_collision_accepted;
+        }
+
+        const std::array authoredSurfaceKinds{
+            StaticCollisionKind::one_way_up,
+            StaticCollisionKind::slope_up_right,
+            StaticCollisionKind::slope_down_right};
+        for (std::size_t index = 0u; index < authoredSurfaceKinds.size(); ++index)
+        {
+            StaticCollision surface = floor_surface();
+            surface.stable_id += static_cast<std::uint64_t>(index + 1u);
+            surface.kind = authoredSurfaceKinds[index];
+            ActorRuntime surfaceRuntime{};
+            if (surfaceRuntime.replace_collision(
+                    std::span<const StaticCollision>{&surface, 1u})
+                    != ResultCode::ready)
+            {
+                return ContractFailure::invalid_collision_accepted;
+            }
+            const auto snapshot = surfaceRuntime.snapshot();
+            if (snapshot.solver.state.static_primitives.size() != 1u
+                || snapshot.solver.state.static_primitives.front().stable_id
+                    != surface.stable_id)
+            {
+                return ContractFailure::invalid_collision_accepted;
+            }
         }
 
         const std::vector<StaticCollision> floor{floor_surface()};

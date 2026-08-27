@@ -12,8 +12,13 @@ import project.texture_pipeline;
 import project.tilemap_pipeline;
 import project.tilemap_runtime;
 import project.input_profile;
+import project.input_controller;
 import project.actor2d_runtime;
 import project.sprite_animation;
+import project.gameplay2d_runtime;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+import project.texture_source;
+#endif
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import project.tilemap_source;
 #endif
@@ -44,6 +49,19 @@ namespace epochengine::project_contracts
                 project_textures::texture_pipeline_contract_failure_name(
                     pipeline)};
         }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+        const auto textureSources =
+            project_texture_sources::
+                project_texture_source_contract_failure();
+        if (textureSources
+            != project_texture_sources::SourceContractFailure::none)
+        {
+            return {
+                false,
+                project_texture_sources::source_contract_failure_name(
+                    textureSources)};
+        }
+#endif
         const auto admission =
             project_textures::project_texture_admission_contract_failure();
         if (admission != project_textures::TextureAdmissionContractFailure::none)
@@ -80,6 +98,15 @@ namespace epochengine::project_contracts
                 false,
                 project_input::contract_failure_name(inputProfile)};
         }
+        const auto inputController = project_input_controller::run_contract();
+        if (inputController
+            != project_input_controller::ContractFailure::none)
+        {
+            return {
+                false,
+                project_input_controller::contract_failure_name(
+                    inputController)};
+        }
         const auto actor2d = project_actor2d::run_contract();
         if (actor2d != project_actor2d::ContractFailure::none)
         {
@@ -97,6 +124,13 @@ namespace epochengine::project_contracts
                 false,
                 project_sprite_animation::contract_failure_name(
                     spriteAnimation)};
+        }
+        const auto gameplay2d = project_gameplay2d::run_contract();
+        if (gameplay2d != project_gameplay2d::ContractFailure::none)
+        {
+            return {
+                false,
+                project_gameplay2d::contract_failure_name(gameplay2d)};
         }
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
         const auto tilemapSources =

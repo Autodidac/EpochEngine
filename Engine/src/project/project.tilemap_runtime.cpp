@@ -15,6 +15,8 @@ module;
 
 module project.tilemap_runtime;
 
+import asset.texture_artifact;
+
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import authoring.tilemap;
 #endif
@@ -203,19 +205,6 @@ namespace epochengine::project_tilemap_runtime
                 ++metrics_.texture_restorations;
             }
 
-            canvas2d::scene_content::ResourceLease lease{};
-            if (!logicalTextures.empty())
-            {
-                auto binding = textures_.bind_canvas2d(logicalTextures);
-                if (!binding)
-                {
-                    return reject(
-                        RuntimeCode::texture_binding_failure,
-                        "tile-set textures did not produce a Canvas2D lease");
-                }
-                lease = std::move(binding.lease);
-            }
-
             auto view = request.view;
             if (view.world_bounds.empty())
             {
@@ -242,6 +231,37 @@ namespace epochengine::project_tilemap_runtime
                     "tile map could not compile its visible region");
             }
 
+            std::vector<canvas2d::LogicalTextureReference> visibleTextures{};
+            visibleTextures.reserve(logicalTextures.size());
+            for (const auto& sprite : visible.sprites)
+            {
+                if (sprite.material.source
+                        != canvas2d::SpriteSourceKind::texture)
+                {
+                    continue;
+                }
+                if (!contains(logicalTextures, sprite.material.logical_texture))
+                {
+                    return reject(
+                        RuntimeCode::texture_identity_mismatch,
+                        "visible tile references an undeclared texture identity");
+                }
+                if (!contains(visibleTextures, sprite.material.logical_texture))
+                    visibleTextures.push_back(sprite.material.logical_texture);
+            }
+
+            canvas2d::scene_content::ResourceLease lease{};
+            if (!visibleTextures.empty())
+            {
+                auto binding = textures_.bind_canvas2d(visibleTextures);
+                if (!binding)
+                {
+                    return reject(
+                        RuntimeCode::texture_binding_failure,
+                        "visible tile textures did not produce a Canvas2D lease");
+                }
+                lease = std::move(binding.lease);
+            }
             canvas2d::CameraState camera = request.camera;
             if (request.use_project_pixel_density)
             {

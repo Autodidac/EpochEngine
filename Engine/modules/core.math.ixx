@@ -39,6 +39,52 @@ export namespace epochengine::core::math
     template <class T>
     concept arithmetic = std::is_arithmetic_v<T>;
 
+    template <arithmetic T, class Domain = void>
+    struct Vector2 final
+    {
+        T x{};
+        T y{};
+
+        [[nodiscard]] friend constexpr bool operator==(
+            const Vector2&,
+            const Vector2&) noexcept = default;
+    };
+
+    using Float2 = Vector2<float>;
+    using Double2 = Vector2<double>;
+
+    template <arithmetic T, class Domain>
+    [[nodiscard]] constexpr Vector2<T, Domain> add(
+        Vector2<T, Domain> left,
+        Vector2<T, Domain> right) noexcept
+    {
+        return {left.x + right.x, left.y + right.y};
+    }
+
+    template <arithmetic T, class Domain>
+    [[nodiscard]] constexpr Vector2<T, Domain> subtract(
+        Vector2<T, Domain> left,
+        Vector2<T, Domain> right) noexcept
+    {
+        return {left.x - right.x, left.y - right.y};
+    }
+
+    template <arithmetic T, class Domain>
+    [[nodiscard]] constexpr Vector2<T, Domain> scale(
+        Vector2<T, Domain> value,
+        T factor) noexcept
+    {
+        return {value.x * factor, value.y * factor};
+    }
+
+    template <arithmetic T, class Domain>
+    [[nodiscard]] constexpr T dot(
+        Vector2<T, Domain> left,
+        Vector2<T, Domain> right) noexcept
+    {
+        return left.x * right.x + left.y * right.y;
+    }
+
     template <arithmetic T>
     constexpr T clamp(T v, T lo, T hi) noexcept
     {

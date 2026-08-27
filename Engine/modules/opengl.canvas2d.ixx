@@ -401,8 +401,7 @@ export namespace epochengine::openglcanvas2d
             return false;
         }
 
-        const auto platform_context =
-            opengltextures::detail::to_platform_context(backend.glState);
+        const auto platform_context = context_guard.target();
         const void* const context_key =
             opengltextures::platform_context_key(platform_context);
         if (!context_key || context_key != record->native_context_key)

@@ -58,7 +58,9 @@ import :shared_vk;
 import core.context;
 import render.canvas2d;
 import render.canvas2d_cpu;
+import render.canvas2d_limits;
 import render.canvas2d_runtime;
+import render.device;
 import core.logger;
 import core.path;
 import epoch.cli;
@@ -881,20 +883,24 @@ namespace epochengine::vulkancontext
           return false;
         }
 
-        constexpr std::uint64_t maximumUploadBytes = 128ull * 1024ull * 1024ull;
-        canvas2d::cpu::RasterLimits rasterLimits{};
-        canvas2d::CanvasLimits canvasLimits{};
-        rasterLimits.maximum_canvas_pixels =
-            (std::min)(rasterLimits.maximum_canvas_pixels,
-                       maximumUploadBytes / sizeof(canvas2d::cpu::Rgba8));
+        const canvas2d::limits::NativeExecutionLimits executionLimits =
+            canvas2d::limits::for_backend(RendererBackendKind::vulkan);
+        if (!executionLimits.valid())
+          return false;
+        const std::uint64_t maximumUploadBytes =
+            executionLimits.maximum_native_canvas_bytes;
+        canvas2d::cpu::RasterLimits rasterLimits = executionLimits.raster;
+        canvas2d::CanvasLimits canvasLimits = executionLimits.canvas;
         const std::uint32_t deviceDimension =
             physicalDevice.getProperties().limits.maxImageDimension2D;
         const std::uint32_t boundedDimension =
             (std::min)(std::uint32_t{16'384}, deviceDimension);
         if (boundedDimension == 0u)
           return false;
-        canvasLimits.maximum_canvas_dimension = boundedDimension;
-        canvasLimits.maximum_surface_dimension = boundedDimension;
+        canvasLimits.maximum_canvas_dimension =
+            (std::min)(canvasLimits.maximum_canvas_dimension, boundedDimension);
+        canvasLimits.maximum_surface_dimension =
+            (std::min)(canvasLimits.maximum_surface_dimension, boundedDimension);
         canvasLimits.maximum_canvas_pixels = rasterLimits.maximum_canvas_pixels;
         canvasLimits.maximum_surface_pixels =
             rasterLimits.maximum_presentation_pixels;

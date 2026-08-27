@@ -26,12 +26,14 @@ module editor.project_textures;
 
 import asset.texture_artifact;
 import asset.texture_import;
+import authoring.texture;
 import capability.profile;
 import platform.budgets;
 import project.asset_registry;
 import project.texture_admission;
 import project.texture_pipeline;
 import project.texture_resources;
+import project.texture_source;
 import render.canvas2d;
 import render.canvas2d_scene;
 import scene.snapshot;
@@ -123,7 +125,7 @@ namespace epochengine::editor_project_textures
             return std::string{"Assets/"} + relative.generic_string();
         }
 
-        [[nodiscard]] bool supported_source_extension(
+        [[nodiscard]] std::string lowercase_extension(
             const fs::path& source)
         {
             std::string extension = source.extension().string();
@@ -135,9 +137,51 @@ namespace epochengine::editor_project_textures
                 {
                     return static_cast<char>(std::tolower(character));
                 });
+            return extension;
+        }
+
+        [[nodiscard]] bool supported_source_extension(
+            const fs::path& source)
+        {
+            const std::string extension = lowercase_extension(source);
             return extension == ".ppm"
                 || extension == ".bmp"
                 || extension == ".tga";
+        }
+
+        [[nodiscard]] bool catalog_source_extension(
+            const fs::path& source)
+        {
+            return supported_source_extension(source)
+                || lowercase_extension(source) == ".epoch_texture";
+        }
+
+        [[nodiscard]] asset::texture::TextureCompileProfile
+            imported_texture_profile() noexcept
+        {
+            asset::texture::TextureCompileProfile profile{};
+            profile.format = asset::texture::ArtifactFormat::rgba8_unorm;
+            profile.color_space = asset::texture::ColorSpace::linear;
+            profile.mipmaps =
+                asset::texture::MipmapPolicy::preserve_authored;
+            return profile;
+        }
+
+        [[nodiscard]] asset::texture::TextureCompileProfile
+            authored_texture_profile(
+                const authoring::texture::TextureDocument& document) noexcept
+        {
+            asset::texture::TextureCompileProfile profile{};
+            const auto& canvas = document.descriptor();
+            profile.format =
+                canvas.format
+                    == authoring::texture::PixelFormat::rgba8_srgb
+                ? asset::texture::ArtifactFormat::rgba8_srgb
+                : asset::texture::ArtifactFormat::rgba8_unorm;
+            profile.color_space = canvas.color_space;
+            profile.mipmaps =
+                asset::texture::MipmapPolicy::preserve_authored;
+            return profile;
         }
 
         [[nodiscard]] std::uint64_t material_stable_key(
@@ -242,6 +286,158 @@ namespace epochengine::editor_project_textures
         }
     }
 
+    std::optional<TextureThumbnail> make_texture_thumbnail(
+        const TexturePreview& preview,
+        TextureThumbnailPolicy policy) noexcept
+    {
+        if (!preview || !policy.valid())
+            return std::nullopt;
+
+        try
+        {
+            std::uint32_t targetWidth = preview.width;
+            std::uint32_t targetHeight = preview.height;
+            if (targetWidth > policy.maximum_width
+                || targetHeight > policy.maximum_height)
+            {
+                const std::uint64_t widthLimitedHeight =
+                    static_cast<std::uint64_t>(preview.height)
+                    * policy.maximum_width;
+                const std::uint64_t heightLimitedWidth =
+                    static_cast<std::uint64_t>(preview.width)
+                    * policy.maximum_height;
+                if (widthLimitedHeight
+                    <= static_cast<std::uint64_t>(preview.width)
+                        * policy.maximum_height)
+                {
+                    targetWidth = policy.maximum_width;
+                    targetHeight = static_cast<std::uint32_t>((std::max)(
+                        std::uint64_t{1u},
+                        widthLimitedHeight / preview.width));
+                }
+                else
+                {
+                    targetHeight = policy.maximum_height;
+                    targetWidth = static_cast<std::uint32_t>((std::max)(
+                        std::uint64_t{1u},
+                        heightLimitedWidth / preview.height));
+                }
+            }
+
+            targetWidth = (std::min)(targetWidth, policy.maximum_width);
+            targetHeight = (std::min)(targetHeight, policy.maximum_height);
+            TextureThumbnail result{
+                .logical_path = preview.logical_path,
+                .artifact_key = preview.artifact_key,
+                .width = targetWidth,
+                .height = targetHeight
+            };
+
+            if (targetWidth == preview.width
+                && targetHeight == preview.height)
+            {
+                result.rgba8 = preview.rgba8;
+                return result;
+            }
+
+            const std::uint64_t outputBytes =
+                static_cast<std::uint64_t>(targetWidth)
+                * targetHeight
+                * 4u;
+            if (outputBytes > static_cast<std::uint64_t>(
+                    (std::numeric_limits<std::size_t>::max)()))
+            {
+                return std::nullopt;
+            }
+            result.rgba8.resize(static_cast<std::size_t>(outputBytes));
+
+            for (std::uint32_t targetY = 0u;
+                 targetY < targetHeight;
+                 ++targetY)
+            {
+                const std::uint32_t sourceYBegin =
+                    static_cast<std::uint32_t>(
+                        static_cast<std::uint64_t>(targetY)
+                        * preview.height / targetHeight);
+                const std::uint32_t sourceYEnd = (std::min)(
+                    preview.height,
+                    static_cast<std::uint32_t>(
+                        (static_cast<std::uint64_t>(targetY + 1u)
+                            * preview.height
+                            + targetHeight - 1u)
+                        / targetHeight));
+
+                for (std::uint32_t targetX = 0u;
+                     targetX < targetWidth;
+                     ++targetX)
+                {
+                    const std::uint32_t sourceXBegin =
+                        static_cast<std::uint32_t>(
+                            static_cast<std::uint64_t>(targetX)
+                            * preview.width / targetWidth);
+                    const std::uint32_t sourceXEnd = (std::min)(
+                        preview.width,
+                        static_cast<std::uint32_t>(
+                            (static_cast<std::uint64_t>(targetX + 1u)
+                                * preview.width
+                                + targetWidth - 1u)
+                            / targetWidth));
+
+                    std::array<std::uint64_t, 4> sums{};
+                    std::uint64_t sampleCount{};
+                    for (std::uint32_t sourceY = sourceYBegin;
+                         sourceY < sourceYEnd;
+                         ++sourceY)
+                    {
+                        for (std::uint32_t sourceX = sourceXBegin;
+                             sourceX < sourceXEnd;
+                             ++sourceX)
+                        {
+                            const std::size_t sourceOffset =
+                                (static_cast<std::size_t>(sourceY)
+                                    * preview.width
+                                    + sourceX)
+                                * 4u;
+                            for (std::size_t channel = 0u;
+                                 channel < sums.size();
+                                 ++channel)
+                            {
+                                sums[channel] +=
+                                    preview.rgba8[sourceOffset + channel];
+                            }
+                            ++sampleCount;
+                        }
+                    }
+
+                    if (sampleCount == 0u)
+                        return std::nullopt;
+                    const std::size_t targetOffset =
+                        (static_cast<std::size_t>(targetY)
+                            * targetWidth
+                            + targetX)
+                        * 4u;
+                    for (std::size_t channel = 0u;
+                         channel < sums.size();
+                         ++channel)
+                    {
+                        result.rgba8[targetOffset + channel] =
+                            static_cast<std::uint8_t>(
+                                (sums[channel] + sampleCount / 2u)
+                                / sampleCount);
+                    }
+                }
+            }
+
+            return result
+                ? std::optional<TextureThumbnail>{std::move(result)}
+                : std::nullopt;
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+    }
+
     ProjectTextureController::ProjectTextureController(
         std::string projectId,
         fs::path projectRoot) noexcept
@@ -249,16 +445,20 @@ namespace epochengine::editor_project_textures
           assets_root_(project_root_.empty()
               ? fs::path{}
               : project_root_ / "Assets"),
+          source_store_(projectId, project_root_),
           pipeline_(
               std::move(projectId),
               project_root_.generic_string())
     {
+        if (valid())
+            (void)refresh_catalog();
     }
 
     bool ProjectTextureController::valid() const noexcept
     {
         return !project_root_.empty()
             && !assets_root_.empty()
+            && source_store_.valid()
             && pipeline_.valid();
     }
 
@@ -328,6 +528,204 @@ namespace epochengine::editor_project_textures
                 entry.height);
         }
         return result;
+    }
+
+    CatalogRefreshResult ProjectTextureController::refresh_catalog() noexcept
+    {
+        CatalogRefreshResult result{};
+        if (!valid())
+            return result;
+
+        try
+        {
+            constexpr std::size_t kMaximumCatalogSources = 4'096u;
+            const fs::path assets = normalized_absolute(assets_root_);
+            if (assets.empty())
+                return result;
+
+            std::error_code error{};
+            fs::create_directories(assets, error);
+            if (error)
+                return result;
+
+            std::vector<fs::path> sources{};
+            sources.reserve(64u);
+            fs::recursive_directory_iterator iterator{
+                assets,
+                fs::directory_options::skip_permission_denied,
+                error};
+            const fs::recursive_directory_iterator end{};
+            for (; !error && iterator != end; iterator.increment(error))
+            {
+                std::error_code entryError{};
+                if (!iterator->is_regular_file(entryError)
+                    || entryError
+                    || !catalog_source_extension(iterator->path()))
+                {
+                    continue;
+                }
+                if (sources.size() >= kMaximumCatalogSources)
+                {
+                    ++result.skipped_sources;
+                    continue;
+                }
+                sources.push_back(normalized_absolute(iterator->path()));
+            }
+            if (error)
+                ++result.skipped_sources;
+            std::sort(sources.begin(), sources.end());
+            result.discovered_sources = static_cast<std::uint32_t>(
+                sources.size());
+
+            const std::vector<TextureCatalogEntry> before = catalog_;
+            const std::string previousSelection = selected_logical_path_;
+            std::vector<TextureCatalogEntry> refreshed{};
+            refreshed.reserve(sources.size());
+
+            for (const fs::path& source : sources)
+            {
+                const auto logicalPath = logical_source_path(source, assets);
+                if (!logicalPath)
+                {
+                    ++result.skipped_sources;
+                    continue;
+                }
+
+                const bool authored =
+                    lowercase_extension(source) == ".epoch_texture";
+                asset::texture::TextureCompileProfile profile =
+                    imported_texture_profile();
+                std::unique_ptr<authoring::texture::TextureDocument>
+                    authoredDocument{};
+                if (authored)
+                {
+                    auto loaded = source_store_.load(*logicalPath);
+                    if (!loaded)
+                    {
+                        ++result.skipped_sources;
+                        continue;
+                    }
+                    profile = authored_texture_profile(*loaded.document);
+                    authoredDocument = std::move(loaded.document);
+                }
+
+                project_textures::TexturePipelineResult activated =
+                    pipeline_.restore_latest(*logicalPath, profile);
+                bool regenerated = false;
+                if (!activated && authoredDocument)
+                {
+                    const asset::texture::CompiledTextureArtifact artifact =
+                        authoredDocument->compile_artifact(profile);
+                    if (artifact)
+                    {
+                        activated = pipeline_.publish(
+                            *logicalPath,
+                            artifact);
+                        regenerated = static_cast<bool>(activated);
+                    }
+                }
+                if (!activated)
+                {
+                    ++result.skipped_sources;
+                    continue;
+                }
+
+                const std::array<canvas2d::LogicalTextureReference, 1>
+                    logical{activated.logical};
+                const project_textures::Canvas2DLeaseResult leased =
+                    pipeline_.bind_canvas2d(logical);
+                if (!leased
+                    || leased.lease.bindings.textures.size() != 1u)
+                {
+                    ++result.skipped_sources;
+                    continue;
+                }
+                const auto& view = leased.lease.bindings.textures.front();
+                if (view.extent.empty())
+                {
+                    ++result.skipped_sources;
+                    continue;
+                }
+
+                std::error_code sizeError{};
+                const std::uintmax_t sourceBytes =
+                    fs::file_size(source, sizeError);
+                refreshed.push_back(TextureCatalogEntry{
+                    .logical_path =
+                        activated.locator.canonical_logical_path,
+                    .source_path = source,
+                    .artifact_key = activated.locator.artifact_key,
+                    .logical = activated.logical,
+                    .source_sequence =
+                        activated.locator.source_revision.sequence,
+                    .source_bytes = sizeError
+                        ? 0u
+                        : static_cast<std::uint64_t>(sourceBytes),
+                    .decoded_bytes = leased.decoded_bytes,
+                    .width = view.extent.width,
+                    .height = view.extent.height
+                });
+                if (regenerated)
+                    ++result.regenerated_artifacts;
+                else
+                    ++result.restored_artifacts;
+            }
+
+            std::sort(
+                refreshed.begin(),
+                refreshed.end(),
+                [](const TextureCatalogEntry& left,
+                   const TextureCatalogEntry& right)
+                {
+                    return left.logical_path < right.logical_path;
+                });
+            const auto sameCatalog = [&]() noexcept
+            {
+                if (before.size() != refreshed.size())
+                    return false;
+                for (std::size_t index = 0u;
+                     index < before.size();
+                     ++index)
+                {
+                    if (before[index].logical_path
+                            != refreshed[index].logical_path
+                        || before[index].artifact_key
+                            != refreshed[index].artifact_key
+                        || before[index].source_sequence
+                            != refreshed[index].source_sequence)
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            const bool catalogUnchanged = sameCatalog();
+            catalog_ = std::move(refreshed);
+            const auto previous = std::find_if(
+                catalog_.begin(),
+                catalog_.end(),
+                [&](const TextureCatalogEntry& entry)
+                {
+                    return entry.logical_path == previousSelection;
+                });
+            if (previous != catalog_.end())
+                selected_logical_path_ = previous->logical_path;
+            else if (!catalog_.empty())
+                selected_logical_path_ = catalog_.front().logical_path;
+            else
+                selected_logical_path_.clear();
+
+            result.code = catalogUnchanged
+                ? ControllerCode::unchanged
+                : ControllerCode::ready;
+            return result;
+        }
+        catch (...)
+        {
+            result.code = ControllerCode::allocation_failure;
+            return result;
+        }
     }
 
     ControllerResult ProjectTextureController::import_source(
@@ -450,6 +848,602 @@ namespace epochengine::editor_project_textures
         }
     }
 
+    ControllerResult ProjectTextureController::create_editable(
+        std::string_view logicalPath,
+        authoring::texture::CanvasDescriptor descriptor,
+        const capability::SubsystemProfile& renderer,
+        const Budgets& platformBudgets) noexcept
+    {
+        if (!valid())
+            return reject(ControllerCode::invalid_controller);
+        if (editable_dirty_)
+            return reject(ControllerCode::unsaved_changes);
+
+        try
+        {
+            const auto canonical = project_assets::canonical_logical_path(
+                logicalPath,
+                source_store_.limits().registry);
+            if (!canonical)
+            {
+                ControllerResult result =
+                    reject(ControllerCode::source_rejected);
+                result.source_code =
+                    project_texture_sources::SourceCode::invalid_path;
+                return result;
+            }
+
+            const std::uint64_t assetKey =
+                project_assets::stable_asset_identity(
+                    pipeline_.project_key(),
+                    project_assets::AssetKind::texture,
+                    *canonical);
+            if (assetKey == 0u)
+            {
+                ControllerResult result =
+                    reject(ControllerCode::source_rejected);
+                result.source_code =
+                    project_texture_sources::SourceCode::invalid_path;
+                return result;
+            }
+            std::uint32_t documentIndex =
+                static_cast<std::uint32_t>(assetKey);
+            if (documentIndex
+                == authoring::texture::DocumentHandle::invalid_index)
+            {
+                --documentIndex;
+            }
+            std::uint32_t generation =
+                static_cast<std::uint32_t>(assetKey >> 32u);
+            if (generation == 0u)
+                generation = 1u;
+
+            auto document =
+                std::make_unique<authoring::texture::TextureDocument>(
+                    authoring::texture::DocumentHandle{
+                        documentIndex,
+                        generation},
+                    authoring::texture::BranchIdentity{
+                        pipeline_.project_key(),
+                        assetKey},
+                    descriptor);
+            if (!document->valid())
+            {
+                ControllerResult result =
+                    reject(ControllerCode::edit_rejected);
+                result.authoring_code =
+                    authoring::texture::ResultCode::invalid_descriptor;
+                return result;
+            }
+
+            const authoring::texture::MutationResult base =
+                document->create_layer(
+                    authoring::texture::LayerDescriptor{
+                        .name = "Base Color"},
+                    0u,
+                    authoring::texture::TemporalPoint{
+                        document->branch(),
+                        1});
+            if (!base)
+            {
+                ControllerResult result =
+                    reject(ControllerCode::edit_rejected);
+                result.authoring_code = base.code;
+                return result;
+            }
+
+            editable_document_ = std::move(document);
+            editable_logical_path_ = *canonical;
+            editable_source_path_.clear();
+            editable_selected_layer_ = base.layer;
+            editable_dirty_ = true;
+            ControllerResult result = publish_editable(
+                renderer,
+                platformBudgets,
+                true);
+            if (!result)
+            {
+                editable_document_.reset();
+                editable_logical_path_.clear();
+                editable_source_path_.clear();
+                editable_selected_layer_ = {};
+                editable_dirty_ = false;
+            }
+            return result;
+        }
+        catch (...)
+        {
+            return reject(ControllerCode::allocation_failure);
+        }
+    }
+
+    ControllerResult ProjectTextureController::open_editable(
+        std::string_view logicalPath,
+        const capability::SubsystemProfile& renderer,
+        const Budgets& platformBudgets) noexcept
+    {
+        if (!valid())
+            return reject(ControllerCode::invalid_controller);
+        if (editable_dirty_)
+            return reject(ControllerCode::unsaved_changes);
+        project_texture_sources::LoadedSource loaded =
+            source_store_.load(logicalPath);
+        if (!loaded)
+        {
+            ControllerResult result =
+                reject(ControllerCode::source_rejected);
+            result.source_code = loaded.code;
+            return result;
+        }
+
+        editable_document_ = std::move(loaded.document);
+        editable_logical_path_ =
+            loaded.location.canonical_logical_path;
+        editable_source_path_ = loaded.location.storage_path;
+        editable_dirty_ = false;
+        editable_selected_layer_ = {};
+        refresh_editable_selection();
+        return publish_editable(renderer, platformBudgets, false);
+    }
+
+    ControllerResult ProjectTextureController::save_editable(
+        const capability::SubsystemProfile& renderer,
+        const Budgets& platformBudgets) noexcept
+    {
+        return publish_editable(renderer, platformBudgets, true);
+    }
+
+    std::optional<EditableTextureState>
+        ProjectTextureController::editable_state() const
+    {
+        if (!editable_document_ || !editable_document_->valid())
+            return std::nullopt;
+        EditableTextureState state{
+            .logical_path = editable_logical_path_,
+            .source_path = editable_source_path_,
+            .revision = editable_document_->revision(),
+            .canvas = editable_document_->descriptor(),
+            .layers = editable_document_->layers(),
+            .selected_layer = editable_selected_layer_,
+            .metrics = editable_document_->metrics(),
+            .dirty = editable_dirty_,
+            .can_undo = editable_document_->can_undo(),
+            .can_redo = editable_document_->can_redo()
+        };
+        return state ? std::optional<EditableTextureState>{
+                std::move(state)}
+            : std::nullopt;
+    }
+
+    std::optional<TexturePreview>
+        ProjectTextureController::editable_preview() const noexcept
+    {
+        if (!editable_document_
+            || !editable_document_->valid()
+            || editable_logical_path_.empty())
+        {
+            return std::nullopt;
+        }
+        try
+        {
+            asset::texture::TextureCompileProfile profile{};
+            const authoring::texture::CanvasDescriptor& canvas =
+                editable_document_->descriptor();
+            profile.format =
+                canvas.format
+                    == authoring::texture::PixelFormat::rgba8_srgb
+                ? asset::texture::ArtifactFormat::rgba8_srgb
+                : asset::texture::ArtifactFormat::rgba8_unorm;
+            profile.color_space = canvas.color_space;
+            profile.mipmaps =
+                asset::texture::MipmapPolicy::preserve_authored;
+            const asset::texture::CompiledTextureArtifact artifact =
+                editable_document_->compile_artifact(profile);
+            if (!artifact || artifact.mips.empty())
+                return std::nullopt;
+            const asset::texture::CompiledTextureMip& mip =
+                artifact.mips.front();
+            TexturePreview preview{
+                .logical_path = editable_logical_path_,
+                .artifact_key = artifact.identity.key,
+                .width = mip.width,
+                .height = mip.height
+            };
+            preview.rgba8.resize(mip.texels.size());
+            std::transform(
+                mip.texels.begin(),
+                mip.texels.end(),
+                preview.rgba8.begin(),
+                [](std::byte value)
+                {
+                    return std::to_integer<std::uint8_t>(value);
+                });
+            return preview
+                ? std::optional<TexturePreview>{std::move(preview)}
+                : std::nullopt;
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+    }
+
+    TextureEditResult ProjectTextureController::select_editable_layer(
+        authoring::texture::LayerHandle layer) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        if (!editable_document_->layer(layer))
+        {
+            return {
+                .code = ControllerCode::edit_rejected,
+                .authoring_code =
+                    authoring::texture::ResultCode::invalid_handle,
+                .revision = editable_document_->revision(),
+                .dirty = editable_dirty_
+            };
+        }
+        editable_selected_layer_ = layer;
+        return {
+            .code = ControllerCode::unchanged,
+            .authoring_code =
+                authoring::texture::ResultCode::unchanged,
+            .revision = editable_document_->revision(),
+            .layer = layer,
+            .dirty = editable_dirty_
+        };
+    }
+
+    TextureEditResult ProjectTextureController::create_editable_layer(
+        authoring::texture::LayerDescriptor descriptor) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        const auto layers = editable_document_->layers();
+        TextureEditResult result = edit_result(
+            editable_document_->create_layer(
+                std::move(descriptor),
+                static_cast<std::uint32_t>(layers.size()),
+                next_edit_time()));
+        if (result && result.layer)
+            editable_selected_layer_ = result.layer;
+        return result;
+    }
+
+    TextureEditResult ProjectTextureController::create_editable_layer_mask(
+        authoring::texture::LayerHandle owner,
+        std::string name) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        const auto ownerInfo = editable_document_->layer(owner);
+        if (!ownerInfo
+            || ownerInfo->descriptor.role
+                != authoring::texture::LayerRole::content
+            || ownerInfo->descriptor.mask.source
+            || name.empty())
+        {
+            return {
+                .code = ControllerCode::edit_rejected,
+                .authoring_code =
+                    authoring::texture::ResultCode::invalid_descriptor,
+                .revision = editable_document_->revision(),
+                .layer = owner,
+                .dirty = editable_dirty_
+            };
+        }
+
+        const auto layers = editable_document_->layers();
+        TextureEditResult created = edit_result(
+            editable_document_->create_layer(
+                authoring::texture::LayerDescriptor{
+                    .name = std::move(name),
+                    .role = authoring::texture::LayerRole::mask
+                },
+                static_cast<std::uint32_t>(layers.size()),
+                next_edit_time()));
+        if (!created || !created.layer)
+            return created;
+
+        auto descriptor = ownerInfo->descriptor;
+        descriptor.mask.source = created.layer;
+        TextureEditResult attached = edit_result(
+            editable_document_->set_layer_properties(
+                owner,
+                std::move(descriptor),
+                next_edit_time()));
+        if (!attached)
+        {
+            (void)edit_result(editable_document_->remove_layer(
+                created.layer,
+                next_edit_time()));
+            editable_selected_layer_ = owner;
+            return attached;
+        }
+        editable_selected_layer_ = created.layer;
+        attached.layer = created.layer;
+        return attached;
+    }
+
+    TextureEditResult ProjectTextureController::remove_editable_layer(
+        authoring::texture::LayerHandle layer) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        return edit_result(editable_document_->remove_layer(
+            layer,
+            next_edit_time()));
+    }
+
+    TextureEditResult ProjectTextureController::move_editable_layer(
+        authoring::texture::LayerHandle layer,
+        std::uint32_t insertionIndex) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        return edit_result(editable_document_->move_layer(
+            layer,
+            insertionIndex,
+            next_edit_time()));
+    }
+
+    TextureEditResult
+        ProjectTextureController::set_editable_layer_properties(
+            authoring::texture::LayerHandle layer,
+            authoring::texture::LayerDescriptor descriptor) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        return edit_result(
+            editable_document_->set_layer_properties(
+                layer,
+                std::move(descriptor),
+                next_edit_time()));
+    }
+
+    TextureEditResult ProjectTextureController::paint_editable(
+        authoring::texture::StrokeDescriptor stroke) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        stroke.target = editable_selected_layer_;
+        return edit_result(editable_document_->apply_stroke(
+            std::move(stroke),
+            next_edit_time()));
+    }
+
+    TextureEditResult ProjectTextureController::undo_editable() noexcept
+    {
+        if (!editable_document_)
+            return {};
+        return edit_result(
+            editable_document_->undo(next_edit_time()));
+    }
+
+    TextureEditResult ProjectTextureController::redo_editable() noexcept
+    {
+        if (!editable_document_)
+            return {};
+        return edit_result(
+            editable_document_->redo(next_edit_time()));
+    }
+
+    ControllerResult ProjectTextureController::publish_editable(
+        const capability::SubsystemProfile& renderer,
+        const Budgets& platformBudgets,
+        bool persistSource) noexcept
+    {
+        if (!valid())
+            return reject(ControllerCode::invalid_controller);
+        if (!editable_document_
+            || !editable_document_->valid()
+            || editable_logical_path_.empty())
+        {
+            return reject(ControllerCode::editable_not_open);
+        }
+
+        try
+        {
+            const auto serialized = editable_document_->serialize(
+                source_store_.limits().maximum_source_bytes);
+            if (!serialized)
+            {
+                ControllerResult result =
+                    reject(ControllerCode::source_rejected);
+                result.authoring_code = serialized.code;
+                result.source_code =
+                    project_texture_sources::SourceCode::malformed_source;
+                return result;
+            }
+
+            project_texture_sources::SourceCode sourceCode =
+                project_texture_sources::SourceCode::ready;
+            if (persistSource)
+            {
+                const project_texture_sources::SourceLocation source =
+                    source_store_.save(
+                        editable_logical_path_,
+                        *editable_document_);
+                sourceCode = source.code;
+                if (!source)
+                {
+                    ControllerResult result =
+                        reject(ControllerCode::source_rejected);
+                    result.source_code = source.code;
+                    return result;
+                }
+                editable_source_path_ = source.storage_path;
+            }
+
+            asset::texture::TextureCompileProfile profile{};
+            const auto& canvas = editable_document_->descriptor();
+            profile.format =
+                canvas.format
+                    == authoring::texture::PixelFormat::rgba8_srgb
+                ? asset::texture::ArtifactFormat::rgba8_srgb
+                : asset::texture::ArtifactFormat::rgba8_unorm;
+            profile.color_space = canvas.color_space;
+            profile.mipmaps =
+                asset::texture::MipmapPolicy::preserve_authored;
+            const asset::texture::CompiledTextureArtifact artifact =
+                editable_document_->compile_artifact(profile);
+            if (!artifact)
+            {
+                ControllerResult result =
+                    reject(ControllerCode::compilation_rejected);
+                result.source_code = sourceCode;
+                result.compilation_status = artifact.status;
+                return result;
+            }
+
+            const project_textures::TextureAdmissionDecision admission =
+                project_textures::assess_texture_admission(
+                    artifact,
+                    renderer,
+                    {},
+                    platformBudgets);
+            if (!admission)
+            {
+                ControllerResult result = reject(
+                    ControllerCode::admission_rejected,
+                    asset::texture::TextureImportStatus::ready,
+                    admission.reason);
+                result.source_code = sourceCode;
+                result.compilation_status = artifact.status;
+                return result;
+            }
+
+            const project_textures::TexturePipelineResult published =
+                pipeline_.publish(
+                    editable_logical_path_,
+                    artifact);
+            if (!published)
+            {
+                ControllerResult result = reject(
+                    ControllerCode::publication_rejected,
+                    asset::texture::TextureImportStatus::ready,
+                    admission.reason,
+                    published.code);
+                result.source_code = sourceCode;
+                result.compilation_status = artifact.status;
+                return result;
+            }
+
+            TextureCatalogEntry entry{
+                .logical_path =
+                    published.locator.canonical_logical_path,
+                .source_path = editable_source_path_,
+                .artifact_key = artifact.identity.key,
+                .logical = published.logical,
+                .source_sequence =
+                    artifact.identity.source_revision.sequence,
+                .source_bytes = serialized.bytes.size(),
+                .decoded_bytes =
+                    artifact.identity.estimated_artifact_bytes,
+                .width = artifact.identity.width,
+                .height = artifact.identity.height
+            };
+            const auto existing = std::find_if(
+                catalog_.begin(),
+                catalog_.end(),
+                [&](const TextureCatalogEntry& candidate)
+                {
+                    return candidate.logical_path
+                        == entry.logical_path;
+                });
+            if (existing == catalog_.end())
+                catalog_.push_back(entry);
+            else
+                *existing = entry;
+            selected_logical_path_ = entry.logical_path;
+            if (persistSource)
+                editable_dirty_ = false;
+
+            ControllerResult result{
+                published.code
+                        == project_textures::PipelineCode::unchanged
+                    ? ControllerCode::unchanged
+                    : ControllerCode::ready,
+                asset::texture::TextureImportStatus::ready,
+                admission.reason,
+                published.code,
+                std::move(entry)
+            };
+            result.source_code = sourceCode;
+            result.authoring_code =
+                authoring::texture::ResultCode::success;
+            result.compilation_status = artifact.status;
+            return result;
+        }
+        catch (...)
+        {
+            return reject(ControllerCode::allocation_failure);
+        }
+    }
+
+    TextureEditResult ProjectTextureController::edit_result(
+        const authoring::texture::MutationResult& mutation) noexcept
+    {
+        if (!editable_document_)
+            return {};
+        if (mutation.code == authoring::texture::ResultCode::success)
+            editable_dirty_ = true;
+        refresh_editable_selection();
+        return {
+            .code = mutation
+                ? (mutation.code
+                        == authoring::texture::ResultCode::unchanged
+                    ? ControllerCode::unchanged
+                    : ControllerCode::ready)
+                : ControllerCode::edit_rejected,
+            .authoring_code = mutation.code,
+            .revision = mutation.revision,
+            .layer = mutation.layer,
+            .affected_tiles = mutation.affected_tiles,
+            .dirty = editable_dirty_
+        };
+    }
+
+    void ProjectTextureController::refresh_editable_selection() noexcept
+    {
+        if (!editable_document_)
+        {
+            editable_selected_layer_ = {};
+            return;
+        }
+        if (editable_document_->layer(editable_selected_layer_))
+            return;
+        try
+        {
+            const auto layers = editable_document_->layers();
+            editable_selected_layer_ = layers.empty()
+                ? authoring::texture::LayerHandle{}
+                : layers.back().handle;
+        }
+        catch (...)
+        {
+            editable_selected_layer_ = {};
+        }
+    }
+
+    authoring::texture::TemporalPoint
+        ProjectTextureController::next_edit_time() const noexcept
+    {
+        if (!editable_document_)
+            return {};
+        const authoring::texture::TemporalPoint current =
+            editable_document_->current_time();
+        if (!current
+            || current.tick
+                == (std::numeric_limits<std::int64_t>::max)())
+        {
+            return {};
+        }
+        return {
+            editable_document_->branch(),
+            current.tick + 1
+        };
+    }
     ControllerResult ProjectTextureController::select(
         std::string_view logicalPath) noexcept
     {
@@ -472,6 +1466,94 @@ namespace epochengine::editor_project_textures
             project_textures::PipelineCode::ready,
             *found
         };
+    }
+
+    std::optional<TexturePreview> ProjectTextureController::preview(
+        std::string_view logicalPath) noexcept
+    {
+        if (!valid() || logicalPath.empty())
+            return std::nullopt;
+
+        const auto found = std::find_if(
+            catalog_.begin(),
+            catalog_.end(),
+            [&](const TextureCatalogEntry& entry)
+            {
+                return entry.logical_path == logicalPath;
+            });
+        if (found == catalog_.end())
+            return std::nullopt;
+
+        try
+        {
+            const std::array<canvas2d::LogicalTextureReference, 1>
+                requested{found->logical};
+            project_textures::Canvas2DLeaseResult leased =
+                pipeline_.bind_canvas2d(requested);
+            if (!leased
+                || leased.lease.bindings.textures.size() != 1u)
+            {
+                return std::nullopt;
+            }
+
+            const auto& view = leased.lease.bindings.textures.front();
+            if (view.extent.empty()
+                || view.row_stride_pixels < view.extent.width)
+            {
+                return std::nullopt;
+            }
+
+            TexturePreview result{
+                .logical_path = found->logical_path,
+                .artifact_key = found->artifact_key,
+                .width = view.extent.width,
+                .height = view.extent.height
+            };
+            const std::uint64_t byteCount =
+                static_cast<std::uint64_t>(result.width)
+                * static_cast<std::uint64_t>(result.height)
+                * 4u;
+            if (byteCount > static_cast<std::uint64_t>(
+                    std::numeric_limits<std::size_t>::max()))
+            {
+                return std::nullopt;
+            }
+            result.rgba8.resize(static_cast<std::size_t>(byteCount));
+
+            for (std::uint32_t y = 0u; y < result.height; ++y)
+            {
+                const std::size_t rowOffset =
+                    static_cast<std::size_t>(y)
+                    * view.row_stride_pixels;
+                const std::size_t outputOffset =
+                    static_cast<std::size_t>(y)
+                    * result.width
+                    * 4u;
+                for (std::uint32_t x = 0u; x < result.width; ++x)
+                {
+                    const auto& pixel = view.pixels[rowOffset + x];
+                    const std::size_t offset =
+                        outputOffset + static_cast<std::size_t>(x) * 4u;
+                    result.rgba8[offset + 0u] = pixel.r;
+                    result.rgba8[offset + 1u] = pixel.g;
+                    result.rgba8[offset + 2u] = pixel.b;
+                    result.rgba8[offset + 3u] = pixel.a;
+                }
+            }
+            return result ? std::optional<TexturePreview>{std::move(result)}
+                          : std::nullopt;
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+    }
+
+    std::optional<TexturePreview>
+        ProjectTextureController::selected_preview() noexcept
+    {
+        const TextureCatalogEntry* entry = selected();
+        return entry ? preview(entry->logical_path) : std::nullopt;
     }
 
     std::optional<scene::SceneTextureMaterialSnapshot>
@@ -658,6 +1740,30 @@ namespace epochengine::editor_project_textures
             return ControllerContractFailure::material_identity;
         }
 
+        const auto firstPreview =
+            controller.preview(first.entry->logical_path);
+        const auto thumbnail = firstPreview
+            ? make_texture_thumbnail(
+                *firstPreview,
+                TextureThumbnailPolicy{
+                    .maximum_width = 1u,
+                    .maximum_height = 1u})
+            : std::nullopt;
+        if (!thumbnail
+            || thumbnail->width != 1u
+            || thumbnail->height != 1u
+            || thumbnail->rgba8
+                != std::vector<std::uint8_t>{
+                    128u, 128u, 0u, 255u}
+            || make_texture_thumbnail(
+                *firstPreview,
+                TextureThumbnailPolicy{
+                    .maximum_width = 0u,
+                    .maximum_height = 1u}))
+        {
+            return ControllerContractFailure::thumbnail_generation;
+        }
+
         if (!write_contract_ppm(
                 source,
                 {0u, 0u, 255u, 255u, 255u, 0u}))
@@ -702,6 +1808,32 @@ namespace epochengine::editor_project_textures
             "epoch.editor-project-textures.contract",
             root.path
         };
+        if (restored.catalog().size() != 1u
+            || restored.selected() == nullptr
+            || restored.selected()->artifact_key
+                != second.entry->artifact_key
+            || restored.selected()->source_sequence
+                != second.entry->source_sequence)
+        {
+            return ControllerContractFailure::restart_catalog;
+        }
+
+        if (!write_contract_ppm(
+                source,
+                {24u, 48u, 72u, 96u, 120u, 144u}))
+        {
+            return ControllerContractFailure::temporary_project;
+        }
+        const ControllerResult third =
+            restored.import_source(source, renderer, budgets);
+        if (!third
+            || third.entry->source_sequence
+                <= second.entry->source_sequence
+            || third.entry->artifact_key == second.entry->artifact_key)
+        {
+            return ControllerContractFailure::restart_reimport;
+        }
+
         SceneTextureLeaseResult restoredLease =
             restored.bind_scene_materials(revisions);
         if (!restoredLease
@@ -720,6 +1852,213 @@ namespace epochengine::editor_project_textures
             != ControllerCode::exact_restore_rejected)
         {
             return ControllerContractFailure::stale_path;
+        }
+
+        authoring::texture::CanvasDescriptor canvas{};
+        canvas.width = 8u;
+        canvas.height = 8u;
+        canvas.tile_extent = 4u;
+        canvas.mip_count = 1u;
+        canvas.format =
+            authoring::texture::PixelFormat::rgba8_unorm;
+        canvas.color_space = asset::texture::ColorSpace::linear;
+        constexpr std::string_view authoredPath{
+            "Assets/Textures/authored.epoch_texture"};
+        const ControllerResult created = controller.create_editable(
+            authoredPath,
+            canvas,
+            renderer,
+            budgets);
+        auto editable = controller.editable_state();
+        if (!created
+            || !editable
+            || editable->dirty
+            || editable->layers.size() != 1u
+            || !fs::exists(editable->source_path))
+        {
+            return ControllerContractFailure::authoring_create;
+        }
+
+        const TextureEditResult highlight =
+            controller.create_editable_layer({
+                .name = "Highlight"
+            });
+        editable = controller.editable_state();
+        if (!highlight
+            || !editable
+            || !editable->dirty
+            || editable->layers.size() != 2u
+            || editable->selected_layer != highlight.layer)
+        {
+            return ControllerContractFailure::authoring_edit;
+        }
+        authoring::texture::LayerDescriptor highlightProperties{};
+        highlightProperties.name = "Highlight";
+        highlightProperties.opacity = 48'000u;
+        if (!controller.set_editable_layer_properties(
+                highlight.layer,
+                highlightProperties)
+            || !controller.move_editable_layer(
+                highlight.layer,
+                0u))
+        {
+            return ControllerContractFailure::authoring_edit;
+        }
+
+        authoring::texture::StrokeDescriptor stroke{};
+        stroke.color = {32u, 96u, 255u, 255u};
+        stroke.radius_subpixels = 512u;
+        stroke.samples.push_back({
+            .x_subpixels = 3 * 256 + 128,
+            .y_subpixels = 4 * 256 + 128
+        });
+        const TextureEditResult painted =
+            controller.paint_editable(stroke);
+        const auto paintedPreview = controller.editable_preview();
+        constexpr std::size_t paintedAlpha =
+            (4u * 8u + 3u) * 4u + 3u;
+        if (!painted
+            || !paintedPreview
+            || paintedPreview->rgba8.size() <= paintedAlpha
+            || paintedPreview->rgba8[paintedAlpha] == 0u)
+        {
+            return ControllerContractFailure::authoring_edit;
+        }
+
+        if (controller.open_editable(
+                authoredPath,
+                renderer,
+                budgets).code != ControllerCode::unsaved_changes)
+        {
+            return ControllerContractFailure::authoring_unsaved_guard;
+        }
+
+        if (!controller.undo_editable())
+            return ControllerContractFailure::authoring_undo_redo;
+        const auto undonePreview = controller.editable_preview();
+        if (!undonePreview
+            || undonePreview->rgba8.size() <= paintedAlpha
+            || undonePreview->rgba8[paintedAlpha] != 0u
+            || !controller.redo_editable())
+        {
+            return ControllerContractFailure::authoring_undo_redo;
+        }
+        const auto redonePreview = controller.editable_preview();
+        if (!redonePreview
+            || redonePreview->rgba8.size() <= paintedAlpha
+            || redonePreview->rgba8[paintedAlpha] == 0u)
+        {
+            return ControllerContractFailure::authoring_undo_redo;
+        }
+
+        const TextureEditResult mask = controller.create_editable_layer_mask(
+            highlight.layer,
+            "Highlight Mask");
+        editable = controller.editable_state();
+        if (!mask
+            || !editable
+            || editable->selected_layer != mask.layer
+            || editable->layers.size() != 3u)
+        {
+            return ControllerContractFailure::authoring_layer_mask;
+        }
+        const auto contentLayer = std::ranges::find(
+            editable->layers,
+            highlight.layer,
+            &authoring::texture::LayerInfo::handle);
+        const auto maskLayer = std::ranges::find(
+            editable->layers,
+            mask.layer,
+            &authoring::texture::LayerInfo::handle);
+        if (contentLayer == editable->layers.end()
+            || maskLayer == editable->layers.end()
+            || contentLayer->descriptor.mask.source != mask.layer
+            || maskLayer->descriptor.role
+                != authoring::texture::LayerRole::mask)
+        {
+            return ControllerContractFailure::authoring_layer_mask;
+        }
+
+        authoring::texture::StrokeDescriptor maskStroke = stroke;
+        maskStroke.target = {};
+        maskStroke.color = {0u, 0u, 0u, 255u};
+        maskStroke.channel_mask = 0x08u;
+        if (!controller.paint_editable(maskStroke))
+        {
+            return ControllerContractFailure::authoring_layer_mask;
+        }
+        const auto maskedPreview = controller.editable_preview();
+        if (!maskedPreview
+            || maskedPreview->rgba8.size() <= paintedAlpha
+            || maskedPreview->rgba8[paintedAlpha] != 0u)
+        {
+            return ControllerContractFailure::authoring_layer_mask;
+        }
+
+        const ControllerResult saved =
+            controller.save_editable(renderer, budgets);
+        editable = controller.editable_state();
+        if (!saved
+            || !editable
+            || editable->dirty
+            || editable->revision.sequence != saved.entry->source_sequence
+            || saved.entry->logical_path != authoredPath)
+        {
+            return ControllerContractFailure::authoring_save_reopen;
+        }
+        const asset::texture::DocumentRevision savedRevision =
+            editable->revision;
+        const auto savedPreview = controller.editable_preview();
+
+        std::error_code libraryError{};
+        fs::remove_all(
+            root.path / "Library" / "Textures",
+            libraryError);
+        if (libraryError)
+        {
+            return
+                ControllerContractFailure::authoring_cache_regeneration;
+        }
+
+        ProjectTextureController reopened{
+            "epoch.editor-project-textures.contract",
+            root.path
+        };
+        const ControllerResult reopenedResult =
+            reopened.open_editable(
+                authoredPath,
+                renderer,
+                budgets);
+        const auto reopenedState = reopened.editable_state();
+        const auto reopenedPreview = reopened.editable_preview();
+        if (!reopenedResult
+            || !reopenedState
+            || reopenedState->dirty
+            || reopenedState->revision != savedRevision
+            || reopenedState->layers.size() != 3u
+            || std::ranges::find(
+                    reopenedState->layers,
+                    mask.layer,
+                    &authoring::texture::LayerInfo::handle)
+                == reopenedState->layers.end()
+            || std::ranges::find(
+                    reopenedState->layers,
+                    highlight.layer,
+                    &authoring::texture::LayerInfo::handle)
+                == reopenedState->layers.end()
+            || std::ranges::find(
+                    reopenedState->layers,
+                    highlight.layer,
+                    &authoring::texture::LayerInfo::handle)
+                    ->descriptor.mask.source != mask.layer
+            || !savedPreview
+            || !reopenedPreview
+            || reopenedPreview->artifact_key != savedPreview->artifact_key
+            || reopenedPreview->rgba8 != savedPreview->rgba8
+            || reopened.catalog().size() != 1u)
+        {
+            return
+                ControllerContractFailure::authoring_cache_regeneration;
         }
         return ControllerContractFailure::none;
     }

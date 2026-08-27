@@ -148,6 +148,8 @@ export namespace epochengine::openglstate
         GLuint sceneVao = 0;
         GLuint sceneVbo = 0;
         GLuint sceneEbo = 0;
+        std::uint64_t sceneGridSignature = 0;
+        GLsizei sceneGridIndexCount = 0;
         GLuint sceneMarkerVao = 0;
         GLuint sceneMarkerVbo = 0;
 

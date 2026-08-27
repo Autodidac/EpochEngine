@@ -23,6 +23,8 @@ module;
 
 module editor.tilemap_workspace;
 
+import project.asset_registry;
+
 namespace epochengine::editor_tilemaps
 {
     namespace
@@ -95,6 +97,44 @@ namespace epochengine::editor_tilemaps
             return gui_lib::contains(rect, gui_lib_point(point));
         }
 
+        [[nodiscard]] gui_lib::Rect object_canvas_rect(
+            const gui_lib::tile_workspace::TileCanvasLayout& canvas,
+            const authoring::tilemap::MapObjectDescriptor& object) noexcept
+        {
+            const float cosine = std::abs(std::cos(object.rotation_radians));
+            const float sine = std::abs(std::sin(object.rotation_radians));
+            const float width = (object.size.x * cosine + object.size.y * sine)
+                * canvas.cell_pixels;
+            const float height = (object.size.x * sine + object.size.y * cosine)
+                * canvas.cell_pixels;
+            const float displayWidth = (std::max)(8.0f, width);
+            const float displayHeight = (std::max)(8.0f, height);
+            const gui_lib::Vec2 center{
+                canvas.origin.x + object.position.x * canvas.cell_pixels,
+                canvas.origin.y + object.position.y * canvas.cell_pixels};
+            return {
+                {center.x - displayWidth * 0.5f,
+                 center.y - displayHeight * 0.5f},
+                {displayWidth, displayHeight}};
+        }
+
+        [[nodiscard]] gui_lib::Rect clipped_rect(
+            gui_lib::Rect value,
+            gui_lib::Rect clip) noexcept
+        {
+            const float left = (std::max)(value.position.x, clip.position.x);
+            const float top = (std::max)(value.position.y, clip.position.y);
+            const float right = (std::min)(
+                value.position.x + value.size.x,
+                clip.position.x + clip.size.x);
+            const float bottom = (std::min)(
+                value.position.y + value.size.y,
+                clip.position.y + clip.size.y);
+            if (right <= left || bottom <= top)
+                return {};
+            return {{left, top}, {right - left, bottom - top}};
+        }
+
         [[nodiscard]] std::string map_status_line(
             const TileMapWorkspaceController& controller,
             const authoring::tilemap::DocumentSnapshot& snapshot)
@@ -107,7 +147,9 @@ namespace epochengine::editor_tilemaps
             line += std::to_string(snapshot.layers.size());
             line += " layers | ";
             line += std::to_string(snapshot.palette.size());
-            line += " tiles";
+            line += " tiles | ";
+            line += std::to_string(snapshot.objects.size());
+            line += " objects";
             return line;
         }
 
@@ -271,6 +313,53 @@ namespace epochengine::editor_tilemaps
         return selected_cell_;
     }
 
+    const authoring::tilemap::LayerDescriptor*
+        TileMapWorkspaceController::selected_layer_draft() const noexcept
+    {
+        return selected_layer_draft_
+            ? std::addressof(*selected_layer_draft_)
+            : nullptr;
+    }
+
+    bool TileMapWorkspaceController::selected_layer_draft_dirty() const noexcept
+    {
+        return selected_layer_draft_dirty_;
+    }
+
+    const authoring::tilemap::CollisionShape*
+        TileMapWorkspaceController::selected_palette_collision_draft()
+            const noexcept
+    {
+        return selected_palette_collision_draft_
+            ? std::addressof(*selected_palette_collision_draft_)
+            : nullptr;
+    }
+
+    bool TileMapWorkspaceController::selected_palette_collision_draft_dirty()
+        const noexcept
+    {
+        return selected_palette_collision_draft_dirty_;
+    }
+
+    std::optional<authoring::tilemap::MapObjectHandle>
+        TileMapWorkspaceController::selected_object() const noexcept
+    {
+        return selected_object_;
+    }
+
+    const authoring::tilemap::MapObjectDescriptor*
+        TileMapWorkspaceController::selected_object_draft() const noexcept
+    {
+        return selected_object_draft_
+            ? std::addressof(*selected_object_draft_)
+            : nullptr;
+    }
+
+    bool TileMapWorkspaceController::selected_object_draft_dirty() const noexcept
+    {
+        return selected_object_draft_dirty_;
+    }
+
     ControllerResult TileMapWorkspaceController::open_or_create(
         authoring::tilemap::MapDescriptor descriptor) noexcept
     {
@@ -284,6 +373,13 @@ namespace epochengine::editor_tilemaps
             document_ = std::move(loaded.document);
             saved_revision_ = document_->revision();
             selected_cell_.reset();
+            selected_layer_handle_.reset();
+            selected_layer_draft_.reset();
+            selected_layer_draft_dirty_ = false;
+            selected_palette_handle_.reset();
+            selected_palette_collision_draft_.reset();
+            selected_palette_collision_draft_dirty_ = false;
+            clear_object_selection();
             normalize_selection();
             status_ = "Opened tile map source from Assets/Maps.";
             return {
@@ -341,6 +437,13 @@ namespace epochengine::editor_tilemaps
         document_ = std::move(created.document);
         saved_revision_ = {};
         selected_cell_.reset();
+        selected_layer_handle_.reset();
+        selected_layer_draft_.reset();
+        selected_layer_draft_dirty_ = false;
+        selected_palette_handle_.reset();
+        selected_palette_collision_draft_.reset();
+        selected_palette_collision_draft_dirty_ = false;
+        clear_object_selection();
         ui_state_ = {};
         normalize_selection();
         ++metrics_.mutations;
@@ -368,6 +471,13 @@ namespace epochengine::editor_tilemaps
         document_ = std::move(loaded.document);
         saved_revision_ = document_->revision();
         selected_cell_.reset();
+        selected_layer_handle_.reset();
+        selected_layer_draft_.reset();
+        selected_layer_draft_dirty_ = false;
+        selected_palette_handle_.reset();
+        selected_palette_collision_draft_.reset();
+        selected_palette_collision_draft_dirty_ = false;
+        clear_object_selection();
         normalize_selection();
         status_ = "Reloaded the saved temporal tile map source.";
         return {
@@ -396,6 +506,13 @@ namespace epochengine::editor_tilemaps
             ? authoring::tilemap::DocumentRevision{}
             : document_->revision();
         selected_cell_.reset();
+        selected_layer_handle_.reset();
+        selected_layer_draft_.reset();
+        selected_layer_draft_dirty_ = false;
+        selected_palette_handle_.reset();
+        selected_palette_collision_draft_.reset();
+        selected_palette_collision_draft_dirty_ = false;
+        clear_object_selection();
         preview_artifact_.reset();
         preview_revision_ = {};
         normalize_selection();
@@ -425,6 +542,12 @@ namespace epochengine::editor_tilemaps
         ui_state_.selected_layer = selectedLayer;
         ui_state_.zoom = zoom;
         ui_state_.pan = pan;
+        selected_layer_handle_.reset();
+        selected_layer_draft_.reset();
+        selected_layer_draft_dirty_ = false;
+        selected_palette_handle_.reset();
+        selected_palette_collision_draft_.reset();
+        selected_palette_collision_draft_dirty_ = false;
         normalize_selection();
     }
 
@@ -439,6 +562,11 @@ namespace epochengine::editor_tilemaps
         if (index >= current.layers.size())
             return reject(ControllerCode::layer_required);
         ui_state_.selected_layer = index;
+        selected_layer_handle_ = current.layers[index].handle;
+        selected_layer_draft_ = current.layers[index].descriptor;
+        selected_layer_draft_dirty_ = false;
+        selected_cell_.reset();
+        clear_object_selection();
         status_ = "Selected layer "
             + current.layers[index].descriptor.name + ".";
         return {
@@ -458,6 +586,10 @@ namespace epochengine::editor_tilemaps
         if (index >= current.palette.size())
             return reject(ControllerCode::palette_required);
         ui_state_.selected_palette = index;
+        selected_palette_handle_ = current.palette[index].handle;
+        selected_palette_collision_draft_ =
+            current.palette[index].descriptor.collision;
+        selected_palette_collision_draft_dirty_ = false;
         status_ = "Selected palette tile "
             + current.palette[index].descriptor.name + ".";
         return {
@@ -502,9 +634,185 @@ namespace epochengine::editor_tilemaps
         if (accepted)
         {
             normalize_selection();
+            const auto refreshed = document_->snapshot();
             ui_state_.selected_layer = static_cast<std::uint32_t>(
-                document_->snapshot().layers.size() - 1u);
+                refreshed.layers.size() - 1u);
+            selected_layer_handle_ = mutation.layer;
+            selected_layer_draft_ = mutation.layer
+                ? document_->layer(mutation.layer)
+                : std::optional<authoring::tilemap::LayerDescriptor>{};
+            selected_layer_draft_dirty_ = false;
+            selected_cell_.reset();
+            clear_object_selection();
             status_ = "Created a temporal tile layer.";
+        }
+        return accepted;
+    }
+
+    ControllerResult TileMapWorkspaceController::stage_selected_layer(
+        authoring::tilemap::LayerDescriptor descriptor) noexcept
+    {
+        ++metrics_.commands;
+        const auto layer = selected_layer();
+        if (!has_document() || !layer)
+            return reject(ControllerCode::layer_required);
+        const auto current = document_->layer(*layer);
+        if (!current)
+        {
+            selected_layer_handle_.reset();
+            selected_layer_draft_.reset();
+            selected_layer_draft_dirty_ = false;
+            return reject(ControllerCode::layer_required);
+        }
+        selected_layer_draft_dirty_ = descriptor != *current;
+        selected_layer_draft_ = std::move(descriptor);
+        status_ = selected_layer_draft_dirty_
+            ? "Layer changes are staged. Apply to commit one semantic operation."
+            : "Layer properties match the committed document.";
+        return {
+            selected_layer_draft_dirty_
+                ? ControllerCode::ready
+                : ControllerCode::unchanged,
+            selected_layer_draft_dirty_
+                ? authoring::tilemap::ResultCode::success
+                : authoring::tilemap::ResultCode::unchanged,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    ControllerResult TileMapWorkspaceController::apply_selected_layer() noexcept
+    {
+        ++metrics_.commands;
+        const auto layer = selected_layer();
+        if (!has_document() || !layer || !selected_layer_draft_)
+            return reject(ControllerCode::layer_required);
+        if (!selected_layer_draft_dirty_)
+        {
+            return {
+                ControllerCode::unchanged,
+                authoring::tilemap::ResultCode::unchanged,
+                project_tilemap_sources::SourceCode::ready,
+                project_tilemaps::PipelineCode::ready};
+        }
+        ControllerResult accepted = accept(document_->set_layer_properties(
+            *layer, *selected_layer_draft_));
+        if (accepted)
+        {
+            selected_layer_draft_ = document_->layer(*layer);
+            selected_layer_draft_dirty_ = false;
+            status_ = "Committed the staged tile-layer properties.";
+        }
+        return accepted;
+    }
+
+    ControllerResult
+        TileMapWorkspaceController::duplicate_selected_layer() noexcept
+    {
+        ++metrics_.commands;
+        const auto layer = selected_layer();
+        if (!has_document() || !layer || !selected_layer_draft_)
+            return reject(ControllerCode::layer_required);
+
+        authoring::tilemap::LayerDescriptor duplicate =
+            *selected_layer_draft_;
+        const auto current = document_->snapshot();
+        const std::size_t maximumName = document_->limits().maximum_name_bytes;
+        constexpr std::string_view copySuffix{" Copy"};
+        if (maximumName <= copySuffix.size())
+            return reject(ControllerCode::operation_limit);
+
+        const std::string baseName = duplicate.name;
+        auto nameExists = [&](std::string_view name)
+        {
+            return std::any_of(
+                current.layers.begin(),
+                current.layers.end(),
+                [&](const auto& candidate)
+                {
+                    return candidate.descriptor.name == name;
+                });
+        };
+        for (std::uint32_t ordinal = 1u;; ++ordinal)
+        {
+            std::string suffix = ordinal == 1u
+                ? std::string{copySuffix}
+                : std::string{copySuffix} + " " + std::to_string(ordinal);
+            if (suffix.size() >= maximumName)
+                return reject(ControllerCode::operation_limit);
+            duplicate.name = baseName.substr(
+                0u, (std::min)(baseName.size(), maximumName - suffix.size()));
+            duplicate.name += suffix;
+            if (!nameExists(duplicate.name))
+                break;
+            if (ordinal >= document_->limits().maximum_layers)
+                return reject(ControllerCode::operation_limit);
+        }
+        const auto highestLayer = std::max_element(
+            current.layers.begin(),
+            current.layers.end(),
+            [](const auto& left, const auto& right)
+            {
+                return left.descriptor.draw_layer
+                    < right.descriptor.draw_layer;
+            });
+        duplicate.draw_layer = highestLayer == current.layers.end()
+            ? 0
+            : highestLayer->descriptor.draw_layer == (std::numeric_limits<
+                    std::int32_t>::max)()
+                ? highestLayer->descriptor.draw_layer
+                : highestLayer->descriptor.draw_layer + 1;
+
+        const auto mutation = document_->create_layer(std::move(duplicate));
+        ControllerResult accepted = accept(mutation);
+        if (accepted && mutation.layer)
+        {
+            const auto refreshed = document_->snapshot();
+            const auto selected = std::find_if(
+                refreshed.layers.begin(),
+                refreshed.layers.end(),
+                [&](const auto& candidate)
+                {
+                    return candidate.handle == mutation.layer;
+                });
+            selected_layer_handle_ = mutation.layer;
+            selected_layer_draft_ = document_->layer(mutation.layer);
+            selected_layer_draft_dirty_ = false;
+            if (selected != refreshed.layers.end())
+            {
+                ui_state_.selected_layer = static_cast<std::uint32_t>(
+                    selected - refreshed.layers.begin());
+            }
+            selected_cell_.reset();
+            clear_object_selection();
+            status_ = "Duplicated and selected the tile layer.";
+        }
+        return accepted;
+    }
+
+    ControllerResult TileMapWorkspaceController::remove_selected_layer() noexcept
+    {
+        ++metrics_.commands;
+        const auto layer = selected_layer();
+        if (!has_document() || !layer)
+            return reject(ControllerCode::layer_required);
+        const auto current = document_->snapshot();
+        if (current.layers.size() <= 1u)
+            return reject(ControllerCode::operation_limit);
+
+        const std::uint32_t removedIndex = ui_state_.selected_layer;
+        ControllerResult accepted = accept(document_->remove_layer(*layer));
+        if (accepted)
+        {
+            selected_layer_handle_.reset();
+            selected_layer_draft_.reset();
+            selected_layer_draft_dirty_ = false;
+            ui_state_.selected_layer = removedIndex == 0u
+                ? 0u
+                : removedIndex - 1u;
+            selected_cell_.reset();
+            clear_object_selection();
+            normalize_selection();
+            status_ = "Removed the selected tile layer.";
         }
         return accepted;
     }
@@ -642,7 +950,8 @@ namespace epochengine::editor_tilemaps
             auto descriptor = document_->palette_entry(*palette);
             if (!descriptor)
                 return reject(ControllerCode::palette_required);
-            authoring::tilemap::CollisionShape collision{};
+            authoring::tilemap::CollisionShape collision =
+                descriptor->collision;
             collision.kind = descriptor->collision.kind
                     == asset::tilemap::CollisionKind::none
                 ? asset::tilemap::CollisionKind::full_cell
@@ -657,7 +966,17 @@ namespace epochengine::editor_tilemaps
             object.position = {
                 static_cast<float>(mapCoordinate.x) + 0.5f,
                 static_cast<float>(mapCoordinate.y) + 0.5f};
-            return accept(document_->create_object(std::move(object)));
+            const auto mutation = document_->create_object(std::move(object));
+            ControllerResult accepted = accept(mutation);
+            if (accepted && mutation.object)
+            {
+                selected_object_ = mutation.object;
+                selected_object_draft_ = document_->object(mutation.object);
+                selected_object_draft_dirty_ = false;
+                selected_cell_.reset();
+                status_ = "Created and selected a temporal map object.";
+            }
+            return accepted;
         }
 
         authoring::tilemap::CellValue replacement{};
@@ -685,6 +1004,321 @@ namespace epochengine::editor_tilemaps
         return accepted;
     }
 
+    ControllerResult TileMapWorkspaceController::select_object(
+        authoring::tilemap::MapObjectHandle handle) noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document())
+            return reject(ControllerCode::invalid_controller);
+        const auto descriptor = document_->object(handle);
+        if (!descriptor)
+            return reject(ControllerCode::object_required);
+        selected_object_ = handle;
+        selected_object_draft_ = *descriptor;
+        selected_object_draft_dirty_ = false;
+        object_drag_active_ = false;
+        object_drag_offset_ = {};
+        selected_cell_.reset();
+        status_ = "Selected map object " + descriptor->name + ".";
+        return {
+            ControllerCode::ready,
+            authoring::tilemap::ResultCode::success,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    void TileMapWorkspaceController::clear_object_selection() noexcept
+    {
+        selected_object_.reset();
+        selected_object_draft_.reset();
+        selected_object_draft_dirty_ = false;
+        object_drag_active_ = false;
+        object_drag_offset_ = {};
+    }
+
+    ControllerResult TileMapWorkspaceController::stage_selected_object(
+        authoring::tilemap::MapObjectDescriptor descriptor) noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document() || !selected_object_)
+            return reject(ControllerCode::object_required);
+        const auto current = document_->object(*selected_object_);
+        if (!current)
+        {
+            clear_object_selection();
+            return reject(ControllerCode::object_required);
+        }
+        selected_object_draft_dirty_ = descriptor != *current;
+        selected_object_draft_ = std::move(descriptor);
+        status_ = selected_object_draft_dirty_
+            ? "Map object changes are staged. Apply to commit one semantic operation."
+            : "Map object matches the committed document.";
+        return {
+            selected_object_draft_dirty_
+                ? ControllerCode::ready
+                : ControllerCode::unchanged,
+            selected_object_draft_dirty_
+                ? authoring::tilemap::ResultCode::success
+                : authoring::tilemap::ResultCode::unchanged,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    ControllerResult TileMapWorkspaceController::apply_selected_object() noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document() || !selected_object_ || !selected_object_draft_)
+            return reject(ControllerCode::object_required);
+        if (!selected_object_draft_dirty_)
+        {
+            return {
+                ControllerCode::unchanged,
+                authoring::tilemap::ResultCode::unchanged,
+                project_tilemap_sources::SourceCode::ready,
+                project_tilemaps::PipelineCode::ready};
+        }
+        ControllerResult accepted = accept(document_->set_object_properties(
+            *selected_object_, *selected_object_draft_));
+        if (accepted)
+        {
+            selected_object_draft_ = document_->object(*selected_object_);
+            selected_object_draft_dirty_ = false;
+            status_ = "Committed the staged map object properties.";
+        }
+        return accepted;
+    }
+
+    ControllerResult TileMapWorkspaceController::duplicate_selected_object() noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document() || !selected_object_ || !selected_object_draft_)
+            return reject(ControllerCode::object_required);
+        authoring::tilemap::MapObjectDescriptor duplicate =
+            *selected_object_draft_;
+        constexpr std::string_view suffix{" Copy"};
+        const std::size_t maximumName = document_->limits().maximum_name_bytes;
+        if (maximumName <= suffix.size())
+            return reject(ControllerCode::operation_limit);
+        if (duplicate.name.size() + suffix.size() > maximumName)
+            duplicate.name.resize(maximumName - suffix.size());
+        duplicate.name += suffix;
+        duplicate.position.x += 0.5f;
+        duplicate.position.y += 0.5f;
+        const auto mutation = document_->create_object(std::move(duplicate));
+        ControllerResult accepted = accept(mutation);
+        if (accepted && mutation.object)
+        {
+            selected_object_ = mutation.object;
+            selected_object_draft_ = document_->object(mutation.object);
+            selected_object_draft_dirty_ = false;
+            selected_cell_.reset();
+            status_ = "Duplicated and selected the map object.";
+        }
+        return accepted;
+    }
+
+    ControllerResult TileMapWorkspaceController::remove_selected_object() noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document() || !selected_object_)
+            return reject(ControllerCode::object_required);
+        ControllerResult accepted = accept(
+            document_->remove_object(*selected_object_));
+        if (accepted)
+        {
+            clear_object_selection();
+            status_ = "Removed the selected map object.";
+        }
+        return accepted;
+    }
+
+    ControllerResult TileMapWorkspaceController::begin_object_drag(
+        authoring::tilemap::MapObjectHandle handle,
+        authoring::tilemap::Float2 mapPoint) noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document()
+            || !std::isfinite(mapPoint.x)
+            || !std::isfinite(mapPoint.y))
+        {
+            return reject(ControllerCode::object_required);
+        }
+        const auto descriptor = document_->object(handle);
+        if (!descriptor)
+            return reject(ControllerCode::object_required);
+        selected_object_ = handle;
+        selected_object_draft_ = *descriptor;
+        selected_object_draft_dirty_ = false;
+        selected_cell_.reset();
+        object_drag_offset_ = {
+            mapPoint.x - descriptor->position.x,
+            mapPoint.y - descriptor->position.y};
+        object_drag_active_ = true;
+        status_ = "Dragging map object " + descriptor->name
+            + "; release commits one semantic operation.";
+        return {
+            ControllerCode::ready,
+            authoring::tilemap::ResultCode::success,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    ControllerResult TileMapWorkspaceController::update_object_drag(
+        authoring::tilemap::Float2 mapPoint) noexcept
+    {
+        if (!has_document() || !object_drag_active_
+            || !selected_object_ || !selected_object_draft_
+            || !std::isfinite(mapPoint.x)
+            || !std::isfinite(mapPoint.y))
+        {
+            return reject(ControllerCode::object_required);
+        }
+
+        auto staged = *selected_object_draft_;
+        const float cosine = std::abs(std::cos(staged.rotation_radians));
+        const float sine = std::abs(std::sin(staged.rotation_radians));
+        const float halfWidth =
+            (staged.size.x * cosine + staged.size.y * sine) * 0.5f;
+        const float halfHeight =
+            (staged.size.x * sine + staged.size.y * cosine) * 0.5f;
+        const auto extent = document_->descriptor().extent_tiles;
+        const float mapWidth = static_cast<float>(extent.x);
+        const float mapHeight = static_cast<float>(extent.y);
+        const float minimumX = (std::min)(halfWidth, mapWidth * 0.5f);
+        const float maximumX = (std::max)(minimumX, mapWidth - minimumX);
+        const float minimumY = (std::min)(halfHeight, mapHeight * 0.5f);
+        const float maximumY = (std::max)(minimumY, mapHeight - minimumY);
+        staged.position = {
+            (std::clamp)(
+                mapPoint.x - object_drag_offset_.x,
+                minimumX,
+                maximumX),
+            (std::clamp)(
+                mapPoint.y - object_drag_offset_.y,
+                minimumY,
+                maximumY)};
+
+        const auto committed = document_->object(*selected_object_);
+        if (!committed)
+        {
+            clear_object_selection();
+            return reject(ControllerCode::object_required);
+        }
+        const bool changed = staged != *selected_object_draft_;
+        selected_object_draft_ = std::move(staged);
+        selected_object_draft_dirty_ =
+            *selected_object_draft_ != *committed;
+        if (changed)
+            status_ = "Previewing the staged map-object transform.";
+        return {
+            changed ? ControllerCode::ready : ControllerCode::unchanged,
+            changed
+                ? authoring::tilemap::ResultCode::success
+                : authoring::tilemap::ResultCode::unchanged,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    ControllerResult TileMapWorkspaceController::end_object_drag(
+        bool commit) noexcept
+    {
+        ++metrics_.commands;
+        if (!has_document() || !object_drag_active_
+            || !selected_object_ || !selected_object_draft_)
+        {
+            return reject(ControllerCode::object_required);
+        }
+        object_drag_active_ = false;
+        object_drag_offset_ = {};
+        if (commit)
+            return apply_selected_object();
+
+        const auto committed = document_->object(*selected_object_);
+        if (!committed)
+        {
+            clear_object_selection();
+            return reject(ControllerCode::object_required);
+        }
+        selected_object_draft_ = *committed;
+        selected_object_draft_dirty_ = false;
+        status_ = "Cancelled the staged map-object drag.";
+        return {
+            ControllerCode::unchanged,
+            authoring::tilemap::ResultCode::unchanged,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    bool TileMapWorkspaceController::object_drag_active() const noexcept
+    {
+        return object_drag_active_;
+    }
+
+    ControllerResult
+        TileMapWorkspaceController::stage_selected_palette_collision(
+            authoring::tilemap::CollisionShape collision) noexcept
+    {
+        ++metrics_.commands;
+        const auto palette = selected_palette();
+        if (!has_document() || !palette)
+            return reject(ControllerCode::palette_required);
+        const auto current = document_->palette_entry(*palette);
+        if (!current)
+        {
+            selected_palette_handle_.reset();
+            selected_palette_collision_draft_.reset();
+            selected_palette_collision_draft_dirty_ = false;
+            return reject(ControllerCode::palette_required);
+        }
+        selected_palette_collision_draft_dirty_ =
+            collision != current->collision;
+        selected_palette_collision_draft_ = std::move(collision);
+        status_ = selected_palette_collision_draft_dirty_
+            ? "Collision changes are staged. Apply to commit one semantic operation."
+            : "Collision properties match the committed palette tile.";
+        return {
+            selected_palette_collision_draft_dirty_
+                ? ControllerCode::ready
+                : ControllerCode::unchanged,
+            selected_palette_collision_draft_dirty_
+                ? authoring::tilemap::ResultCode::success
+                : authoring::tilemap::ResultCode::unchanged,
+            project_tilemap_sources::SourceCode::ready,
+            project_tilemaps::PipelineCode::ready};
+    }
+
+    ControllerResult
+        TileMapWorkspaceController::apply_selected_palette_collision() noexcept
+    {
+        ++metrics_.commands;
+        const auto palette = selected_palette();
+        if (!has_document() || !palette
+            || !selected_palette_collision_draft_)
+        {
+            return reject(ControllerCode::palette_required);
+        }
+        if (!selected_palette_collision_draft_dirty_)
+        {
+            return {
+                ControllerCode::unchanged,
+                authoring::tilemap::ResultCode::unchanged,
+                project_tilemap_sources::SourceCode::ready,
+                project_tilemaps::PipelineCode::ready};
+        }
+        ControllerResult accepted = accept(document_->set_palette_collision(
+            *palette, *selected_palette_collision_draft_));
+        if (accepted)
+        {
+            const auto committed = document_->palette_entry(*palette);
+            selected_palette_collision_draft_ = committed
+                ? std::optional{committed->collision}
+                : std::nullopt;
+            selected_palette_collision_draft_dirty_ = false;
+            status_ = "Committed the staged palette collision properties.";
+        }
+        return accepted;
+    }
+
     ControllerResult
         TileMapWorkspaceController::set_selected_palette_collision(
             authoring::tilemap::CollisionShape collision) noexcept
@@ -698,7 +1332,11 @@ namespace epochengine::editor_tilemaps
         ControllerResult accepted = accept(
             document_->set_palette_collision(*palette, collision));
         if (accepted)
+        {
+            selected_palette_collision_draft_ = std::move(collision);
+            selected_palette_collision_draft_dirty_ = false;
             status_ = "Updated collision intent for the selected palette tile.";
+        }
         return accepted;
     }
 
@@ -710,6 +1348,9 @@ namespace epochengine::editor_tilemaps
         ControllerResult accepted = accept(document_->undo());
         if (accepted)
         {
+            selected_layer_draft_dirty_ = false;
+            selected_palette_collision_draft_dirty_ = false;
+            selected_object_draft_dirty_ = false;
             normalize_selection();
             status_ = "Undid the last semantic tile-map operation.";
         }
@@ -724,6 +1365,9 @@ namespace epochengine::editor_tilemaps
         ControllerResult accepted = accept(document_->redo());
         if (accepted)
         {
+            selected_layer_draft_dirty_ = false;
+            selected_palette_collision_draft_dirty_ = false;
+            selected_object_draft_dirty_ = false;
             normalize_selection();
             status_ = "Redid the next semantic tile-map operation.";
         }
@@ -968,12 +1612,97 @@ namespace epochengine::editor_tilemaps
             ui_state_,
             static_cast<std::uint32_t>(current.palette.size()),
             static_cast<std::uint32_t>(current.layers.size()));
+        if (current.layers.empty())
+        {
+            selected_layer_handle_.reset();
+            selected_layer_draft_.reset();
+            selected_layer_draft_dirty_ = false;
+        }
+        else
+        {
+            auto selected = current.layers.end();
+            if (selected_layer_handle_)
+            {
+                selected = std::find_if(
+                    current.layers.begin(),
+                    current.layers.end(),
+                    [&](const auto& candidate)
+                    {
+                        return candidate.handle == *selected_layer_handle_;
+                    });
+            }
+            if (selected == current.layers.end())
+            {
+                const std::uint32_t resolvedIndex =
+                    ui_state_.selected_layer < current.layers.size()
+                    ? ui_state_.selected_layer
+                    : 0u;
+                selected = current.layers.begin()
+                    + static_cast<std::ptrdiff_t>(resolvedIndex);
+                selected_layer_handle_ = selected->handle;
+                selected_layer_draft_dirty_ = false;
+            }
+            ui_state_.selected_layer = static_cast<std::uint32_t>(
+                selected - current.layers.begin());
+            if (!selected_layer_draft_dirty_)
+                selected_layer_draft_ = selected->descriptor;
+        }
+        if (current.palette.empty())
+        {
+            selected_palette_handle_.reset();
+            selected_palette_collision_draft_.reset();
+            selected_palette_collision_draft_dirty_ = false;
+        }
+        else
+        {
+            auto selected = current.palette.end();
+            if (selected_palette_handle_)
+            {
+                selected = std::find_if(
+                    current.palette.begin(),
+                    current.palette.end(),
+                    [&](const auto& candidate)
+                    {
+                        return candidate.handle == *selected_palette_handle_;
+                    });
+            }
+            if (selected == current.palette.end())
+            {
+                const std::uint32_t resolvedIndex =
+                    ui_state_.selected_palette < current.palette.size()
+                    ? ui_state_.selected_palette
+                    : 0u;
+                selected = current.palette.begin()
+                    + static_cast<std::ptrdiff_t>(resolvedIndex);
+                selected_palette_handle_ = selected->handle;
+                selected_palette_collision_draft_dirty_ = false;
+            }
+            ui_state_.selected_palette = static_cast<std::uint32_t>(
+                selected - current.palette.begin());
+            if (!selected_palette_collision_draft_dirty_)
+            {
+                selected_palette_collision_draft_ =
+                    selected->descriptor.collision;
+            }
+        }
         if (selected_cell_)
         {
             if (selected_cell_->x >= current.descriptor.extent_tiles.x
                 || selected_cell_->y >= current.descriptor.extent_tiles.y)
             {
                 selected_cell_.reset();
+            }
+        }
+        if (selected_object_)
+        {
+            const auto descriptor = document_->object(*selected_object_);
+            if (!descriptor)
+            {
+                clear_object_selection();
+            }
+            else if (!selected_object_draft_dirty_)
+            {
+                selected_object_draft_ = *descriptor;
             }
         }
     }
@@ -983,10 +1712,12 @@ namespace epochengine::editor_tilemaps
     {
         if (!has_document())
             return std::nullopt;
-        const auto current = document_->snapshot();
-        if (ui_state_.selected_layer >= current.layers.size())
+        if (!selected_layer_handle_
+            || !document_->layer(*selected_layer_handle_))
+        {
             return std::nullopt;
-        return current.layers[ui_state_.selected_layer].handle;
+        }
+        return selected_layer_handle_;
     }
 
     std::optional<authoring::tilemap::PaletteEntryHandle>
@@ -994,10 +1725,10 @@ namespace epochengine::editor_tilemaps
     {
         if (!has_document())
             return std::nullopt;
-        const auto current = document_->snapshot();
-        if (ui_state_.selected_palette >= current.palette.size())
+        if (!selected_palette_handle_
+            || !document_->palette_entry(*selected_palette_handle_))
             return std::nullopt;
-        return current.palette[ui_state_.selected_palette].handle;
+        return selected_palette_handle_;
     }
 
     ControllerResult TileMapWorkspaceController::fill_cell(
@@ -1218,8 +1949,36 @@ namespace epochengine::editor_tilemaps
             gui::label("Layers");
             const float layerWidth = (std::max)(
                 32.0f, layout.layers.size.x - 12.0f);
+            gui::set_cursor({
+                layout.layers.position.x + 6.0f,
+                layout.layers.position.y + 27.0f});
+            const std::array layerActions{
+                gui::InlineButtonSpec{
+                    .label = "+ Layer",
+                    .width = 58.0f},
+                gui::InlineButtonSpec{
+                    .label = "Duplicate",
+                    .width = 76.0f,
+                    .enabled = !current.layers.empty()},
+                gui::InlineButtonSpec{
+                    .label = "Delete",
+                    .width = 56.0f,
+                    .enabled = current.layers.size() > 1u}};
+            if (const auto action = gui::inline_button_row(
+                    layerActions, 24.0f, 4.0f))
+            {
+                ControllerResult changed{};
+                if (*action == 0u)
+                    changed = controller.create_layer();
+                else if (*action == 1u)
+                    changed = controller.duplicate_selected_layer();
+                else
+                    changed = controller.remove_selected_layer();
+                result.changed = static_cast<bool>(changed) || result.changed;
+                result.input_captured = true;
+            }
             const std::uint32_t visibleLayers = static_cast<std::uint32_t>(
-                (std::max)(0.0f, layout.layers.size.y - 30.0f) / 27.0f);
+                (std::max)(0.0f, layout.layers.size.y - 57.0f) / 27.0f);
             const std::uint32_t firstLayer = (std::min)(
                 static_cast<std::uint32_t>(current.layers.size()),
                 static_cast<std::uint32_t>(state.layer_scroll));
@@ -1230,10 +1989,16 @@ namespace epochengine::editor_tilemaps
             {
                 gui::set_cursor({
                     layout.layers.position.x + 6.0f,
-                    layout.layers.position.y + 27.0f
+                    layout.layers.position.y + 54.0f
                         + static_cast<float>(index - firstLayer) * 27.0f});
+                std::string layerLabel{};
+                if (!current.layers[index].descriptor.visible)
+                    layerLabel += "[Hidden] ";
+                if (current.layers[index].descriptor.locked)
+                    layerLabel += "[Locked] ";
+                layerLabel += current.layers[index].descriptor.name;
                 if (gui::button_selected(
-                        current.layers[index].descriptor.name,
+                        layerLabel,
                         {layerWidth, 23.0f},
                         state.selected_layer == index))
                 {
@@ -1298,6 +2063,64 @@ namespace epochengine::editor_tilemaps
                     result.input_captured = true;
                 }
 
+                std::optional<authoring::tilemap::MapObjectHandle>
+                    pointerObject{};
+                for (auto object = current.objects.rbegin();
+                     object != current.objects.rend();
+                     ++object)
+                {
+                    const auto* descriptor = std::addressof(object->descriptor);
+                    if (controller.selected_object()
+                            == std::optional{object->handle}
+                        && controller.selected_object_draft())
+                    {
+                        descriptor = controller.selected_object_draft();
+                    }
+                    const auto bounds = clipped_rect(
+                        object_canvas_rect(canvas, *descriptor),
+                        canvas.viewport);
+                    if (bounds.size.x > 0.0f && bounds.size.y > 0.0f
+                        && point_in_rect(pointer, bounds))
+                    {
+                        pointerObject = object->handle;
+                        break;
+                    }
+                }
+
+                const authoring::tilemap::Float2 mapPointer{
+                    (libraryPointer.x - canvas.origin.x) / canvas.cell_pixels,
+                    (libraryPointer.y - canvas.origin.y) / canvas.cell_pixels};
+                if (options.interactive && pointerObject
+                    && gui::was_mouse_pressed())
+                {
+                    const auto started = controller.begin_object_drag(
+                        *pointerObject, mapPointer);
+                    result.changed = static_cast<bool>(started)
+                        || result.changed;
+                    result.input_captured = true;
+                }
+                if (controller.object_drag_active())
+                {
+                    if (gui::is_mouse_down())
+                    {
+                        const auto staged =
+                            controller.update_object_drag(mapPointer);
+                        result.changed =
+                            staged.code == ControllerCode::ready
+                            || result.changed;
+                        result.input_captured = true;
+                    }
+                    else
+                    {
+                        const auto committed =
+                            controller.end_object_drag(true);
+                        result.changed =
+                            committed.code == ControllerCode::ready
+                            || result.changed;
+                        result.input_captured = true;
+                    }
+                }
+
                 std::uint32_t rendered{};
                 for (std::uint32_t y = canvas.visible_cells.first.y;
                      y < canvas.visible_cells.past_last.y;
@@ -1319,19 +2142,59 @@ namespace epochengine::editor_tilemaps
                         if (bounds.size.x <= 0.0f || bounds.size.y <= 0.0f)
                             continue;
                         bool occupied{};
+                        std::string_view collisionMarker{};
                         if (state.selected_layer < current.layers.size())
                         {
                             const auto value = controller.document()->cell(
                                 current.layers[state.selected_layer].handle,
                                 {x, y});
                             occupied = value && value->occupied();
+                            if (occupied && state.tool == Tool::collision)
+                            {
+                                const auto palette =
+                                    controller.document()->palette_entry(
+                                        value->palette);
+                                if (palette)
+                                {
+                                    switch (palette->collision.kind)
+                                    {
+                                    case asset::tilemap::CollisionKind::none:
+                                        break;
+                                    case asset::tilemap::CollisionKind::full_cell:
+                                        collisionMarker = "S";
+                                        break;
+                                    case asset::tilemap::CollisionKind::one_way_up:
+                                        collisionMarker = "1W";
+                                        break;
+                                    case asset::tilemap::CollisionKind::slope_up_right:
+                                        collisionMarker = "R+";
+                                        break;
+                                    case asset::tilemap::CollisionKind::slope_down_right:
+                                        collisionMarker = "R-";
+                                        break;
+                                    case asset::tilemap::CollisionKind::custom_box:
+                                        collisionMarker = "BOX";
+                                        break;
+                                    }
+                                }
+                            }
                         }
                         const bool selected = controller.selected_cell()
                             == std::optional<CellCoordinate>{coordinate};
                         gui::set_cursor(gui_point(bounds.position));
-                        if (gui::button_selected(
-                                {}, gui_size(bounds), occupied || selected)
-                            && options.interactive)
+                        const bool objectOwnsPointer = pointerObject
+                            && point_in_rect(pointer, bounds);
+                        if (objectOwnsPointer)
+                        {
+                            gui::panel_rect(
+                                gui_point(bounds.position),
+                                gui_size(bounds));
+                        }
+                        else if (gui::button_selected(
+                                     collisionMarker,
+                                     gui_size(bounds),
+                                     occupied || selected)
+                                 && options.interactive)
                         {
                             const auto changed = controller.apply_cell(coordinate);
                             result.changed = result.changed
@@ -1347,6 +2210,33 @@ namespace epochengine::editor_tilemaps
                     }
                 }
                 result.rendered_cells = rendered;
+
+                for (const auto& object : current.objects)
+                {
+                    const auto* descriptor = std::addressof(object.descriptor);
+                    const bool selected = controller.selected_object()
+                        == std::optional{object.handle};
+                    if (selected && controller.selected_object_draft())
+                        descriptor = controller.selected_object_draft();
+                    const auto bounds = clipped_rect(
+                        object_canvas_rect(canvas, *descriptor),
+                        canvas.viewport);
+                    if (bounds.size.x <= 0.0f || bounds.size.y <= 0.0f)
+                        continue;
+                    gui::set_cursor(gui_point(bounds.position));
+                    if (gui::button_selected(
+                            descriptor->name,
+                            gui_size(bounds),
+                            selected)
+                        && options.interactive)
+                    {
+                        const auto changed =
+                            controller.select_object(object.handle);
+                        result.changed = result.changed
+                            || static_cast<bool>(changed);
+                        result.input_captured = true;
+                    }
+                }
             }
 
             if (layout.inspector_visible)
@@ -1357,6 +2247,14 @@ namespace epochengine::editor_tilemaps
                 gui::set_cursor({
                     layout.inspector.position.x + 6.0f,
                     layout.inspector.position.y + 5.0f});
+                gui::begin_scroll_area({
+                    .id = "tilemap.inspector.scroll",
+                    .size = {
+                        (std::max)(80.0f, layout.inspector.size.x - 12.0f),
+                        (std::max)(48.0f, layout.inspector.size.y - 10.0f)},
+                    .content_height = 760.0f,
+                    .draw_background = false,
+                    .show_scrollbar = true});
                 gui::label("Tile Inspector");
                 gui::property_row(
                     "Tool",
@@ -1377,6 +2275,503 @@ namespace epochengine::editor_tilemaps
                     "History",
                     std::to_string(controller.document()->metrics().operation_count),
                     64.0f);
+                gui::property_row(
+                    "Objects",
+                    std::to_string(current.objects.size()),
+                    64.0f);
+
+                if (state.tool == Tool::collision
+                    && controller.selected_palette_collision_draft())
+                {
+                    authoring::tilemap::CollisionShape draft =
+                        *controller.selected_palette_collision_draft();
+                    bool draftChanged{};
+                    const float inspectorWidth =
+                        (std::max)(80.0f, layout.inspector.size.x - 12.0f);
+                    gui::label(
+                        controller.selected_palette_collision_draft_dirty()
+                        ? "Palette Collision *"
+                        : "Palette Collision");
+
+                    const std::array primaryKinds{
+                        gui::SegmentedButtonSpec{
+                            "None", 48.0f,
+                            draft.kind == asset::tilemap::CollisionKind::none},
+                        gui::SegmentedButtonSpec{
+                            "Solid", 52.0f,
+                            draft.kind
+                                == asset::tilemap::CollisionKind::full_cell},
+                        gui::SegmentedButtonSpec{
+                            "One Way", 68.0f,
+                            draft.kind
+                                == asset::tilemap::CollisionKind::one_way_up}};
+                    if (const auto selected = gui::segmented_button_row(
+                            primaryKinds, 25.0f, 3.0f))
+                    {
+                        constexpr std::array kinds{
+                            asset::tilemap::CollisionKind::none,
+                            asset::tilemap::CollisionKind::full_cell,
+                            asset::tilemap::CollisionKind::one_way_up};
+                        if (*selected < kinds.size())
+                        {
+                            draft.kind = kinds[*selected];
+                            draftChanged = true;
+                        }
+                    }
+                    const std::array shapedKinds{
+                        gui::SegmentedButtonSpec{
+                            "Rise Right", 76.0f,
+                            draft.kind
+                                == asset::tilemap::CollisionKind::slope_up_right},
+                        gui::SegmentedButtonSpec{
+                            "Fall Right", 76.0f,
+                            draft.kind
+                                == asset::tilemap::CollisionKind::slope_down_right},
+                        gui::SegmentedButtonSpec{
+                            "Box", 42.0f,
+                            draft.kind
+                                == asset::tilemap::CollisionKind::custom_box}};
+                    if (const auto selected = gui::segmented_button_row(
+                            shapedKinds, 25.0f, 3.0f))
+                    {
+                        constexpr std::array kinds{
+                            asset::tilemap::CollisionKind::slope_up_right,
+                            asset::tilemap::CollisionKind::slope_down_right,
+                            asset::tilemap::CollisionKind::custom_box};
+                        if (*selected < kinds.size())
+                        {
+                            draft.kind = kinds[*selected];
+                            draftChanged = true;
+                        }
+                    }
+
+                    const auto boundsX = gui::slider({
+                        .id = "tilemap.collision.bounds_x",
+                        .label = "Bounds X",
+                        .minimum = 0.0f,
+                        .maximum = (std::max)(
+                            0.0f, 1.0f - draft.local_bounds.width),
+                        .value = draft.local_bounds.x,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (boundsX.changed)
+                    {
+                        draft.local_bounds.x = boundsX.value;
+                        draft.local_bounds.width = (std::min)(
+                            draft.local_bounds.width,
+                            1.0f - draft.local_bounds.x);
+                        draftChanged = true;
+                    }
+                    const auto boundsY = gui::slider({
+                        .id = "tilemap.collision.bounds_y",
+                        .label = "Bounds Y",
+                        .minimum = 0.0f,
+                        .maximum = (std::max)(
+                            0.0f, 1.0f - draft.local_bounds.height),
+                        .value = draft.local_bounds.y,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (boundsY.changed)
+                    {
+                        draft.local_bounds.y = boundsY.value;
+                        draft.local_bounds.height = (std::min)(
+                            draft.local_bounds.height,
+                            1.0f - draft.local_bounds.y);
+                        draftChanged = true;
+                    }
+                    const auto boundsWidth = gui::slider({
+                        .id = "tilemap.collision.bounds_width",
+                        .label = "Bounds Width",
+                        .minimum = 0.05f,
+                        .maximum = (std::max)(
+                            0.05f, 1.0f - draft.local_bounds.x),
+                        .value = draft.local_bounds.width,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (boundsWidth.changed)
+                    {
+                        draft.local_bounds.width = boundsWidth.value;
+                        draftChanged = true;
+                    }
+                    const auto boundsHeight = gui::slider({
+                        .id = "tilemap.collision.bounds_height",
+                        .label = "Bounds Height",
+                        .minimum = 0.05f,
+                        .maximum = (std::max)(
+                            0.05f, 1.0f - draft.local_bounds.y),
+                        .value = draft.local_bounds.height,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (boundsHeight.changed)
+                    {
+                        draft.local_bounds.height = boundsHeight.value;
+                        draftChanged = true;
+                    }
+                    gui::property_row(
+                        "Layer Bits",
+                        std::to_string(draft.layer_bits),
+                        76.0f);
+                    gui::property_row(
+                        "Mask Bits",
+                        std::to_string(draft.mask_bits),
+                        76.0f);
+                    gui::property_row(
+                        "Sensor",
+                        draft.sensor ? "Unsupported" : "Off",
+                        76.0f);
+
+                    if (draftChanged)
+                    {
+                        result.changed = static_cast<bool>(
+                            controller.stage_selected_palette_collision(
+                                draft)) || result.changed;
+                        result.input_captured = true;
+                    }
+                    const std::array collisionActions{
+                        gui::InlineButtonSpec{
+                            .label = "Apply",
+                            .width = 52.0f,
+                            .enabled = controller
+                                .selected_palette_collision_draft_dirty()},
+                        gui::InlineButtonSpec{
+                            .label = "Full Bounds",
+                            .width = 82.0f}};
+                    if (const auto action = gui::inline_button_row(
+                            collisionActions, 26.0f, 4.0f))
+                    {
+                        ControllerResult changed{};
+                        if (*action == 0u)
+                        {
+                            changed =
+                                controller.apply_selected_palette_collision();
+                        }
+                        else
+                        {
+                            draft.local_bounds = {0.0f, 0.0f, 1.0f, 1.0f};
+                            changed =
+                                controller.stage_selected_palette_collision(
+                                    draft);
+                        }
+                        result.changed = static_cast<bool>(changed)
+                            || result.changed;
+                        result.input_captured = true;
+                    }
+                }
+                else if (const auto* selectedDraft =
+                             controller.selected_object_draft())
+                {
+                    authoring::tilemap::MapObjectDescriptor draft =
+                        *selectedDraft;
+                    bool draftChanged{};
+                    gui::label(controller.selected_object_draft_dirty()
+                        ? "Object Properties *"
+                        : "Object Properties");
+                    gui::label("Name");
+                    draftChanged = gui::edit_box(
+                        draft.name,
+                        {(std::max)(80.0f, layout.inspector.size.x - 12.0f),
+                         28.0f},
+                        controller.document()->limits().maximum_name_bytes)
+                        .changed || draftChanged;
+                    gui::label("Type");
+                    draftChanged = gui::edit_box(
+                        draft.type,
+                        {(std::max)(80.0f, layout.inspector.size.x - 12.0f),
+                         28.0f},
+                        controller.document()->limits().maximum_name_bytes)
+                        .changed || draftChanged;
+
+                    const float inspectorWidth =
+                        (std::max)(80.0f, layout.inspector.size.x - 12.0f);
+                    auto x = gui::slider({
+                        .id = "tilemap.object.position_x",
+                        .label = "X",
+                        .minimum = 0.0f,
+                        .maximum = static_cast<float>(
+                            current.descriptor.extent_tiles.x),
+                        .value = draft.position.x,
+                        .step = 0.25f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (x.changed)
+                    {
+                        draft.position.x = x.value;
+                        draftChanged = true;
+                    }
+                    auto y = gui::slider({
+                        .id = "tilemap.object.position_y",
+                        .label = "Y",
+                        .minimum = 0.0f,
+                        .maximum = static_cast<float>(
+                            current.descriptor.extent_tiles.y),
+                        .value = draft.position.y,
+                        .step = 0.25f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (y.changed)
+                    {
+                        draft.position.y = y.value;
+                        draftChanged = true;
+                    }
+                    auto width = gui::slider({
+                        .id = "tilemap.object.width",
+                        .label = "Width",
+                        .minimum = 0.25f,
+                        .maximum = (std::max)(
+                            1.0f,
+                            static_cast<float>(
+                                current.descriptor.extent_tiles.x)),
+                        .value = draft.size.x,
+                        .step = 0.25f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (width.changed)
+                    {
+                        draft.size.x = width.value;
+                        draftChanged = true;
+                    }
+                    auto height = gui::slider({
+                        .id = "tilemap.object.height",
+                        .label = "Height",
+                        .minimum = 0.25f,
+                        .maximum = (std::max)(
+                            1.0f,
+                            static_cast<float>(
+                                current.descriptor.extent_tiles.y)),
+                        .value = draft.size.y,
+                        .step = 0.25f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (height.changed)
+                    {
+                        draft.size.y = height.value;
+                        draftChanged = true;
+                    }
+                    constexpr float radiansToDegrees =
+                        57.295779513082320876f;
+                    constexpr float degreesToRadians =
+                        0.01745329251994329577f;
+                    auto rotation = gui::slider({
+                        .id = "tilemap.object.rotation",
+                        .label = "Rotation",
+                        .minimum = -180.0f,
+                        .maximum = 180.0f,
+                        .value = draft.rotation_radians * radiansToDegrees,
+                        .step = 1.0f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (rotation.changed)
+                    {
+                        draft.rotation_radians =
+                            rotation.value * degreesToRadians;
+                        draftChanged = true;
+                    }
+                    if (draftChanged)
+                    {
+                        result.changed = static_cast<bool>(
+                            controller.stage_selected_object(
+                                std::move(draft))) || result.changed;
+                        result.input_captured = true;
+                    }
+
+                    const std::array objectActions{
+                        gui::InlineButtonSpec{
+                            .label = "Apply",
+                            .width = 52.0f,
+                            .enabled =
+                                controller.selected_object_draft_dirty()},
+                        gui::InlineButtonSpec{
+                            .label = "Duplicate",
+                            .width = 76.0f},
+                        gui::InlineButtonSpec{
+                            .label = "Delete",
+                            .width = 56.0f}};
+                    if (const auto action = gui::inline_button_row(
+                            objectActions, 26.0f, 4.0f))
+                    {
+                        ControllerResult changed{};
+                        if (*action == 0u)
+                            changed = controller.apply_selected_object();
+                        else if (*action == 1u)
+                            changed = controller.duplicate_selected_object();
+                        else
+                            changed = controller.remove_selected_object();
+                        result.changed = static_cast<bool>(changed)
+                            || result.changed;
+                        result.input_captured = true;
+                    }
+                }
+                else if (const auto* selectedLayer =
+                             controller.selected_layer_draft())
+                {
+                    authoring::tilemap::LayerDescriptor draft =
+                        *selectedLayer;
+                    bool draftChanged{};
+                    const float inspectorWidth =
+                        (std::max)(80.0f, layout.inspector.size.x - 12.0f);
+                    gui::label(controller.selected_layer_draft_dirty()
+                        ? "Layer Properties *"
+                        : "Layer Properties");
+                    gui::label("Name");
+                    draftChanged = gui::edit_box(
+                        draft.name,
+                        {inspectorWidth, 28.0f},
+                        controller.document()->limits().maximum_name_bytes)
+                        .changed || draftChanged;
+
+                    draftChanged = gui::toggle_switch(
+                        "Visible",
+                        draft.visible,
+                        {inspectorWidth, 27.0f}) || draftChanged;
+                    draftChanged = gui::toggle_switch(
+                        "Locked",
+                        draft.locked,
+                        {inspectorWidth, 27.0f}) || draftChanged;
+                    draftChanged = gui::toggle_switch(
+                        "Collision Source",
+                        draft.collision_source,
+                        {inspectorWidth, 27.0f}) || draftChanged;
+
+                    const std::array phaseButtons{
+                        gui::SegmentedButtonSpec{
+                            "Bkg", 40.0f,
+                            draft.phase == asset::tilemap::LayerPhase::background},
+                        gui::SegmentedButtonSpec{
+                            "World", 44.0f,
+                            draft.phase == asset::tilemap::LayerPhase::world},
+                        gui::SegmentedButtonSpec{
+                            "Front", 44.0f,
+                            draft.phase == asset::tilemap::LayerPhase::foreground},
+                        gui::SegmentedButtonSpec{
+                            "Overlay", 48.0f,
+                            draft.phase == asset::tilemap::LayerPhase::overlay}};
+                    if (const auto phase = gui::segmented_button_row(
+                            phaseButtons, 25.0f, 3.0f))
+                    {
+                        constexpr std::array phases{
+                            asset::tilemap::LayerPhase::background,
+                            asset::tilemap::LayerPhase::world,
+                            asset::tilemap::LayerPhase::foreground,
+                            asset::tilemap::LayerPhase::overlay};
+                        if (*phase < phases.size())
+                        {
+                            draft.phase = phases[*phase];
+                            draftChanged = true;
+                        }
+                    }
+
+                    const auto opacity = gui::slider({
+                        .id = "tilemap.layer.opacity",
+                        .label = "Opacity",
+                        .minimum = 0.0f,
+                        .maximum = 1.0f,
+                        .value = draft.opacity,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (opacity.changed)
+                    {
+                        draft.opacity = opacity.value;
+                        draftChanged = true;
+                    }
+                    const auto drawLayer = gui::slider({
+                        .id = "tilemap.layer.draw_order",
+                        .label = "Draw Order",
+                        .minimum = -128.0f,
+                        .maximum = 128.0f,
+                        .value = static_cast<float>(draft.draw_layer),
+                        .step = 1.0f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (drawLayer.changed)
+                    {
+                        draft.draw_layer = static_cast<std::int32_t>(
+                            std::lround(drawLayer.value));
+                        draftChanged = true;
+                    }
+                    const auto parallaxX = gui::slider({
+                        .id = "tilemap.layer.parallax_x",
+                        .label = "Parallax X",
+                        .minimum = 0.0f,
+                        .maximum = 2.0f,
+                        .value = draft.parallax.x,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (parallaxX.changed)
+                    {
+                        draft.parallax.x = parallaxX.value;
+                        draftChanged = true;
+                    }
+                    const auto parallaxY = gui::slider({
+                        .id = "tilemap.layer.parallax_y",
+                        .label = "Parallax Y",
+                        .minimum = 0.0f,
+                        .maximum = 2.0f,
+                        .value = draft.parallax.y,
+                        .step = 0.05f,
+                        .size = {inspectorWidth, 28.0f}});
+                    if (parallaxY.changed)
+                    {
+                        draft.parallax.y = parallaxY.value;
+                        draftChanged = true;
+                    }
+                    if (draftChanged)
+                    {
+                        result.changed = static_cast<bool>(
+                            controller.stage_selected_layer(std::move(draft)))
+                            || result.changed;
+                        result.input_captured = true;
+                    }
+
+                    const std::array actions{
+                        gui::InlineButtonSpec{
+                            .label = "Apply",
+                            .width = 52.0f,
+                            .enabled =
+                                controller.selected_layer_draft_dirty()},
+                        gui::InlineButtonSpec{
+                            .label = "Duplicate",
+                            .width = 76.0f},
+                        gui::InlineButtonSpec{
+                            .label = "Delete",
+                            .width = 56.0f,
+                            .enabled = current.layers.size() > 1u}};
+                    if (const auto action = gui::inline_button_row(
+                            actions, 26.0f, 4.0f))
+                    {
+                        ControllerResult changed{};
+                        if (*action == 0u)
+                            changed = controller.apply_selected_layer();
+                        else if (*action == 1u)
+                            changed = controller.duplicate_selected_layer();
+                        else
+                            changed = controller.remove_selected_layer();
+                        result.changed = static_cast<bool>(changed)
+                            || result.changed;
+                        result.input_captured = true;
+                    }
+                }
+
+                if (!current.objects.empty())
+                {
+                    gui::label("Map Objects");
+                    const std::size_t visibleObjectCount = (std::min)(
+                        current.objects.size(), std::size_t{6u});
+                    for (std::size_t index = 0u;
+                         index < visibleObjectCount;
+                         ++index)
+                    {
+                        const auto& object = current.objects[index];
+                        if (gui::button_selected(
+                                object.descriptor.name,
+                                {(std::max)(
+                                     80.0f,
+                                     layout.inspector.size.x - 12.0f),
+                                 24.0f},
+                                controller.selected_object()
+                                    == std::optional{object.handle}))
+                        {
+                            result.changed = static_cast<bool>(
+                                controller.select_object(object.handle))
+                                || result.changed;
+                            result.input_captured = true;
+                        }
+                    }
+                }
+                gui::end_scroll_area();
             }
 
             gui::panel_rect(gui_point(layout.status.position), gui_size(layout.status));
@@ -1423,6 +2818,44 @@ namespace epochengine::editor_tilemaps
         {
             return ControllerContractFailure::layer;
         }
+        if (!controller.selected_layer_draft())
+            return ControllerContractFailure::layer_edit;
+        auto gameplayLayer = *controller.selected_layer_draft();
+        gameplayLayer.name = "Gameplay";
+        gameplayLayer.parallax = {0.75f, 0.85f};
+        gameplayLayer.phase = asset::tilemap::LayerPhase::foreground;
+        gameplayLayer.draw_layer = 4;
+        gameplayLayer.opacity = 0.65f;
+        gameplayLayer.visible = false;
+        gameplayLayer.locked = true;
+        gameplayLayer.collision_source = false;
+        const auto operationsBeforeLayerEdit =
+            controller.document()->metrics().operation_count;
+        if (!controller.stage_selected_layer(gameplayLayer)
+            || !controller.selected_layer_draft_dirty()
+            || !controller.apply_selected_layer()
+            || controller.selected_layer_draft_dirty()
+            || controller.document()->metrics().operation_count
+                != operationsBeforeLayerEdit + 1u
+            || controller.snapshot().layers[1].descriptor != gameplayLayer)
+        {
+            return ControllerContractFailure::layer_edit;
+        }
+        if (!controller.duplicate_selected_layer()
+            || controller.snapshot().layers.size() != 3u
+            || controller.snapshot().layers[2].descriptor.name
+                != "Gameplay Copy"
+            || controller.snapshot().layers[2].descriptor.draw_layer != 5)
+        {
+            return ControllerContractFailure::layer_duplicate;
+        }
+        if (!controller.remove_selected_layer()
+            || controller.snapshot().layers.size() != 2u
+            || controller.ui_state().selected_layer != 1u
+            || controller.snapshot().layers[1].descriptor != gameplayLayer)
+        {
+            return ControllerContractFailure::layer_remove;
+        }
 
         editor_project_textures::TextureCatalogEntry texture{
             .logical_path = "Assets/Textures/tiles.rgba",
@@ -1445,6 +2878,26 @@ namespace epochengine::editor_tilemaps
             || controller.snapshot().palette.size() != 16u)
         {
             return ControllerContractFailure::texture_attach;
+        }
+        if (!controller.select_layer(1u)
+            || !controller.select_palette(0u)
+            || !controller.select_tool(Tool::pencil))
+        {
+            return ControllerContractFailure::layer_lock;
+        }
+        const auto lockedPaint = controller.apply_cell({0u, 0u});
+        if (lockedPaint.code != ControllerCode::document_failure
+            || lockedPaint.document_code
+                != authoring::tilemap::ResultCode::locked_layer)
+        {
+            return ControllerContractFailure::layer_lock;
+        }
+        gameplayLayer.locked = false;
+        if (!controller.stage_selected_layer(gameplayLayer)
+            || !controller.apply_selected_layer()
+            || controller.snapshot().layers[1].descriptor != gameplayLayer)
+        {
+            return ControllerContractFailure::layer_lock;
         }
         if (!controller.select_layer(0u) || !controller.select_palette(0u)
             || !controller.select_tool(Tool::pencil))
@@ -1480,11 +2933,134 @@ namespace epochengine::editor_tilemaps
         {
             return ControllerContractFailure::collision;
         }
+        authoring::tilemap::CollisionShape authoredCollision =
+            collision->collision;
+        authoredCollision.kind =
+            asset::tilemap::CollisionKind::slope_up_right;
+        authoredCollision.local_bounds = {0.1f, 0.15f, 0.8f, 0.75f};
+        authoredCollision.layer_bits = 4u;
+        authoredCollision.mask_bits = 7u;
+        const auto operationsBeforeCollision =
+            controller.document()->metrics().operation_count;
+        if (!controller.stage_selected_palette_collision(authoredCollision)
+            || !controller.selected_palette_collision_draft_dirty()
+            || controller.document()->palette_entry(
+                    controller.snapshot().palette[0].handle)->collision
+                == authoredCollision
+            || !controller.apply_selected_palette_collision()
+            || controller.selected_palette_collision_draft_dirty()
+            || controller.document()->metrics().operation_count
+                != operationsBeforeCollision + 1u)
+        {
+            return ControllerContractFailure::collision;
+        }
+        const auto committedCollision = controller.document()->palette_entry(
+            controller.snapshot().palette[0].handle);
+        if (!committedCollision
+            || committedCollision->collision != authoredCollision)
+        {
+            return ControllerContractFailure::collision;
+        }
+        if (!controller.select_tool(Tool::object)
+            || !controller.apply_cell({2u, 3u})
+            || !controller.selected_object()
+            || controller.snapshot().objects.size() != 1u)
+        {
+            return ControllerContractFailure::object_create;
+        }
+        auto object = *controller.selected_object_draft();
+        object.name = "Spawn Trigger";
+        object.type = "trigger";
+        object.position = {3.25f, 4.5f};
+        object.size = {2.0f, 1.5f};
+        object.rotation_radians = 0.25f;
+        if (!controller.stage_selected_object(object)
+            || !controller.selected_object_draft_dirty()
+            || !controller.apply_selected_object()
+            || controller.selected_object_draft_dirty())
+        {
+            return ControllerContractFailure::object_edit;
+        }
+        const auto committedObject = controller.document()->object(
+            *controller.selected_object());
+        if (!committedObject || *committedObject != object)
+            return ControllerContractFailure::object_edit;
+        const auto operationCountBeforeDrag =
+            controller.document()->metrics().operation_count;
+        if (!controller.begin_object_drag(
+                *controller.selected_object(), object.position)
+            || !controller.object_drag_active()
+            || !controller.update_object_drag({6.0f, 5.0f})
+            || !controller.selected_object_draft_dirty())
+        {
+            return ControllerContractFailure::object_drag;
+        }
+        const auto objectBeforeDragCommit = controller.document()->object(
+            *controller.selected_object());
+        if (!objectBeforeDragCommit
+            || objectBeforeDragCommit->position != object.position
+            || !controller.end_object_drag(true)
+            || controller.object_drag_active()
+            || controller.selected_object_draft_dirty()
+            || controller.document()->metrics().operation_count
+                != operationCountBeforeDrag + 1u)
+        {
+            return ControllerContractFailure::object_drag;
+        }
+        const auto draggedObject = controller.document()->object(
+            *controller.selected_object());
+        if (!draggedObject
+            || draggedObject->position
+                != authoring::tilemap::Float2{6.0f, 5.0f})
+        {
+            return ControllerContractFailure::object_drag;
+        }
+        if (!controller.begin_object_drag(
+                *controller.selected_object(), draggedObject->position)
+            || !controller.update_object_drag({7.0f, 6.0f})
+            || !controller.end_object_drag(false)
+            || controller.document()->object(*controller.selected_object())
+                != draggedObject)
+        {
+            return ControllerContractFailure::object_drag;
+        }
+        if (!controller.duplicate_selected_object()
+            || controller.snapshot().objects.size() != 2u)
+        {
+            return ControllerContractFailure::object_duplicate;
+        }
+        if (!controller.remove_selected_object()
+            || controller.selected_object()
+            || controller.snapshot().objects.size() != 1u)
+        {
+            return ControllerContractFailure::object_remove;
+        }
         if (!controller.undo() || !controller.redo())
             return ControllerContractFailure::undo_redo;
         const auto preview = controller.compile_runtime_preview(250u);
         if (!preview || preview.visible.sprites.size() != 64u
-            || preview.visible.collision.size() != 64u)
+            || preview.visible.collision.size() != 64u
+            || preview.visible.objects.size() != 1u
+            || preview.visible.metrics.visible_layers != 1u
+            || preview.visible.metrics.hidden_layers != 1u
+            || !preview.artifact
+            || preview.artifact->layers.size() != 2u
+            || preview.artifact->layers[1].name != "Gameplay"
+            || preview.artifact->layers[1].visible
+            || preview.artifact->layers[1].opacity != 0.65f
+            || preview.artifact->layers[1].draw_layer != 4
+            || preview.artifact->collision.size() != 64u
+            || preview.artifact->collision[0].kind
+                != asset::tilemap::CollisionKind::slope_up_right
+            || preview.artifact->collision[0].world_bounds
+                != asset::tilemap::RectF{0.1f, 0.15f, 0.8f, 0.75f}
+            || preview.artifact->collision[0].layer_bits != 4u
+            || preview.artifact->collision[0].mask_bits != 7u
+            || preview.visible.collision[0]
+                != preview.artifact->collision[0]
+            || preview.visible.objects[0].name != "Spawn Trigger"
+            || preview.visible.objects[0].position.x != 6.0f
+            || preview.visible.objects[0].position.y != 5.0f)
         {
             return ControllerContractFailure::runtime_preview;
         }
@@ -1497,36 +3073,73 @@ namespace epochengine::editor_tilemaps
             || !handedOff.restore_context_handoff(
                 handoffBytes.bytes, true)
             || !handedOff.dirty()
-            || handedOff.document()->metrics().occupied_cells != 64u)
+            || handedOff.document()->metrics().occupied_cells != 64u
+            || handedOff.snapshot().layers
+                != controller.snapshot().layers
+            || handedOff.snapshot().palette
+                != controller.snapshot().palette
+            || handedOff.snapshot().objects.size() != 1u
+            || handedOff.snapshot().objects[0].descriptor
+                != controller.snapshot().objects[0].descriptor)
         {
             return ControllerContractFailure::context_handoff;
         }
 
+        const auto savedLayers = controller.snapshot().layers;
+        const auto savedPalette = controller.snapshot().palette;
+        const auto savedObject = controller.snapshot().objects[0];
         const PublishResult published = controller.save_and_publish();
         if (!published || controller.dirty())
             return ControllerContractFailure::source_publish;
-        if (!controller.select_tool(Tool::eraser)
+        if (!controller.select_object(savedObject.handle))
+            return ControllerContractFailure::reload;
+        auto temporaryObject = *controller.selected_object_draft();
+        temporaryObject.name = "Unsaved Temporary Trigger";
+        if (!controller.stage_selected_object(std::move(temporaryObject))
+            || !controller.apply_selected_object()
+            || !controller.select_tool(Tool::eraser)
             || !controller.apply_cell({0u, 0u}) || !controller.dirty()
             || !controller.reload() || controller.dirty()
-            || controller.document()->metrics().occupied_cells != 64u)
+            || controller.document()->metrics().occupied_cells != 64u
+            || controller.snapshot().layers != savedLayers
+            || controller.snapshot().palette != savedPalette
+            || controller.snapshot().objects.size() != 1u
+            || controller.snapshot().objects[0] != savedObject)
         {
             return ControllerContractFailure::reload;
         }
         project_tilemaps::ProjectTileMapPipeline restored{
             std::string{projectId}, root.path.generic_string()};
-        if (!restored.valid()
-            || !restored.restore_exact(
-                controller.logical_path(), published.compiled.locator.artifact_key))
+        const auto restoredArtifact = restored.restore_exact_artifact(
+            controller.logical_path(),
+            published.compiled.locator.artifact_key);
+        if (!restored.valid() || !restoredArtifact
+            || restoredArtifact.artifact.layers.size() != 2u
+            || restoredArtifact.artifact.layers[1].name != "Gameplay"
+            || restoredArtifact.artifact.layers[1].visible
+            || restoredArtifact.artifact.layers[1].opacity != 0.65f
+            || restoredArtifact.artifact.layers[1].draw_layer != 4
+            || restoredArtifact.artifact.collision.size() != 64u
+            || restoredArtifact.artifact.collision[0].kind
+                != asset::tilemap::CollisionKind::slope_up_right
+            || restoredArtifact.artifact.collision[0].world_bounds
+                != asset::tilemap::RectF{0.1f, 0.15f, 0.8f, 0.75f}
+            || restoredArtifact.artifact.collision[0].layer_bits != 4u
+            || restoredArtifact.artifact.collision[0].mask_bits != 7u
+            || restoredArtifact.artifact.objects.size() != 1u
+            || restoredArtifact.artifact.objects[0].name != "Spawn Trigger"
+            || restoredArtifact.artifact.objects[0].position.x != 6.0f
+            || restoredArtifact.artifact.objects[0].position.y != 5.0f)
         {
             return ControllerContractFailure::compiled_restore;
         }
 
         const auto metrics = controller.metrics();
-        if (metrics.commands < 16u || metrics.mutations < 20u
+        if (metrics.commands < 27u || metrics.mutations < 24u
             || metrics.saves != 1u || metrics.compilations != 1u
             || metrics.preview_artifact_compilations != 1u
             || metrics.preview_compilations != 1u
-            || metrics.rejected_commands != 1u
+            || metrics.rejected_commands != 2u
             || metrics.painted_cells < 66u)
         {
             return ControllerContractFailure::metrics;

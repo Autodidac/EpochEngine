@@ -38,6 +38,7 @@ module;
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <source_location>
 #include <stdexcept>
 #include <span>
@@ -171,6 +172,14 @@ export namespace epochengine::sdltextures
         if (!gpu.textureHandle)
             throw std::runtime_error("[ SDL3 ] - Failed: SDL_CreateTextureFromSurface");
 
+        if (!SDL_SetTextureBlendMode(gpu.textureHandle, SDL_BLENDMODE_BLEND) ||
+            !SDL_SetTextureScaleMode(gpu.textureHandle, SDL_SCALEMODE_NEAREST)) {
+            sdlcontext::check_sdl_error("SDL atlas texture configuration");
+            SDL_DestroyTexture(gpu.textureHandle);
+            gpu.textureHandle = nullptr;
+            throw std::runtime_error("[ SDL3 ] - Failed to configure atlas texture");
+        }
+
         gpu.width = atlas.width;
         gpu.height = atlas.height;
         gpu.version = atlas.version;
@@ -226,6 +235,9 @@ export namespace epochengine::sdltextures
 
     inline void clear_gpu_atlases() noexcept
     {
+        std::scoped_lock runtimeGuard{
+            sdlcontext::state::runtime_api_mutex()};
+
         for (auto& [_, gpu] : sdl_gpu_atlases) {
             if (gpu.textureHandle) {
                 SDL_DestroyTexture(gpu.textureHandle);
@@ -284,7 +296,24 @@ export namespace epochengine::sdltextures
 
         // Use a scoped renderer logger category when atlas/sprite diagnostics are needed here.
 
-        ensure_uploaded(*atlas); // Your SDL texture upload variant
+        try
+        {
+            ensure_uploaded(*atlas);
+        }
+        catch (const std::exception& error)
+        {
+            logger::error(
+                "SDL.DrawSprite",
+                std::string("Atlas upload failed: ") + error.what());
+            sharedState.renderFaulted = true;
+            return;
+        }
+        catch (...)
+        {
+            logger::error("SDL.DrawSprite", "Atlas upload failed with an unknown error.");
+            sharedState.renderFaulted = true;
+            return;
+        }
 
         auto it = sdl_gpu_atlases.find(atlas);
         if (it == sdl_gpu_atlases.end()) {
@@ -307,7 +336,7 @@ export namespace epochengine::sdltextures
         SDL_Rect viewport{ 0, 0, outputW, outputH };
         if (sdl_renderer) {
             SDL_Rect currentViewport{ 0, 0, 0, 0 };
-            if (SDL_GetRenderViewport(sdl_renderer, &currentViewport) == 0 &&
+            if (SDL_GetRenderViewport(sdl_renderer, &currentViewport) &&
                 currentViewport.w > 0 && currentViewport.h > 0) {
                 viewport = currentViewport;
             }
@@ -317,28 +346,6 @@ export namespace epochengine::sdltextures
         float drawY = static_cast<float>(y);
         float drawWidth = static_cast<float>(width);
         float drawHeight = static_cast<float>(height);
-
-        const bool widthNormalized = drawWidth > 0.f && drawWidth <= 1.f;
-        const bool heightNormalized = drawHeight > 0.f && drawHeight <= 1.f;
-        const bool xNormalized = drawX >= 0.f && drawX <= 1.f;
-        const bool yNormalized = drawY >= 0.f && drawY <= 1.f;
-
-        const float baseWidth = static_cast<float>((std::max)(1, viewport.w));
-        const float baseHeight = static_cast<float>((std::max)(1, viewport.h));
-
-        if (widthNormalized) {
-            drawWidth = (std::max)(drawWidth * baseWidth, 1.0f);
-        }
-        if (heightNormalized) {
-            drawHeight = (std::max)(drawHeight * baseHeight, 1.0f);
-        }
-
-        if (xNormalized) {
-            drawX = drawX * baseWidth;
-        }
-        if (yNormalized) {
-            drawY = drawY * baseHeight;
-        }
 
         if (drawWidth <= 0.f)
             drawWidth = static_cast<float>(region.width);

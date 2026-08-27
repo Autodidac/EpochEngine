@@ -20,6 +20,7 @@ import epoch.gui.tile_workspace;
 import gui.engine;
 import project.tilemap_pipeline;
 import project.tilemap_source;
+import render.canvas2d_tilemap;
 
 export namespace epochengine::editor_tilemaps
 {
@@ -36,6 +37,7 @@ export namespace epochengine::editor_tilemaps
         invalid_tile_extent,
         palette_required,
         layer_required,
+        object_required,
         tool_not_applicable,
         operation_limit,
         allocation_failure
@@ -58,6 +60,7 @@ export namespace epochengine::editor_tilemaps
         case ControllerCode::invalid_tile_extent: return "invalid_tile_extent";
         case ControllerCode::palette_required: return "palette_required";
         case ControllerCode::layer_required: return "layer_required";
+        case ControllerCode::object_required: return "object_required";
         case ControllerCode::tool_not_applicable: return "tool_not_applicable";
         case ControllerCode::operation_limit: return "operation_limit";
         case ControllerCode::allocation_failure: return "allocation_failure";
@@ -192,6 +195,18 @@ export namespace epochengine::editor_tilemaps
             ui_state() const noexcept;
         [[nodiscard]] std::optional<gui_lib::tile_workspace::CellCoordinate>
             selected_cell() const noexcept;
+        [[nodiscard]] const authoring::tilemap::LayerDescriptor*
+            selected_layer_draft() const noexcept;
+        [[nodiscard]] bool selected_layer_draft_dirty() const noexcept;
+        [[nodiscard]] const authoring::tilemap::CollisionShape*
+            selected_palette_collision_draft() const noexcept;
+        [[nodiscard]] bool selected_palette_collision_draft_dirty()
+            const noexcept;
+        [[nodiscard]] std::optional<authoring::tilemap::MapObjectHandle>
+            selected_object() const noexcept;
+        [[nodiscard]] const authoring::tilemap::MapObjectDescriptor*
+            selected_object_draft() const noexcept;
+        [[nodiscard]] bool selected_object_draft_dirty() const noexcept;
 
         [[nodiscard]] ControllerResult open_or_create(
             authoring::tilemap::MapDescriptor descriptor = {}) noexcept;
@@ -215,12 +230,36 @@ export namespace epochengine::editor_tilemaps
             gui_lib::tile_workspace::Tool tool) noexcept;
         [[nodiscard]] ControllerResult create_layer(
             std::string name = "Layer") noexcept;
+        [[nodiscard]] ControllerResult stage_selected_layer(
+            authoring::tilemap::LayerDescriptor descriptor) noexcept;
+        [[nodiscard]] ControllerResult apply_selected_layer() noexcept;
+        [[nodiscard]] ControllerResult duplicate_selected_layer() noexcept;
+        [[nodiscard]] ControllerResult remove_selected_layer() noexcept;
         [[nodiscard]] ControllerResult attach_texture(
             const editor_project_textures::TextureCatalogEntry& texture,
             std::uint64_t textureProjectKey,
             authoring::tilemap::UInt2 tileExtent) noexcept;
         [[nodiscard]] ControllerResult apply_cell(
             gui_lib::tile_workspace::CellCoordinate coordinate) noexcept;
+        [[nodiscard]] ControllerResult select_object(
+            authoring::tilemap::MapObjectHandle handle) noexcept;
+        void clear_object_selection() noexcept;
+        [[nodiscard]] ControllerResult stage_selected_object(
+            authoring::tilemap::MapObjectDescriptor descriptor) noexcept;
+        [[nodiscard]] ControllerResult apply_selected_object() noexcept;
+        [[nodiscard]] ControllerResult duplicate_selected_object() noexcept;
+        [[nodiscard]] ControllerResult remove_selected_object() noexcept;
+        [[nodiscard]] ControllerResult begin_object_drag(
+            authoring::tilemap::MapObjectHandle handle,
+            authoring::tilemap::Float2 mapPoint) noexcept;
+        [[nodiscard]] ControllerResult update_object_drag(
+            authoring::tilemap::Float2 mapPoint) noexcept;
+        [[nodiscard]] ControllerResult end_object_drag(bool commit) noexcept;
+        [[nodiscard]] bool object_drag_active() const noexcept;
+        [[nodiscard]] ControllerResult stage_selected_palette_collision(
+            authoring::tilemap::CollisionShape collision) noexcept;
+        [[nodiscard]] ControllerResult apply_selected_palette_collision()
+            noexcept;
         [[nodiscard]] ControllerResult set_selected_palette_collision(
             authoring::tilemap::CollisionShape collision) noexcept;
         [[nodiscard]] ControllerResult undo() noexcept;
@@ -270,6 +309,23 @@ export namespace epochengine::editor_tilemaps
         gui_lib::Vec2 canvas_pan_pointer_{};
         std::optional<gui_lib::tile_workspace::CellCoordinate>
             selected_cell_{};
+        std::optional<authoring::tilemap::LayerHandle>
+            selected_layer_handle_{};
+        std::optional<authoring::tilemap::LayerDescriptor>
+            selected_layer_draft_{};
+        bool selected_layer_draft_dirty_{};
+        std::optional<authoring::tilemap::PaletteEntryHandle>
+            selected_palette_handle_{};
+        std::optional<authoring::tilemap::CollisionShape>
+            selected_palette_collision_draft_{};
+        bool selected_palette_collision_draft_dirty_{};
+        std::optional<authoring::tilemap::MapObjectHandle>
+            selected_object_{};
+        std::optional<authoring::tilemap::MapObjectDescriptor>
+            selected_object_draft_{};
+        bool selected_object_draft_dirty_{};
+        bool object_drag_active_{};
+        authoring::tilemap::Float2 object_drag_offset_{};
         std::optional<asset::tilemap::CompiledTileMapArtifact>
             preview_artifact_{};
         authoring::tilemap::DocumentRevision preview_revision_{};
@@ -286,6 +342,10 @@ export namespace epochengine::editor_tilemaps
         construction,
         create,
         layer,
+        layer_edit,
+        layer_duplicate,
+        layer_remove,
+        layer_lock,
         texture_project_guard,
         texture_attach,
         select,
@@ -293,6 +353,11 @@ export namespace epochengine::editor_tilemaps
         erase,
         fill,
         collision,
+        object_create,
+        object_edit,
+        object_drag,
+        object_duplicate,
+        object_remove,
         undo_redo,
         source_publish,
         context_handoff,
@@ -313,6 +378,11 @@ export namespace epochengine::editor_tilemaps
         case ControllerContractFailure::construction: return "construction";
         case ControllerContractFailure::create: return "create";
         case ControllerContractFailure::layer: return "layer";
+        case ControllerContractFailure::layer_edit: return "layer_edit";
+        case ControllerContractFailure::layer_duplicate:
+            return "layer_duplicate";
+        case ControllerContractFailure::layer_remove: return "layer_remove";
+        case ControllerContractFailure::layer_lock: return "layer_lock";
         case ControllerContractFailure::texture_project_guard:
             return "texture_project_guard";
         case ControllerContractFailure::texture_attach: return "texture_attach";
@@ -321,6 +391,12 @@ export namespace epochengine::editor_tilemaps
         case ControllerContractFailure::erase: return "erase";
         case ControllerContractFailure::fill: return "fill";
         case ControllerContractFailure::collision: return "collision";
+        case ControllerContractFailure::object_create: return "object_create";
+        case ControllerContractFailure::object_edit: return "object_edit";
+        case ControllerContractFailure::object_drag: return "object_drag";
+        case ControllerContractFailure::object_duplicate:
+            return "object_duplicate";
+        case ControllerContractFailure::object_remove: return "object_remove";
         case ControllerContractFailure::undo_redo: return "undo_redo";
         case ControllerContractFailure::source_publish: return "source_publish";
         case ControllerContractFailure::context_handoff: return "context_handoff";

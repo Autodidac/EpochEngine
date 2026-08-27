@@ -33,6 +33,7 @@ import render.preview_grid;
 import atlas.texture;
 import render.canvas2d;
 import render.canvas2d_cpu;
+import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
 import render.canvas2d_scene;
@@ -301,13 +302,17 @@ namespace epochengine::directxcontext::detail
             DirectXState& ownerState,
             std::uint64_t epoch)
             : owner(&ownerState),
+              executionLimits(
+                  canvas2d::limits::for_backend(
+                      RendererBackendKind::directx)),
               device(ownerState),
               presenter(
                   device,
                   epoch,
                   canvas2d::presentation::NativePresentationHooks{
                       this,
-                      &DirectXCanvasState::present_native})
+                      &DirectXCanvasState::present_native},
+                  executionLimits.residency)
         {
         }
 
@@ -531,7 +536,11 @@ namespace epochengine::directxcontext::detail
             if (!contextOwner || nextOutput.empty())
                 return false;
             const canvas2d::runtime::PreparedSceneView prepared =
-                rasterSession.prepare(contextOwner, nextOutput);
+                rasterSession.prepare(
+                    contextOwner,
+                    nextOutput,
+                    executionLimits.canvas,
+                    executionLimits.raster);
             if (!prepared)
                 return false;
             return static_cast<bool>(
@@ -542,6 +551,7 @@ namespace epochengine::directxcontext::detail
         }
 
         DirectXState* owner{};
+        canvas2d::limits::NativeExecutionLimits executionLimits{};
         CanvasRenderDevice device;
         canvas2d::presentation::Canvas2DPresenter presenter;
         canvas2d::runtime::SceneRasterSession rasterSession{};
@@ -734,11 +744,13 @@ namespace epochengine::directxcontext
         {
             if (!detail::render_canvas2d_scene(ctx, state))
             {
+                std::vector<detail::DirectXVertex> gridLines{};
                 std::vector<detail::DirectXVertex> solid{};
-                std::vector<detail::DirectXVertex> lines{};
+                std::vector<detail::DirectXVertex> overlayLines{};
+                gridLines.reserve(128);
                 solid.reserve(256);
-                lines.reserve(512);
-                detail::build_preview_geometry(*ctx, state, solid, lines);
+                overlayLines.reserve(256);
+                detail::build_preview_geometry(*ctx, state, gridLines, solid, overlayLines);
                 const D3D11_VIEWPORT previewViewport =
                     detail::scene_viewport_for(*ctx, state);
                 state.immediate->RSSetViewports(1, &previewViewport);
@@ -746,10 +758,12 @@ namespace epochengine::directxcontext
                 state.immediate->VSSetShader(state.vertexShader, nullptr, 0);
                 state.immediate->PSSetShader(state.pixelShader, nullptr, 0);
                 detail::draw_vertices(
+                    state, gridLines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+                detail::draw_vertices(
                     state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                 detail::render_engine_arcade_sampled_surface_preview(*ctx, state);
                 detail::draw_vertices(
-                    state, lines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+                    state, overlayLines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
             }
         }
 

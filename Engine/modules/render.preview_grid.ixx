@@ -37,6 +37,7 @@ module;
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <span>
@@ -49,6 +50,7 @@ export module render.preview_grid;
 
 import visuals.engine;
 import render.arcade;
+export import render.camera;
 import render.lighting;
 
 namespace epochengine::previewgrid
@@ -69,6 +71,15 @@ namespace epochengine::previewgrid
     {
         Vec3 position{};
         Vec3 color{};
+    };
+
+    export struct GridGeometry final
+    {
+        std::vector<Vertex> vertices{};
+        std::vector<std::uint32_t> indices{};
+        std::uint64_t signature{};
+        float spacing{ 1.0f };
+        Vec3 center{};
     };
 
     export using Mat4 = std::array<float, 16>;
@@ -92,6 +103,7 @@ namespace epochengine::previewgrid
     {
         bool solid_scene{};
         bool marker_wire{};
+        bool selection_wire{};
         bool sampled_surface{};
     };
 
@@ -104,29 +116,55 @@ namespace epochengine::previewgrid
             return ObjectPreviewGeometryRoute{
                 .solid_scene = false,
                 .marker_wire = render_arcade::kScreenSceneNode.diagnostic_overlay,
+                .selection_wire = false,
                 .sampled_surface = render_arcade::kScreenSceneNode.sampled_render_surface
             };
         case ObjectPreviewPrimitive::EngineArcadeCabinet:
             return ObjectPreviewGeometryRoute{
                 .solid_scene = true,
                 .marker_wire = render_arcade::kCabinetBodySceneNode.diagnostic_overlay,
+                .selection_wire = false,
                 .sampled_surface = render_arcade::kCabinetBodySceneNode.sampled_render_surface
             };
-        default:
+        case ObjectPreviewPrimitive::Camera:
+        case ObjectPreviewPrimitive::Light:
+            return ObjectPreviewGeometryRoute{
+                .solid_scene = false,
+                .marker_wire = true,
+                .selection_wire = false,
+                .sampled_surface = false
+            };
+        case ObjectPreviewPrimitive::Spawn:
             return ObjectPreviewGeometryRoute{
                 .solid_scene = true,
                 .marker_wire = true,
+                .selection_wire = true,
+                .sampled_surface = false
+            };
+        case ObjectPreviewPrimitive::Cube:
+        case ObjectPreviewPrimitive::Level:
+        case ObjectPreviewPrimitive::Canvas2D:
+        case ObjectPreviewPrimitive::ForestTrunk:
+        case ObjectPreviewPrimitive::ForestBranch:
+        case ObjectPreviewPrimitive::ForestLeafCluster:
+            return ObjectPreviewGeometryRoute{
+                .solid_scene = true,
+                .marker_wire = false,
+                .selection_wire = true,
                 .sampled_surface = false
             };
         }
+        return {};
     }
 
     export struct ArcadePreviewRoutingContract final
     {
         bool cabinet_is_scene_geometry{};
         bool cabinet_excludes_marker_overlay{};
+        bool cabinet_excludes_selection_overlay{};
         bool screen_is_sampled_surface{};
         bool screen_excludes_marker_overlay{};
+        bool screen_excludes_selection_overlay{};
         bool screen_accepts_front_view{};
         bool screen_rejects_rear_view{};
 
@@ -134,8 +172,10 @@ namespace epochengine::previewgrid
         {
             return cabinet_is_scene_geometry
                 && cabinet_excludes_marker_overlay
+                && cabinet_excludes_selection_overlay
                 && screen_is_sampled_surface
                 && screen_excludes_marker_overlay
+                && screen_excludes_selection_overlay
                 && screen_accepts_front_view
                 && screen_rejects_rear_view;
         }
@@ -151,8 +191,10 @@ namespace epochengine::previewgrid
         return ArcadePreviewRoutingContract{
             .cabinet_is_scene_geometry = cabinet.solid_scene && !cabinet.sampled_surface,
             .cabinet_excludes_marker_overlay = !cabinet.marker_wire,
+            .cabinet_excludes_selection_overlay = !cabinet.selection_wire,
             .screen_is_sampled_surface = !screen.solid_scene && screen.sampled_surface,
             .screen_excludes_marker_overlay = !screen.marker_wire,
+            .screen_excludes_selection_overlay = !screen.selection_wire,
             .screen_accepts_front_view = render_arcade::screen_sample_plane_faces_viewer(
                 render_arcade::kScreenSceneNode.position[2],
                 render_arcade::kScreenSceneNode.scale[2],
@@ -174,6 +216,9 @@ namespace epochengine::previewgrid
         float fovRadians = 0.90f;
         float nearPlane = 0.1f;
         float farPlane = 64.0f;
+        render_camera::ProjectionKind projection{ render_camera::ProjectionKind::perspective };
+        render_camera::ViewOrientation orientation{ render_camera::ViewOrientation::free };
+        float orthographicVerticalSize = 10.0f;
     };
 
     export struct ObjectMarker
@@ -188,6 +233,18 @@ namespace epochengine::previewgrid
         bool sampledRenderSurface = false;
     };
 
+    export [[nodiscard]] constexpr bool object_marker_uses_solid_fill(
+        const ObjectMarker& marker) noexcept
+    {
+        if (!object_preview_geometry_route(marker.primitive).solid_scene)
+            return false;
+        if (!marker.editorOnly)
+            return true;
+
+        return marker.primitive != ObjectPreviewPrimitive::Camera
+            && marker.primitive != ObjectPreviewPrimitive::Light;
+    }
+
     export inline const std::array<float, 4> kClearColor = epochengine::visuals::scene_background();
 
     export inline constexpr Camera kCamera{};
@@ -198,6 +255,37 @@ namespace epochengine::previewgrid
         FPS = 1,
         Canvas2D = 2
     };
+
+    export struct CameraNavigationGestures final
+    {
+        bool orbiting{};
+        bool panning{};
+        bool dollying{};
+        bool flying{};
+    };
+
+    export [[nodiscard]] constexpr CameraNavigationGestures
+    resolve_camera_navigation_gestures(
+        bool altHeld,
+        bool leftMouseDown,
+        bool middleMouseDown,
+        bool rightMouseDown) noexcept
+    {
+        return CameraNavigationGestures{
+            .orbiting = altHeld && leftMouseDown,
+            .panning = middleMouseDown,
+            .dollying = altHeld && rightMouseDown,
+            .flying = !altHeld && rightMouseDown};
+    }
+
+    static_assert(resolve_camera_navigation_gestures(
+        false, false, true, false).panning);
+    static_assert(resolve_camera_navigation_gestures(
+        true, true, false, false).orbiting);
+    static_assert(resolve_camera_navigation_gestures(
+        true, false, false, true).dollying);
+    static_assert(resolve_camera_navigation_gestures(
+        false, false, false, true).flying);
 
     export [[nodiscard]] inline std::string_view camera_mode_name(CameraMode mode) noexcept
     {
@@ -210,6 +298,34 @@ namespace epochengine::previewgrid
         }
     }
 
+    export enum class EditorView : std::uint8_t
+    {
+        Perspective = 0,
+        FreeOrthographic,
+        Front,
+        Back,
+        Left,
+        Right,
+        Top,
+        Bottom
+    };
+
+    export [[nodiscard]] constexpr std::string_view editor_view_name(EditorView view) noexcept
+    {
+        switch (view)
+        {
+        case EditorView::FreeOrthographic: return "Orthographic";
+        case EditorView::Front: return "Front";
+        case EditorView::Back: return "Back";
+        case EditorView::Left: return "Left";
+        case EditorView::Right: return "Right";
+        case EditorView::Top: return "Top";
+        case EditorView::Bottom: return "Bottom";
+        case EditorView::Perspective:
+        default: return "Perspective";
+        }
+    }
+
     export struct CameraRigSnapshot
     {
         bool valid{ false };
@@ -218,7 +334,18 @@ namespace epochengine::previewgrid
         Vec3 position{ 0.0f, 1.8f, 6.0f };
         float yaw_degrees = -135.0f;
         float pitch_degrees = -28.0f;
+        float free_yaw_degrees = -135.0f;
+        float free_pitch_degrees = -28.0f;
         float distance = 13.5f;
+        float orthographic_vertical_size = 11.34f;
+        float fly_speed = 6.5f;
+        render_camera::ProjectionKind projection{ render_camera::ProjectionKind::perspective };
+        render_camera::ViewOrientation orientation{ render_camera::ViewOrientation::free };
+        std::array<Vec3, 8> view_focuses{};
+        std::array<float, 8> view_distances{};
+        std::array<float, 8> view_orthographic_sizes{};
+        std::uint64_t logical_view_id{};
+        std::uint32_t logical_view_generation{ 1u };
         std::uint64_t revision = 1;
     };
 
@@ -423,7 +550,18 @@ namespace epochengine::previewgrid
             Vec3 position{ 0.0f, 1.8f, 6.0f };
             float yawDegrees = -135.0f;
             float pitchDegrees = -28.0f;
+            float freeYawDegrees = -135.0f;
+            float freePitchDegrees = -28.0f;
             float distance = 13.5f;
+            float orthographicVerticalSize = 11.34f;
+            float flySpeed = 6.5f;
+            render_camera::ProjectionKind projection{ render_camera::ProjectionKind::perspective };
+            render_camera::ViewOrientation orientation{ render_camera::ViewOrientation::free };
+            std::array<Vec3, 8> viewFocuses{};
+            std::array<float, 8> viewDistances{};
+            std::array<float, 8> viewOrthographicSizes{};
+            std::uint64_t logicalViewId{};
+            std::uint32_t logicalViewGeneration{ 1u };
             std::uint64_t revision = 1;
         };
 
@@ -432,10 +570,13 @@ namespace epochengine::previewgrid
         export inline std::unordered_map<const void*, std::vector<ObjectMarker>, PtrHash> g_objectMarkers{};
         export inline std::unordered_map<const void*, epochengine::lighting::LightingFrame, PtrHash> g_lightingFrames{};
         export inline std::unordered_map<const void*, std::uint64_t, PtrHash> g_geometryRevisions{};
+        export inline std::unordered_map<const void*, std::shared_ptr<const GridGeometry>, PtrHash> g_gridGeometries{};
         inline std::shared_mutex g_cameraRigMutex{};
         inline std::shared_mutex g_objectMarkerMutex{};
         inline std::shared_mutex g_lightingFrameMutex{};
         inline std::shared_mutex g_geometryRevisionMutex{};
+        inline std::shared_mutex g_gridGeometryMutex{};
+        inline std::uint64_t g_nextLogicalViewId{ 1u };
 
         inline void touch_geometry(const void* ctxKey) noexcept
         {
@@ -466,7 +607,13 @@ namespace epochengine::previewgrid
                 .position{ 0.0f, 1.8f, 6.0f },
                 .yawDegrees = -135.0f,
                 .pitchDegrees = -28.0f,
-                .distance = 13.5f
+                .freeYawDegrees = -135.0f,
+                .freePitchDegrees = -28.0f,
+                .distance = 13.5f,
+                .orthographicVerticalSize = 11.34f,
+                .flySpeed = 6.5f,
+                .projection = render_camera::ProjectionKind::perspective,
+                .orientation = render_camera::ViewOrientation::free
             };
         }
 
@@ -478,7 +625,13 @@ namespace epochengine::previewgrid
                 .position{ 0.0f, 1.8f, 6.0f },
                 .yawDegrees = -90.0f,
                 .pitchDegrees = -8.0f,
-                .distance = 0.0f
+                .freeYawDegrees = -90.0f,
+                .freePitchDegrees = -8.0f,
+                .distance = 0.0f,
+                .orthographicVerticalSize = 10.0f,
+                .flySpeed = 6.5f,
+                .projection = render_camera::ProjectionKind::perspective,
+                .orientation = render_camera::ViewOrientation::free
             };
         }
 
@@ -490,7 +643,13 @@ namespace epochengine::previewgrid
                 .position{ 0.0f, 1.8f, 8.0f },
                 .yawDegrees = -90.0f,
                 .pitchDegrees = 0.0f,
-                .distance = 8.0f
+                .freeYawDegrees = -90.0f,
+                .freePitchDegrees = 0.0f,
+                .distance = 8.0f,
+                .orthographicVerticalSize = 6.72f,
+                .flySpeed = 6.5f,
+                .projection = render_camera::ProjectionKind::orthographic,
+                .orientation = render_camera::ViewOrientation::free
             };
         }
 
@@ -557,6 +716,75 @@ namespace epochengine::previewgrid
             }
         }
 
+        [[nodiscard]] constexpr EditorView editor_view_from_rig(const CameraRigState& rig) noexcept
+        {
+            if (rig.projection == render_camera::ProjectionKind::perspective)
+                return EditorView::Perspective;
+            switch (rig.orientation)
+            {
+            case render_camera::ViewOrientation::front: return EditorView::Front;
+            case render_camera::ViewOrientation::back: return EditorView::Back;
+            case render_camera::ViewOrientation::left: return EditorView::Left;
+            case render_camera::ViewOrientation::right: return EditorView::Right;
+            case render_camera::ViewOrientation::top: return EditorView::Top;
+            case render_camera::ViewOrientation::bottom: return EditorView::Bottom;
+            case render_camera::ViewOrientation::free:
+            default: return EditorView::FreeOrthographic;
+            }
+        }
+
+        [[nodiscard]] constexpr render_camera::ViewOrientation orientation_for_editor_view(
+            EditorView view) noexcept
+        {
+            switch (view)
+            {
+            case EditorView::Front: return render_camera::ViewOrientation::front;
+            case EditorView::Back: return render_camera::ViewOrientation::back;
+            case EditorView::Left: return render_camera::ViewOrientation::left;
+            case EditorView::Right: return render_camera::ViewOrientation::right;
+            case EditorView::Top: return render_camera::ViewOrientation::top;
+            case EditorView::Bottom: return render_camera::ViewOrientation::bottom;
+            case EditorView::FreeOrthographic:
+            case EditorView::Perspective:
+            default: return render_camera::ViewOrientation::free;
+            }
+        }
+
+        [[nodiscard]] constexpr std::size_t editor_view_index(EditorView view) noexcept
+        {
+            const auto index = static_cast<std::size_t>(view);
+            return index < 8u ? index : 0u;
+        }
+
+        inline void save_active_view(CameraRigState& rig) noexcept
+        {
+            if (rig.mode != CameraMode::Editor)
+                return;
+            const std::size_t index = editor_view_index(editor_view_from_rig(rig));
+            rig.viewFocuses[index] = rig.focus;
+            rig.viewDistances[index] = rig.distance;
+            rig.viewOrthographicSizes[index] = rig.orthographicVerticalSize;
+        }
+
+        inline void restore_or_seed_view(CameraRigState& rig, EditorView view) noexcept
+        {
+            const std::size_t index = editor_view_index(view);
+            if (rig.viewDistances[index] > 0.0f)
+            {
+                rig.focus = rig.viewFocuses[index];
+                rig.distance = rig.viewDistances[index];
+            }
+            else
+            {
+                rig.viewFocuses[index] = rig.focus;
+                rig.viewDistances[index] = rig.distance;
+            }
+            if (rig.viewOrthographicSizes[index] > 0.0f)
+                rig.orthographicVerticalSize = rig.viewOrthographicSizes[index];
+            else
+                rig.viewOrthographicSizes[index] = rig.orthographicVerticalSize;
+        }
+
         [[nodiscard]] inline float finite_or(float value, float fallback) noexcept
         {
             return std::isfinite(value) ? value : fallback;
@@ -574,7 +802,14 @@ namespace epochengine::previewgrid
         [[nodiscard]] inline Camera camera_from_rig(const CameraRigState& rig) noexcept
         {
             const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
-            const Vec3 forward = forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+            Vec3 forward = forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+            Vec3 cameraUp = worldUp;
+            if (render_camera::axis_locked(rig.orientation))
+            {
+                const auto axis = render_camera::orientation_basis(rig.orientation);
+                forward = { axis.forward.x, axis.forward.y, axis.forward.z };
+                cameraUp = { axis.up.x, axis.up.y, axis.up.z };
+            }
 
             if (rig.mode == CameraMode::FPS)
             {
@@ -584,8 +819,11 @@ namespace epochengine::previewgrid
                     .target = target,
                     .up = worldUp,
                     .fovRadians = 1.05f,
-                    .nearPlane = 0.1f,
-                    .farPlane = 96.0f
+                    .nearPlane = 0.05f,
+                    .farPlane = 4096.0f,
+                    .projection = render_camera::ProjectionKind::perspective,
+                    .orientation = render_camera::ViewOrientation::free,
+                    .orthographicVerticalSize = rig.orthographicVerticalSize
                 };
             }
 
@@ -596,8 +834,11 @@ namespace epochengine::previewgrid
                     .target = rig.focus,
                     .up = { 0.0f, 1.0f, 0.0f },
                     .fovRadians = 0.48f,
-                    .nearPlane = 0.1f,
-                    .farPlane = 128.0f
+                    .nearPlane = 0.01f,
+                    .farPlane = 4096.0f,
+                    .projection = render_camera::ProjectionKind::orthographic,
+                    .orientation = render_camera::ViewOrientation::free,
+                    .orthographicVerticalSize = rig.orthographicVerticalSize
                 };
             }
 
@@ -605,17 +846,61 @@ namespace epochengine::previewgrid
             return Camera{
                 .eye = eye,
                 .target = rig.focus,
-                .up = worldUp,
+                .up = cameraUp,
                 .fovRadians = 0.90f,
-                .nearPlane = 0.1f,
-                .farPlane = 96.0f
+                .nearPlane = 0.05f,
+                .farPlane = 4096.0f,
+                .projection = rig.projection,
+                .orientation = rig.orientation,
+                .orthographicVerticalSize = rig.orthographicVerticalSize
             };
+        }
+
+        [[nodiscard]] inline render_camera::ViewDescriptor descriptor_from_rig(
+            const CameraRigState& rig) noexcept
+        {
+            const Camera camera = camera_from_rig(rig);
+            auto descriptor = render_camera::make_editor_view(
+                { rig.logicalViewId == 0u ? 1u : rig.logicalViewId,
+                    rig.logicalViewGeneration == 0u ? 1u : rig.logicalViewGeneration },
+                { camera.eye.x, camera.eye.y, camera.eye.z },
+                { camera.target.x, camera.target.y, camera.target.z },
+                { camera.up.x, camera.up.y, camera.up.z },
+                camera.projection,
+                camera.orientation,
+                camera.orthographicVerticalSize,
+                rig.revision);
+            descriptor.perspective = {
+                camera.fovRadians,
+                camera.nearPlane,
+                camera.farPlane
+            };
+            descriptor.orthographic = {
+                camera.orthographicVerticalSize,
+                camera.nearPlane,
+                camera.farPlane
+            };
+            descriptor.purpose = rig.mode == CameraMode::Canvas2D
+                ? render_camera::ViewPurpose::canvas_2d
+                : (rig.mode == CameraMode::FPS
+                    ? render_camera::ViewPurpose::project_runtime
+                    : render_camera::ViewPurpose::editor);
+            return descriptor;
         }
 
         [[nodiscard]] inline CameraRigState& ensure_rig(const void* ctxKey)
         {
             const void* const rigKey = normalize_camera_key(ctxKey);
             auto [it, inserted] = g_cameraRigs.try_emplace(rigKey, make_default_rig(CameraMode::Editor));
+            if (inserted || it->second.logicalViewId == 0u)
+            {
+                if (g_nextLogicalViewId == (std::numeric_limits<std::uint64_t>::max)())
+                    g_nextLogicalViewId = 1u;
+                it->second.logicalViewId = g_nextLogicalViewId++;
+                it->second.logicalViewGeneration = 1u;
+            }
+            if (it->second.viewDistances[editor_view_index(editor_view_from_rig(it->second))] <= 0.0f)
+                save_active_view(it->second);
             return it->second;
         }
 
@@ -628,7 +913,18 @@ namespace epochengine::previewgrid
                 .position = rig.position,
                 .yaw_degrees = rig.yawDegrees,
                 .pitch_degrees = rig.pitchDegrees,
+                .free_yaw_degrees = rig.freeYawDegrees,
+                .free_pitch_degrees = rig.freePitchDegrees,
                 .distance = rig.distance,
+                .orthographic_vertical_size = rig.orthographicVerticalSize,
+                .fly_speed = rig.flySpeed,
+                .projection = rig.projection,
+                .orientation = rig.orientation,
+                .view_focuses = rig.viewFocuses,
+                .view_distances = rig.viewDistances,
+                .view_orthographic_sizes = rig.viewOrthographicSizes,
+                .logical_view_id = rig.logicalViewId,
+                .logical_view_generation = rig.logicalViewGeneration,
                 .revision = rig.revision
             };
         }
@@ -639,70 +935,200 @@ namespace epochengine::previewgrid
             rig.focus = finite_vec_or(snapshot.focus, rig.focus);
             rig.position = finite_vec_or(snapshot.position, rig.position);
             rig.yawDegrees = finite_or(snapshot.yaw_degrees, rig.yawDegrees);
-            rig.pitchDegrees = (std::clamp)(finite_or(snapshot.pitch_degrees, rig.pitchDegrees), -80.0f, 80.0f);
-            const float minDistance = rig.mode == CameraMode::Canvas2D ? 6.0f : 0.0f;
-            const float maxDistance = rig.mode == CameraMode::Canvas2D ? 64.0f : 96.0f;
-            rig.distance = (std::clamp)(finite_or(snapshot.distance, rig.distance), minDistance, maxDistance);
+            rig.pitchDegrees = (std::clamp)(
+                finite_or(snapshot.pitch_degrees, rig.pitchDegrees),
+                -85.0f,
+                85.0f);
+            rig.freeYawDegrees = finite_or(snapshot.free_yaw_degrees, rig.yawDegrees);
+            rig.freePitchDegrees = (std::clamp)(
+                finite_or(snapshot.free_pitch_degrees, rig.pitchDegrees),
+                -85.0f,
+                85.0f);
+            const float minDistance = rig.mode == CameraMode::FPS
+                ? 0.0f
+                : (rig.mode == CameraMode::Canvas2D ? 0.75f : 0.50f);
+            const float maxDistance = rig.mode == CameraMode::FPS
+                ? 0.0f
+                : 2048.0f;
+            rig.distance = (std::clamp)(
+                finite_or(snapshot.distance, rig.distance),
+                minDistance,
+                maxDistance);
+            rig.orthographicVerticalSize = (std::clamp)(
+                finite_or(snapshot.orthographic_vertical_size, rig.orthographicVerticalSize),
+                0.05f,
+                4096.0f);
+            rig.flySpeed = (std::clamp)(
+                finite_or(snapshot.fly_speed, rig.flySpeed),
+                0.05f,
+                4096.0f);
+            rig.projection = snapshot.projection;
+            rig.orientation = snapshot.orientation;
+            rig.viewFocuses = snapshot.view_focuses;
+            rig.viewDistances = snapshot.view_distances;
+            rig.viewOrthographicSizes = snapshot.view_orthographic_sizes;
+            if (rig.mode == CameraMode::FPS)
+            {
+                rig.projection = render_camera::ProjectionKind::perspective;
+                rig.orientation = render_camera::ViewOrientation::free;
+            }
+            else if (rig.mode == CameraMode::Canvas2D)
+            {
+                rig.projection = render_camera::ProjectionKind::orthographic;
+                rig.orientation = render_camera::ViewOrientation::free;
+            }
+            rig.logicalViewId = snapshot.logical_view_id;
+            rig.logicalViewGeneration = snapshot.logical_view_generation == 0u
+                ? 1u
+                : snapshot.logical_view_generation;
             rig.revision = snapshot.revision == 0 ? 1 : snapshot.revision;
             return rig;
         }
 
-        struct Geometry
+        struct GridPlacement final
         {
-            std::vector<Vertex> vertices{};
-            std::vector<std::uint32_t> indices{};
+            std::int64_t centerCellX{};
+            std::int64_t centerCellZ{};
+            int spacingExponent{};
+            float spacing{ 1.0f };
+            std::uint64_t signature{};
         };
 
-        [[nodiscard]] inline const Geometry& shared_geometry() noexcept
+        [[nodiscard]] inline std::uint64_t mix_grid_signature(
+            std::uint64_t seed,
+            std::uint64_t value) noexcept
         {
-            static const Geometry geometry = []()
+            constexpr std::uint64_t kPrime = 1099511628211ull;
+            seed ^= value;
+            seed *= kPrime;
+            return seed;
+        }
+
+        [[nodiscard]] inline GridPlacement grid_placement(const Camera& camera) noexcept
+        {
+            const float dx = camera.eye.x - camera.target.x;
+            const float dy = camera.eye.y - camera.target.y;
+            const float dz = camera.eye.z - camera.target.z;
+            const float cameraDistance = (std::max)(
+                0.25f,
+                std::sqrt(dx * dx + dy * dy + dz * dz));
+            const float viewSpan = camera.projection == render_camera::ProjectionKind::orthographic
+                ? (std::max)(camera.orthographicVerticalSize, cameraDistance * 0.5f)
+                : cameraDistance;
+            const float desiredSpacing = (std::clamp)(viewSpan / 8.0f, 0.25f, 64.0f);
+            const int spacingExponent = (std::clamp)(
+                static_cast<int>(std::ceil(std::log2(desiredSpacing))),
+                -2,
+                6);
+            const float spacing = std::exp2(static_cast<float>(spacingExponent));
+            const auto centerCellX = static_cast<std::int64_t>(
+                std::llround(static_cast<double>(camera.target.x / spacing)));
+            const auto centerCellZ = static_cast<std::int64_t>(
+                std::llround(static_cast<double>(camera.target.z / spacing)));
+
+            std::uint64_t signature = 1469598103934665603ull;
+            signature = mix_grid_signature(signature, static_cast<std::uint64_t>(centerCellX));
+            signature = mix_grid_signature(signature, static_cast<std::uint64_t>(centerCellZ));
+            signature = mix_grid_signature(
+                signature,
+                static_cast<std::uint64_t>(spacingExponent + 2));
+            return GridPlacement{
+                .centerCellX = centerCellX,
+                .centerCellZ = centerCellZ,
+                .spacingExponent = spacingExponent,
+                .spacing = spacing,
+                .signature = signature
+            };
+        }
+
+        [[nodiscard]] inline GridGeometry build_grid_geometry(
+            const GridPlacement& placement)
+        {
+            GridGeometry out{};
+            constexpr int kHalfLineCount = 8;
+            constexpr std::size_t kGridLineCount =
+                static_cast<std::size_t>((kHalfLineCount * 2 + 1) * 2 + 3);
+            out.vertices.reserve(kGridLineCount * 2u);
+            out.indices.reserve(kGridLineCount * 2u);
+            out.signature = placement.signature;
+            out.spacing = placement.spacing;
+            out.center = {
+                static_cast<float>(placement.centerCellX) * placement.spacing,
+                0.0f,
+                static_cast<float>(placement.centerCellZ) * placement.spacing
+            };
+
+            const float minimumX = static_cast<float>(
+                placement.centerCellX - kHalfLineCount) * placement.spacing;
+            const float maximumX = static_cast<float>(
+                placement.centerCellX + kHalfLineCount) * placement.spacing;
+            const float minimumZ = static_cast<float>(
+                placement.centerCellZ - kHalfLineCount) * placement.spacing;
+            const float maximumZ = static_cast<float>(
+                placement.centerCellZ + kHalfLineCount) * placement.spacing;
+
+            auto push_vertex = [&](float x, float y, float z, float r, float g, float b)
             {
-                Geometry out{};
-                out.vertices.reserve(128);
-                out.indices.reserve(128);
+                out.vertices.push_back(Vertex{
+                    .position{ x, y, z },
+                    .color{ r, g, b }
+                });
+                return static_cast<std::uint32_t>(out.vertices.size() - 1u);
+            };
 
-                auto push_vertex = [&](float x, float y, float z, float r, float g, float b)
-                {
-                    out.vertices.push_back(Vertex{
-                        .position{ x, y, z },
-                        .color{ r, g, b }
-                    });
-                    return static_cast<std::uint32_t>(out.vertices.size() - 1u);
-                };
+            auto push_line = [&](float x0, float y0, float z0, float x1, float y1, float z1,
+                                 float r, float g, float b)
+            {
+                const std::uint32_t first = push_vertex(x0, y0, z0, r, g, b);
+                const std::uint32_t second = push_vertex(x1, y1, z1, r, g, b);
+                out.indices.push_back(first);
+                out.indices.push_back(second);
+            };
 
-                auto push_line = [&](float x0, float y0, float z0, float x1, float y1, float z1,
-                                     float r, float g, float b)
-                {
-                    const std::uint32_t first = push_vertex(x0, y0, z0, r, g, b);
-                    const std::uint32_t second = push_vertex(x1, y1, z1, r, g, b);
-                    out.indices.push_back(first);
-                    out.indices.push_back(second);
-                };
+            const auto line_tone = [](std::int64_t worldCell) noexcept
+            {
+                if (worldCell == 0)
+                    return 0.36f;
+                if (worldCell % 32 == 0)
+                    return 0.25f;
+                if (worldCell % 8 == 0)
+                    return 0.17f;
+                return 0.09f;
+            };
 
-                constexpr int kHalfExtent = 12;
-                for (int line = -kHalfExtent; line <= kHalfExtent; ++line)
-                {
-                    const bool center = line == 0;
-                    const bool major = center || (line % 4 == 0);
-                    const float tone = center ? 0.44f : (major ? 0.26f : 0.15f);
+            for (int line = -kHalfLineCount; line <= kHalfLineCount; ++line)
+            {
+                const std::int64_t worldCellX = placement.centerCellX + line;
+                const std::int64_t worldCellZ = placement.centerCellZ + line;
+                const float x = static_cast<float>(worldCellX) * placement.spacing;
+                const float z = static_cast<float>(worldCellZ) * placement.spacing;
+                const float xTone = line_tone(worldCellX);
+                const float zTone = line_tone(worldCellZ);
 
-                    push_line(
-                        static_cast<float>(line), 0.0f, static_cast<float>(-kHalfExtent),
-                        static_cast<float>(line), 0.0f, static_cast<float>(kHalfExtent),
-                        tone, tone, tone + 0.03f);
-                    push_line(
-                        static_cast<float>(-kHalfExtent), 0.0f, static_cast<float>(line),
-                        static_cast<float>(kHalfExtent), 0.0f, static_cast<float>(line),
-                        tone, tone, tone + 0.03f);
-                }
+                push_line(
+                    x, 0.0f, minimumZ,
+                    x, 0.0f, maximumZ,
+                    xTone, xTone, xTone + 0.03f);
+                push_line(
+                    minimumX, 0.0f, z,
+                    maximumX, 0.0f, z,
+                    zTone, zTone, zTone + 0.03f);
+            }
 
-                push_line(0.0f, 0.02f, 0.0f, 3.5f, 0.02f, 0.0f, 0.95f, 0.30f, 0.28f);
-                push_line(0.0f, 0.02f, 0.0f, 0.0f, 3.5f, 0.0f, 0.28f, 0.92f, 0.40f);
-                push_line(0.0f, 0.02f, 0.0f, 0.0f, 0.02f, 3.5f, 0.33f, 0.58f, 0.98f);
-                return out;
-            }();
+            const bool containsOrigin =
+                placement.centerCellX >= -kHalfLineCount
+                && placement.centerCellX <= kHalfLineCount
+                && placement.centerCellZ >= -kHalfLineCount
+                && placement.centerCellZ <= kHalfLineCount;
+            if (containsOrigin)
+            {
+                const float axisLength = (std::max)(3.5f, placement.spacing * 3.5f);
+                push_line(0.0f, 0.02f, 0.0f, axisLength, 0.02f, 0.0f, 0.95f, 0.30f, 0.28f);
+                push_line(0.0f, 0.02f, 0.0f, 0.0f, axisLength, 0.0f, 0.28f, 0.92f, 0.40f);
+                push_line(0.0f, 0.02f, 0.0f, 0.0f, 0.02f, axisLength, 0.33f, 0.58f, 0.98f);
+            }
 
-            return geometry;
+            return out;
         }
     }
 
@@ -715,6 +1141,53 @@ namespace epochengine::previewgrid
         std::shared_lock lock(detail::g_cameraRigMutex);
         const auto it = detail::g_cameraRigs.find(rigKey);
         return it != detail::g_cameraRigs.end() ? it->second.mode : CameraMode::Editor;
+    }
+
+    export [[nodiscard]] inline EditorView editor_view_for(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return EditorView::Perspective;
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(rigKey);
+        return it != detail::g_cameraRigs.end()
+            ? detail::editor_view_from_rig(it->second)
+            : EditorView::Perspective;
+    }
+
+    export inline bool set_editor_view(const void* ctxKey, EditorView view) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey || static_cast<std::size_t>(view) >= 8u)
+            return false;
+
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(rigKey);
+        if (rig.mode != CameraMode::Editor)
+            return false;
+        if (detail::editor_view_from_rig(rig) == view)
+            return true;
+
+        detail::save_active_view(rig);
+        if (rig.orientation == render_camera::ViewOrientation::free)
+        {
+            rig.freeYawDegrees = rig.yawDegrees;
+            rig.freePitchDegrees = rig.pitchDegrees;
+        }
+
+        rig.projection = view == EditorView::Perspective
+            ? render_camera::ProjectionKind::perspective
+            : render_camera::ProjectionKind::orthographic;
+        rig.orientation = detail::orientation_for_editor_view(view);
+        if (rig.orientation == render_camera::ViewOrientation::free)
+        {
+            rig.yawDegrees = rig.freeYawDegrees;
+            rig.pitchDegrees = rig.freePitchDegrees;
+        }
+        detail::restore_or_seed_view(rig, view);
+        detail::touch_rig(rig);
+        return true;
     }
 
     export [[nodiscard]] inline CameraRigSnapshot capture_camera_rig_snapshot(const void* ctxKey) noexcept
@@ -737,7 +1210,15 @@ namespace epochengine::previewgrid
             return false;
 
         std::unique_lock lock(detail::g_cameraRigMutex);
-        detail::g_cameraRigs[rigKey] = detail::rig_from_snapshot(snapshot);
+        auto restored = detail::rig_from_snapshot(snapshot);
+        if (restored.logicalViewId == 0u)
+        {
+            if (detail::g_nextLogicalViewId == (std::numeric_limits<std::uint64_t>::max)())
+                detail::g_nextLogicalViewId = 1u;
+            restored.logicalViewId = detail::g_nextLogicalViewId++;
+            restored.logicalViewGeneration = 1u;
+        }
+        detail::g_cameraRigs[rigKey] = restored;
         return true;
     }
 
@@ -749,9 +1230,20 @@ namespace epochengine::previewgrid
 
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(rigKey);
+        mode = detail::sanitize_camera_mode(mode);
+        if (rig.mode == mode)
+            return;
+
         const std::uint64_t nextRevision =
-            rig.revision == (std::numeric_limits<std::uint64_t>::max)() ? 1 : (rig.revision + 1);
+            rig.revision == (std::numeric_limits<std::uint64_t>::max)()
+                ? 1
+                : (rig.revision + 1);
+        const std::uint64_t logicalViewId = rig.logicalViewId;
+        const std::uint32_t logicalViewGeneration = rig.logicalViewGeneration;
         rig = detail::make_default_rig(mode);
+        rig.logicalViewId = logicalViewId;
+        rig.logicalViewGeneration = logicalViewGeneration;
+        detail::save_active_view(rig);
         rig.revision = nextRevision;
     }
 
@@ -763,8 +1255,18 @@ namespace epochengine::previewgrid
 
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(rigKey);
-        rig = detail::make_default_rig(rig.mode);
-        detail::touch_rig(rig);
+        const CameraMode mode = rig.mode;
+        const std::uint64_t logicalViewId = rig.logicalViewId;
+        const std::uint32_t logicalViewGeneration = rig.logicalViewGeneration;
+        const std::uint64_t nextRevision =
+            rig.revision == (std::numeric_limits<std::uint64_t>::max)()
+                ? 1
+                : (rig.revision + 1);
+        rig = detail::make_default_rig(mode);
+        rig.logicalViewId = logicalViewId;
+        rig.logicalViewGeneration = logicalViewGeneration;
+        detail::save_active_view(rig);
+        rig.revision = nextRevision;
     }
 
     export inline bool focus_camera(
@@ -788,11 +1290,22 @@ namespace epochengine::previewgrid
         else
         {
             rig.focus = focus;
-            const float minimumDistance = rig.mode == CameraMode::Canvas2D ? 6.0f : 2.5f;
-            const float maximumDistance = rig.mode == CameraMode::Canvas2D ? 64.0f : 48.0f;
-            const float framingDistance = (std::max)(minimumDistance, framingRadius * 3.25f);
+            const float minimumDistance =
+                rig.mode == CameraMode::Canvas2D ? 0.75f : 0.50f;
+            constexpr float maximumDistance = 2048.0f;
+            const float framingDistance = (std::max)(
+                minimumDistance,
+                framingRadius * 3.25f);
             rig.distance = (std::clamp)(framingDistance, minimumDistance, maximumDistance);
+            if (rig.projection == render_camera::ProjectionKind::orthographic)
+            {
+                rig.orthographicVerticalSize = (std::clamp)(
+                    (std::max)(0.50f, framingRadius * 2.60f),
+                    0.05f,
+                    4096.0f);
+            }
         }
+        detail::save_active_view(rig);
         detail::touch_rig(rig);
         return true;
     }
@@ -806,7 +1319,11 @@ namespace epochengine::previewgrid
         const auto it = detail::g_cameraRigs.find(rigKey);
         if (it == detail::g_cameraRigs.end())
             return detail::make_default_rig(CameraMode::Editor).distance;
-        return it->second.mode == CameraMode::FPS ? 0.0f : it->second.distance;
+        if (it->second.mode == CameraMode::FPS)
+            return 0.0f;
+        return it->second.projection == render_camera::ProjectionKind::orthographic
+            ? it->second.orthographicVerticalSize
+            : it->second.distance;
     }
 
     export inline void zoom_camera(const void* ctxKey, float amount) noexcept
@@ -821,11 +1338,31 @@ namespace epochengine::previewgrid
             return;
 
         const float oldDistance = rig.distance;
-        const float minDistance = rig.mode == CameraMode::Canvas2D ? 6.0f : 2.5f;
-        const float maxDistance = rig.mode == CameraMode::Canvas2D ? 64.0f : 48.0f;
-        rig.distance = (std::clamp)(rig.distance - amount, minDistance, maxDistance);
-        if (rig.distance != oldDistance)
+        const float oldOrthographicSize = rig.orthographicVerticalSize;
+        const float minDistance =
+            rig.mode == CameraMode::Canvas2D ? 0.75f : 0.50f;
+        constexpr float maxDistance = 2048.0f;
+        const float zoomFactor = std::exp(
+            -(std::clamp)(amount, -12.0f, 12.0f) * 0.14f);
+        if (rig.projection == render_camera::ProjectionKind::orthographic)
+        {
+            rig.orthographicVerticalSize = (std::clamp)(
+                rig.orthographicVerticalSize * zoomFactor,
+                0.05f,
+                4096.0f);
+        }
+        else
+        {
+            rig.distance = (std::clamp)(
+                rig.distance * zoomFactor,
+                minDistance,
+                maxDistance);
+        }
+        if (rig.distance != oldDistance || rig.orthographicVerticalSize != oldOrthographicSize)
+        {
+            detail::save_active_view(rig);
             detail::touch_rig(rig);
+        }
     }
 
     export [[nodiscard]] inline std::uint64_t camera_revision_for(const void* ctxKey) noexcept
@@ -868,16 +1405,60 @@ namespace epochengine::previewgrid
         if (rig.mode == CameraMode::FPS)
             return;
 
-        const Vec3 right = rig.mode == CameraMode::Canvas2D
-            ? Vec3{ 1.0f, 0.0f, 0.0f }
-            : detail::right_from_angles(rig.yawDegrees, rig.pitchDegrees);
-        const Vec3 forward = rig.mode == CameraMode::Canvas2D
-            ? Vec3{ 0.0f, 1.0f, 0.0f }
-            : detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
-        const float dragScale = (std::max)(0.010f, rig.distance * 0.0125f);
-        rig.focus = add(rig.focus, scale(right, deltaRightPixels * dragScale));
-        rig.focus = add(rig.focus, scale(forward, deltaForwardPixels * dragScale));
+        const Camera camera = detail::camera_from_rig(rig);
+        const Vec3 forward = normalize(subtract(camera.target, camera.eye));
+        const Vec3 right = normalize(cross(forward, camera.up));
+        const Vec3 vertical = normalize(cross(right, forward));
+        const float navigationScale = rig.projection == render_camera::ProjectionKind::orthographic
+            ? rig.orthographicVerticalSize
+            : rig.distance;
+        const float dragScale = (std::max)(
+            0.00075f,
+            navigationScale
+                * (rig.mode == CameraMode::Canvas2D
+                    ? 0.00105f
+                    : 0.00120f));
+        rig.focus = add(
+            rig.focus,
+            scale(right, deltaRightPixels * dragScale));
+        rig.focus = add(
+            rig.focus,
+            scale(vertical, deltaForwardPixels * dragScale));
+        detail::save_active_view(rig);
         detail::touch_rig(rig);
+    }
+
+    export inline void dolly_camera_drag(const void* ctxKey, float deltaPixels) noexcept
+    {
+        if (!std::isfinite(deltaPixels) || deltaPixels == 0.0f)
+            return;
+        zoom_camera(ctxKey, -deltaPixels * 0.045f);
+    }
+
+    export inline void adjust_fly_speed(const void* ctxKey, float wheelSteps) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey || !std::isfinite(wheelSteps) || wheelSteps == 0.0f)
+            return;
+        std::unique_lock lock(detail::g_cameraRigMutex);
+        auto& rig = detail::ensure_rig(rigKey);
+        const float oldSpeed = rig.flySpeed;
+        rig.flySpeed = (std::clamp)(
+            rig.flySpeed * std::exp((std::clamp)(wheelSteps, -12.0f, 12.0f) * 0.12f),
+            0.05f,
+            4096.0f);
+        if (rig.flySpeed != oldSpeed)
+            detail::touch_rig(rig);
+    }
+
+    export [[nodiscard]] inline float fly_speed_for(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return 6.5f;
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(rigKey);
+        return it != detail::g_cameraRigs.end() ? it->second.flySpeed : 6.5f;
     }
 
     export inline void cleanup_context(const void* ctxKey) noexcept
@@ -903,6 +1484,10 @@ namespace epochengine::previewgrid
             std::unique_lock lock(detail::g_geometryRevisionMutex);
             detail::g_geometryRevisions.erase(rigKey);
         }
+        {
+            std::unique_lock lock(detail::g_gridGeometryMutex);
+            detail::g_gridGeometries.erase(rigKey);
+        }
     }
 
     export [[nodiscard]] inline Camera camera_for(const void* ctxKey) noexcept
@@ -918,17 +1503,30 @@ namespace epochengine::previewgrid
         return detail::camera_from_rig(it->second);
     }
 
+    export [[nodiscard]] inline render_camera::ViewDescriptor camera_descriptor_for(
+        const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return detail::descriptor_from_rig(detail::make_default_rig(CameraMode::Editor));
+
+        std::shared_lock lock(detail::g_cameraRigMutex);
+        const auto it = detail::g_cameraRigs.find(rigKey);
+        return it != detail::g_cameraRigs.end()
+            ? detail::descriptor_from_rig(it->second)
+            : detail::descriptor_from_rig(detail::make_default_rig(CameraMode::Editor));
+    }
+
     export [[nodiscard]] inline Mat4 projection_for(
         const void* ctxKey,
         float aspect,
         const Camera& camera) noexcept
     {
         const float safeAspect = (std::max)(0.001f, aspect);
-        if (camera_mode_for(ctxKey) == CameraMode::Canvas2D)
+        (void)ctxKey;
+        if (camera.projection == render_camera::ProjectionKind::orthographic)
         {
-            const auto delta = subtract(camera.eye, camera.target);
-            const float distance = std::sqrt(dot(delta, delta));
-            const float halfHeight = (std::max)(2.0f, distance * 0.42f);
+            const float halfHeight = (std::max)(0.025f, camera.orthographicVerticalSize * 0.5f);
             const float halfWidth = halfHeight * safeAspect;
             return orthographic(
                 -halfWidth,
@@ -953,7 +1551,8 @@ namespace epochengine::previewgrid
         float moveRight,
         float moveUp,
         float yawInput,
-        float pitchInput) noexcept
+        float pitchInput,
+        float speedMultiplier = 1.0f) noexcept
     {
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
         if (!rigKey)
@@ -976,40 +1575,56 @@ namespace epochengine::previewgrid
 
         if (rig.mode == CameraMode::Canvas2D)
         {
-            constexpr float kPanSpeed = 5.0f;
-            constexpr float kDollySpeed = 8.5f;
-            rig.focus.x += moveRight * kPanSpeed * dt;
-            rig.focus.y += moveUp * kPanSpeed * dt;
-            rig.distance = (std::clamp)(rig.distance - moveForward * kDollySpeed * dt, 6.0f, 64.0f);
+            const float panSpeed =
+                (std::max)(1.0f, rig.distance * 0.55f);
+            const float dollySpeed =
+                (std::max)(1.5f, rig.distance * 1.35f);
+            rig.focus.x += moveRight * panSpeed * dt;
+            rig.focus.y += moveUp * panSpeed * dt;
+            rig.distance = (std::clamp)(
+                rig.distance - moveForward * dollySpeed * dt,
+                0.75f,
+                2048.0f);
             detail::touch_rig(rig);
             return;
         }
 
-        const float lookSpeed = rig.mode == CameraMode::FPS ? 105.0f : 92.0f;
-        rig.yawDegrees += yawInput * lookSpeed * dt;
-        rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchInput * lookSpeed * dt, -80.0f, 80.0f);
+        const bool freeOrientation = !render_camera::axis_locked(rig.orientation);
+        if (freeOrientation)
+        {
+            const float lookSpeed = rig.mode == CameraMode::FPS ? 105.0f : 92.0f;
+            rig.yawDegrees = std::remainder(
+                rig.yawDegrees + yawInput * lookSpeed * dt,
+                360.0f);
+            rig.pitchDegrees = (std::clamp)(
+                rig.pitchDegrees + pitchInput * lookSpeed * dt,
+                -85.0f,
+                85.0f);
+            rig.freeYawDegrees = rig.yawDegrees;
+            rig.freePitchDegrees = rig.pitchDegrees;
+        }
 
         const Vec3 worldUp{ 0.0f, 1.0f, 0.0f };
-        const Vec3 forward = detail::forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
+        const Camera camera = detail::camera_from_rig(rig);
+        const Vec3 forward = normalize(subtract(camera.target, camera.eye));
         const Vec3 flatForward = detail::flat_forward_from_angles(rig.yawDegrees, rig.pitchDegrees);
-        const Vec3 right = normalize(cross(flatForward, worldUp));
+        const Vec3 right = normalize(cross(forward, camera.up));
+        const float navigationSpeed = rig.flySpeed
+            * (std::clamp)(detail::finite_or(speedMultiplier, 1.0f), 0.05f, 16.0f);
 
         if (rig.mode == CameraMode::FPS)
         {
-            constexpr float kMoveSpeed = 6.5f;
-            constexpr float kVerticalSpeed = 4.5f;
-            rig.position = add(rig.position, scale(flatForward, moveForward * kMoveSpeed * dt));
-            rig.position = add(rig.position, scale(right, moveRight * kMoveSpeed * dt));
-            rig.position = add(rig.position, scale(worldUp, moveUp * kVerticalSpeed * dt));
+            rig.position = add(rig.position, scale(flatForward, moveForward * navigationSpeed * dt));
+            rig.position = add(rig.position, scale(right, moveRight * navigationSpeed * dt));
+            rig.position = add(rig.position, scale(worldUp, moveUp * navigationSpeed * dt));
             detail::touch_rig(rig);
             return;
         }
 
-        constexpr float kPanSpeed = 5.0f;
-        constexpr float kDollySpeed = 8.5f;
-        rig.focus = add(rig.focus, scale(right, moveRight * kPanSpeed * dt));
-        rig.focus = add(rig.focus, scale(worldUp, moveUp * kPanSpeed * dt));
-        rig.distance = (std::clamp)(rig.distance - moveForward * kDollySpeed * dt, 2.5f, 48.0f);
+        rig.focus = add(rig.focus, scale(forward, moveForward * navigationSpeed * dt));
+        rig.focus = add(rig.focus, scale(right, moveRight * navigationSpeed * dt));
+        rig.focus = add(rig.focus, scale(worldUp, moveUp * navigationSpeed * dt));
+        detail::save_active_view(rig);
         detail::touch_rig(rig);
     }
 
@@ -1027,10 +1642,18 @@ namespace epochengine::previewgrid
 
         std::unique_lock lock(detail::g_cameraRigMutex);
         auto& rig = detail::ensure_rig(rigKey);
-        if (rig.mode == CameraMode::Canvas2D)
+        if (rig.mode == CameraMode::Canvas2D || render_camera::axis_locked(rig.orientation))
             return;
-        rig.yawDegrees += yawDeltaDegrees;
-        rig.pitchDegrees = (std::clamp)(rig.pitchDegrees + pitchDeltaDegrees, -80.0f, 80.0f);
+        rig.yawDegrees = std::remainder(
+            rig.yawDegrees + yawDeltaDegrees,
+            360.0f);
+        rig.pitchDegrees = (std::clamp)(
+            rig.pitchDegrees + pitchDeltaDegrees,
+            -85.0f,
+            85.0f);
+        rig.freeYawDegrees = rig.yawDegrees;
+        rig.freePitchDegrees = rig.pitchDegrees;
+        detail::save_active_view(rig);
         detail::touch_rig(rig);
     }
 
@@ -1328,23 +1951,31 @@ namespace epochengine::previewgrid
             if (marker.editorOnly && !marker.selected)
                 color = scale(color, epochengine::visuals::editor_wire_opacity_factor());
 
-            const Vec3 center{ marker.position.x, (std::max)(0.035f, marker.position.y), marker.position.z };
+            const Vec3 center{ marker.position.x, marker.position.y, marker.position.z };
             Vec3 half{
                 safe_axis(marker.scale.x * 0.5f, radius * 0.45f),
                 safe_axis(marker.scale.y * 0.5f, radius * 0.45f),
                 safe_axis(marker.scale.z * 0.5f, radius * 0.45f)
             };
 
-            if (object_preview_geometry_route(marker.primitive).marker_wire)
+            const ObjectPreviewGeometryRoute route =
+                object_preview_geometry_route(marker.primitive);
+            if (route.marker_wire)
             {
                 switch (marker.primitive)
                 {
                 case ObjectPreviewPrimitive::Light:
-                    half = { radius * 0.32f, radius * 0.32f, radius * 0.32f };
-                    push_box_edges(center, half, color);
                     push_line({ center.x - radius, center.y, center.z }, { center.x + radius, center.y, center.z }, lit(color, 1.2f));
                     push_line({ center.x, center.y - radius, center.z }, { center.x, center.y + radius, center.z }, lit(color, 1.2f));
                     push_line({ center.x, center.y, center.z - radius }, { center.x, center.y, center.z + radius }, lit(color, 1.2f));
+                    push_line(
+                        { center.x - radius * 0.55f, center.y - radius * 0.55f, center.z },
+                        { center.x + radius * 0.55f, center.y + radius * 0.55f, center.z },
+                        color);
+                    push_line(
+                        { center.x - radius * 0.55f, center.y + radius * 0.55f, center.z },
+                        { center.x + radius * 0.55f, center.y - radius * 0.55f, center.z },
+                        color);
                     break;
                 case ObjectPreviewPrimitive::Spawn:
                     half.y = (std::max)(0.08f, radius * 0.12f);
@@ -1352,17 +1983,28 @@ namespace epochengine::previewgrid
                     push_line(center, { center.x, center.y + radius * 1.4f, center.z }, lit(color, 1.05f));
                     break;
                 case ObjectPreviewPrimitive::Camera:
-                    half = { radius * 0.56f, radius * 0.34f, radius * 0.42f };
+                {
+                    half = { radius * 0.30f, radius * 0.20f, radius * 0.24f };
                     push_box_edges(center, half, color);
-                    push_line(
-                        { center.x - half.x, center.y, center.z - half.z },
-                        { center.x - half.x - radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
-                        lit(color, 1.0f));
-                    push_line(
-                        { center.x + half.x, center.y, center.z - half.z },
-                        { center.x + half.x + radius * 0.52f, center.y, center.z - half.z - radius * 0.52f },
-                        lit(color, 1.0f));
+                    const Vec3 lens{ center.x, center.y, center.z - half.z };
+                    const float farZ = center.z - radius * 1.45f;
+                    const float farX = radius * 0.82f;
+                    const float farY = radius * 0.52f;
+                    const Vec3 farTopLeft{ center.x - farX, center.y + farY, farZ };
+                    const Vec3 farTopRight{ center.x + farX, center.y + farY, farZ };
+                    const Vec3 farBottomLeft{ center.x - farX, center.y - farY, farZ };
+                    const Vec3 farBottomRight{ center.x + farX, center.y - farY, farZ };
+                    const auto frustumColor = lit(color, 1.1f);
+                    push_line(lens, farTopLeft, frustumColor);
+                    push_line(lens, farTopRight, frustumColor);
+                    push_line(lens, farBottomLeft, frustumColor);
+                    push_line(lens, farBottomRight, frustumColor);
+                    push_line(farTopLeft, farTopRight, frustumColor);
+                    push_line(farTopRight, farBottomRight, frustumColor);
+                    push_line(farBottomRight, farBottomLeft, frustumColor);
+                    push_line(farBottomLeft, farTopLeft, frustumColor);
                     break;
+                }
                 case ObjectPreviewPrimitive::Level:
                     half.y = (std::max)(0.05f, radius * 0.08f);
                     push_box_edges(center, half, color);
@@ -1423,7 +2065,7 @@ namespace epochengine::previewgrid
             }
             }
 
-            if (marker.selected)
+            if (marker.selected && route.selection_wire)
             {
                 const Vec3 selectedHalf{
                     half.x + 0.055f,
@@ -1552,7 +2194,7 @@ namespace epochengine::previewgrid
 
         for (const auto& marker : markers)
         {
-            if (!object_preview_geometry_route(marker.primitive).solid_scene)
+            if (!object_marker_uses_solid_fill(marker))
                 continue;
 
             const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
@@ -1560,7 +2202,7 @@ namespace epochengine::previewgrid
             if (marker.editorOnly && !marker.selected)
                 color = scale(color, epochengine::visuals::editor_solid_opacity_factor());
 
-            const Vec3 center{ marker.position.x, (std::max)(0.035f, marker.position.y), marker.position.z };
+            const Vec3 center{ marker.position.x, marker.position.y, marker.position.z };
             Vec3 half{
                 safe_axis(marker.scale.x * 0.5f, radius * 0.45f),
                 safe_axis(marker.scale.y * 0.5f, radius * 0.45f),
@@ -1693,15 +2335,34 @@ namespace epochengine::previewgrid
         return markers;
     }
 
-    export [[nodiscard]] inline std::span<const Vertex> grid_vertices() noexcept
+    export [[nodiscard]] inline std::shared_ptr<const GridGeometry> grid_geometry_for(
+        const void* ctxKey)
     {
-        const auto& geometry = detail::shared_geometry();
-        return { geometry.vertices.data(), geometry.vertices.size() };
-    }
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        const detail::GridPlacement placement = detail::grid_placement(camera_for(rigKey));
 
-    export [[nodiscard]] inline std::span<const std::uint32_t> grid_indices() noexcept
-    {
-        const auto& geometry = detail::shared_geometry();
-        return { geometry.indices.data(), geometry.indices.size() };
+        if (rigKey)
+        {
+            std::shared_lock lock(detail::g_gridGeometryMutex);
+            const auto found = detail::g_gridGeometries.find(rigKey);
+            if (found != detail::g_gridGeometries.end()
+                && found->second
+                && found->second->signature == placement.signature)
+            {
+                return found->second;
+            }
+        }
+
+        auto geometry = std::make_shared<const GridGeometry>(
+            detail::build_grid_geometry(placement));
+        if (!rigKey)
+            return geometry;
+
+        std::unique_lock lock(detail::g_gridGeometryMutex);
+        auto& cached = detail::g_gridGeometries[rigKey];
+        if (cached && cached->signature == placement.signature)
+            return cached;
+        cached = std::move(geometry);
+        return cached;
     }
 }

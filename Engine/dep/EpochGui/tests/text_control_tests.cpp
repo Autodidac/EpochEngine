@@ -1,5 +1,6 @@
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <string>
 
 import epoch.gui;
@@ -11,6 +12,11 @@ namespace
     int check(bool condition, int line)
     {
         return condition ? 0 : line;
+    }
+
+    [[nodiscard]] bool approximately(float left, float right) noexcept
+    {
+        return std::abs(left - right) <= 0.001f;
     }
 
 #define EPOCHGUI_CHECK(condition) \
@@ -142,6 +148,63 @@ namespace
         return 0;
     }
 
+    int whitespace_and_control_filtering()
+    {
+        TextControlState state{ .text = "A\xc3\xa9 B", .anchor = 5, .caret = 5 };
+        TextControlOptions options{};
+        TextControlResult result = update_text_control(
+            state,
+            options,
+            TextControlInput{ .command = TextControlCommand::erase_backward });
+        EPOCHGUI_CHECK(result.text_changed);
+        EPOCHGUI_CHECK(state.text == "A\xc3\xa9 ");
+        EPOCHGUI_CHECK(state.caret == 4);
+
+        // Backspace is an edit command; a duplicate control byte from the text lane is ignored.
+        result = update_text_control(
+            state,
+            options,
+            TextControlInput{ .command = TextControlCommand::insert_text, .text = "\b" });
+        EPOCHGUI_CHECK(!result.text_changed);
+        EPOCHGUI_CHECK(state.text == "A\xc3\xa9 ");
+        EPOCHGUI_CHECK(state.caret == 4);
+
+        result = update_text_control(
+            state,
+            options,
+            TextControlInput{ .command = TextControlCommand::erase_backward });
+        EPOCHGUI_CHECK(result.text_changed);
+        EPOCHGUI_CHECK(state.text == "A\xc3\xa9");
+        EPOCHGUI_CHECK(state.caret == 3);
+
+        // Key repeat remains a sequence of erase commands, one codepoint per event.
+        result = update_text_control(
+            state,
+            options,
+            TextControlInput{ .command = TextControlCommand::erase_backward });
+        EPOCHGUI_CHECK(result.text_changed);
+        EPOCHGUI_CHECK(state.text == "A");
+        EPOCHGUI_CHECK(state.caret == 1);
+
+        result = update_text_control(
+            state,
+            options,
+            TextControlInput{ .command = TextControlCommand::insert_text, .text = " X\b Y\x7f" });
+        EPOCHGUI_CHECK(result.text_changed);
+        EPOCHGUI_CHECK(state.text == "A X Y");
+        EPOCHGUI_CHECK(state.caret == 5);
+
+        options.accept_tab = true;
+        result = update_text_control(
+            state,
+            options,
+            TextControlInput{ .command = TextControlCommand::insert_text, .text = "\t" });
+        EPOCHGUI_CHECK(result.text_changed);
+        EPOCHGUI_CHECK(state.text == "A X Y\t");
+        EPOCHGUI_CHECK(state.caret == 6);
+        return 0;
+    }
+
     int text_editor_document()
     {
         TextEditorState editor{};
@@ -205,6 +268,118 @@ namespace
             == invalid_selectable_row_index);
         return 0;
     }
+
+    int visual_control_geometry()
+    {
+        ImageBoxLayout image = make_image_box_layout({
+            .bounds = { { 10.0f, 20.0f }, { 200.0f, 100.0f } },
+            .source_extent = { 400.0f, 200.0f },
+            .fit = ImageFitMode::contain,
+            .padding = 10.0f,
+            .caption_height = 20.0f
+        });
+        EPOCHGUI_CHECK(image.valid);
+        EPOCHGUI_CHECK(image.viewport.position.x == 20.0f);
+        EPOCHGUI_CHECK(image.viewport.position.y == 30.0f);
+        EPOCHGUI_CHECK(image.viewport.size.x == 180.0f);
+        EPOCHGUI_CHECK(image.viewport.size.y == 60.0f);
+        EPOCHGUI_CHECK(approximately(image.content.position.x, 50.0f));
+        EPOCHGUI_CHECK(approximately(image.content.position.y, 30.0f));
+        EPOCHGUI_CHECK(approximately(image.content.size.x, 120.0f));
+        EPOCHGUI_CHECK(approximately(image.content.size.y, 60.0f));
+        EPOCHGUI_CHECK(image.caption.position.y == 90.0f);
+
+        image = make_image_box_layout({
+            .bounds = { { 0.0f, 0.0f }, { 64.0f, 32.0f } },
+            .source_extent = { 2.0f, 1.0f },
+            .fit = ImageFitMode::stretch,
+            .padding = 0.0f
+        });
+        EPOCHGUI_CHECK(image.valid);
+        EPOCHGUI_CHECK(image.content.size.x == 64.0f);
+        EPOCHGUI_CHECK(image.content.size.y == 32.0f);
+
+        const std::array<float, 2> tabWidths{ 100.0f, 120.0f };
+        const TabButtonLayout tab = make_tab_button_layout({
+            .strip = {
+                .position = { 0.0f, 0.0f },
+                .item_widths = tabWidths,
+                .height = 30.0f,
+                .gap = 2.0f },
+            .indicator_height = 3.0f,
+            .close_extent = 16.0f,
+            .label_padding = 8.0f
+        }, 1u, true, true);
+        EPOCHGUI_CHECK(tab.valid);
+        EPOCHGUI_CHECK(tab.active);
+        EPOCHGUI_CHECK(tab.closable);
+        EPOCHGUI_CHECK(tab.button.position.x == 102.0f);
+        EPOCHGUI_CHECK(tab.button.size.x == 120.0f);
+        EPOCHGUI_CHECK(tab.indicator.position.y == 27.0f);
+        EPOCHGUI_CHECK(tab.indicator.size.y == 3.0f);
+        EPOCHGUI_CHECK(tab.close_button.position.x == 206.0f);
+        EPOCHGUI_CHECK(tab.close_button.position.y == 7.0f);
+        EPOCHGUI_CHECK(tab.label.size.x == 88.0f);
+
+        const SliderLayoutOptions sliderOptions{
+            .bounds = {{10.0f, 20.0f}, {200.0f, 30.0f}},
+            .minimum = -1.0f,
+            .maximum = 1.0f,
+            .value = 0.25f,
+            .step = 0.25f
+        };
+        const SliderLayout slider = make_slider_layout(sliderOptions);
+        EPOCHGUI_CHECK(slider.valid);
+        EPOCHGUI_CHECK(slider.bounds.position.x == 10.0f);
+        EPOCHGUI_CHECK(slider.track.position.x == 14.0f);
+        EPOCHGUI_CHECK(slider.track.size.x == 192.0f);
+        EPOCHGUI_CHECK(approximately(slider.fraction, 0.625f));
+        EPOCHGUI_CHECK(approximately(slider.fill.size.x, 120.0f));
+        EPOCHGUI_CHECK(approximately(slider.thumb.position.x, 130.875f));
+        EPOCHGUI_CHECK(
+            slider_value_from_position(sliderOptions, 14.0f) == -1.0f);
+        EPOCHGUI_CHECK(
+            slider_value_from_position(sliderOptions, 110.0f) == 0.0f);
+        EPOCHGUI_CHECK(
+            slider_value_from_position(sliderOptions, 206.0f) == 1.0f);
+        EPOCHGUI_CHECK(!make_slider_layout({
+            .bounds = {{0.0f, 0.0f}, {100.0f, 20.0f}},
+            .minimum = 1.0f,
+            .maximum = 1.0f
+        }).valid);
+        return 0;
+    }
+
+    int window_scoped_identity_and_tool_tabs()
+    {
+        const std::string worldScroll = scoped_control_key(
+            "host-1", "World Outliner", "body");
+        const std::string assetScroll = scoped_control_key(
+            "host-1", "Asset Browser", "body");
+        const std::string secondHostScroll = scoped_control_key(
+            "host-2", "World Outliner", "body");
+
+        EPOCHGUI_CHECK(worldScroll != assetScroll);
+        EPOCHGUI_CHECK(worldScroll != secondHostScroll);
+        EPOCHGUI_CHECK(
+            scoped_control_key("a|b", "c", "d")
+            != scoped_control_key("a", "b|c", "d"));
+
+        const ToolTabSizingPolicy policy{};
+        EPOCHGUI_CHECK(approximately(
+            preferred_tool_tab_width(20.0f, false, false, policy),
+            policy.minimum_width));
+        EPOCHGUI_CHECK(approximately(
+            preferred_tool_tab_width(1000.0f, true, true, policy),
+            policy.maximum_width));
+        EPOCHGUI_CHECK(
+            preferred_tool_tab_width(84.0f, true, false, policy)
+            > preferred_tool_tab_width(84.0f, false, false, policy));
+        EPOCHGUI_CHECK(
+            preferred_tool_tab_width(84.0f, true, true, policy)
+            > preferred_tool_tab_width(84.0f, true, false, policy));
+        return 0;
+    }
 }
 
 int main()
@@ -217,7 +392,13 @@ int main()
         return result;
     if (const int result = filtering_read_only_and_scroll(); result != 0)
         return result;
+    if (const int result = whitespace_and_control_filtering(); result != 0)
+        return result;
     if (const int result = text_editor_document(); result != 0)
         return result;
-    return segmented_control_geometry();
+    if (const int result = segmented_control_geometry(); result != 0)
+        return result;
+    if (const int result = visual_control_geometry(); result != 0)
+        return result;
+    return window_scoped_identity_and_tool_tabs();
 }

@@ -661,45 +661,6 @@ namespace epochengine::raylibcontext
                     static_cast<std::uint8_t>((std::clamp)(clearColor[3], 0.0f, 1.0f) * 255.0f)
                 });
             const auto cameraMode = epochengine::previewgrid::camera_mode_for(ctx.get());
-            if (epochengine::raylib_api::has_loaded_models()
-                && cameraMode != epochengine::previewgrid::CameraMode::Canvas2D)
-            {
-                constexpr float kRadiansToDegrees = 57.29577951308232f;
-                const auto camera = epochengine::previewgrid::camera_for(ctx.get());
-                const int renderHeight = (std::max)(1, epochengine::raylib_api::get_render_height());
-                const int renderWidth = (std::max)(1, epochengine::raylib_api::get_render_width());
-                const int viewportY = renderHeight - (viewport.y + viewport.height);
-
-                epochengine::raylib_api::set_viewport(
-                    viewport.x,
-                    viewportY,
-                    viewport.width,
-                    viewport.height);
-
-                epochengine::raylib_api::begin_mode_3d(epochengine::raylib_api::Camera3D{
-                    .position = { camera.eye.x, camera.eye.y, camera.eye.z },
-                    .target = { camera.target.x, camera.target.y, camera.target.z },
-                    .up = { camera.up.x, camera.up.y, camera.up.z },
-                    .fovy = camera.fovRadians * kRadiansToDegrees,
-                    .projection = epochengine::raylib_api::camera_perspective
-                });
-                epochengine::raylib_api::draw_grid(20, 1.0f);
-                epochengine::raylib_api::draw_loaded_models();
-                epochengine::raylib_api::end_mode_3d();
-                epochengine::raylib_api::set_viewport(0, 0, renderWidth, renderHeight);
-
-                const float aspect = viewport.height > 0
-                    ? (viewport.width / static_cast<float>(viewport.height))
-                    : 1.0f;
-                const auto mvp = epochengine::previewgrid::multiply(
-                    epochengine::previewgrid::projection_for(ctx.get(), aspect, camera),
-                    epochengine::previewgrid::look_at(camera.eye, camera.target, camera.up));
-                if (arcadePreviewReady)
-                    render_engine_arcade_sampled_surface_preview(
-                        sampledSurfaceMarkers, mvp, viewport);
-                epochengine::raylib_api::end_scissor_mode();
-                return;
-            }
 
             const auto camera = epochengine::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
@@ -711,8 +672,9 @@ namespace epochengine::raylibcontext
                 camera.target,
                 camera.up);
             const auto mvp = epochengine::previewgrid::multiply(proj, view);
-            const auto vertices = epochengine::previewgrid::grid_vertices();
-            const auto indices = epochengine::previewgrid::grid_indices();
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+            const auto& vertices = gridGeometry->vertices;
+            const auto& indices = gridGeometry->indices;
 
             for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
             {
@@ -760,6 +722,44 @@ namespace epochengine::raylibcontext
                 const auto color = to_raylib_color(solidVertices[i].color);
                 epochengine::raylib_api::draw_triangle(a, b, c, color);
                 epochengine::raylib_api::draw_triangle(c, b, a, color);
+            }
+
+            if (epochengine::raylib_api::has_loaded_models()
+                && cameraMode != epochengine::previewgrid::CameraMode::Canvas2D)
+            {
+                constexpr float kRadiansToDegrees = 57.29577951308232f;
+                const int renderHeight =
+                    (std::max)(1, epochengine::raylib_api::get_render_height());
+                const int renderWidth =
+                    (std::max)(1, epochengine::raylib_api::get_render_width());
+                const int viewportY = renderHeight - (viewport.y + viewport.height);
+
+                epochengine::raylib_api::set_viewport(
+                    viewport.x,
+                    viewportY,
+                    viewport.width,
+                    viewport.height);
+                epochengine::raylib_api::begin_mode_3d(
+                    epochengine::raylib_api::Camera3D{
+                        .position = { camera.eye.x, camera.eye.y, camera.eye.z },
+                        .target = { camera.target.x, camera.target.y, camera.target.z },
+                        .up = { camera.up.x, camera.up.y, camera.up.z },
+                        .fovy = camera.projection
+                                == epochengine::render_camera::ProjectionKind::orthographic
+                            ? camera.orthographicVerticalSize
+                            : camera.fovRadians * kRadiansToDegrees,
+                        .projection = camera.projection
+                                == epochengine::render_camera::ProjectionKind::orthographic
+                            ? epochengine::raylib_api::camera_orthographic
+                            : epochengine::raylib_api::camera_perspective
+                    });
+                epochengine::raylib_api::draw_loaded_models();
+                epochengine::raylib_api::end_mode_3d();
+                epochengine::raylib_api::set_viewport(
+                    0,
+                    0,
+                    renderWidth,
+                    renderHeight);
             }
 
             if (arcadePreviewReady)

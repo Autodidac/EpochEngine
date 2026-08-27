@@ -103,7 +103,8 @@ namespace epochengine::anativecontext
             !sr.frameValid
             || guiGeneration != sr.lastGuiGeneration;
 
-        if (sceneDirty)
+        const bool compositionDirty = sceneDirty || guiDirty;
+        if (compositionDirty)
         {
 #if EPOCH_USE_CLEAR_COLOR
             const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
@@ -148,6 +149,16 @@ namespace epochengine::anativecontext
             }
 #endif
 
+            if (!ctx.gui_overlay_priority()
+                && ctx.windowData
+                && ctx.windowData->context)
+            {
+                if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(
+                        ctx.windowData->context))
+                {
+                    ::epochengine::gui::render_deferred_batch(liveContext.get());
+                }
+            }
             detail::render_scene_preview(ctx);
 
             if (sr.lastTelemetryCommandDepth != commandDepth)
@@ -162,19 +173,15 @@ namespace epochengine::anativecontext
             sr.sceneFramebuffer = sr.framebuffer;
         }
 
-        const bool needsPresent = sceneDirty || guiDirty;
+        const bool needsPresent = compositionDirty;
         if (needsPresent)
         {
-            if (!sceneDirty && sr.sceneFramebuffer.size() == sr.framebuffer.size())
-                sr.framebuffer = sr.sceneFramebuffer;
-
             if (ctx.windowData && ctx.windowData->context)
             {
                 if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
                     ::epochengine::gui::render_deferred_batch(liveContext.get());
             }
 
-            detail::render_scene_preview(ctx);
             if (ctx.windowData && ctx.windowData->context)
             {
                 if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))

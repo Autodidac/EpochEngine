@@ -366,7 +366,8 @@ export namespace epochengine::capability
         return profile.recommended_budgets.cpu_ms >= 0.0f
             && profile.recommended_budgets.gpu_ms >= 0.0f
             && profile.recommended_budgets.min_w <= profile.recommended_budgets.max_w
-            && profile.recommended_budgets.min_h <= profile.recommended_budgets.max_h;
+            && profile.recommended_budgets.min_h <= profile.recommended_budgets.max_h
+            && profile.recommended_budgets.canvas2d.valid();
     }
 
     [[nodiscard]] constexpr bool selectable(const Profile& profile) noexcept
@@ -537,8 +538,8 @@ export namespace epochengine::capability
         profile.power.thermal_state_available = true;
         profile.power.battery_state_available = true;
         profile.performance_tier = perf::tier::mobile_30;
-        profile.recommended_budgets.cpu_ms = 10.0f;
-        profile.recommended_budgets.gpu_ms = 20.0f;
+        profile.recommended_budgets =
+            platform::recommended_budgets_for_tier(profile.performance_tier);
         profile.recommended_budgets.vram_budget_bytes = profile.memory.local_budget_bytes;
         profile.recommended_budgets.upload_budget_bytes = profile.memory.upload_budget_bytes;
         profile.recommended_budgets.max_w = 1280u;
@@ -574,6 +575,8 @@ export namespace epochengine::capability
         profile.memory.upload_budget_bytes = 32ull * 1024ull * 1024ull;
         profile.power.power_class = PowerClass::balanced;
         profile.performance_tier = perf::tier::desktop_60;
+        profile.recommended_budgets =
+            platform::recommended_budgets_for_tier(profile.performance_tier);
         profile.recommended_budgets.vram_budget_bytes = profile.memory.local_budget_bytes;
         profile.recommended_budgets.upload_budget_bytes = profile.memory.upload_budget_bytes;
         return profile;
@@ -612,6 +615,8 @@ export namespace epochengine::capability
         profile.memory.upload_budget_bytes = 64ull * 1024ull * 1024ull;
         profile.power.power_class = PowerClass::performance;
         profile.performance_tier = perf::tier::editor_120;
+        profile.recommended_budgets =
+            platform::recommended_budgets_for_tier(profile.performance_tier);
         profile.recommended_budgets.vram_budget_bytes = profile.memory.local_budget_bytes;
         profile.recommended_budgets.upload_budget_bytes = profile.memory.upload_budget_bytes;
         return profile;

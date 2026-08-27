@@ -27,8 +27,11 @@ export namespace epochengine::asset::texture
         }
 
         [[nodiscard]] friend constexpr bool operator==(
-            const ContentHash&,
-            const ContentHash&) noexcept = default;
+            const ContentHash& left,
+            const ContentHash& right) noexcept
+        {
+            return left.words == right.words;
+        }
     };
     [[nodiscard]] ContentHash deterministic_content_hash(
         std::string_view domain,
@@ -43,8 +46,12 @@ export namespace epochengine::asset::texture
         std::uint64_t sequence{};
 
         [[nodiscard]] friend constexpr bool operator==(
-            const DocumentRevision&,
-            const DocumentRevision&) noexcept = default;
+            const DocumentRevision& left,
+            const DocumentRevision& right) noexcept
+        {
+            return left.content.words == right.content.words
+                && left.sequence == right.sequence;
+        }
     };
 
     enum class ColorSpace : std::uint8_t

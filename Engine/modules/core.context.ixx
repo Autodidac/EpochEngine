@@ -439,6 +439,8 @@ namespace epochengine::core
                 {
                     x = cursor.x;
                     y = cursor.y;
+                    if (normalize_mouse_position)
+                        normalize_mouse_position(x, y);
                     return;
                 }
             }
@@ -468,6 +470,9 @@ namespace epochengine::core
                 }
             }
 #endif
+
+            if (normalize_mouse_position)
+                normalize_mouse_position(x, y);
         }
 
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept
@@ -686,6 +691,7 @@ namespace epochengine::core
         std::function<bool(input::Key)>         is_key_held;
         std::function<bool(input::Key)>         is_key_down;
         std::function<void(int&, int&)>         get_mouse_position; // client coords
+        std::function<void(int&, int&)>         normalize_mouse_position;
         std::function<bool(input::MouseButton)> is_mouse_button_held;
         std::function<bool(input::MouseButton)> is_mouse_button_down;
 

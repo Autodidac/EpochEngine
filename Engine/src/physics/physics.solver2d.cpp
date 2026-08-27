@@ -506,6 +506,145 @@ namespace epochengine::physics
             return collided;
         }
 
+        [[nodiscard]] bool horizontal_overlap(
+            Vector2 bodyPosition,
+            Vector2 bodyExtent,
+            const Aabb2& bounds) noexcept
+        {
+            return bodyPosition.x + bodyExtent.x > bounds.minimum.x
+                && bodyPosition.x - bodyExtent.x < bounds.maximum.x;
+        }
+
+        [[nodiscard]] double slope_surface_y(
+            const Aabb2& bounds,
+            StaticPrimitive2DKind kind,
+            double x) noexcept
+        {
+            const double width = bounds.maximum.x - bounds.minimum.x;
+            const double height = bounds.maximum.y - bounds.minimum.y;
+            const double t = std::clamp(
+                (x - bounds.minimum.x) / width,
+                0.0,
+                1.0);
+            return kind == StaticPrimitive2DKind::slope_up_right
+                ? bounds.maximum.y - height * t
+                : bounds.minimum.y + height * t;
+        }
+
+        [[nodiscard]] Vector2 slope_solid_normal(
+            const Aabb2& bounds,
+            StaticPrimitive2DKind kind) noexcept
+        {
+            const double width = bounds.maximum.x - bounds.minimum.x;
+            const double height = bounds.maximum.y - bounds.minimum.y;
+            Vector2 normal{
+                kind == StaticPrimitive2DKind::slope_up_right
+                    ? height / width
+                    : -height / width,
+                1.0
+            };
+            const double length = std::sqrt(dot(normal, normal));
+            return multiply(normal, 1.0 / length);
+        }
+
+        [[nodiscard]] bool collide_static_primitive(
+            const Shape2D& bodyShape,
+            Vector2 bodyPosition,
+            Vector2 previousPosition,
+            Vector2 velocity,
+            const StaticAabbPrimitive2D& primitive,
+            double contactSlop,
+            bool enforceApproach,
+            Manifold& result) noexcept
+        {
+            if (primitive.kind == StaticPrimitive2DKind::solid_box)
+            {
+                return collide(
+                    bodyShape,
+                    bodyPosition,
+                    map_shape(primitive),
+                    map_center(primitive),
+                    result);
+            }
+
+            const Vector2 extent = shape_extents(bodyShape);
+            if (!horizontal_overlap(bodyPosition, extent, primitive.bounds))
+                return false;
+
+            if (primitive.kind == StaticPrimitive2DKind::one_way_up)
+            {
+                const double surfaceY = primitive.bounds.minimum.y;
+                const double bodyBottom = bodyPosition.y + extent.y;
+                const double previousBottom = previousPosition.y + extent.y;
+                if (bodyBottom <= surfaceY
+                    || bodyPosition.y - extent.y >= primitive.bounds.maximum.y)
+                {
+                    return false;
+                }
+                const double tolerance = (std::max)(1.0e-7, contactSlop * 4.0);
+                if (enforceApproach
+                    && (velocity.y < -tolerance
+                        || previousBottom > surfaceY + tolerance))
+                {
+                    return false;
+                }
+                result.normal = { 0.0, 1.0 };
+                result.point = {
+                    std::clamp(
+                        bodyPosition.x,
+                        primitive.bounds.minimum.x,
+                        primitive.bounds.maximum.x),
+                    surfaceY
+                };
+                result.penetration = bodyBottom - surfaceY;
+                return finite(result.point)
+                    && finite(result.penetration)
+                    && result.penetration > 0.0;
+            }
+
+            const double sampleX = std::clamp(
+                bodyPosition.x,
+                primitive.bounds.minimum.x,
+                primitive.bounds.maximum.x);
+            const double surfaceY = slope_surface_y(
+                primitive.bounds,
+                primitive.kind,
+                sampleX);
+            const double bodyBottom = bodyPosition.y + extent.y;
+            if (bodyBottom <= surfaceY
+                || bodyPosition.y - extent.y >= primitive.bounds.maximum.y)
+            {
+                return false;
+            }
+
+            const double previousX = std::clamp(
+                previousPosition.x,
+                primitive.bounds.minimum.x,
+                primitive.bounds.maximum.x);
+            const double previousSurfaceY = slope_surface_y(
+                primitive.bounds,
+                primitive.kind,
+                previousX);
+            const double tolerance = (std::max)(1.0e-7, contactSlop * 4.0);
+            if (enforceApproach
+                && previousPosition.y - extent.y
+                    >= previousSurfaceY + tolerance)
+            {
+                return false;
+            }
+
+            result.normal = slope_solid_normal(
+                primitive.bounds,
+                primitive.kind);
+            result.point = { sampleX, surfaceY };
+            result.penetration =
+                (bodyBottom - surfaceY) * result.normal.y;
+            return finite(result.normal)
+                && finite(result.point)
+                && finite(result.penetration)
+                && result.penetration > 0.0;
+        }
+
         [[nodiscard]] Solver2DCode manager_code(ResultCode code) noexcept
         {
             switch (code)
@@ -544,6 +683,7 @@ namespace epochengine::physics
             BodyState state{};
             Shape2D shape{};
             CollisionFilter2D filter{};
+            Vector2 previous_position{};
         };
 
         struct ContactCandidate final
@@ -663,9 +803,15 @@ namespace epochengine::physics
             const StaticAabbPrimitive2D& primitive,
             const Solver2DConfiguration& configuration) noexcept
         {
+            const bool validKind =
+                primitive.kind == StaticPrimitive2DKind::solid_box
+                || primitive.kind == StaticPrimitive2DKind::one_way_up
+                || primitive.kind == StaticPrimitive2DKind::slope_up_right
+                || primitive.kind == StaticPrimitive2DKind::slope_down_right;
             return primitive.stable_id != 0
                 && valid_bounds(primitive.bounds)
                 && valid_filter(primitive.filter)
+                && validKind
                 && primitive.bounds.minimum.x
                     >= configuration.world_bounds.minimum.x
                 && primitive.bounds.minimum.y
@@ -705,6 +851,7 @@ namespace epochengine::physics
             CollisionFilter2D filter{};
             BodyMotionType motion{ BodyMotionType::static_body };
             bool enabled{};
+            std::optional<StaticAabbPrimitive2D> static_primitive{};
         };
 
         [[nodiscard]] bool resolve_snapshot_contact_geometry(
@@ -773,7 +920,8 @@ namespace epochengine::physics
                 .position = map_center(*found),
                 .filter = found->filter,
                 .motion = BodyMotionType::static_body,
-                .enabled = true
+                .enabled = true,
+                .static_primitive = *found
             };
             return true;
         }
@@ -808,12 +956,23 @@ namespace epochengine::physics
             }
 
             Manifold expected{};
-            return collide(
+            const bool expectedCollision = second.static_primitive
+                ? collide_static_primitive(
+                    first.shape,
+                    first.position,
+                    first.position,
+                    {},
+                    *second.static_primitive,
+                    0.0,
+                    false,
+                    expected)
+                : collide(
                     first.shape,
                     first.position,
                     second.shape,
                     second.position,
-                    expected)
+                    expected);
+            return expectedCollision
                 && snapshot_contact_equal(contact.normal, expected.normal)
                 && snapshot_contact_equal(contact.point, expected.point)
                 && snapshot_contact_equal(
@@ -951,11 +1110,14 @@ namespace epochengine::physics
 
                     ++workingMetrics.broadphase_pairs_tested;
                     Manifold manifold{};
-                    if (!collide(
+                    if (!collide_static_primitive(
                             firstBody.shape,
                             body_position(firstBody),
-                            map_shape(primitive),
-                            map_center(primitive),
+                            firstBody.previous_position,
+                            body_velocity(firstBody),
+                            primitive,
+                            configuration.contact_slop,
+                            true,
                             manifold))
                     {
                         continue;
@@ -1142,6 +1304,7 @@ namespace epochengine::physics
                 * configuration.seconds_per_tick;
             for (WorkingBody& body : workingBodies)
             {
+                body.previous_position = body_position(body);
                 if (!body.state.enabled
                     || body.descriptor.motion == BodyMotionType::static_body)
                 {

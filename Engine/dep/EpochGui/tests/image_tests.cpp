@@ -64,5 +64,33 @@ int main()
     if (invalid_result.error != image::ImageError::unsupported_encoding)
         return 5;
 
+    const image::ImageResult padded = image::extrude_edge_gutter(p3_result.image, 1U);
+    if (!padded
+        || padded.image.width != 4U
+        || padded.image.height != 3U
+        || padded.image.pixels[0].r != 255U
+        || padded.image.pixels[3].g != 128U
+        || padded.image.pixels[3].b != 255U
+        || padded.image.pixels[5].r != 255U
+        || padded.image.pixels[6].g != 128U)
+    {
+        return 6;
+    }
+
+    image::Image invalid_image{};
+    if (image::extrude_edge_gutter(invalid_image, 1U).error
+        != image::ImageError::invalid_dimensions)
+    {
+        return 7;
+    }
+
+    image::ImageLimits narrow_limits{};
+    narrow_limits.maximum_width = 3U;
+    if (image::extrude_edge_gutter(p3_result.image, 1U, narrow_limits).error
+        != image::ImageError::invalid_dimensions)
+    {
+        return 8;
+    }
+
     return 0;
 }

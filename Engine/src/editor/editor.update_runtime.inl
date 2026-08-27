@@ -510,8 +510,30 @@
             return static_cast<float>(std::fmod(editor_update_elapsed_seconds(editor) * 0.35, 1.0));
         }
 
+        [[nodiscard]] bool editor_private_source_access_pending(const EditorState& editor)
+        {
+            if (!editor.updateCheckPending)
+                return false;
+
+            switch (updater::private_source_access_status().phase)
+            {
+            case updater::SourceAccessPhase::Starting:
+            case updater::SourceAccessPhase::AwaitingApproval:
+            case updater::SourceAccessPhase::ExchangingToken:
+            case updater::SourceAccessPhase::FetchingManifest:
+            case updater::SourceAccessPhase::Downloading:
+            case updater::SourceAccessPhase::Decrypting:
+                return true;
+            default:
+                return false;
+            }
+        }
+
         [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
         {
+            if (editor_private_source_access_pending(editor))
+                return updater::private_source_access_status().progress;
+
             if (editor.updateState == EditorUpdateState::SourceWorkerRunning
                 || (editor.updateSourceInstallPending && updater::source_update_worker_active()))
             {
@@ -535,6 +557,15 @@
 
         [[nodiscard]] std::string editor_update_running_status(const EditorState& editor)
         {
+            if (editor_private_source_access_pending(editor))
+            {
+                const updater::SourceAccessStatus sourceAccess =
+                    updater::private_source_access_status();
+                if (!sourceAccess.message.empty())
+                    return sourceAccess.message;
+                return "Authorizing encrypted private source access.";
+            }
+
             if (editor.updateProjectSourceDownloadPending)
                 return "Downloading project source code into the project source cache. This does not update or restart the runtime.";
 
@@ -767,7 +798,7 @@
             }
 
             editor.updateState = EditorUpdateState::Checking;
-            editor.updateStatus = "Installing the best available update. If main source is newer, Epoch builds it locally; packaged releases are used only when no newer source lane is available.";
+            editor.updateStatus = "Installing the best available update. Epoch verifies the packaged runtime first and uses authorized source only if the compatible binary lane is unavailable or fails safely.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = false;
             editor.updateProjectSourceDownloadPending = false;
@@ -775,7 +806,7 @@
             clear_editor_update_retry_wait(editor);
             clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
-            push_editor_log(editor, "[update] Installing through the source-preferred update gate.");
+            push_editor_log(editor, "[update] Installing through the binary-first update gate with authorized source backup.");
 
             try
             {
@@ -837,7 +868,7 @@
             }
 
             editor.updateState = EditorUpdateState::Checking;
-            editor.updateStatus = "Launching the advanced source rebuild worker. Use this only when you intentionally want latest main source instead of the packaged platform release.";
+            editor.updateStatus = "Requesting authorized encrypted source for an explicit local rebuild. Browser approval and temporary-cache cleanup remain visible.";
             editor.updateInstallPending = true;
             editor.updateSourceInstallPending = true;
             editor.updateProjectSourceDownloadPending = false;
@@ -845,7 +876,7 @@
             clear_editor_update_retry_wait(editor);
             clear_editor_update_restart_countdown(editor);
             editor.updateOperationStartedAt = std::chrono::steady_clock::now();
-            push_editor_log(editor, "[update] Launching advanced source rebuild worker.");
+            push_editor_log(editor, "[update] Starting explicit authorized source rebuild flow.");
 
             try
             {
@@ -913,7 +944,7 @@
             }
 
             editor.updateState = EditorUpdateState::Checking;
-            editor.updateStatus = "Downloading project source code into the project source cache. This will not update, rebuild, restart, or replace Epoch.";
+            editor.updateStatus = "Requesting authorized encrypted source for the project source cache. This will not update, rebuild, restart, or replace Epoch.";
             editor.updateInstallPending = false;
             editor.updateSourceInstallPending = false;
             editor.updateProjectSourceDownloadPending = true;
@@ -1278,5 +1309,17 @@
                     "Source rebuild cancellation could not write the cancel marker. Check logs/epoch_source_update.log beside the executable.";
             }
 
+            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
+        }
+
+        void request_editor_private_source_access_cancel(EditorState& editor)
+        {
+            if (editor.updateSourceCancelRequested)
+                return;
+
+            updater::cancel_private_source_access();
+            editor.updateSourceCancelRequested = true;
+            editor.updateStatus =
+                "Private source authorization cancellation requested. Temporary encrypted and decrypted archives will be removed.";
             push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
         }

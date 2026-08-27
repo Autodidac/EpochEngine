@@ -51,8 +51,8 @@ import core.logger;
 import core.path;
 import platform.engine;
 
-inline constexpr int DEFAULT_WINDOW_WIDTH = 1277;
-inline constexpr int DEFAULT_WINDOW_HEIGHT = 1277;
+inline constexpr int DEFAULT_WINDOW_WIDTH = 1280;
+inline constexpr int DEFAULT_WINDOW_HEIGHT = 800;
 
 namespace epochengine::core::cli
 {
@@ -329,6 +329,44 @@ namespace epochengine::core::cli
         return root / filename;
     }
 
+    // C ABI adapter for legacy/non-module renderer implementation units.
+    // The returned pointer remains valid until the next call on this thread.
+    extern "C" const char* epoch_reserve_capture_path_utf8(
+        const char* backend,
+        const std::uintptr_t windowId)
+    {
+        static thread_local std::string capturePathText{};
+        capturePathText.clear();
+        if (backend == nullptr)
+            return nullptr;
+
+        const auto capturePath =
+            reserve_capture_path(backend, windowId);
+        if (capturePath.empty())
+            return nullptr;
+
+        capturePathText = capturePath.string();
+        return capturePathText.c_str();
+    }
+
+    extern "C" void epoch_release_capture_path_utf8(
+        const char* backend,
+        const std::uintptr_t windowId)
+    {
+        if (backend == nullptr)
+            return;
+
+        const std::string stem = capture_output_stem();
+        const std::string backendToken =
+            detail::sanitize_capture_token(backend);
+        const std::string key =
+            stem + "|" + backendToken + "|"
+            + std::to_string(windowId);
+
+        std::lock_guard guard(detail::capture_mutex());
+        detail::captured_outputs().erase(key);
+    }
+
     export struct ParseResult
     {
         bool version_requested = false;
@@ -511,7 +549,7 @@ namespace epochengine::core::cli
                     "  --editor-project-self-test <id>\n"
                     "                             Materialize and build an editor project shell, then exit\n"
                     "  --editor-ai-gate-self-test\n"
-                    "                             Run deterministic self-iteration helper gate checks, then exit\n"
+                    "                             Run deterministic guarded engine-development gate checks, then exit\n"
                     "  --engine-contract-self-test\n"
                     "                             Run pure engine contract checks, then exit\n"
                     "  --menu                     Start the menu + games loop\n"

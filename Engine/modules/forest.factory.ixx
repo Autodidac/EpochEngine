@@ -32,10 +32,13 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cmath>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "../include/core.stl_types.hpp"
 
@@ -157,6 +160,40 @@ export namespace epochengine::forest
         ForestDisplayToggles display{};
         ForestFactoryConfig config{};
         std::uint32_t atlasIndex{};
+    };
+
+    enum class ForestProfileProperty : std::uint8_t
+    {
+        TargetHeightMeters,
+        TrunkRadiusMeters,
+        BranchLevels,
+        ChildrenPerNode,
+        BranchStartHeightMeters,
+        BranchLengthMeters,
+        BranchAngleDegrees,
+        BranchSpreadDegrees,
+        GrowthDurationSeconds,
+        GrowthTimeSeconds
+    };
+
+    struct ForestProfileEdit
+    {
+        std::uint64_t sequence{};
+        ForestProfileProperty property{ForestProfileProperty::TargetHeightMeters};
+        float beforeValue{};
+        float afterValue{};
+    };
+
+    struct ForestAssetDocument
+    {
+        ForestGenomeId genome{};
+        std::string name{"Untitled Plant"};
+        ForestFactoryProfile profile{};
+        std::uint64_t revision{1u};
+        std::uint64_t contentHash{};
+        std::uint64_t nextSequence{1u};
+        std::vector<ForestProfileEdit> journal{};
+        std::size_t historyCursor{};
     };
 
     struct ForestPreviewStats
@@ -315,6 +352,249 @@ export namespace epochengine::forest
     using MorphologySample = epochengine::authoring::morphology::Sample;
     using MorphologyVoxelLodPlan = epochengine::authoring::morphology::VoxelLodPlan;
 
+    struct CompiledForestAsset
+    {
+        ForestGenomeId genome{};
+        std::uint64_t sourceRevision{};
+        std::uint64_t sourceContentHash{};
+        MorphologyGraph graph{};
+        MorphologySample sample{};
+        MorphologyVoxelLodPlan voxelLods{};
+        ForestPreviewGeometry preview{};
+        ForestVoxelOccupancySummary voxelOccupancy{};
+        bool valid{};
+    };
+
+    inline constexpr std::size_t kForestMaximumProfileEdits = 512u;
+
+    [[nodiscard]] constexpr std::uint64_t mix_seed(
+        std::uint64_t state,
+        std::uint64_t value) noexcept
+    {
+        state ^= value + 0x9e3779b97f4a7c15ull + (state << 6u) + (state >> 2u);
+        return state;
+    }
+
+    [[nodiscard]] constexpr std::uint64_t forest_name_hash(
+        std::string_view name) noexcept
+    {
+        std::uint64_t hash = 1469598103934665603ull;
+        for (const char character : name)
+        {
+            hash ^= static_cast<std::uint8_t>(character);
+            hash *= 1099511628211ull;
+        }
+        return hash == 0u ? 1u : hash;
+    }
+
+    [[nodiscard]] inline std::uint64_t forest_float_bits(float value) noexcept
+    {
+        return static_cast<std::uint64_t>(std::bit_cast<std::uint32_t>(value));
+    }
+
+    [[nodiscard]] inline std::uint64_t forest_profile_content_hash(
+        const ForestFactoryProfile& profile) noexcept
+    {
+        std::uint64_t hash = 0x45504f4348464f52ull;
+        const auto add_float = [&](float value) noexcept
+        {
+            hash = mix_seed(hash, forest_float_bits(value));
+        };
+        hash = mix_seed(hash, static_cast<std::uint64_t>(profile.preset));
+        hash = mix_seed(hash, static_cast<std::uint64_t>(profile.previewMode));
+        hash = mix_seed(hash, static_cast<std::uint64_t>(profile.editStage));
+        hash = mix_seed(hash, profile.seed.value);
+        add_float(profile.temporal.timeSeconds);
+        add_float(profile.temporal.speed);
+        add_float(profile.temporal.durationSeconds);
+        hash = mix_seed(hash, profile.temporal.playing ? 1u : 0u);
+        hash = mix_seed(hash, profile.temporal.reverse ? 1u : 0u);
+        add_float(profile.branch.branchesPerNode);
+        add_float(profile.branch.nodeStepMeters);
+        add_float(profile.branch.startHeightMeters);
+        add_float(profile.branch.branchLengthMeters);
+        hash = mix_seed(hash, profile.branch.levels);
+        hash = mix_seed(hash, profile.branch.childrenPerNode);
+        add_float(profile.branch.angleDegrees);
+        add_float(profile.branch.spreadDegrees);
+        add_float(profile.branch.twistDegrees);
+        add_float(profile.branch.jitterDegrees);
+        add_float(profile.branch.upwardBend);
+        add_float(profile.branch.outwardBias);
+        add_float(profile.branch.curve);
+        add_float(profile.branch.sag);
+        hash = mix_seed(hash, profile.config.maxBranchDepth);
+        hash = mix_seed(hash, profile.config.maxPreviewSegments);
+        add_float(profile.config.trunkRadiusMeters);
+        add_float(profile.config.targetHeightMeters);
+        hash = mix_seed(hash, profile.config.deterministicWindProfile ? 1u : 0u);
+        hash = mix_seed(hash, profile.config.emitVoxelOccupancy ? 1u : 0u);
+        hash = mix_seed(hash, profile.atlasIndex);
+        return hash == 0u ? 1u : hash;
+    }
+
+    [[nodiscard]] inline float forest_profile_value(
+        const ForestFactoryProfile& profile,
+        ForestProfileProperty property) noexcept
+    {
+        switch (property)
+        {
+        case ForestProfileProperty::TargetHeightMeters: return profile.config.targetHeightMeters;
+        case ForestProfileProperty::TrunkRadiusMeters: return profile.config.trunkRadiusMeters;
+        case ForestProfileProperty::BranchLevels: return static_cast<float>(profile.branch.levels);
+        case ForestProfileProperty::ChildrenPerNode: return static_cast<float>(profile.branch.childrenPerNode);
+        case ForestProfileProperty::BranchStartHeightMeters: return profile.branch.startHeightMeters;
+        case ForestProfileProperty::BranchLengthMeters: return profile.branch.branchLengthMeters;
+        case ForestProfileProperty::BranchAngleDegrees: return profile.branch.angleDegrees;
+        case ForestProfileProperty::BranchSpreadDegrees: return profile.branch.spreadDegrees;
+        case ForestProfileProperty::GrowthDurationSeconds: return profile.temporal.durationSeconds;
+        case ForestProfileProperty::GrowthTimeSeconds: return profile.temporal.timeSeconds;
+        }
+        return 0.0f;
+    }
+
+    inline void set_forest_profile_value(
+        ForestFactoryProfile& profile,
+        ForestProfileProperty property,
+        float value) noexcept
+    {
+        switch (property)
+        {
+        case ForestProfileProperty::TargetHeightMeters:
+            profile.config.targetHeightMeters = (std::clamp)(value, 0.1f, 256.0f);
+            break;
+        case ForestProfileProperty::TrunkRadiusMeters:
+            profile.config.trunkRadiusMeters = (std::clamp)(value, 0.005f, 8.0f);
+            break;
+        case ForestProfileProperty::BranchLevels:
+            profile.branch.levels = static_cast<std::uint32_t>((std::clamp)(
+                std::round(value), 1.0f, 32.0f));
+            break;
+        case ForestProfileProperty::ChildrenPerNode:
+            profile.branch.childrenPerNode = static_cast<std::uint32_t>((std::clamp)(
+                std::round(value), 1.0f, 8.0f));
+            break;
+        case ForestProfileProperty::BranchStartHeightMeters:
+            profile.branch.startHeightMeters = (std::clamp)(value, 0.0f, 128.0f);
+            break;
+        case ForestProfileProperty::BranchLengthMeters:
+            profile.branch.branchLengthMeters = (std::clamp)(value, 0.01f, 128.0f);
+            break;
+        case ForestProfileProperty::BranchAngleDegrees:
+            profile.branch.angleDegrees = (std::clamp)(value, 0.0f, 180.0f);
+            break;
+        case ForestProfileProperty::BranchSpreadDegrees:
+            profile.branch.spreadDegrees = (std::clamp)(value, 0.0f, 360.0f);
+            break;
+        case ForestProfileProperty::GrowthDurationSeconds:
+            profile.temporal.durationSeconds = (std::clamp)(value, 0.001f, 86'400.0f);
+            profile.temporal.timeSeconds = (std::clamp)(
+                profile.temporal.timeSeconds, 0.0f, profile.temporal.durationSeconds);
+            break;
+        case ForestProfileProperty::GrowthTimeSeconds:
+            profile.temporal.timeSeconds = (std::clamp)(
+                value, 0.0f, (std::max)(profile.temporal.durationSeconds, 0.001f));
+            break;
+        }
+    }
+
+    [[nodiscard]] inline ForestAssetDocument make_forest_asset_document(
+        std::string_view name,
+        ForestPreset preset = ForestPreset::Tree)
+    {
+        ForestAssetDocument document{};
+        document.name.assign(name.empty() ? std::string_view{"Untitled Plant"} : name);
+        document.profile = default_profile(preset);
+        document.genome.stableHash = mix_seed(
+            forest_name_hash(document.name),
+            mix_seed(static_cast<std::uint64_t>(preset), document.profile.seed.value));
+        if (document.genome.stableHash == 0u)
+            document.genome.stableHash = 1u;
+        document.contentHash = forest_profile_content_hash(document.profile);
+        return document;
+    }
+
+    [[nodiscard]] inline bool apply_forest_profile_edit(
+        ForestAssetDocument& document,
+        ForestProfileProperty property,
+        float requestedValue)
+    {
+        if (!std::isfinite(requestedValue))
+            return false;
+
+        ForestFactoryProfile candidate = document.profile;
+        const float before = forest_profile_value(candidate, property);
+        set_forest_profile_value(candidate, property, requestedValue);
+        const float after = forest_profile_value(candidate, property);
+        if (before == after)
+            return false;
+
+        if (document.historyCursor < document.journal.size())
+        {
+            document.journal.erase(
+                document.journal.begin() + static_cast<std::ptrdiff_t>(document.historyCursor),
+                document.journal.end());
+        }
+        if (document.journal.size() >= kForestMaximumProfileEdits)
+        {
+            document.journal.erase(document.journal.begin());
+            if (document.historyCursor > 0u)
+                --document.historyCursor;
+        }
+
+        document.profile = candidate;
+        document.journal.push_back(ForestProfileEdit{
+            .sequence = document.nextSequence++,
+            .property = property,
+            .beforeValue = before,
+            .afterValue = after});
+        document.historyCursor = document.journal.size();
+        ++document.revision;
+        document.contentHash = forest_profile_content_hash(document.profile);
+        return true;
+    }
+
+    [[nodiscard]] inline bool undo_forest_profile_edit(ForestAssetDocument& document)
+    {
+        if (document.historyCursor == 0u)
+            return false;
+        const ForestProfileEdit& edit = document.journal[document.historyCursor - 1u];
+        set_forest_profile_value(document.profile, edit.property, edit.beforeValue);
+        --document.historyCursor;
+        ++document.revision;
+        document.contentHash = forest_profile_content_hash(document.profile);
+        return true;
+    }
+
+    [[nodiscard]] inline bool redo_forest_profile_edit(ForestAssetDocument& document)
+    {
+        if (document.historyCursor >= document.journal.size())
+            return false;
+        const ForestProfileEdit& edit = document.journal[document.historyCursor];
+        set_forest_profile_value(document.profile, edit.property, edit.afterValue);
+        ++document.historyCursor;
+        ++document.revision;
+        document.contentHash = forest_profile_content_hash(document.profile);
+        return true;
+    }
+
+    [[nodiscard]] inline ForestAssetDocument make_default_plant_lab_document()
+    {
+        auto document = make_forest_asset_document(
+            "Plant Lab Default Tree", ForestPreset::Tree);
+        (void)apply_forest_profile_edit(
+            document, ForestProfileProperty::TargetHeightMeters, 4.2f);
+        (void)apply_forest_profile_edit(
+            document, ForestProfileProperty::TrunkRadiusMeters, 0.09f);
+        (void)apply_forest_profile_edit(
+            document, ForestProfileProperty::BranchLevels, 4.0f);
+        (void)apply_forest_profile_edit(
+            document, ForestProfileProperty::BranchStartHeightMeters, 0.24f);
+        (void)apply_forest_profile_edit(
+            document, ForestProfileProperty::BranchLengthMeters, 0.92f);
+        return document;
+    }
+
     [[nodiscard]] inline epochengine::authoring::morphology::Recipe morphology_recipe(
         const ForestFactoryProfile& profile) noexcept
     {
@@ -328,12 +608,31 @@ export namespace epochengine::forest
         recipe.growth.generations = (std::max)(1u,
             (std::min)(profile.branch.levels, profile.config.maxBranchDepth));
         recipe.growth.children_per_node = (std::max)(1u, profile.branch.childrenPerNode);
-        recipe.growth.root_length_meters = profile.config.targetHeightMeters * 0.36f;
-        recipe.growth.segment_length_meters = profile.branch.branchLengthMeters;
         recipe.growth.length_decay = (std::clamp)(
             0.58f + profile.branch.curve * 0.24f,
             0.45f,
             0.94f);
+        float branchLengthScale = 0.0f;
+        float generationScale = 1.0f;
+        for (std::uint32_t generation = 0u;
+            generation < recipe.growth.generations;
+            ++generation)
+        {
+            branchLengthScale += generationScale;
+            generationScale *= recipe.growth.length_decay;
+        }
+        const float authoredAxialHeight = (std::max)(
+            0.01f,
+            profile.branch.startHeightMeters +
+                profile.branch.branchLengthMeters * branchLengthScale);
+        const float targetScale = profile.config.targetHeightMeters /
+            authoredAxialHeight;
+        recipe.growth.root_length_meters = (std::max)(
+            0.01f,
+            profile.branch.startHeightMeters * targetScale);
+        recipe.growth.segment_length_meters = (std::max)(
+            0.01f,
+            profile.branch.branchLengthMeters * targetScale);
         recipe.growth.root_radius_meters = profile.config.trunkRadiusMeters;
         recipe.growth.radius_decay = 0.72f;
         recipe.growth.branch_angle_degrees = profile.branch.angleDegrees;
@@ -475,14 +774,10 @@ export namespace epochengine::forest
     }
 
     [[nodiscard]] inline ForestPreviewGeometry build_preview_geometry(
-        const ForestFactoryProfile& profile)
+        const ForestFactoryProfile& profile,
+        const MorphologySample& sample)
     {
         ForestPreviewGeometry geometry{};
-        const MorphologyGraph graph = build_morphology_graph(profile);
-        if (!epochengine::authoring::morphology::validate(graph))
-            return geometry;
-        const MorphologySample sample = sample_morphology_graph(profile, graph);
-
         for (const auto& segment : sample.segments)
         {
             if (geometry.segmentCount >= geometry.segments.size())
@@ -534,6 +829,16 @@ export namespace epochengine::forest
             .triangles = static_cast<std::uint32_t>(
                 geometry.segmentCount * 8u + geometry.leafCount * 2u)};
         return geometry;
+    }
+
+    [[nodiscard]] inline ForestPreviewGeometry build_preview_geometry(
+        const ForestFactoryProfile& profile)
+    {
+        const MorphologyGraph graph = build_morphology_graph(profile);
+        if (!epochengine::authoring::morphology::validate(graph))
+            return {};
+        const MorphologySample sample = sample_morphology_graph(profile, graph);
+        return build_preview_geometry(profile, sample);
     }
 
     [[nodiscard]] inline ForestVoxelOccupancySummary estimate_voxel_occupancy(
@@ -611,6 +916,33 @@ export namespace epochengine::forest
         return summary;
     }
 
+    [[nodiscard]] inline CompiledForestAsset compile_forest_asset(
+        const ForestAssetDocument& document,
+        epochengine::voxel::LodPolicy lodPolicy = {},
+        float baseCellSizeMeters = 0.05f,
+        std::uint8_t lodLevelCount = 5u)
+    {
+        CompiledForestAsset asset{};
+        asset.genome = document.genome;
+        asset.sourceRevision = document.revision;
+        asset.sourceContentHash = document.contentHash;
+        asset.graph = build_morphology_graph(document.profile);
+        if (!epochengine::authoring::morphology::validate(asset.graph))
+            return asset;
+        asset.sample = sample_morphology_graph(document.profile, asset.graph);
+        asset.preview = build_preview_geometry(document.profile, asset.sample);
+        asset.voxelLods = plan_morphology_lods(
+            asset.graph, lodPolicy, baseCellSizeMeters, lodLevelCount);
+        asset.voxelOccupancy = estimate_voxel_occupancy(
+            document.profile, asset.preview, baseCellSizeMeters);
+        asset.valid = asset.sourceContentHash != 0u &&
+            asset.graph.content_hash != 0u &&
+            !asset.sample.segments.empty() &&
+            asset.preview.segmentCount > 0u &&
+            !asset.voxelLods.levels.empty();
+        return asset;
+    }
+
     [[nodiscard]] constexpr bool requires_project_activation(ForestOutputKind output) noexcept
     {
         return output == ForestOutputKind::MeshLod ||
@@ -631,12 +963,6 @@ export namespace epochengine::forest
     [[nodiscard]] constexpr ForestActivationPolicy activation_for_editor_preview() noexcept
     {
         return {};
-    }
-
-    [[nodiscard]] constexpr std::uint64_t mix_seed(std::uint64_t state, std::uint64_t value) noexcept
-    {
-        state ^= value + 0x9e3779b97f4a7c15ull + (state << 6u) + (state >> 2u);
-        return state;
     }
 
     [[nodiscard]] constexpr std::uint32_t encode_axis_millimeters(float meters) noexcept

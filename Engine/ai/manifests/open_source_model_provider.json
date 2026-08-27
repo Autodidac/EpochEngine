@@ -73,5 +73,5 @@
       "project_bundle_default": false
     }
   ],
-  "notes": "Epoch does not ship bundled model weights. Qwen, Nemotron, Bonsai, FLUX, Wan, and TRELLIS weights are downloaded on demand into executable-local cache/models when the operator requests them. Bonsai Ternary 4B is the recommended default local image lane; Bonsai Binary 4B is the low-memory lane; FLUX.2 Klein 4B remains a higher-memory fallback. Engine self-iteration uses selected OS model lanes through evidence gates; generated projects include model weights only after an explicit package opt-in with license/notice review."
+  "notes": "Epoch does not ship bundled model weights. Qwen, Nemotron, Bonsai, FLUX, Wan, and TRELLIS weights are downloaded on demand into executable-local cache/models when the operator requests them. Bonsai Ternary 4B is the recommended default local image lane; Bonsai Binary 4B is the low-memory lane; FLUX.2 Klein 4B remains a higher-memory fallback. Guarded engine development uses operator-selected OS model lanes through evidence gates and never trains or mutates them; generated projects include model weights only after an explicit package opt-in with license/notice review."
 }

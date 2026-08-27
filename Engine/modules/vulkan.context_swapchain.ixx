@@ -287,7 +287,7 @@ namespace epochengine::vulkancontext
     {
         if (commandPool && device)
         {
-            device->resetCommandPool(*commandPool);
+            (void)device->resetCommandPool(*commandPool);
             commandBuffers.clear();
         }
 

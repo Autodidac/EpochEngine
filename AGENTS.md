@@ -42,7 +42,8 @@
 - Prefer the fastest faithful local proof before waiting on hosted CI. Linux
   updater/release work uses `build.sh --bootstrap-current-toolchain` locally
   with the same Clang, vcpkg root, overlays, and Release configuration that the
-  updater passes; GitHub Actions confirms that result and produces artifacts.
+  updater passes; hosted validation confirms that result before the Site admits
+  and publishes artifacts.
 - Minimize release churn: complete source repair, local production build,
   contract checks, and package staging as one bounded pass before pushing the
   candidate. Do not advance/tag repeatedly to discover errors a local lane can
@@ -84,11 +85,12 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- The published `v0.89.06` runtime release and its updater implementation are a
-  sealed baseline. Do not edit updater code, updater UI, handoff/build scripts,
-  packaging, release metadata, tags, or release assets unless the operator
-  explicitly reopens that gate. Normal source-version advancement is allowed
-  without changing packaged-version defaults or updater behavior.
+- `v0.89.27` is the current source/runtime release authority. Preserve
+  `v0.89.06` as immutable release history and preserve
+  `multicontext-base-stable` at
+  `ad6c416d930b348a61bc37ceb7d4522742be084a`. Do not mutate verified release
+  bytes, tags, manifests, checksums, or historical refs outside an explicitly
+  authorized bounded release pass.
 
 ## 3. Current Validation Commands
 
@@ -205,7 +207,7 @@
   authoring, FFT ocean, imported prototypes, and game-specific world stacks are
   package candidates first.
 - Bulky optional package source belongs in
-  `https://github.com/Autodidac/EpochEngineExtensions`, not in EpochEngine
+  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git`, not in EpochEngine
   mainline or local `addons/` dumps.
 - Forest Factory is a core editor feature with its own 3D scene/window, but
   generated projects include Forest Factory assets/scripts only after visible

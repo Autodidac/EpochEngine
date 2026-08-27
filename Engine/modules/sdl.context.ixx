@@ -82,6 +82,7 @@ import context.control;
 import context.type;
 import atlas.manager;
 import atlas.texture;
+import gui.engine;
 import sdl.state;
 import sdl.renderer;
 import sdl.textures;
@@ -144,6 +145,9 @@ export namespace epochengine::sdlcontext
 
         int virtualWidth = 400;
         int virtualHeight = 300;
+        int logicalPresentationWidth = 0;
+        int logicalPresentationHeight = 0;
+
 
         std::function<void(int, int)> onResize;
 
@@ -188,7 +192,7 @@ export namespace epochengine::sdlcontext
         {
             int renderW = 0;
             int renderH = 0;
-            if (SDL_GetCurrentRenderOutputSize(sdlcontext.renderer, &renderW, &renderH) == 0
+            if (SDL_GetRenderOutputSize(sdlcontext.renderer, &renderW, &renderH)
                 && renderW > 0 && renderH > 0)
             {
                 fbW = renderW;
@@ -196,8 +200,52 @@ export namespace epochengine::sdlcontext
             }
         }
 
-        sdlcontext.framebufferWidth = (std::max)(1, fbW);
-        sdlcontext.framebufferHeight = (std::max)(1, fbH);
+        auto dimensions = state::make_presentation_dimensions(
+            logicalW,
+            logicalH,
+            (std::max)(1, fbW),
+            (std::max)(1, fbH));
+        if (sdlcontext.window)
+        {
+            const auto displayScaledDimensions =
+                state::make_display_scaled_presentation_dimensions(
+                    dimensions.framebufferWidth,
+                    dimensions.framebufferHeight,
+                    SDL_GetWindowDisplayScale(sdlcontext.window));
+            if (displayScaledDimensions.valid())
+                dimensions = displayScaledDimensions;
+        }
+        sdlcontext.width = dimensions.logicalWidth;
+        sdlcontext.height = dimensions.logicalHeight;
+        sdlcontext.virtualWidth = dimensions.logicalWidth;
+        sdlcontext.virtualHeight = dimensions.logicalHeight;
+        sdlcontext.framebufferWidth = dimensions.framebufferWidth;
+        sdlcontext.framebufferHeight = dimensions.framebufferHeight;
+        auto& sharedState = state::get_sdl_state();
+        if (sdlcontext.renderer
+            && SDL_GetRenderTarget(sdlcontext.renderer) == nullptr
+            && (sdlcontext.logicalPresentationWidth != sdlcontext.width
+                || sdlcontext.logicalPresentationHeight != sdlcontext.height))
+        {
+            if (!SDL_SetRenderLogicalPresentation(
+                    sdlcontext.renderer,
+                    sdlcontext.width,
+                    sdlcontext.height,
+                    SDL_LOGICAL_PRESENTATION_STRETCH))
+            {
+                logger::error(
+                    "SDL",
+                    std::string("SDL_SetRenderLogicalPresentation failed: ")
+                        + SDL_GetError());
+                sharedState.renderFaulted = true;
+            }
+            else
+            {
+                sdlcontext.logicalPresentationWidth = sdlcontext.width;
+                sdlcontext.logicalPresentationHeight = sdlcontext.height;
+            }
+        }
+
 
         if (ctx)
         {
@@ -215,7 +263,6 @@ export namespace epochengine::sdlcontext
             }
         }
 
-        auto& sharedState = state::get_sdl_state();
         sharedState.window.sdl_window = sdlcontext.window;
         sharedState.set_dimensions(sdlcontext.width, sdlcontext.height);
     }
@@ -463,8 +510,9 @@ export namespace epochengine::sdlcontext
                 camera.target,
                 camera.up);
             const auto mvp = epochengine::previewgrid::multiply(proj, view);
-            const auto vertices = epochengine::previewgrid::grid_vertices();
-            const auto indices = epochengine::previewgrid::grid_indices();
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+            const auto& vertices = gridGeometry->vertices;
+            const auto& indices = gridGeometry->indices;
 
             for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
             {
@@ -594,6 +642,9 @@ export namespace epochengine::sdlcontext
         std::function<void(int, int)> onResize = nullptr,
         std::string windowTitle = {})
     {
+        std::scoped_lock runtimeGuard{
+            state::runtime_api_mutex()};
+
         const int clampedWidth = (std::max)(1, w);
         const int clampedHeight = (std::max)(1, h);
 
@@ -635,7 +686,18 @@ export namespace epochengine::sdlcontext
             };
 
         if (ctx)
+        {
             ctx->onResize = sdlcontext.onResize;
+#if defined(_WIN32)
+            ctx->normalize_mouse_position = [](int& x, int& y)
+            {
+                x = state::normalize_presented_coordinate(
+                    x, sdlcontext.width, sdlcontext.framebufferWidth);
+                y = state::normalize_presented_coordinate(
+                    y, sdlcontext.height, sdlcontext.framebufferHeight);
+            };
+#endif
+        }
 
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
         {
@@ -843,6 +905,9 @@ export namespace epochengine::sdlcontext
 
     inline bool sdl_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {
+        std::scoped_lock runtimeGuard{
+            state::runtime_api_mutex()};
+
         const core::ContextType backendType = ctx ? ctx->type : core::ContextType::SDL;
 
         std::uintptr_t windowId = 0u;
@@ -927,9 +992,20 @@ export namespace epochengine::sdlcontext
             return false;
         }
 
+        atlasmanager::process_pending_uploads(core::ContextType::SDL);
+        const bool overlayPriority =
+            ctx && ctx->gui_overlay_priority();
+        queue.drain();
+        if (!overlayPriority)
+            (void)gui::render_deferred_batch(ctx.get());
+
+        // Match the protected OpenGL editor draw contract: base GUI, scene,
+        // refreshed GUI, and top-layer replay before presentation.
         detail::render_scene_preview(ctx);
 
         queue.drain();
+        (void)gui::render_deferred_batch(ctx.get());
+        (void)gui::render_top_layer_batch(ctx.get());
 
         if (sharedState.renderFaulted)
         {
@@ -969,15 +1045,24 @@ export namespace epochengine::sdlcontext
 
     inline void sdl_present()
     {
+        std::scoped_lock runtimeGuard{
+            state::runtime_api_mutex()};
         SDL_RenderPresent(sdl_renderer.renderer);
     }
 
     inline void sdl_cleanup(std::shared_ptr<epochengine::core::Context>& ctx)
     {
+        std::scoped_lock runtimeGuard{
+            state::runtime_api_mutex()};
+
         (void)ctx;
 
         detail::destroy_arcade_screen_preview_target();
 
+        // SDL textures belong to the live renderer and must be released before
+        // SDL_DestroyRenderer invalidates them.
+        sdltextures::clear_gpu_atlases();
+        sdltextures::sdl_renderer = nullptr;
         if (sdlcontext.renderer)
         {
             SDL_DestroyRenderer(sdlcontext.renderer);
@@ -994,8 +1079,9 @@ export namespace epochengine::sdlcontext
         sdlcontext.running = false;
         state::get_sdl_state().running = false;
         state::get_sdl_state().window.sdl_window = nullptr;
-        sdltextures::sdl_renderer = nullptr;
-        sdltextures::clear_gpu_atlases();
+        sdl_renderer.renderer = nullptr;
+        sdlcontext.logicalPresentationWidth = 0;
+        sdlcontext.logicalPresentationHeight = 0;
 
 #if defined(_WIN32)
         sdlcontext.hwnd = nullptr;

@@ -23,11 +23,12 @@ namespace epochengine::editor_update_modal
         bool installableUpdate = false;
         bool projectSourceDownload = false;
         bool sourceCancelAvailable = false;
+        bool sourceAuthorizationRunning = false;
     };
 
     struct ActionStrip
     {
-        std::array<float, 3> widths{};
+        std::array<float, 4> widths{};
         std::size_t count = 0u;
         float height = 0.0f;
         bool stacked = false;
@@ -166,7 +167,7 @@ namespace epochengine::editor_update_modal
             return "Project source code is downloading into Epoch's project source cache.";
 
         if (!flags.installableUpdate && !flags.updateRunning && !flags.restartReady && !flags.sourceWorkerRunning)
-            return "Epoch is already current for this packaged runtime. Project source code download remains available as a separate cached project snapshot.";
+            return "Epoch is already current for this packaged runtime. Authorized source build and project-source download remain separate options.";
 
         return flags.sourceOnlyUpdate
             ? "A newer main source build is available. Epoch will build it locally and keep progress, Cancel, and restart evidence visible."
@@ -205,24 +206,24 @@ namespace epochengine::editor_update_modal
             return "Use Update From Source to build the newer source locally, or Cancel to stay on this build.";
 
         if (!flags.installableUpdate)
-            return "Use Project Source Code Download only if you want a source snapshot in the project cache.";
+            return "Use Source Options only when you intentionally want a local source build or a source snapshot in the project cache.";
 
-        return "Install Release is recommended for runtime updates. Project Source Code Download only caches the source as project material.";
+        return "Install Release is the normal binary-first path. Authorized source is the fallback and remains available explicitly.";
     }
 
     [[nodiscard]] inline std::string_view source_line(std::size_t index) noexcept
     {
         constexpr std::array<std::string_view, 4> kLines{
-            "Project Source Code Download stores the latest source snapshot as cached project material.",
-            "It does not update, rebuild, restart, or replace the running Epoch runtime.",
-            "Epoch overwrites stale project-source downloads inside the project source cache before extracting the new snapshot.",
-            "Use the normal Update Epoch button when you want to update the packaged runtime."
+            "The first authorized source action pairs this device in the browser. Later actions use its protected OS signing key without reopening the browser.",
+            "Pair / Re-pair forgets only the nonsecret device registration ID; the next source action performs explicit enrollment.",
+            "Build / Update From Source decrypts into a restricted temporary cache, builds locally, then removes the temporary source payload.",
+            "Download Source Project extracts the same verified encrypted snapshot into the project source cache without changing the running runtime."
         };
         return index < kLines.size() ? kLines[index] : std::string_view{};
     }
 
     [[nodiscard]] inline float action_strip_height(
-        const std::array<float, 3>& widths,
+        const std::array<float, 4>& widths,
         const std::size_t count,
         const float availableWidth) noexcept
     {
@@ -251,7 +252,9 @@ namespace epochengine::editor_update_modal
         const float primaryButtonWidth = (std::min)(220.0f, (std::max)(160.0f, contentWidth * 0.34f));
         const float advancedButtonWidth = (std::min)(190.0f, (std::max)(156.0f, contentWidth * 0.28f));
         const bool showCancelButton =
-            flags.sourceWorkerRunning
+            flags.sourceAuthorizationRunning
+                ? true
+            : flags.sourceWorkerRunning
                 ? flags.sourceCancelAvailable
                 : (!flags.updateRunning && !flags.restartReady);
         const bool showPrimaryButton =
@@ -276,7 +279,7 @@ namespace epochengine::editor_update_modal
     [[nodiscard]] inline ActionStrip source_action_strip(const float contentWidth) noexcept
     {
         ActionStrip strip{};
-        strip.widths = { 120.0f, 120.0f, 220.0f };
+        strip.widths = { 104.0f, 168.0f, 208.0f, 220.0f };
         strip.count = strip.widths.size();
         strip.height = action_strip_height(strip.widths, strip.count, contentWidth);
         strip.stacked = strip.height > kButtonHeight + 0.5f;

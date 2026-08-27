@@ -36,6 +36,7 @@ namespace epochengine::ai {
 
 	void init_engine_ai();
 	void shutdown_engine_ai();
+	void cancel_engine_ai_request() noexcept;
 	std::string send_to_engine_ai(const std::string& user_text);
 
 }

@@ -355,8 +355,9 @@ namespace epochengine::directxcontext::detail
     void build_preview_geometry(
         const core::Context& ctx,
         const DirectXState& state,
+        std::vector<DirectXVertex>& gridLines,
         std::vector<DirectXVertex>& solid,
-        std::vector<DirectXVertex>& lines)
+        std::vector<DirectXVertex>& overlayLines)
     {
         auto viewport = ctx.scene_viewport();
         if (!viewport.valid())
@@ -380,8 +381,9 @@ namespace epochengine::directxcontext::detail
             camera.up);
         const auto mvp = previewgrid::multiply(proj, view);
 
-        const auto gridVertices = previewgrid::grid_vertices();
-        const auto gridIndices = previewgrid::grid_indices();
+        const auto gridGeometry = previewgrid::grid_geometry_for(&ctx);
+        const auto& gridVertices = gridGeometry->vertices;
+        const auto& gridIndices = gridGeometry->indices;
         for (std::size_t i = 0; i + 1 < gridIndices.size(); i += 2)
         {
             const auto first = static_cast<std::size_t>(gridIndices[i]);
@@ -389,7 +391,7 @@ namespace epochengine::directxcontext::detail
             if (first >= gridVertices.size() || second >= gridVertices.size())
                 continue;
 
-            (void)append_clip_line(lines, mvp, gridVertices[first], gridVertices[second]);
+            (void)append_clip_line(gridLines, mvp, gridVertices[first], gridVertices[second]);
         }
 
         const auto solidVertices = previewgrid::object_solid_vertices_for(&ctx);
@@ -414,11 +416,11 @@ namespace epochengine::directxcontext::detail
         const auto focusVertices = previewgrid::look_marker_vertices_for(&ctx);
         const std::size_t focusCount = previewgrid::look_marker_vertex_count_for(&ctx);
         for (std::size_t i = 0; i + 1 < focusCount && i + 1 < focusVertices.size(); i += 2)
-            (void)append_clip_line(lines, mvp, focusVertices[i], focusVertices[i + 1]);
+            (void)append_clip_line(overlayLines, mvp, focusVertices[i], focusVertices[i + 1]);
 
         const auto objectVertices = previewgrid::object_marker_vertices_for(&ctx);
         for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
-            (void)append_clip_line(lines, mvp, objectVertices[i], objectVertices[i + 1]);
+            (void)append_clip_line(overlayLines, mvp, objectVertices[i], objectVertices[i + 1]);
     }
 }
 #endif

@@ -35,6 +35,7 @@ export module engine.updater;
 export import updater.system; // Primary updater implementation module
 export import updater.config;
 export import updater.tools;
+export import updater.source_access;
 
 namespace epochengine::updater
 {

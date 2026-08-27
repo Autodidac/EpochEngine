@@ -1,9 +1,11 @@
 module;
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -16,8 +18,8 @@ export namespace epochengine::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 89;
-    inline constexpr int version_revision = 2;
-    inline constexpr std::string_view version_string = "0.89.02";
+    inline constexpr int version_revision = 27;
+    inline constexpr std::string_view version_string = "0.89.27";
 
     struct Vec2
     {
@@ -281,6 +283,124 @@ export namespace epochengine::gui_lib
         bool valid{};
     };
 
+    enum class ImageFitMode : std::uint8_t
+    {
+        stretch,
+        contain
+    };
+
+    struct ImageBoxLayoutOptions
+    {
+        Rect bounds{};
+        Vec2 source_extent{};
+        ImageFitMode fit{ImageFitMode::contain};
+        float padding{4.0f};
+        float caption_height{};
+    };
+
+    struct ImageBoxLayout
+    {
+        Rect frame{};
+        Rect viewport{};
+        Rect content{};
+        Rect caption{};
+        bool valid{};
+    };
+
+    struct TabButtonLayoutOptions
+    {
+        SegmentedControlLayoutOptions strip{};
+        float indicator_height{3.0f};
+        float close_extent{16.0f};
+        float label_padding{8.0f};
+    };
+
+    struct TabButtonLayout
+    {
+        Rect button{};
+        Rect label{};
+        Rect indicator{};
+        Rect close_button{};
+        bool active{};
+        bool closable{};
+        bool valid{};
+    };
+
+    struct ToolTabSizingPolicy
+    {
+        float minimum_width{ 96.0f };
+        float maximum_width{ 176.0f };
+        float horizontal_padding{ 10.0f };
+        float close_extent{ 18.0f };
+        float dirty_extent{ 8.0f };
+    };
+
+    [[nodiscard]] inline std::string scoped_control_key(
+        std::string_view host,
+        std::string_view window,
+        std::string_view control)
+    {
+        std::string key{};
+        key.reserve(
+            host.size() + window.size() + control.size() + 32u);
+        key.append(host);
+        key.push_back('|');
+        key.append(std::to_string(window.size()));
+        key.push_back(':');
+        key.append(window);
+        key.push_back('|');
+        key.append(control);
+        return key;
+    }
+
+    [[nodiscard]] inline float preferred_tool_tab_width(
+        float measured_label_width,
+        bool closable,
+        bool dirty,
+        const ToolTabSizingPolicy& policy = {}) noexcept
+    {
+        const float minimumWidth = (std::max)(1.0f, policy.minimum_width);
+        const float maximumWidth = (std::max)(minimumWidth, policy.maximum_width);
+        const float labelWidth = std::isfinite(measured_label_width)
+            ? (std::max)(0.0f, measured_label_width)
+            : 0.0f;
+        const float padding = (std::max)(0.0f, policy.horizontal_padding);
+        const float closeExtent = closable
+            ? (std::max)(0.0f, policy.close_extent)
+            : 0.0f;
+        const float dirtyExtent = dirty
+            ? (std::max)(0.0f, policy.dirty_extent)
+            : 0.0f;
+        return (std::clamp)(
+            labelWidth + padding * 2.0f + closeExtent + dirtyExtent,
+            minimumWidth,
+            maximumWidth);
+    }
+
+    struct SliderLayoutOptions
+    {
+        Rect bounds{};
+        float minimum{};
+        float maximum{1.0f};
+        float value{};
+        float step{0.01f};
+        float horizontal_padding{4.0f};
+        float track_height{3.0f};
+        float thumb_width{5.0f};
+        float thumb_height{11.0f};
+    };
+
+    struct SliderLayout
+    {
+        Rect bounds{};
+        Rect track{};
+        Rect fill{};
+        Rect thumb{};
+        float value{};
+        float fraction{};
+        bool valid{};
+    };
+
     struct ToggleSwitchLayoutOptions
     {
         Rect bounds{};
@@ -362,6 +482,192 @@ export namespace epochengine::gui_lib
             return invalid_selectable_row_index;
         }
 
+        [[nodiscard]] ImageBoxLayout make_image_box(
+            const ImageBoxLayoutOptions& options) const noexcept
+        {
+            const float width = options.bounds.size.x > 1.0f
+                ? options.bounds.size.x
+                : 1.0f;
+            const float height = options.bounds.size.y > 1.0f
+                ? options.bounds.size.y
+                : 1.0f;
+            const float maximumPadding = (std::min)(width, height) * 0.5f;
+            const float padding = options.padding > 0.0f
+                ? (std::min)(options.padding, maximumPadding)
+                : 0.0f;
+            const float innerWidth = (std::max)(1.0f, width - padding * 2.0f);
+            const float innerHeight = (std::max)(1.0f, height - padding * 2.0f);
+            const float captionHeight = options.caption_height > 0.0f
+                ? (std::min)(options.caption_height, innerHeight)
+                : 0.0f;
+            const float viewportHeight = (std::max)(1.0f, innerHeight - captionHeight);
+
+            ImageBoxLayout layout{};
+            layout.frame = Rect{options.bounds.position, {width, height}};
+            layout.viewport = Rect{
+                {options.bounds.position.x + padding, options.bounds.position.y + padding},
+                {innerWidth, viewportHeight}};
+            if (captionHeight > 0.0f)
+            {
+                layout.caption = Rect{
+                    {options.bounds.position.x + padding,
+                     options.bounds.position.y + height - padding - captionHeight},
+                    {innerWidth, captionHeight}};
+            }
+
+            const float sourceWidth = options.source_extent.x > 0.0f
+                ? options.source_extent.x
+                : 0.0f;
+            const float sourceHeight = options.source_extent.y > 0.0f
+                ? options.source_extent.y
+                : 0.0f;
+            if (sourceWidth == 0.0f || sourceHeight == 0.0f)
+                return layout;
+
+            if (options.fit == ImageFitMode::stretch)
+            {
+                layout.content = layout.viewport;
+            }
+            else
+            {
+                const float scale = (std::min)(
+                    layout.viewport.size.x / sourceWidth,
+                    layout.viewport.size.y / sourceHeight);
+                const Vec2 contentSize{sourceWidth * scale, sourceHeight * scale};
+                layout.content = Rect{
+                    {layout.viewport.position.x
+                        + (layout.viewport.size.x - contentSize.x) * 0.5f,
+                     layout.viewport.position.y
+                        + (layout.viewport.size.y - contentSize.y) * 0.5f},
+                    contentSize};
+            }
+            layout.valid = true;
+            return layout;
+        }
+
+        [[nodiscard]] TabButtonLayout make_tab_button(
+            const TabButtonLayoutOptions& options,
+            std::uint32_t index,
+            bool active,
+            bool closable) const noexcept
+        {
+            const Rect button = segmented_item(options.strip, index);
+            if (button.size.x <= 0.0f || button.size.y <= 0.0f)
+                return {};
+
+            const float indicatorHeight = (std::min)(
+                (std::max)(1.0f, options.indicator_height),
+                button.size.y);
+            const float padding = (std::max)(0.0f, options.label_padding);
+            const float closeExtent = closable
+                ? (std::min)((std::max)(8.0f, options.close_extent), button.size.y)
+                : 0.0f;
+            const float labelWidth = (std::max)(
+                1.0f,
+                button.size.x - padding * 2.0f - closeExtent);
+
+            TabButtonLayout layout{};
+            layout.button = button;
+            layout.label = Rect{
+                {button.position.x + padding, button.position.y},
+                {labelWidth, button.size.y - indicatorHeight}};
+            layout.indicator = Rect{
+                {button.position.x, button.position.y + button.size.y - indicatorHeight},
+                {button.size.x, indicatorHeight}};
+            if (closable)
+            {
+                layout.close_button = Rect{
+                    {button.position.x + button.size.x - closeExtent,
+                     button.position.y + (button.size.y - closeExtent) * 0.5f},
+                    {closeExtent, closeExtent}};
+            }
+            layout.active = active;
+            layout.closable = closable;
+            layout.valid = true;
+            return layout;
+        }
+
+        [[nodiscard]] SliderLayout make_slider(
+            const SliderLayoutOptions& options) const noexcept
+        {
+            SliderLayout layout{};
+            layout.bounds = options.bounds;
+            if (!std::isfinite(options.bounds.position.x)
+                || !std::isfinite(options.bounds.position.y)
+                || !std::isfinite(options.bounds.size.x)
+                || !std::isfinite(options.bounds.size.y)
+                || !std::isfinite(options.minimum)
+                || !std::isfinite(options.maximum)
+                || !std::isfinite(options.value)
+                || !std::isfinite(options.step)
+                || options.bounds.size.x < 1.0f
+                || options.bounds.size.y < 1.0f
+                || options.maximum <= options.minimum
+                || options.step <= 0.0f)
+            {
+                return layout;
+            }
+
+            const float padding = (std::clamp)(
+                options.horizontal_padding,
+                0.0f,
+                options.bounds.size.x * 0.5f);
+            const float trackWidth = (std::max)(
+                0.0f, options.bounds.size.x - padding * 2.0f);
+            const float trackHeight = (std::clamp)(
+                options.track_height, 1.0f, options.bounds.size.y);
+            const float thumbWidth = (std::clamp)(
+                options.thumb_width, 1.0f, options.bounds.size.x);
+            const float thumbHeight = (std::clamp)(
+                options.thumb_height, 1.0f, options.bounds.size.y);
+            layout.value = (std::clamp)(
+                options.value, options.minimum, options.maximum);
+            layout.fraction = (layout.value - options.minimum)
+                / (options.maximum - options.minimum);
+            layout.track = {
+                {options.bounds.position.x + padding,
+                 options.bounds.position.y + options.bounds.size.y
+                    - trackHeight},
+                {trackWidth, trackHeight}};
+            layout.fill = layout.track;
+            layout.fill.size.x = trackWidth * layout.fraction;
+            const float thumbTravel = (std::max)(
+                0.0f, trackWidth - thumbWidth);
+            layout.thumb = {
+                {layout.track.position.x + thumbTravel * layout.fraction,
+                 options.bounds.position.y + options.bounds.size.y
+                    - thumbHeight},
+                {thumbWidth, thumbHeight}};
+            layout.valid = true;
+            return layout;
+        }
+
+        [[nodiscard]] float slider_value_at(
+            const SliderLayoutOptions& options,
+            float horizontal_position) const noexcept
+        {
+            const SliderLayout layout = make_slider(options);
+            if (!layout.valid || layout.track.size.x <= 0.0f
+                || !std::isfinite(horizontal_position))
+            {
+                return options.value;
+            }
+
+            const float fraction = (std::clamp)(
+                (horizontal_position - layout.track.position.x)
+                    / layout.track.size.x,
+                0.0f,
+                1.0f);
+            const float raw = options.minimum
+                + (options.maximum - options.minimum) * fraction;
+            const float steps = std::round(
+                (raw - options.minimum) / options.step);
+            return (std::clamp)(
+                options.minimum + steps * options.step,
+                options.minimum,
+                options.maximum);
+        }
+
         [[nodiscard]] ToggleSwitchLayout make_toggle_switch(
             const ToggleSwitchLayoutOptions& options) const noexcept
         {
@@ -417,12 +723,671 @@ export namespace epochengine::gui_lib
         return selection_control_controller().segmented_item_at(options, point);
     }
 
+    [[nodiscard]] inline ImageBoxLayout make_image_box_layout(
+        const ImageBoxLayoutOptions& options) noexcept
+    {
+        return selection_control_controller().make_image_box(options);
+    }
+
+    [[nodiscard]] inline TabButtonLayout make_tab_button_layout(
+        const TabButtonLayoutOptions& options,
+        std::uint32_t index,
+        bool active = false,
+        bool closable = false) noexcept
+    {
+        return selection_control_controller().make_tab_button(
+            options, index, active, closable);
+    }
+
+    [[nodiscard]] inline SliderLayout make_slider_layout(
+        const SliderLayoutOptions& options) noexcept
+    {
+        return selection_control_controller().make_slider(options);
+    }
+
+    [[nodiscard]] inline float slider_value_from_position(
+        const SliderLayoutOptions& options,
+        float horizontal_position) noexcept
+    {
+        return selection_control_controller().slider_value_at(
+            options, horizontal_position);
+    }
+
     [[nodiscard]] inline ToggleSwitchLayout make_toggle_switch_layout(
         const ToggleSwitchLayoutOptions& options) noexcept
     {
         return selection_control_controller().make_toggle_switch(options);
     }
 
+    inline constexpr std::size_t asset_grid_maximum_items = 4096;
+    inline constexpr std::size_t asset_grid_maximum_visible_tiles = 512;
+    inline constexpr std::size_t asset_grid_maximum_filter_bytes = 96;
+    inline constexpr std::size_t asset_grid_maximum_searchable_field_bytes = 512;
+    inline constexpr float asset_grid_maximum_tile_extent = 16384.0f;
+    inline constexpr std::uint32_t invalid_asset_grid_source_index = 0xffffffffU;
+
+    struct AssetGridItemId
+    {
+        std::uint64_t value{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return value != 0;
+        }
+
+        friend bool operator==(AssetGridItemId, AssetGridItemId) noexcept = default;
+    };
+
+    enum class AssetGridItemKind : std::uint8_t
+    {
+        generic,
+        folder,
+        image,
+        texture,
+        material,
+        model,
+        audio,
+        scene,
+        document
+    };
+
+    enum class AssetGridActivationRole : std::uint8_t
+    {
+        none,
+        invoke,
+        open_in_tab
+    };
+
+    struct AssetGridImageMetadata
+    {
+        std::uint64_t content_key{};
+        std::uint32_t pixel_width{};
+        std::uint32_t pixel_height{};
+        ImageFitMode fit{ImageFitMode::contain};
+        bool has_alpha{};
+    };
+
+    struct AssetGridItem
+    {
+        AssetGridItemId id{};
+        std::string_view label{};
+        std::string_view detail{};
+        std::string_view search_terms{};
+        AssetGridItemKind kind{AssetGridItemKind::generic};
+        AssetGridActivationRole activation{AssetGridActivationRole::open_in_tab};
+        std::optional<AssetGridImageMetadata> image{};
+        bool enabled{true};
+    };
+
+    struct AssetGridFilterOptions
+    {
+        std::string_view query{};
+        std::size_t maximum_results{asset_grid_maximum_items};
+        bool include_disabled{true};
+    };
+
+    struct AssetGridFilterResult
+    {
+        std::vector<std::uint32_t> source_indices{};
+        std::size_t inspected_count{};
+        std::size_t matched_count{};
+        std::size_t invalid_id_count{};
+        std::size_t duplicate_id_count{};
+        bool source_truncated{};
+        bool results_truncated{};
+        bool query_truncated{};
+    };
+
+    struct AssetGridLayoutOptions
+    {
+        Rect viewport{};
+        Vec2 tile_extent{144.0f, 164.0f};
+        Vec2 gap{8.0f, 8.0f};
+        Vec2 padding{8.0f, 8.0f};
+        float image_height{108.0f};
+        float label_height{24.0f};
+        float detail_height{18.0f};
+        float scroll_offset{};
+        std::size_t maximum_visible_tiles{asset_grid_maximum_visible_tiles};
+        bool clear_selection_on_empty_press{true};
+    };
+
+    struct AssetGridState
+    {
+        std::optional<AssetGridItemId> selected_id{};
+    };
+
+    struct AssetGridInput
+    {
+        Vec2 pointer_position{};
+        bool pointer_pressed{};
+        bool pointer_activated{};
+        bool context_requested{};
+        bool activate_selected{};
+        bool clear_selection{};
+        bool pointer_present{};
+        std::optional<AssetGridItemId> requested_selection{};
+    };
+
+    struct AssetGridTileLayout
+    {
+        AssetGridItemId id{};
+        std::uint32_t source_index{invalid_asset_grid_source_index};
+        std::uint32_t filtered_index{invalid_asset_grid_source_index};
+        std::uint32_t row{};
+        std::uint32_t column{};
+        Rect tile{};
+        ImageBoxLayout image{};
+        Rect label{};
+        Rect detail{};
+        Rect selection_indicator{};
+        AssetGridItemKind kind{AssetGridItemKind::generic};
+        AssetGridActivationRole activation{AssetGridActivationRole::none};
+        bool has_image{};
+        bool image_metadata_valid{};
+        bool enabled{};
+        bool hovered{};
+        bool selected{};
+    };
+
+    struct AssetGridLayout
+    {
+        Rect viewport{};
+        Vec2 content_extent{};
+        std::vector<AssetGridTileLayout> visible_tiles{};
+        std::uint32_t column_count{};
+        std::uint32_t row_count{};
+        std::uint32_t item_count{};
+        std::uint32_t first_visible_row{};
+        std::uint32_t past_last_visible_row{};
+        float scroll_offset{};
+        float maximum_scroll_offset{};
+        bool valid{};
+        bool items_truncated{};
+        bool visible_tiles_truncated{};
+    };
+
+    struct AssetGridView
+    {
+        AssetGridFilterResult filter{};
+        AssetGridLayout layout{};
+    };
+
+    struct AssetGridUpdateResult
+    {
+        AssetGridView view{};
+        std::optional<AssetGridItemId> selected_id{};
+        std::optional<AssetGridItemId> activated_id{};
+        std::optional<AssetGridItemId> context_requested_id{};
+        AssetGridActivationRole activation{AssetGridActivationRole::none};
+        std::uint32_t selected_source_index{invalid_asset_grid_source_index};
+        std::uint32_t activated_source_index{invalid_asset_grid_source_index};
+        std::uint32_t context_requested_source_index{
+            invalid_asset_grid_source_index};
+        bool selection_changed{};
+        bool activation_requested{};
+        bool context_request_valid{};
+    };
+
+    [[nodiscard]] inline char asset_grid_fold_ascii(char value) noexcept
+    {
+        return value >= 'A' && value <= 'Z'
+            ? static_cast<char>(value + ('a' - 'A'))
+            : value;
+    }
+
+    [[nodiscard]] inline bool asset_grid_text_matches_filter(
+        std::string_view text,
+        std::string_view query) noexcept
+    {
+        const std::size_t querySize = (std::min)(
+            query.size(), asset_grid_maximum_filter_bytes);
+        if (querySize == 0)
+            return true;
+
+        const std::size_t textSize = (std::min)(
+            text.size(), asset_grid_maximum_searchable_field_bytes);
+        if (querySize > textSize)
+            return false;
+
+        for (std::size_t start = 0; start + querySize <= textSize; ++start)
+        {
+            bool matches = true;
+            for (std::size_t offset = 0; offset < querySize; ++offset)
+            {
+                if (asset_grid_fold_ascii(text[start + offset])
+                    != asset_grid_fold_ascii(query[offset]))
+                {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches)
+                return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] inline bool asset_grid_item_matches_filter(
+        const AssetGridItem& item,
+        std::string_view query) noexcept
+    {
+        return asset_grid_text_matches_filter(item.label, query)
+            || asset_grid_text_matches_filter(item.detail, query)
+            || asset_grid_text_matches_filter(item.search_terms, query);
+    }
+
+    class AssetGridController final : public LayoutController
+    {
+    public:
+        [[nodiscard]] std::string_view name() const noexcept override
+        {
+            return "Asset grid";
+        }
+
+        [[nodiscard]] AssetGridFilterResult filter(
+            std::span<const AssetGridItem> items,
+            const AssetGridFilterOptions& options) const
+        {
+            AssetGridFilterResult result{};
+            const std::size_t inspectCount = (std::min)(
+                items.size(), asset_grid_maximum_items);
+            const std::size_t resultLimit = (std::min)(
+                options.maximum_results, asset_grid_maximum_items);
+            const std::string_view query = options.query.substr(
+                0, (std::min)(options.query.size(), asset_grid_maximum_filter_bytes));
+
+            result.source_indices.reserve((std::min)(inspectCount, resultLimit));
+            result.inspected_count = inspectCount;
+            result.source_truncated = items.size() > inspectCount;
+            result.query_truncated = options.query.size() > query.size();
+
+            std::vector<AssetGridItemId> acceptedIds{};
+            acceptedIds.reserve(inspectCount);
+            for (std::size_t index = 0; index < inspectCount; ++index)
+            {
+                const AssetGridItem& item = items[index];
+                if (!item.id)
+                {
+                    ++result.invalid_id_count;
+                    continue;
+                }
+
+                if (std::find(acceptedIds.begin(), acceptedIds.end(), item.id)
+                    != acceptedIds.end())
+                {
+                    ++result.duplicate_id_count;
+                    continue;
+                }
+                acceptedIds.push_back(item.id);
+
+                if ((!options.include_disabled && !item.enabled)
+                    || !asset_grid_item_matches_filter(item, query))
+                {
+                    continue;
+                }
+
+                ++result.matched_count;
+                if (result.source_indices.size() < resultLimit)
+                    result.source_indices.push_back(static_cast<std::uint32_t>(index));
+                else
+                    result.results_truncated = true;
+            }
+            return result;
+        }
+
+        [[nodiscard]] AssetGridLayout layout(
+            std::span<const AssetGridItem> items,
+            const AssetGridFilterResult& filtered,
+            const AssetGridLayoutOptions& options,
+            const AssetGridState& state,
+            Vec2 pointerPosition,
+            bool pointerPresent) const
+        {
+            AssetGridLayout result{};
+            result.viewport = options.viewport;
+            if (!std::isfinite(options.viewport.position.x)
+                || !std::isfinite(options.viewport.position.y)
+                || !std::isfinite(options.viewport.size.x)
+                || !std::isfinite(options.viewport.size.y)
+                || !std::isfinite(options.tile_extent.x)
+                || !std::isfinite(options.tile_extent.y)
+                || !std::isfinite(options.gap.x)
+                || !std::isfinite(options.gap.y)
+                || !std::isfinite(options.padding.x)
+                || !std::isfinite(options.padding.y)
+                || options.viewport.size.x <= 0.0f
+                || options.viewport.size.y <= 0.0f
+                || options.tile_extent.x <= 0.0f
+                || options.tile_extent.y <= 0.0f
+                || options.tile_extent.x > asset_grid_maximum_tile_extent
+                || options.tile_extent.y > asset_grid_maximum_tile_extent)
+            {
+                return result;
+            }
+
+            const float gapX = (std::clamp)(
+                options.gap.x, 0.0f, asset_grid_maximum_tile_extent);
+            const float gapY = (std::clamp)(
+                options.gap.y, 0.0f, asset_grid_maximum_tile_extent);
+            const float paddingX = (std::clamp)(
+                options.padding.x, 0.0f, options.viewport.size.x * 0.5f);
+            const float paddingY = (std::clamp)(
+                options.padding.y, 0.0f, options.viewport.size.y * 0.5f);
+            const float availableWidth = (std::max)(
+                0.0f, options.viewport.size.x - paddingX * 2.0f);
+            const float columnStride = options.tile_extent.x + gapX;
+            const float rowStride = options.tile_extent.y + gapY;
+            const float requestedColumns = (availableWidth + gapX) / columnStride;
+            const std::uint32_t columns = static_cast<std::uint32_t>(
+                (std::clamp)(requestedColumns, 1.0f, 512.0f));
+            const std::size_t itemCount = (std::min)(
+                filtered.source_indices.size(), asset_grid_maximum_items);
+            const std::uint32_t rows = itemCount == 0
+                ? 0U
+                : static_cast<std::uint32_t>((itemCount + columns - 1U) / columns);
+            const float contentHeight = paddingY * 2.0f
+                + (rows == 0 ? 0.0f
+                    : static_cast<float>(rows) * options.tile_extent.y
+                        + static_cast<float>(rows - 1U) * gapY);
+            const float contentWidth = paddingX * 2.0f
+                + static_cast<float>(columns) * options.tile_extent.x
+                + static_cast<float>(columns - 1U) * gapX;
+            const float maximumScroll = (std::max)(
+                0.0f, contentHeight - options.viewport.size.y);
+            const float scroll = std::isfinite(options.scroll_offset)
+                ? (std::clamp)(options.scroll_offset, 0.0f, maximumScroll)
+                : 0.0f;
+            const std::uint32_t firstRow = rows == 0
+                ? 0U
+                : (std::min)(
+                    rows,
+                    static_cast<std::uint32_t>(
+                        (std::max)(0.0f, scroll - paddingY) / rowStride));
+            const float visibleBottom = scroll + options.viewport.size.y;
+            const std::uint32_t pastLastRow = rows == 0
+                ? 0U
+                : (std::min)(
+                    rows,
+                    static_cast<std::uint32_t>(
+                        ((std::max)(0.0f, visibleBottom - paddingY) / rowStride) + 1.0f));
+            const std::size_t visibleLimit = (std::min)(
+                options.maximum_visible_tiles, asset_grid_maximum_visible_tiles);
+
+            result.content_extent = {contentWidth, contentHeight};
+            result.column_count = columns;
+            result.row_count = rows;
+            result.item_count = static_cast<std::uint32_t>(itemCount);
+            result.first_visible_row = firstRow;
+            result.past_last_visible_row = pastLastRow;
+            result.scroll_offset = scroll;
+            result.maximum_scroll_offset = maximumScroll;
+            result.valid = true;
+            result.items_truncated =
+                filtered.source_indices.size() > itemCount;
+            result.visible_tiles.reserve((std::min)(itemCount, visibleLimit));
+
+            for (std::uint32_t row = firstRow; row < pastLastRow; ++row)
+            {
+                for (std::uint32_t column = 0; column < columns; ++column)
+                {
+                    const std::size_t filteredIndex =
+                        static_cast<std::size_t>(row) * columns + column;
+                    if (filteredIndex >= itemCount)
+                        break;
+                    if (result.visible_tiles.size() >= visibleLimit)
+                    {
+                        result.visible_tiles_truncated = true;
+                        return result;
+                    }
+
+                    const std::uint32_t sourceIndex = filtered.source_indices[filteredIndex];
+                    if (sourceIndex >= items.size())
+                        continue;
+                    const AssetGridItem& item = items[sourceIndex];
+                    const Rect tile{
+                        {options.viewport.position.x + paddingX
+                            + static_cast<float>(column) * columnStride,
+                         options.viewport.position.y + paddingY
+                            + static_cast<float>(row) * rowStride - scroll},
+                        options.tile_extent};
+                    const float imageHeight = (std::clamp)(
+                        options.image_height, 0.0f, options.tile_extent.y);
+                    const float remainingHeight = (std::max)(
+                        0.0f, options.tile_extent.y - imageHeight);
+                    const float labelHeight = (std::clamp)(
+                        options.label_height, 0.0f, remainingHeight);
+                    const float detailHeight = (std::clamp)(
+                        options.detail_height, 0.0f, remainingHeight - labelHeight);
+
+                    AssetGridTileLayout tileLayout{};
+                    tileLayout.id = item.id;
+                    tileLayout.source_index = sourceIndex;
+                    tileLayout.filtered_index = static_cast<std::uint32_t>(filteredIndex);
+                    tileLayout.row = row;
+                    tileLayout.column = column;
+                    tileLayout.tile = tile;
+                    tileLayout.label = {
+                        {tile.position.x, tile.position.y + imageHeight},
+                        {tile.size.x, labelHeight}};
+                    tileLayout.detail = {
+                        {tile.position.x, tile.position.y + imageHeight + labelHeight},
+                        {tile.size.x, detailHeight}};
+                    tileLayout.selection_indicator = {
+                        {tile.position.x, tile.position.y + tile.size.y - 3.0f},
+                        {tile.size.x, 3.0f}};
+                    tileLayout.kind = item.kind;
+                    tileLayout.activation = item.activation;
+                    tileLayout.has_image = item.image.has_value();
+                    tileLayout.enabled = item.enabled;
+                    tileLayout.hovered = pointerPresent
+                        && item.enabled
+                        && contains(tile, pointerPosition);
+                    tileLayout.selected = state.selected_id.has_value()
+                        && state.selected_id.value() == item.id;
+                    Vec2 sourceExtent{};
+                    ImageFitMode imageFit = ImageFitMode::contain;
+                    if (item.image.has_value())
+                    {
+                        const AssetGridImageMetadata& metadata = item.image.value();
+                        tileLayout.image_metadata_valid = metadata.pixel_width > 0
+                            && metadata.pixel_height > 0;
+                        sourceExtent = {
+                            static_cast<float>(metadata.pixel_width),
+                            static_cast<float>(metadata.pixel_height)};
+                        imageFit = metadata.fit;
+                    }
+                    if (imageHeight > 0.0f)
+                    {
+                        tileLayout.image = make_image_box_layout({
+                            .bounds = {tile.position, {tile.size.x, imageHeight}},
+                            .source_extent = sourceExtent,
+                            .fit = imageFit,
+                            .padding = 4.0f});
+                    }
+                    result.visible_tiles.push_back(tileLayout);
+                }
+            }
+            return result;
+        }
+
+        [[nodiscard]] AssetGridUpdateResult update(
+            AssetGridState& state,
+            std::span<const AssetGridItem> items,
+            const AssetGridFilterOptions& filterOptions,
+            const AssetGridLayoutOptions& layoutOptions,
+            const AssetGridInput& input) const
+        {
+            AssetGridUpdateResult result{};
+            result.view.filter = filter(items, filterOptions);
+
+            const std::size_t inspectCount = (std::min)(
+                items.size(), asset_grid_maximum_items);
+            auto sourceIndexFor = [&](AssetGridItemId id) noexcept
+                -> std::uint32_t
+            {
+                if (!id)
+                    return invalid_asset_grid_source_index;
+                for (std::size_t index = 0; index < inspectCount; ++index)
+                {
+                    if (items[index].id == id)
+                        return static_cast<std::uint32_t>(index);
+                }
+                return invalid_asset_grid_source_index;
+            };
+
+            if (state.selected_id.has_value()
+                && sourceIndexFor(state.selected_id.value()) == invalid_asset_grid_source_index)
+            {
+                state.selected_id.reset();
+                result.selection_changed = true;
+            }
+            if (input.clear_selection && state.selected_id.has_value())
+            {
+                state.selected_id.reset();
+                result.selection_changed = true;
+            }
+            if (input.requested_selection.has_value())
+            {
+                const std::uint32_t requestedIndex = sourceIndexFor(
+                    input.requested_selection.value());
+                if (requestedIndex != invalid_asset_grid_source_index
+                    && items[requestedIndex].enabled
+                    && state.selected_id != input.requested_selection)
+                {
+                    state.selected_id = input.requested_selection;
+                    result.selection_changed = true;
+                }
+            }
+
+            result.view.layout = layout(
+                items,
+                result.view.filter,
+                layoutOptions,
+                state,
+                input.pointer_position,
+                input.pointer_present
+                    || input.pointer_pressed
+                    || input.pointer_activated
+                    || input.context_requested);
+            const AssetGridTileLayout* hitTile = nullptr;
+            for (const AssetGridTileLayout& tile : result.view.layout.visible_tiles)
+            {
+                if (tile.enabled && contains(tile.tile, input.pointer_position))
+                {
+                    hitTile = &tile;
+                    break;
+                }
+            }
+
+            if (input.pointer_pressed)
+            {
+                if (hitTile != nullptr)
+                {
+                    if (!state.selected_id.has_value()
+                        || state.selected_id.value() != hitTile->id)
+                    {
+                        state.selected_id = hitTile->id;
+                        result.selection_changed = true;
+                    }
+                }
+                else if (layoutOptions.clear_selection_on_empty_press
+                    && contains(layoutOptions.viewport, input.pointer_position)
+                    && state.selected_id.has_value())
+                {
+                    state.selected_id.reset();
+                    result.selection_changed = true;
+                }
+            }
+
+            if (input.context_requested && hitTile != nullptr)
+            {
+                if (!state.selected_id.has_value()
+                    || state.selected_id.value() != hitTile->id)
+                {
+                    state.selected_id = hitTile->id;
+                    result.selection_changed = true;
+                }
+                result.context_requested_id = hitTile->id;
+                result.context_requested_source_index = hitTile->source_index;
+                result.context_request_valid = true;
+            }
+
+            if (input.pointer_activated && hitTile != nullptr
+                && hitTile->activation != AssetGridActivationRole::none)
+            {
+                if (!state.selected_id.has_value()
+                    || state.selected_id.value() != hitTile->id)
+                {
+                    result.selection_changed = true;
+                }
+                state.selected_id = hitTile->id;
+                result.activated_id = hitTile->id;
+                result.activated_source_index = hitTile->source_index;
+                result.activation = hitTile->activation;
+                result.activation_requested = true;
+            }
+            else if (input.activate_selected && state.selected_id.has_value())
+            {
+                const std::uint32_t selectedIndex = sourceIndexFor(
+                    state.selected_id.value());
+                if (selectedIndex != invalid_asset_grid_source_index
+                    && items[selectedIndex].enabled
+                    && items[selectedIndex].activation != AssetGridActivationRole::none)
+                {
+                    result.activated_id = state.selected_id;
+                    result.activated_source_index = selectedIndex;
+                    result.activation = items[selectedIndex].activation;
+                    result.activation_requested = true;
+                }
+            }
+
+            result.selected_id = state.selected_id;
+            if (state.selected_id.has_value())
+            {
+                result.selected_source_index = sourceIndexFor(state.selected_id.value());
+                for (AssetGridTileLayout& tile : result.view.layout.visible_tiles)
+                    tile.selected = tile.id == state.selected_id.value();
+            }
+            return result;
+        }
+    };
+
+    [[nodiscard]] inline const AssetGridController& asset_grid_controller() noexcept
+    {
+        static const AssetGridController controller{};
+        return controller;
+    }
+
+    [[nodiscard]] inline AssetGridFilterResult filter_asset_grid_items(
+        std::span<const AssetGridItem> items,
+        const AssetGridFilterOptions& options = {})
+    {
+        return asset_grid_controller().filter(items, options);
+    }
+
+    [[nodiscard]] inline AssetGridLayout make_asset_grid_layout(
+        std::span<const AssetGridItem> items,
+        const AssetGridFilterResult& filtered,
+        const AssetGridLayoutOptions& options,
+        const AssetGridState& state = {},
+        Vec2 pointerPosition = {},
+        bool pointerPresent = false)
+    {
+        return asset_grid_controller().layout(
+            items, filtered, options, state, pointerPosition, pointerPresent);
+    }
+
+    [[nodiscard]] inline AssetGridUpdateResult update_asset_grid(
+        AssetGridState& state,
+        std::span<const AssetGridItem> items,
+        const AssetGridFilterOptions& filterOptions,
+        const AssetGridLayoutOptions& layoutOptions,
+        const AssetGridInput& input = {})
+    {
+        return asset_grid_controller().update(
+            state, items, filterOptions, layoutOptions, input);
+    }
     enum class PopupPlacement : std::uint8_t
     {
         below,
@@ -516,6 +1481,54 @@ export namespace epochengine::gui_lib
         top,
         bottom,
         center
+    };
+
+    enum class DockGuideTarget : std::uint8_t
+    {
+        none,
+        left_tabs,
+        right_tabs,
+        bottom_left_tabs,
+        bottom_right_tabs,
+        left_context,
+        right_context,
+        float_window
+    };
+
+    struct DockGuideOptions
+    {
+        Rect guide_bounds{};
+        Rect left_tabs_preview{};
+        Rect right_tabs_preview{};
+        Rect bottom_left_tabs_preview{};
+        Rect bottom_right_tabs_preview{};
+        Rect left_context_preview{};
+        Rect right_context_preview{};
+        Rect floating_preview{};
+        Vec2 pointer{};
+        float guide_extent{ 94.0f };
+        float guide_gap{ 8.0f };
+        bool allow_side_tabs{ true };
+        bool allow_bottom_tabs{ true };
+        bool allow_contexts{};
+        bool allow_float{ true };
+        bool center_context_guides_in_previews{};
+    };
+
+    struct DockGuide
+    {
+        DockGuideTarget target{ DockGuideTarget::none };
+        Rect target_bounds{};
+        Rect preview_bounds{};
+        bool hovered{};
+    };
+
+    struct DockGuideLayout
+    {
+        DockGuide guides[7]{};
+        std::uint32_t count{};
+        DockGuideTarget hovered_target{ DockGuideTarget::none };
+        Rect hovered_preview{};
     };
 
     struct DockPaneState
@@ -619,6 +1632,8 @@ export namespace epochengine::gui_lib
 
     [[nodiscard]] const DockLayoutController& dock_layout_controller() noexcept;
     [[nodiscard]] bool is_valid_dock_slot(DockSlot slot) noexcept;
+    [[nodiscard]] DockGuideLayout make_dock_guide_layout(
+        const DockGuideOptions& options) noexcept;
     [[nodiscard]] bool dock_pane_requests_context_window(const DockPaneState& pane) noexcept;
     [[nodiscard]] DockPaneLayout make_dock_pane_layout(
         const DockPaneState& pane,

@@ -102,7 +102,30 @@ namespace epochengine::core
         int width{ 720 };
         int height{ 440 };
         bool start_docked{ false };
-        bool pinned_to_parent{ false };
+    };
+
+    export enum class RoutedPanelDockTarget : std::uint8_t
+    {
+        none = 0,
+        left_tabs,
+        right_tabs,
+        bottom_left_tabs,
+        bottom_right_tabs,
+        left_context,
+        right_context
+    };
+
+    export struct RoutedPanelDockDragProjection final
+    {
+        bool active{};
+        bool routed_panel{};
+        bool host_overlay{};
+        std::string route{};
+        float cursor_x{};
+        float cursor_y{};
+        float host_width{};
+        float host_height{};
+        RoutedPanelDockTarget target{ RoutedPanelDockTarget::none };
     };
 
 #if defined(_WIN32)
@@ -121,6 +144,8 @@ namespace epochengine::core
 
     export std::unordered_map<HWND, std::thread>& Threads() noexcept;
     export DragState& Drag() noexcept;
+    export [[nodiscard]] RoutedPanelDockDragProjection
+        routed_panel_dock_drag_projection() noexcept;
 
     export void MakeDockable(HWND hwnd, HWND parent);
     export class MultiContextManager;
@@ -166,6 +191,8 @@ namespace epochengine::core
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
         bool OpenReplacementContextWindow(const DetachedContextWindowRequest& request, std::shared_ptr<Context>* createdContext = nullptr);
         bool PromotePrimaryWindow(const std::shared_ptr<Context>& context);
+        void ConstrainPrimaryWindowToWorkArea(
+            const std::shared_ptr<Context>& context = {});
         void BeginContextReplacement() noexcept;
         void EndContextReplacement() noexcept;
         [[nodiscard]] bool ContextReplacementInProgress() const noexcept;
@@ -261,6 +288,7 @@ namespace epochengine::core
             return false;
         }
         bool PromotePrimaryWindow(const std::shared_ptr<Context>&) { return false; }
+        void ConstrainPrimaryWindowToWorkArea(const std::shared_ptr<Context>& = {}) {}
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
@@ -300,7 +328,11 @@ namespace epochengine::core
     };
 
     export MultiContextManager* GetActiveMultiContextManager() noexcept;
-    export void HandleX11Configure(::Window window, int width, int height);
+    export [[nodiscard]] inline RoutedPanelDockDragProjection
+        routed_panel_dock_drag_projection() noexcept
+    {
+        return {};
+    }    export void HandleX11Configure(::Window window, int width, int height);
     export void RequestActiveParentLayout() noexcept;
 
 #else
@@ -333,6 +365,7 @@ namespace epochengine::core
             return false;
         }
         bool PromotePrimaryWindow(const std::shared_ptr<Context>&) { return false; }
+        void ConstrainPrimaryWindowToWorkArea(const std::shared_ptr<Context>& = {}) {}
 
         HWND GetParentWindow() const { return nullptr; }
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return s_emptyWindows; }
@@ -356,7 +389,11 @@ namespace epochengine::core
     };
 
     export inline MultiContextManager* GetActiveMultiContextManager() noexcept { return nullptr; }
-    export inline void RequestActiveParentLayout() noexcept {}
+    export [[nodiscard]] inline RoutedPanelDockDragProjection
+        routed_panel_dock_drag_projection() noexcept
+    {
+        return {};
+    }    export inline void RequestActiveParentLayout() noexcept {}
 
 #endif
 } // namespace epochengine::core

@@ -158,6 +158,8 @@ export namespace epochengine::canvas2d::presentation
         std::uint64_t native_present_failures{};
         std::uint64_t uploaded_frames{};
         std::uint64_t reused_frames{};
+        std::uint64_t superseded_releases{};
+        std::uint64_t failed_present_releases{};
         std::uint64_t presented_frames{};
         std::uint64_t presented_pixels{};
         std::uint64_t presented_bytes{};
@@ -388,6 +390,17 @@ export namespace epochengine::canvas2d::presentation
                 return record.active ? &record : nullptr;
             }
 
+            [[nodiscard]] std::uint32_t active_count() const noexcept
+            {
+                std::uint32_t count{};
+                for (const Record& record : records)
+                {
+                    if (record.active)
+                        ++count;
+                }
+                return count;
+            }
+
             ContractCommandContext command_context{};
             std::vector<Record> records{};
             std::uint32_t create_count{};
@@ -399,6 +412,13 @@ export namespace epochengine::canvas2d::presentation
         {
             std::uint32_t calls{};
             TextureHandle last_texture{};
+            PresentationSurface last_surface{};
+            ImageContract last_image{};
+            CanvasExtent last_output_surface{};
+            CanvasExtent last_render_extent{};
+            FilterMode last_filter{FilterMode::nearest};
+            std::uint64_t last_frame_sequence{};
+            std::uint64_t last_content_hash{};
             bool fail_next{};
         };
 
@@ -411,6 +431,13 @@ export namespace epochengine::canvas2d::presentation
                 return false;
             ++state->calls;
             state->last_texture = packet.texture;
+            state->last_surface = packet.surface;
+            state->last_image = packet.image;
+            state->last_output_surface = packet.compose->viewport.output_surface;
+            state->last_render_extent = packet.compose->viewport.render_extent;
+            state->last_filter = packet.compose->presentation_filter;
+            state->last_frame_sequence = packet.frame_sequence;
+            state->last_content_hash = packet.content_hash;
             if (state->fail_next)
             {
                 state->fail_next = false;
@@ -542,9 +569,23 @@ export namespace epochengine::canvas2d::presentation
                 raster.canvas_hash};
             if (!packet || !hooks_.present(hooks_.user, packet))
             {
+                if (acquired.handle != active_residency_
+                    && residency_.release(acquired.handle)
+                        == texture_residency::ResidencyCode::resident)
+                {
+                    ++metrics_.failed_present_releases;
+                }
                 ++metrics_.native_present_failures;
                 return reject(output, PresentationCode::native_present_failed, false);
             }
+
+            if (active_residency_ && active_residency_ != acquired.handle
+                && residency_.release(active_residency_)
+                    == texture_residency::ResidencyCode::resident)
+            {
+                ++metrics_.superseded_releases;
+            }
+            active_residency_ = acquired.handle;
 
             if (output.cache_reused)
                 ++metrics_.reused_frames;
@@ -576,7 +617,10 @@ export namespace epochengine::canvas2d::presentation
 
         [[nodiscard]] bool reset_backend_epoch(std::uint64_t epoch) noexcept
         {
-            return residency_.reset_backend_epoch(epoch);
+            if (!residency_.reset_backend_epoch(epoch))
+                return false;
+            active_residency_ = {};
+            return true;
         }
 
         [[nodiscard]] bool replace_native_hooks(
@@ -585,6 +629,7 @@ export namespace epochengine::canvas2d::presentation
         {
             if (!hooks.ready() || !residency_.reset_backend_epoch(backend_epoch))
                 return false;
+            active_residency_ = {};
             hooks_ = hooks;
             return true;
         }
@@ -592,6 +637,7 @@ export namespace epochengine::canvas2d::presentation
         void retire_all() noexcept
         {
             residency_.retire_all();
+            active_residency_ = {};
         }
 
         [[nodiscard]] const PresentationMetrics& metrics() const noexcept
@@ -617,6 +663,7 @@ export namespace epochengine::canvas2d::presentation
         }
 
         texture_residency::TextureResidencyCache residency_;
+        texture_residency::ResidencyHandle active_residency_{};
         NativePresentationHooks hooks_{};
         PresentationMetrics metrics_{};
     };
@@ -629,8 +676,15 @@ export namespace epochengine::canvas2d::presentation
         missing_hook,
         first_present,
         cache_reuse,
+        invalid_surface,
+        budget_admission,
+        resize_metadata,
         native_failure,
+        hook_replacement,
+        revision_churn,
         backend_reset,
+        lifecycle_soak,
+        retirement,
         metrics
     };
 
@@ -645,8 +699,15 @@ export namespace epochengine::canvas2d::presentation
         case PresentationContractFailure::missing_hook: return "missing_hook";
         case PresentationContractFailure::first_present: return "first_present";
         case PresentationContractFailure::cache_reuse: return "cache_reuse";
+        case PresentationContractFailure::invalid_surface: return "invalid_surface";
+        case PresentationContractFailure::budget_admission: return "budget_admission";
+        case PresentationContractFailure::resize_metadata: return "resize_metadata";
         case PresentationContractFailure::native_failure: return "native_failure";
+        case PresentationContractFailure::hook_replacement: return "hook_replacement";
+        case PresentationContractFailure::revision_churn: return "revision_churn";
         case PresentationContractFailure::backend_reset: return "backend_reset";
+        case PresentationContractFailure::lifecycle_soak: return "lifecycle_soak";
+        case PresentationContractFailure::retirement: return "retirement";
         case PresentationContractFailure::metrics: return "metrics";
         }
         return "unknown";
@@ -671,7 +732,7 @@ export namespace epochengine::canvas2d::presentation
         solid.stable_key = 1;
         solid.source = SpriteSourceKind::solid_color;
         solid.alpha = SpriteAlphaMode::opaque;
-        const std::array<SpriteSubmission, 1> sprites{{
+        std::array<SpriteSubmission, 1> sprites{{
             {*sprite, solid, {{0.0f, 0.0f}, {4.0f, 4.0f}},
                 {0.0f, 0.0f, 1.0f, 1.0f},
                 {0.2f, 0.7f, 1.0f, 1.0f}, SpritePhase::world, 0, 0, 0, 1}
@@ -718,33 +779,235 @@ export namespace epochengine::canvas2d::presentation
             return PresentationContractFailure::cache_reuse;
         }
 
+        const PresentationSurface invalidSurface{
+            {16, 16}, {1, 0, 16, 16}};
+        if (presenter.present(frame, raster, invalidSurface).code
+                != PresentationCode::invalid_frame
+            || native.calls != 2 || device.create_count != 1
+            || device.upload_count != 1 || device.active_count() != 1)
+        {
+            return PresentationContractFailure::invalid_surface;
+        }
+
+        texture_residency::ResidencyLimits constrainedLimits{};
+        constrainedLimits.maximum_entries = 2u;
+        constrainedLimits.maximum_resident_bytes = 64u;
+        constrainedLimits.maximum_single_texture_bytes = 32u;
+        constrainedLimits.maximum_transient_replacement_bytes = 32u;
+        constrainedLimits.maximum_upload_bytes_per_frame = 32u;
+        constrainedLimits.maximum_evictions_per_acquire = 1u;
+        detail::ContractDevice constrainedDevice{};
+        detail::ContractNativeState constrainedNative{};
+        Canvas2DPresenter constrainedPresenter{
+            constrainedDevice,
+            1u,
+            NativePresentationHooks{
+                &constrainedNative,
+                detail::contract_present},
+            constrainedLimits};
+        const PresentationResult constrainedResult =
+            constrainedPresenter.present(frame, raster);
+        if (constrainedResult.code != PresentationCode::residency_failed
+            || constrainedResult.residency_code
+                != texture_residency::ResidencyCode::resident_budget_exceeded
+            || constrainedNative.calls != 0u
+            || constrainedDevice.create_count != 0u
+            || constrainedDevice.active_count() != 0u
+            || constrainedPresenter.metrics().residency_failures != 1u)
+        {
+            return PresentationContractFailure::budget_admission;
+        }
+
+        auto failedSprites = sprites;
+        failedSprites[0].tint = {1.0f, 0.1f, 0.4f, 1.0f};
+        Canvas2DSubmission failedSubmission = submission;
+        failedSubmission.sprites = failedSprites;
+        failedSubmission.frame_sequence = 2;
+        const Canvas2DFramePlan failedFrame =
+            compile_canvas2d_submission(failedSubmission, {16, 16});
+        const cpu::RasterResult failedRaster = cpu::rasterize(failedFrame);
         native.fail_next = true;
-        if (presenter.present(frame, raster).code
+        if (!failedFrame || !failedRaster
+            || failedRaster.canvas_hash == raster.canvas_hash
+            || presenter.present(failedFrame, failedRaster).code
                 != PresentationCode::native_present_failed
-            || native.calls != 3)
+            || native.calls != 3 || device.create_count != 2
+            || device.upload_count != 2 || device.destroy_count != 1
+            || device.active_count() != 1)
         {
             return PresentationContractFailure::native_failure;
         }
 
-        if (!presenter.reset_backend_epoch(2))
-            return PresentationContractFailure::backend_reset;
-        const PresentationResult recreated = presenter.present(frame, raster);
-        if (!recreated || recreated.cache_reused
+        project.presentation_filter = FilterMode::linear;
+        submission.project = project;
+        submission.frame_sequence = 3;
+        const Canvas2DFramePlan resizedFrame =
+            compile_canvas2d_submission(submission, {24, 20});
+        const cpu::RasterResult resizedRaster = cpu::rasterize(resizedFrame);
+        const PresentationSurface resizedSurface{
+            {32, 24}, {4, 2, 24, 20}};
+        const PresentationResult resized = presenter.present(
+            resizedFrame,
+            resizedRaster,
+            resizedSurface);
+        if (!resized || !resized.cache_reused
+            || resized.physical != first.physical
+            || resized.canvas_hash != raster.canvas_hash
+            || native.calls != 4
+            || native.last_surface.framebuffer_extent != CanvasExtent{32, 24}
+            || native.last_surface.viewport.x != 4
+            || native.last_surface.viewport.y != 2
+            || native.last_surface.viewport.width != 24
+            || native.last_surface.viewport.height != 20
+            || native.last_output_surface != CanvasExtent{24, 20}
+            || native.last_render_extent != CanvasExtent{8, 8}
+            || native.last_image.extent != CanvasExtent{8, 8}
+            || native.last_image.origin != PixelOrigin::top_left
+            || native.last_image.color_space != SpriteColorSpace::linear
+            || native.last_image.alpha_encoding
+                != cpu::AlphaEncoding::premultiplied
+            || native.last_filter != FilterMode::linear
+            || native.last_frame_sequence != 3
+            || native.last_content_hash != resizedRaster.canvas_hash
             || device.create_count != 2 || device.upload_count != 2
-            || device.destroy_count != 1)
+            || device.destroy_count != 1 || device.active_count() != 1)
+        {
+            return PresentationContractFailure::resize_metadata;
+        }
+
+        constexpr std::uint32_t revisionCycles = 64;
+        std::uint64_t previousRevisionHash = resizedRaster.canvas_hash;
+        for (std::uint32_t cycle = 0; cycle < revisionCycles; ++cycle)
+        {
+            const float red = static_cast<float>(cycle + 96u) / 255.0f;
+            sprites[0].tint = {red, 0.25f, 1.0f - red, 1.0f};
+            submission.frame_sequence = static_cast<std::uint64_t>(cycle) + 4u;
+            const Canvas2DFramePlan revisionFrame =
+                compile_canvas2d_submission(submission, {24, 20});
+            const cpu::RasterResult revisionRaster = cpu::rasterize(revisionFrame);
+            const PresentationResult revision = presenter.present(
+                revisionFrame,
+                revisionRaster,
+                resizedSurface);
+            if (!revisionFrame || !revisionRaster || !revision
+                || revision.cache_reused
+                || revisionRaster.canvas_hash == previousRevisionHash
+                || native.calls != cycle + 5u
+                || device.active_count() != 1
+                || device.records.size() > 2u
+                || device.create_count != cycle + 3u
+                || device.upload_count != cycle + 3u
+                || device.destroy_count != cycle + 2u)
+            {
+                return PresentationContractFailure::revision_churn;
+            }
+            previousRevisionHash = revisionRaster.canvas_hash;
+        }
+
+        detail::ContractNativeState replacementNative{};
+        const std::uint32_t destroysBeforeRejectedReplacement =
+            device.destroy_count;
+        if (presenter.replace_native_hooks({}, 2)
+            || presenter.replace_native_hooks(
+                NativePresentationHooks{
+                    &replacementNative,
+                    detail::contract_present},
+                1)
+            || device.destroy_count != destroysBeforeRejectedReplacement
+            || device.active_count() != 1)
+        {
+            return PresentationContractFailure::hook_replacement;
+        }
+        if (!presenter.replace_native_hooks(
+                NativePresentationHooks{
+                    &replacementNative,
+                    detail::contract_present},
+                2))
+        {
+            return PresentationContractFailure::backend_reset;
+        }
+        const PresentationResult recreated = presenter.present(
+            resizedFrame,
+            resizedRaster,
+            resizedSurface);
+        if (!recreated || recreated.cache_reused
+            || device.create_count != revisionCycles + 3u
+            || device.upload_count != revisionCycles + 3u
+            || device.destroy_count != revisionCycles + 2u
+            || device.active_count() != 1
+            || native.calls != revisionCycles + 4u
+            || replacementNative.calls != 1
+            || replacementNative.last_texture != recreated.physical)
         {
             return PresentationContractFailure::backend_reset;
         }
 
+        constexpr std::uint32_t replacementCycles = 64;
+        for (std::uint32_t cycle = 0; cycle < replacementCycles; ++cycle)
+        {
+            detail::ContractNativeState& target =
+                (cycle & 1u) == 0u ? native : replacementNative;
+            detail::ContractNativeState& other =
+                (cycle & 1u) == 0u ? replacementNative : native;
+            const std::uint32_t targetCalls = target.calls;
+            const std::uint32_t otherCalls = other.calls;
+            if (!presenter.replace_native_hooks(
+                    NativePresentationHooks{&target, detail::contract_present},
+                    static_cast<std::uint64_t>(cycle) + 3u))
+            {
+                return PresentationContractFailure::lifecycle_soak;
+            }
+            const PresentationResult cycled = presenter.present(
+                resizedFrame,
+                resizedRaster,
+                resizedSurface);
+            if (!cycled || cycled.cache_reused
+                || target.calls != targetCalls + 1u
+                || other.calls != otherCalls
+                || target.last_texture != cycled.physical
+                || device.active_count() != 1
+                || device.create_count != revisionCycles + cycle + 4u
+                || device.upload_count != revisionCycles + cycle + 4u
+                || device.destroy_count != revisionCycles + cycle + 3u)
+            {
+                return PresentationContractFailure::lifecycle_soak;
+            }
+        }
+
+        presenter.retire_all();
+        const std::uint32_t retiredDestroyCount = device.destroy_count;
+        presenter.retire_all();
+        const auto& residencyMetrics = presenter.residency().metrics();
+        if (device.active_count() != 0
+            || retiredDestroyCount != device.create_count
+            || device.destroy_count != retiredDestroyCount
+            || residencyMetrics.active_entries != 0
+            || residencyMetrics.resident_bytes != 0
+            || residencyMetrics.backend_epoch != replacementCycles + 2u
+            || residencyMetrics.backend_retirements != replacementCycles + 2u
+            || residencyMetrics.explicit_releases != revisionCycles + 1u
+            || residencyMetrics.peak_entries != 2u
+            || device.records.size() > 2u)
+        {
+            return PresentationContractFailure::retirement;
+        }
+
         const PresentationMetrics& metrics = presenter.metrics();
-        if (metrics.requests != 4 || metrics.accepted_frames != 4
-            || metrics.native_present_calls != 4
+        if (metrics.requests != revisionCycles + replacementCycles + 6u
+            || metrics.accepted_frames
+                != revisionCycles + replacementCycles + 6u
+            || metrics.native_present_calls
+                != revisionCycles + replacementCycles + 5u
             || metrics.native_present_failures != 1
-            || metrics.uploaded_frames != 2
-            || metrics.reused_frames != 1
-            || metrics.presented_frames != 3
-            || metrics.last_frame_sequence != 1
-            || metrics.last_canvas_hash != raster.canvas_hash)
+            || metrics.uploaded_frames
+                != revisionCycles + replacementCycles + 2u
+            || metrics.reused_frames != 2
+            || metrics.superseded_releases != revisionCycles
+            || metrics.failed_present_releases != 1
+            || metrics.presented_frames
+                != revisionCycles + replacementCycles + 4u
+            || metrics.last_frame_sequence != 3
+            || metrics.last_canvas_hash != resizedRaster.canvas_hash)
         {
             return PresentationContractFailure::metrics;
         }

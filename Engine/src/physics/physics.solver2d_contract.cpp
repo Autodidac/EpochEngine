@@ -2,11 +2,13 @@
  * Epoch Engine
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
+module;
+
 #include <cstdint>
 #include <limits>
 #include <vector>
 
-import physics.solver2d;
+module physics.solver2d;
 
 namespace epochengine::physics::contract
 {
@@ -398,6 +400,116 @@ namespace epochengine::physics::contract
             return 0;
         }
 
+        [[nodiscard]] int authored_static_surface_contract()
+        {
+            Solver2DConfiguration config = configuration();
+            config.initial_gravity = {};
+
+            const StaticAabbPrimitive2D oneWay{
+                .stable_id = 701,
+                .bounds = {
+                    .minimum = { -2.0, 2.0 },
+                    .maximum = { 2.0, 2.25 }
+                },
+                .kind = StaticPrimitive2DKind::one_way_up
+            };
+            Solver2D ascending{ config };
+            if (ascending.set_static_map({ &oneWay, 1 })
+                    != Solver2DCode::success)
+            {
+                return 1;
+            }
+            const auto rising = ascending.spawn(body_descriptor(
+                BodyMotionType::dynamic_body,
+                Shape2D::box({ 0.25, 0.25 }),
+                { 0.0, 2.4 },
+                { 0.0, -1.0 }));
+            if (!rising || !advance_steps(ascending, 1)
+                || has_map_contact(ascending.contacts(), rising.body, 701))
+            {
+                return 2;
+            }
+
+            Solver2D falling{ config };
+            if (falling.set_static_map({ &oneWay, 1 })
+                    != Solver2DCode::success)
+            {
+                return 3;
+            }
+            const auto descending = falling.spawn(body_descriptor(
+                BodyMotionType::dynamic_body,
+                Shape2D::box({ 0.25, 0.25 }),
+                { 0.0, 1.6 },
+                { 0.0, 3.0 }));
+            if (!descending || !advance_steps(falling, 1)
+                || !has_map_contact(falling.contacts(), descending.body, 701))
+            {
+                return 4;
+            }
+            const auto landed = falling.body(descending.body);
+            if (!landed
+                || landed->body.state.linear_velocity.y != 0.0
+                || landed->body.state.transform.position.y >= 1.76)
+            {
+                return 5;
+            }
+
+            const auto slopeProof = [&](StaticPrimitive2DKind kind,
+                                        std::uint64_t stableId,
+                                        double expectedNormalX)
+            {
+                const StaticAabbPrimitive2D slope{
+                    .stable_id = stableId,
+                    .bounds = {
+                        .minimum = { 0.0, 2.0 },
+                        .maximum = { 2.0, 4.0 }
+                    },
+                    .kind = kind
+                };
+                Solver2D solver{ config };
+                if (solver.set_static_map({ &slope, 1 })
+                        != Solver2DCode::success)
+                {
+                    return 1;
+                }
+                const auto actor = solver.spawn(body_descriptor(
+                    BodyMotionType::dynamic_body,
+                    Shape2D::box({ 0.25, 0.25 }),
+                    { 1.0, 2.55 },
+                    { 0.0, 2.0 }));
+                if (!actor)
+                    return 2;
+                if (!advance_steps(solver, 2))
+                    return 3;
+                const auto contacts = solver.contacts();
+                if (!has_map_contact(contacts, actor.body, stableId))
+                    return 4;
+                const auto& contact = contacts.front();
+                if (contact.normal.y < 0.0)
+                    return 5;
+                if (contact.normal.y == 0.0)
+                    return 6;
+                if (contact.normal.y <= 0.5)
+                    return 7;
+                if (contact.normal.x * expectedNormalX < 0.0)
+                    return 8;
+                if (contact.normal.x * expectedNormalX == 0.0)
+                    return 9;
+                if (contact.normal.x * expectedNormalX <= 0.25)
+                    return 10;
+                if (contact.penetration <= 0.0)
+                    return 11;
+                return 0;
+            };
+            if (const int slope = slopeProof(
+                    StaticPrimitive2DKind::slope_up_right, 702, 1.0))
+                return 60 + slope;
+            if (const int slope = slopeProof(
+                    StaticPrimitive2DKind::slope_down_right, 703, -1.0))
+                return 70 + slope;
+            return 0;
+        }
+
         [[nodiscard]] bool restore_rejected_transactionally(
             Solver2D& solver,
             const Solver2DSnapshot& malformed,
@@ -499,9 +611,13 @@ namespace epochengine::physics::contract
         if (bounds != 0)
             return 400 + bounds;
 
+        const int surfaces = authored_static_surface_contract();
+        if (surfaces != 0)
+            return 500 + surfaces;
+
         const int adversarial = adversarial_contact_snapshot_contract();
         if (adversarial != 0)
-            return 500 + adversarial;
+            return 600 + adversarial;
 
         return 0;
     }

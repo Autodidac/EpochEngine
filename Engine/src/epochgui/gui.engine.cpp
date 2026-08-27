@@ -32,6 +32,7 @@
 module;
 
 #include "core.format_text.hpp"
+#include <gui/node_graph_workspace.hpp>
 
 #include <algorithm>
 #include <array>
@@ -61,6 +62,7 @@ module;
 module gui.engine;
 
 import epoch.gui;
+import epoch.gui.image;
 import epoch.gui.rounded_rect;
 
 import context.type;
@@ -93,12 +95,13 @@ namespace epochengine::gui
     constexpr float       kBoxInnerPadding = 5.0f;
     constexpr float       kTitleBarPadding = 6.0f;
     constexpr float       kButtonTextClipInset = 2.0f;
-    constexpr float       kTextClipSlack = 2.0f;
+    constexpr float       kGlyphRasterPadding = 2.0f;
     constexpr float       kCaretBlinkPeriod = 1.0f;
     constexpr float       kMinQueuedSpriteExtent = 0.5f;
     constexpr float       kMaxQueuedSpriteExtent = 65536.0f;
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
+    constexpr const char* kDarkTextFontName = "__agui_dark_text_font";
     constexpr const char* kDefaultFontFile = "Roboto-Regular.ttf";
     constexpr const char* kRuntimeSurfaceAtlasName = "__agui_runtime_surfaces";
     constexpr std::uint32_t kRuntimeSurfaceAtlasSize = 4096;
@@ -226,7 +229,15 @@ namespace epochengine::gui
             PaletteSprites emberForge{};
             PaletteSprites forestTerminal{};
             PaletteSprites auroraSteel{};
+            SpriteHandle dockGuide{};
+            SpriteHandle dockGuideHover{};
+            SpriteHandle dockGuidePreview{};
+            SpriteHandle dockContextGuide{};
+            SpriteHandle dockContextHover{};
             GuiFontCache font{};
+            GuiFontCache darkTextFont{
+                .fontName = kDarkTextFontName
+            };
             font::FontRenderer fontRenderer{};
             std::unordered_map<SpriteHandle, RoundedCorners, SpriteHandleHash> roundedControls{};
         };
@@ -238,6 +249,7 @@ namespace epochengine::gui
             std::uint32_t width = 0;
             std::uint32_t height = 0;
             std::uint32_t version = 0;
+            std::string spriteName{};
         };
 
         static GuiResources g_resources{};
@@ -270,6 +282,7 @@ namespace epochengine::gui
         {
             std::shared_ptr<std::vector<QueuedSpriteDraw>> draws{};
             std::uint64_t generation = 0;
+            std::uint64_t replayedGeneration = 0;
         };
 
         static std::unordered_map<const void*, UploadState, PtrHash> g_uploadedContexts{};
@@ -387,7 +400,7 @@ namespace epochengine::gui
 
         struct PendingSelectPopup
         {
-            std::string scrollId{};
+            std::string scrollKey{};
             Vec2 position{};
             float width = 0.0f;
             float height = 0.0f;
@@ -409,15 +422,34 @@ namespace epochengine::gui
             bool draggingSelection = false;
         };
 
+        struct AssetGridContextMenuState
+        {
+            Vec2 position{};
+            float scrollOffset{};
+            std::uint64_t targetId{};
+            bool open{};
+        };
+
         struct EditBoxMenuState
         {
             bool open = false;
             Vec2 pos{};
         };
 
+        struct NodeGraphCanvasState
+        {
+            gui_lib::node_graph_workspace::Controller controller{};
+            std::unordered_map<std::uint64_t,
+                gui_lib::node_graph_workspace::Vec2> nodeOffsets{};
+            std::uint64_t externalSelectionSignature{};
+            bool initialized{};
+        };
+
         struct ScrollAreaFrame
         {
             std::string key{};
+            std::string ownerWindowKey{};
+            std::size_t ownerWindowDepth{};
             Vec2 previousCursor{};
             Vec2 previousMin{};
             Vec2 previousMax{};
@@ -438,6 +470,7 @@ namespace epochengine::gui
             Vec2 contentMax{};
             std::string windowKey{};
             std::uint64_t widgetSerial = 0;
+            std::size_t scrollAreaDepth = 0;
             bool insideWindow = false;
         };
 
@@ -445,6 +478,9 @@ namespace epochengine::gui
         static thread_local std::unordered_map<std::string, ScrollAreaState> g_scrollAreaStates{};
         static thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates{};
         static thread_local std::unordered_map<std::string, SourceEditorState> g_sourceEditorStates{};
+        static thread_local std::unordered_map<std::string, AssetGridContextMenuState>
+            g_assetGridContextMenuStates{};
+        static thread_local std::unordered_map<std::string, NodeGraphCanvasState> g_nodeGraphCanvasStates{};
         static thread_local std::unordered_map<const void*, EditBoxMenuState, PtrHash> g_editBoxMenuStates{};
         static thread_local std::vector<ScrollAreaFrame> g_scrollAreaStack{};
         static thread_local std::vector<bool> g_floatingWindowTopLayerStack{};
@@ -539,6 +575,14 @@ namespace epochengine::gui
             default:
                 return g_resources.defaultDark;
             }
+        }
+
+        [[nodiscard]] static const GuiFontCache& active_font_cache() noexcept
+        {
+            if (g_frame.activeTheme == ThemeVariant::DefaultLight
+                && g_resources.darkTextFont.asset)
+                return g_resources.darkTextFont;
+            return g_resources.font;
         }
 
         [[nodiscard]] static bool system_prefers_dark_palette() noexcept
@@ -647,16 +691,28 @@ namespace epochengine::gui
             return (std::max)(8.0f, content_right() - cursorX);
         }
 
-        [[nodiscard]] static std::string scroll_panel_key(std::string_view id)
+        [[nodiscard]] static std::string window_scoped_state_key(std::string_view id)
         {
             const auto ctxValue = reinterpret_cast<std::uintptr_t>(g_frame.ctx);
-            return std::to_string(ctxValue) + "|" + std::string(id);
+            return gui_lib::scoped_control_key(
+                std::to_string(ctxValue),
+                g_frame.windowKey,
+                id);
+        }
+
+        [[nodiscard]] static std::string scroll_panel_key(std::string_view id)
+        {
+            return window_scoped_state_key(id);
         }
 
         [[nodiscard]] static std::string widget_state_key(std::string_view id)
         {
-            const auto ctxValue = reinterpret_cast<std::uintptr_t>(g_frame.ctx);
-            return std::to_string(ctxValue) + "|" + std::string(id);
+            return window_scoped_state_key(id);
+        }
+
+        [[nodiscard]] static std::string asset_grid_state_key(std::string_view id)
+        {
+            return window_scoped_state_key(id);
         }
 
         [[nodiscard]] static gui_lib::Vec2 to_lib(Vec2 v) noexcept
@@ -743,6 +799,79 @@ namespace epochengine::gui
             case gui_lib::DockSlot::none:
             default: return DockSlot::none;
             }
+        }
+
+        [[nodiscard]] static gui_lib::DockGuideTarget to_lib(DockGuideTarget target) noexcept
+        {
+            switch (target)
+            {
+            case DockGuideTarget::left_tabs: return gui_lib::DockGuideTarget::left_tabs;
+            case DockGuideTarget::right_tabs: return gui_lib::DockGuideTarget::right_tabs;
+            case DockGuideTarget::bottom_left_tabs: return gui_lib::DockGuideTarget::bottom_left_tabs;
+            case DockGuideTarget::bottom_right_tabs: return gui_lib::DockGuideTarget::bottom_right_tabs;
+            case DockGuideTarget::left_context: return gui_lib::DockGuideTarget::left_context;
+            case DockGuideTarget::right_context: return gui_lib::DockGuideTarget::right_context;
+            case DockGuideTarget::float_window: return gui_lib::DockGuideTarget::float_window;
+            case DockGuideTarget::none:
+            default: return gui_lib::DockGuideTarget::none;
+            }
+        }
+
+        [[nodiscard]] static DockGuideTarget from_lib(gui_lib::DockGuideTarget target) noexcept
+        {
+            switch (target)
+            {
+            case gui_lib::DockGuideTarget::left_tabs: return DockGuideTarget::left_tabs;
+            case gui_lib::DockGuideTarget::right_tabs: return DockGuideTarget::right_tabs;
+            case gui_lib::DockGuideTarget::bottom_left_tabs: return DockGuideTarget::bottom_left_tabs;
+            case gui_lib::DockGuideTarget::bottom_right_tabs: return DockGuideTarget::bottom_right_tabs;
+            case gui_lib::DockGuideTarget::left_context: return DockGuideTarget::left_context;
+            case gui_lib::DockGuideTarget::right_context: return DockGuideTarget::right_context;
+            case gui_lib::DockGuideTarget::float_window: return DockGuideTarget::float_window;
+            case gui_lib::DockGuideTarget::none:
+            default: return DockGuideTarget::none;
+            }
+        }
+
+        [[nodiscard]] static gui_lib::DockGuideOptions to_lib(const DockGuideOptions& options) noexcept
+        {
+            return gui_lib::DockGuideOptions{
+                .guide_bounds = to_lib(options.guide_bounds),
+                .left_tabs_preview = to_lib(options.left_tabs_preview),
+                .right_tabs_preview = to_lib(options.right_tabs_preview),
+                .bottom_left_tabs_preview = to_lib(options.bottom_left_tabs_preview),
+                .bottom_right_tabs_preview = to_lib(options.bottom_right_tabs_preview),
+                .left_context_preview = to_lib(options.left_context_preview),
+                .right_context_preview = to_lib(options.right_context_preview),
+                .floating_preview = to_lib(options.floating_preview),
+                .pointer = to_lib(options.pointer),
+                .guide_extent = options.guide_extent,
+                .guide_gap = options.guide_gap,
+                .allow_side_tabs = options.allow_side_tabs,
+                .allow_bottom_tabs = options.allow_bottom_tabs,
+                .allow_contexts = options.allow_contexts,
+                .allow_float = options.allow_float,
+                .center_context_guides_in_previews =
+                    options.center_context_guides_in_previews
+            };
+        }
+
+        [[nodiscard]] static DockGuideLayout from_lib(const gui_lib::DockGuideLayout& source) noexcept
+        {
+            DockGuideLayout result{};
+            result.count = (std::min)(source.count, std::uint32_t{7});
+            result.hovered_target = from_lib(source.hovered_target);
+            result.hovered_preview = from_lib(source.hovered_preview);
+            for (std::uint32_t i = 0; i < result.count; ++i)
+            {
+                result.guides[i] = DockGuide{
+                    .target = from_lib(source.guides[i].target),
+                    .target_bounds = from_lib(source.guides[i].target_bounds),
+                    .preview_bounds = from_lib(source.guides[i].preview_bounds),
+                    .hovered = source.guides[i].hovered
+                };
+            }
+            return result;
         }
 
         [[nodiscard]] static gui_lib::DockableWindowMode to_lib(DockableWindowMode mode) noexcept
@@ -1058,12 +1187,81 @@ namespace epochengine::gui
             const std::vector<std::uint8_t>& pixels,
             std::uint32_t w, std::uint32_t h)
         {
-            SpriteHandle handle = try_add_sprite(atlas, name, pixels, w, h, false);
-            if (!handle.is_valid())
+            constexpr std::uint32_t gutter = 1U;
+            if (w == 0U || h == 0U
+                || pixels.size() != static_cast<std::size_t>(w) * h * 4U)
+            {
+                throw std::runtime_error("[agui] Invalid GUI sprite: " + name);
+            }
+
+            gui_lib::image::Image source{};
+            source.width = w;
+            source.height = h;
+            source.pixels.resize(static_cast<std::size_t>(w) * h);
+            for (std::size_t index = 0; index < source.pixels.size(); ++index)
+            {
+                const std::size_t byte = index * 4U;
+                source.pixels[index] = {
+                    pixels[byte],
+                    pixels[byte + 1U],
+                    pixels[byte + 2U],
+                    pixels[byte + 3U]
+                };
+            }
+
+            const gui_lib::image::ImageResult padded =
+                gui_lib::image::extrude_edge_gutter(source, gutter);
+            if (!padded)
+                throw std::runtime_error("[agui] Failed to pad GUI sprite: " + name);
+
+            std::vector<std::uint8_t> padded_pixels;
+            padded_pixels.reserve(padded.image.pixels.size() * 4U);
+            for (const gui_lib::image::Rgba8 pixel : padded.image.pixels)
+            {
+                padded_pixels.push_back(pixel.r);
+                padded_pixels.push_back(pixel.g);
+                padded_pixels.push_back(pixel.b);
+                padded_pixels.push_back(pixel.a);
+            }
+
+            Texture texture{};
+            texture.name = name + "/gutter";
+            texture.width = padded.image.width;
+            texture.height = padded.image.height;
+            texture.channels = 4;
+            texture.pixels = std::move(padded_pixels);
+
+            const auto padded_entry = atlas.add_entry(texture.name, texture);
+            if (!padded_entry)
                 throw std::runtime_error("[agui] Failed to register GUI sprite: " + name);
+
+            const auto entry = atlas.add_slice_entry(
+                name,
+                static_cast<int>(padded_entry->region.x + gutter),
+                static_cast<int>(padded_entry->region.y + gutter),
+                static_cast<int>(w),
+                static_cast<int>(h));
+            if (!entry)
+                throw std::runtime_error("[agui] Failed to register GUI sprite slice: " + name);
+
+            if (epochengine::spritepool::capacity == 0)
+                epochengine::spritepool::initialize(2048);
+
+            SpriteHandle handle = epochengine::spritepool::allocate();
+            if (!handle.is_valid())
+                throw std::runtime_error("[agui] Failed to allocate GUI sprite: " + name);
+
+            handle.atlasIndex = static_cast<std::uint32_t>(atlas.get_index());
+            handle.localIndex = static_cast<std::uint32_t>(entry->index);
+            epochengine::atlasmanager::registry.add(
+                name,
+                handle,
+                entry->region.u1,
+                entry->region.v1,
+                entry->region.u2 - entry->region.u1,
+                entry->region.v2 - entry->region.v1);
             return handle;
         }
-
         [[nodiscard]] static bool point_in_triangle(
             gui_lib::Vec2 point,
             gui_lib::Vec2 a,
@@ -1331,7 +1529,7 @@ namespace epochengine::gui
 
         static void ensure_font_loaded_locked()
         {
-            if (g_resources.font.asset)
+            if (g_resources.font.asset && g_resources.darkTextFont.asset)
                 return;
 
             const std::filesystem::path fontPath = find_default_font_path();
@@ -1349,47 +1547,71 @@ namespace epochengine::gui
                 return;
             }
 
-            if (!g_resources.fontRenderer.load_font(g_resources.font.fontName, fontPath.string(), g_resources.font.fontSizePt))
+            const auto loadCache = [&](GuiFontCache& fontCache, font::FontColor color)
+                {
+                    if (fontCache.asset)
+                        return true;
+
+                    fontCache.asset = g_resources.fontRenderer.get_font(fontCache.fontName);
+                    if (!fontCache.asset
+                        && !g_resources.fontRenderer.load_font(
+                            fontCache.fontName,
+                            fontPath.string(),
+                            fontCache.fontSizePt,
+                            color))
+                    {
+                        return false;
+                    }
+
+                    fontCache.asset = g_resources.fontRenderer.get_font(fontCache.fontName);
+                    if (!fontCache.asset)
+                        return false;
+
+                    fontCache.metrics = fontCache.asset->metrics;
+                    populate_font_lookup(fontCache);
+
+                    const auto atlasVec = epochengine::atlasmanager::get_atlas_vector_snapshot();
+                    if (fontCache.asset->atlas_index >= 0
+                        && static_cast<std::size_t>(fontCache.asset->atlas_index) < atlasVec.size())
+                    {
+                        fontCache.atlas = atlasVec[static_cast<std::size_t>(fontCache.asset->atlas_index)];
+                    }
+
+                    if (!fontCache.atlas)
+                    {
+                        if (auto it = epochengine::atlasmanager::atlas_map.find("font_atlas");
+                            it != epochengine::atlasmanager::atlas_map.end())
+                        {
+                            fontCache.atlas = it->second.get();
+                        }
+                    }
+                    return fontCache.atlas != nullptr;
+                };
+
+            const bool lightTextLoaded = loadCache(
+                g_resources.font,
+                font::FontColor{255, 255, 255, 255});
+            const bool darkTextLoaded = loadCache(
+                g_resources.darkTextFont,
+                font::FontColor{32, 39, 48, 255});
+            if (!lightTextLoaded || !darkTextLoaded)
             {
                 if (!g_failedFontLoadWarningLogged)
                 {
                     logger::error(
                         "Epoch.GUI",
-                        epochengine::format_text("Failed to load GUI font from '{}'", fontPath.string()));
+                        epochengine::format_text(
+                            "Failed to load the complete GUI font palette from '{}'",
+                            fontPath.string()));
                     g_failedFontLoadWarningLogged = true;
                 }
-                return;
-            }
-
-            g_resources.font.asset = g_resources.fontRenderer.get_font(g_resources.font.fontName);
-            if (!g_resources.font.asset)
-            {
-                if (!g_missingFontAssetWarningLogged)
+                if ((!g_resources.font.asset || !g_resources.darkTextFont.asset)
+                    && !g_missingFontAssetWarningLogged)
                 {
                     logger::error(
                         "Epoch.GUI",
-                        epochengine::format_text("Font renderer returned no asset for '{}'", g_resources.font.fontName));
+                        "Font renderer returned an incomplete GUI font palette");
                     g_missingFontAssetWarningLogged = true;
-                }
-                return;
-            }
-
-            g_resources.font.metrics = g_resources.font.asset->metrics;
-            populate_font_lookup(g_resources.font);
-
-            auto atlasVec = epochengine::atlasmanager::get_atlas_vector_snapshot(); // by value snapshot
-            if (g_resources.font.asset->atlas_index >= 0 &&
-                static_cast<std::size_t>(g_resources.font.asset->atlas_index) < atlasVec.size())
-            {
-                g_resources.font.atlas = atlasVec[static_cast<std::size_t>(g_resources.font.asset->atlas_index)];
-            }
-
-            if (!g_resources.font.atlas)
-            {
-                if (auto it = epochengine::atlasmanager::atlas_map.find("font_atlas");
-                    it != epochengine::atlasmanager::atlas_map.end())
-                {
-                    g_resources.font.atlas = it->second.get();
                 }
             }
         }
@@ -1417,6 +1639,16 @@ namespace epochengine::gui
 
                 TextureAtlas& atlas = *atlasIt->second;
                 g_resources.atlas = &atlas;
+                g_resources.dockGuide = add_sprite(atlas, "__agui/dock_guide",
+                    make_solid_pixels(0xF0, 0x82, 0x24, 0x68, 8, 8), 8, 8);
+                g_resources.dockGuideHover = add_sprite(atlas, "__agui/dock_guide_hover",
+                    make_solid_pixels(0xFF, 0xA1, 0x38, 0xC0, 8, 8), 8, 8);
+                g_resources.dockGuidePreview = add_sprite(atlas, "__agui/dock_guide_preview",
+                    make_solid_pixels(0xF0, 0x82, 0x24, 0x34, 8, 8), 8, 8);
+                g_resources.dockContextGuide = add_sprite(atlas, "__agui/dock_context_guide",
+                    make_solid_pixels(0xFF, 0xA1, 0x38, 0x78, 8, 8), 8, 8);
+                g_resources.dockContextHover = add_sprite(atlas, "__agui/dock_context_hover",
+                    make_solid_pixels(0xFF, 0xB4, 0x55, 0xD0, 8, 8), 8, 8);
 
                 g_resources.defaultDark.windowBackground = add_sprite(atlas, "__agui/window_bg",
                     make_solid_pixels(0x1F, 0x23, 0x2A, 0xFF, 8, 8), 8, 8);
@@ -1440,25 +1672,25 @@ namespace epochengine::gui
                     make_solid_pixels(0x05, 0x07, 0x0B, 0xB8, 8, 8), 8, 8);
 
                 g_resources.defaultLight.windowBackground = add_sprite(atlas, "__agui_light/window_bg",
-                    make_solid_pixels(0x68, 0x6F, 0x78, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xED, 0xF1, 0xF5, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.buttonNormal = add_sprite(atlas, "__agui_light/button_normal",
-                    make_solid_pixels(0x78, 0x80, 0x8B, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xDD, 0xE3, 0xEA, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.buttonHover = add_sprite(atlas, "__agui_light/button_hover",
-                    make_solid_pixels(0x8B, 0x95, 0xA1, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xCE, 0xD8, 0xE4, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.buttonActive = add_sprite(atlas, "__agui_light/button_active",
-                    make_solid_pixels(0x5E, 0x75, 0x94, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xB8, 0xCB, 0xE0, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.textField = add_sprite(atlas, "__agui_light/text_field",
-                    make_solid_pixels(0x61, 0x67, 0x70, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xFF, 0xFF, 0xFF, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.textFieldActive = add_sprite(atlas, "__agui_light/text_field_active",
-                    make_solid_pixels(0x53, 0x68, 0x82, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xD9, 0xE6, 0xF2, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.panelBackground = add_sprite(atlas, "__agui_light/panel_bg",
-                    make_solid_pixels(0x70, 0x78, 0x82, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xF6, 0xF8, 0xFA, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.consoleBackground = add_sprite(atlas, "__agui_light/console_bg",
-                    make_solid_pixels(0x55, 0x5B, 0x64, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xFF, 0xFF, 0xFF, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.titleBar = add_sprite(atlas, "__agui_light/title_bar",
-                    make_solid_pixels(0x50, 0x5C, 0x68, 0xFF, 8, 8), 8, 8);
+                    make_solid_pixels(0xD7, 0xDE, 0xE7, 0xFF, 8, 8), 8, 8);
                 g_resources.defaultLight.modalScrim = add_sprite(atlas, "__agui_light/modal_scrim",
-                    make_solid_pixels(0x22, 0x26, 0x2D, 0x98, 8, 8), 8, 8);
+                    make_solid_pixels(0x20, 0x27, 0x30, 0x78, 8, 8), 8, 8);
 
                 g_resources.classicLauncher.windowBackground = add_sprite(atlas, "__agui_classic/window_bg",
                     make_solid_pixels(0x33, 0x35, 0x38, 0xFF, 8, 8), 8, 8);
@@ -1582,8 +1814,8 @@ namespace epochengine::gui
                     { 0x21, 0x26, 0x2E }, { 0x2A, 0x31, 0x3B }
                 }});
                 registerPaletteControls(g_resources.defaultLight, "__agui_round/light", {{
-                    { 0x78, 0x80, 0x8B }, { 0x8B, 0x95, 0xA1 }, { 0x5E, 0x75, 0x94 },
-                    { 0x61, 0x67, 0x70 }, { 0x53, 0x68, 0x82 }
+                    { 0xDD, 0xE3, 0xEA }, { 0xCE, 0xD8, 0xE4 }, { 0xB8, 0xCB, 0xE0 },
+                    { 0xFF, 0xFF, 0xFF }, { 0xD9, 0xE6, 0xF2 }
                 }});
                 registerPaletteControls(g_resources.classicLauncher, "__agui_round/classic", {{
                     { 0x5B, 0x5F, 0x66 }, { 0x6C, 0x71, 0x7A }, { 0x4C, 0x52, 0x5C },
@@ -1792,9 +2024,28 @@ namespace epochengine::gui
                 return;
             }
 
-            draw_sprite_raw(handle, x + radius, y, w - radius * 2.0f, h);
-            draw_sprite_raw(handle, x, y + radius, radius, h - radius * 2.0f);
-            draw_sprite_raw(handle, x + w - radius, y + radius, radius, h - radius * 2.0f);
+            // Opaque slices overlap their neighboring corner by one physical
+            // pixel. Fractional scaling otherwise exposes atlas texels as thin
+            // seams along rounded button edges.
+            const float overlap = (std::min)(1.0f, radius * 0.25f);
+            draw_sprite_raw(
+                handle,
+                x + radius - overlap,
+                y,
+                w - radius * 2.0f + overlap * 2.0f,
+                h);
+            draw_sprite_raw(
+                handle,
+                x,
+                y + radius - overlap,
+                radius + overlap,
+                h - radius * 2.0f + overlap * 2.0f);
+            draw_sprite_raw(
+                handle,
+                x + w - radius - overlap,
+                y + radius - overlap,
+                radius + overlap,
+                h - radius * 2.0f + overlap * 2.0f);
             draw_sprite_raw(corners.topLeft, x, y, radius, radius);
             draw_sprite_raw(corners.topRight, x + w - radius, y, radius, radius);
             draw_sprite_raw(corners.bottomRight, x + w - radius, y + h - radius, radius, radius);
@@ -1934,15 +2185,15 @@ namespace epochengine::gui
 
         [[nodiscard]] static float base_line_height(float scale) noexcept
         {
-            const auto& metrics = g_resources.font.metrics;
+            const auto& metrics = active_font_cache().metrics;
             if (metrics.ascent > 0.0f || metrics.descent > 0.0f)
-                return (metrics.ascent + metrics.descent) * scale;
-            return 8.0f * scale;
+                return (metrics.ascent + metrics.descent) * scale + kGlyphRasterPadding;
+            return 8.0f * scale + kGlyphRasterPadding;
         }
 
         [[nodiscard]] static float line_advance_amount(float scale) noexcept
         {
-            const auto& metrics = g_resources.font.metrics;
+            const auto& metrics = active_font_cache().metrics;
             const float baseHeight = base_line_height(scale);
             const bool hasMetrics = (metrics.ascent > 0.0f || metrics.descent > 0.0f);
 
@@ -1966,58 +2217,67 @@ namespace epochengine::gui
 
         [[nodiscard]] static float baseline_offset(float scale) noexcept
         {
-            const auto& metrics = g_resources.font.metrics;
+            const auto& metrics = active_font_cache().metrics;
             if (metrics.ascent > 0.0f)
                 return metrics.ascent * scale;
-            return base_line_height(scale);
+            return 8.0f * scale;
         }
 
         [[nodiscard]] static float space_advance(float scale) noexcept
         {
-            if (g_resources.font.metrics.spaceAdvance > 0.0f)
-                return g_resources.font.metrics.spaceAdvance * scale;
-            if (const auto* glyph = g_resources.font.glyphLookup[static_cast<unsigned char>(' ')])
+            const auto& fontCache = active_font_cache();
+            if (fontCache.metrics.spaceAdvance > 0.0f)
+                return fontCache.metrics.spaceAdvance * scale;
+            if (const auto* glyph = fontCache.glyphLookup[static_cast<unsigned char>(' ')])
                 return glyph->advance * scale;
-            if (g_resources.font.metrics.averageAdvance > 0.0f)
-                return g_resources.font.metrics.averageAdvance * scale;
+            if (fontCache.metrics.averageAdvance > 0.0f)
+                return fontCache.metrics.averageAdvance * scale;
             return 8.0f * scale;
         }
 
         [[nodiscard]] static float letter_spacing(float scale) noexcept
         {
-            const float average = g_resources.font.metrics.averageAdvance;
+            const float average = active_font_cache().metrics.averageAdvance;
             if (average <= 0.0f || kLetterSpacingFactor <= 0.0f)
                 return 0.0f;
             return average * scale * kLetterSpacingFactor;
         }
 
-        [[nodiscard]] static const font::Glyph* lookup_glyph(unsigned char ch) noexcept
+        [[nodiscard]] static const font::Glyph* lookup_glyph(char32_t codepoint) noexcept
         {
-            if (!g_resources.font.asset)
+            const auto& fontCache = active_font_cache();
+            if (!fontCache.asset)
                 return nullptr;
 
-            if (ch >= 128u)
-                ch = static_cast<unsigned char>('?');
-
-            const auto glyphIndex = static_cast<std::size_t>(ch);
-            if (glyphIndex < g_resources.font.glyphLookup.size())
+            const auto glyphIndex = static_cast<std::size_t>(codepoint);
+            if (glyphIndex < fontCache.glyphLookup.size())
             {
-                if (const auto* glyph = g_resources.font.glyphLookup[glyphIndex])
+                if (const auto* glyph = fontCache.glyphLookup[glyphIndex])
                     return glyph;
             }
 
-            return g_resources.font.fallbackGlyph;
+            const auto found = fontCache.asset->glyphs.find(codepoint);
+            if (found != fontCache.asset->glyphs.end())
+                return &found->second;
+            return fontCache.fallbackGlyph;
         }
 
-        [[nodiscard]] static unsigned char safe_draw_char(unsigned char ch) noexcept
+        [[nodiscard]] static char32_t safe_draw_codepoint(char32_t codepoint) noexcept
         {
-            if (ch == '\t' || ch == '\n')
-                return ch;
-            if (ch < 32u)
-                return static_cast<unsigned char>(' ');
-            if (ch >= 128u)
-                return static_cast<unsigned char>('?');
-            return ch;
+            if (codepoint == U'\t' || codepoint == U'\n')
+                return codepoint;
+            if (codepoint < 32u
+                || (codepoint >= 0x7Fu && codepoint < 0xA0u))
+            {
+                return U' ';
+            }
+
+            if (codepoint > 0x10FFFFu
+                || (codepoint >= 0xD800u && codepoint <= 0xDFFFu))
+            {
+                return U'?';
+            }
+            return codepoint;
         }
 
 #if defined(_WIN32)
@@ -2189,63 +2449,172 @@ namespace epochengine::gui
             return (ch & 0xC0u) == 0x80u;
         }
 
-        [[nodiscard]] static std::optional<unsigned char> next_drawable_char(std::string_view text, std::size_t index) noexcept
+        struct DecodedUtf8Codepoint
+        {
+            char32_t codepoint{U'?'};
+            std::size_t byte_count{1u};
+        };
+
+        [[nodiscard]] static DecodedUtf8Codepoint decode_utf8_codepoint(
+            std::string_view text,
+            std::size_t index) noexcept
+        {
+            if (index >= text.size())
+                return DecodedUtf8Codepoint{U'\0', 0u};
+
+            const auto byte = [&](std::size_t offset) noexcept
+                {
+                    return static_cast<unsigned char>(text[index + offset]);
+                };
+            const unsigned char first = byte(0u);
+            if (first < 0x80u)
+                return DecodedUtf8Codepoint{
+                    static_cast<char32_t>(first), 1u};
+
+            if (first >= 0xC2u && first <= 0xDFu
+                && index + 1u < text.size()
+                && is_utf8_continuation_byte(byte(1u)))
+            {
+                return DecodedUtf8Codepoint{
+                    static_cast<char32_t>(
+                        ((first & 0x1Fu) << 6u)
+                        | (byte(1u) & 0x3Fu)),
+                    2u};
+            }
+
+            if (first >= 0xE0u && first <= 0xEFu
+                && index + 2u < text.size()
+                && is_utf8_continuation_byte(byte(1u))
+                && is_utf8_continuation_byte(byte(2u))
+                && (first != 0xE0u || byte(1u) >= 0xA0u)
+                && (first != 0xEDu || byte(1u) <= 0x9Fu))
+            {
+                return DecodedUtf8Codepoint{
+                    static_cast<char32_t>(
+                        ((first & 0x0Fu) << 12u)
+                        | ((byte(1u) & 0x3Fu) << 6u)
+                        | (byte(2u) & 0x3Fu)),
+                    3u};
+            }
+
+            if (first >= 0xF0u && first <= 0xF4u
+                && index + 3u < text.size()
+                && is_utf8_continuation_byte(byte(1u))
+                && is_utf8_continuation_byte(byte(2u))
+                && is_utf8_continuation_byte(byte(3u))
+                && (first != 0xF0u || byte(1u) >= 0x90u)
+                && (first != 0xF4u || byte(1u) <= 0x8Fu))
+            {
+                return DecodedUtf8Codepoint{
+                    static_cast<char32_t>(
+                        ((first & 0x07u) << 18u)
+                        | ((byte(1u) & 0x3Fu) << 12u)
+                        | ((byte(2u) & 0x3Fu) << 6u)
+                        | (byte(3u) & 0x3Fu)),
+                    4u};
+            }
+
+            return DecodedUtf8Codepoint{};
+        }
+
+        [[nodiscard]] static std::size_t previous_utf8_codepoint_start(
+            std::string_view text,
+            std::size_t index) noexcept
+        {
+            index = (std::min)(index, text.size());
+            if (index == 0u)
+                return 0u;
+
+            --index;
+            while (index > 0u
+                && is_utf8_continuation_byte(
+                    static_cast<unsigned char>(text[index])))
+            {
+                --index;
+            }
+            return index;
+        }
+
+        [[nodiscard]] static std::size_t next_utf8_codepoint_start(
+            std::string_view text,
+            std::size_t index) noexcept
+        {
+            index = (std::min)(index, text.size());
+            if (index >= text.size())
+                return text.size();
+
+            const DecodedUtf8Codepoint decoded =
+                decode_utf8_codepoint(text, index);
+            return (std::min)(
+                index + (std::max)(
+                    std::size_t{1u}, decoded.byte_count),
+                text.size());
+        }
+        [[nodiscard]] static std::optional<char32_t> next_drawable_char(
+            std::string_view text,
+            std::size_t index) noexcept
         {
             if (index >= text.size())
                 return std::nullopt;
 
-            for (std::size_t i = index + 1; i < text.size(); ++i)
-            {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char next = safe_draw_char(raw);
-                if (next == '\n')
-                    return std::nullopt;
-                return next;
-            }
+            const DecodedUtf8Codepoint current =
+                decode_utf8_codepoint(text, index);
+            const std::size_t nextIndex =
+                index + (std::max)(std::size_t{1u}, current.byte_count);
+            if (nextIndex >= text.size())
+                return std::nullopt;
 
-            return std::nullopt;
+            const char32_t next = safe_draw_codepoint(
+                decode_utf8_codepoint(text, nextIndex).codepoint);
+            if (next == U'\n')
+                return std::nullopt;
+            return next;
         }
 
-        [[nodiscard]] static float kerning_adjust(unsigned char left, unsigned char right, float scale) noexcept
+        [[nodiscard]] static float kerning_adjust(
+            char32_t left,
+            char32_t right,
+            float scale) noexcept
         {
-            if (!g_resources.font.asset)
+            const auto& fontCache = active_font_cache();
+            if (!fontCache.asset)
                 return 0.0f;
 
-            const float kern = g_resources.font.asset->get_kerning(left, right);
+            const float kern = fontCache.asset->get_kerning(left, right);
             if (kern == 0.0f)
                 return 0.0f;
             return kern * scale;
         }
 
-        [[nodiscard]] static float glyph_advance(unsigned char ch, float scale) noexcept
+        [[nodiscard]] static float glyph_advance(
+            char32_t codepoint,
+            float scale) noexcept
         {
-            if (ch == '\t')
+            if (codepoint == U'\t')
                 return space_advance(scale) * static_cast<float>(kTabSpaces);
 
-            if (const auto* glyph = lookup_glyph(ch))
+            if (const auto* glyph = lookup_glyph(codepoint))
                 return glyph->advance * scale;
 
-            if (g_resources.font.metrics.averageAdvance > 0.0f)
-                return g_resources.font.metrics.averageAdvance * scale;
+            if (active_font_cache().metrics.averageAdvance > 0.0f)
+                return active_font_cache().metrics.averageAdvance * scale;
 
             return 8.0f * scale;
         }
 
         [[nodiscard]] static float glyph_advance_with_kerning(
-            unsigned char ch,
-            std::optional<unsigned char> next,
+            char32_t codepoint,
+            std::optional<char32_t> next,
             float scale) noexcept
         {
-            ch = safe_draw_char(ch);
+            codepoint = safe_draw_codepoint(codepoint);
             if (next)
-                next = safe_draw_char(*next);
+                next = safe_draw_codepoint(*next);
 
-            float advance = glyph_advance(ch, scale);
+            float advance = glyph_advance(codepoint, scale);
             if (next)
-                advance += kerning_adjust(ch, *next, scale);
-            if (ch != ' ' && ch != '\t')
+                advance += kerning_adjust(codepoint, *next, scale);
+            if (codepoint != U' ' && codepoint != U'\t')
                 advance += letter_spacing(scale);
             return advance;
         }
@@ -2261,7 +2630,7 @@ namespace epochengine::gui
                 && h <= baseHeight * 4.0f;
         }
 
-        [[nodiscard]] static bool glyph_fully_inside_clip(
+        [[nodiscard]] static bool glyph_intersects_clip(
             float x,
             float y,
             float w,
@@ -2287,14 +2656,24 @@ namespace epochengine::gui
                 return false;
             }
 
-            const float visibleLeft = (std::max)(x, clipLeft);
-            const float visibleTop = (std::max)(y, clipTop);
-            const float visibleRight = (std::min)(x + w, clipRight);
-            const float visibleBottom = (std::min)(y + h, clipBottom);
-            const float visibleWidth = visibleRight - visibleLeft;
-            const float visibleHeight = visibleBottom - visibleTop;
+            constexpr float intersectionEpsilon = 0.01f;
+            return x + w > clipLeft - intersectionEpsilon
+                && y + h > clipTop - intersectionEpsilon
+                && x < clipRight + intersectionEpsilon
+                && y < clipBottom + intersectionEpsilon;
+        }
 
-            return visibleWidth >= 1.0f && visibleHeight >= 1.0f;
+        [[nodiscard]] static constexpr float align_leading_glyph_to_clip(
+            float penX,
+            float lineStartX,
+            float glyphX,
+            float clipLeft) noexcept
+        {
+            constexpr float lineStartEpsilon = 0.01f;
+            if (penX > lineStartX + lineStartEpsilon || glyphX >= clipLeft)
+                return penX;
+
+            return penX + (clipLeft - glyphX);
         }
 
         [[nodiscard]] static float measure_text_width(std::string_view text, float scale) noexcept
@@ -2304,17 +2683,19 @@ namespace epochengine::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char ch = safe_draw_char(raw);
+                const std::size_t byteIndex = i;
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, byteIndex);
+                const char32_t ch =
+                    safe_draw_codepoint(decoded.codepoint);
+                i += (std::max)(std::size_t{1u}, decoded.byte_count) - 1u;
                 if (ch == '\n')
                 {
                     maxWidth = (std::max)(maxWidth, current);
                     current = 0.0f;
                     continue;
                 }
-                const auto next = next_drawable_char(text, i);
+                const auto next = next_drawable_char(text, byteIndex);
                 current += glyph_advance_with_kerning(ch, next, scale);
             }
             return (std::max)(maxWidth, current);
@@ -2340,10 +2721,19 @@ namespace epochengine::gui
             trimmed.reserve(text.size());
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const std::string candidate = trimmed + text[i] + std::string(kEllipsis);
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, i);
+                const std::size_t byteCount =
+                    (std::max)(std::size_t{1u}, decoded.byte_count);
+                const std::string_view codepointBytes =
+                    text.substr(i, byteCount);
+                const std::string candidate =
+                    trimmed + std::string(codepointBytes)
+                    + std::string(kEllipsis);
                 if (measure_text_width(candidate, scale) > maxWidth)
                     break;
-                trimmed.push_back(text[i]);
+                trimmed.append(codepointBytes);
+                i += byteCount - 1u;
             }
 
             if (trimmed.empty())
@@ -2353,9 +2743,9 @@ namespace epochengine::gui
             return trimmed;
         }
 
-        [[nodiscard]] static bool is_wrap_space(char ch) noexcept
+        [[nodiscard]] static bool is_wrap_space(char32_t codepoint) noexcept
         {
-            return ch == ' ' || ch == '\t';
+            return codepoint == U' ' || codepoint == U'\t';
         }
 
         [[nodiscard]] static float measure_word_advance(std::string_view text, std::size_t start, float scale) noexcept
@@ -2364,15 +2754,17 @@ namespace epochengine::gui
 
             for (std::size_t i = start; i < text.size(); ++i)
             {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char ch = safe_draw_char(raw);
+                const std::size_t byteIndex = i;
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, byteIndex);
+                const char32_t ch =
+                    safe_draw_codepoint(decoded.codepoint);
+                i += (std::max)(std::size_t{1u}, decoded.byte_count) - 1u;
                 if (ch == '\n' || is_wrap_space(ch))
                     break;
 
-                const auto next = next_drawable_char(text, i);
-                advance += glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                const auto next = next_drawable_char(text, byteIndex);
+                advance += glyph_advance_with_kerning(ch, next, scale);
             }
 
             return advance;
@@ -2390,10 +2782,12 @@ namespace epochengine::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char ch = safe_draw_char(raw);
+                const std::size_t byteIndex = i;
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, byteIndex);
+                const char32_t ch =
+                    safe_draw_codepoint(decoded.codepoint);
+                i += (std::max)(std::size_t{1u}, decoded.byte_count) - 1u;
                 if (ch == '\n')
                 {
                     ++lines;
@@ -2403,7 +2797,7 @@ namespace epochengine::gui
 
                 if (is_wrap_space(ch))
                 {
-                    std::size_t runEnd = i;
+                    std::size_t runEnd = byteIndex;
                     float whitespaceAdvance = 0.0f;
                     while (runEnd < text.size() && is_wrap_space(text[runEnd]))
                     {
@@ -2432,9 +2826,9 @@ namespace epochengine::gui
                     continue;
                 }
 
-                if ((i == 0 || text[i - 1] == '\n' || is_wrap_space(text[i - 1])) && penX > 0.0f)
+                if ((byteIndex == 0 || text[byteIndex - 1] == '\n' || is_wrap_space(text[byteIndex - 1])) && penX > 0.0f)
                 {
-                    const float wordAdvance = measure_word_advance(text, i, scale);
+                    const float wordAdvance = measure_word_advance(text, byteIndex, scale);
                     if (wordAdvance > 0.0f && penX + wordAdvance > effectiveWidth + 0.001f)
                     {
                         ++lines;
@@ -2442,8 +2836,8 @@ namespace epochengine::gui
                     }
                 }
 
-                const auto next = next_drawable_char(text, i);
-                const float advance = glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                const auto next = next_drawable_char(text, byteIndex);
+                const float advance = glyph_advance_with_kerning(ch, next, scale);
                 if (penX > 0.0f && penX + advance > effectiveWidth + 0.001f)
                 {
                     ++lines;
@@ -2468,10 +2862,12 @@ namespace epochengine::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char ch = safe_draw_char(raw);
+                const std::size_t byteIndex = i;
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, byteIndex);
+                const char32_t ch =
+                    safe_draw_codepoint(decoded.codepoint);
+                i += (std::max)(std::size_t{1u}, decoded.byte_count) - 1u;
                 if (ch == '\n')
                 {
                     penX = x;
@@ -2481,7 +2877,7 @@ namespace epochengine::gui
 
                 if (is_wrap_space(ch))
                 {
-                    std::size_t runEnd = i;
+                    std::size_t runEnd = byteIndex;
                     float whitespaceAdvance = 0.0f;
                     while (runEnd < text.size() && is_wrap_space(text[runEnd]))
                     {
@@ -2510,9 +2906,9 @@ namespace epochengine::gui
                     continue;
                 }
 
-                if ((i == 0 || text[i - 1] == '\n' || is_wrap_space(text[i - 1])) && penX > x)
+                if ((byteIndex == 0 || text[byteIndex - 1] == '\n' || is_wrap_space(text[byteIndex - 1])) && penX > x)
                 {
-                    const float wordAdvance = measure_word_advance(text, i, scale);
+                    const float wordAdvance = measure_word_advance(text, byteIndex, scale);
                     if (wordAdvance > 0.0f && penX - x + wordAdvance > effectiveWidth + 0.001f)
                     {
                         penX = x;
@@ -2520,8 +2916,8 @@ namespace epochengine::gui
                     }
                 }
 
-                const auto next = next_drawable_char(text, i);
-                const float advance = glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                const auto next = next_drawable_char(text, byteIndex);
+                const float advance = glyph_advance_with_kerning(ch, next, scale);
                 if (penX > x && penX + advance > x + effectiveWidth + 0.001f)
                 {
                     penX = x;
@@ -2538,11 +2934,11 @@ namespace epochengine::gui
         static float draw_wrapped_text(std::string_view text, float x, float y, float width, float scale)
         {
             ensure_resources();
-            if (!g_frame.ctx || !g_resources.font.asset)
+            if (!g_frame.ctx || !active_font_cache().asset)
                 return 0.0f;
 
-            const float clipLeft = has_content_clip() ? (g_frame.contentMin.x - kTextClipSlack) : x;
-            const float clipTop = has_content_clip() ? (g_frame.contentMin.y - kTextClipSlack) : y;
+            const float clipLeft = has_content_clip() ? g_frame.contentMin.x : x;
+            const float clipTop = has_content_clip() ? g_frame.contentMin.y : y;
             const float clipRight = has_content_clip() ? g_frame.contentMax.x : (x + width);
             const float clipBottom = has_content_clip() ? g_frame.contentMax.y : (y + 100000.0f);
             const float effectiveWidth = (std::max)(space_advance(scale), (std::min)(width, clipRight - x));
@@ -2556,10 +2952,12 @@ namespace epochengine::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char ch = safe_draw_char(raw);
+                const std::size_t byteIndex = i;
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, byteIndex);
+                const char32_t ch =
+                    safe_draw_codepoint(decoded.codepoint);
+                i += (std::max)(std::size_t{1u}, decoded.byte_count) - 1u;
                 if (ch == '\n')
                 {
                     penX = x;
@@ -2572,7 +2970,7 @@ namespace epochengine::gui
 
                 if (is_wrap_space(ch))
                 {
-                    std::size_t runEnd = i;
+                    std::size_t runEnd = byteIndex;
                     float whitespaceAdvance = 0.0f;
                     while (runEnd < text.size() && is_wrap_space(text[runEnd]))
                     {
@@ -2604,9 +3002,9 @@ namespace epochengine::gui
                     continue;
                 }
 
-                if ((i == 0 || text[i - 1] == '\n' || is_wrap_space(text[i - 1])) && penX > x)
+                if ((byteIndex == 0 || text[byteIndex - 1] == '\n' || is_wrap_space(text[byteIndex - 1])) && penX > x)
                 {
-                    const float wordAdvance = measure_word_advance(text, i, scale);
+                    const float wordAdvance = measure_word_advance(text, byteIndex, scale);
                     if (wordAdvance > 0.0f && penX - x + wordAdvance > effectiveWidth + 0.001f)
                     {
                         penX = x;
@@ -2617,8 +3015,8 @@ namespace epochengine::gui
                     }
                 }
 
-                const auto next = next_drawable_char(text, i);
-                const float advance = glyph_advance_with_kerning(static_cast<unsigned char>(ch), next, scale);
+                const auto next = next_drawable_char(text, byteIndex);
+                const float advance = glyph_advance_with_kerning(ch, next, scale);
                 if (penX > x && penX + advance > x + effectiveWidth + 0.001f)
                 {
                     penX = x;
@@ -2630,7 +3028,7 @@ namespace epochengine::gui
 
                 if (ch != ' ' && ch != '\t')
                 {
-                    if (const auto* glyph = lookup_glyph(static_cast<unsigned char>(ch)))
+                    if (const auto* glyph = lookup_glyph(ch))
                     {
                         const float drawW = glyph->size_px.x * scale;
                         const float drawH = glyph->size_px.y * scale;
@@ -2638,9 +3036,14 @@ namespace epochengine::gui
                         {
                             const float offsetX = glyph->offset_px.x * scale;
                             const float offsetY = glyph->offset_px.y * scale;
+                            penX = align_leading_glyph_to_clip(
+                                penX,
+                                x,
+                                penX + offsetX,
+                                clipLeft);
                             const float drawX = penX + offsetX;
                             const float drawY = baseline + offsetY;
-                            if (glyph_fully_inside_clip(drawX, drawY, drawW, drawH, clipLeft, clipTop, clipRight, clipBottom))
+                            if (glyph_intersects_clip(drawX, drawY, drawW, drawH, clipLeft, clipTop, clipRight, clipBottom))
                             {
                                 draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                             }
@@ -2657,7 +3060,7 @@ namespace epochengine::gui
         static void draw_text_line(std::string_view text, float x, float y, float scale, std::optional<float> indent = std::nullopt)
         {
             ensure_resources();
-            if (!g_frame.ctx || !g_resources.font.asset)
+            if (!g_frame.ctx || !active_font_cache().asset)
                 return;
 
             const bool clipped = has_content_clip();
@@ -2672,10 +3075,12 @@ namespace epochengine::gui
 
             for (std::size_t i = 0; i < text.size(); ++i)
             {
-                const unsigned char raw = static_cast<unsigned char>(text[i]);
-                if (is_utf8_continuation_byte(raw))
-                    continue;
-                const unsigned char ch = safe_draw_char(raw);
+                const std::size_t byteIndex = i;
+                const DecodedUtf8Codepoint decoded =
+                    decode_utf8_codepoint(text, byteIndex);
+                const char32_t ch =
+                    safe_draw_codepoint(decoded.codepoint);
+                i += (std::max)(std::size_t{1u}, decoded.byte_count) - 1u;
                 if (ch == '\n')
                 {
                     penX = anchorX;
@@ -2691,9 +3096,14 @@ namespace epochengine::gui
                         const float drawH = glyph->size_px.y * scale;
                         const float offsetX = glyph->offset_px.x * scale;
                         const float offsetY = glyph->offset_px.y * scale;
+                        penX = align_leading_glyph_to_clip(
+                            penX,
+                            anchorX,
+                            penX + offsetX,
+                            clipLeft);
                         const float drawX = penX + offsetX;
                         const float drawY = baseline + offsetY;
-                        const bool glyphVisible = glyph_fully_inside_clip(
+                        const bool glyphVisible = glyph_intersects_clip(
                             drawX,
                             drawY,
                             drawW,
@@ -2709,7 +3119,7 @@ namespace epochengine::gui
                     }
                 }
 
-                const auto next = next_drawable_char(text, i);
+                const auto next = next_drawable_char(text, byteIndex);
                 penX += glyph_advance_with_kerning(ch, next, scale);
                 if (penX > clipRight)
                     return;
@@ -2718,8 +3128,11 @@ namespace epochengine::gui
 
         static void draw_caret(float x, float y, float height)
         {
-            const float caretWidth = (std::max)(1.0f, space_advance(kFontScale) * 0.08f);
-            draw_sprite(active_palette().textFieldActive, x, y, caretWidth, height);
+            if (!g_frame.caretVisible || height <= 0.0f)
+                return;
+
+            const float caretWidth = (std::max)(2.0f, space_advance(kFontScale) * 0.12f);
+            draw_sprite_raw(active_palette().buttonActive, x, y, caretWidth, height);
         }
 
         static void reset_frame()
@@ -2960,6 +3373,22 @@ namespace epochengine::gui
             else
                 ++it;
         }
+        for (auto it = g_assetGridContextMenuStates.begin();
+             it != g_assetGridContextMenuStates.end();)
+        {
+            if (it->first.starts_with(scrollPrefix))
+                it = g_assetGridContextMenuStates.erase(it);
+            else
+                ++it;
+        }
+        for (auto it = g_nodeGraphCanvasStates.begin();
+             it != g_nodeGraphCanvasStates.end();)
+        {
+            if (it->first.starts_with(scrollPrefix))
+                it = g_nodeGraphCanvasStates.erase(it);
+            else
+                ++it;
+        }
     }
 
     void refresh_context_resources(const core::Context* ctx) noexcept
@@ -2978,6 +3407,32 @@ namespace epochengine::gui
             return 0;
 
         return it->second.generation;
+    }
+
+    std::uint64_t top_layer_batch_generation(const core::Context* ctx) noexcept
+    {
+        if (!ctx)
+            return 0;
+
+        std::scoped_lock lock(g_deferredBatchMutex);
+        const auto it = g_topLayerDrawBatches.find(ctx);
+        if (it == g_topLayerDrawBatches.end())
+            return 0;
+
+        return it->second.generation;
+    }
+
+    std::uint64_t replayed_top_layer_batch_generation(const core::Context* ctx) noexcept
+    {
+        if (!ctx)
+            return 0;
+
+        std::scoped_lock lock(g_deferredBatchMutex);
+        const auto it = g_topLayerDrawBatches.find(ctx);
+        if (it == g_topLayerDrawBatches.end())
+            return 0;
+
+        return it->second.replayedGeneration;
     }
 
     bool render_deferred_batch(core::Context* ctx) noexcept
@@ -3010,12 +3465,14 @@ namespace epochengine::gui
             return false;
 
         std::shared_ptr<std::vector<QueuedSpriteDraw>> draws;
+        std::uint64_t generation = 0;
         {
             std::scoped_lock lock(g_deferredBatchMutex);
             const auto it = g_topLayerDrawBatches.find(ctx);
             if (it == g_topLayerDrawBatches.end())
                 return false;
             draws = it->second.draws;
+            generation = it->second.generation;
         }
 
         if (!draws || draws->empty())
@@ -3025,6 +3482,14 @@ namespace epochengine::gui
         std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
         for (const auto& draw : *draws)
             ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+        {
+            std::scoped_lock lock(g_deferredBatchMutex);
+            const auto it = g_topLayerDrawBatches.find(ctx);
+            if (it != g_topLayerDrawBatches.end())
+            {
+                it->second.replayedGeneration = (std::max)(it->second.replayedGeneration, generation);
+            }
+        }
         return true;
     }
 
@@ -3164,6 +3629,78 @@ namespace epochengine::gui
         return g_frame.mouseDown && point_in_modal_input_capture(g_frame.mousePos);
     }
 
+    DragSurfaceResult drag_surface(
+        DragSurfaceState& state,
+        const DragSurfaceOptions& options) noexcept
+    {
+        DragSurfaceResult result{};
+        if (!g_frame.ctx || !options.enabled
+            || options.size.x <= 0.0f || options.size.y <= 0.0f)
+        {
+            if (!g_frame.mouseDown)
+                state = {};
+            return result;
+        }
+
+        const float padding = (std::max)(0.0f, options.hit_padding);
+        const float minimumExtent = (std::max)(1.0f, options.minimum_hit_extent);
+        const float hitWidth = (std::max)(
+            options.size.x + padding * 2.0f,
+            minimumExtent);
+        const float hitHeight = (std::max)(
+            options.size.y + padding * 2.0f,
+            minimumExtent);
+        const Vec2 hitPosition{
+            options.position.x - (hitWidth - options.size.x) * 0.5f,
+            options.position.y - (hitHeight - options.size.y) * 0.5f};
+        result.hovered = point_in_rect(
+                g_frame.mousePos,
+                hitPosition.x,
+                hitPosition.y,
+                hitWidth,
+                hitHeight)
+            && point_in_active_clip(g_frame.mousePos);
+
+        if (!state.pending && result.hovered && left_press_available())
+        {
+            state.press_position = g_frame.mousePos;
+            state.pending = true;
+            state.dragging = false;
+            result.pressed = true;
+        }
+
+        if (!state.pending)
+            return result;
+
+        result.delta = {
+            g_frame.mousePos.x - state.press_position.x,
+            g_frame.mousePos.y - state.press_position.y};
+        const float threshold = (std::max)(0.0f, options.drag_threshold);
+        if (g_frame.mouseDown && !state.dragging
+            && result.delta.x * result.delta.x
+                + result.delta.y * result.delta.y
+                >= threshold * threshold)
+        {
+            state.dragging = true;
+        }
+        result.dragging = state.dragging && g_frame.mouseDown;
+        if (result.dragging)
+            g_frame.mousePressConsumed = true;
+
+        if (g_frame.justReleased)
+        {
+            result.released = state.dragging;
+            if (result.released && left_release_available())
+                consume_left_release();
+            state = {};
+        }
+        else if (!g_frame.mouseDown)
+        {
+            state = {};
+        }
+        return result;
+    }
+
     bool was_mouse_pressed() noexcept
     {
         return g_frame.justPressed && point_in_modal_input_capture(g_frame.mousePos);
@@ -3187,6 +3724,15 @@ namespace epochengine::gui
     bool was_mouse_right_released() noexcept
     {
         return g_frame.rightJustReleased && point_in_modal_input_capture(g_frame.mousePos);
+    }
+    bool keyboard_input_captured() noexcept
+    {
+        if (!g_frame.ctx)
+            return any_select_box_open();
+        const void* contextKey = static_cast<const void*>(g_frame.ctx);
+        const auto active = g_contextActiveWidgets.find(contextKey);
+        return (active != g_contextActiveWidgets.end() && active->second != nullptr)
+            || any_select_box_open();
     }
 
     void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept
@@ -3218,10 +3764,15 @@ namespace epochengine::gui
 
     std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept
     {
-        static constexpr std::array<ThemePreferenceChoice, 3> kChoices{ {
+        static constexpr std::array<ThemePreferenceChoice, 8> kChoices{ {
             { "System Light/Dark", ThemePreference::FollowSystemDark },
             { "Light", ThemePreference::Light },
-            { "Dark", ThemePreference::Dark }
+            { "Dark", ThemePreference::Dark },
+            { "Classic Launcher", ThemePreference::ClassicLauncher },
+            { "Midnight Blue", ThemePreference::MidnightBlue },
+            { "Ember Forge", ThemePreference::EmberForge },
+            { "Forest Terminal", ThemePreference::ForestTerminal },
+            { "Aurora Steel", ThemePreference::AuroraSteel }
         } };
         return { kChoices.data(), kChoices.size() };
     }
@@ -3351,7 +3902,7 @@ namespace epochengine::gui
             return;
         }
 
-        auto& scrollState = g_scrollAreaStates[scroll_panel_key(popup.scrollId)];
+        auto& scrollState = g_scrollAreaStates[popup.scrollKey];
         scrollState.contentHeight = (std::max)(popup.height, popup.contentHeight);
         const float maxScroll = (std::max)(0.0f, scrollState.contentHeight - popup.height);
         if (!std::isfinite(scrollState.scrollY))
@@ -3449,6 +4000,7 @@ namespace epochengine::gui
             .contentMax = g_frame.contentMax,
             .windowKey = g_frame.windowKey,
             .widgetSerial = g_frame.widgetSerial,
+            .scrollAreaDepth = g_scrollAreaStack.size(),
             .insideWindow = g_frame.insideWindow
         });
 
@@ -3514,6 +4066,17 @@ namespace epochengine::gui
 
         const WindowFrameState previous = std::move(g_windowFrameStack.back());
         g_windowFrameStack.pop_back();
+        while (g_scrollAreaStack.size() > previous.scrollAreaDepth)
+        {
+            const std::string leakedKey =
+                std::move(g_scrollAreaStack.back().key);
+            g_scrollAreaStack.pop_back();
+            if (auto state = g_scrollAreaStates.find(leakedKey);
+                state != g_scrollAreaStates.end())
+            {
+                state->second.draggingScrollbar = false;
+            }
+        }
         g_frame.cursor = previous.cursor;
         g_frame.origin = previous.origin;
         g_frame.windowSize = previous.windowSize;
@@ -3689,6 +4252,114 @@ namespace epochengine::gui
             end_top_layer();
     }
 
+    DockGuideLayout make_dock_guide_layout(const DockGuideOptions& options) noexcept
+    {
+        return from_lib(gui_lib::make_dock_guide_layout(to_lib(options)));
+    }
+
+    void render_dock_guide_overlay(
+        const DockGuideLayout& layout,
+        const DockGuideOverlayOptions& options) noexcept
+    {
+        if (!g_frame.ctx || layout.count == 0U)
+            return;
+
+        ensure_resources();
+        begin_top_layer();
+        ContentClipClearScope clearClip;
+
+        const auto drawPreview = [&](const WidgetBounds& preview)
+        {
+            if (preview.size.x <= 1.0f || preview.size.y <= 1.0f)
+                return;
+
+            draw_sprite(
+                g_resources.dockGuidePreview,
+                preview.position.x,
+                preview.position.y,
+                preview.size.x,
+                preview.size.y);
+            draw_sprite(
+                g_resources.dockGuide,
+                preview.position.x,
+                preview.position.y,
+                preview.size.x,
+                (std::min)(28.0f, preview.size.y));
+            if (!options.moving_label.empty())
+            {
+                draw_text_line(
+                    options.moving_label,
+                    preview.position.x + 10.0f,
+                    preview.position.y + 5.0f,
+                    0.86f);
+            }
+        };
+
+        if (layout.hovered_target != DockGuideTarget::none)
+            drawPreview(layout.hovered_preview);
+        else if (options.show_floating_preview)
+            drawPreview(options.floating_preview);
+
+        for (std::uint32_t index = 0U; index < layout.count; ++index)
+        {
+            const DockGuide& guide = layout.guides[index];
+            if (guide.target == DockGuideTarget::none)
+                continue;
+
+            const bool contextTarget =
+                guide.target == DockGuideTarget::left_context
+                || guide.target == DockGuideTarget::right_context;
+            const SpriteHandle fill = contextTarget
+                ? (guide.hovered ? g_resources.dockContextHover : g_resources.dockContextGuide)
+                : (guide.hovered ? g_resources.dockGuideHover : g_resources.dockGuide);
+            draw_sprite(
+                fill,
+                guide.target_bounds.position.x,
+                guide.target_bounds.position.y,
+                guide.target_bounds.size.x,
+                guide.target_bounds.size.y);
+
+            if (contextTarget)
+            {
+                draw_sprite(
+                    guide.hovered ? g_resources.dockContextHover : g_resources.dockGuide,
+                    guide.target_bounds.position.x + 10.0f,
+                    guide.target_bounds.position.y + guide.target_bounds.size.y - 10.0f,
+                    (std::max)(0.0f, guide.target_bounds.size.x - 20.0f),
+                    4.0f);
+            }
+
+            std::string_view label{};
+            switch (guide.target)
+            {
+            case DockGuideTarget::left_tabs: label = options.left_tabs_label; break;
+            case DockGuideTarget::right_tabs: label = options.right_tabs_label; break;
+            case DockGuideTarget::bottom_left_tabs: label = options.bottom_left_tabs_label; break;
+            case DockGuideTarget::bottom_right_tabs: label = options.bottom_right_tabs_label; break;
+            case DockGuideTarget::left_context: label = options.left_context_label; break;
+            case DockGuideTarget::right_context: label = options.right_context_label; break;
+            case DockGuideTarget::float_window: label = options.floating_label; break;
+            default: break;
+            }
+
+            if (!label.empty())
+            {
+                const float scale = contextTarget ? 0.86f : 0.80f;
+                const float labelWidth = measure_text_width(label, scale);
+                const float labelHeight = line_advance_amount(scale);
+                draw_text_line(
+                    label,
+                    guide.target_bounds.position.x
+                        + (std::max)(6.0f, (guide.target_bounds.size.x - labelWidth) * 0.5f),
+                    guide.target_bounds.position.y
+                        + (std::max)(6.0f, (guide.target_bounds.size.y - labelHeight) * 0.5f),
+                    scale);
+            }
+        }
+
+        end_top_layer();
+    }
+
     DockableWindowResult update_dockable_window(
         DockableWindowHostState& host,
         DockableWindowState& state,
@@ -3807,6 +4478,29 @@ namespace epochengine::gui
         return bounds;
     }
 
+    void selection_outline(Vec2 position, Vec2 size, float thickness) noexcept
+    {
+        if (!g_frame.ctx || size.x <= 0.0f || size.y <= 0.0f)
+            return;
+
+        try { ensure_resources(); }
+        catch (...) { return; }
+
+        const float border = (std::clamp)(
+            thickness,
+            1.0f,
+            (std::max)(1.0f, (std::min)(size.x, size.y) * 0.5f));
+        const SpriteHandle accent = active_palette().buttonActive;
+        draw_sprite(accent,
+            position.x, position.y, size.x, border);
+        draw_sprite(accent,
+            position.x, position.y + size.y - border, size.x, border);
+        draw_sprite(accent,
+            position.x, position.y, border, size.y);
+        draw_sprite(accent,
+            position.x + size.x - border, position.y, border, size.y);
+    }
+
     void panel_rect(Vec2 position, Vec2 size) noexcept
     {
         if (!g_frame.ctx || size.x <= 0.0f || size.y <= 0.0f)
@@ -3854,7 +4548,11 @@ namespace epochengine::gui
             draw_sprite(accent, position.x, y, size.x, 1.0f);
         }
     }
-    static bool button_with_state(std::string_view label, Vec2 size, bool selected) noexcept
+    static bool button_with_state(
+        std::string_view label,
+        Vec2 size,
+        bool selected,
+        bool enabled = true) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
 
@@ -3864,7 +4562,8 @@ namespace epochengine::gui
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
         const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kBoxInnerPadding);
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+        const bool hovered = enabled
+            && point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
@@ -3885,20 +4584,13 @@ namespace epochengine::gui
 
         const auto& palette = active_palette();
 
-        const SpriteHandle background =
-            selected || pressed ? palette.buttonActive
+        const SpriteHandle background = !enabled
+            ? palette.panelBackground
+            : selected || pressed ? palette.buttonActive
             : hovered ? palette.buttonHover
             : palette.buttonNormal;
 
         draw_sprite(background, pos.x, pos.y, width, height);
-        if (hovered || pressed || selected)
-        {
-            const SpriteHandle accent = selected
-                ? palette.textFieldActive
-                : palette.buttonHover;
-            draw_sprite(accent, pos.x, pos.y, width, 2.0f);
-            draw_sprite(accent, pos.x, pos.y, 2.0f, height);
-        }
 
         const std::string fittedLabel = fit_text_to_width(
             label,
@@ -4130,51 +4822,1313 @@ namespace epochengine::gui
         return clicked;
     }
 
-    bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept
+    ImageBoxResult image_box(const ImageBoxOptions& options) noexcept
     {
-        if (!g_frame.insideWindow || !g_frame.ctx) return false;
+        ImageBoxResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx)
+            return result;
 
-        const Vec2 pos = g_frame.cursor;
-        const float width = (std::max)(static_cast<float>(size.x), 1.0f);
-        const float height = (std::max)(static_cast<float>(size.y), 1.0f);
+        const Vec2 position = g_frame.cursor;
+        const float width = (std::max)(options.size.x, 1.0f);
+        const float height = (std::max)(options.size.y, 1.0f);
+        const float captionHeight = options.caption.empty()
+            ? 0.0f
+            : base_line_height(kFontScale) + kBoxInnerPadding;
+        const gui_lib::ImageBoxLayout layout = gui_lib::make_image_box_layout({
+            .bounds = { to_lib(position), { width, height } },
+            .source_extent = {
+                options.source_size.x > 0.0f ? options.source_size.x : width,
+                options.source_size.y > 0.0f ? options.source_size.y : height },
+            .fit = options.fit == ImageFit::Stretch
+                ? gui_lib::ImageFitMode::stretch
+                : gui_lib::ImageFitMode::contain,
+            .padding = kBoxInnerPadding,
+            .caption_height = captionHeight
+        });
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
+        const bool hovered = options.enabled
+            && point_in_rect(g_frame.mousePos, position.x, position.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
-        const std::size_t pressKey = widget_press_key("<image-button>", pos, { width, height });
+        const std::string_view identity = !options.id.empty()
+            ? options.id
+            : (!options.caption.empty() ? options.caption : std::string_view{ "<image-box>" });
+        const std::size_t pressKey = widget_press_key(identity, position, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && left_press_available())
+        if (options.interactive && hovered && left_press_available())
         {
             pressedKey = pressKey;
             consume_left_press();
         }
 
-        const bool pressed = (g_frame.mouseDown || g_frame.justReleased) && pressedKey == pressKey;
-        const bool clicked = left_release_available() && hovered && pressedKey == pressKey;
+        const bool pressed = options.interactive
+            && (g_frame.mouseDown || g_frame.justReleased)
+            && pressedKey == pressKey;
+        const bool clicked = options.interactive
+            && left_release_available()
+            && hovered
+            && pressedKey == pressKey;
         if (g_frame.justReleased && pressedKey == pressKey)
         {
-            if (hovered)
+            if (clicked)
                 consume_left_release();
             pressedKey = 0;
         }
 
         const auto& palette = active_palette();
-
-        const SpriteHandle background =
-            pressed ? palette.buttonActive
+        const SpriteHandle background = !options.enabled
+            ? palette.panelBackground
+            : pressed ? palette.buttonActive
             : hovered ? palette.buttonHover
             : palette.buttonNormal;
+        draw_sprite(background, position.x, position.y, width, height);
 
-        draw_sprite(background, pos.x, pos.y, width, height);
+        if (layout.valid && options.sprite.is_valid())
+        {
+            draw_sprite(
+                options.sprite,
+                layout.content.position.x,
+                layout.content.position.y,
+                layout.content.size.x,
+                layout.content.size.y);
+        }
 
-        const float inset = (std::min)(kBoxInnerPadding, (std::min)(width, height) * 0.2f);
-        draw_sprite(sprite, pos.x + inset, pos.y + inset, (std::max)(1.0f, width - 2.0f * inset), (std::max)(1.0f, height - 2.0f * inset));
+        if (options.selected)
+        {
+            draw_sprite(palette.textFieldActive, position.x, position.y, width, 2.0f);
+            draw_sprite(palette.textFieldActive, position.x, position.y + height - 2.0f, width, 2.0f);
+            draw_sprite(palette.textFieldActive, position.x, position.y, 2.0f, height);
+            draw_sprite(palette.textFieldActive, position.x + width - 2.0f, position.y, 2.0f, height);
+        }
 
-        g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
+        if (!options.caption.empty() && layout.caption.size.y > 0.0f)
+        {
+            const std::string fitted = fit_text_to_width(
+                options.caption,
+                (std::max)(1.0f, layout.caption.size.x - 2.0f * kButtonTextClipInset),
+                kFontScale);
+            const std::string_view display = fitted.empty()
+                ? options.caption
+                : std::string_view{ fitted };
+            const float textY = layout.caption.position.y
+                + std::floor((std::max)(
+                    0.0f,
+                    (layout.caption.size.y - base_line_height(kFontScale)) * 0.5f));
+            draw_text_line(display, layout.caption.position.x, textY, kFontScale);
+        }
+
+        result.bounds = { .position = position, .size = { width, height } };
+        result.image_bounds = {
+            .position = from_lib(layout.content.position),
+            .size = from_lib(layout.content.size) };
+        result.hovered = hovered;
+        result.clicked = clicked;
+        result.valid = layout.valid && options.sprite.is_valid();
+        g_frame.lastButtonBounds = result.bounds;
         advance_cursor({ 0.0f, height + kContentPadding });
-
-        return clicked;
+        return result;
     }
 
+    bool image_button(const ImageButtonOptions& options) noexcept
+    {
+        if (options.id.empty())
+            return false;
+        return image_box({
+            .id = options.id,
+            .sprite = options.sprite,
+            .size = options.size,
+            .source_size = options.source_size,
+            .fit = options.fit,
+            .interactive = true,
+            .selected = options.selected,
+            .enabled = options.enabled
+        }).clicked;
+    }
+
+    bool image_button(const SpriteHandle& sprite, Vec2 size) noexcept
+    {
+        return image_box({
+            .id = "<image-button>",
+            .sprite = sprite,
+            .size = size,
+            .source_size = size,
+            .fit = ImageFit::Contain,
+            .interactive = true
+        }).clicked;
+    }
+
+    AssetGridResult asset_grid(const AssetGridOptions& options) noexcept
+    {
+        AssetGridResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx || options.id.empty()
+            || options.size.x < 1.0f || options.size.y < 1.0f
+            || options.items.size() > gui_lib::asset_grid_maximum_items)
+        {
+            return result;
+        }
+
+        const Vec2 origin = g_frame.cursor;
+        const float width = (std::max)(1.0f, options.size.x);
+        const float height = (std::max)(48.0f, options.size.y);
+        const bool hovered = options.enabled
+            && point_in_rect(g_frame.mousePos, origin.x, origin.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+
+        std::vector<const ContextMenuActionSpec*> contextActions{};
+        const std::size_t contextActionInspectCount = (std::min)(
+            options.context_actions.size(),
+            asset_grid_maximum_context_actions);
+        contextActions.reserve(contextActionInspectCount);
+        result.context_actions_truncated =
+            options.context_actions.size() > contextActionInspectCount;
+        for (std::size_t index = 0u;
+             index < contextActionInspectCount;
+             ++index)
+        {
+            const ContextMenuActionSpec& action = options.context_actions[index];
+            if (action.id.empty() || action.label.empty())
+                continue;
+            const bool duplicate = std::any_of(
+                contextActions.begin(),
+                contextActions.end(),
+                [&](const ContextMenuActionSpec* accepted) noexcept
+                {
+                    return accepted->id == action.id;
+                });
+            if (duplicate)
+                continue;
+            contextActions.push_back(&action);
+        }
+
+        const std::string contextStateKey = asset_grid_state_key(options.id);
+        auto& contextMenu = g_assetGridContextMenuStates[contextStateKey];
+        if (contextActions.empty())
+            contextMenu.open = false;
+        const bool menuWasOpen = contextMenu.open;
+
+        std::vector<gui_lib::AssetGridItem> libraryItems{};
+        libraryItems.reserve(options.items.size());
+        const auto libraryKind = [](AssetGridItemKind kind) noexcept
+        {
+            switch (kind)
+            {
+            case AssetGridItemKind::Folder: return gui_lib::AssetGridItemKind::folder;
+            case AssetGridItemKind::Image: return gui_lib::AssetGridItemKind::image;
+            case AssetGridItemKind::Texture: return gui_lib::AssetGridItemKind::texture;
+            case AssetGridItemKind::Material: return gui_lib::AssetGridItemKind::material;
+            case AssetGridItemKind::Model: return gui_lib::AssetGridItemKind::model;
+            case AssetGridItemKind::Audio: return gui_lib::AssetGridItemKind::audio;
+            case AssetGridItemKind::Scene: return gui_lib::AssetGridItemKind::scene;
+            case AssetGridItemKind::Document: return gui_lib::AssetGridItemKind::document;
+            case AssetGridItemKind::Generic:
+            default: return gui_lib::AssetGridItemKind::generic;
+            }
+        };
+        for (const AssetGridItem& item : options.items)
+        {
+            std::optional<gui_lib::AssetGridImageMetadata> imageMetadata{};
+            if (item.image.is_valid())
+            {
+                imageMetadata = gui_lib::AssetGridImageMetadata{
+                    .content_key = item.image.pack(),
+                    .pixel_width = static_cast<std::uint32_t>((std::max)(1.0f, item.source_size.x)),
+                    .pixel_height = static_cast<std::uint32_t>((std::max)(1.0f, item.source_size.y)),
+                    .fit = gui_lib::ImageFitMode::contain,
+                    .has_alpha = true
+                };
+            }
+            libraryItems.push_back(gui_lib::AssetGridItem{
+                .id = { item.id },
+                .label = item.label,
+                .detail = item.detail,
+                .search_terms = item.search_terms,
+                .kind = libraryKind(item.kind),
+                .activation = gui_lib::AssetGridActivationRole::open_in_tab,
+                .image = imageMetadata,
+                .enabled = options.enabled && item.enabled
+            });
+        }
+
+        float requestedScroll = std::isfinite(options.scroll_offset)
+            ? (std::max)(0.0f, options.scroll_offset)
+            : 0.0f;
+        if (hovered && !menuWasOpen && g_frame.mouseWheelDelta != 0)
+        {
+            const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
+            requestedScroll = (std::max)(0.0f, requestedScroll - wheelSteps * 108.0f);
+            g_frame.mouseWheelDelta = 0;
+            result.wheel_scrolled = true;
+        }
+
+        gui_lib::AssetGridState state{};
+        if (options.selected_id.has_value())
+            state.selected_id = gui_lib::AssetGridItemId{ *options.selected_id };
+        const gui_lib::AssetGridLayoutOptions layoutOptions{
+            .viewport = { to_lib(origin), { width, height } },
+            .tile_extent = to_lib(options.tile_size),
+            .gap = to_lib(options.gap),
+            .padding = to_lib(options.padding),
+            .image_height = options.image_height,
+            .label_height = 24.0f,
+            .detail_height = 18.0f,
+            .scroll_offset = requestedScroll,
+            .maximum_visible_tiles = gui_lib::asset_grid_maximum_visible_tiles,
+            .clear_selection_on_empty_press = options.clear_selection_on_empty_press
+        };
+
+        const std::size_t pressKey = widget_press_key(options.id, origin, { width, height });
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        const bool pointerPressed = hovered && !menuWasOpen && left_press_available();
+        if (pointerPressed)
+        {
+            pressedKey = pressKey;
+            consume_left_press();
+        }
+        const bool pointerActivated = hovered
+            && !menuWasOpen
+            && left_release_available()
+            && pressedKey == pressKey;
+        const bool contextRequested = hovered
+            && !contextActions.empty()
+            && right_press_available();
+
+        const gui_lib::AssetGridUpdateResult update = gui_lib::update_asset_grid(
+            state,
+            libraryItems,
+            gui_lib::AssetGridFilterOptions{
+                .query = options.query,
+                .maximum_results = gui_lib::asset_grid_maximum_items,
+                .include_disabled = true
+            },
+            layoutOptions,
+            gui_lib::AssetGridInput{
+                .pointer_position = to_lib(g_frame.mousePos),
+                .pointer_pressed = pointerPressed,
+                .pointer_activated = pointerActivated,
+                .context_requested = contextRequested,
+                .pointer_present = hovered
+            });
+        if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (pointerActivated)
+                consume_left_release();
+            pressedKey = 0;
+        }
+
+        bool menuOpenedThisFrame = false;
+        if (contextRequested && update.context_request_valid
+            && update.context_requested_id.has_value())
+        {
+            contextMenu.position = g_frame.mousePos;
+            contextMenu.scrollOffset = 0.0f;
+            contextMenu.targetId = update.context_requested_id->value;
+            contextMenu.open = true;
+            menuOpenedThisFrame = true;
+            consume_right_press();
+        }
+
+        if (contextMenu.open)
+        {
+            const bool targetVisible = std::any_of(
+                update.view.layout.visible_tiles.begin(),
+                update.view.layout.visible_tiles.end(),
+                [&](const gui_lib::AssetGridTileLayout& tile) noexcept
+                {
+                    return tile.enabled && tile.id.value == contextMenu.targetId;
+                });
+            if (!targetVisible)
+                contextMenu.open = false;
+        }
+
+        const auto& palette = active_palette();
+        draw_sprite(palette.consoleBackground, origin.x, origin.y, width, height);
+        const auto kindLabel = [](AssetGridItemKind kind) noexcept -> std::string_view
+        {
+            switch (kind)
+            {
+            case AssetGridItemKind::Folder: return "FOLDER";
+            case AssetGridItemKind::Image: return "IMAGE";
+            case AssetGridItemKind::Texture: return "TEXTURE";
+            case AssetGridItemKind::Material: return "MATERIAL";
+            case AssetGridItemKind::Model: return "MODEL";
+            case AssetGridItemKind::Audio: return "AUDIO";
+            case AssetGridItemKind::Scene: return "SCENE";
+            case AssetGridItemKind::Document: return "DOCUMENT";
+            case AssetGridItemKind::Generic:
+            default: return "ASSET";
+            }
+        };
+
+        for (const gui_lib::AssetGridTileLayout& tile : update.view.layout.visible_tiles)
+        {
+            if (tile.source_index >= options.items.size())
+                continue;
+            const AssetGridItem& item = options.items[tile.source_index];
+            const SpriteHandle tileBackground = !item.enabled
+                ? palette.panelBackground
+                : tile.selected ? palette.buttonActive
+                : tile.hovered ? palette.buttonHover
+                : palette.buttonNormal;
+            draw_sprite(tileBackground, tile.tile.position.x, tile.tile.position.y,
+                tile.tile.size.x, tile.tile.size.y);
+
+            if (item.image.is_valid() && tile.image.valid)
+            {
+                draw_sprite(item.image, tile.image.content.position.x,
+                    tile.image.content.position.y, tile.image.content.size.x,
+                    tile.image.content.size.y);
+            }
+            else if (tile.image.frame.size.y > 0.0f)
+            {
+                draw_sprite(palette.panelBackground, tile.image.frame.position.x,
+                    tile.image.frame.position.y, tile.image.frame.size.x,
+                    tile.image.frame.size.y);
+                const std::string_view placeholder = kindLabel(item.kind);
+                const float placeholderWidth = measure_text_width(placeholder, kFontScale);
+                draw_text_line(placeholder,
+                    tile.image.frame.position.x
+                        + (std::max)(0.0f, (tile.image.frame.size.x - placeholderWidth) * 0.5f),
+                    tile.image.frame.position.y
+                        + (std::max)(0.0f, (tile.image.frame.size.y - base_line_height(kFontScale)) * 0.5f),
+                    kFontScale);
+            }
+
+            const std::string fittedLabel = fit_text_to_width(item.label,
+                (std::max)(1.0f, tile.label.size.x - 2.0f * kButtonTextClipInset),
+                kFontScale);
+            const std::string_view displayLabel = fittedLabel.empty()
+                ? item.label
+                : std::string_view{ fittedLabel };
+            draw_text_line(displayLabel, tile.label.position.x + kButtonTextClipInset,
+                tile.label.position.y
+                    + (std::max)(0.0f, (tile.label.size.y - base_line_height(kFontScale)) * 0.5f),
+                kFontScale);
+
+            if (!item.detail.empty() && tile.detail.size.y > 0.0f)
+            {
+                const std::string fittedDetail = fit_text_to_width(item.detail,
+                    (std::max)(1.0f, tile.detail.size.x - 2.0f * kButtonTextClipInset),
+                    kFontScale);
+                const std::string_view displayDetail = fittedDetail.empty()
+                    ? item.detail
+                    : std::string_view{ fittedDetail };
+                draw_text_line(displayDetail,
+                    tile.detail.position.x + kButtonTextClipInset,
+                    tile.detail.position.y, kFontScale);
+            }
+            if (tile.selected)
+            {
+                draw_sprite(palette.textFieldActive,
+                    tile.selection_indicator.position.x,
+                    tile.selection_indicator.position.y,
+                    tile.selection_indicator.size.x,
+                    tile.selection_indicator.size.y);
+            }
+        }
+
+        if (contextMenu.open)
+        {
+            constexpr float menuPadding = 4.0f;
+            constexpr float rowHeight = 28.0f;
+            constexpr float rowGap = 2.0f;
+            constexpr float minimumMenuWidth = 144.0f;
+            constexpr float maximumMenuWidth = 280.0f;
+            constexpr float scrollbarWidth = 10.0f;
+
+            float measuredMenuWidth = minimumMenuWidth;
+            for (const ContextMenuActionSpec* action : contextActions)
+            {
+                measuredMenuWidth = (std::max)(
+                    measuredMenuWidth,
+                    measure_text_width(action->label, kFontScale)
+                        + 2.0f * kContentPadding);
+            }
+            measuredMenuWidth = (std::min)(measuredMenuWidth, maximumMenuWidth);
+
+            const Vec2 hostOrigin = g_frame.origin;
+            const Vec2 hostSize = g_frame.windowSize;
+            const float availableHostWidth = (std::max)(
+                48.0f, hostSize.x - 2.0f * menuPadding);
+            const float availableHostHeight = (std::max)(
+                48.0f, hostSize.y - 2.0f * menuPadding);
+            const float menuWidth = (std::min)(
+                measuredMenuWidth, availableHostWidth);
+            const float menuContentHeight =
+                static_cast<float>(contextActions.size()) * rowHeight
+                + static_cast<float>(
+                    contextActions.empty() ? 0u : contextActions.size() - 1u)
+                    * rowGap;
+            const float desiredMenuHeight =
+                menuContentHeight + 2.0f * menuPadding;
+            const float menuHeight = (std::min)(
+                desiredMenuHeight, availableHostHeight);
+            const float maximumScroll = (std::max)(
+                0.0f, desiredMenuHeight - menuHeight);
+            contextMenu.scrollOffset = (std::clamp)(
+                contextMenu.scrollOffset, 0.0f, maximumScroll);
+
+            Vec2 menuPosition = contextMenu.position;
+            menuPosition.x = (std::clamp)(
+                menuPosition.x,
+                hostOrigin.x + menuPadding,
+                (std::max)(
+                    hostOrigin.x + menuPadding,
+                    hostOrigin.x + hostSize.x - menuWidth - menuPadding));
+            menuPosition.y = (std::clamp)(
+                menuPosition.y,
+                hostOrigin.y + menuPadding,
+                (std::max)(
+                    hostOrigin.y + menuPadding,
+                    hostOrigin.y + hostSize.y - menuHeight - menuPadding));
+
+            const bool hoveredMenu = point_in_rect(
+                g_frame.mousePos,
+                menuPosition.x,
+                menuPosition.y,
+                menuWidth,
+                menuHeight);
+            if (hoveredMenu && g_frame.mouseWheelDelta != 0)
+            {
+                const float wheelSteps =
+                    static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
+                contextMenu.scrollOffset = (std::clamp)(
+                    contextMenu.scrollOffset - wheelSteps * rowHeight * 2.0f,
+                    0.0f,
+                    maximumScroll);
+                g_frame.mouseWheelDelta = 0;
+            }
+
+            if (!menuOpenedThisFrame && !hoveredMenu
+                && left_press_available())
+            {
+                contextMenu.open = false;
+                consume_left_press();
+            }
+            else if (!menuOpenedThisFrame && !hoveredMenu
+                && right_press_available())
+            {
+                contextMenu.open = false;
+                consume_right_press();
+            }
+            if (contextMenu.open && right_release_available())
+                consume_right_release();
+
+            if (contextMenu.open)
+            {
+                const Vec2 savedCursor = g_frame.cursor;
+                const Vec2 savedOrigin = g_frame.origin;
+                const Vec2 savedWindowSize = g_frame.windowSize;
+                const Vec2 savedContentMin = g_frame.contentMin;
+                const Vec2 savedContentMax = g_frame.contentMax;
+                const bool savedInsideWindow = g_frame.insideWindow;
+                const std::string savedWindowKey = g_frame.windowKey;
+                const std::uint64_t savedWidgetSerial = g_frame.widgetSerial;
+
+                begin_top_layer();
+                draw_sprite(
+                    palette.windowBackground,
+                    menuPosition.x,
+                    menuPosition.y,
+                    menuWidth,
+                    menuHeight);
+                draw_sprite(
+                    palette.titleBar,
+                    menuPosition.x,
+                    menuPosition.y,
+                    menuWidth,
+                    2.0f);
+
+                g_frame.insideWindow = true;
+                g_frame.windowKey = contextStateKey;
+                g_frame.widgetSerial = 0;
+                g_frame.origin = menuPosition;
+                g_frame.windowSize = { menuWidth, menuHeight };
+                g_frame.contentMin = {
+                    menuPosition.x + menuPadding,
+                    menuPosition.y + menuPadding
+                };
+                g_frame.contentMax = {
+                    menuPosition.x + menuWidth - menuPadding
+                        - (maximumScroll > 0.0f ? scrollbarWidth : 0.0f),
+                    menuPosition.y + menuHeight - menuPadding
+                };
+
+                const float actionWidth = (std::max)(
+                    1.0f, g_frame.contentMax.x - g_frame.contentMin.x);
+                for (std::size_t index = 0u;
+                     index < contextActions.size();
+                     ++index)
+                {
+                    const ContextMenuActionSpec& action =
+                        *contextActions[index];
+                    set_cursor({
+                        g_frame.contentMin.x,
+                        g_frame.contentMin.y
+                            + static_cast<float>(index) * (rowHeight + rowGap)
+                            - contextMenu.scrollOffset
+                    });
+                    if (button_with_state(
+                            action.label,
+                            { actionWidth, rowHeight },
+                            false,
+                            action.enabled))
+                    {
+                        result.context_target_id = contextMenu.targetId;
+                        result.selected_action_id = std::string(action.id);
+                        contextMenu.open = false;
+                        break;
+                    }
+                }
+
+                if (maximumScroll > 0.0f)
+                {
+                    const float trackX =
+                        menuPosition.x + menuWidth - scrollbarWidth;
+                    const float visibleRatio = menuHeight / desiredMenuHeight;
+                    const float thumbHeight = (std::max)(
+                        18.0f, menuHeight * visibleRatio);
+                    const float scrollRatio = maximumScroll > 0.0f
+                        ? contextMenu.scrollOffset / maximumScroll
+                        : 0.0f;
+                    const float thumbY = menuPosition.y
+                        + (menuHeight - thumbHeight) * scrollRatio;
+                    draw_sprite(
+                        palette.textField,
+                        trackX,
+                        menuPosition.y,
+                        scrollbarWidth,
+                        menuHeight);
+                    draw_sprite(
+                        palette.buttonActive,
+                        trackX,
+                        thumbY,
+                        scrollbarWidth,
+                        thumbHeight);
+                }
+
+                if (hoveredMenu)
+                {
+                    if (left_press_available())
+                        consume_left_press();
+                    if (left_release_available())
+                        consume_left_release();
+                    if (right_press_available())
+                        consume_right_press();
+                    if (right_release_available())
+                        consume_right_release();
+                }
+
+                g_frame.cursor = savedCursor;
+                g_frame.origin = savedOrigin;
+                g_frame.windowSize = savedWindowSize;
+                g_frame.contentMin = savedContentMin;
+                g_frame.contentMax = savedContentMax;
+                g_frame.insideWindow = savedInsideWindow;
+                g_frame.windowKey = savedWindowKey;
+                g_frame.widgetSerial = savedWidgetSerial;
+                end_top_layer();
+            }
+        }
+
+        result.bounds = { .position = origin, .size = { width, height } };
+        if (update.selected_id.has_value())
+            result.selected_id = update.selected_id->value;
+        if (update.activated_id.has_value())
+            result.activated_id = update.activated_id->value;
+        if (contextMenu.open)
+        {
+            result.context_target_id = contextMenu.targetId;
+            result.context_menu_open = true;
+        }
+        result.matched_count = update.view.filter.matched_count;
+        result.visible_count = update.view.layout.visible_tiles.size();
+        result.visible_ids.reserve(update.view.layout.visible_tiles.size());
+        for (const gui_lib::AssetGridTileLayout& tile :
+             update.view.layout.visible_tiles)
+        {
+            result.visible_ids.push_back(tile.id.value);
+        }
+        result.content_height = update.view.layout.content_extent.y;
+        result.scroll_offset = update.view.layout.scroll_offset;
+        result.selection_changed = update.selection_changed;
+        result.truncated = update.view.filter.source_truncated
+            || update.view.filter.results_truncated
+            || update.view.layout.items_truncated
+            || update.view.layout.visible_tiles_truncated;
+        result.valid = update.view.layout.valid;
+        g_frame.lastButtonBounds = result.bounds;
+        advance_cursor({ 0.0f, height + kContentPadding });
+        return result;
+    }
+
+    NodeGraphCanvasResult node_graph_canvas(
+        const NodeGraphCanvasOptions& options) noexcept
+    {
+        NodeGraphCanvasResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx || options.id.empty()
+            || options.size.x < 1.0f || options.size.y < 1.0f
+            || options.nodes.size() > 4'096u
+            || options.edges.size() > 16'384u)
+        {
+            return result;
+        }
+
+        const Vec2 origin = g_frame.cursor;
+        const float width = options.size.x;
+        const float height = options.size.y;
+        result.bounds = {origin, options.size};
+        result.hovered = options.enabled
+            && point_in_rect(
+                g_frame.mousePos, origin.x, origin.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+        namespace graph_workspace = gui_lib::node_graph_workspace;
+        auto& graphState = g_nodeGraphCanvasStates[widget_state_key(options.id)];
+        std::erase_if(
+            graphState.nodeOffsets,
+            [&](const auto& offset)
+            {
+                return std::ranges::none_of(
+                    options.nodes,
+                    [&](const NodeGraphCanvasNode& node)
+                    {
+                        return node.id == offset.first;
+                    });
+            });
+
+        std::vector<graph_workspace::NodeLayout> graphNodes{};
+        std::vector<graph_workspace::PinLayout> graphPins{};
+        std::vector<graph_workspace::EdgeLayout> graphEdges{};
+        std::unordered_map<std::uint64_t, std::size_t> nodeIndices{};
+        graphNodes.reserve(options.nodes.size());
+        graphPins.reserve(options.nodes.size() * 2u);
+        graphEdges.reserve(options.edges.size());
+        nodeIndices.reserve(options.nodes.size());
+
+        std::uint64_t sourceRevision = 1'469'598'103'934'665'603ull;
+        const auto hashValue = [&](std::uint64_t value) noexcept
+        {
+            sourceRevision ^= value;
+            sourceRevision *= 1'099'511'628'211ull;
+        };
+        for (std::size_t index = 0u; index < options.nodes.size(); ++index)
+        {
+            const NodeGraphCanvasNode& node = options.nodes[index];
+            if (node.id == graph_workspace::invalid_node_id
+                || nodeIndices.contains(node.id))
+            {
+                result.valid = false;
+                return result;
+            }
+            nodeIndices.emplace(node.id, index);
+            const auto offset = graphState.nodeOffsets.contains(node.id)
+                ? graphState.nodeOffsets.at(node.id)
+                : graph_workspace::Vec2{};
+            const double nodeWidth = (std::max)(64.0, static_cast<double>(node.size.x));
+            const double nodeHeight = (std::max)(36.0, static_cast<double>(node.size.y));
+            const graph_workspace::Rect bounds{
+                static_cast<double>(node.position.x) + offset.x,
+                static_cast<double>(node.position.y) + offset.y,
+                nodeWidth,
+                nodeHeight};
+            graphNodes.push_back({
+                .id = node.id,
+                .bounds = bounds,
+                .layout_order = index,
+                .selectable = node.enabled});
+            const graph_workspace::PinId inputPin =
+                static_cast<graph_workspace::PinId>(index * 2u + 1u);
+            const graph_workspace::PinId outputPin = inputPin + 1u;
+            graphPins.push_back({
+                .id = inputPin,
+                .node_id = node.id,
+                .direction = graph_workspace::PinDirection::input,
+                .position = {bounds.x, bounds.y + bounds.height * 0.5},
+                .layout_order = index * 2u,
+                .connectable = options.allow_connections && node.enabled});
+            graphPins.push_back({
+                .id = outputPin,
+                .node_id = node.id,
+                .direction = graph_workspace::PinDirection::output,
+                .position = {bounds.x + bounds.width, bounds.y + bounds.height * 0.5},
+                .layout_order = index * 2u + 1u,
+                .connectable = options.allow_connections && node.enabled});
+            hashValue(node.id);
+            hashValue(static_cast<std::uint64_t>(std::llround(bounds.x * 1'000.0)));
+            hashValue(static_cast<std::uint64_t>(std::llround(bounds.y * 1'000.0)));
+            hashValue(static_cast<std::uint64_t>(std::llround(bounds.width * 1'000.0)));
+            hashValue(static_cast<std::uint64_t>(std::llround(bounds.height * 1'000.0)));
+        }
+        for (std::size_t index = 0u; index < options.edges.size(); ++index)
+        {
+            const NodeGraphCanvasEdge& edge = options.edges[index];
+            const auto sourceNode = nodeIndices.find(edge.source_node);
+            const auto targetNode = nodeIndices.find(edge.target_node);
+            if (!edge.enabled || edge.id == graph_workspace::invalid_edge_id
+                || sourceNode == nodeIndices.end()
+                || targetNode == nodeIndices.end())
+            {
+                continue;
+            }
+            graphEdges.push_back({
+                .id = edge.id,
+                .output_pin_id = static_cast<graph_workspace::PinId>(
+                    sourceNode->second * 2u + 2u),
+                .input_pin_id = static_cast<graph_workspace::PinId>(
+                    targetNode->second * 2u + 1u),
+                .layout_order = index,
+                .selectable = edge.enabled});
+            hashValue(edge.id);
+            hashValue(edge.source_node);
+            hashValue(edge.target_node);
+        }
+        if (sourceRevision == 0u)
+            sourceRevision = 1u;
+
+        const auto replaced = graphState.controller.replace_graph({
+            .nodes = graphNodes,
+            .pins = graphPins,
+            .edges = graphEdges,
+            .source_revision = sourceRevision});
+        const auto viewportSet = graphState.controller.set_viewport({
+            origin.x, origin.y, width, height});
+        if (!replaced.committed || !viewportSet.accepted)
+        {
+            result.valid = false;
+            return result;
+        }
+
+        std::uint64_t externalSelectionSignature = 1u;
+        for (const NodeGraphCanvasNode& node : options.nodes)
+        {
+            if (node.selected)
+            {
+                externalSelectionSignature ^= node.id;
+                externalSelectionSignature *= 1'099'511'628'211ull;
+            }
+        }
+        if (externalSelectionSignature != graphState.externalSelectionSignature)
+        {
+            (void)graphState.controller.clear_selection();
+            bool first = true;
+            for (const NodeGraphCanvasNode& node : options.nodes)
+            {
+                if (!node.selected)
+                    continue;
+                (void)graphState.controller.select_node(
+                    node.id,
+                    first ? graph_workspace::SelectionMode::replace
+                          : graph_workspace::SelectionMode::add);
+                first = false;
+            }
+            graphState.externalSelectionSignature = externalSelectionSignature;
+        }
+        if (!graphState.initialized || options.reset_view)
+        {
+            (void)graphState.controller.set_view({});
+            graphState.initialized = true;
+            result.view_changed = true;
+        }
+        if (options.fit_to_content && !options.nodes.empty())
+        {
+            const auto fitted = graphState.controller.fit_to_content(28.0);
+            result.view_changed = result.view_changed || fitted.changed;
+        }
+        if (result.hovered && g_frame.mouseWheelDelta != 0)
+        {
+            const double wheelSteps =
+                static_cast<double>(g_frame.mouseWheelDelta) / 120.0;
+            const auto zoomed = graphState.controller.zoom_at(
+                {g_frame.mousePos.x, g_frame.mousePos.y},
+                wheelSteps);
+            result.view_changed = result.view_changed || zoomed.changed;
+            g_frame.mouseWheelDelta = 0;
+        }
+        result.valid = true;
+
+        const auto& palette = active_palette();
+        draw_sprite(
+            palette.panelBackground,
+            origin.x, origin.y, width, height);
+        ContentClipScope graphClip{
+            origin,
+            {origin.x + width, origin.y + height}};
+        const auto graphView = graphState.controller.view();
+        const float gridStep = (std::clamp)(
+            options.grid_step * static_cast<float>(graphView.zoom),
+            12.0f,
+            96.0f);
+        float gridOffsetX = std::fmod(
+            static_cast<float>(graphView.pan.x), gridStep);
+        float gridOffsetY = std::fmod(
+            static_cast<float>(graphView.pan.y), gridStep);
+        if (gridOffsetX < 0.0f)
+            gridOffsetX += gridStep;
+        if (gridOffsetY < 0.0f)
+            gridOffsetY += gridStep;
+        for (float x = gridOffsetX; x < width; x += gridStep)
+        {
+            draw_sprite(
+                palette.titleBar,
+                origin.x + x, origin.y, 1.0f, height);
+        }
+        for (float y = gridOffsetY; y < height; y += gridStep)
+        {
+            draw_sprite(
+                palette.titleBar,
+                origin.x, origin.y + y, width, 1.0f);
+        }
+
+        std::unordered_map<std::uint64_t,
+            const graph_workspace::NodeProjection*> projectedNodes{};
+        projectedNodes.reserve(options.nodes.size());
+        for (const graph_workspace::NodeProjection& projection
+             : graphState.controller.node_projections())
+        {
+            projectedNodes.emplace(projection.id, &projection);
+        }
+        std::unordered_map<std::uint64_t, Vec2> projectedPins{};
+        projectedPins.reserve(graphPins.size());
+        for (const graph_workspace::PinProjection& projection
+             : graphState.controller.pin_projections())
+        {
+            projectedPins.emplace(
+                projection.id,
+                Vec2{
+                    static_cast<float>(projection.screen_position.x),
+                    static_cast<float>(projection.screen_position.y)});
+        }
+        const auto drawHorizontal = [&](float first, float second, float y,
+            const SpriteHandle& sprite)
+        {
+            const float x = (std::min)(first, second);
+            draw_sprite(
+                sprite,
+                x, y - 1.0f,
+                (std::max)(2.0f, std::abs(second - first)),
+                2.0f);
+        };
+        const auto drawVertical = [&](float x, float first, float second,
+            const SpriteHandle& sprite)
+        {
+            const float y = (std::min)(first, second);
+            draw_sprite(
+                sprite,
+                x - 1.0f, y,
+                2.0f,
+                (std::max)(2.0f, std::abs(second - first)));
+        };
+        const auto edgeScreenPositions = [&](
+            const NodeGraphCanvasEdge& edge)
+            -> std::optional<std::pair<Vec2, Vec2>>
+        {
+            const auto sourceNode = nodeIndices.find(edge.source_node);
+            const auto targetNode = nodeIndices.find(edge.target_node);
+            if (sourceNode == nodeIndices.end()
+                || targetNode == nodeIndices.end())
+            {
+                return std::nullopt;
+            }
+            const std::uint64_t outputPin = sourceNode->second * 2u + 2u;
+            const std::uint64_t inputPin = targetNode->second * 2u + 1u;
+            const auto source = projectedPins.find(outputPin);
+            const auto target = projectedPins.find(inputPin);
+            if (source == projectedPins.end() || target == projectedPins.end())
+                return std::nullopt;
+            return std::pair{source->second, target->second};
+        };
+        const auto edgeHovered = [&](const NodeGraphCanvasEdge& edge)
+        {
+            if (!result.hovered || !edge.enabled)
+                return false;
+            const auto positions = edgeScreenPositions(edge);
+            if (!positions)
+                return false;
+            const auto [source, target] = *positions;
+            const float middleX = (source.x + target.x) * 0.5f;
+            constexpr float tolerance = 6.0f;
+            const auto nearHorizontal = [&](float first, float second, float y)
+            {
+                return g_frame.mousePos.x >= (std::min)(first, second) - tolerance
+                    && g_frame.mousePos.x <= (std::max)(first, second) + tolerance
+                    && std::abs(g_frame.mousePos.y - y) <= tolerance;
+            };
+            const auto nearVertical = [&](float x, float first, float second)
+            {
+                return g_frame.mousePos.y >= (std::min)(first, second) - tolerance
+                    && g_frame.mousePos.y <= (std::max)(first, second) + tolerance
+                    && std::abs(g_frame.mousePos.x - x) <= tolerance;
+            };
+            return nearHorizontal(source.x, middleX, source.y)
+                || nearVertical(middleX, source.y, target.y)
+                || nearHorizontal(middleX, target.x, target.y);
+        };
+
+        std::optional<std::uint64_t> hoveredEdge{};
+        for (const NodeGraphCanvasEdge& edge : options.edges)
+        {
+            if (!edge.enabled)
+                continue;
+            const auto positions = edgeScreenPositions(edge);
+            if (!positions)
+                continue;
+            const auto [source, target] = *positions;
+            const float middleX = (source.x + target.x) * 0.5f;
+            const bool hovered = edgeHovered(edge);
+            const SpriteHandle lineSprite = edge.selected || hovered
+                ? palette.textFieldActive
+                : palette.buttonActive;
+            drawHorizontal(source.x, middleX, source.y, lineSprite);
+            drawVertical(middleX, source.y, target.y, lineSprite);
+            drawHorizontal(middleX, target.x, target.y, lineSprite);
+            draw_sprite(
+                lineSprite,
+                target.x - 4.0f, target.y - 4.0f,
+                8.0f, 8.0f);
+            if (hovered)
+                hoveredEdge = edge.id;
+        }
+
+        std::optional<std::uint64_t> hoveredNode{};
+        for (const NodeGraphCanvasNode& node : options.nodes)
+        {
+            const auto projected = projectedNodes.find(node.id);
+            if (projected == projectedNodes.end())
+                continue;
+            const auto& projection = *projected->second;
+            const Vec2 nodePosition{
+                static_cast<float>(projection.screen_bounds.x),
+                static_cast<float>(projection.screen_bounds.y)};
+            const float nodeWidth = static_cast<float>(
+                projection.screen_bounds.width);
+            const float nodeHeight = static_cast<float>(
+                projection.screen_bounds.height);
+            const bool hovered = options.enabled && node.enabled
+                && point_in_rect(
+                    g_frame.mousePos,
+                    nodePosition.x,
+                    nodePosition.y,
+                    nodeWidth,
+                    nodeHeight)
+                && point_in_active_clip(g_frame.mousePos);
+            SpriteHandle fill = palette.textField;
+            switch (node.role)
+            {
+            case NodeGraphNodeRole::document:
+                fill = palette.textFieldActive;
+                break;
+            case NodeGraphNodeRole::container:
+                fill = palette.buttonNormal;
+                break;
+            case NodeGraphNodeRole::action:
+                fill = palette.buttonActive;
+                break;
+            case NodeGraphNodeRole::control:
+            default:
+                break;
+            }
+            if (!node.enabled)
+                fill = palette.panelBackground;
+            else if (hovered)
+                fill = palette.buttonHover;
+            draw_sprite(
+                fill,
+                nodePosition.x,
+                nodePosition.y,
+                nodeWidth,
+                nodeHeight);
+
+            const bool selected = node.selected || projection.selected;
+            const SpriteHandle border = selected
+                ? palette.textFieldActive
+                : palette.titleBar;
+            const float borderWidth = selected ? 3.0f : 2.0f;
+            draw_sprite(border, nodePosition.x, nodePosition.y,
+                nodeWidth, borderWidth);
+            draw_sprite(border, nodePosition.x,
+                nodePosition.y + nodeHeight - borderWidth,
+                nodeWidth, borderWidth);
+            draw_sprite(border, nodePosition.x, nodePosition.y,
+                borderWidth, nodeHeight);
+            draw_sprite(border,
+                nodePosition.x + nodeWidth - borderWidth,
+                nodePosition.y, borderWidth, nodeHeight);
+            draw_sprite(
+                palette.textFieldActive,
+                nodePosition.x - 4.0f,
+                nodePosition.y + nodeHeight * 0.5f - 4.0f,
+                8.0f, 8.0f);
+            draw_sprite(
+                palette.buttonActive,
+                nodePosition.x + nodeWidth - 4.0f,
+                nodePosition.y + nodeHeight * 0.5f - 4.0f,
+                8.0f, 8.0f);
+
+            const std::string title = fit_text_to_width(
+                node.title,
+                (std::max)(1.0f, nodeWidth - 18.0f),
+                kFontScale);
+            draw_text_line(
+                title.empty() ? node.title : std::string_view{title},
+                nodePosition.x + 9.0f,
+                nodePosition.y + 6.0f,
+                kFontScale);
+            if (!node.subtitle.empty() && nodeHeight >= 44.0f)
+            {
+                const std::string subtitle = fit_text_to_width(
+                    node.subtitle,
+                    (std::max)(1.0f, nodeWidth - 18.0f),
+                    kFontScale * 0.82f);
+                draw_text_line(
+                    subtitle.empty()
+                        ? node.subtitle
+                        : std::string_view{subtitle},
+                    nodePosition.x + 9.0f,
+                    nodePosition.y + nodeHeight - 18.0f,
+                    kFontScale * 0.82f);
+            }
+            if (hovered)
+                hoveredNode = node.id;
+        }
+
+        const std::size_t pressKey = widget_press_key(
+            options.id, origin, options.size);
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        const auto nodeForPin = [&](graph_workspace::PinId id)
+            -> std::optional<std::uint64_t>
+        {
+            const auto pins = graphState.controller.pins();
+            const auto found = std::ranges::find(
+                pins, id, &graph_workspace::PinLayout::id);
+            return found == pins.end()
+                ? std::nullopt
+                : std::optional<std::uint64_t>{found->node_id};
+        };
+        const auto commitIntent = [&](
+            const graph_workspace::WorkspaceIntent& intent)
+        {
+            if (intent.phase != graph_workspace::IntentPhase::commit)
+                return;
+            if (intent.kind == graph_workspace::IntentKind::move_nodes
+                && options.allow_node_movement)
+            {
+                for (const std::uint64_t id : intent.node_ids)
+                {
+                    auto& offset = graphState.nodeOffsets[id];
+                    offset.x = (std::clamp)(
+                        offset.x + intent.world_delta.x,
+                        -1'000'000.0,
+                        1'000'000.0);
+                    offset.y = (std::clamp)(
+                        offset.y + intent.world_delta.y,
+                        -1'000'000.0,
+                        1'000'000.0);
+                    result.moved_nodes.push_back({
+                        .id = id,
+                        .delta = {
+                            static_cast<float>(intent.world_delta.x),
+                            static_cast<float>(intent.world_delta.y)}
+                    });
+                }
+                result.layout_changed = !result.moved_nodes.empty();
+                return;
+            }
+            if (intent.kind == graph_workspace::IntentKind::connect_pins
+                && options.allow_connections
+                && intent.valid_target)
+            {
+                const auto source = nodeForPin(intent.output_pin_id);
+                const auto target = nodeForPin(intent.input_pin_id);
+                if (source && target && *source != *target)
+                {
+                    result.connection = NodeGraphCanvasConnection{
+                        .source_node = *source,
+                        .target_node = *target};
+                }
+                return;
+            }
+            if (intent.kind
+                    == graph_workspace::IntentKind::disconnect_edges
+                && options.allow_disconnection)
+            {
+                result.disconnected_edges.assign(
+                    intent.edge_ids.begin(), intent.edge_ids.end());
+            }
+        };
+
+        if (options.interactive && options.allow_disconnection
+            && result.hovered && right_press_available())
+        {
+            const auto pointer = graphState.controller.pointer_down({
+                .screen_position = {g_frame.mousePos.x, g_frame.mousePos.y},
+                .button = graph_workspace::PointerButton::secondary,
+                .disconnect_gesture = true});
+            commitIntent(pointer.intent);
+            if (pointer.hit.kind == graph_workspace::HitKind::edge)
+                result.clicked_edge = pointer.hit.edge_id;
+            result.selection_changed = result.selection_changed
+                || pointer.selection_changed;
+            consume_right_press();
+        }
+        if (options.interactive && result.hovered && left_press_available())
+        {
+            const auto hit = graphState.controller.hit_test(
+                {g_frame.mousePos.x, g_frame.mousePos.y});
+            const auto pointer = graphState.controller.pointer_down({
+                .screen_position = {g_frame.mousePos.x, g_frame.mousePos.y},
+                .pan_gesture = hit.kind == graph_workspace::HitKind::none});
+            if (hit.kind == graph_workspace::HitKind::node)
+                result.clicked_node = hit.node_id;
+            else if (hit.kind == graph_workspace::HitKind::pin)
+                result.clicked_node = hit.node_id;
+            else if (hit.kind == graph_workspace::HitKind::edge)
+                result.clicked_edge = hit.edge_id;
+            else
+                result.clicked_background = true;
+            result.selection_changed = result.selection_changed
+                || pointer.selection_changed;
+            result.view_changed = result.view_changed || pointer.view_changed;
+            pressedKey = pressKey;
+            consume_left_press();
+        }
+        if (options.interactive && graphState.controller.pointer_active()
+            && g_frame.mouseDown && pressedKey == pressKey)
+        {
+            const auto pointer = graphState.controller.pointer_move(
+                {g_frame.mousePos.x, g_frame.mousePos.y});
+            result.selection_changed = result.selection_changed
+                || pointer.selection_changed;
+            result.view_changed = result.view_changed || pointer.view_changed;
+        }
+        if (options.interactive && graphState.controller.pointer_active()
+            && g_frame.justReleased && pressedKey == pressKey)
+        {
+            const auto pointer = graphState.controller.pointer_up(
+                {g_frame.mousePos.x, g_frame.mousePos.y});
+            commitIntent(pointer.intent);
+            result.selection_changed = result.selection_changed
+                || pointer.selection_changed;
+            result.view_changed = result.view_changed || pointer.view_changed;
+            if (left_release_available())
+                consume_left_release();
+            pressedKey = 0u;
+        }
+
+        result.selected_nodes.assign(
+            graphState.controller.selected_node_ids().begin(),
+            graphState.controller.selected_node_ids().end());
+        const auto finalView = graphState.controller.view();
+        result.pan = {
+            static_cast<float>(finalView.pan.x),
+            static_cast<float>(finalView.pan.y)};
+        result.zoom = static_cast<float>(finalView.zoom);
+
+        g_frame.lastButtonBounds = result.bounds;
+        advance_cursor({0.0f, height + kContentPadding});
+        return result;
+    }
+
+    SliderResult slider(const SliderOptions& options) noexcept
+    {
+        SliderResult result{};
+        result.value = options.value;
+        if (!g_frame.insideWindow || !g_frame.ctx || options.id.empty()
+            || !std::isfinite(options.minimum)
+            || !std::isfinite(options.maximum)
+            || !std::isfinite(options.value)
+            || !std::isfinite(options.step)
+            || options.maximum <= options.minimum || options.step <= 0.0f)
+        {
+            return result;
+        }
+
+        const Vec2 position = g_frame.cursor;
+        const float width = (std::max)(options.size.x, 40.0f);
+        const float height = (std::max)(
+            options.size.y, base_line_height(kFontScale) + 8.0f);
+        result.bounds = {position, {width, height}};
+        const gui_lib::SliderLayoutOptions layoutOptions{
+            .bounds = {
+                {position.x, position.y},
+                {width, height}},
+            .minimum = options.minimum,
+            .maximum = options.maximum,
+            .value = options.value,
+            .step = options.step
+        };
+        if (!gui_lib::make_slider_layout(layoutOptions).valid)
+            return result;
+        result.hovered = options.enabled
+            && point_in_rect(
+                g_frame.mousePos, position.x, position.y, width, height)
+            && point_in_active_clip(g_frame.mousePos);
+
+        const std::size_t pressKey = widget_press_key(
+            options.id, position, {width, height});
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        if (result.hovered && left_press_available())
+        {
+            pressedKey = pressKey;
+            consume_left_press();
+        }
+        const bool active = options.enabled && g_frame.mouseDown
+            && pressedKey == pressKey;
+        if (active || (result.hovered && g_frame.justReleased
+                && pressedKey == pressKey))
+        {
+            result.value = gui_lib::slider_value_from_position(
+                layoutOptions,
+                g_frame.mousePos.x);
+            result.changed = result.value != options.value;
+        }
+        if (g_frame.justReleased && pressedKey == pressKey)
+        {
+            if (result.hovered)
+                consume_left_release();
+            pressedKey = 0u;
+        }
+
+        const auto& palette = active_palette();
+        draw_sprite(
+            options.enabled ? palette.textField : palette.panelBackground,
+            position.x, position.y, width, height);
+        auto renderedLayoutOptions = layoutOptions;
+        renderedLayoutOptions.value = result.value;
+        const gui_lib::SliderLayout layout =
+            gui_lib::make_slider_layout(renderedLayoutOptions);
+        draw_sprite(
+            palette.titleBar,
+            layout.track.position.x,
+            layout.track.position.y,
+            layout.track.size.x,
+            layout.track.size.y);
+        draw_sprite(
+            active || result.hovered
+                ? palette.textFieldActive : palette.buttonActive,
+            layout.fill.position.x,
+            layout.fill.position.y,
+            layout.fill.size.x,
+            layout.fill.size.y);
+        draw_sprite(
+            palette.buttonHover,
+            layout.thumb.position.x,
+            layout.thumb.position.y,
+            layout.thumb.size.x,
+            layout.thumb.size.y);
+        if (!options.label.empty())
+        {
+            const std::string fitted = fit_text_to_width(
+                options.label,
+                (std::max)(1.0f, width - 2.0f * kContentPadding),
+                kFontScale);
+            draw_text_line(
+                fitted.empty() ? options.label : std::string_view{fitted},
+                position.x + kContentPadding,
+                position.y + 2.0f,
+                kFontScale);
+        }
+        g_frame.lastButtonBounds = result.bounds;
+        advance_cursor({0.0f, height + kContentPadding});
+        return result;
+    }
     void image(const SpriteHandle& sprite, Vec2 size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return;
@@ -4187,14 +6141,119 @@ namespace epochengine::gui
         advance_cursor({ 0.0f, height + kContentPadding });
     }
 
-    SpriteHandle register_runtime_surface(
-        std::string_view id,
-        std::span<const std::uint8_t> rgba_pixels,
-        std::uint32_t width,
-        std::uint32_t height) noexcept
+    RuntimeSurfaceAtlasResult register_runtime_surface_atlas(
+        std::span<const RuntimeSurfaceDescriptor> surfaces) noexcept
     {
-        if (id.empty() || rgba_pixels.empty() || width == 0 || height == 0)
-            return {};
+        RuntimeSurfaceAtlasResult result{};
+        result.descriptor_count = surfaces.size();
+        try
+        {
+            result.handles.resize(surfaces.size());
+        }
+        catch (...)
+        {
+            result.status = RuntimeSurfaceBatchStatus::ResourceUnavailable;
+            return result;
+        }
+
+        if (surfaces.empty())
+            return result;
+        if (surfaces.size() > runtime_surface_batch_maximum_entries)
+        {
+            result.status = RuntimeSurfaceBatchStatus::BatchLimitExceeded;
+            return result;
+        }
+
+        struct PreparedSurface
+        {
+            const RuntimeSurfaceDescriptor* descriptor{};
+            std::size_t inputIndex{};
+            std::string key{};
+            std::uint64_t contentHash{};
+        };
+
+        std::vector<PreparedSurface> prepared{};
+        result.status = RuntimeSurfaceBatchStatus::Ready;
+        try
+        {
+            prepared.reserve(surfaces.size());
+            std::size_t totalBytes = 0u;
+            for (std::size_t index = 0u;
+                 index < surfaces.size();
+                 ++index)
+            {
+                const RuntimeSurfaceDescriptor& surface =
+                    surfaces[index];
+                const auto reject = [&](RuntimeSurfaceBatchStatus status)
+                {
+                    if (result.status == RuntimeSurfaceBatchStatus::Ready)
+                        result.status = status;
+                };
+
+                if (surface.id.empty()
+                    || surface.id.size()
+                        > runtime_surface_identifier_maximum_bytes
+                    || surface.width == 0u
+                    || surface.height == 0u
+                    || surface.width > runtime_surface_maximum_extent
+                    || surface.height > runtime_surface_maximum_extent)
+                {
+                    reject(RuntimeSurfaceBatchStatus::InvalidDescriptor);
+                    continue;
+                }
+
+                const std::uint64_t expectedBytes =
+                    static_cast<std::uint64_t>(surface.width)
+                    * static_cast<std::uint64_t>(surface.height) * 4ull;
+                if (expectedBytes != surface.rgba_pixels.size())
+                {
+                    reject(RuntimeSurfaceBatchStatus::InvalidDescriptor);
+                    continue;
+                }
+                if (expectedBytes
+                        > runtime_surface_batch_maximum_rgba_bytes
+                    || totalBytes
+                        > runtime_surface_batch_maximum_rgba_bytes
+                            - static_cast<std::size_t>(expectedBytes))
+                {
+                    reject(RuntimeSurfaceBatchStatus::ByteBudgetExceeded);
+                    continue;
+                }
+
+                const auto duplicate = std::find_if(
+                    prepared.begin(),
+                    prepared.end(),
+                    [&](const PreparedSurface& accepted) noexcept
+                    {
+                        return accepted.key == surface.id;
+                    });
+                if (duplicate != prepared.end())
+                {
+                    reject(RuntimeSurfaceBatchStatus::DuplicateIdentifier);
+                    continue;
+                }
+
+                totalBytes += static_cast<std::size_t>(expectedBytes);
+                prepared.push_back(PreparedSurface{
+                    .descriptor = &surface,
+                    .inputIndex = index,
+                    .key = std::string{surface.id},
+                    .contentHash = hash_surface_pixels(
+                        surface.rgba_pixels,
+                        surface.width,
+                        surface.height)
+                });
+            }
+        }
+        catch (...)
+        {
+            result.status = RuntimeSurfaceBatchStatus::ResourceUnavailable;
+            return result;
+        }
+
+        if (result.status != RuntimeSurfaceBatchStatus::Ready
+            || prepared.empty())
+            return result;
 
         try
         {
@@ -4202,54 +6261,256 @@ namespace epochengine::gui
         }
         catch (...)
         {
-            return {};
-        }
-
-        std::lock_guard cacheLock(g_runtimeSurfaceCacheMutex);
-
-        const std::string key{ id };
-        const std::uint64_t contentHash = hash_surface_pixels(rgba_pixels, width, height);
-        auto& entry = g_runtimeSurfaceCache[key];
-
-        if (entry.handle.is_valid()
-            && entry.contentHash == contentHash
-            && entry.width == width
-            && entry.height == height)
-        {
-            return entry.handle;
+            result.status = RuntimeSurfaceBatchStatus::ResourceUnavailable;
+            return result;
         }
 
         try
         {
-            std::vector<std::uint8_t> pixels(rgba_pixels.begin(), rgba_pixels.end());
-            std::string spriteName = "__agui/runtime_surface/" + key + "/" + std::to_string(entry.version + 1u);
-
-            SpriteHandle handle{};
+            std::scoped_lock locks(
+                g_runtimeSurfaceCacheMutex,
+                g_resourceMutex);
+            TextureAtlas* runtimeAtlas =
+                ensure_runtime_surface_atlas_locked();
+            if (!runtimeAtlas)
             {
-                std::scoped_lock resourceLock(g_resourceMutex);
-                TextureAtlas* runtimeAtlas = ensure_runtime_surface_atlas_locked();
-                if (!runtimeAtlas)
-                    return {};
-
-                handle = try_add_sprite(*runtimeAtlas, spriteName, pixels, width, height, true);
+                result.status =
+                    RuntimeSurfaceBatchStatus::ResourceUnavailable;
+                return result;
             }
 
-            if (!handle.is_valid())
-                return {};
+            bool mutationFailed = false;
+            try
+            {
+                for (const PreparedSurface& surface : prepared)
+                {
+                    const RuntimeSurfaceDescriptor& descriptor =
+                        *surface.descriptor;
+                    auto entryIt =
+                        g_runtimeSurfaceCache.find(surface.key);
+                    if (entryIt != g_runtimeSurfaceCache.end()
+                        && entryIt->second.handle.is_valid()
+                        && entryIt->second.contentHash
+                            == surface.contentHash
+                        && entryIt->second.width == descriptor.width
+                        && entryIt->second.height == descriptor.height)
+                    {
+                        result.handles[surface.inputIndex] =
+                            entryIt->second.handle;
+                        ++result.accepted_count;
+                        ++result.unchanged_count;
+                        continue;
+                    }
 
-            entry.handle = handle;
-            entry.contentHash = contentHash;
-            entry.width = width;
-            entry.height = height;
-            entry.version += 1u;
-            return entry.handle;
+                    if (entryIt != g_runtimeSurfaceCache.end()
+                        && entryIt->second.handle.is_valid()
+                        && entryIt->second.width == descriptor.width
+                        && entryIt->second.height == descriptor.height
+                        && !entryIt->second.spriteName.empty())
+                    {
+                        Texture texture{};
+                        texture.name = entryIt->second.spriteName;
+                        texture.width = descriptor.width;
+                        texture.height = descriptor.height;
+                        texture.channels = 4;
+                        texture.pixels.assign(
+                            descriptor.rgba_pixels.begin(),
+                            descriptor.rgba_pixels.end());
+                        if (!runtimeAtlas->replace_entry_pixels(
+                                entryIt->second.spriteName,
+                                texture))
+                        {
+                            mutationFailed = true;
+                            break;
+                        }
+
+                        entryIt->second.contentHash =
+                            surface.contentHash;
+                        ++entryIt->second.version;
+                        result.handles[surface.inputIndex] =
+                            entryIt->second.handle;
+                        ++result.accepted_count;
+                        ++result.replaced_count;
+                        continue;
+                    }
+
+                    const std::uint32_t nextVersion =
+                        entryIt == g_runtimeSurfaceCache.end()
+                            ? 1u
+                            : entryIt->second.version + 1u;
+                    std::vector<std::uint8_t> pixels(
+                        descriptor.rgba_pixels.begin(),
+                        descriptor.rgba_pixels.end());
+                    std::string spriteName =
+                        "__agui/runtime_surface/" + surface.key + "/"
+                        + std::to_string(nextVersion);
+                    SpriteHandle handle = try_add_sprite(
+                        *runtimeAtlas,
+                        spriteName,
+                        pixels,
+                        descriptor.width,
+                        descriptor.height,
+                        false);
+                    if (!handle.is_valid())
+                    {
+                        mutationFailed = true;
+                        break;
+                    }
+
+                    CachedRuntimeSurface cacheEntry{
+                        .handle = handle,
+                        .contentHash = surface.contentHash,
+                        .width = descriptor.width,
+                        .height = descriptor.height,
+                        .version = nextVersion,
+                        .spriteName = std::move(spriteName)
+                    };
+                    if (entryIt == g_runtimeSurfaceCache.end())
+                    {
+                        g_runtimeSurfaceCache.emplace(
+                            surface.key,
+                            std::move(cacheEntry));
+                    }
+                    else
+                    {
+                        entryIt->second = std::move(cacheEntry);
+                    }
+
+                    result.handles[surface.inputIndex] = handle;
+                    ++result.accepted_count;
+                    ++result.added_count;
+                }
+            }
+            catch (...)
+            {
+                result.status =
+                    RuntimeSurfaceBatchStatus::ResourceUnavailable;
+            }
+
+            if (mutationFailed)
+            {
+                result.status =
+                    RuntimeSurfaceBatchStatus::AtlasMutationFailed;
+            }
+
+            try
+            {
+                epochengine::atlasmanager::ensure_uploaded(
+                    *runtimeAtlas);
+                result.uploaded = true;
+            }
+            catch (...)
+            {
+                result.status = RuntimeSurfaceBatchStatus::UploadFailed;
+            }
+            return result;
         }
         catch (...)
         {
-            return {};
+            result.status = RuntimeSurfaceBatchStatus::ResourceUnavailable;
+            return result;
         }
     }
 
+    bool run_runtime_surface_contract() noexcept
+    {
+        constexpr std::string_view utf8Sample{
+            "A\xE2\x96\x88\xF0\x9F\x9A\x80"};
+        const DecodedUtf8Codepoint ascii =
+            decode_utf8_codepoint(utf8Sample, 0u);
+        const DecodedUtf8Codepoint block =
+            decode_utf8_codepoint(utf8Sample, 1u);
+        const DecodedUtf8Codepoint rocket =
+            decode_utf8_codepoint(utf8Sample, 4u);
+        constexpr std::string_view malformed{"\xE2\x28\xA1"};
+        const DecodedUtf8Codepoint rejected =
+            decode_utf8_codepoint(malformed, 0u);
+        if (ascii.codepoint != U'A' || ascii.byte_count != 1u
+            || block.codepoint != U'\u2588'
+            || block.byte_count != 3u
+            || rocket.codepoint != U'\U0001F680'
+            || rocket.byte_count != 4u
+            || rejected.codepoint != U'?'
+            || rejected.byte_count != 1u
+            || safe_draw_codepoint(block.codepoint) != U'\u2588'
+            || safe_draw_codepoint(U'\u2550') != U'\u2550'
+            || safe_draw_codepoint(U'\u2551') != U'\u2551'
+            || safe_draw_codepoint(U'\u2557') != U'\u2557'
+            || next_utf8_codepoint_start(utf8Sample, 0u) != 1u
+            || next_utf8_codepoint_start(utf8Sample, 1u) != 4u
+            || next_utf8_codepoint_start(utf8Sample, 4u) != 8u
+            || previous_utf8_codepoint_start(utf8Sample, 8u) != 4u
+            || previous_utf8_codepoint_start(utf8Sample, 4u) != 1u)
+        {
+            return false;
+        }
+        constexpr std::array<std::uint8_t, 16> firstPixels{
+            255u, 0u, 0u, 255u,
+            0u, 255u, 0u, 255u,
+            0u, 0u, 255u, 255u,
+            255u, 255u, 255u, 255u};
+        constexpr std::array<std::uint8_t, 16> changedPixels{
+            0u, 0u, 0u, 255u,
+            255u, 255u, 0u, 255u,
+            0u, 255u, 255u, 255u,
+            255u, 0u, 255u, 255u};
+        const RuntimeSurfaceDescriptor first{
+            .id = "__agui_contract/runtime_surface",
+            .rgba_pixels = firstPixels,
+            .width = 2u,
+            .height = 2u};
+        const RuntimeSurfaceAtlasResult initial =
+            register_runtime_surface_atlas(
+                std::span<const RuntimeSurfaceDescriptor>{&first, 1u});
+        if (!initial || initial.handles.size() != 1u
+            || !initial.handles.front().is_valid())
+        {
+            return false;
+        }
+
+        const RuntimeSurfaceAtlasResult unchanged =
+            register_runtime_surface_atlas(
+                std::span<const RuntimeSurfaceDescriptor>{&first, 1u});
+        if (!unchanged || unchanged.unchanged_count != 1u
+            || unchanged.handles.front() != initial.handles.front())
+        {
+            return false;
+        }
+
+        const RuntimeSurfaceDescriptor changed{
+            .id = first.id,
+            .rgba_pixels = changedPixels,
+            .width = first.width,
+            .height = first.height};
+        const RuntimeSurfaceAtlasResult replaced =
+            register_runtime_surface_atlas(
+                std::span<const RuntimeSurfaceDescriptor>{&changed, 1u});
+        return replaced
+            && replaced.replaced_count == 1u
+            && replaced.handles.front() == initial.handles.front();
+    }
+    SpriteHandle register_runtime_surface(
+        std::string_view id,
+        std::span<const std::uint8_t> rgba_pixels,
+        std::uint32_t width,
+        std::uint32_t height) noexcept
+    {
+        const RuntimeSurfaceDescriptor descriptor{
+            .id = id,
+            .rgba_pixels = rgba_pixels,
+            .width = width,
+            .height = height
+        };
+        RuntimeSurfaceAtlasResult result =
+            register_runtime_surface_atlas(
+                std::span<const RuntimeSurfaceDescriptor>{
+                    &descriptor,
+                    1u
+                });
+        return result && !result.handles.empty()
+            ? result.handles.front()
+            : SpriteHandle{};
+    }
     std::optional<WidgetBounds> last_button_bounds() noexcept
     {
         return g_frame.lastButtonBounds;
@@ -4438,16 +6699,19 @@ namespace epochengine::gui
         float penX = 0.0f;
         for (std::size_t index = lineStart; index < lineEnd; ++index)
         {
-            const unsigned char raw = static_cast<unsigned char>(text[index]);
-            if (is_utf8_continuation_byte(raw))
-                continue;
-            const unsigned char ch = safe_draw_char(raw);
+            const std::size_t byteIndex = index;
+            const DecodedUtf8Codepoint decoded =
+                decode_utf8_codepoint(text, byteIndex);
+            const char32_t codepoint =
+                safe_draw_codepoint(decoded.codepoint);
+            index += (std::max)(
+                std::size_t{1u}, decoded.byte_count) - 1u;
             const float advance = glyph_advance_with_kerning(
-                ch,
-                next_drawable_char(text, index),
+                codepoint,
+                next_drawable_char(text, byteIndex),
                 scale);
             if (localX <= penX + advance * 0.5f)
-                return index;
+                return byteIndex;
             penX += advance;
         }
         return lineEnd;
@@ -4782,7 +7046,7 @@ namespace epochengine::gui
                 ++lineIndex;
             }
 
-            if (active && g_frame.caretVisible)
+            if (active)
             {
                 const std::size_t caret = (std::min)(widget.control.caret, view.size());
                 const std::size_t caretLineStart = edit_box_line_start(view, caret);
@@ -5010,14 +7274,20 @@ namespace epochengine::gui
         float penX = 0.0f;
         for (std::size_t i = lineStart; i < lineEnd; ++i)
         {
-            const unsigned char raw = static_cast<unsigned char>(text[i]);
-            if (is_utf8_continuation_byte(raw))
-                continue;
+            const std::size_t byteIndex = i;
+            const DecodedUtf8Codepoint decoded =
+                decode_utf8_codepoint(text, byteIndex);
+            const char32_t codepoint =
+                safe_draw_codepoint(decoded.codepoint);
+            i += (std::max)(
+                std::size_t{1u}, decoded.byte_count) - 1u;
 
-            const unsigned char ch = safe_draw_char(raw);
-            const float advance = glyph_advance_with_kerning(ch, next_drawable_char(text, i), scale);
+            const float advance = glyph_advance_with_kerning(
+                codepoint,
+                next_drawable_char(text, byteIndex),
+                scale);
             if (localX <= penX + advance * 0.5f)
-                return i;
+                return byteIndex;
             penX += advance;
         }
 
@@ -5074,20 +7344,44 @@ namespace epochengine::gui
 
         std::string filtered{};
         filtered.reserve((std::min)(incoming.size(), available));
-        for (char ch : incoming)
+        std::size_t incomingIndex = 0u;
+        while (incomingIndex < incoming.size()
+            && filtered.size() < available)
         {
-            if (filtered.size() >= available)
-                break;
-            if (ch == '\r')
-                continue;
-            if (ch == '\n')
+            const unsigned char lead =
+                static_cast<unsigned char>(incoming[incomingIndex]);
+            if (lead == static_cast<unsigned char>('\r'))
             {
-                filtered.push_back('\n');
+                ++incomingIndex;
                 continue;
             }
-            if (static_cast<unsigned char>(ch) < 32u)
+            if (lead == static_cast<unsigned char>('\n'))
+            {
+                filtered.push_back('\n');
+                ++incomingIndex;
                 continue;
-            filtered.push_back(ch);
+            }
+            if (lead < 32u)
+            {
+                ++incomingIndex;
+                continue;
+            }
+
+            const DecodedUtf8Codepoint decoded =
+                decode_utf8_codepoint(incoming, incomingIndex);
+            const std::size_t byteCount =
+                (std::max)(std::size_t{1u}, decoded.byte_count);
+            if (lead >= 0x80u && decoded.codepoint == U'?'
+                && byteCount == 1u)
+            {
+                filtered.push_back('?');
+                ++incomingIndex;
+                continue;
+            }
+            if (byteCount > available - filtered.size())
+                break;
+            filtered.append(incoming.substr(incomingIndex, byteCount));
+            incomingIndex += byteCount;
         }
 
         if (filtered.empty())
@@ -5119,6 +7413,8 @@ namespace epochengine::gui
             ? std::to_string(reinterpret_cast<std::uintptr_t>(&text))
             : std::string(options.id);
         auto& state = g_sourceEditorStates[scroll_panel_key(id)];
+        const std::string scrollId = id + "-scroll";
+        auto& scrollState = g_scrollAreaStates[scroll_panel_key(scrollId)];
 
         const float scrollbarReserve = 12.0f;
         const float editorWidth = (std::max)(64.0f, width - scrollbarReserve);
@@ -5209,15 +7505,25 @@ namespace epochengine::gui
                         }
                         else if (evt.key == 8 && state.cursorIndex > 0u)
                         {
-                            const std::size_t eraseIndex = state.cursorIndex - 1u;
-                            text.erase(eraseIndex, 1u);
+                            const std::size_t eraseIndex =
+                                previous_utf8_codepoint_start(
+                                    text, state.cursorIndex);
+                            text.erase(
+                                eraseIndex,
+                                state.cursorIndex - eraseIndex);
                             state.cursorIndex = eraseIndex;
                             state.selectionAnchor = eraseIndex;
                             result.edit.changed = true;
                         }
-                        else if (evt.key == 127 && state.cursorIndex < text.size())
+                        else if (evt.key == 127
+                            && state.cursorIndex < text.size())
                         {
-                            text.erase(state.cursorIndex, 1u);
+                            const std::size_t eraseEnd =
+                                next_utf8_codepoint_start(
+                                    text, state.cursorIndex);
+                            text.erase(
+                                state.cursorIndex,
+                                eraseEnd - state.cursorIndex);
                             result.edit.changed = true;
                         }
                     }
@@ -5235,12 +7541,16 @@ namespace epochengine::gui
                     }
                     else if (evt.key == 37) // VK_LEFT
                     {
-                        const std::size_t next = state.cursorIndex > 0u ? state.cursorIndex - 1u : 0u;
+                        const std::size_t next =
+                            previous_utf8_codepoint_start(
+                                text, state.cursorIndex);
                         source_editor_set_cursor(state, next, evt.shift_down, text.size());
                     }
                     else if (evt.key == 39) // VK_RIGHT
                     {
-                        const std::size_t next = (std::min)(state.cursorIndex + 1u, text.size());
+                        const std::size_t next =
+                            next_utf8_codepoint_start(
+                                text, state.cursorIndex);
                         source_editor_set_cursor(state, next, evt.shift_down, text.size());
                     }
                     else if (evt.key == 36) // VK_HOME
@@ -5267,8 +7577,43 @@ namespace epochengine::gui
             }
         }
 
+        const bool revealCaret = active
+            && std::any_of(
+                g_frame.events.begin(),
+                g_frame.events.end(),
+                [](const InputEvent& event)
+                {
+                    if (event.type == EventType::TextInput)
+                        return true;
+                    if (event.type != EventType::KeyDown)
+                        return false;
+                    return event.key == 8 || event.key == 127
+                        || event.key == 13 || event.key == 35
+                        || event.key == 36 || event.key == 37
+                        || event.key == 39
+                        || (event.ctrl_down
+                            && (event.key == 'A' || event.key == 'a'
+                                || event.key == 'V' || event.key == 'v'
+                                || event.key == 'X' || event.key == 'x'));
+                });
+        if (revealCaret)
+        {
+            const auto cursorEnd = text.begin()
+                + static_cast<std::ptrdiff_t>(
+                    (std::min)(state.cursorIndex, text.size()));
+            const std::size_t caretLine = static_cast<std::size_t>(
+                std::count(text.begin(), cursorEnd, '\n'));
+            const float caretTop =
+                static_cast<float>(caretLine) * lineAdvance;
+            const float caretBottom = caretTop + baseHeight
+                + 2.0f * kBoxInnerPadding;
+            if (caretTop < scrollState.scrollY)
+                scrollState.scrollY = caretTop;
+            else if (caretBottom > scrollState.scrollY + height)
+                scrollState.scrollY = caretBottom - height;
+        }
+
         draw_sprite(active ? palette.textFieldActive : palette.textField, pos.x, pos.y, editorWidth, height);
-        const std::string scrollId = id + "-scroll";
 
         const auto scroll = begin_scroll_area(ScrollAreaOptions{
             .id = scrollId,
@@ -5279,6 +7624,7 @@ namespace epochengine::gui
         });
 
         const float textX = g_frame.cursor.x + kBoxInnerPadding;
+        const float viewportTextY = pos.y + kBoxInnerPadding;
         const float firstTextY = g_frame.cursor.y + kBoxInnerPadding;
         const std::size_t firstVisibleLine = static_cast<std::size_t>((std::max)(0.0f, scroll.scroll_y) / (std::max)(1.0f, lineAdvance));
         const std::size_t visibleLineBudget = static_cast<std::size_t>(height / (std::max)(1.0f, lineAdvance)) + 4u;
@@ -5290,7 +7636,7 @@ namespace epochengine::gui
                 g_frame.mousePos.x,
                 g_frame.mousePos.y,
                 textX,
-                firstTextY,
+                viewportTextY,
                 scroll.scroll_y,
                 lineAdvance,
                 kFontScale);
@@ -5304,7 +7650,7 @@ namespace epochengine::gui
                 g_frame.mousePos.x,
                 g_frame.mousePos.y,
                 textX,
-                firstTextY,
+                viewportTextY,
                 scroll.scroll_y,
                 lineAdvance,
                 kFontScale);
@@ -5340,7 +7686,7 @@ namespace epochengine::gui
             lineY += lineAdvance;
         }
 
-        if (active && g_frame.caretVisible && !source_editor_has_selection(state, text.size()))
+        if (active && !source_editor_has_selection(state, text.size()))
         {
             const std::size_t cursor = (std::min)(state.cursorIndex, text.size());
             std::size_t caretLineIndex = 0u;
@@ -5600,6 +7946,238 @@ namespace epochengine::gui
         return clicked;
     }
 
+    TabBarResult tab_bar_buttons(
+        std::span<const TabButtonSpec> tabs,
+        float height,
+        float gap,
+        TabBarPresentation presentation) noexcept
+    {
+        TabBarResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx || tabs.empty())
+            return result;
+
+        const Vec2 rowStart = g_frame.cursor;
+        const auto& palette = active_palette();
+        static thread_local std::vector<float> widths;
+        widths.clear();
+        widths.reserve(tabs.size());
+        const bool workbenchPresentation =
+            presentation == TabBarPresentation::Workbench;
+        for (const auto& tab : tabs)
+        {
+            const float requestedWidth = tab.width > 0.0f
+                ? tab.width
+                : workbenchPresentation
+                    ? (std::max)(
+                        52.0f,
+                        measure_text_width(tab.label, kFontScale)
+                            + 24.0f
+                            + (tab.closable ? 18.0f : 0.0f)
+                            + (tab.dirty ? 8.0f : 0.0f))
+                    : gui_lib::preferred_tool_tab_width(
+                        measure_text_width(tab.label, kFontScale),
+                        tab.closable,
+                        tab.dirty);
+            widths.push_back((std::max)(1.0f, requestedWidth));
+        }
+
+        const float rowHeight = (std::max)(
+            height,
+            base_line_height(kFontScale) + 2.0f * kBoxInnerPadding);
+        const gui_lib::TabButtonLayoutOptions layoutOptions{
+            .strip = {
+                .position = to_lib(rowStart),
+                .item_widths = std::span<const float>{ widths.data(), widths.size() },
+                .height = rowHeight,
+                .gap = gap },
+            .indicator_height = workbenchPresentation ? 2.0f : 3.0f,
+            .close_extent = 18.0f,
+            .label_padding = workbenchPresentation ? 12.0f : kContentPadding
+        };
+        const gui_lib::SegmentedControlLayout strip =
+            gui_lib::make_segmented_control_layout(layoutOptions.strip);
+        auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+
+        if (workbenchPresentation && strip.valid)
+        {
+            draw_sprite(
+                palette.panelBackground,
+                strip.bounds.position.x,
+                strip.bounds.position.y,
+                strip.bounds.size.x,
+                strip.bounds.size.y);
+        }
+
+        for (std::size_t index = 0; index < tabs.size(); ++index)
+        {
+            const TabButtonSpec& tab = tabs[index];
+            const gui_lib::TabButtonLayout layout =
+                gui_lib::make_tab_button_layout(
+                    layoutOptions,
+                    static_cast<std::uint32_t>(index),
+                    tab.active,
+                    tab.closable);
+            if (!layout.valid)
+                continue;
+
+            const Vec2 buttonPosition = from_lib(layout.button.position);
+            const Vec2 buttonSize = from_lib(layout.button.size);
+            const Vec2 closePosition = from_lib(layout.close_button.position);
+            const Vec2 closeSize = from_lib(layout.close_button.size);
+            const bool closeHovered = tab.enabled
+                && tab.closable
+                && point_in_rect(
+                    g_frame.mousePos,
+                    closePosition.x,
+                    closePosition.y,
+                    closeSize.x,
+                    closeSize.y)
+                && point_in_active_clip(g_frame.mousePos);
+            const bool buttonHovered = tab.enabled
+                && point_in_rect(
+                    g_frame.mousePos,
+                    buttonPosition.x,
+                    buttonPosition.y,
+                    buttonSize.x,
+                    buttonSize.y)
+                && point_in_active_clip(g_frame.mousePos)
+                && !closeHovered;
+
+            const std::string_view identity = !tab.id.empty() ? tab.id : tab.label;
+            const std::size_t buttonKey =
+                widget_press_key(identity, buttonPosition, buttonSize);
+            std::string closeIdentity{ identity };
+            closeIdentity.append(".close");
+            const std::size_t closeKey =
+                widget_press_key(closeIdentity, closePosition, closeSize);
+
+            if (closeHovered && left_press_available())
+            {
+                pressedKey = closeKey;
+                consume_left_press();
+            }
+            else if (buttonHovered && left_press_available())
+            {
+                pressedKey = buttonKey;
+                result.pressed_index = index;
+                consume_left_press();
+            }
+
+            const bool buttonPressed =
+                (g_frame.mouseDown || g_frame.justReleased)
+                && pressedKey == buttonKey;
+            const bool closePressed =
+                (g_frame.mouseDown || g_frame.justReleased)
+                && pressedKey == closeKey;
+            const bool buttonClicked = left_release_available()
+                && buttonHovered
+                && pressedKey == buttonKey;
+            const bool closeClicked = left_release_available()
+                && closeHovered
+                && pressedKey == closeKey;
+            if (g_frame.justReleased
+                && (pressedKey == buttonKey || pressedKey == closeKey))
+            {
+                if (buttonClicked || closeClicked)
+                    consume_left_release();
+                pressedKey = 0;
+            }
+
+            const SpriteHandle background = !tab.enabled
+                ? palette.panelBackground
+                : tab.active || buttonPressed ? palette.buttonActive
+                : buttonHovered ? palette.buttonHover
+                : workbenchPresentation ? palette.panelBackground
+                : palette.buttonNormal;
+            if (!workbenchPresentation || tab.active || buttonPressed || buttonHovered)
+            {
+                draw_sprite(
+                    background,
+                    buttonPosition.x,
+                    buttonPosition.y,
+                    buttonSize.x,
+                    buttonSize.y);
+            }
+            const float dirtyReservation = tab.dirty ? 8.0f : 0.0f;
+            const float availableTextWidth = (std::max)(
+                1.0f,
+                layout.label.size.x - dirtyReservation);
+            const std::string fitted = fit_text_to_width(
+                tab.label,
+                availableTextWidth,
+                kFontScale);
+            const std::string_view display =
+                fitted.empty() ? tab.label : std::string_view{ fitted };
+            const float textY = layout.label.position.y
+                + std::floor((std::max)(
+                    0.0f,
+                    (layout.label.size.y - base_line_height(kFontScale)) * 0.5f));
+            const float textX = workbenchPresentation
+                ? layout.label.position.x
+                    + (std::max)(
+                        0.0f,
+                        (layout.label.size.x
+                            - measure_text_width(display, kFontScale)) * 0.5f)
+                : layout.label.position.x;
+            draw_text_line(
+                display,
+                textX,
+                textY,
+                kFontScale);
+
+            if (workbenchPresentation && tab.active)
+            {
+                draw_sprite(
+                    palette.textFieldActive,
+                    layout.indicator.position.x,
+                    layout.indicator.position.y,
+                    layout.indicator.size.x,
+                    layout.indicator.size.y);
+            }
+
+            if (tab.dirty)
+            {
+                draw_sprite(
+                    palette.textFieldActive,
+                    layout.label.position.x + availableTextWidth + 2.0f,
+                    layout.label.position.y + layout.label.size.y * 0.5f - 2.0f,
+                    4.0f,
+                    4.0f);
+            }
+
+            if (tab.closable)
+            {
+                const SpriteHandle closeBackground = closePressed
+                    ? palette.buttonActive
+                    : closeHovered ? palette.textFieldActive
+                    : background;
+                draw_sprite(
+                    closeBackground,
+                    closePosition.x,
+                    closePosition.y,
+                    closeSize.x,
+                    closeSize.y);
+                const float closeTextWidth = measure_text_width("X", kFontScale);
+                draw_text_line(
+                    "X",
+                    closePosition.x + (std::max)(0.0f, (closeSize.x - closeTextWidth) * 0.5f),
+                    closePosition.y + (std::max)(
+                        0.0f,
+                        (closeSize.y - base_line_height(kFontScale)) * 0.5f),
+                    kFontScale);
+            }
+
+            if (buttonClicked)
+                result.selected_index = index;
+            if (closeClicked)
+                result.closed_index = index;
+        }
+
+        set_cursor(rowStart);
+        advance_cursor({ 0.0f, strip.height + kContentPadding });
+        return result;
+    }
+
     std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height,
@@ -5616,8 +8194,14 @@ namespace epochengine::gui
         {
             const auto& item = items[i];
             set_cursor({ x, rowStart.y });
-            if (button(item.label, { item.width, height }))
+            if (button_with_state(
+                    item.label,
+                    { item.width, height },
+                    false,
+                    item.enabled))
+            {
                 clicked = i;
+            }
             x += (std::max)(1.0f, item.width) + gap;
         }
 
@@ -5788,7 +8372,7 @@ namespace epochengine::gui
         if (state.open)
         {
             PendingSelectPopup popup{};
-            popup.scrollId = listId;
+            popup.scrollKey = scroll_panel_key(listId);
             popup.position = listPos;
             popup.width = width;
             popup.height = listHeight;
@@ -6123,7 +8707,8 @@ namespace epochengine::gui
         const std::string id = options.id.empty()
             ? std::to_string(reinterpret_cast<std::uintptr_t>(g_frame.ctx)) + ":scroll-area"
             : std::string(options.id);
-        auto& state = g_scrollAreaStates[scroll_panel_key(id)];
+        const std::string stateKey = scroll_panel_key(id);
+        auto& state = g_scrollAreaStates[stateKey];
 
         float estimatedContentHeight = (std::max)(
             height,
@@ -6142,7 +8727,8 @@ namespace epochengine::gui
             && point_in_active_clip(g_frame.mousePos);
         const bool selectList = is_select_box_list_id(id);
         const bool selectBoxCapturesWheel = any_select_box_open() && !selectList;
-        if (hovered && g_frame.mouseWheelDelta != 0 && !selectBoxCapturesWheel)
+        if (options.capture_wheel && hovered
+            && g_frame.mouseWheelDelta != 0 && !selectBoxCapturesWheel)
         {
             const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
             const float step = line_advance_amount(kFontScale) * 3.0f;
@@ -6193,7 +8779,9 @@ namespace epochengine::gui
         }
 
         g_scrollAreaStack.push_back(ScrollAreaFrame{
-            .key = scroll_panel_key(id),
+            .key = stateKey,
+            .ownerWindowKey = g_frame.windowKey,
+            .ownerWindowDepth = g_windowFrameStack.size(),
             .previousCursor = g_frame.cursor,
             .previousMin = g_frame.contentMin,
             .previousMax = g_frame.contentMax,
@@ -6225,6 +8813,14 @@ namespace epochengine::gui
         if (!g_frame.insideWindow || g_scrollAreaStack.empty())
             return;
 
+        if (g_scrollAreaStack.back().ownerWindowDepth
+                != g_windowFrameStack.size()
+            || g_scrollAreaStack.back().ownerWindowKey
+                != g_frame.windowKey)
+        {
+            return;
+        }
+
         const ScrollAreaFrame frame = g_scrollAreaStack.back();
         g_scrollAreaStack.pop_back();
 
@@ -6253,6 +8849,9 @@ namespace epochengine::gui
             const float scrollbarWidth = 10.0f;
             const float trackX = frame.viewportMax.x - scrollbarWidth;
             const float trackY = frame.viewportMin.y;
+            ContentClipScope scrollbarClip{
+                frame.viewportMin,
+                frame.viewportMax };
             draw_sprite(palette.textField, trackX, trackY, scrollbarWidth, frame.viewportHeight);
 
             const float visibleRatio = frame.viewportHeight / state.contentHeight;
@@ -6293,7 +8892,28 @@ namespace epochengine::gui
         const float contentHeight = (std::max)(1.0f, height - 2.0f * kBoxInnerPadding);
         const float linePitch = line_advance_amount(kFontScale);
         const float rowGap = 2.0f;
+        const float edgePadding = kGlyphRasterPadding;
+        const float messageInsetX = 6.0f;
+        const float messageInsetY = 3.0f;
         const std::size_t lineCount = options.lines.size();
+
+        const auto line_role = [&](std::size_t lineIndex) noexcept
+        {
+            return lineIndex < options.line_roles.size()
+                ? options.line_roles[lineIndex]
+                : TextMessageRole::neutral;
+        };
+        const auto role_is_styled = [](TextMessageRole role) noexcept
+        {
+            return role != TextMessageRole::neutral;
+        };
+        const auto line_text_width = [&](std::size_t lineIndex) noexcept
+        {
+            const float inset = role_is_styled(line_role(lineIndex))
+                ? messageInsetX
+                : 0.0f;
+            return (std::max)(1.0f, contentWidth - inset * 2.0f);
+        };
 
         const auto line_view = [&](std::size_t lineIndex) noexcept -> std::string_view
         {
@@ -6306,14 +8926,17 @@ namespace epochengine::gui
         std::vector<float> lineHeights{};
         lineHeights.reserve(lineCount);
 
-        float totalTextHeight = 0.0f;
+        float totalTextHeight = edgePadding * 2.0f;
         for (std::size_t lineIndex = 0; lineIndex < lineCount; ++lineIndex)
         {
             const std::string_view line = line_view(lineIndex);
+            const TextMessageRole role = line_role(lineIndex);
             const float textHeight = (options.wrap_lines && !line.empty())
-                ? measure_wrapped_text_height(line, contentWidth, kFontScale)
+                ? measure_wrapped_text_height(line, line_text_width(lineIndex), kFontScale)
                 : linePitch;
-            const float rowHeight = (std::max)(linePitch, textHeight) + rowGap;
+            const float verticalInset = role_is_styled(role) ? messageInsetY : 0.0f;
+            const float rowHeight = (std::max)(linePitch, textHeight)
+                + rowGap + verticalInset * 2.0f;
             lineHeights.push_back(rowHeight);
             totalTextHeight += rowHeight;
         }
@@ -6424,7 +9047,7 @@ namespace epochengine::gui
             };
 
             bool foundFirstVisible = false;
-            float rowY = contentY - state.scrollY;
+            float rowY = contentY + edgePadding - state.scrollY;
             for (std::size_t lineIndex = 0; lineIndex < lineCount; ++lineIndex)
             {
                 const float rowHeight = lineHeights[lineIndex];
@@ -6478,6 +9101,30 @@ namespace epochengine::gui
                     openedContextMenuThisFrame = true;
                 }
 
+                const TextMessageRole role = line_role(lineIndex);
+                const bool styledRole = role_is_styled(role);
+                if (styledRole)
+                {
+                    switch (role)
+                    {
+                    case TextMessageRole::user:
+                        draw_sprite(palette.buttonActive, contentX, rowY, contentWidth, rowHeight - rowGap);
+                        break;
+                    case TextMessageRole::assistant:
+                        draw_sprite(palette.panelBackground, contentX, rowY, contentWidth, rowHeight - rowGap);
+                        break;
+                    case TextMessageRole::system:
+                        draw_sprite(palette.buttonNormal, contentX, rowY, contentWidth, rowHeight - rowGap);
+                        break;
+                    case TextMessageRole::error:
+                        draw_sprite(palette.buttonHover, contentX, rowY, contentWidth, rowHeight - rowGap);
+                        break;
+                    case TextMessageRole::neutral:
+                    default:
+                        break;
+                    }
+                }
+
                 const auto [firstSelected, lastSelected] = selected_line_range();
                 if (options.selectable && state.hasSelection && lineIndex >= firstSelected && lineIndex <= lastSelected)
                     draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
@@ -6485,12 +9132,15 @@ namespace epochengine::gui
                     draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
 
                 const std::string_view line = line_view(lineIndex);
+                const float textX = contentX + (styledRole ? messageInsetX : 0.0f);
+                const float textY = rowY + (styledRole ? messageInsetY : 0.0f);
+                const float textWidth = line_text_width(lineIndex);
                 if (options.wrap_lines)
-                    draw_wrapped_text(line, contentX, rowY, contentWidth, kFontScale);
+                    draw_wrapped_text(line, textX, textY, textWidth, kFontScale);
                 else
                 {
-                    const std::string fitted = fit_text_to_width(line, contentWidth, kFontScale);
-                    draw_text_line(fitted.empty() ? line : std::string_view{ fitted }, contentX, rowY, kFontScale);
+                    const std::string fitted = fit_text_to_width(line, textWidth, kFontScale);
+                    draw_text_line(fitted.empty() ? line : std::string_view{ fitted }, textX, textY, kFontScale);
                 }
 
                 rowY += rowHeight;
@@ -6608,16 +9258,147 @@ namespace epochengine::gui
         ensure_resources();
         const float availableWidth = (std::max)(0.0f, options.size.x - 2.0f * kContentPadding);
 
+        const float controlRowHeight = base_line_height(kFontScale)
+            + 2.0f * kBoxInnerPadding;
+        const bool taskVisible = options.task_editing
+            || !options.task_label.empty() || !options.task_value.empty()
+            || !options.task_actions.empty();
+        const float taskValueHeight = taskVisible ? controlRowHeight : 0.0f;
+        const float taskActionHeight = options.task_actions.empty()
+            ? 0.0f : controlRowHeight;
         const float fieldHeight = options.input
-            ? (base_line_height(kFontScale) + 2.0f * kBoxInnerPadding)
+            ? controlRowHeight
+            : 0.0f;
+        const float headerHeight = options.header_actions.empty()
+            ? 0.0f
+            : controlRowHeight;
+        const float messageHeight = options.message_actions.empty()
+            ? 0.0f
+            : controlRowHeight;
+        const float footerHeight = options.footer_actions.empty()
+            ? 0.0f
+            : controlRowHeight;
+        const float interControlGap = options.input && !options.footer_actions.empty()
+            ? kContentPadding
             : 0.0f;
 
+        const float taskBlockHeight = taskValueHeight
+            + (taskValueHeight > 0.0f && taskActionHeight > 0.0f
+                ? kContentPadding : 0.0f)
+            + taskActionHeight;
         const float contentTopY = g_frame.cursor.y;
+        const float contentX = g_frame.cursor.x;
         const float contentBottomY = options.position.y + options.size.y - kContentPadding;
-        const float reservedBottom = options.input ? (fieldHeight + kContentPadding) : 0.0f;
+        const float headerY = contentTopY + taskBlockHeight
+            + (taskBlockHeight > 0.0f && headerHeight > 0.0f
+                ? kContentPadding : 0.0f);
+        const float logTopY = headerY + headerHeight
+            + (taskBlockHeight > 0.0f && headerHeight == 0.0f
+                ? kContentPadding : 0.0f)
+            + (headerHeight > 0.0f ? kContentPadding : 0.0f);
+        const float controlHeight = fieldHeight + interControlGap + footerHeight;
+        float reservedBottom = 0.0f;
+        if (messageHeight > 0.0f)
+            reservedBottom += messageHeight + kContentPadding;
+        if (controlHeight > 0.0f)
+            reservedBottom += controlHeight + kContentPadding;
 
-        const float logHeight = (std::max)(0.0f, contentBottomY - contentTopY - reservedBottom);
-        const Vec2 logPos = g_frame.cursor;
+        const float logHeight = (std::max)(0.0f, contentBottomY - logTopY - reservedBottom);
+        const Vec2 logPos{g_frame.cursor.x, logTopY};
+
+        const auto render_actions = [&](
+            const std::span<const ConsoleWindowActionSpec> actions,
+            const float actionGap,
+            const float actionY,
+            std::optional<std::size_t>& selectedAction)
+        {
+            if (actions.empty())
+                return;
+
+            const float gap = (std::max)(0.0f, actionGap);
+            const float totalGap = gap
+                * static_cast<float>(actions.size() - 1u);
+            const float availableActionWidth = (std::max)(
+                0.0f,
+                availableWidth - totalGap);
+            float requestedActionWidth = 0.0f;
+            for (const ConsoleWindowActionSpec& action : actions)
+                requestedActionWidth += (std::max)(32.0f, action.width);
+            const float widthScale = requestedActionWidth > availableActionWidth
+                && requestedActionWidth > 0.0f
+                ? availableActionWidth / requestedActionWidth
+                : 1.0f;
+
+            float actionX = contentX;
+            for (std::size_t index = 0u; index < actions.size(); ++index)
+            {
+                const ConsoleWindowActionSpec& action = actions[index];
+                const float actionWidth = (std::max)(
+                    1.0f,
+                    (std::max)(32.0f, action.width) * widthScale);
+                const Vec2 actionPosition{actionX, actionY};
+                const Vec2 actionSize{actionWidth, controlRowHeight};
+                bool activatedOnPress = false;
+                if (action.enabled && action.activate_on_press
+                    && point_in_rect(
+                        g_frame.mousePos,
+                        actionPosition.x,
+                        actionPosition.y,
+                        actionSize.x,
+                        actionSize.y)
+                    && point_in_active_clip(g_frame.mousePos)
+                    && left_press_available())
+                {
+                    activatedOnPress = true;
+                    consume_left_press();
+                }
+                set_cursor({actionX, actionY});
+                const bool clicked = button_with_state(
+                    action.label,
+                    actionSize,
+                    false,
+                    action.enabled);
+                if (activatedOnPress
+                    || (!action.activate_on_press && clicked))
+                {
+                    selectedAction = index;
+                }
+                actionX += actionWidth + gap;
+            }
+        };
+
+        if (taskVisible)
+        {
+            set_cursor({contentX, contentTopY});
+            if (options.task_editing && options.task_edit_buffer)
+            {
+                result.task_input = edit_box(
+                    *options.task_edit_buffer,
+                    {availableWidth, taskValueHeight},
+                    options.task_max_input_chars,
+                    false);
+            }
+            else
+            {
+                std::string taskText{};
+                if (!options.task_label.empty())
+                    taskText = std::string{options.task_label} + ": ";
+                taskText += options.task_value;
+                text_box(taskText, {availableWidth, taskValueHeight});
+            }
+            render_actions(
+                options.task_actions,
+                options.task_action_gap,
+                contentTopY + taskValueHeight
+                    + (taskActionHeight > 0.0f ? kContentPadding : 0.0f),
+                result.task_action_index);
+        }
+
+        render_actions(
+            options.header_actions,
+            options.header_action_gap,
+            headerY,
+            result.header_action_index);
 
         if (availableWidth > 0.0f && logHeight > 0.0f)
         {
@@ -6627,17 +9408,27 @@ namespace epochengine::gui
                 .id = panelId,
                 .size = { availableWidth, logHeight },
                 .lines = options.lines,
+                .line_roles = options.line_roles,
                 .max_line_chars = options.max_visible_lines == 0 ? 768u : options.max_visible_lines * 16u,
                 .selectable = true,
                 .stick_to_bottom = true
             });
         }
 
-        set_cursor({ logPos.x, logPos.y + logHeight + kContentPadding });
+        const float messageY = logPos.y + logHeight
+            + (messageHeight > 0.0f ? kContentPadding : 0.0f);
+        render_actions(
+            options.message_actions,
+            options.message_action_gap,
+            messageY,
+            result.message_action_index);
+
+        const float controlsY = messageY + messageHeight
+            + (controlHeight > 0.0f ? kContentPadding : 0.0f);
+        set_cursor({ logPos.x, controlsY });
 
         if (options.input)
         {
-            const float fieldHeight = base_line_height(kFontScale) + 2.0f * kBoxInnerPadding;
             const float rowY = g_frame.cursor.y;
 
             if (options.show_send_button)
@@ -6658,6 +9449,16 @@ namespace epochengine::gui
                 Vec2 inputSize{ availableWidth, fieldHeight };
                 result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
             }
+        }
+
+        if (!options.footer_actions.empty())
+        {
+            const float footerY = controlsY + fieldHeight + interControlGap;
+            render_actions(
+                options.footer_actions,
+                options.footer_action_gap,
+                footerY,
+                result.footer_action_index);
         }
 
         end_window();

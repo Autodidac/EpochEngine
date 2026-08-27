@@ -39,6 +39,13 @@ The normal Epoch Linux/WSL build uses vcpkg. `Engine/build.sh` discovers
 local vcpkg clone, and fetches the missing baseline when the clone is stale.
 Use `--no-vcpkg` only when deliberately testing a system-package lane.
 
+Manifest dependencies remain vcpkg-owned. X11 and OpenGL are host integration
+libraries: while resolving only those two packages, Epoch's CMake restores host
+library search alongside the vcpkg find root, then restores the previous
+`CMAKE_FIND_ROOT_PATH_MODE_LIBRARY` policy. This prevents a vcpkg toolchain
+prefix from hiding valid distribution libraries without weakening dependency
+ownership for the rest of the build.
+
 ## 3. Use a module-capable compiler
 
 - Clang 22.1.8 plus matching `clang-scan-deps` for the full-engine Linux build

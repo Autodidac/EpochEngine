@@ -22,30 +22,75 @@ the same engine-owned path.
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
-- packaged updates use the source-preferred modern lane: when main source is
-  newer than the running build, Update launches the local source rebuild worker
-  so progress and Cancel remain visible. Versioned packaged runtime archives are
-  used only when no newer source lane is available or when an explicit
-  bootstrap/package-only flow owns that choice.
+- Smart Update is binary-first. It discovers the newest matching versioned
+  runtime archive, verifies the signed release manifest and complete payload,
+  and stages replacement before considering source. Authorized encrypted source
+  remains both an explicit operator choice and the fallback when a compatible
+  package is absent or fails verification/staging; it never outranks a valid
+  compatible binary.
 - the active packaged asset contract is versioned runtime archives such as
   `epoch_win10_x64_vX.Y.Z.zip` and `epoch_linux_x64_vX.Y.Z.tar.gz`
 - the updater extracts the packaged version directly from the archive name
+- Epoch-owned update discovery and payloads are hosted at
+  `https://epoch.adamrushford.chatgpt.site`: packaged releases come from
+  `/api/epoch/releases`, build admission from `/api/epoch/actions/runs`, and
+  runtime bytes come from immutable release paths. Anonymous EpochEngine Git and
+  source-archive routes are disabled. The public source-version response is only
+  a capped legacy-client lane-selection sentinel; current clients obtain private
+  source metadata exclusively through authorization. The updater has no automatic
+  GitHub fallback. Standalone EpochGui remains public at
+  `/git/EpochGui.git`; bundled `Engine/dep/EpochGui` must remain identical.
+  GitHub URLs remain only where an independently owned managed tool, such as
+  vcpkg, Git for Windows, LLVM, or 7-Zip, publishes its own payload.
+- packaged release discovery consumes the Site's canonical integrity document,
+  requires its pinned-key Ed25519 signature, exact schema/key identity, and
+  same-Site release URL boundary, then hashes the complete payload against the
+  SHA-256 authenticated inside that signed document before extraction or
+  replacement. Companion `.sha256` objects remain public for manual tooling;
+  Epoch fails closed when signature or digest evidence is absent or invalid
 - WSL is treated as Linux for runtime package selection and should consume the
   same `epoch_linux_x64_vX.Y.Z.tar.gz` asset unless a future package layout
   proves a separate WSL asset is necessary
-- source checkout installs use the same source-preferred rule: a newer main
-  source snapshot drives the update worker directly, while packaged archives
-  remain a verified fallback when source is not newer.
+- source checkout installs use the same packaged-runtime-first update rule.
+  Restricted source uses explicit browser approval for first device enrollment.
+  Windows persists a signing-only ECDSA P-256 key in CNG, prefers the platform
+  provider, falls back to the software KSP, and disables private-key export.
+  Later source actions request a short-lived challenge bound to the exact compact
+  request bytes and sign its domain-separated SHA-256 payload. Each archive still
+  uses a fresh ephemeral P-256 ECDH/HKDF key, a five-minute in-memory bearer, a
+  signed private manifest, and AES-256-GCM ciphertext. Linux keeps the one-time
+  browser flow until an admitted TPM or Secret Service provider exists; it must
+  not claim non-exportability from protected-at-rest storage alone. Static source
+  credentials, bearer tokens, and plaintext archive keys never ship in the
+  executable or browser bundle.
+- Site v27 is live from exact Site commit
+  `e81d7781d0cdde2f26e5ad981c9e433b9bbbc106`, deployment
+  `appgdep_6a901360570c8191936ba5c581646ded`, environment revision 7. Its
+  owner-only `/admin` CMS uses direct Sign in with ChatGPT and never accepts a
+  native device code. Extended starts advertise
+  `epoch-source-device-enroll/v1` only after all signing-JWK, client-nonce,
+  device-label, and key-protection fields validate; legacy starts stay on the
+  one-time flow without that capability. Both verification fields remain the
+  same generic no-query `/private/epoch-engine/device` page, and the owner
+  enters the displayed code through authenticated same-origin lookup. Enrolled
+  devices later use short-lived persistent-key challenge/token exchanges with
+  one-use replay refusal and owner CMS revocation. Successful runtime and
+  encrypted-source downloads update only anonymous aggregate artifact, asset,
+  byte-count, and last-time metrics visible to the owner. The encrypted archive
+  remains hosted snapshot `5f3613941a45d8df1edd5881dc5035e61f688d98`
+  until the current committed tree is ingested. Offline decrypt is
+  byte-identical; live enrolled-device challenge, unwrap, decrypt, and replay
+  rejection require a fresh owner pairing, and no credentials are recorded.
 - editor update checks must also prove the matching hosted build lane before
   surfacing an update: Windows waits for `windows-msvc`, Linux waits for
   `linux-clang-engine`, and pending/failing/missing job evidence withholds the
   update affordance
 - editor update checks are automatic after the editor has loaded. The modal is
-  shown only for a newer current-platform update path. The smart/default path is
-  source-preferred: if main source is newer, it launches the source rebuild
-  worker and keeps Cancel/progress visible; if source is not newer, it may use a
-  verified packaged runtime archive. Project Source Code Download remains a
-  cache-only source snapshot action and does not update or restart Epoch.
+  shown for a newer current-platform package or a proven missing compatible
+  package with the authorized fallback enabled. `Source Options...` separately
+  exposes `Pair / Re-pair This Device`, `Build / Update From Source`, and
+  `Download Source Project`. Pair / Re-pair clears only the nonsecret local
+  registration ID; no action is a public or anonymous source download.
 - update work must stay visible while it runs. During checking, packaged
   install, and source rebuild, the toolbar/modal/output evidence should report
   elapsed time, current lane, and completion/failure state instead of leaving a
@@ -57,10 +102,14 @@ the same engine-owned path.
 - starting a source rebuild worker must clear stale cancel/source/replacement
   logs before the detached process is spawned. A previous worker's final error
   or staged replacement script is not valid evidence for the new run.
-- source rebuild downloads and extraction live in disposable per-run work roots
-  under `cache/updates/work/`. Cancel writes the worker cancel marker and clears
-  the active run when possible; if a crash leaves a run folder behind, the next
-  update sweeps stale run/source/download folders before fetching fresh source.
+- authorized source ciphertext and plaintext archives live only under a hidden,
+  permission-restricted `.source_access/<random>/` directory inside the owning
+  cache. The native process authenticates, decrypts, verifies signed ciphertext
+  and plaintext hashes, then transfers the archive into the disposable source
+  worker or project-cache operation and removes the authorization directory.
+  Source-build extraction remains in per-run work roots under
+  `cache/updates/work/`. Cancel covers browser approval, encrypted transfer,
+  decryption, and the later worker checkpoints.
 - source rebuild workers always build the Windows `Release|x64` runtime lane,
   even when the editor was launched from `Debug|x64`. Debug update tests should
   keep Epoch open, watch the handoff/progress evidence, and only restart after
@@ -69,6 +118,11 @@ the same engine-owned path.
   the update lane. The worker console stays hidden by default; set
   `EPOCH_UPDATER_SHOW_WORKER_CONSOLE=1` only when deliberately debugging the
   detached update script.
+- authorized source distribution, automatic source fallback, and project-source
+  download are enabled by default. Compile with
+  `-DEPOCH_BINARY_ONLY_DISTRIBUTION=ON` in CMake or
+  `/p:EpochBinaryOnlyDistribution=true` in MSBuild to remove those source lanes
+  from a binary-only product while retaining signed packaged updates.
 - managed-vcpkg source updates stage disposable overlay ports under
   `cache/updates/` when old dependency ports need modern CMake policy options;
   do not mutate the user's vcpkg checkout or mask restore failures.
@@ -79,8 +133,8 @@ the same engine-owned path.
   lane. Linux renderer availability remains runtime-evidence-driven; package
   feature metadata must not override an operator-verified context.
 - runtime-created update/package/cache data is app-local: updater work,
-  temporary probes, extraction folders, and helper tools live under
-  `cache/updates/`; downloaded release/source packages live under
+  temporary probes, source-access material, extraction folders, and helper tools
+  live under `cache/updates/`; downloaded release packages live under
   `cache/packages/`; generated/runtime atlases live under `cache/atlases/`.
   These folders are disposable runtime state, not public release payload and not
   tracked source.
@@ -90,7 +144,7 @@ the same engine-owned path.
   reuse stale bytes; invalid package caches are still deleted and redownloaded,
   and source rebuilds use fresh per-run source snapshots.
 - source snapshot extraction must prove the manifest root before running vcpkg
-  or MSBuild. If a downloaded GitHub archive leaves one nested top-level folder,
+  or MSBuild. If a downloaded hosted archive leaves one nested top-level folder,
   the worker may repair that shape only when the nested root contains
   `Engine/vcpkg.json`; otherwise the update fails with visible evidence instead
   of continuing into a missing-manifest toolchain shutdown.
@@ -119,10 +173,10 @@ the same engine-owned path.
 - `Play Project` should reject non-project scene ids from the editor path so the
   live shell cannot quietly fall back to built-in sample launches
 - built-in sample games should move behind project templates or script actions
-- the long-term target is a Unity/Unreal-style project shell generated from
-  duplicated engine source/layout
-- that same shell must also support the static-compile path where a project
-  embeds the engine directly and consumes the active engine surface from
+- generated projects declare the `epoch-runtime-static` build profile and link
+  a canonical reusable `EpochRuntime` static target instead of copying engine
+  source into each project
+- that static-compile path consumes the active engine surface from
   `Engine/include/`, `Engine/modules/`, `Engine/src/`,
   `Engine/src/scripts/`, and `Engine/resource/`
 - that project shell should support both game projects and software/tool
@@ -131,23 +185,70 @@ the same engine-owned path.
 - the first generated shell flow should create a real on-disk project root,
   manifest, world file, script starter, and README for both game and tool
   projects
-- generated shells should land under repo-root `Projects/` so creation and
-  discovery stay stable regardless of the current working directory
+- generated shells should land under repo-root `Projects/` so creation stays
+  stable regardless of the current working directory; this is a creation
+  default, not a restriction on where a user-owned project may live
 - generated shells should emit `project.paths.txt` so the editor log, build
   actions, and troubleshooting flow can point at concrete files on disk
-- generated non-template `Projects/**/project.epoch.json` manifests should be
-  discovered back into the live editor project list so the shell generation
-  path immediately feeds real project selection and play
+- Open Project and Switch Project use the Windows native file dialog to select
+  an existing `project.epoch.json`. Admission validates that exact manifest in
+  place, does not rewrite it, and rejects a duplicate project identity already
+  admitted from another root
+- generated-output folders are not a second project catalog. The editor does
+  not populate a prebuilt project dropdown by scanning Debug/Release output;
+  one admitted manifest owns one canonical project root and session
+- project creation refuses to overwrite an existing manifest. An existing
+  project is opened through its manifest rather than regenerated over its source
 - a newly created project shell should become the active editor project instead
   of forcing the user to restart or manually stitch a second fake load path
-- generated embedded-engine shells should emit a child project file, a build
-  script, a build fragment, and script include fallback so the full engine
-  surface stays real instead of roadmap-only promise text
+- generated embedded-engine shells emit a child project file, a build script, a
+  versioned build fragment, and script include fallback. New manifests declare
+  `project_format: epoch-project-v1` and
+  `build_profile: epoch-runtime-static`. Open may inspect a known legacy shell
+  without mutating it; Save Project, Build, and Run atomically add missing
+  canonical fields. Malformed, duplicated, future, or conflicting metadata
+  fails before admission or child compilation
+- generated Linux builds use Bash plus the managed current CMake, Ninja, Clang,
+  and vcpkg toolchain, then build the project-owned child target into the
+  platform-specific output directory
+- File owns Open/Switch/Close/Save Project. Tools owns camera actions and must
+  not duplicate project persistence commands
 - the project launcher is a prelaunch surface for editor application, live
   renderer context, update, and exit policy; it is not another editor shell
 - the direct actions are Open Editor, Plant Lab, GUI Editor, Update Epoch
   Engine, and Quit. Launch Settings selects a live compiled context before an
   editor application opens; layered game/puzzle menus do not belong here
+- desktop editor hosts sample usable display work area and the requested
+  capability tier, then create and center one stable native host before launcher
+  or editor composition begins. Windows selects the monitor under the launch
+  cursor; Linux uses the EWMH `_NET_WORKAREA` when available and falls back to
+  the X11 screen extent. Default client policies are 1920 x 1200 for 4K work
+  areas, 1600 x 1000 for 2K, 1440 x 900 for 1080p-class work areas, and
+  1024 x 640 for compact displays. Mobile/deck capability tiers scale those
+  dimensions proportionally; explicit command-line dimensions remain
+  authoritative. Generated project runtimes and the sealed updater shell keep
+  their own dimensions. Launcher-to-editor admission reuses the selected
+  geometry instead of visibly resizing or moving the host
+- Epoch defines no built-in Secondary Map, Display 2, or hardcoded output route.
+  A project may create a map, radar, telemetry, or similar EpochGui pane and use
+  the same tab, float, context-host, close, and redock behavior as every other
+  compatible pane. The application owns any visible secondary-display controls
+- ordinary pane movement defaults to in-host tab docking. Choosing Float uses
+  the pane's existing context-backed native host; there is no second promotion
+  feature. The pane retains one logical identity and does not clone canonical
+  editor state or acquire active-editor authority
+- desktop fullscreen policy may choose one borderless same-process host spanning
+  selected display work areas or multiple native windows. Selection is governed
+  by monitor geometry, per-display DPI, refresh/capability policy, renderer
+  support, and product settings; it must not assume equal displays or one
+  contiguous coordinate scale. An application that enables secondary
+  presentation must retain a control on its main surface that disables it
+- renderer/context-host routing remains an explicit capability for a
+  renderer-backed view or diagnostic. It is not the fallback for ordinary
+  Outliner, Inspector, Assets, Console, AI, or code panes. The current source
+  proves monitor-aware primary sizing, central document-tab docking, and
+  context-backed pane floating. Automatic display placement and fullscreen
+  spanning remain incomplete
 - the launcher may open project demos directly or preload a project before the
   editor, but it should not drift back into multiple menu layers or become a
   fake game shell
@@ -186,7 +287,7 @@ the same engine-owned path.
   windows continue normally. Additional switch requests are rejected throughout
   adoption. Routed, floating, closing, failed, initializing, or stopped contexts
   are not eligible as whole-editor targets.
-- normal editor switching owns one live backend at a time. The host keeps its
+- normal editor switching owns one logical active backend at a time. The host keeps its
   parent window alive during the rendererless replacement gap, does not start
   the target until deferred source cleanup is complete, keeps the replacement
   transaction held through target initialization and session restoration, and
@@ -247,37 +348,197 @@ the same engine-owned path.
   project manifests, build logs, output paths, and `PROJECT_NOTES.md` there as
   evidence, but those files are not automatically promoted into tracked source
 
+## Project Save, Build, And External Run
+
+The project workflow has one ownership path:
+
+1. Materialize or open one validated project root and manifest.
+2. Save dirty scene and script authoring state before a dependent operation.
+3. Prepare build inputs stamped to the selected project and committed scene,
+   then start one generation-stamped build attempt through `project.lifecycle`.
+4. Accept an output only when its project, input, build, artifact, and verification
+   evidence match; run only that accepted artifact for the same project revision.
+5. Track runtime generation against the accepted artifact, report launch/exit
+   errors visibly, and return focus according to editor policy.
+
+Project Save is not a UI-only flag. Build does not compile an unrelated sample,
+and Run does not quietly fall back to an editor-internal game. A selected-script
+build is a narrower compiler operation and cannot mark the project built or
+authorize external Run.
+
+The strict `project.lifecycle` ledger covers the selected project, committed
+scene, materialized shell, prepared inputs, active build, verified output, and
+runtime. The production editor populates it directly. Project selection uses a
+stable project identity; successful atomic scene persistence records the scene
+revision; verified shell creation records materialization; source, project,
+script, and link-input stamps produce the build-input generation; and both
+asynchronous completion consumers settle the exact claimed build generation.
+Completion recomputes input freshness and records a SHA-256 digest for the
+accepted executable; immediate and later Run recheck those exact bytes.
+Missing, failed, changed, stale, cross-project, or mismatched evidence fails
+closed. Scene-only saves advance scene evidence without forcing a relink. The
+Project workspace shows the current lifecycle action, reason, and
+project/scene/input/build/artifact generations.
+
+The source contains production materialize/save-reopen/build/child-self-test
+lanes for the registered generated profiles and a standalone external GUI Run
+proof. `platform.child_process` now owns the bounded native process boundary:
+stable handles, exact argument vectors, duplicate-correlation focus, one
+exclusive project-runtime group, polling, PID/elapsed/exit evidence, graceful
+Stop, and forced Stop. The editor correlation key includes selected project,
+accepted artifact generation, and SHA-256; lifecycle runtime evidence starts
+only after native launch and stops only after observed termination. Linux uses
+`fork`/`execv` and an isolated process group instead of a shell command.
+
+The Project workspace exposes that observed state and the Focus/Stop controls.
+An isolated Windows MSVC/Linux Clang contract proves supervisor behavior without
+requiring unrelated renderer packages. The production Linux full-engine lane
+remains Clang 22 plus the shared vcpkg manifest and validates every enabled
+backend through that vcpkg-backed build.
+Visible repeated external Run, Focus/Stop interaction, cooperative build
+cancellation, and current-pass eye proof remain acceptance work; build-safe
+contracts must not be described as a live runtime pass.
+
 ## Scripting and reload workflow
 
 - script sources belong to the engine/project scripting tree used by the active
   project
-- engine-owned compiled scripting means project/game logic compiles with the
-  engine/project build; it is not a text-macro or string-eval layer
-- the scripting/project phase must account for both integration modes:
-  duplicated engine-source projects and embedded-engine builds that include the
-  engine surface from `Engine/include/`, `Engine/modules/`, `Engine/src/`,
-  `Engine/src/scripts/`, and `Engine/resource/`
+- engine-owned scripting is compiled C++23, not a text-macro or string-eval
+  layer. `scripting.compiler` launches the selected compiler with an argument
+  vector and targets the canonical shared-library path beside the source
+- compilation captures source and current-output evidence, writes a bounded
+  same-directory candidate, rejects source/output changes during the build,
+  verifies the candidate, publishes it by same-filesystem atomic replacement,
+  and verifies the published artifact before reporting success
+- the editor saves dirty selected source before Build Selected Script, permits
+  only one build at a time, and routes that work through the shared editor
+  TaskGraph while retaining visible target, generation, completion, and failure
+  state
+- `scripting.system` resolves the same verified output path for load/reload.
+  Compiler launch, nonzero exit, source/output races, candidate/publication
+  verification, load, and entry-point failures remain separate diagnostics
+- a script build does not mark the project built. Project Save, Build, and
+  external Run continue through `project.lifecycle`
+- the scripting/project phase must account for editor-hosted work and generated
+  static-runtime builds that consume the same engine surface from
+  `Engine/include/`, `Engine/modules/`, `Engine/src/`, `Engine/src/scripts/`,
+  and `Engine/resource/`
 - the project/assets dock should expose script lists, source paths, run/build
   actions, and compile/load diagnostics
-- the `Assets` workspace now owns script visibility: it creates project-local
-  `.ascript.cpp` stubs, lists project and engine script files, and exposes a
-  shallow active-project file/folder browser so scripts can be selected without
-  command-line digging
-- the central `Assets` surface is intentionally not the Sandbox and not the
-  primary script-control panel; it is the project asset browser shell while the
-  bottom Assets dock temporarily exposes file/script detail until the thumbnail
-  grid and bounded file tree land
+- the `Assets` document surface owns script visibility: it creates project-local
+  `.ascript.cpp` stubs, lists project and engine script files, and exposes the
+  active-project browser so scripts can be selected without command-line
+  digging. The Outliner Assets/Scripts tabs are compact navigators into that
+  full-width surface rather than duplicate editors.
+- the central Asset Manager is intentionally not the Sandbox. Its Browser,
+  Textures, Scripts, and Graph tabs keep navigation, texture authoring,
+  full-width source editing, and dependency evidence in one workspace while
+  the bottom Assets dock remains compact status
 - the Assets workspace also owns one project texture controller: bounded BMP,
   TGA, and P6 PPM discovery/import, atomic Library publication, exact restore,
   selected-scene semantic material assignment, and diagnostics share the same
   project pipeline used by runtime compilation; physical handles never enter
   scene files
+- the current Asset Browser and World Outliner Assets tool share one project
+  texture controller. The central surface is rooted at the active project,
+  exposes bounded folder navigation, search and type filters, and classifies
+  project GUI sources separately from images, maps, audio, models, and code.
+  Folder rows remain navigable under a type filter. Browser results use the
+  reusable virtualized EpochGui asset grid with stable selection/activation,
+  bounded right-click actions, and lazy visible-thumbnail resolution instead of
+  an unbounded button list. Open, Show Details, and Copy Path resolve against
+  the stable context target and existing project controllers.
+- the controller hydrates editable texture source and compiled Library catalogs
+  after restart, preserves current source revision across reimport, creates
+  Checker/Gradient/Solid P6 sources, imports bounded BMP/TGA/P6 content, and
+  regenerates exact RGBA8 artifacts. Compiled previews use reusable image-button
+  controls keyed by artifact identity rather than text-only fake thumbnails.
+- active texture editing exposes sparse layers, drag strokes, blend, opacity,
+  visibility, locking, order, undo/redo, sampling, independent U/V addressing,
+  alpha cutoff, color space, scene assignment, and an interactive image canvas.
+  Source is canonical; decoded images, thumbnails, Library output, and native
+  residency remain reproducible or disposable.
+- GUI Editor creates panel, button, text, image, image-button, tab-set,
+  text-input, slider, and scroll-area widgets through
+  `authoring.gui_document`. Reusable tabs select Widgets, Layout, and Hierarchy;
+  authored tab pages use stable handle identity separately from editable labels.
+  Content, layout, style, visibility, enablement, keyboard/pointer policy,
+  actions, and tooltips enter semantic operations with document undo/redo.
+- Standard Editor GUI Canvas and GUI Editor share one canonical document rather
+  than renderer cameras aimed at debug rectangles. Standard Editor deliberately
+  exposes one interactive project-placement canvas plus hierarchy/layout/history
+  tools. The projectless launcher GUI Editor owns widget creation and the full
+  Canvas, Runtime Preview, Component Graph, and Styles workspace. Canvas and
+  Runtime Preview read the same document; hierarchy is parent-relative,
+  selection opens real Layout and Properties controls, text inputs and sliders
+  update semantic content, tab sets select stable page handles, and image
+  controls resolve through the project texture catalog. The scene projection
+  remains for compatible project/runtime publication.
+- the Hierarchy view projects canonical document parentage and commits reorder,
+  root, nest, and delete operations through `authoring.gui_document`. The GUI
+  Structure Graph shares the reusable pan/zoom/fit/drag canvas and converts
+  parent-output to child-input connections into validated temporal reparenting;
+  right-click disconnect moves a legal child back to the document root. Invalid
+  containers, cycles, tab-page parentage, stale handles, and limits fail without
+  partial mutation.
+- GUI Editor is not a generated project. It opens a real project manifest when
+  project binding is needed, preserves its application role while doing so, and
+  can create Blank Canvas, Desktop App, Dashboard, Mobile App, and Game HUD
+  documents. Native `.epochgui` Open and Save Template use the same bounded
+  integrity codec as project GUI source; writes use verified temporary files and
+  atomic replacement, and unsaved replacement requires explicit confirmation.
+- Canonical GUI source is `<project>/Assets/Gui/main.epochgui`. Registered 2D
+  project profiles declare that path explicitly in `project.epoch.json`. Missing
+  legacy fields migrate narrowly; malformed, duplicate, alternate, symlinked,
+  or over-budget source fails closed. A missing source receives the shared Game
+  HUD semantic template once, while an existing valid authored document is
+  preserved and recompiled. Materialization atomically publishes source,
+  persists the content-addressed `Library/Gui` artifact, restores it exactly,
+  and builds one renderer-neutral runtime frame before project build proceeds.
+  The bounded integrity-checked codec restores the exact document revision at
+  project load;
+  Save writes and verifies a same-directory temporary before atomic replacement.
+  Save Project, Build, and external Run require both GUI and scene publication
+  evidence. The scene/canvas view is a preview projection, not GUI authority.
+  Save compiles the accepted document into a validated immutable artifact under
+  `Library/Gui`; ProjectPlayScene restores the matching logical source through
+  the project GUI runtime and EpochGui adapter. `move_x`, `move_y`, `jump`,
+  `interact`, `pause`, and `reset` widget actions are admitted only when present
+  in the compiled project input profile. Activations and normalized slider
+  values merge once into the next deterministic action frame; unknown actions,
+  incompatible events, and absent profile actions fail closed. `editor.return`
+  is the explicit host command. GUI keyboard capture suppresses physical
+  gameplay sampling without suppressing admitted GUI impulses. Arbitrary
+  application/script command routing remains future work.
+- physical controller ownership remains process-wide in `input.controller`.
+  `project.input_controller` reads one immutable generation-checked snapshot,
+  maps only sources declared by the compiled project profile, preserves held and
+  axis state, rejects stale/malformed snapshots without partial mutation, and
+  suppresses repeated press edges when multiple project frames observe the same
+  physical revision. Focused GUI controls consume the physical revision into a
+  discarded frame so releasing focus cannot replay an old press.
+- Project Controls edits keyboard keys, controller buttons, axes, slots, and one
+  uniform dead zone through semantic profile operations. Every accepted edit
+  advances source revision, recompiles, saves canonical
+  `Assets/Config/input_profile.epochinput`, and publishes the matching
+  `Library/InputProfiles/input_profile.epochinputc`; duplicate physical sources
+  fail closed.
+- GUI Canvas Save publishes that canonical source. Reload rereads the same file
+  only when doing so cannot discard an unsaved document revision. Undo, Redo,
+  Delete, and deselection resolve stable GUI document identity and then rebuild
+  the compatible scene projection; they do not edit the preview vector directly.
+  Global history/delete shortcuts are muted while a reusable GUI text/select
+  control owns keyboard input.
+- Scene and GUI history share command placement but not document storage. World
+  Edit Undo/Redo operate on `scene.document`; GUI Canvas Undo/Redo operate on
+  `authoring.gui_document`. Each editor window, Inspector, and detached pane
+  reads the current canonical projection instead of keeping an independent scene.
 - script source resolution should prefer the active project's local `scripts/`
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
 - script starter creation should append `PROJECT_NOTES.md` entries; a useful
   Sandbox iteration must leave at least one of: build log output, script-host
-  log output, staged packet evidence, selected project file path, or project
+  log output, explicit tool-trace or eval evidence, selected project file path, or project
   notes explaining what changed
 - build diagnostics should now cover the generated child-project build path too:
   entry source, generated project file, build script, build log, and expected
@@ -291,12 +552,24 @@ the same engine-owned path.
   selection stays runtime-driven through `--backend`, not a project rewrite.
 - generated child projects expose `--project-self-test` so Sandbox and
   ProjectLauncher output can be verified without opening GUI windows.
+- the editor exposes explicit Open Project, Switch Project, and Close Project
+  commands over discovered profiles. Open admits the selected authoring scene;
+  Close releases project-bound editor/runtime evidence and returns to the
+  current application scene without deleting or rematerializing source files.
+  Plant Lab is a launcher-owned authoring application, not a project profile.
 - the checked-in engine exposes `--editor-project-self-test <id>` for the same
   route from the real engine binary. The route materializes the selected
   profile, production-loads its canonical scene, atomically saves it, reopens
   and compares it, builds the child, then runs generated `--project-self-test`.
-  Supported profile IDs are `sandbox`, `platformer`, `twodstudio`, `plantlab`,
-  `projectlauncher`, and `softwarestudio`. Packet/tool evidence and project
+  Gameplay-capable child evidence includes the immutable Canvas2D hash plus
+  logical texture bytes, emitted sprite/batch counts, collision surfaces and
+  peak contacts, resident audio bytes, and Canvas2D rejection count. The live
+  Project Runtime Preview reads the same request-driven snapshot on a bounded
+  cadence without rasterizing or changing backend frame order. Generated
+  gameplay acceptance enforces the `T1-GLES/mobile_30` platform budget and logs
+  its violation mask; the preview labels the same portable baseline explicitly.
+  Supported generated profile IDs are `sandbox`, `platformer`, `twodstudio`,
+  `projectlauncher`, and `softwarestudio`. Tool-trace/eval evidence and project
   notes remain additive. If the pass should bind to a local helper model, set
   `EPOCH_AI_MODEL` or a compatible explicit model variable before launch;
   discovery still remains separate from activation.
@@ -340,7 +613,7 @@ the same engine-owned path.
   `assets/packages/engine_forest_factory.package.json` and
   `assets/packages/engine_forest_factory/default.forest.json` in the active
   project. Package payload/source routing points at
-  `Autodidac/EpochEngineExtensions`; the external Plant Lab repository remains
+  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git`; the external Plant Lab repository remains
   provenance/reference material, and generated project payloads are emitted
   only after visible package activation or main-scene use.
 - the command-menu Package Manager is the intended modal surface for local
@@ -381,7 +654,7 @@ the same engine-owned path.
   exit or replacement retires only the physical scene publication.
 - OS model package lanes are on-demand model assets. Qwen, Nemotron, Bonsai,
   FLUX, Wan, and TRELLIS weights are staged to executable-local `cache/models/`
-  only after operator action, are not cloned for engine self-iteration, and are
+  only after operator action, are not cloned for guarded engine development, and are
   included in generated projects only by explicit package opt-in with
   license/notice review. The current gate writes a project-local
   `*.model.package.json` opt-in manifest and a cache-local `download.plan.json`
@@ -403,7 +676,10 @@ the same engine-owned path.
 - Launch Single Context uses a child-build freshness gate. The editor saves and
   repairs project evidence, then launches the existing child executable when the
   output is newer than the project entry source, active script source, generated
-  Windows project file, generated build script, and engine static library. When
+  Windows project file, generated build script, and engine static library.
+  A current matching child is focused instead of relaunched; another artifact or
+  project holding the runtime group is surfaced for Focus/Stop instead of being
+  overlapped. When
   any of those inputs are newer or the output is missing, the normal serialized
   project build path still runs before launch. Scene and manifest writes are
   runtime inputs and should not force a relink by themselves.
@@ -414,7 +690,7 @@ the same engine-owned path.
 - The centered Run button follows the same split: normal generated projects
   save project evidence and launch through the selected single-context child
   backend, rebuilding only when the freshness gate says the executable is stale;
-  the engine self-iteration lane stays editor-shaped because it manipulates the
+  the guarded engine-development lane stays editor-shaped because it manipulates the
   checked-out engine and needs visible build/review evidence.
 - workspace changes from the launcher/editor toolbar may use short loading
   feedback through the shared GUI progress primitive only after that feedback is
@@ -430,7 +706,7 @@ the same engine-owned path.
   server/listener code by default.
 - heavy optional package source should live outside the engine repository. The
   canonical package-source home is
-  `https://github.com/Autodidac/EpochEngineExtensions`; EpochEngine should keep
+  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git`; EpochEngine should keep
   package descriptors, security gates, updater/cache paths, and minimal inert
   runtime hooks only. Downloaded or generated package payloads resolve under
   executable-local `cache/packages/`.
@@ -439,11 +715,33 @@ the same engine-owned path.
   research-package candidates first. A package candidate needs provenance,
   source/hash, build/test commands, known limitations, and a proposed engine API
   boundary before mainline source promotion.
-- Self-Iteration Sandbox controls always target the `sandbox` profile. The
-  profile is classified as an engine self-iteration lane, not a normal
+- Engine Development Sandbox controls always target the `sandbox` profile. The
+  profile is classified as a guarded engine-development lane, not a normal
   game/tool project, so it mirrors the checked-out engine/editor shape for
   manipulation, build, and testing instead of inheriting generated-project
   presentation behavior.
+- Engine Development source proposals are two-pass and context-first. AI Controls
+  owns objective entry, host-curated existing-file candidates, model/endpoint
+  evidence, and the explicit Share Curated Context or Reject Selection action.
+  Candidate ranking uses path metadata only; sharing reads and sends only the
+  displayed bounded UTF-8 files to the selected endpoint. Models cannot request or
+  invent paths. Review Proposal and Approve Sandbox or Cancel Proposal remain
+  attached to the resulting AI Chat response. Changing the objective invalidates
+  reviewed evidence. The returned proposal must survive deterministic objective
+  relevance, exact-source-symbol, no-op, preservation, and module-ownership checks
+  before it becomes a reviewable data record executed only in a disposable
+  sandbox; it cannot write live source or self-certify build/test results.
+  A request for one source-proven defect in a named subsystem is bounded without
+  a preselected symbol: one insufficient-evidence reply receives one recheck
+  against the unchanged reviewed bytes, and a repeated refusal stops. A fresh
+  share clears prior correction state. The larger source-file/byte status is the
+  local disposable build-workspace copy, not extra model context.
+  Each completed source-model generation is routed into the source controller
+  exactly once; malformed packets receive at most two automatic host-diagnosed
+  retries without another click. Direct llama transport strips only line-framed
+  bytes outside a complete structured envelope. Unique-search remains mandatory,
+  so an ambiguous objective is rejected rather than assigned an inferred target.
+
 - project shells should only be materialized by explicit operator action:
   File > Save Project, Project > Save Active Project, or the centered Run
   button. Merely selecting a project profile must not create files silently.
@@ -451,7 +749,7 @@ the same engine-owned path.
   child executable freshness, rebuilds only when source/build inputs are stale,
   and launches the selected single-context child backend. If the build fails,
   launch is canceled so stale `Projects/**/bin/...` outputs are not mistaken for
-  the result of the current run. The engine self-iteration sandbox is
+  the result of the current run. The Engine Development Sandbox is
   intentionally excluded from that generated-project launch path and remains
   editor-shaped for visible engine manipulation, build evidence, and review
   gates.
@@ -467,7 +765,7 @@ the same engine-owned path.
 - normal generated projects expose a selectable camera style from the Project
   workspace. The first production choices are editor orbit, first-person runtime,
   and locked 2D canvas. That setting applies to Play In Editor and the project
-  preview path; the engine self-iteration sandbox keeps following editor tools
+  preview path; the Engine Development Sandbox keeps following editor tools
   because it is an engine/editor manipulation lane.
 - viewport movement starts with shared input actions: LMB pan, RMB orbit,
   wheel zoom, movement/look actions, and `Home` reset. Editor Settings and the
@@ -498,82 +796,72 @@ the same engine-owned path.
 - future 2D work should add tile/layer/canvas tools on top of this same
   entity/project spine
 
-## System Info workspace direction
+## Systems And Task Graph Workspace
 
-- `System Info` is now the active tooling surface for:
-  - frame graph / render graph
-  - task graph / multithreading
-  - time-system diagnostics that point to Video for controls
-  - pacing / perf select
-  - diagnostics
-- capability diagnostics have two explicit targets: the active editor backend
-  and the independently selected project-run backend. Both are assessed against
-  the active project's typed policy; neither may certify the other.
-- recommended resolution, CPU/GPU frame time, upload, and local-memory budgets
-  are policy from `platform.budgets`, not measured renderer cost. Unknown cost
-  stays unknown until runtime evidence exists.
-- graph views render as engine-generated textures inside the central System Info
-  surface only; the bottom Console Dock keeps compact text diagnostics and does
-  not duplicate the graph UI
-- the central System Info surface gives the render/frame graph and task/thread graph
-  full-width readable rows instead of tiny side-by-side thumbnails
-- graph views support pan/zoom and remain clipped when they are wider than the
-  available panel
-- top-level editor mode controls route the central work area. `3D Scene` and
-  `2D Scene/UI` keep the real scene viewport; `Assets`, `Forest Factory`,
-  `Video`, `Project`, `AI`, and `System Info` own dedicated surfaces so those
-  workflows do not have to be operated from the console dock.
-- launcher actions open standard Editor, Plant Lab, or GUI Editor directly.
-  Forest Factory stays in the standard editor. The three applications retain
-  one shared project/service shell while unsupported
-  tabs, entity commands, Run/Build controls, AI panes, and detached routes are
-  absent or rejected according to the active application profile.
-- AI activation is centralized: the toolbar, bottom AI dock tab, and
-  Window > Open AI Control Surface all reopen Inspector, AI Chat, and the
-  Console Dock before selecting the self-iteration sandbox.
-- `EPOCH_EDITOR_START_WORKSPACE=AI`, `Systems`, or `Assets` selects the matching
-  central editor surface at startup instead of only changing the bottom dock tab.
-- splitter bars are dedicated GUI chrome rather than blank buttons. They should
-  stay visually stable while resizing/maximizing and must not consume launcher
-  or editor button press identity.
-- the bottom Console Dock / AI Chat column controls are resize-only now: drag
-  the vertical splitter between them or the horizontal splitter above them.
-  Button rows such as `Console +`, `Chat +`, `Dock +`, `Dock -`, and `Reset
-  Columns` are intentionally removed from the active workflow.
-- Bottom Dock `Project`, `Assets`, `AI`, and `Systems` pages are compact
-  selectable text status panels using the same visual path as `Output`. Their
-  job is evidence/status only; controls for packages, script editing, model
-  selection, time controls, and graph surfaces belong in central workspaces,
-  Video, or the Inspector.
-- Phase 5 self-iteration should have visible graph/flow feedback, not only text
-  rows. The first-pass AI loop visualizer shows planner, builder, verifier,
-  gate, and human-review readiness as an engine-generated surface in the central
-  Intelligence. Generated graph/runtime surfaces use the dedicated runtime-surface
-  atlas, not the small built-in GUI skin atlas. Future work should promote that
-  into a dedicated editor window with packet replay, scene-state diffs, and
-  eventually 3D model/weight visualization
-- support-tier diagnostics should stay visible beside renderer stage flow and
-  worker-count information so compatibility policy is visible in the editor
-- docked backend hosts should present one clean pane per active context
-- the target GUI shape is MSVC/IDE-like: visible context panes, ordinary
-  close/resize affordances, modal/menu layers over scene views, and no duplicate
-  console-only control surfaces for editor-critical actions
-- `gui.engine` is the reusable engine GUI library layer. Primitive widgets
-  such as tabs, dropdown/select boxes, text inputs, scroll areas, image views,
-  window chrome, modal layers, and future context menus should live there before
-  editor workspaces consume them. `editor.application.cpp` chooses the active workspace and
-  feeds domain data; it should not own generic widget behavior.
-- The detailed GUI library contract is tracked in
-  `Engine/docs/engine/gui_library_architecture.md`; use that before adding new
-  panes, tabs, dropdowns, modal windows, package-manager UI, scripting views, or
-  AI sandbox controls.
-- The first dropdown/select-box primitive is the AI local-model selector. It
-  replaces long repeated model buttons with one reusable control so package
-  manager, project settings, backend selection, and script/asset selectors can
-  follow the same path instead of creating one-off UI. Open dropdowns own their
-  mouse-wheel focus so parent scroll panes do not steal model-list scrolling.
-  Opening a dropdown anchors the list near the selected value, and clicking
-  outside the closed control or list closes it through the shared GUI primitive.
+The Systems workspace has two data authorities and one portable projection:
+
+- `systems.registry` supplies live registry lifecycle, dependency order,
+  initialization state, frame counts/timing, and per-system update/last/peak/total
+  timing. Timing sampling is disabled by default and must be enabled only while the
+  central Systems workspace is visible; leaving or hiding the workspace disables
+  it again so normal system updates retain the direct fast path.
+- `editor.task_scheduler` owns the bounded shared editor operation lane over
+  `taskgraph.dotsystem`. AI evidence builds, selected script builds, project
+  builds, and the approved tool harness submit there. Its immutable snapshot
+  reports revision, lifecycle, workers, queued/running nodes, cumulative
+  completions/failures, truncation, accepted/queued/started/finished timestamps,
+  queue latency, run duration, totals, peaks, and per-node state/dependencies as
+  read-only Live Scheduler evidence.
+- `authoring.task_graph` supplies an isolated temporal learning document with
+  stable handles, semantic add/remove/rename/connect operations, undo/redo,
+  validation, deterministic topology, critical path, and parallel-wave
+  simulation. It never schedules, cancels, or executes a live task.
+- EpochGui's `SystemWorkspace` controller owns bounded row replacement,
+  hierarchy, filter/sort/status projection, selection, keyboard navigation,
+  summaries, and explicit empty/error/stale states without importing engine
+  systems.
+- `editor.systems_workspace` adapts registry, live scheduler, and learning
+  document snapshots into that portable controller. It owns sampling intent,
+  revision-aware refresh, bounded timing history, and truthful
+  unknown/unavailable/warming/available/paused states, not renderer drawing or
+  scheduler execution authority.
+
+- EpochGui's node-graph workspace now supplies stable node/pin/edge projection,
+  contain-aligned hit testing, selection, navigation, and viewport intent for
+  the Learning Graph. The authoring document remains the mutation authority
+- Live Scheduler snapshots include bounded dependency edges, and editor task
+  exceptions settle as failed nodes/futures rather than falsely incrementing
+  completed work
+The central workspace exposes one tab row for concise Overview, Systems,
+Scheduler, Task Graph, Time, and Renderer views. Graphs are the primary content;
+zero captured scheduler work has an explicit compact empty state rather than a
+blank graph surface. Lists and detail panes consume cached
+owning snapshots. Expensive graph textures/layout are rebuilt only when source
+revision, viewport, filter, selection, or explicit refresh changes; they are not
+regenerated every editor frame. Same-size chart surfaces replace pixels in their
+existing atlas entries and preserve sprite handles. The Console Dock mirrors
+compact status only.
+
+The visible data should include lifecycle, order, dependencies, state, queue and
+worker pressure, frame/system timing, peak/total/update count, failure text,
+snapshot age/revision, truncation, critical path, parallel waves, and selected
+node/system details. Unknown and unsampled values remain labeled as such.
+
+The controller and editor panels are integrated in source. The visible Systems
+surface enables registry timing only while selected, caches scheduler rows and
+learning projection by revision, shows real editor work in the read-only Live
+Scheduler, and provides add/connect/remove, undo/redo, reset, filtering,
+selection, topology, critical-path, and parallel-wave inspection only in the
+Learning Graph. The Time view shows bounded registry-update spans and real
+scheduler queue/run evidence; it does not label registry measurement as total
+editor frame time. Release visual responsiveness, interactions, and screenshots
+remain unclaimed until an operator-approved GUI run.
+
+Top-level editor modes still route the central work area. `3D Scene` and `2D
+Scene/UI` keep the real scene viewport; Assets, Forest Factory, Video, Project,
+AI, and Systems use dedicated surfaces. The movable Output pane owns Project,
+Assets, AI Output, and Systems evidence filters rather than duplicate status
+tabs or command surfaces.
 - the stable Windows top-row contract is visible real child panes:
   `GLFW30`, `SDL_app`, and `SFML_Window`
 - helper `EpochChild` wrappers are implementation detail only:
@@ -690,11 +978,12 @@ Context switching acceptance:
 - the combobox label tracks the actual active backend, not stale desired state
 - choosing the active backend logs that it was kept and does not create windows
 - choosing another live backend captures and restores editor state first, then
-  atomically promotes that context into the baked primary slot and parks other
-  editor sessions back to launcher/menu; failed restore keeps the old primary
+  atomically transfers logical active-editor authority to that context and parks
+  other editor sessions back to launcher/menu; failed restore keeps the old
+  authority
 - choosing an available backend with no live editor context uses the serialized
-  replacement transaction on the Windows parent host: retire the old backend,
-  create the exact target in the same primary slot, restore state, and require
+  replacement transaction on the Windows parent host: retire the old active
+  backend, create the exact target, restore state, and require
   backend plus restored-frame evidence before claiming success
 - an explicit backend request must fail closed when that backend is unavailable;
   it must not silently substitute the priority/default backend
@@ -747,10 +1036,21 @@ Floating/routed GUI acceptance:
 - route windows are optional desktop editor/tool features. If a product target
   excludes native popouts, the command should be absent or report unsupported,
   not create hidden shells
-- the first parented renderer context is the baked primary surface. Successful
-  launcher selection and editor switching transfer that role transactionally;
-  the primary cannot undock, while secondary diagnostic contexts and routed
-  panel windows retain native popout/redock through the EpochGui action model
+- active-editor authority is logical and independent of physical context creation
+  order, parent-grid side, or dock state. Successful launcher selection and
+  editor switching transfer that authority transactionally. Every physical
+  renderer context may undock/redock, and routed panel windows retain the same
+  capability through the EpochGui action model
+- routed pane popouts keep docking guides in their own context-local coordinate
+  space; they may return to logical tab stacks or preserve their pane-owned
+  native context through an explicit physical-context target
+- detached full renderer contexts publish only parent topology and cursor data;
+  EpochGui centers left/right guides in the actual parent destination previews,
+  and the parent host paints the matching placement ghost. Child renderers do
+  not paint a duplicate local full-context overlay
+- drawing, hover testing, and release selection consume one EpochGui guide
+  layout. SDL3, SFML3, Raylib3, Vulkan, OpenGL, DirectX, and Software retain
+  their existing native lifetime, reparent, owner-thread, and frame-order paths
 
 When this area is split across agents, keep file ownership disjoint: one agent
 may work on editor UI/status, another on session/window host code, another on
@@ -799,7 +1099,12 @@ the write ranges are explicitly isolated.
 - scene-backed editor workspaces reserve a bottom Video Timeline strip when
   there is enough room. That strip shrinks the scene viewport instead of
   letting 3D/2D rendering draw behind timeline controls or timeline graph
-  chrome.
+  chrome. Its slider scrubs the shared time spine and pauses playback; Play
+  resumes the shared clock, and step controls advance the same playhead consumed
+  by the full Timeline workspace. Timeline data and scene time therefore cannot
+  drift into separate per-window clocks. Playback anchors to the current simulation
+  timestamp when synchronization begins and advances only by subsequent elapsed
+  deltas; absolute engine uptime must never clamp a newly played clip to its end.
 - Epoch's 4D direction means timing is not a side panel: timeline authoring,
   streaming-save cadence, checkpoint retention, replay keys, package preview
   playback, and future deterministic simulation review all route through the
@@ -864,8 +1169,10 @@ the write ranges are explicitly isolated.
   generated Game2D projects persist canonical action and keyboard/controller
   bindings under `Assets/Config`, compile reproducible Library artifacts, and
   evaluate fixed-point dead zones without coupling gameplay to editor shortcuts.
-  ProjectPlayScene currently samples keyboard state; live controller polling and
-  full rebinding UI remain explicit adapter work.
+  A process-owned SDL3 provider publishes generation-checked controller state
+  once per engine frame. ProjectPlayScene maps that snapshot through the
+  compiled project bindings without replaying press edges; physical-device and
+  native selector interaction remain operator proof gates.
 - Generated Game2D projects also declare one canonical sprite-animation source
   and compiled Library artifact. Authoring builds regenerate or materialize the
   default idle/run/rise/fall sheet from authenticated map texture metadata;
@@ -877,8 +1184,17 @@ the write ranges are explicitly isolated.
   device. ProjectPlayScene acquires one generation-checked session, routes actor
   jump/landing/pause/reset events, and releases only that session on stop.
   Unavailable devices and queue backpressure remain visible diagnostics and are
-  nonfatal to project simulation. Imported project clips, authored cue bindings,
-  and live device/ear proof remain follow-up.- The non-GUI engine contract self-test now exercises the Forest Factory,
+  nonfatal to project simulation. `project.audio_profile` owns canonical source
+  plus the immutable, digest-verified
+  `Library/Audio/project_audio.epochaudioc` artifact for decoded PCM clips,
+  buses, cue semantics, volume/mute, loop/autoplay, and actor event bindings.
+  Editor edits and Build/Run preflight decode valid source before saving or
+  refreshing that artifact. A game-only runtime may restore it without
+  authoring source/WAV files; malformed present source fails closed rather than
+  selecting stale derived output. Project and Assets expose one Project Audio
+  editor with visible artifact freshness. Physical-device ear proof and
+  repeated Play/Stop proof remain follow-up.
+- The non-GUI engine contract self-test now exercises the Forest Factory,
   package registry, streaming-save package, input profile, and scene snapshot
   serializer/parser contracts before the heavier project-profile and OS-AI
   validation gates. New timeline, package, model, or input contracts should join
@@ -912,83 +1228,23 @@ features over forcing every integration on every machine.
 - keep backend convergence visible in the System Info workspace so OpenGL, Vulkan,
   DirectX, the software fallback, SDL, SFML, Raylib, and future D3D12 do not drift
   without tooling feedback
-- OpenGL launcher/editor flicker has been manually reported resolved for the
-  current pass, but GUI/scene composition remains guarded because z-order bugs
-  can make command windows, AI Chat, Inspector, or viewport titles appear hidden
-  behind the 3D/2D preview.
-- Native context hosts publish a `host FPS` counter in their window titles
-  during local runs. Use the parent and child/context title rates as quick
-  evidence when checking whether flicker is coming from the dock host, backend
-  process loop, or a duplicated present/composition path.
-- `v0.84.23` removes the extra queued OpenGL clear from editor/menu UI frames
-  and makes preview-grid lines non-depth-writing reference geometry. Manual
-  confirmation should test launcher press transitions, dropdown menus,
-  Perspective orbit angles, Game/2D canvas angles, and graph/matrix scenes
-  before closing this issue.
-- The same pass now defers workbench tab/menu switches until the GUI frame is
-  complete, restores the relevant docked panes when entering scene/game/AI
-  workbenches, and keeps the OpenGL scene viewport one pixel inside its GUI
-  chrome. These changes are specifically for the remaining GUI/3D overlap
-  flicker and missing-pane reports. MSVC Debug/Release builds and the Sandbox
-  project self-test pass; manual eye-test confirmation is still required because
-  the standalone OpenGL smoke launch hit `PlatformGL::make_current(final) failed`
-  before it could complete.
-- `v0.84.24` tested GUI-first OpenGL composition after the flicker fix. Manual
-  follow-up showed the launcher flicker was resolved, but GUI-first composition
-  put command/dropdown windows and pane chrome behind the scissored scene view.
-- `v0.84.25` restores scene-first / GUI-over composition for OpenGL: the
-  scissored Perspective/Game preview renders first, then queued GUI commands
-  draw AI Chat, Inspector, menu dropdowns, and scene viewport titles on top.
-  System Info graph surfaces now belong only to the central System Info workspace; the
-  bottom Console Dock stays a compact evidence/log strip.
-- `v0.84.26` keeps that composition order but makes the central workbench
-  background transparent when a scene-backed surface is active, so the retained
-  GUI batch can draw pane chrome without hiding the 3D/2D preview underneath.
-- `v0.84.29` issue evidence is archived in
-  `diagnostics/2026-05-17-gui-regression/README.md`. The key clue is that
-  closing World Outliner exposes the Perspective title while Inspector and AI
-  Chat remain blank, so the remaining work should stay focused on GUI
-  layout/composition and pane draw order instead of speculative renderer
-  rewrites.
-- `v0.84.31` is the stable multicontext checkpoint to preserve before the next
-  risky pass. It keeps OpenGL scene-first / GUI-over frame order, adds an
-  overlay-priority path for command menus and modals, removes visible
-  scene-viewport blanking during workbench switches, and adds a short cooldown
-  around Systems graph controls. Raylib redock crash and multicontext
-  maximize/restore remain open blockers for the stable branch.
-- `v0.84.32` records the next architecture direction before risky code churn:
-  keep the current multicontext baseline stable, move the editor shell toward
-  first-class individual context panes, retire software to safe-launch/debug
-  GUI fallback, and begin the Windows Direct3D/D3D12 renderer track as the
-  eventual native replacement for software-as-product-renderer. Do not claim D3D
-  runtime support until a real device/context/swapchain/shader/resource slice is
-  built and screenshot-validated.
-- `v0.84.33` keeps that baseline conservative: module SDL/SFML previews now
-  use the shared preview marker data instead of grid-only rendering, and Systems
-  graph controls have a longer repeat guard. MSVC `ConsoleApplication1`
-  `Debug|x64` builds cleanly and standalone OpenGL editor smoke exits cleanly.
-  Parented multicontext editor smoke still times out, and parented
-  `--smoke --capture` writes proof captures but does not shut down before
-  timeout, so smoke shutdown is still an open multicontext acceptance gate.
-- `v0.84.34` keeps the proxy-host crash guard but restores immediate parent-grid
-  sizing for direct child renderers. SDL/SFML proxy hosts still move
-  asynchronously; Raylib, OpenGL, Vulkan, and software panes should resize with
-  the parent more directly. A parented multicontext maximize/restore smoke
-  completed without crashing, but Raylib resize speed still needs operator
-  confirmation.
-- `v0.84.35` promotes DirectX/D3D11 into the Windows multicontext proof set.
-  DirectX owns a D3D11 device/swapchain/render target, renders preview markers,
-  replays GUI, and replaces Software as the normal sixth Windows README proof
-  pane. Software stays available for safe-launch/debug GUI, capture diagnostics,
-  and headless validation.
-- The same `v0.84.35` line now serializes editor Run builds, validates
-  ProjectLauncher and Sandbox child `--project-self-test` paths when built
-  serially, and queues Raylib redock operations through the backend owner
-  thread. Linux Clang build/headless CTest is green with DirectX disabled, and
-  Ubuntu WSL2/WSLg has a non-black single OpenGL editor proof when launched as
-  `epoch --renderer opengl --standalone --editor --smoke --capture`. Do not use
-  plain runtime smoke captures as editor proof; they can be black without
-  indicating an OpenGL dependency failure.
+- OpenGL is the first Tier 1 reference; Software is the Tier 0 CPU fallback and
+  deterministic comparison path. SDL3, SFML3, Raylib3, Vulkan, and Direct3D 11
+  consume the same scene, Canvas2D, texture, material, and GUI contracts.
+- Preserve scene-first / GUI-over composition. The active backend draws the
+  scene, EpochGui replays tool windows, command menus, and modal layers above
+  it, and the host presents exactly once.
+- Normal editor context selection transfers logical active-editor authority, or
+  replaces a missing target as one serialized capture, retire, create, restore,
+  and acknowledge transaction.
+  Multicontext remains diagnostic and must not be used for runtime scoring.
+- Native context hosts may publish `host FPS` and lifecycle diagnostics during
+  local runs. These are useful for finding duplicated presentation, blocked
+  hosts, or failed teardown, but they are not visual-parity evidence.
+- The seven-backend acceptance gate, canonical scene, pixel policy, and
+  resource-soak requirements live in `renderer_regression_smoke_plan.md`.
+  Current capability truth lives in `renderer_feature_matrix.md`; version
+  chronology lives in `Changes/changelog.txt`.
 - When `EPOCH_SINGLE_PARENT=0`, the launch config must force standalone
   top-level contexts even if CLI defaults still prefer parented mode. This mode
   is used to isolate resize/flicker from the single-parent dock host, so any
@@ -1009,42 +1265,103 @@ features over forcing every integration on every machine.
 
 ## Editor viewport controls
 
-- right-drag orbits the editor preview camera
-- left-drag pans the preview focus across the grid plane
-- mouse wheel zooms the preview camera
-- the preview should show a visible look-hit marker where the center camera ray
-  intersects the grid
+- LMB selects scene objects; GUI, menu, title-bar, and splitter capture prevents
+  that input from leaking into camera navigation
+- Alt+LMB orbits perspective and free-orthographic views
+- MMB pans in the current view plane without requiring a modifier
+- Alt+RMB dollies without depending on empty grid space
+- RMB captures fly/look; WASD translates, Q/E descends/ascends, Shift is fast,
+  and Ctrl is precision
+- the wheel zooms while navigating normally and adjusts fly speed while RMB fly
+  is active
+- F focuses the selected stable scene object; Home resets the active view
+- Perspective, free Orthographic, Front, Back, Left, Right, Top, and Bottom keep
+  independent framing behind one stable logical view identity
+- project/runtime camera policy remains separate from the editor navigation
+  view. Mobile, console, and authored project-camera input maps remain future
+  bindings over this same contract
 
-## AI runtime, MCP, and harness direction
+## AI Runtime, MCP, And Guarded Development
 
-Epoch runs an operator-selected external model; it does not own or train an
-internal LLM. The model may be reached through an operator-started
-OpenAI-compatible endpoint or a directly selected `llama-cli` plus separately
-licensed GGUF.
+Epoch runs an operator-selected external model through a local
+OpenAI-compatible endpoint or a directly selected `llama-cli`/GGUF pair. It
+does not own or train an internal LLM, start a server, bind a port, or activate a
+discovered model without operator choice.
 
-Model transport and tool transport are separate. `ai.mcp` owns bounded tool
-descriptors, calls, results, errors, capabilities, approval gates, cancellation,
-and evidence attachments. The in-process registry covers project inspection,
-creation, save, document/script edit, build, run, test, editor capture, and
-diagnostics. Epoch starts no MCP server or listener.
+Optional voice interaction follows the same authority path. A desktop authoring
+profile may use operator-selected local STT/TTS only after per-session
+microphone consent; submitted transcripts remain visible proposals and cannot
+bypass model confirmation, plan review, or operator approval. No hidden
+listener/server or default raw-audio retention is permitted, and game/headless
+profiles can compile the voice host out. This is a workflow requirement, not a
+claim that voice capture or synthesis is currently implemented; the normative
+contract is in `os_ai_tooling_and_evidence_policy.md`.
 
-The protocol/registry and manual Tool Harness are implemented. Parsing arbitrary
-model-generated tool calls and multi-step dispatch are pending. Until then,
-operator-invoked controls execute the real project lifecycle and append
-structured traces to `workspace/tool_trace.jsonl`.
+`ai.mcp` owns bounded provider-independent tool messages.
+`ai.development_guard` separately owns immutable proposal identity, review,
+operator approval, bounded lifetimes, cancellation, and evidence. Its private
+`ExecutionPermit` is issued by the guard and claimed once before work:
 
-Normal chat is not captured automatically. Explicit trace/harness actions may
-write `workspace/model_exchange.jsonl`, `workspace/tool_trace.jsonl`, and
-bounded packets under `workspace/ai/sessions/`. These are evidence, not model
-training. Hidden reasoning is neither displayed nor harvested.
+1. register complete typed operations, exact content transitions, and SHA-256
+   digest;
+2. review that exact digest;
+3. obtain separate allowlisted operator approval when policy requires it;
+4. issue and claim one expiring private capability;
+5. execute only the approved operation and return verified terminal evidence.
 
-Project creation is part of the harness contract. Model-requested creation,
-editing, save, build, and run must pass the same path, capability, package,
-network, and human-approval gates as editor controls. Engine-source work is a
-separate developer capability with allowlisted roots, patch preview, build/test
-proof, and no automatic commit, push, or release.
+`editor.ai_development_controller` maps production calls to trusted monotonic
+time, serializes execution entry, and rejects caller-driven backdating. Before a
+source request reaches a model, the trusted host tokenizes the operator objective,
+gives an exact canonical objective path precedence, ranks existing files beneath
+the approved read-only source roots, and presents a bounded candidate list without
+reading or transmitting file contents. Only the visible
+`Share Curated Context` action reads those unchanged candidates and sends bounded
+full-file or objective-centered excerpt evidence to the displayed selected
+endpoint. The same action opens the reviewed files in the large source workspace
+instead of leaving the 3D scene dominant. `Project Scripts` returns to the normal
+script editor and `3D Scene` restores the scene surface. EpochGui decodes UTF-8
+for layout, drawing, hit testing, caret motion, and deletion; unsupported
+box/block decorations use a readable ASCII fallback without changing source
+bytes.
+Model-originated path requests are rejected; models cannot browse, invent, or
+expand the candidate set. The controller preserves exact raw model reply bytes
+and accepts source intent only through the strict bounded
+`EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block codec. The trusted host owns
+canonical workspace roots, full preimages/postimages, hashes, risk, actor
+identity, approval, and permit issuance. Direct local source inference runs
+below normal priority with half logical CPUs, matching batch threads, and
+`--gpu-layers 0`; ordinary chat retains its configured GPU acceleration.
+Build/run evidence comes from registered host paths. Source completion cannot be
+The direct transport selects one line-framed structured header and matching
+terminator before strict decoding, and each completed generation is ingested only
+once. The prompt's packet sample uses the first exact reviewed evidence path;
+explicit two-literal replacements use exact unique reviewed search and requested
+replacement bytes. Packet rejection queues no more than two complete
+host-diagnosed retries over the same evidence.
 
-See `os_ai_tooling_and_evidence_policy.md` for the normative contract.
+submitted through the public completion path; it must come from
+`ai.development_executor`.
+
+The source executor verifies operation IDs, canonical relative paths, approved
+preimages/postimages, and exact replacement bytes. It exclusively creates and
+flushes same-directory temporaries, revalidates parent chains and destinations
+before commit, verifies committed bytes, and records rollback evidence. It owns
+no Git, release, updater, package, network, or unrestricted shell authority.
+
+This remains bounded process-local protection, not complete OS transaction
+semantics. Hostile external-writer exclusion, directory crash
+journaling/durability, and complete ACL/xattr/alternate-stream/ownership
+preservation remain future hardening. Strict bounded model source-proposal
+parsing is complete; generic non-source build/run/test/capture multi-tool
+dispatch remains incomplete.
+
+Project creation, document/script changes, Save, Build, external Run, test,
+capture, and diagnostics use the existing project and evidence contracts.
+Normal chat is not captured automatically; explicit traces remain bounded
+evidence rather than training data. Source v0.89.28 claims these source
+contracts, not GUI eye proof. See
+`os_ai_tooling_and_evidence_policy.md` for the normative authority contract.
+
 ## Procedural/time-node direction
 
 - the later procedural authoring phase should cover SpeedTree-like modular
@@ -1057,18 +1374,13 @@ See `os_ai_tooling_and_evidence_policy.md` for the normative contract.
 ## Editor Shell Direction
 
 The bottom `Console Dock` is a temporary evidence/status strip, not the final
-editor-window system. It currently hosts reusable tabbed panes for:
-
-- `Project`
-- `Assets`
-- `Systems`
-- `AI`
-- `Output`
-
-These tabs should keep logs, build evidence, status, model inventory, and visual
-feedback available without becoming the main command surface. Action controls
-that start AI plan/build/harness passes belong in the Inspector until the
-dedicated editor windows below exist.
+editor-window system. It hosts one reusable `Output` tool pane with persistent
+`All`, `Project`, `Assets`, `AI Output`, and `Systems` filters. The
+categories filter logs, build evidence, status, model inventory, and visual
+feedback without creating duplicate dock routes or becoming the main command
+surface. `AI Chat` remains a separate movable tool. Action controls that start
+AI plan/build/harness passes belong in the Inspector or owning central workspace,
+not in Output filters.
 
 The real editor shell target is a set of independently focusable/dockable
 editor frames and views:
@@ -1077,9 +1389,11 @@ editor frames and views:
   editing
 - Software/Tool editor view for generated apps/tools and code-oriented project
   work
-- Self-Iteration Sandbox view for dark-factory coding passes, staged packets,
+- Engine Development Sandbox view for guarded source-development passes,
+  reviewed proposals,
   builder/verifier gates, and human approvals
-- AI Visualizer view for model state, packet replay, scene-state diffs, and
+- AI Visualizer view for model state, proposal/evidence replay, scene-state
+  diffs, and
   future 3D weight/model views
 - Project Hub view for project launch/update/context selection. The
   compatibility id/path may still be `projectlauncher` /
@@ -1110,9 +1424,10 @@ Current editor-shell gaps:
 - `tab_bar` is a real tab primitive now, not a segmented button alias. Future
   work should keep tabs visually connected to their content pane and reserve
   ordinary buttons for actions.
-- the current file browser and asset cards are intentionally first-pass
-  controls. They still need bounded columns, filtering, real decoded thumbnails,
-  rename/move/import actions, and a code/text editor surface for scripts.
+- the Asset Manager now has bounded filters, a virtualized thumbnail grid,
+  stable selection, contextual Open/Details/Copy actions, and a full-width
+  source editor. Rename/move workflows, richer import actions, multi-selection,
+  and column/list alternatives remain future work.
 - launcher/editor settings buttons should open modal windows with concrete
   backend, display, package, project, and AI safety controls. Modal close
   affordances should be normal top-right X controls with overlay-priority z-order.
@@ -1120,41 +1435,63 @@ Current editor-shell gaps:
   a miniature duplicate of the editor shell.
 - World Outliner rows should show human project/entity names, type, and useful
   grouping instead of implementation-ish labels.
-- the AI Visualizer should eventually expose packet graphs, scene-state diffs,
+- the AI Visualizer should eventually expose proposal/evidence graphs, scene-state diffs,
   and sampled weight/memory terrain views; it must not attempt to draw billions
   of raw parameters directly.
-- the GUI still needs context menus, popouts, dockable editor windows,
-  persisted layout profiles, resize cursors, resize handles, and column controls
+- the GUI still needs broader domain context-menu coverage, resize cursors,
+  resize handles, column controls, arbitrary compatible stack creation, and
+  user tab reordering
   for desktop editor/tool builds; product targets that do not support native
   floating hosts should exclude those routes instead of carrying hidden shells
-- editor theme selection is intentionally simple and user-facing: `System
+- editor theme selection remains user-facing: `System
   Light/Dark` follows the platform app-theme preference when available, while
-  `Light` and `Dark` are manual choices. More branded/professional Epoch themes
-  should be added later as optional palettes, not as replacements for those three
-  basic choices.
+  `Light` and `Dark` are manual choices. Classic Launcher, Midnight Blue, Ember
+  Forge, Forest Terminal, and Aurora Steel are optional named palettes. Light
+  uses dark glyphs over a true light palette, and rounded controls default on.
+- pane visibility, Left/Right/Bottom Left/Bottom Right placement, active tabs,
+  the bottom-column split ratio, theme, and rounded-control preference persist
+  per editor application in versioned user configuration outside project and
+  release data. Output and AI Chat default to the two bottom cells but remain
+  ordinary movable panes; either cell may collapse when empty. Invalid state
+  falls back to that application's defaults.
 - global UI scaling should behave like normal desktop software, with explicit
   user scale/font controls instead of one hardcoded pixel density
 - separate editor windows/domains are still needed inside the application:
-  project/game editor, software/tool editor, self-iteration sandbox, and AI
+  project/game editor, software/tool editor, Engine Development Sandbox, and AI
   visualizer should be independently launchable/dockable surfaces
 - the software/tool editor name does not mean the software renderer is a normal
   production backend. The software renderer's target role is safe launch,
   debug/error messages, capture diagnostics, and headless validation; Windows
   native rendering is now moving through the first DirectX/D3D11 slice, with
   D3D12 still future work.
-- linked-context panel hosts should remain explicit GUI containers such as
-  Inspector, Asset Browser, Code Editor, AI Visualizer, and Build/Output. They
-  must be operator-opened, visible, closable, and logged; future redock support
-  should extend the same host contract instead of becoming hidden model/control
-  channels.
-- pane popouts are editor pane routes, not a duplicate editor shell and not a
-  generic test window. Dragging a real pane title bar may request a cloned routed
-  native context for that pane after release. Window menu entries manage pane
-  visibility and layout reset only. The detached pane must own input and GUI
-  overlay priority, and command menus must not let lower toolbar/content
-  controls consume clicks behind them.
-- self-iteration needs visual state, not only console rows. The first visible
-  surface is the AI loop card visualizer; later passes should add packet replay,
+- linked-context hosts are explicit presentations of exact tool routes such as
+  Properties, Asset Browser, Script Browser, AI Chat, and Output. Project,
+  Assets, AI Output, and Systems are filters within Output rather than floating
+  routes of their own. Tool hosts are operator-opened, visible, closable, and
+  logged. Native-window X and titlebar drag restore the route to a remembered
+  tool group; floating content does not expose command-style Dock Back or Close
+  Window controls.
+- ordinary tool tabs dock into Left, Right, Bottom Left, or Bottom Right in-host
+  groups. Physical contexts use separate upper-left and upper-right targets;
+  bottom guide targets always retire a detached host into a logical tab stack.
+  World/GUI/etc. document tabs and scene views remain outside this movement
+  model. Dragging a tool tab or pane title shows MSVC-style target guides and a
+  ghost of the proposed group or floating placement. External context-backed
+  presentation remains explicit and does not clone canonical editor state.
+  Window menu entries recover each exact tool and layout. Selection commits on
+  the pressed tab before drag begins; movement activates the exact destination
+  route and resolves a valid source fallback. Tabs retain readable label width
+  while reserving one close affordance. Any external route owns input and
+  overlay priority only inside its bounds and returns the same logical pane when
+  hidden, closed, or redocked.
+- routed-pane cleanup is deterministic. Close/redock detaches the route from the
+  host. Context retirement, completed-thread joining, command-queue clearing,
+  and native GL/DC/window release occur only when the route owns a dedicated
+  context; a reused host remains alive. Full shutdown resets route maps, shared
+  detached projection, and passive context scores
+- guarded engine development needs visual state, not only console rows. The
+  first visible surface is the AI loop card visualizer; later passes should add
+  proposal/evidence replay,
   scene-state diff views, and a 3D model/weight visualization surface
 
 ## Multicontext proxy-shell behavior
@@ -1207,10 +1544,12 @@ Run these from the repository root after building the editor runtime:
 .\Projects\ProjectLauncher\bin\windows\Debug\x64\ProjectLauncher.exe --project-self-test
 ```
 
-The editor command materializes the selected shell, production-loads and
-atomically saves/reopens its canonical scene, builds the child, and runs its
-headless `--project-self-test`. A direct child command remains useful for
-isolating an already-built executable. Sandbox reports the engine-self-iteration
+The editor command materializes the selected shell, verifies
+`project_format: epoch-project-v1`, `build_profile: epoch-runtime-static`, and
+the versioned build inputs, production-loads and atomically saves/reopens its
+canonical scene, builds the child, and runs its headless
+`--project-self-test`. A direct child command remains useful for
+isolating an already-built executable. Sandbox reports the engine-development
 identity; ProjectLauncher reports its launcher-tool identity. A GUI project
 external-run check should additionally launch its generated executable with the
 same `--scene`, `--backend`, and standalone arguments emitted by the editor.
@@ -1220,12 +1559,11 @@ and the AI evidence gate in one non-GUI pass. It is intentionally broader than a
 single profile smoke, but it still does not replace manual eye testing for GUI
 composition, command-menu z-order, renderer flicker, or dock behavior.
 
-As of `v0.84.30`, the engine-side command also appends an MCP-style tool
-capture and stages an AI iteration packet under
-`Engine/examples/ConsoleApplication1/workspace/ai/iterations/`. That packet is
-the reviewable bridge for OS AI: it records project paths, build logs,
-outputs, capture logs, selected model metadata, and a human-gated verifier
-state before any follow-up coding pass is allowed to promote changes.
+The engine-side command appends one explicit MCP-style tool trace and writes the
+evidence path into project notes. It does not create hidden AI iteration/session state,
+capture normal chat, promote source, or treat build output as training material.
+Build logs, child self-test output, and canonical project paths remain ordinary
+operator-review evidence.
 
 ## Troubleshooting checklist
 

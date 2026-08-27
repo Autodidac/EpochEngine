@@ -188,6 +188,111 @@ namespace epochengine::gui_lib
             || slot == DockSlot::center;
     }
 
+    DockGuideLayout make_dock_guide_layout(const DockGuideOptions& options) noexcept
+    {
+        DockGuideLayout layout{};
+        const Rect guideBounds = sane_rect(options.guide_bounds);
+        const float extent = (std::max)(
+            44.0f,
+            sane_or(options.guide_extent, 94.0f));
+        const float gap = (std::max)(
+            0.0f,
+            sane_or(options.guide_gap, 8.0f));
+        const Vec2 center{
+            guideBounds.position.x + guideBounds.size.x * 0.5f,
+            guideBounds.position.y + guideBounds.size.y * 0.5f
+        };
+
+        const auto append = [&](DockGuideTarget target, Vec2 position, Vec2 size, Rect preview)
+        {
+            if (layout.count >= 7U)
+                return;
+
+            DockGuide& guide = layout.guides[layout.count++];
+            guide.target = target;
+            guide.target_bounds = Rect{ position, size };
+            guide.preview_bounds = sane_rect(preview);
+            guide.hovered = contains(guide.target_bounds, options.pointer);
+            if (guide.hovered && layout.hovered_target == DockGuideTarget::none)
+            {
+                layout.hovered_target = target;
+                layout.hovered_preview = guide.preview_bounds;
+            }
+        };
+
+        const float leftX = center.x - extent - gap;
+        const float middleX = center.x - extent * 0.5f;
+        const float rightX = center.x + gap;
+        const float topY = center.y - extent * 1.5f - gap;
+        const float middleY = center.y - extent * 0.5f;
+        const float bottomY = center.y + extent * 0.5f + gap;
+        if (options.allow_side_tabs)
+        {
+            append(
+                DockGuideTarget::left_tabs,
+                { leftX, middleY },
+                { extent, extent },
+                options.left_tabs_preview);
+            append(
+                DockGuideTarget::right_tabs,
+                { rightX, middleY },
+                { extent, extent },
+                options.right_tabs_preview);
+        }
+        if (options.allow_float)
+        {
+            append(
+                DockGuideTarget::float_window,
+                { middleX, middleY },
+                { extent, extent },
+                options.floating_preview);
+        }
+        if (options.allow_bottom_tabs)
+        {
+            append(
+                DockGuideTarget::bottom_left_tabs,
+                { leftX, bottomY },
+                { extent, extent },
+                options.bottom_left_tabs_preview);
+            append(
+                DockGuideTarget::bottom_right_tabs,
+                { rightX, bottomY },
+                { extent, extent },
+                options.bottom_right_tabs_preview);
+        }
+        if (options.allow_contexts)
+        {
+            Vec2 leftContextPosition{ leftX, topY };
+            Vec2 rightContextPosition{ rightX, topY };
+            if (options.center_context_guides_in_previews)
+            {
+                const Rect leftPreview = sane_rect(options.left_context_preview);
+                const Rect rightPreview = sane_rect(options.right_context_preview);
+                leftContextPosition = {
+                    leftPreview.position.x + (leftPreview.size.x - extent) * 0.5f,
+                    leftPreview.position.y + (leftPreview.size.y - extent) * 0.5f
+                };
+                rightContextPosition = {
+                    rightPreview.position.x + (rightPreview.size.x - extent) * 0.5f,
+                    rightPreview.position.y + (rightPreview.size.y - extent) * 0.5f
+                };
+            }
+
+            append(
+                DockGuideTarget::left_context,
+                leftContextPosition,
+                { extent, extent },
+                options.left_context_preview);
+            append(
+                DockGuideTarget::right_context,
+                rightContextPosition,
+                { extent, extent },
+                options.right_context_preview);
+        }
+
+        return layout;
+    }
+
     bool dock_pane_requests_context_window(const DockPaneState& pane) noexcept
     {
         return pane.visible && pane.popped_out;

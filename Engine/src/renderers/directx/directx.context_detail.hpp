@@ -150,8 +150,9 @@ namespace epochengine::directxcontext::detail
     void build_preview_geometry(
         const core::Context& ctx,
         const DirectXState& state,
+        std::vector<DirectXVertex>& gridLines,
         std::vector<DirectXVertex>& solid,
-        std::vector<DirectXVertex>& lines);
+        std::vector<DirectXVertex>& overlayLines);
 
     void render_engine_arcade_sampled_surface_preview(
         const core::Context& ctx,

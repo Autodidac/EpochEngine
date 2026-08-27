@@ -7,17 +7,35 @@ windows should compose shared GUI primitives from the same layer.
 
 ## Current Boundary
 
-- Public module API: `Engine/modules/gui.engine.ixx`
-- Current implementation: `Engine/src/epochgui/gui.engine.cpp`
-- Primary consumer: `Engine/src/editor/editor.application.cpp`
+- Portable static-library API: `Engine/dep/EpochGui/include/gui/`
+- Portable implementation: `Engine/dep/EpochGui/src/epochgui/`
+- Engine adapter API/implementation: `Engine/modules/gui.engine.ixx` and
+  `Engine/src/epochgui/gui.engine.cpp`
+- Primary editor consumer: `Engine/src/editor/editor.application.cpp`
 - Backend replay consumers: renderer/context code that drains deferred GUI
   batches after scene rendering
+
+Source `v0.89.28` documents the current portable/controller composition. The
+published `v0.89.06` packaged runtime and updater remain sealed. Source and
+contract integration below does not claim GUI screenshots, responsiveness, or
+operator eye proof.
 
 The current implementation is still physically compact, but the ownership rule
 is already library-like: reusable controls are added to `gui.engine` first, then
 editor domains consume them. Editor workspaces should not reimplement generic
 buttons, tabs, dropdowns, scroll areas, text inputs, modal chrome, or clipping
 logic.
+
+Application workspaces use real tab ownership rather than toolbar mode buttons.
+The shared workspace-layout contract assigns document, structure, inspector,
+and operation-dock providers separately for Standard Editor, Plant Lab, and GUI
+Editor. The primary renderer view is externally supplied by the engine context;
+the GUI library does not create or own a renderer. Standard Editor and the
+projectless launcher GUI Editor consume the same canonical GUI document and
+projection adapter. Standard Editor presents the interactive placement canvas;
+GUI Editor presents widget creation, Canvas, Runtime Preview, Component Graph,
+Styles, verified `.epochgui` I/O, and reusable templates. Both share stable
+selection with Hierarchy and Properties.
 
 The practical rule is strict: if an editor surface needs a control that normal
 software would also need, create or extend the shared GUI primitive first. A
@@ -96,12 +114,14 @@ replay pass.
   runtime-surface atlas use, deferred GUI replay, and backend-safe present
   ordering. Theme preference labels, option data, preference resolution, and
   scoped theme application belong to `gui.engine`; editor surfaces may store the
-  selected preference but must not recreate theme tables in domain code. Current
-  exposed choices are `System Light/Dark`, `Light`, and `Dark`. System mode must
-  resolve through platform app-theme preference when available and fall back to
-  the dark palette on platforms without an OS light/dark bridge. More branded
-  Epoch themes such as a future professional dark style are palette extensions,
-  not replacements for the three basic choices.
+  selected preference but must not recreate theme tables in domain code. The
+  baseline choices are `System Light/Dark`, `Light`, and `Dark`; named Epoch
+  palettes currently include Classic Launcher, Midnight Blue, Ember Forge,
+  Forest Terminal, and Aurora Steel. System mode resolves through platform
+  app-theme preference when available and falls back to the dark palette on
+  platforms without an OS light/dark bridge. Light mode is a real high-luminance
+  palette with a dark glyph atlas, not a recolored dark surface. Rounded controls
+  default on; new palettes extend this table rather than replacing the baseline.
 - Cross-backend visual parity starts in `engine.visuals`. Frame clears, scene
   clears, object colors, selection colors, look markers, and editor-only opacity
   factors are shared there so OpenGL, Vulkan, DirectX, Raylib, SDL, and SFML can
@@ -111,66 +131,71 @@ replay pass.
   scripting, and package manager workspaces choose domain data and layout, but
   do not own generic widget behavior.
 
-## New Control Rule
+## Image, Tab, And Graph Controls
 
-Every new editor control starts as a reusable GUI primitive unless it is truly
-domain-specific. Dropdown/select-box state and segmented-selection geometry
-belong in EpochGui controllers; the local AI model selector, scene-mode switch,
-package selection, backend selection, project settings, asset selection, and
-script selection should reuse those paths instead of adding one-off controls.
+EpochGui now owns portable geometry for image boxes and tab buttons. Image boxes
+take stable image identity, source extent, contain/stretch fit, selection,
+enabled/interactive state, and optional caption; the engine adapter resolves the
+runtime sprite and draws it. Image buttons require an explicit stable identity
+through the same contract; the legacy overload remains compatibility-only. Tab
+bars take stable IDs, active/disabled/dirty/closeable state, accept explicit
+geometry when the application requires it, and otherwise derive readable tool-tab
+width from EpochGui font metrics and close/dirty affordances. They return
+selection/close intent without owning editor documents.
 
-Before a control is considered ready, it needs:
+Active tool tabs use the active palette fill; the close affordance changes its
+own hover color without adding an underline that can be mistaken for selection.
+Rounded controls are the editor default and remain a user preference. Static
+palette sprites are packed with an edge-clamped gutter and expose only the inner
+atlas rectangle, preventing linear filtering from sampling neighboring rounded
+button or modal pixels.
 
-- stable clipping and hit testing inside scrollable/resizable panes
-- dropdown/select boxes must keep their own mouse-wheel focus while open instead
-  of letting a parent scroll pane consume the wheel first
-- dropdown/select boxes close on outside click and align the scroll position near
-  the selected option when opened; editor surfaces should not duplicate this
-  behavior in domain code
-- progress bars are shared GUI primitives for package installs, workspace
-  loading, updater/cache operations, generated-project builds, and any future
-  visible long-running editor action; do not draw one-off progress rows in
-  Console Dock or domain code when `gui.engine` can own the behavior
-- loading screens are shared GUI primitives too. `EpochGui` owns the
-  backend-neutral `LoadingScreenLayout`; `gui.engine` owns drawing, input
-  capture, and theme integration; launcher/editor/update domains provide only
-  title, message, progress, status, and action text. Loading surfaces are valid
-  for mode handoff, updater handoff, package/cache work, and project build
-  waits, but they are not a replacement for the launcher command grid or the
-  editor command menu.
-- Package Manager uses a reusable list/action/detail shape. Package selection
-  should not be a cramped one-line combo box when rows need per-package status,
-  Install/Remove/Review Gate actions, provenance, and bounded progress. Package
-  names and row summaries use selectable `text_link` rows, not fake buttons;
-  only true commands remain buttons.
-- automatic content containers are a GUI-library responsibility. Lists,
-  details panes, source editors, progress rows, graph canvases, and modal bodies
-  should resize from viewport/content constraints through reusable primitives so
-  editor workspaces do not keep reinventing brittle row math.
-- dynamic word wrap is the default for reusable text surfaces. Logs, chat
-  transcripts, inspector rows, package details, update modals, source previews,
-  and other scrollable panels should measure against their actual viewport width
-  and keep scrollbar extents in pixel space so resizing cannot smear stale glyph
-  columns or truncate important status text unless a control explicitly opts out.
-- source editors are shared GUI primitives. They process text input directly,
-  render only visible source lines inside the scroll clip, and expose
-  click-to-caret placement, drag ranged selection, focused navigation hotkeys,
-  Ctrl+A/C/X/V, and right-click Select All/Copy/Cut/Paste through the GUI
-  context-menu path; editor workspaces should not replace them with static text
-  dumps or ad hoc clipboard buttons.
-- input profiles are shared engine/editor contracts, not per-surface hacks.
-  `v0.84.54` keeps movement bindings and look bindings non-overlapping in the
-  shipped presets, after `v0.84.53` introduced named
-  movement/look/reset/cancel/confirm actions, Win32 navigation-key coverage,
-  project runtime camera handoff, and visible Editor Settings/Project workspace
-  profile selectors. Rebinding, project export, and package opt-in must flow
-  through a reusable input-configuration surface before being promoted to
-  generated projects
-- text inputs must support basic desktop editing affordances before promotion:
-  focused editing, visible caret state, ranged selection, copy, cut, paste,
-  select-all, stable scroll focus, and context-menu actions without requiring a
-  held mouse button
-- keyboard/mouse focus behavior that does not leak across panes or contexts
+`gui_lib::AssetGrid` owns bounded filtering, virtualized tile layout, stable
+selection and activation, scroll clamping, optional image metadata, and explicit
+invalid/duplicate identity rejection. It returns visible stable IDs for
+virtualization without owning thumbnail lifetime. The central Asset Manager
+matches each browser entry to canonical texture source identity and hydrates one
+bounded catalog atlas before drawing the grid, so a first-visible card does not
+depend on a previous frame's visibility result. Decoded thumbnails, atlas
+entries, and renderer handles remain disposable projection state.
+
+`gui.engine::register_runtime_surface_atlas` accepts a bounded batch of stable
+runtime-surface descriptors, validates the whole request before mutation, updates
+the shared physical atlas under one lock, and uploads once after all accepted
+entries are packed. The Assets adapter uses this path for project thumbnails and
+retains only aligned `SpriteHandle` projections; neither EpochGui nor the atlas
+owns canonical asset identity or source bytes. Its build-safe contract proves
+stable handles for unchanged registration and same-size pixel replacement.
+
+`gui_lib::node_graph_workspace::Controller` is the reusable graph interaction
+surface. It transactionally accepts bounded stable node, pin, and edge layouts;
+owns pan, anchored zoom, fit, projection, hit testing, selection, keyboard
+navigation, and pointer intents; and never imports engine scheduler or authoring
+state. The engine `node_graph_canvas` adapter preserves view and node offsets and
+returns drag, connect, disconnect, and selection intent. `editor.systems_panel`
+maps those intents into `authoring.task_graph`; GUI Editor maps parent-output to
+child-input connections into validated temporal widget reparenting and maps
+disconnect back to the document root. Domain documents remain mutation
+authorities, so GUI intent cannot rewrite scheduler or document internals.
+
+`authoring.gui_document` is the typed temporal meaning behind GUI authoring. It
+also owns the shared semantic template factory for Blank Canvas, Desktop App,
+Dashboard, Mobile App, and Game HUD documents; editor application choices and
+project materialization call the same factory. Generated 2D projects declare
+`Assets/Gui/main.epochgui` in their manifest, preserve existing valid source,
+and create the shared Game HUD only when canonical source is absent. Source is
+compiled and persisted through `project.gui_library`, then restored through
+`project.gui_runtime` before generated child acceptance may continue.
+
+The reusable GUI boundary also requires:
+- global editor Delete, Escape, and history shortcuts query
+  `gui::keyboard_input_captured()` so active text/select controls retain keyboard
+  ownership rather than triggering scene or document commands
+- native hosts forward printable Unicode text separately from editing keys;
+  Backspace, Delete, Enter, Escape, and other control codepoints must not arrive
+  twice as both a key command and inserted text
+- one drag gesture has one stable widget owner until release; sibling widgets may
+  not cancel or steal a pending/active canvas drag while the document is iterated
 - backend-safe rendering through the shared GUI replay path
 - a documented owner and expected consumers
 - build/test evidence before roadmap completion is claimed
@@ -185,36 +210,185 @@ belong in proper GUI windows:
 - System Info graphs belong in the System Info workspace. Shared `core.time` controls,
   timeline graphing, streaming-save cadence, and video-authoring controls belong
   in Video or the bottom scene timeline strip.
-- AI controls belong in the AI workspace and Inspector, with compact
-  status mirrored in the dock only when useful. The World Outliner may expose an
-  `OS AI` tab with compact model/loop state, chat transcript, prompt entry,
-  and plan controls because that keeps the selected AI model attached to normal editor chrome
-  instead of hiding control in a separate floating window.
+- AI authoring and bounded-development controls belong in the movable AI Controls
+  tool, with compact status mirrored in the dock only when useful. The World
+  Outliner may expose an `OS AI` tab with compact model/loop state, chat
+  transcript, prompt entry, and plan controls because that keeps the selected
+  AI model attached to normal editor chrome instead of hiding control in a main
+  document. AI Chat remains a separate dockable conversation tool so the scene
+  can stay visible. Reusable console windows own clipped transcript, input, and
+  optional pinned/footer action rows; approval-sensitive actions stay pinned
+  above scrollable content so compact docks cannot hide authority controls.
+  Text rows accept optional semantic roles so user, assistant, system, and error
+  messages can use restrained contrasting backgrounds without editor-side drawing.
+  Font line metrics reserve raster/descender padding, and focused text controls
+  own a visible high-contrast caret across chat, script, and ordinary edit fields.
+  Partially clipped glyphs are omitted rather than destination-scaled because
+  atlas UVs remain immutable during GUI clipping.
 - Scripting needs a real code/text editor surface, not a Console Dock submenu.
 
-Current bottom-dock non-output tabs should use compact status-only text inside
-`scroll_text_panel`; only `Output` owns selectable log text. Do not reintroduce
-property-row blocks, buttons, dropdowns, selection tables, or progress widgets
-into Project, Assets, AI, or Systems dock pages; those controls belong in
-central workspaces, modal windows, or Inspector-owned panels.
+The single `Output` tool owns selectable log text and compact Project, Assets,
+AI Output, and Systems evidence filters. These status categories are not
+independent dock routes. Do not reintroduce property-row blocks, action buttons,
+selection tables, or progress widgets into Output filters; those controls
+belong in central workspaces, modal windows, or Inspector-owned panels.
 
-Docking defaults to selected-backend multi-pane composition. A DirectX editor
-creates DirectX scene panes, an OpenGL editor creates OpenGL scene panes, and
-mixed-backend grids are reserved for explicit diagnostics or accurate-preview
-comparison. GUI primitives must therefore stay backend-neutral while the editor
-host owns which renderer family a pane belongs to.
+Docking defaults to in-host tool-tab stacks over one live editor projection.
+World Outliner, Asset Browser, GUI Hierarchy, Script Browser, Tile Map,
+Properties, World Settings, Output, and AI Chat each own an independent tool
+route. They may move between the left, right, Bottom Left, and Bottom Right
+groups without entering
+the main document strip or creating another editor, renderer, project session,
+or native context. Tabs retain stable pane identity, focus, selection, document
+bindings, and history while the host changes only presentation. Output filter
+selection persists with the editor context but never changes pane identity.
+One EpochGui-owned guide overlay and placement ghost make four logical tab
+stacks, two physical-context destinations, and native float drops visible before
+release. Bottom Left and Bottom Right are ordinary tab destinations. The
+upper-left and upper-right context targets preserve a physical context on the
+selected side instead of retiring it into a logical tab stack. Guides use
+translucent orange
+idle and stronger orange hover states. Drawing and hit testing consume the same
+`DockGuideLayout`; the editor must never draw a competing guide set. Press identity is part of the
+closable tab result, so selection commits before movement and the exact pressed route enters drag.
+Labels reserve close space once and use readable professional widths. The
+reusable workspace state validates group category, destination activation,
+source fallback, close fallback, and movement; document and scene tabs are not
+legal tool-dock payloads.
 
-Desktop editor/tool builds may opt into native routed pane popouts. A valid
-popout starts from real pane chrome with a title-bar drag/release gesture,
-clones the current editor pane state into a detached context route, captures its
-own input, hides the docked source pane while the route is open, restores that
-source pane on Dock Back, Close, or native-window close, and keeps GUI overlay
-priority active in that routed context. The routed context must refresh GUI/font
-resource upload state before its first panel frame so cloned panes do not inherit
-stale atlas bindings. The Window menu manages pane visibility and layout reset;
-it is not the primary pane-detach surface. Games,
-mobile apps, console targets, and headless tools must be able to omit the native
-floating/detached host while still linking the portable GUI primitives.
+Persistent control identity is scoped by GUI host, owning window, and stable
+control ID. Two windows may intentionally reuse a local ID without sharing
+scroll position, drag capture, popup state, or selection. Scroll-area frames also
+record their owner and nesting depth, unwind at the owning window boundary, and
+draw their track and thumb inside the area viewport clip. The editor supplies
+window identity and content; it must not implement or globalize reusable
+scrollbar state.
+
+Reusable console windows own their complete vertical composition: transcript,
+input row, command button, and any optional footer actions are measured and
+clipped inside the console rectangle. Hosts provide action descriptions and
+consume the selected action; they must not reserve a second height or draw an
+ad hoc footer outside the console. This invariant applies equally in side,
+bottom, floating, and context-backed pane hosts.
+
+Scene and game panes remain associated with the editor's selected renderer. A
+DirectX editor creates DirectX scene panes, an OpenGL editor creates OpenGL
+scene panes, and mixed-backend grids are reserved for explicit diagnostics or
+accurate-preview comparison. That renderer association does not turn every
+ordinary GUI pane into a renderer context. GUI primitives stay backend-neutral;
+the editor host decides whether a particular view needs a render surface.
+
+Float is an ordinary presentation route for a pane, not a second promotion mode.
+A desktop editor/tool may route one stable pane identity to an in-app floating
+panel, another same-process application window, or the existing context-backed
+native host. The engine adapter supplies native renderer/context integration;
+EpochGui owns pane identity, guide targets, placement intent, and tab-group
+return. Closing, hiding, or redocking must return the same logical pane without
+logging out of the editor, replacing active-editor authority, or cloning
+canonical state.
+
+The current editor keeps its main World/GUI/Forest/Plant/Timeline/Project/
+Assets/AI/Systems strip document-only. Tool routes use the Left, Right, Bottom
+Left, and Bottom Right tab groups. Output and AI Chat default to the two bottom
+groups, but neither route nor group is special after initialization. Dragging a
+tool to Float starts its existing context-backed native host; dragging that
+native titlebar over the primary host publishes all four logical tab targets,
+upper-left and upper-right physical-context targets, and a matching placement
+ghost. A logical target retires the pane-owned native context and restores the
+same pane as an in-host tool tab. A context target preserves and grid-docks the
+physical context on the selected side. EpochGui's `DockGuideLayout`
+owns the visible guide rectangles, pointer hit testing, hovered target, and
+placement preview for every routed pane; engine hosts consume that result and
+must not infer separate broad screen regions. Native drag projection supplies
+the live native cursor so every visible guide remains selectable. Releasing on
+a logical target or closing the native window returns the same route to its
+remembered group.
+
+Guide coordinate space follows the dragged surface. An ordinary tool-pane
+popout is a routed pane, so its guide overlay remains local to that pane's
+context. A detached full renderer context is not a routed pane: EpochGui derives
+its left/right targets from the destination preview rectangles, centers each
+guide inside the actual destination, and returns the same preview as the hover
+ghost. The engine host supplies parent-space context bounds and presents that
+model in the canonical parent window. The detached renderer must not draw a
+second local guide set. Native window creation, reparenting, backend owner-thread
+commands, and renderer frame order remain engine/backend responsibilities and
+are not changed by guide projection.
+
+Floating content contains no Dock Back or Close Window command buttons.
+Routed-pane garbage collection is deterministic: close/redock detaches the pane
+route from its host. Context retirement, completed-thread joining, command-queue
+clearing, and native GL/DC/window release occur only when that route owns a
+dedicated context; reusing an existing context never retires the host. Full
+editor shutdown also resets route maps, the shared detached-pane projection,
+and passive-context scoring. Epoch defines no built-in Secondary Map or fixed
+Display 2. Application-defined map, radar, and telemetry panes use this same
+contract. Native interaction still requires operator eye proof, and automatic
+monitor placement remains unfinished.
+Games, mobile apps, console targets, and headless tools may omit floating,
+detached, and context hosts while linking the portable GUI primitives.
+
+## Pane Hosts And Application-Defined Outputs
+
+A pane has one stable logical identity and one active presentation route. The
+host resolves requests in this order:
+
+1. an in-host tab stack, which is the default;
+2. an optional in-app floating panel;
+3. an optional same-process or native additional window;
+4. an explicit renderer/context host when the pane's declared capabilities
+   require it.
+
+Application-defined surfaces such as `Game`, `Map`, radar, or telemetry are
+ordinary pane identities and may be assigned to a compatible tab stack or
+floated through the existing host route. Their application owns visible
+show/hide/focus controls. Hiding one suspends or removes its presentation work
+according to policy but does not discard the underlying document, selection,
+temporal state, or project session.
+
+Desktop fullscreen policy may use either one same-process borderless host over
+selected display work areas or multiple native windows, depending on monitor
+geometry, DPI, platform support, renderer support, and product capability tier.
+EpochGui supplies portable pane/output identity and route intent; the engine
+host owns monitor enumeration, window placement, native lifecycle, fullscreen,
+focus, and presentation throttling. Non-desktop targets may omit this entire
+host layer. This section is an architectural contract and does not claim that
+multi-monitor routing or arbitrary tab-stack docking is implemented.
+
+## System Workspace Projection
+
+EpochGui's `SystemWorkspace` is a portable data/controller primitive, not an
+engine registry or graph executor. It owns:
+
+- bounded transactional row replacement through an adapter or owning rows;
+- hierarchy, expansion, filtering, category/status filters, and stable sorting;
+- selection, keyboard navigation, summaries, and selected-row lookup;
+- source/view revisions and explicit empty, error, and stale-data states;
+- deterministic bounds for rows, depth, text, filters, and categories.
+
+It imports no engine systems, scheduler, authoring graph, renderer, windowing, or
+project state. `editor.systems_workspace` converts immutable registry, shared
+editor scheduler, and learning-document snapshots into rows. `gui.engine` draws
+those rows and graph surfaces, routes input, and owns clipping/theme/font
+behavior.
+
+The adapter caches by source/view revision and keeps bounded scheduler rows and
+timing history. It does not rebuild graph projection or duplicate owning data
+every frame when source revision, viewport, filter, and selection are unchanged.
+Live diagnostics sampling is an engine lifetime decision: enable registry timing
+only while the central Systems workspace is active and disable it when hidden.
+Task scheduler timestamps remain lifecycle evidence independent of tab
+visibility. EpochGui only projects supplied snapshots.
+
+The read-only Live Scheduler reports the real shared TaskGraph used by AI
+evidence builds, selected script builds, project builds, and the approved tool
+harness. The separately labeled Learning Graph owns editable semantic
+add/connect/remove, undo/redo, validation, topology, critical-path, and
+parallel-wave simulation. Learning actions cannot schedule, cancel, reorder, or
+execute live work. The Time view presents bounded registry-update samples and
+live scheduler queue/run evidence. Fixed-size runtime chart surfaces update
+existing atlas pixels in place, preserving their sprite handle and preventing
+per-sample atlas growth.
 
 ## Artifact And Smear Guard
 
@@ -233,40 +407,47 @@ rule, not the final typography goal: mojibake in AI notes or local model replies
 must be normalized before display or explicit session capture, and hidden reasoning text
 must never be promoted to chat output.
 
-## Script Editing Gate
+## Script Editing And Build Gate
 
-The Assets workspace owns the first visible Script Source Editor surface. It
-loads the active `.ascript.cpp` through the shared `gui.engine` source-editor
-primitive, not an editor-local clipboard hack. The primitive owns scrollable
-multiline editing, click-to-caret placement, drag ranged selection, Ctrl+A/C/X/V,
-Left/Right/Home/End navigation, and right-click Select All/Copy/Cut/Paste.
-Save/Reload remain editor evidence actions because they touch project files.
-Promotion to a real code editor still requires syntax-aware display, line/column
-status, search, undo/redo, and a cleaner split between preview, editor, and build
-actions.
+The Assets/Scripting tool owns the visible `.ascript.cpp` source surface through
+shared EpochGui text-editor state and the `gui.engine` adapter. The reusable
+control owns multiline indexing, caret/range selection, focus, scrolling,
+clipboard intent, navigation, dirty revision, find/replace, and save
+acknowledgement. Native clipboard, glyph measurement, syntax presentation,
+diagnostics, file I/O, and build execution remain adapter/domain work.
 
-## Script Editor And Clipboard Gate
+Build Selected Script is a real C++23 shared-library compilation request routed
+through the shared editor TaskGraph. The editor saves dirty source first and
+starts at most one build. The compiler records source/current-output evidence,
+rejects ownership changes during compilation, verifies the bounded candidate,
+publishes it by same-filesystem atomic replacement, and verifies the published
+artifact before success. The surface reports source, output target, generation,
+progress state, completion, and actionable failure; the loader resolves that
+same canonical output path.
 
-The current script surface is not a finished editor. It can locate and edit
-script source through the shared source-editor primitive, but a production
-scripting workspace still needs syntax-aware code text, line numbers, search,
-undo/redo, save/reload evidence, build/run feedback, and predictable keyboard
-focus across all docked contexts. Built-in script assets should use ASCII-safe
-source headers until the text renderer supports the full banner glyph set; any
-remaining high-byte source preview normalization must not corrupt the saved
-source.
+A selected-script build is not Project Build and cannot authorize external Run.
+The strict `project.lifecycle` contract defines selected-project, committed
+scene, materialized-shell, build-input, verified-artifact, and runtime
+generations. The production editor still uses its legacy evidence adapter and
+must populate those stamps before the GUI can claim generation-safe Build/Run.
 
-Script editing should use shared GUI text/source-editor primitives, not a
-one-off asset panel hack. The acceptance gate is a script file that can be
-opened from Assets or the Script Editor workspace, edited, selected, saved,
-reloaded, copied/pasted from a right-click context menu, built, and run with
-visible evidence and no Console Dock-only control path.
+The source editor is still not a finished IDE. Production acceptance needs
+syntax-aware display, line/column status, search UI, undo/redo, document tabs,
+large-file virtualization, compile/load diagnostics, predictable focus across
+docked contexts, and visible external project-run evidence. Controller or build
+contracts alone do not prove those GUI behaviors.
 
-Window chrome follows the same rule: close buttons, titlebar controls, context
-menus, scroll areas, text inputs, and future tabs/splitters belong in
-`gui.engine` first. Editor domains compose those primitives and should not draw
-their own ad hoc copies.
+The editor now places the selected script in the central Assets/Scripts
+workspace with Save, Reload, Build, and Copy Path commands above the full-width
+source control. Outliner Scripts remains a compact navigator. The reusable
+asset grid owns bounded per-context/window popup state and returns stable target
+plus action identity; the engine maps Open, Show Details, and Copy Path to real
+project behavior.
 
+Window chrome follows the same ownership rule: close controls, title bars,
+context menus, scroll areas, text inputs, tabs, and splitters belong in EpochGui
+or `gui.engine` according to the portable/adapter boundary; editor domains
+compose them rather than drawing ad hoc copies.
 ## Safe Split Plan
 
 Do not split files only for aesthetics. The safe code split is:
@@ -289,21 +470,27 @@ theme, text, and atlas/backend replay; keep portable math/control state in
 The current reusable payload includes floating-window layout, popup/dropdown
 layout, dock-layout math, dockable-window host/action state, splitters,
 progress-bar layout, selectable-list row math, segmented-selection geometry,
-rounded-rectangle mesh/style policy, toggle-switch layout, and portable
-text-control state. `SelectionControlController` owns clamped segment sizing,
+rounded-rectangle mesh/style policy, toggle-switch layout, portable text-control
+state, and the bounded `SystemWorkspace` row/filter/sort/hierarchy/selection
+controller. `SelectionControlController` owns clamped segment sizing,
 gap-aware item placement, aggregate bounds, toggle geometry, and hit testing;
 `gui.engine` supplies rendering, cached rounded control corners, theme, font,
 focus, and translated input.
+Rounded atlas replay overlaps adjacent corner/edge slices by at most one
+physical pixel so fractional logical-pixel and DPI scaling cannot expose
+transparent seams at hover or pressed-state boundaries.
 `TextControlController` provides UTF-8-safe caret boundaries, anchor/range
 selection, line/document/word/multiline navigation, edit and clipboard intent,
 read-only and maximum-byte policy, and metric-driven scrolling. The adapter
 still owns native clipboard calls, glyph measurement, wrapping, rendering, and
-input-event translation. The editor exposes rounded controls as an opt-in
-Settings toggle, disabled by default and preserved during context snapshot
-handoff. The current production editor route uses real pane title bars for
-detach requests; the baked primary renderer surface is never detachable, while
-secondary routed panes retain native popout/redock. Old generic Floating GUI
-proof routes are infrastructure only. The next safe conversion batch is modal
+input-event translation. The editor exposes rounded controls as the default
+EpochGui style policy, with an explicit Settings toggle to disable them; the
+preference is preserved during context snapshot handoff. The current production editor route uses real tool tabs and pane title bars for
+placement requests; scene views and main document tabs are never ordinary
+tool-dock payloads. Logical active-editor authority does not pin its physical
+renderer context to a grid side. Exact tool routes retain native popout/redock,
+with host guide projection and remembered-group restoration. Old generic Floating
+GUI proof routes are infrastructure only. The next safe conversion batch is modal
 sizing/action rows, closable panels with scroll bodies, text adapter integration,
 and Package Manager action rows before touching top-layer menu composition.
 
@@ -386,14 +573,21 @@ exclude the host that presents them.
 
 ## Current Floating Panel And Route Contract
 
-World Outliner, Inspector, Console Dock, and AI Chat popouts start from their
-real pane title bars with a drag/release gesture. They use explicit pane route
-ids and a cloned editor snapshot so the new context presents one current pane
-rather than a second editor shell. A successful route marks that pane detached
-inside the editor layout, removes the source pane from the docked window, and
-restores it when the routed pane uses Dock Back, Close, or native window close.
-`Window` menu entries are reserved for show/hide, recovery docking, and layout
-reset so menu clicks do not stand in for the primary docking gesture.
+Every non-scene tool owns an exact route and starts from its real tool tab or
+pane chrome. The route carries pane identity; the engine publishes one bounded
+live projection containing project identity, scene revision, entity rows,
+selection, logs, and preview state. Detached panes read that projection and do
+not create a second editor shell, scene document, or project session. Dragging
+a tool tab shows Left, Right, Bottom Left, Bottom Right, and native-float guides;
+releasing on a group joins that group while Float starts the context-backed
+native route. A native titlebar drag additionally exposes upper-left and
+upper-right physical-context guides. A physical-context target preserves and
+grid-docks the context on that side; any logical target retires the detached
+host and restores the route to the selected in-host stack.
+Both paths use the same EpochGui layout for drawing and hit testing, and
+native close restores the route to its remembered group. The main document strip and
+scene views reject tool routes. The `Window` menu remains available for exact
+show/hide recovery, named secondary-output control, and layout reset.
 
 The first named optional native GUI route remains `floating.gui`, but it is
 infrastructure for future low-level GUI host tests, not the current menu path,
@@ -408,10 +602,19 @@ not a second editor shell, and not the context-selection UI. Its contract is:
   content for concrete pane ids. `floating.gui` remains a low-level host proof,
   not the user-facing pane-popout route.
 - A native route captures input inside its own native/context window. It must
-  not steal clicks from the original editor window, leave the docked source pane
-  visible behind it, or pretend to redock before a real host move exists. The
-  safe redock path is close-and-restore until drag/drop host redocking is owned
-  by the native application tier.
+  not steal clicks from the original editor window or leave the docked source
+  pane visible behind it. Native chrome owns movement and close; routed content
+  contains no Dock Back or Close Window commands. Tool-tab and native-titlebar
+  drags use visible guide zones and placement ghosts against canonical pane
+  state. Standard Editor, Plant Lab, and GUI Editor each persist pane visibility,
+  Left/Right/Bottom Left/Bottom Right placement, active tabs, the bottom-column
+  split ratio, theme choice, and rounded-control preference in versioned per-user
+  configuration outside project and release data. Output and AI Chat initially
+  occupy Bottom Left and Bottom Right respectively, but both are ordinary routes;
+  an empty bottom group collapses and the occupied group consumes the available
+  width. Restore is schema-bounded; malformed files fall back to application
+  defaults, and writes use same-filesystem atomic replacement. User
+  tab reordering and arbitrary compatible stack creation remain follow-up work.
 - The session loop refreshes GUI/font upload state for the routed context before
   its first routed panel frame. Font corruption after spawning a pane means the
   route did not receive an isolated atlas upload and must fail validation.

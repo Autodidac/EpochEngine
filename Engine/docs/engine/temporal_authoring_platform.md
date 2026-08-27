@@ -142,9 +142,19 @@ A texture document supports:
 
 - stable identity, dimensions, format/color-space intent, channels, and revision;
 - sparse logical tiles and mip coordinates;
-- layers, masks, opacity/blend, selection, transforms, and filters;
-- deterministic brush operations with algorithm version, seed, path samples,
-  pressure/tilt where available, target layer, and affected tiles;
+- ordered content and spatial-mask layers, opacity/blend, selection, transforms,
+  and filters. Mask layers use sparse single-channel R8 tiles and content layers
+  bind them by generation-checked handle with canonical strength/invert intent;
+- deterministic brush operations with algorithm version, seed, raw path samples,
+  pressure/tilt where available, target layer, and affected tiles. The current
+  `round_path_v2` keeps those raw control samples as semantic intent and derives
+  pressure/tilt-interpolated round stamps at half-radius spacing with a
+  quarter-pixel floor. Derived stamps are bounded execution data, never journal
+  identity; admission rejects an over-budget path before tile discovery or
+  allocation. `round_stamp_v1` remains the exact isolated-stamp compatibility
+  program. The Assets control surface authors exact opacity, hardness, and a
+  nonempty RGBA channel mask into this same descriptor; those values affect
+  deterministic raster output and remain part of journaled semantic intent;
 - semantic undo/redo, checkpoints, history budgets, dependencies, diagnostics,
   and deterministic compile;
 - future procedural graph outputs without changing document identity;
@@ -156,6 +166,23 @@ decoded, or absent.
 
 Nondeterministic/external brush output stores changed tile payloads. Deterministic
 brushes may replay from operations plus periodic checkpoints.
+
+Layer transforms and filters are canonical document semantics, not physical
+texture state. The current deterministic compile mirrors within each mip first,
+then applies signed integer translation; authored offsets scale by `2^mip` using
+signed integer truncation. It then applies grayscale luma, RGB inversion, and
+signed brightness in that order while preserving alpha. These operations never
+rewrite sparse source tiles. The Assets surface authors them through EpochGui and
+records one semantic layer-properties operation per accepted change.
+
+Texture source schema 3 extends the bounded schema-2 layer descriptor table with
+layer role and generation-checked spatial-mask binding records. Mask layers own
+sparse R8 coverage; absent mask tiles reveal content, painted coverage conceals
+it, and strength/invert are canonical semantic properties. Schema-1 and schema-2
+sources are verified against their exact legacy hashes and migrated to the
+current in-memory identity without rewriting operator source; later explicit
+serialization emits schema 3. Truncated, mismatched, stale-mask, future, or
+integrity-broken sources fail atomically.
 
 ## Compiled Texture And Residency
 
@@ -171,6 +198,13 @@ hashes. Runtime residency chooses among:
 The choice uses capability, project policy, texture size/format, update rate,
 sampling, memory/upload budgets, and workload. Atlases remain valuable physical
 caches for compatibility and batching; they are not canonical asset meaning.
+
+The Assets projection derives aspect-preserving thumbnails from compiled
+artifacts and batches up to 1,024 compact 96x96 surfaces into the existing
+EpochGui runtime atlas with one upload transaction per catalog identity.
+Thumbnail pixels, atlas placement, and sprite handles are disposable cache state;
+the live editable preview continues to read the active authoring document even
+when no compiled catalog row is selected.
 
 Changing atlas placement, descriptor index, sparse mapping, compression variant,
 or GPU backend must not change the texture document revision.
@@ -233,6 +267,32 @@ selection into CPU, SIMD, GPU compute/graphics, or software/reference plans.
 
 The 2D product does not wait for the general graph editor. Texture compilation
 must leave a clean seam for it.
+
+## Morphology And Forest Documents
+
+`authoring.morphology` owns renderer-neutral stable node, segment, and terminal
+identity, deterministic branching recipes, per-organ temporal ranges, sampled
+growth, and voxel LOD planning for plant, vascular, respiratory, electrical,
+coral, and generic branching domains.
+
+`forest.factory` now wraps that spine in a stable `ForestAssetDocument`. Profile
+changes are bounded semantic operations with undo/redo and deterministic content
+revision. Compilation derives a validated morphology graph and time sample,
+renderer-neutral preview segments/leaves, a multi-level voxel LOD plan, and
+bounded voxel occupancy from the same source revision. Plant Lab owns one live
+document, exposes semantic edit/undo/redo controls, and projects only its current
+compiled artifact. Forest Factory remains the standard-editor placement portal,
+places that same compiled revision into the active scene, and does not own or
+silently fork Plant Lab documents. Package staging records matching source
+revision, content hash, morphology hash, preview counts, voxel LOD levels, and
+bounded occupancy.
+
+The compiled preview is portable scene meaning, not native renderer proof. Each
+context consumes shared trunk, branch, and leaf-cluster geometry through the
+existing scene projection and owns only disposable physical resources. A
+bounded source codec, atomic `Assets/` and `Library/` publication/reopen,
+interactive typed-node editing, sparse voxel materialization, mesh/impostor
+compilation, and accepted live pixels in every context remain delivery work.
 
 ## Later Authoring Domains
 

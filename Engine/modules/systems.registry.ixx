@@ -34,10 +34,13 @@ module;
 #include "../include/core.stl_types.hpp"
 
 #include <atomic>
+#include <chrono>
 // For the template constraint checks (optional but useful).
 #include <concepts>
 #include <cstdint>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 export module systems.registry;
 
@@ -70,6 +73,38 @@ export namespace epochengine::systems
 
         create_fn  create = nullptr;
         destroy_fn destroy = nullptr;
+    };
+
+    enum class SystemLifecycle : std::uint8_t
+    {
+        registered,
+        initialized,
+        stopped
+    };
+
+    struct SystemDiagnostic final
+    {
+        std::string name{};
+        std::vector<std::string> dependencies{};
+        SystemLifecycle lifecycle{SystemLifecycle::registered};
+        std::size_t execution_order{};
+        std::uint64_t update_count{};
+        std::uint64_t last_update_nanoseconds{};
+        std::uint64_t peak_update_nanoseconds{};
+        std::uint64_t total_update_nanoseconds{};
+    };
+
+    struct RegistryDiagnosticSnapshot final
+    {
+        std::uint64_t revision{};
+        std::uint64_t frame_count{};
+        std::uint64_t last_frame_nanoseconds{};
+        std::uint64_t peak_frame_nanoseconds{};
+        bool order_resolved{};
+        bool initialized{};
+        bool diagnostics_sampling{};
+        std::string last_error{};
+        std::vector<SystemDiagnostic> systems{};
     };
 
     namespace threading
@@ -152,5 +187,9 @@ export namespace epochengine::systems
         bool initialize() noexcept;
         void update(double dt_seconds) noexcept;
         void shutdown() noexcept;
+
+        [[nodiscard]] RegistryDiagnosticSnapshot diagnostics() const;
+        void set_diagnostics_sampling(bool enabled) noexcept;
+        void reset_diagnostics() noexcept;
     };
 } // namespace epochengine::systems

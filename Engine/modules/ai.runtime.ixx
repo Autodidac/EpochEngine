@@ -1,6 +1,7 @@
 module;
 
 #include <cstdint>
+#include <cstddef>
 #include <string>
 #include <string_view>
 
@@ -20,9 +21,12 @@ export namespace epochengine::ai
         ProviderMode provider{ProviderMode::OpenSourceLocal};
         std::string endpoint{};
         std::string manifest_path{};
+        std::size_t host_context_budget_tokens{};
+        std::size_t host_output_budget_tokens{};
         bool repo_safe_manifest{true};
         bool local_weights_only{false};
         bool available{false};
+        bool source_iteration_budget_available{false};
     };
 
     [[nodiscard]] inline std::string_view provider_mode_name(ProviderMode) noexcept

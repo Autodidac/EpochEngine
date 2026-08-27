@@ -10,11 +10,14 @@ module;
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <string>
 #include <string_view>
 
 module audio.device_sdl;
+
+import sdl.state;
 
 namespace epochengine::audio
 {
@@ -31,6 +34,8 @@ namespace epochengine::audio
             [[nodiscard]] AudioDeviceCode open(
                 const AudioDeviceConfiguration& configuration) override
             {
+                std::scoped_lock runtimeGuard{
+                    epochengine::sdlcontext::state::runtime_api_mutex()};
                 close();
                 if ((SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO) == 0)
                 {
@@ -71,6 +76,8 @@ namespace epochengine::audio
 
             void close() noexcept override
             {
+                std::scoped_lock runtimeGuard{
+                    epochengine::sdlcontext::state::runtime_api_mutex()};
                 if (stream_)
                 {
                     SDL_DestroyAudioStream(stream_);

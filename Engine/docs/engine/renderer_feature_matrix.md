@@ -42,7 +42,7 @@ features must be individually capability-gated.
 | CPU/software | T0 reference, headless, safe fallback | Deterministic raster/contracts plus framebuffer Canvas2D composition build | Live output, resize, and repeated-switch proof remain `Partial` |
 | OpenGL | First `T1-GL` desktop presentation and portable technique proof | Context, editor scene, GUI composition, sampled RTT preview, and basic resources exist | Complete Canvas2D/resource/material/settings proof |
 | OpenGL ES | T1-GLES mobile target contract | Profile/limits are represented | No production GLES runtime/presentation proof yet |
-| SDL3 | OpenGL-derived context/tool adapter | Existing window/input/GUI/RTT evidence plus native Canvas2D texture/presentation source builds | Pixel parity, resize, and repeated-switch proof remain `Partial` |
+| SDL3 | OpenGL-derived context/tool adapter | Accepted Windows launcher/loading/editor, high-DPI input/resize, and clean close plus native Canvas2D texture/presentation source builds | Sampled-RTT/Canvas2D reference pixels and repeated-switch/native-memory soak remain `Partial` |
 | SFML3 | OpenGL-derived context/tool adapter | Existing window/GUI/RTT evidence plus native Canvas2D texture/presentation source builds | Pixel parity, resize, and repeated-switch proof remain `Partial` |
 | Raylib3 | Specialized OpenGL-derived context | Existing scene/ownership repairs plus exact native-context Canvas2D texture/presentation source builds | Pixel parity and single/multicontext lifecycle proof remain `Partial` |
 | Vulkan | Explicit backend and future `T2-VK` provider | Existing swapchain/scene/GUI evidence plus Canvas2D upload, compose pipeline, sampling, and transactional residency source builds | Pixel parity, asynchronous animated residency, and repeated-switch proof remain `Partial` |
@@ -52,27 +52,45 @@ features must be individually capability-gated.
 Normal editor operation owns one backend. Multicontext is diagnostic and does
 not prove production performance or feed passive provider selection.
 
+Authorized 2026-08-26 Windows SDL evidence at 150% display scale accepts the
+launcher, replay-backed loading transition, current editor GUI, Systems
+workspace, resize, World Script Browser, large source editor, wheel input,
+120 FPS title, and clean close. SDL owns separate logical and physical
+dimensions and normalizes sampled and queued mouse positions through the same
+mapping. Sampled-RTT pixels, Canvas2D reference agreement, repeated context
+switching, and native memory soak remain open. Matched Windows OpenGL Debug
+reruns with and without an explicit 120 FPS override report swap interval 0,
+sustain 120-121 measured frames per second with approximately 0.02 ms
+`SwapBuffers`, retain the current launcher/editor GUI, display 120 FPS in the
+native title, and close cleanly. This closes the current 60 FPS
+frame-policy/telemetry discrepancy without claiming broader OpenGL native-pixel,
+resize, or repeated-switch proof. None of this evidence changes protected
+backend frame lifecycle, queue drain, GUI replay, top-layer, scene, or present
+order.
+
 ## Current Capability Matrix
 
 | Feature family | Status | Evidence and boundary |
 | --- | --- | --- |
 | Backend-neutral capability selection | Partial | `capability.profile` defines tiers, evidence, subsystem profiles, project requirements, deterministic selection, and contract checks. Integration through runtime settings/reporting still needs build proof. |
-| Window/context bootstrap | Present | OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, software, and noop/headless paths exist. Runtime evidence remains backend-specific. |
-| Frame clear/present | Partial | Core paths exist; resize, GUI replay, modal ordering, and repeated replacement remain regression-sensitive. |
+| Window/context bootstrap | Present | OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, software, and noop/headless paths exist. SDL3 has accepted 150%-DPI Windows bootstrap and one clean native close; runtime evidence remains backend-specific. |
+| Frame clear/present | Partial | Core paths exist. SDL3 launcher, replay-backed loading, editor, resize, and clean close are accepted; other backend resize/GUI/modal/replacement paths remain regression-sensitive. |
 | Editor scene lines/helpers | Present | Grid, markers, camera, and helper geometry exist across active editor lanes. |
 | Editor scene solids | Partial | OpenGL, SDL3, SFML3, DirectX, and Software have accepted current orientation. Raylib and Vulkan have correction candidates awaiting operator eye proof. |
+| Procedural forest preview | Partial | `ForestAssetDocument` compiles one deterministic morphology sample, renderer-neutral preview geometry, voxel LOD plan, and bounded occupancy. Plant Lab edits and previews one live compiled revision; Forest Factory places the same revision, and package staging records matching source/compiler evidence. Shared trunk/branch/leaf routing passes MSVC Debug/Release contracts for the common scene projection. Source codec and Library reopen, sparse voxel materialization, mesh/impostor output, native pixels, resize, teardown, and repeated-switch proof across all contexts remain open. |
 | Canvas2D planning/runtime | Partial | `render.canvas2d` proves project settings, camera/viewport mapping, logical sprite materials, deterministic quad batching, tile descriptors, immutable submissions, offscreen/final-compose plans, diagnostics, and editor policy persistence. `render.canvas2d_cpu` proves deterministic RGBA8 reference output. `render.canvas2d_runtime` reuses immutable scene/frame/raster work across backend adapters. `render.canvas2d_presentation` proves full-frame identity, byte-derived artifact keys, bounded residency, explicit image/surface packets, and staged native dispatch. `project.texture_library`, `project.texture_pipeline`, snapshot format 3, and the Assets controller prove serialized Library persistence, authenticated reopen, semantic material restoration, and owned editor resource closure. OpenGL capture matches T0-CPU across 1,178,872 pixels with zero error. SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software adapters build in Debug/Release; their live pixels/switch cycles and the Assets interaction automation remain unproved. |
-| Tilemap authoring/runtime | Partial | `authoring.tilemap` proves stable source identity, sparse chunks, semantic operations, bounded history, and deterministic compilation. `asset.tilemap_artifact` owns the runtime schema, integrity, collision/object payloads, and bounded serialization. `project.tilemap_library`/`project.tilemap_pipeline` prove exact atomic Library publication/restore and project registry identity. `render.canvas2d_tilemap` proves visible culling, animation selection, transforms, stable sprite ordering, collision, and object output. EpochGui authoring, scene snapshot binding, live presentation, and generated-runtime proof remain incomplete. |
+| Tilemap authoring/runtime | Partial | `authoring.tilemap` proves stable source identity, sparse chunks, semantic operations, bounded history, and deterministic compilation. `asset.tilemap_artifact` owns the runtime schema, integrity, collision/object payloads, and bounded serialization. `project.tilemap_library`/`project.tilemap_pipeline` prove exact atomic Library publication/restore and project registry identity. `render.canvas2d_tilemap` proves visible culling, animation selection, transforms, stable sprite ordering, collision, and object output. The EpochGui workspace, canonical source persistence, scene binding, exact Library publication/reopen, and generated-runtime preparation are build-proven; approved live editing/pixel evidence and cache-loss external-run proof remain incomplete. |
 | Renderer resource spine | Partial | `render.device`/`render.graph` describe logical buffers, textures, validated upload regions, samplers, shaders, pipelines, materials, meshes/models, render targets, bindings, commands, passes, and graph dependencies. `render.texture.residency` proves bounded generation-checked logical-artifact reuse, eviction, pinning, upload budgets, stale-handle refusal, backend epochs, recreation, and metrics. Native parity is incomplete. |
 | Sampled render-to-texture | Partial | Engine Arcade uses one shared content contract with backend-owned scene surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software. Build contracts pass; visual presentation and generic device-spine parity remain incomplete. |
 | Texture mapping and residency | Partial | `authoring.texture` produces validated dense RGBA8 artifacts through the runtime-owned `asset.texture_artifact` schema/serializer/validator. `asset.texture_import` adds bounded uncompressed BMP, TGA, and P6 PPM decoding. `project.texture_admission`, `project.asset_registry`, `project.texture_library`, `project.texture_pipeline`, and `project.texture_resources` authenticate identity, atomically persist/reopen compiled bytes, publish bounded T0-CPU bindings, restore exact revisions, and optionally acquire disposable residency. Cache recreation, eviction, pinning, backend epochs, upload accounting, stale-handle rejection, portable path collision refusal, semantic snapshot save/reopen, and exact immutable scene closure are build-proven. Persistent rename/move migration, interactive UI proof, sRGB/compressed/mip-chain execution, atlas, bindless, sparse, and streaming remain incomplete. |
 | Material semantics | Partial | Material handles and named logical texture slots flow through graph/device contracts. Portable sprite material, sampler, alpha, cutout, and color-space declarations exist; backend shader/blend consumption and broader PBR/normal/ORM semantics remain incomplete. |
-| Camera and transforms | Present | Perspective and Canvas2D cameras, preview rigs, transforms, and editor controls exist. Shared math adoption should continue as touched. |
+| Camera and transforms | Present | One renderer-neutral stable view descriptor carries scene, purpose, projection, orientation, clipping, and revision state. The editor owns perspective, free orthographic, six locked axis views, independent framing, LMB selection, Alt+LMB orbit, MMB pan, Alt+RMB dolly, RMB fly with WASD/QE and speed modifiers, Focus, and Reset. Authored project-camera persistence, oriented axis grids, mobile/console bindings, and live all-context eye proof remain follow-up. |
+| Portal and mirror views | Partial | Stable portal identity, shared camera descriptors, recursive cycle/depth/pixel budgeting, clip-plane intent, logical RTT outputs, disposable physical cache state, metrics, and render-pass view bindings are contract-proven. Native oblique/stencil clipping, traversal, presentation, and live backend pixels are not yet present. |
 | Lighting | Partial | `render.lighting` owns stable directional/point/spot lights, bounded frames, environment state, metrics, Euler conversion, and reference raster evaluation. Editor and project previews publish shared lighting frames but still use truthful reference-solid shading. Native light buffers, shaders, PBR, and shadows are Missing. |
 | CPU ray/spatial queries | Partial | `render.ray` owns validated AABB, sphere, triangle, scene, and voxel-DDA reference queries with explicit status/metrics. Editor selection consumes persistent scene identity through that query spine. Hardware ray query/RT are Missing. |
 | Picking and Focus | Present | Editor picking resolves through persistent scene IDs and shared ray queries; Focus changes the active preview camera across presenting child contexts. Higher-tier GPU picking remains optional work, not the accepted baseline. |
-| Physics | Partial | Stable body/command/fixed-boundary/snapshot contracts exist. A deterministic 2D solver adapter and runtime integration are Missing. |
-| Audio | Partial | Logical clips/sources/buses/listener/scheduling/mix-plan contracts exist. Decode/mix/device output is Missing. |
+| Physics | Partial | `physics.manager`, `physics.solver2d`, and `project.actor2d_runtime` prove stable bodies, deterministic fixed-step AABB/circle collision, layers/masks, bounded static maps, stable contacts, pause/reset, snapshots, map collision, and renderer-neutral actor publication. Authored one-way/slope collision, editor controls, and live acceptance-project proof remain incomplete. |
+| Audio | Partial | Logical clips/sources/buses/listener/scheduling, deterministic stereo mixing, a physical-device boundary, and generation-checked project playback sessions are contract-proven. The optional SDL3 device remains renderer-independent across context replacement; decoded project assets, authored cue bindings, editor controls, and approved live physical-output proof remain incomplete. |
 | Sparse voxel/water | Partial | Deterministic sparse voxel storage and explicit-time analytic water queries/projection exist. Generation/residency, mesh/render resources, buoyancy, and native presentation are Missing. |
 | Text and GUI | Partial | Engine GUI rendering and expanded EpochGui portable control primitives exist. Engine-wide integration, professional docking, complete text behavior, and portable profile exclusion remain work. |
 | Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. The OpenGL capture lane exposes a one-shot queryable evidence snapshot without normal-frame readback cost. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
@@ -105,18 +123,25 @@ evidence layer separate.
 ## Scene-Solid Repair Contract
 
 The current candidate consumes the shared `object_solid_vertices_for()` stream
-without changing queue, GUI replay, or present order.
+without changing backend frame lifecycle, queue drain, GUI replay, or native
+present order. DirectX changes only its internal editor-preview subpass order.
 
 - OpenGL, SDL3, SFML3, DirectX, and Software have operator-accepted current
   orientation.
 - The Arcade sampled screen uses one shared front-plane calculation in every
   backend adapter; compilation and graph contracts pass, while the actual
   presentation remains `Partial` pending operator eye proof.
-- Shared preview geometry defines the clockwise-outward object convention and
-  carries compile-time exterior/opposite-face checks.
+- Shared preview geometry defines the clockwise-outward object convention,
+  carries compile-time exterior/opposite-face checks, and owns one bounded,
+  camera-target-snapped adaptive grid consumed by every active backend. Authored
+  scene geometry uses a solid pass plus an outline only while selected; it does
+  not receive a permanent diagnostic wire pass. Editor-only camera and light
+  objects use compact, purpose-specific wire gizmos rather than cube stand-ins.
 - Raylib filters camera-facing back sides before projected fill.
+- DirectX orders its editor-preview geometry as background grid, solids, sampled
+  surfaces, then foreground helpers so grid lines cannot composite over terrain.
 - Vulkan uses corrected front-face/back-face culling only in its depth-tested
-  scene-solid pipeline; line and GUI pipelines remain uncullled.
+  scene-solid pipeline; line and GUI pipelines remain unculled.
 - Vulkan retirement transfers registry ownership before teardown, retains
   callback lifetime, waits for device idle, and resets both graphics pipelines
   before destroying the logical device.
@@ -145,15 +170,30 @@ The next renderer product gate is not PBR. It is:
 This gate targets `T0-CPU` plus `T1-GL` and shapes contracts for later
 `T1-GLES`. It does not require advanced explicit or ray features.
 
+### Seven-Backend Acceptance Evidence
+
+| Requirement | Current evidence | Status |
+| --- | --- | --- |
+| Tier-derived Canvas2D admission | One renderer-neutral mapper derives compile, CPU-raster, native-upload, and residency ceilings from the selected capability profile; all seven baseline paths consume it, presenter lanes use a bounded two-slot transaction, Vulkan has no desktop-size upload constant, stricter limits invalidate raster reuse, and over-budget output fails before native hooks | Build-safe on MSVC Debug/Release and managed Clang 22 with all 32 CTest contracts; measured native allocation, resize, memory stability, and switch-soak evidence remain `Partial` |
+| Texture identity, import, assignment, and reopen | Authenticated artifacts, Project Library persistence, semantic snapshot restoration, immutable resource closure, and all seven presentation adapters build in Debug/Release | Partial: interactive assignment and six non-OpenGL pixel lanes still need approved proof |
+| Tile palette, layers, chunks, collision, and map compilation | Temporal document, EpochGui workspace state, deterministic artifact, exact Library reopen, runtime preparation, culling, collision, and object output are contract-proven | Partial: live editing and generated-runtime pixels remain unproved |
+| Orientation | Shared top-left Canvas2D contract and accepted scene-solid orientation for OpenGL, SDL3, SFML3, DirectX, and Software | Partial: Raylib3 and Vulkan require current-candidate eye/pixel proof |
+| Alpha, cutout, and nearest/linear sampling | T0-CPU raster contracts and native adapter semantics exist; OpenGL matches the reference image exactly | Partial: equivalent SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software presentation evidence is missing |
+| Resize, letterbox, and scaling | Shared viewport mapping, deterministic software clipping, and runtime-session resize invalidation followed by stable reuse are contract-proven; SDL3 150%-DPI GUI resize and input remapping are accepted | Partial: SDL3 minimized/restore and every other native-context resize/minimized-restore lane still need live evidence |
+| Resource teardown and repeated switching | Every adapter exposes retirement/reset ownership and current source builds in Debug/Release; the shared presenter owns one current lease and passes 64 content revisions plus 64 backend replacements with bounded fake-device state and balanced retirement; one Windows SDL3 native close is accepted | Partial: each native context still needs approved repeated switch/resize/cache-loss soak with stable native memory and handles; OpenGL context-bound hooks and Raylib deferred-delete error paths remain explicit repair gates |
+| Save/reopen, Build, and external Run | Six generated project profiles pass materialize, atomic save/reopen, build, and child self-test; GUI Editor passes the exact external-Run argument path | Partial: the same acceptance project has not yet been exercised through all seven selected backend outputs |
+| Complete playable 2D project | One central gameplay runtime joins input, actor physics, sprite animation, audio events, authenticated textures/tilemaps, GUI, Canvas2D output, and request-driven logical cost evidence; fresh generated-child acceptance proves deterministic execution, teardown, and zero `T1-GLES/mobile_30` budget violations | Partial: one authored project has not yet visually proved Play/Stop and native presentation across the selected backends |
+
 ## Settings And Evidence Surfaces
 
 Renderer/settings integration must expose:
 
-- selected project profile and deterministic fallback policy;
+- selected project profile, tiered 2D budget, and deterministic fallback policy;
 - active backend family, tier, features, limits, evidence, and stability;
 - Canvas2D resolution/scaling/sampling/blend policy;
 - texture memory, history, compilation, residency, and cache budgets;
-- batch, tile, render-target, upload, and frame metrics;
+- logical batch, texture, physics, and audio costs plus native tile,
+  render-target, upload, residency, atlas-pressure, and frame metrics;
 - disabled/experimental reasons for unavailable/partial features.
 
 EpochGui owns portable controls/state. Engine adapters own backend input/drawing,

@@ -25,6 +25,7 @@ import opengl.textures;
 import render.canvas2d;
 import render.canvas2d_cpu;
 import render.canvas2d_evidence;
+import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_scene;
 import render.device;
@@ -38,6 +39,8 @@ namespace epochengine::openglcanvas2d
         {
             std::mutex mutex{};
             OpenGLFamilyRenderDevice device{RendererBackendKind::opengl};
+            canvas2d::limits::NativeExecutionLimits execution_limits{
+                canvas2d::limits::for_backend(RendererBackendKind::opengl)};
             std::unique_ptr<openglcanvas2d::Presenter> presenter{};
             canvas2d::Canvas2DFramePlan frame{};
             canvas2d::cpu::RasterResult raster{};
@@ -50,11 +53,13 @@ namespace epochengine::openglcanvas2d
             {
                 device.set_native_texture_hooks(
                     opengltextures::make_native_texture_hooks());
-                if (device.native_texture_hooks_ready())
+                if (execution_limits.valid()
+                    && device.native_texture_hooks_ready())
                 {
                     presenter = std::make_unique<openglcanvas2d::Presenter>(
                         device,
-                        backendEpoch);
+                        backendEpoch,
+                        execution_limits.residency);
                 }
             }
 
@@ -75,13 +80,17 @@ namespace epochengine::openglcanvas2d
                     || !frame || !raster)
                 {
                     canvas2d::Canvas2DFramePlan nextFrame =
-                        canvas2d::scene_content::compile(scene, nextOutput);
+                        canvas2d::scene_content::compile(
+                            scene,
+                            nextOutput,
+                            execution_limits.canvas);
                     if (!nextFrame)
                         return false;
                     canvas2d::cpu::RasterResult nextRaster =
                         canvas2d::cpu::rasterize(
                             nextFrame,
-                            scene.content->resources.bindings);
+                            scene.content->resources.bindings,
+                            execution_limits.raster);
                     if (!nextRaster)
                         return false;
 

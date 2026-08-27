@@ -86,7 +86,9 @@ namespace epochengine
             std::suspend_always initial_suspend() noexcept { return {}; }
             std::suspend_always final_suspend() noexcept { return {}; }
             void return_void() noexcept {}
-            void unhandled_exception() { std::terminate(); }
+            void unhandled_exception() noexcept { failed = true; }
+
+            bool failed{};
         };
 
         using handle_t = std::coroutine_handle<promise_type>;

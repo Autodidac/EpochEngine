@@ -238,12 +238,20 @@ export namespace epochengine::canvas2d::cpu
         std::uint64_t maximum_fragments{268'435'456};
         std::uint32_t maximum_textures{4'096};
         std::uint32_t maximum_clips{4'096};
+
+        friend constexpr bool operator==(
+            const RasterLimits&,
+            const RasterLimits&) noexcept = default;
     };
 
     struct RasterPolicy final
     {
         bool allow_partial_frame{};
         bool allow_unresolved_tile_layers{};
+
+        friend constexpr bool operator==(
+            const RasterPolicy&,
+            const RasterPolicy&) noexcept = default;
     };
 
     [[nodiscard]] constexpr bool valid(const RasterLimits& limits) noexcept

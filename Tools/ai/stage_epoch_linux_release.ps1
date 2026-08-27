@@ -3,7 +3,8 @@ param(
     [string]$Configuration = 'Clang-Release',
     [string]$BinaryRoot = '',
     [string]$VcpkgInstalledRoot = '',
-    [string]$OutputRoot = ''
+    [string]$OutputRoot = '',
+    [switch]$SkipRuntimeSmoke
 )
 
 $ErrorActionPreference = 'Stop'
@@ -161,13 +162,20 @@ fi
 
 EPOCH_LOG_DIR='__LOGS__' ./epoch --version | grep -F 'Epoch v__VERSION__' >/dev/null
 EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null
-EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s \
-    ./epoch --editor --renderer opengl --smoke
+__RUNTIME_SMOKE__
 '@
 $validationScript = $validationScript.Replace('__STAGE__', $stageWsl)
 $validationScript = $validationScript.Replace('__BUILD_ROOT__', $binaryRootWsl)
 $validationScript = $validationScript.Replace('__LOGS__', $verifyLogsWsl)
 $validationScript = $validationScript.Replace('__VERSION__', $Version)
+$runtimeSmoke = if ($SkipRuntimeSmoke) {
+    "printf '%s\n' 'Linux packaged runtime smoke explicitly skipped; package remains build/contract proven only.'"
+}
+else {
+    "EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s ./epoch --editor --renderer opengl --smoke"
+}
+$runtimeSmoke = $runtimeSmoke.Replace('__LOGS__', $verifyLogsWsl)
+$validationScript = $validationScript.Replace('__RUNTIME_SMOKE__', $runtimeSmoke)
 
 Invoke-WslScript -Script $validationScript -Label 'Linux staged-package validation'
 

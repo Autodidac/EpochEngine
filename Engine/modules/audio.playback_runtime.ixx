@@ -37,9 +37,18 @@ export namespace epochengine::audio
             const PlaybackSessionHandle&) noexcept = default;
     };
 
+    struct PlaybackBusDefinition final
+    {
+        LogicalResourceId id{};
+        LogicalResourceId parent{};
+        float gain{1.0f};
+        bool muted{};
+    };
+
     struct PlaybackCueDefinition final
     {
         OwnedPcmClip clip{};
+        LogicalResourceId bus{};
         float gain{1.0f};
         bool looping{};
     };
@@ -47,6 +56,7 @@ export namespace epochengine::audio
     struct PlaybackSessionRequest final
     {
         std::uint64_t stable_session_id{};
+        std::vector<PlaybackBusDefinition> buses{};
         std::vector<PlaybackCueDefinition> cues{};
         bool request_physical_output{true};
     };
@@ -59,6 +69,7 @@ export namespace epochengine::audio
         invalid_request,
         duplicate_cue,
         clip_rejected,
+        bus_rejected,
         source_rejected,
         command_rejected,
         frame_rejected,
@@ -99,6 +110,8 @@ export namespace epochengine::audio
         std::uint64_t sessions_opened{};
         std::uint64_t sessions_closed{};
         std::uint64_t cues_registered{};
+        std::uint64_t buses_registered{};
+        std::uint64_t bus_control_transitions{};
         std::uint64_t triggers_accepted{};
         std::uint64_t triggers_rejected{};
         std::uint64_t frames_mixed{};
@@ -121,6 +134,7 @@ export namespace epochengine::audio
         std::uint64_t frame_index{};
         double timeline_seconds{};
         std::vector<ClipId> cues{};
+        std::vector<LogicalResourceId> buses{};
         PlaybackRuntimeMetrics metrics{};
         AudioMixerMetrics mixer{};
         AudioDeviceSnapshot device{};
@@ -147,6 +161,14 @@ export namespace epochengine::audio
             PlaybackSessionHandle session,
             ClipId cue,
             double startSeconds = 0.0);
+        [[nodiscard]] PlaybackRuntimeCode set_bus_gain(
+            PlaybackSessionHandle session,
+            LogicalResourceId bus,
+            float gain);
+        [[nodiscard]] PlaybackRuntimeCode set_bus_muted(
+            PlaybackSessionHandle session,
+            LogicalResourceId bus,
+            bool muted);
         [[nodiscard]] PlaybackRuntimeCode set_paused(
             PlaybackSessionHandle session,
             bool paused);
@@ -177,6 +199,7 @@ export namespace epochengine::audio
         case PlaybackRuntimeCode::invalid_request: return "invalid request";
         case PlaybackRuntimeCode::duplicate_cue: return "duplicate cue";
         case PlaybackRuntimeCode::clip_rejected: return "clip rejected";
+        case PlaybackRuntimeCode::bus_rejected: return "bus rejected";
         case PlaybackRuntimeCode::source_rejected: return "source rejected";
         case PlaybackRuntimeCode::command_rejected: return "command rejected";
         case PlaybackRuntimeCode::frame_rejected: return "frame rejected";

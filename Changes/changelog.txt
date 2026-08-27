@@ -1,4 +1,685 @@
-# Epoch Changelog
+## [v0.89.28] - Restricted source distribution and compact workbench navigation
+- Move EpochEngine toward a release-only public boundary. Remove anonymous
+  repository and source-snapshot URLs from the updater, keep packaged runtime
+  discovery public, and reject non-HTTPS updater downloads. The Site hides and
+  blocks EpochEngine Git/source routes while retaining public versioned runtime
+  archives, checksum sidecars, build evidence, and historical v0.89.06 assets.
+  Approved source access is server-authorized; no static secret is embedded in
+  the public engine or browser bundle.
+- Authenticate public release discovery with the Site's canonical Ed25519
+  integrity document and a pinned signing key. The updater rejects unsigned,
+  altered, wrong-key, wrong-schema, or off-site release entries and verifies
+  package bytes against the SHA-256 carried inside the signed payload.
+- Rotate the initial ephemeral signing identity to persisted Site key
+  `epoch-release-e76c3921327a2cd0`; Epoch pins only its public key while the
+  private JWK remains server-side in the Site secret store.
+- Publish the corrected `v0.89.28` Windows and Linux packages at a cache-safe
+  key-revision path after the signing-key rotation, replace the original object
+  keys with the same corrected bytes, and verify both live edge downloads plus
+  the server signature. The Windows ZIP is 29,507,951 bytes with SHA-256
+  `c1c49d88759f6ce87bcf34be4cb8a75662eba75eb364f48071e4ca6042d6592e`;
+  Linux is 30,999,241 bytes with SHA-256
+  `11c24717218dd3cd4c0d6b44224539ae8da57aeb7956547d3fc8098b1321c7a2`.
+- Replace the oversized main-surface button blocks with a compact connected
+  workbench tab presentation. Labels size from measured text, inactive tabs
+  share one quiet strip, hover/pressed state remains visible, and the active
+  workspace owns a two-pixel accent indicator. Other document/tool tab controls
+  retain their existing presentation.
+- Preserve the Windows package invariant that `EpochEditor.exe` and `assets/`
+  sit at the archive root. The updater checks that direct root first and retains
+  recursive lookup only as compatibility fallback.
+- Make Smart Update explicitly binary-first. A missing compatible package or a
+  package that fails verification/staging can enter the authorized source-build
+  backup; a valid compatible package is never displaced merely because source
+  is newer. Keep source rebuild and project-source extraction as separate
+  explicit actions under `Source Options...`.
+- Add native browser device authorization for private source using ephemeral
+  P-256 ECDH, HKDF-SHA256, short-lived bearer scope, pinned Ed25519 manifest
+  verification, AES-256-GCM archive authentication, signed ciphertext/plaintext
+  hashes, restricted hidden temporary cache roots, and cleanup after worker or
+  project-cache handoff. Surface approval code, transfer/decryption progress,
+  and cancellation in the update modal without logging credentials.
+- Enable signed binary update, authorized source fallback, explicit source
+  rebuild, and project-source download by default. Add the opt-in CMake
+  `EPOCH_BINARY_ONLY_DISTRIBUTION` and MSBuild
+  `EpochBinaryOnlyDistribution=true` policies to disable every source lane
+  while preserving packaged update verification.
+- Deploy Site v25 from exact Site commit `34025818dfd8f04cdacf3f97c2ba77cb62eb2a4d` with D1-backed device authorization and the corrected owner allowlist at environment revision 6. Return one generic no-query verification page in both device-start URI fields, keep the user code out of URL/history/referrer/access-log metadata, and require authenticated same-origin manual lookup. Tighten Epoch to display the code locally, open only the generic URL, require both URI fields to match it exactly, and reject code-bearing verification URLs. Keep signed public runtime discovery at `v0.89.28`, the legacy public source sentinel at `0.89.27`, and public EpochEngine Git/source routes fail-closed. The encrypted private artifact remains the older hosted `5f3613941a45d8df1edd5881dc5035e61f688d98` snapshot until a reviewed current checkpoint is published; offline decrypt is byte-identical and a fresh live owner-approved unwrap/decrypt/replay proof remains pending.
+- Deploy Site v26 from exact Site commit
+  `32fbc17ec36acfc489d3a136c9ec2bea89d5ac54` at deployment
+  `appgdep_6a9002b262548191b851405117ee0c55`, environment revision 7. Add the
+  owner-only `/admin` CMS using direct Sign in with ChatGPT; native device
+  codes are not CMS credentials. Keep anonymous CMS APIs at 401, public
+  EpochEngine Git/source at 404, signed runtime discovery at `v0.89.28`, and
+  the public legacy source sentinel at `0.89.27`.
+- Deploy Site v27 from exact Site commit
+  `e81d7781d0cdde2f26e5ad981c9e433b9bbbc106` at deployment
+  `appgdep_6a901360570c8191936ba5c581646ded`, environment revision 7. Admit
+  persistent-device enrollment only after exact extended-start validation,
+  preserve the legacy one-time flow without capability advertisement, and add
+  one-use ECDSA P-256 challenge/token authorization plus owner CMS revocation.
+  Record only anonymous aggregate runtime/source download counts and bytes in
+  the owner-only CMS. Preserve signed runtime `v0.89.28`, the public
+  `0.89.27` sentinel, and public EpochEngine Git/source 404 behavior.
+- Add the native half of persistent source-device authorization. First
+  enrollment registers a signing-only ECDSA P-256 public key; each later source
+  action signs a 60-second, request-bound server challenge and receives only a
+  five-minute in-memory artifact token. Windows stores the private signing key
+  as non-exportable CNG state, preferring the platform provider and falling back
+  to the software KSP. Archive decryption retains a separate fresh ephemeral
+  P-256 ECDH/HKDF key per operation. Source Options exposes Pair / Re-pair,
+  which clears only the nonsecret registration ID and never starts a download.
+  Linux continues the existing one-time browser flow until an admitted TPM or
+  Secret Service provider exists. The matching Site extension remains pending
+  deployment; build-safe contract proof passes without opening the GUI.
+- Split `updater.system` and `updater.source_access` into lean public interfaces plus implementation units for updater orchestration, private-source crypto/networking, and Windows worker generation. This removes MSVC Release C1002 importer pressure. Full Debug and Release editor builds and build-safe contracts pass; the binary-only Debug product and contract pass before restoring the default source-enabled Debug output. No GUI was launched.
+
+## [v0.89.27] - Canonical editor sessions and document controls
+- Move Epoch-owned updater discovery and payloads from GitHub to the existing
+  public ChatGPT Site. The updater now consumes Site-native source-version,
+  release, build-status, source-archive, and runtime-asset routes with no
+  automatic GitHub fallback for Epoch content; independently owned tool
+  downloads keep their original providers. Require a companion SHA-256 object
+  and verify complete bytes before source extraction, cached-package reuse, or
+  runtime replacement, including the generated Windows source worker. Publish
+  the reviewed v0.89.27 source and Windows/Linux packages with anonymous
+  smart-Git repositories for EpochEngine, EpochGui, and EpochEngineExtensions.
+  Preserve EpochGui byte-for-byte between its standalone repository and
+  `Engine/dep/EpochGui`, retain v0.89.06 assets as immutable release history,
+  and expose the real `multicontext-base-stable` branch at exact commit
+  `ad6c416d930b348a61bc37ceb7d4522742be084a`. The final Windows x64 Release
+  build and build-safe engine contract pass; the updater-equivalent Clang
+  22.1.8 Linux Release build passes all 33 CTests; standalone EpochGui Release
+  passes all 10 tests. Release publication requires checksum sidecars and live
+  download verification and does not claim a GUI eye test.
+- Extend the guarded Qwen source-iteration lane beyond its Debug and Release
+  editor compiler/contracts with an independently scheduled HeadlessCI Debug
+  build and asset-light run plus a separately operator-approved full engine
+  validation across project profiles, generated-child self-tests, and the AI
+  gate. Live promotion now requires all seven evidence completions for the same
+  generation, ignores stale completions, and feeds a failed HeadlessCI or full-
+  validation actor through the existing bounded fresh-generation repair
+  path without granting the model shell, Git, network, updater, release, or
+  self-approval authority.
+- Match the hosted SDL renderer thread to the selected dock parent's DPI
+  awareness before native child creation, establish child-window style before
+  `SetParent`, and retain exact Win32 failure evidence. Use literal pixel atlas
+  coordinates, valid SDL3 viewport-status handling, and explicit nearest/alpha
+  texture state so SDL replays the current EpochGui batches. Hold the launcher
+  loading layer until the exact published top-layer generation has been replayed
+  by the active renderer. Bring the Linux SDL host to the same protected
+  atlas-upload/base-GUI/scene/refreshed-GUI/top-layer sequence used by OpenGL
+  and the managed SDL adapter.
+- Record the later Debug SDL native teardown failure instead of treating its
+  earlier render-ready state as stability evidence. Matching-PDB symbolization
+  resolved the SDL 3.4.10 access violation to Windows `IME_Quit` during video
+  subsystem shutdown. Serialize both managed and Linux SDL frames/video teardown
+  against process-wide SDL audio and gamepad subsystem lifecycle changes. Add a
+  build-safe contract proving recursive renderer-thread entry, competing-thread
+  exclusion, and admission after release. Clear Linux SDL texture residency
+  before renderer/video destruction, null every shared renderer alias, and turn
+  upload exceptions into a visible renderer fault at the `noexcept` draw
+  boundary. Debug and Release editor builds and build-safe engine contracts
+  pass. An authorized native rerun now closes cleanly without a retained process.
+- Give hosted SDL one explicit high-DPI presentation contract: retain physical
+  framebuffer dimensions, derive the logical canvas from SDL's display scale,
+  set SDL3 logical presentation, and normalize both sampled Win32 cursor
+  positions and queued host mouse events into that canvas. Add the build-safe
+  `context.sdl_high_dpi_logical_presentation` contract for 100%/150%
+  dimensions and signed coordinate mapping. Authorized 150% Windows eye testing
+  now proves the launcher, the replay-backed 450 ms loading screen, the current
+  standard editor and Systems workspace, live resize, World Script Browser,
+  large editable source surface, wheel input, 120 FPS title, and clean teardown.
+  Matched Windows OpenGL reruns with and without an explicit frame-limit
+  override report swap interval 0, sustain 120-121 measured frames per second
+  with approximately 0.02 ms `SwapBuffers`, retain the current GUI through the
+  launcher/editor transition, display 120 FPS in the native title, and close
+  cleanly. The observed OpenGL 60 FPS discrepancy is closed for the current
+  Debug candidate. Protected queue drain, scene, GUI replay, top-layer, and
+  present order are unchanged.
+- Complete EpochGui dock-guide emission for both physical context destinations,
+  including upper-row logical placement and parent-preview centering for
+  detached full contexts. Debug and Release editor builds and build-safe engine
+  contracts pass.
+- Routed managed SDL close requests through renderer-thread retirement, removed cross-thread native reparent/restyle teardown, and filtered SDL window events by the owned window ID.
+- Extended bounded OS-AI source evidence curation through embedded EpochGui source/tests and mapped edit-box, text-input, caret, and Backspace vocabulary to `text_control` ownership.
+- Ground Engine Development in host-curated exact architecture evidence. Exact
+  canonical objective paths now outrank vocabulary ranking; a first primary file
+  may use the 184 KiB evidence ceiling while additional related candidates retain
+  the 128 KiB aggregate cap. Share Curated Context opens the reviewed files in the
+  large source workspace and supplies complete content through 48 KiB or one
+  UTF-8-safe 16 KiB objective-centered excerpt for larger source.
+- Replace whole-file model regeneration with strict
+  `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block operations. Framed and raw
+  direct-CLI replies use one line-boundary packet extractor; prose is rejected and
+  exactly `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` stops safely. Search blocks
+  must be unique, and the trusted controller reconstructs complete postimages
+  against full live preimages before immutable sandbox staging.
+- Auto-ingest each completed source-model generation exactly once and run at
+  most two deterministic host-diagnosed packet corrections without another
+  click. Direct llama.cpp source replies prefer a structured envelope over an
+  earlier insufficient marker and extract only through its exact line-framed
+  terminator, keeping prefix/suffix transport chatter outside the strict codec.
+- Repair the packet example so closing grammar tokens are adjacent, use the
+  first exact host-reviewed path instead of a fake path, and ground explicit
+  unique quoted replacements in reviewed bytes with correct newline flags.
+  Ambiguous search blocks remain a hard rejection. A live Qwen3.8 run reached
+  the Approve Sandbox review gate at 120 FPS while live source remained read-only
+  and byte-identical to its reviewed disposable copy.
+- Treat one-defect requests against a named subsystem as bounded diagnostic
+  source objectives. A first insufficient-evidence reply receives one
+  deterministic recheck against the same reviewed bytes; a repeated refusal
+  stops without staging. Fresh shares reset stale correction state, and status
+  now separates the complete disposable build-workspace copy from the bounded
+  reviewed context actually sent to the selected endpoint. Replace the persisted
+  mojibake banners and stale module-interface labels in the two reviewed OpenGL
+  context implementation files with accurate ASCII source headers. Validation:
+  Debug x64 editor build and the non-GUI engine contract pass.
+
+- Run direct local source inference below normal priority with half the logical
+  CPUs, matching batch threads, and `--gpu-layers 0` so OpenGL remains responsive;
+  ordinary AI chat retains its configured GPU path. EpochGui now decodes UTF-8
+  across text measurement/drawing/hit-testing and source-editor caret/deletion;
+  bundled box/block source-header decorations use a readable ASCII fallback
+  without changing source bytes.
+- Keep development objective and read-only path/model/endpoint/evidence detail in
+  AI Controls. Keep Review/Share/Reject/Approve/Cancel authority attached to the
+  originating AI Chat response, and invalidate reviewed source evidence when the
+  objective changes.
+- Remove obsolete automatic iteration-packet/session staging from the editor and
+  CLI project self-test. Sandbox compiler completion now has one future owner, so
+  Bottom Dock diagnostics cannot race `future::get()` or auto-promote build/tool
+  output as source or training material.
+- Limit every reviewed scene/GUI authoring response and apply gate to exactly one
+  allowlisted semantic command. Add support-aware placement, GUI Canvas routing,
+  broad editor-grid projection, clipped-glyph/caret fixes, and direct GUI widget
+  select-and-drag behavior.
+- Make Plant Lab branch-start height affect compiled morphology rather than only
+  history/hash state. The compiler derives branch decay height, normalizes root and
+  branch lengths to the authored target height, and retains deterministic voxel
+  LOD descriptors through the existing temporal plant contract.
+- Connect a contained Engine Development iteration lane: Qwen3.8-class
+  related-files admission, source-specific 64K context/32K output budgets, raw
+  prompt preservation, exact buildable workspace materialization, strict
+  proposal/digest approval, sandbox-first transactions, hidden direct MSBuild
+  Debug and Release compiler passes, separate build-safe engine-contract tests
+  for both configurations, cancellation, stale-generation rejection, and at
+  most three fresh-generation repairs from bounded verified diagnostics. Every
+  changed repair needs new exact operator approval. Add a separate two-action
+  live-source promotion gate only after both compiler/contract pairs pass: the
+  host verifies exact live preimages and tested
+  sandbox postimages, reparses the retained proposal through a fresh live-root
+  controller, requires identical operations, displays a new digest without
+  writing, then rechecks and atomically applies only after a second approval.
+  Staleness, tampering, path changes, commit failure, cancellation, and replay
+  fail closed. Static analysis, sanitizers, architecture, visual, and frontier
+  review remain blocked.
+- Add strict `EPOCH_TOOL_PLAN_V1` non-source active-project planning to AI
+  Chat. A local model may propose exactly one argument-free inspect, save,
+  build, run, test, or diagnostics call; path selection, permissions, native
+  commands, and multiple calls fail closed. The editor keeps Apply/Discard
+  attached to the parsed response, revalidates the approved packet through the
+  host-owned tool registry, and invokes only canonical project lifecycle
+  owners. Run has an exact visible approval. Test may perform a prerequisite
+  canonical build before a cancellable hidden generated-child self-test from
+  accepted artifact evidence and rejects stale-project completion. No model
+  permit, shell, Git, network, release, updater, or self-approval authority is
+  added. Debug/Release builds and build-safe contracts pass; live GUI/model and
+  approved child execution remain operator evidence.
+- Open and switch projects through the Windows native `project.epoch.json` file dialog.
+  Admission validates the existing manifest in place, rejects duplicate project
+  identity from another root, and never rewrites source simply because it was
+  opened. Project creation also fails closed before overwriting an existing
+  manifest.
+- Remove output-folder project discovery from the Project workspace. Repo-root
+  `Projects/` remains the default creation location, while opened projects may
+  live elsewhere and retain their own canonical manifest/root identity.
+- Route scene and GUI selection, Delete, Escape deselection, Ctrl+Z, Ctrl+Y, and
+  Ctrl+Shift+Z through stable document identity. World Edit and GUI Canvas expose
+  the same semantic Undo/Redo path instead of mutating preview vectors.
+- Make GUI Canvas Save publish canonical `Assets/Gui/main.epochgui` source and
+  Reload refuse to discard unsaved document revisions. Widget subtree deletion
+  remains a reversible semantic GUI operation.
+- Connect the compact and full timeline controls to the shared temporal spine:
+  scrub pauses and seeks, Play resumes, and one-step controls advance the same
+  time observed by scene and timeline views.
+- Keep the main World/GUI/Forest/Plant/Timeline/Project/Assets/Systems strip
+  document-only. Promote World Outliner, Asset Browser, GUI Hierarchy, Script
+  Browser, Tile Map, Properties, World Settings, AI Controls, Output, and AI Chat to exact
+  movable tool routes with remembered left/right/bottom placement, per-tool
+  Window recovery, MSVC-style guide targets, and placement ghosts. Explicit
+  Float uses the context-backed native host; native close or titlebar redock
+  returns the same route without in-window Dock Back/Close Window controls.
+  Epoch defines no built-in Secondary Map or fixed Display 2; application map,
+  radar, telemetry, and similar surfaces are ordinary EpochGui panes using the
+  same route and redock contract.
+- Collapse the duplicate Project, Assets, AI, and Systems status routes into
+  persistent filters inside the single Output pane. Name the AI evidence filter
+  `AI Output`, preserve legacy route restoration through `pane.output`, and
+  keep AI Chat as a separate movable tool.
+- Fix closable tool-tab selection and movement by publishing the exact pressed
+  tab before drag begins, activating the destination, and selecting a valid
+  source-stack fallback after a move. Use content-fit labels and stop subtracting
+  the close-button reservation twice from label width.
+- Move automatic tool-tab measurement into EpochGui and scope persistent control
+  identity by GUI host, owning window, and stable control ID. Scroll-area frames
+  retain their owner/nesting boundary and clip scrollbar drawing to their own
+  viewport, preventing independent pane scrollbars from fusing or sharing drag
+  state.
+- Complete routed-pane garbage collection through context retirement, finished
+  render-thread joins, command-queue clearing, native GL/DC/HWND release,
+  editor/chat/preview erasure, and shutdown reset of shared pane projection and
+  passive-context score state.
+- Keep Plant Lab and GUI Editor launcher-owned as projectless authoring
+  applications, preserve their role while opening real projects, and add the
+  process-owned renderer-neutral controller snapshot boundary.
+- Resolve one centered desktop host from monitor class, usable work area,
+  capability tier, and hardware-thread evidence before application composition.
+  Windows selects the launch monitor and Linux consumes EWMH work-area evidence.
+  Distinct 4K/2K/1080p/compact defaults remove the launcher/editor resize and
+  offscreen transition while mobile/deck tiers scale each display class
+  proportionally; explicit sizes, generated game windows, and updater-shell
+  dimensions remain authoritative.
+- Split the shared canonical GUI workspace by role: Standard Editor owns
+  placement/history, while GUI Editor owns creation, the full four-tab authoring
+  surface, five built-in templates, and verified atomic `.epochgui` Open/Save.
+- Overlap rounded-control atlas slices by one physical pixel at fractional
+  scale boundaries so hover/pressed rendering does not expose edge seams.
+- Map the process-owned generation-checked controller snapshot into compiled
+  project actions through a renderer-neutral per-scene sampler. Repeated
+  snapshot revisions preserve held/axis state without replaying press edges;
+  stale, malformed, duplicate, and over-budget input fails without partial
+  mutation.
+- Make Project Controls edit controller buttons, axes, slots, and uniform dead
+  zones through the same revisioned source/compile/publish path as keyboard
+  rebinding, with duplicate physical-source refusal and isolated contract proof.
+- Add one Project Audio workspace to Project and Assets. It imports validated
+  WAV sources into content-addressed project storage and edits canonical buses,
+  cue semantics, volume, mute, loop, autoplay, and jump/land bindings without a
+  parallel editor-only audio model.
+- Compile Project Audio source before persistence and atomically publish one
+  digest-verified decoded PCM artifact under
+  `Library/Audio/project_audio.epochaudioc`. Build/Run refresh valid source,
+  game-only runtime preparation restores the artifact without source WAVs, and
+  malformed present source never falls back to stale derived audio. The Project
+  Audio panel reports Current, Stale, or Missing artifact state.
+- Keep `Save Project` under File and remove it from Tools; Tools now owns only
+  preview-camera commands appropriate to the active editor application.
+- Make the editor task-scheduler module re-export the taskgraph types exposed by
+  its public API, handle bounded task-registration refusal explicitly, and fix
+  Clang module ownership in GUI compiler and extension catalog sources.
+- Make tilemap runtime authenticate every declared texture dependency but lease
+  only the exact logical textures referenced by visible cells. Empty visible
+  regions now retain an empty valid Canvas2D closure instead of binding an
+  unrelated map texture.
+- Move all five built-in GUI document templates into one shared semantic factory
+  consumed by both GUI Editor and project materialization. Registered 2D
+  projects explicitly declare canonical `Assets/Gui/main.epochgui`; legacy
+  manifests and engine-generated child sources migrate narrowly, existing
+  authored GUI remains untouched, and missing source receives one default Game
+  HUD before compile, content-addressed Library publication, exact restore, and
+  runtime-frame validation.
+- Pass the updater-equivalent managed-vcpkg Clang 22.1.8 Release full-engine
+  build plus all 32 no-display CTests, native Visual Studio Debug/Release editor
+  builds and aggregate contracts, focused Project Audio contracts, and the
+  483-file source naming validator. Repair strict module ownership with direct
+  tile-workspace/Canvas2D imports and keep gameplay implementation sources out
+  of the narrower actor-only contract target.
+- Pass a fresh generated `twodstudio` materialize/save-reopen/Build/child
+  acceptance lane at artifact mask 63/63 across scene, tilemap, input, sprite
+  animation, audio, and GUI. The composed gameplay run accepts 187 input frames,
+  187 fixed steps, 188 animation samples, three audio triggers, deterministic
+  Canvas2D hash `14053744896759252690`, and clean close/teardown. Live editor
+  Play/Stop, native Project Audio interaction, and ear proof remain open.
+- Replace live `ProjectPlayScene`'s duplicated map/input/actor/animation/audio
+  path with `project.gameplay2d_runtime` while preserving host-owned physical
+  sampling, GUI impulses, camera, context publication, GUI replay, and present
+  order. Open gameplay from scene load, close it before publication retirement,
+  retain static-map fallback on preparation failure, and prove active-session
+  move-assignment closes its process-owned audio lease. MSVC Debug/Release and
+  managed Clang 22.1.8 Release build the adapter; native interaction remains open.
+- Add the versioned `round_path_v2` temporal texture brush. The authoring
+  document retains sparse pointer controls, pressure, and tilt as semantic
+  intent, then deterministically derives bounded half-radius execution stamps
+  with a quarter-pixel floor so fast input cannot leave frame-rate-dependent
+  gaps. Reject derived-sample overflow before tile allocation, preserve exact
+  `round_stamp_v1` behavior, and wire the Assets texture canvas to the new
+  program. Add EpochGui opacity/hardness sliders and guarded RGBA channel
+  toggles that enter the same semantic stroke descriptor. Contracts prove
+  deterministic gap fill, unchanged legacy spacing, raw-intent and exact-property
+  retention, soft/hard edge coverage, selective channel writes, and no-mutation
+  over-budget/invalid-mask refusal on MSVC Debug/Release and managed Clang 22.
+- Add non-destructive canonical layer transforms, filters, and spatial masks to
+  the temporal texture document. Sparse R8 mask layers bind to content through
+  generation-checked handles with canonical strength/invert properties; derived
+  compilation applies conceal/reveal coverage without changing source pixels.
+  EpochGui exposes those controls, schema 3 stores exact role/binding records,
+  and integrity-checked schema 1/2 sources migrate in memory without an implicit
+  rewrite. Contracts cover exact output, undo/redo artifact identity, lossless
+  reopen, legacy migration, stale-reference refusal, and atomic corruption
+  rejection.
+- Restore the editable texture preview independently of compiled catalog
+  selection, and derive aspect-preserving 96x96 project thumbnails from compiled
+  artifacts. Assets canonically matches browser/source paths, registers the
+  complete catalog through one bounded EpochGui runtime-atlas batch before the
+  first grid draw, and caches only disposable sprite projections. A build-safe
+  contract proves stable handles and same-size pixel replacement.
+- Derive Canvas2D compile, CPU-raster, native-upload, and residency limits
+  from each selected renderer capability profile. All seven baseline paths use
+  one fail-closed mapping; presenter lanes receive a bounded two-slot output
+  transaction, Vulkan no longer assumes a 128 MiB desktop upload allowance,
+  stricter profiles invalidate cached rasters, and rejected output reaches no
+  native hook. MSVC Debug/Release, managed Clang 22 Debug, and all 32 CTest
+  contracts pass; live native visual and memory evidence remains separate.
+- Add reviewed local-model scene and GUI creation to AI Authoring. The strict
+  `EPOCH_AUTHORING_PLAN_V1` parser accepts only bounded allowlisted creation
+  and scene-clear calls, rejects trailing or executable instructions, displays
+  every call, and grants call-scoped authority only from
+  `Apply Approved Plan`. Explicit replacement plans clear and recreate the
+  scene in one undoable transaction. Opening AI keeps the live scene visible;
+  ordinary chat cannot save, build, run, edit source, invoke native commands,
+  mutate Git, or release.
+- Make local-model discovery read-only and require an explicit per-session model
+  confirmation before any prompt, scene, or script is sent. Add
+  `ai.voice_session` as a provider-neutral C++23 state machine for separate
+  microphone consent, bounded capture/transcription/review, conversation turns,
+  TTS admission, interruption, and cancellation. Playback support is not
+  misreported as microphone/STT/TTS support; provider adapters and native voice
+  eye proof remain open.
+- Add the contract-proven `ai.iteration_loop` risk and milestone state machine.
+  The movable AI Controls pane holds every local-model milestone for explicit
+  review, records real compiler results, bounds repair attempts, and requires
+  architecture/frontier review without synthetic evidence for missing adapters.
+- Move model inventory refresh off the UI thread, remove the duplicate AI main
+  document, and keep authoring, voice, guarded source, and bounded iteration in
+  one movable AI Controls tool beside the separate AI Chat tool.
+- Make rounded controls default, add edge-clamped atlas gutters for static
+  palette sprites, and replace active-tab close underlining with active/hover
+  palette color. Restore canonical source and compiled asset previews through
+  bounded runtime thumbnail atlases and improve folder tile summaries.
+- Pass native Visual Studio Debug and Release editor builds, the build-safe
+  engine contract, standalone EpochGui tests, JSON validation, and the 488-file
+  source naming validator. Native GUI interaction remains an operator eye gate.
+- Keep the published `v0.89.06` updater and packaged runtime sealed.
+- Make local-model requests use detached shared completion state and a bounded
+  transport timeout so moving or closing AI panes cannot block the Release UI.
+- Bound broad authoring goals to 24 milestones, four calls, and eight object
+  mutations per milestone; excess scope pauses for decomposition and approval.
+- Separate project authoring, read-only evidence review, and the guarded Engine
+  Development Sandbox. Remove the obsolete AI dataset-promotion module and store
+  reviewed non-training fixtures under `Engine/ai/evals/fixtures/`.
+- Add EpochGui semantic transcript roles, descender-safe line metrics, and a
+  visible focused caret for chat, script, and ordinary text controls.
+
+## [v0.89.24] - Project input binding authoring
+- Expose stable project actions and bindings in the Project workspace with real
+  keyboard selectors while keeping controller bindings and dead-zone evidence
+  visible and explicitly pending a physical device adapter.
+- Add a validated semantic keyboard rebind operation with revision advancement,
+  content identity regeneration, unsupported-device refusal, and duplicate
+  physical-source rejection.
+- Publish each rebind and Restore Default operation as one matching canonical
+  source and compiled runtime artifact pair so Build, Run, and reopen consume the
+  same authored input revision.
+- Extend the input-profile contract through rebind, save, artifact publication,
+  fresh-store reopen, and deterministic action evaluation. The existing runtime
+  keyboard sampler remains independent of editor-camera controls.
+
+## [v0.89.23] - Authored one-way and slope collision
+- Add generation-checked palette selection and a staged collision inspector for
+  none, solid, upward one-way, both slope orientations, and bounded custom boxes.
+  Bounds and filter edits remain disposable until Apply commits one semantic
+  tile-map operation.
+- Preserve complete collision descriptors during quick canvas toggles instead
+  of resetting bounds, filters, and sensor intent.
+- Carry exact collision kind, local bounds, layer bits, and mask bits through
+  context handoff, canonical source reload, Library artifacts, Canvas2D visible
+  compilation, and ProjectPlayScene actor-runtime preparation.
+- Extend `physics.solver2d` with deterministic upward one-way and both
+  axis-aligned slope surface manifolds while retaining solid AABB behavior.
+  Actor runtime admission maps the authored surface kinds and continues to
+  reject unsupported and sensor records.
+- Prove upward pass-through/downward landing, both slope normals, accepted actor
+  mappings, one-operation editor staging, and exact source/Library/runtime
+  restoration. Pass the Debug editor target, build-safe engine contract, CMake
+  Debug build, and all 30 Windows CTest contracts before Release verification.
+
+## [v0.89.22] - Temporal tile-map object authoring
+- Record the operator-accepted `v0.89.21` GUI, Assets, Scripts, Systems, and
+  workspace eye test plus the accepted map-object interaction shape without
+  changing the sealed packaged runtime.
+- Add generation-checked map-object selection to the existing temporal tile-map
+  workspace. Canvas object hit targets now own pointer priority over underlying
+  cells and expose selected object identity in the inspector hierarchy.
+- Add staged object name, type, position, size, and rotation editing. Preview
+  changes remain disposable until Apply commits one semantic document operation,
+  avoiding per-frame history growth.
+- Add direct canvas object dragging with stable-handle capture, rotated-bounds
+  map clamping, disposable movement previews, cancel restoration, and exactly
+  one semantic property operation on release.
+- Add semantic duplicate and delete actions, stable selection normalization
+  across undo/redo/reload, visible object counts, and exact handoff, source
+  reload, Library restoration, and compiled runtime object assertions.
+- Add generation-checked layer selection, compact create/duplicate/delete
+  hierarchy actions, and a staged layer inspector for name, visibility, lock,
+  collision source, phase, draw order, opacity, and parallax. Apply commits one
+  semantic operation, duplicate selects a unique topmost layer, deleting the
+  final layer is refused, and locked layers reject painting.
+- Extend handoff, source reload, exact Library restore, and runtime preview
+  contracts to preserve layer descriptors and prove hidden-layer culling.
+- Pass native Visual Studio Debug/Release editor builds, Debug/Release
+  `--engine-contract-self-test`, the CMake Debug editor build, and all 30
+  Windows CTest contracts. Live layer interaction remains an eye-test claim.
+
+## [v0.89.21] - Persistent GUI, graph editing, and project assets
+- Add a typed C++23 `authoring.gui_document` with generation-checked widgets,
+  validated hierarchy, image/image-button/tab/input/slider/scroll descriptors,
+  semantic content/layout/style/interaction operations, deterministic revisions,
+  bounded undo/redo, snapshots, metrics, and stale-handle/limit contracts.
+- Add a bounded deterministic GUI-document codec with SHA-256 integrity and
+  malformed-input rejection. GUI Editor now restores and atomically saves the
+  canonical `<project>/Assets/Gui/main.epochgui` source; Save, Build, and Run
+  fail closed when GUI or scene evidence cannot be published and reread.
+- Add reusable EpochGui image boxes, image buttons, proper connected tab-button
+  layouts, a bounded virtualized asset grid, and a node-graph workspace.
+  Authored tabs use stable widget identity
+  independently of editable labels and expose selection, close, disabled, and
+  dirty state through the shared control contract.
+- Route Standard Editor GUI Canvas and the dedicated GUI Editor through the
+  same canonical GUI-document workspace. Authored hierarchy now resolves
+  parent-relative absolute/row/column/overlay layout, selected text inputs edit
+  real document content, tab sets select stable tab-page handles, canvas
+  selection opens the real Layout tools, and Properties exposes live content,
+  action, tooltip, layout, interaction, opacity, and corner-radius controls.
+- Make Assets a first-class document surface instead of redirecting it back to
+  Scene. World Outliner Assets/Scripts are compact navigators into the central
+  Browser/Textures/Scripts/Graph workspace; the source editor owns a full-width
+  toolbar and context-capable text surface instead of a narrow embedded copy.
+- Add bounded reusable asset-grid right-click menus with stable target identity,
+  disabled actions, top-layer input capture, scrolling, and outside dismissal.
+  The Asset Manager wires Open, Show Details, and Copy Path to real project
+  selection, texture/script activation, Inspector, and clipboard behavior.
+- Preserve rounded button silhouettes across normal, hover, pressed, selected,
+  and disabled states by removing rectangular accent overlays from the shared
+  control path.
+- Replace the Learning Graph placeholder with direct node drag, pin connection,
+  right-click disconnection, selection synchronization, add/remove/reset,
+  semantic undo/redo, cycle diagnostics, topology, critical path, and parallel
+  wave inspection. The graph remains isolated from the read-only Live Scheduler.
+- Rework GUI Editor around real temporal widget content editing for panels,
+  buttons, text, images, image buttons, tab pages, text input, sliders, and
+  scroll areas. Appearance, layout, visibility, enablement, keyboard focus,
+  pointer policy, actions, and tooltips enter semantic document operations;
+  disabled widgets remain visible as a diagnostic projection.
+- Add separate validated workspace-layout contracts for Standard Editor, Plant
+  Lab, and GUI Editor. The shared shell now uses real document tabs plus
+  Properties/World Settings inspector tabs; GUI Editor's Canvas, Runtime
+  Preview, Component Graph, and Styles read the canonical GUI document instead
+  of presenting the Canvas2D debug plane.
+- Add one renderer-neutral camera/view descriptor with perspective, free
+  orthographic, six locked axis views, independent framing, clipping, and
+  revision identity. Adopt LMB selection, Alt+LMB orbit, MMB pan, Alt+RMB
+  dolly, RMB fly with WASD/QE and speed modifiers, Focus, and Reset; pane
+  splitters now capture input before camera navigation.
+- Remove the unpainted scene/timeline strip that exposed stale framebuffer
+  pixels. Rework Systems into one tab row with graph-first scheduler, learning,
+  and time views plus a compact zero-work state.
+- Add a renderer-neutral portal/RTT planning contract with stable identity,
+  recursion/cycle/budget refusal, shared view and clip descriptors, logical
+  outputs, disposable cache state, metrics, and render-pass view bindings.
+  Native portal clipping/traversal/pixels remain unclaimed.
+- Add a descriptor-only optional-extension catalog with stable provenance,
+  platform/capability/tier requirements, integrity policy, activation mode, and
+  fail-closed validation; unavailable external payloads remain unclaimed.
+- Add canonical hierarchy reorder/nest/root controls and an interactive GUI
+  Structure Graph. Pan, zoom, fit, node movement, connection, and disconnection
+  stay in EpochGui; validated temporal reparent operations stay in the GUI
+  document.
+- Rework Project Assets into a project-rooted folder browser with bounded search
+  and type filters, a GUI source category, create/open/import/refresh actions,
+  restart hydration from Assets and Library, revision-safe texture reimport,
+  U/V addressing, alpha cutoff, and a reusable virtualized Browser grid with
+  lazy real compiled thumbnails.
+  Active texture documents expose sparse layer editing and an interactive image
+  canvas while physical previews and residency remain disposable.
+- Complete the source-owned audio starter path with authored buses/cues,
+  decoded WAV publication, deterministic mixing, physical playback sessions,
+  and Game2D profile/runtime semantic event integration.
+- Pass the complete 30-test Windows CMake Debug inventory, Visual Studio Debug
+  editor build, aggregate engine contract, GUI-document round-trip/corruption
+  contract, and the 470-file source-name validator. No GUI launch, screenshot,
+  Release, Linux, package, updater, or operator eye-test claim is made here.
+- Align the CMake MSVC lane with the solution by applying the required
+  source-specific big-object flag to the expanded editor implementation.
+- Advance development source to v0.89.21 while retaining the sealed published
+  v0.89.06 package/updater baseline.
+## [v0.89.20] - Owned external project runtime control
+
+- Add `platform.child_process`, a bounded cross-platform child-process
+  supervisor with stable generation-checked handles, exact argument-vector
+  launch, executable/working-directory validation, duplicate correlation
+  focus, exclusive process groups, polling, exit codes, elapsed-time metrics,
+  graceful stop, forced stop, and stale-handle release.
+- Replace Project Run's fire-and-forget serialized command with direct ownership
+  of the verified child executable. Runtime correlation includes the selected
+  project, accepted artifact generation, and SHA-256, so repeated Run focuses
+  the exact active artifact and a different project cannot silently overlap it.
+- Bind `project.lifecycle` runtime start/stop evidence to observed native process
+  state. Project now exposes process state, PID, elapsed time, supervisor totals,
+  Focus, graceful Stop, and explicit Force Stop fallback.
+- Route the legacy `project-exe:` compatibility command through the same
+  supervisor. Linux launches no longer use a shell or background `system()`
+  string and stop signals target the isolated child process group.
+- Add a standalone process contract that proves invalid-path refusal,
+  duplicate-run focus, exclusive-group refusal, natural exit evidence, forced
+  stop, release, and stale-handle rejection on Windows MSVC and Linux Clang
+  22. The dependency-free contract is available before the graphics/vcpkg
+  configuration boundary.
+- Pass the complete 22-test Windows CMake Debug inventory, Visual Studio Debug,
+  the complete vcpkg-backed Linux Clang 22.1.8 full-engine inventory, and a
+  separate Windows CMake Release editor candidate. The Release candidate reports
+  `v0.89.20`, passes the build-safe engine contract, and passes all six
+  registered generated-project materialize/save-reopen/build/child-verifier
+  profiles.
+- Advance development source to v0.89.20 while leaving the published v0.89.06
+  updater, packaging, release metadata, and packaged runtime sealed. GUI focus,
+  Stop interaction, and repeated external Run still require operator eye proof.
+## [v0.89.19] - Guarded model proposals and observable task timing
+
+- Add `ai.development_proposal_codec`, a strict data-only source proposal
+  protocol for bounded multi-file engine/project edits. It rejects prose,
+  malformed framing, invalid UTF-8, traversal, duplicate paths, unknown fields,
+  control bytes, trailing data, and size/operation overruns.
+- Preserve exact raw model reply bytes separately from display-normalized chat.
+  Correct JSON escape and Unicode decoding, including surrogate pairs and
+  backslash-aware quote scanning, before exact source content reaches the codec.
+- Let the trusted controller snapshot canonical workspace preimages and derive
+  before/after SHA-256 evidence. The model cannot choose risk, permissions,
+  actor identity, timestamps, approval, permit, or execution authority.
+- Add explicit Engine Source and Project Source prompt/stage/review/approve/permit/apply
+  controls. Staging remains manual and execution continues through the existing
+  single-use guard and atomic exact-content transaction.
+- Add real TaskGraph acceptance, queue, start, and finish timestamps with queue
+  latency, run duration, cumulative totals, and peaks. Timing survives finished
+  node pruning and is exposed read-only in Systems; deterministic injected-clock
+  contracts prove ordering and preservation.
+- Bound Systems runtime cost: scheduler maintenance now runs independently of
+  tab visibility, unchanged registry topology does not rebuild rows every sample,
+  and same-size chart/scheduler surfaces replace atlas pixels in place. A
+  1,024-update contract proves atlas entry count remains constant.
+- Label Time evidence as registry-update span rather than whole-editor frame
+  time. The separate Learning Graph remains editable and powerless.
+- Repair Linux vcpkg host-library discovery for CMake 4.4 by searching both the
+  vcpkg find root and host paths only while resolving X11/OpenGL. The managed
+  Clang 22.1.8 full engine and all 21 CTests pass afterward.
+- Verify Windows MSVC Debug, all 21 Windows CTests, the aggregate engine
+  contract, and all six canonical generated project save/materialize/build/child
+  verifier lanes. GUI responsiveness and visual behavior still require the
+  operator eye test.
+- Advance development source to v0.89.19 while leaving the published v0.89.06
+  updater, packaging, release metadata, and packaged runtime sealed.
+
+## [v0.89.18] - Guarded execution and editor operations
+
+- Add a damage-resistant AI development authority with immutable SHA-256
+  proposals, separate review and operator approval, bounded lifetimes,
+  cancellation, and ordered audit/evidence storage. Its private execution
+  capability is issued only by the guard, claimed once before work begins, and
+  cannot be assembled from caller-supplied digest fields.
+- Add the guarded exact-content source transaction executor. It accepts only the
+  approved operation identities, canonical relative paths, preimage/postimage
+  states, replacement bytes, and single-use permit; creates and flushes
+  same-directory temporary files exclusively; revalidates parent chains and
+  preimages immediately before commit; verifies committed postimages; and emits
+  rollback/preimage evidence on failure.
+- Integrate the AI Tooling/Engine controller with trusted monotonic production
+  time, a serialized execution claim, exact source-transition dispatch, and
+  executor-only source completion evidence. Externally driven time remains a
+  contract-only policy and cannot backdate production authority.
+- Rework the Systems workspace around bounded registry diagnostics and a reusable
+  EpochGui SystemWorkspace controller. Timing collection stays off the normal
+  update path and is sampled only while the Systems surface is visible.
+- Add a read-only Live Scheduler view backed by the real editor TaskGraph and a
+  separately labeled editable Learning Graph. AI evidence builds, selected
+  script builds, project builds, and the approved tool harness now use the shared
+  editor scheduler instead of independent asynchronous launch paths.
+- Add an isolated temporal task-graph learning document with stable handles,
+  semantic graph edits, validation, cycle rejection, deterministic topology,
+  critical path, parallel waves, snapshots, undo, and redo. The editor exposes
+  real graph manipulation without pretending to execute the live scheduler.
+- Harden the live task scheduler with race-free lifecycle handling, duplicate
+  execution refusal, zero-worker operation, dependency deadlock detection,
+  draining, and bounded immutable diagnostics.
+- Move the AI and Systems panels out of the large editor application unit so
+  their state, policy, projection, and tests can scale independently.
+- Make selected-script builds asynchronous, compile scripts as C++23 shared
+  libraries, use argument-vector process execution, reject changed source/output
+  ownership, verify the bounded candidate, publish it by same-filesystem atomic
+  replacement, and verify the published artifact before reporting success.
+- Extend `project.lifecycle` with generation-stamped selected-project, committed
+  scene, materialized shell, build-input, build-attempt, output-artifact, and
+  runtime evidence so stale or cross-project Build/Run state fails closed.
+- Wire production Project Save, shell materialization, Build, and external Run
+  into one strict lifecycle ledger. Stable project identity, verified scene
+  revision, build-input fingerprints, exact asynchronous build generations, and
+  SHA-256 output admission replace the legacy Boolean adapter. Failed, changed,
+  missing, or cross-project artifacts fail closed, and Project exposes the
+  active decision and generations.
+- Add reusable tagged two-component vectors while retaining distinct Position
+  and Velocity ECS identities.
+- Add focused guard, exact-content executor, editor AI controller, script
+  compiler, editor scheduler, temporal task-graph, Systems workspace, and
+  EpochGui workspace contracts. The expanded normal Windows CMake inventory contains 20
+  focused and aggregate tests.
+- Enable MSVC /bigobj for the shared StaticLib1 x64 Debug and Release lanes so
+  the modular editor source remains buildable after the new production systems.
+- Keep the published v0.89.06 updater, release implementation, packages, and
+  stable identity sealed. This is a v0.89.18 source candidate; no GUI screenshot,
+  responsiveness, or operator eye-test claim is made.
+- The source transaction reduces process-local races but is not a filesystem
+  database: directory crash journaling, complete ACL/xattr/alternate-stream
+  preservation, and hostile external-writer exclusion remain future OS-specific
+  hardening.
 
 ## [v0.89.16] - Deterministic sprite animation and physical audio
 

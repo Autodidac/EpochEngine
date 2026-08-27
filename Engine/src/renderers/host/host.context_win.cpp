@@ -43,9 +43,11 @@
 #   ifndef NOMINMAX
 #       define NOMINMAX
 #   endif
+#   include <timeapi.h>
 #   include <windowsx.h>
 #   include <commctrl.h>
 #   include <dwmapi.h>
+#   pragma comment(lib, "winmm.lib")
 #   include <shellapi.h>
 #   pragma comment(lib, "comctl32.lib")
 #   pragma comment(lib, "dwmapi.lib")
@@ -87,6 +89,7 @@ import context.window;
 import telemetry.engine;
 import systems.registry;
 import perf.tier;
+import platform.budgets;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;
@@ -96,6 +99,31 @@ import software.context;
 #endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
 import raylib.context;
+    struct ScopedWindowsTimerResolution final
+    {
+        static constexpr UINT period_ms = 1u;
+        bool active{};
+
+        ScopedWindowsTimerResolution() noexcept
+            : active(::timeBeginPeriod(period_ms) == 0u)
+        {
+        }
+
+        ~ScopedWindowsTimerResolution()
+        {
+            if (active)
+                (void)::timeEndPeriod(period_ms);
+        }
+
+        ScopedWindowsTimerResolution(
+            const ScopedWindowsTimerResolution&) = delete;
+        ScopedWindowsTimerResolution& operator=(
+            const ScopedWindowsTimerResolution&) = delete;
+        ScopedWindowsTimerResolution(ScopedWindowsTimerResolution&&) = delete;
+        ScopedWindowsTimerResolution& operator=(
+            ScopedWindowsTimerResolution&&) = delete;
+    };
+
 #endif
 
 #if defined(_WIN32)
@@ -133,9 +161,22 @@ namespace
         if (!ctx)
             return;
 
+        auto mousePosition = client_mouse_position(
+            hwnd, lParam, screenCoordinates);
+        if (ctx->normalize_mouse_position)
+        {
+            int x = static_cast<int>(mousePosition.x);
+            int y = static_cast<int>(mousePosition.y);
+            ctx->normalize_mouse_position(x, y);
+            mousePosition = {
+                static_cast<float>(x),
+                static_cast<float>(y)
+            };
+        }
+
         epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
             .type = type,
-            .mouse_pos = client_mouse_position(hwnd, lParam, screenCoordinates),
+            .mouse_pos = mousePosition,
             .mouse_button = mouseButton,
             .wheel_delta = wheelDelta
         });
@@ -183,9 +224,21 @@ namespace
         return out;
     }
 
+    [[nodiscard]] constexpr bool is_gui_text_codepoint(char32_t codepoint) noexcept
+    {
+        return codepoint >= U' '
+            && codepoint != char32_t{0x7f}
+            && codepoint <= char32_t{0x10ffff}
+            && !(codepoint >= char32_t{0xd800}
+                && codepoint <= char32_t{0xdfff});
+    }
+
+    static_assert(!is_gui_text_codepoint(U'\b'));
+    static_assert(is_gui_text_codepoint(U' '));
+
     inline void push_gui_text_event(const epochengine::core::Context* ctx, char32_t codepoint) noexcept
     {
-        if (!ctx)
+        if (!ctx || !is_gui_text_codepoint(codepoint))
             return;
 
         const std::string utf8 = utf8_from_codepoint(codepoint);
@@ -615,6 +668,100 @@ namespace
             flags);
     }
 
+    [[nodiscard]] inline bool make_parent_dock_guide_layout(
+        HWND parent,
+        POINT screenPoint,
+        bool routedPanel,
+        epochengine::gui::DockGuideLayout& layout) noexcept
+    {
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return false;
+
+        RECT client{};
+        if (::GetClientRect(parent, &client) == FALSE)
+            return false;
+
+        POINT local = screenPoint;
+        if (::ScreenToClient(parent, &local) == FALSE)
+            return false;
+
+        const int width = (std::max)(1L, client.right - client.left);
+        const int height = (std::max)(1L, client.bottom - client.top);
+        if (local.x < 0 || local.y < 0
+            || local.x >= width || local.y >= height)
+        {
+            return false;
+        }
+
+        const float halfWidth = static_cast<float>(width) * 0.5f;
+        layout = epochengine::gui::make_dock_guide_layout(
+            epochengine::gui::DockGuideOptions{
+                .guide_bounds = {
+                    { 0.0f, 0.0f },
+                    { static_cast<float>(width), static_cast<float>(height) } },
+                .left_tabs_preview = {},
+                .right_tabs_preview = {},
+                .bottom_left_tabs_preview = {},
+                .bottom_right_tabs_preview = {},
+                .left_context_preview = routedPanel
+                    ? epochengine::gui::WidgetBounds{}
+                    : epochengine::gui::WidgetBounds{
+                        { 0.0f, 0.0f },
+                        { halfWidth, static_cast<float>(height) } },
+                .right_context_preview = routedPanel
+                    ? epochengine::gui::WidgetBounds{}
+                    : epochengine::gui::WidgetBounds{
+                        { halfWidth, 0.0f },
+                        { static_cast<float>(width) - halfWidth,
+                          static_cast<float>(height) } },
+                .floating_preview = {},
+                .pointer = {
+                    static_cast<float>(local.x),
+                    static_cast<float>(local.y) },
+                .guide_extent = 94.0f,
+                .guide_gap = 8.0f,
+                .allow_side_tabs = routedPanel,
+                .allow_bottom_tabs = routedPanel,
+                .allow_contexts = true,
+                .allow_float = false,
+                .center_context_guides_in_previews = !routedPanel
+            });
+        return true;
+    }
+
+    [[nodiscard]] inline epochengine::core::RoutedPanelDockTarget
+        routed_panel_target_for_parent(
+            HWND parent,
+            POINT screenPoint,
+            bool routedPanel) noexcept
+    {
+        epochengine::gui::DockGuideLayout guideLayout{};
+        if (!make_parent_dock_guide_layout(
+                parent, screenPoint, routedPanel, guideLayout))
+        {
+            return epochengine::core::RoutedPanelDockTarget::none;
+        }
+
+        switch (guideLayout.hovered_target)
+        {
+        case epochengine::gui::DockGuideTarget::left_tabs:
+            return epochengine::core::RoutedPanelDockTarget::left_tabs;
+        case epochengine::gui::DockGuideTarget::right_tabs:
+            return epochengine::core::RoutedPanelDockTarget::right_tabs;
+        case epochengine::gui::DockGuideTarget::bottom_left_tabs:
+            return epochengine::core::RoutedPanelDockTarget::bottom_left_tabs;
+        case epochengine::gui::DockGuideTarget::bottom_right_tabs:
+            return epochengine::core::RoutedPanelDockTarget::bottom_right_tabs;
+        case epochengine::gui::DockGuideTarget::left_context:
+            return epochengine::core::RoutedPanelDockTarget::left_context;
+        case epochengine::gui::DockGuideTarget::right_context:
+            return epochengine::core::RoutedPanelDockTarget::right_context;
+        case epochengine::gui::DockGuideTarget::float_window:
+        case epochengine::gui::DockGuideTarget::none:
+        default:
+            return epochengine::core::RoutedPanelDockTarget::none;
+        }
+    }
     inline void request_routed_panel_redock_close(epochengine::core::WindowData* window) noexcept
     {
         if (!window || window->guiRoute.empty())
@@ -709,14 +856,25 @@ namespace
         ::PostMessageW(hwnd, WM_EPOCH_LAYOUT, 0, 0);
     }
 
+    [[nodiscard]] inline bool backend_window_exposable(
+        const epochengine::core::WindowData* window) noexcept
+    {
+        return window
+            && window->backend_ready()
+            && window->successfulFrameGeneration.load(std::memory_order_acquire) > 0u;
+    }
+
     [[nodiscard]] inline std::shared_ptr<epochengine::core::Context> resolve_gui_context_for_hwnd(HWND hwnd) noexcept
     {
         auto* mgr = g_activeManager;
         if (!mgr)
             return {};
 
-        if (auto* win = mgr->findWindowByHWND(hwnd))
+        if (auto* win = mgr->findWindowByHWND(hwnd);
+            backend_window_exposable(win))
+        {
             return typed_context(win->context);
+        }
 
         return {};
     }
@@ -728,6 +886,83 @@ namespace
             return nullptr;
 
         return mgr->findWindowByHWND(hwnd);
+    }
+
+    [[nodiscard]] inline RECT native_rect(
+        const epochengine::gui::WidgetBounds& bounds) noexcept
+    {
+        return RECT{
+            static_cast<LONG>(bounds.position.x),
+            static_cast<LONG>(bounds.position.y),
+            static_cast<LONG>(bounds.position.x + bounds.size.x),
+            static_cast<LONG>(bounds.position.y + bounds.size.y)
+        };
+    }
+
+    inline void paint_parent_context_dock_overlay(HWND parent, HDC hdc) noexcept
+    {
+        const auto& drag = g_drag;
+        if (!hdc || !drag.dragging || !drag.draggedWindow)
+            return;
+
+        const auto* window = resolve_window_data_for_hwnd(drag.draggedWindow);
+        if (!window || !window->guiRoute.empty())
+            return;
+
+        HWND targetParent = drag.originalParent;
+        if (!targetParent || ::IsWindow(targetParent) == FALSE)
+            targetParent = stored_dock_parent(drag.draggedWindow);
+        if (targetParent != parent)
+            return;
+
+        epochengine::gui::DockGuideLayout layout{};
+        if (!make_parent_dock_guide_layout(
+                parent, drag.lastMousePos, false, layout))
+        {
+            return;
+        }
+
+        const int savedDc = ::SaveDC(hdc);
+        ::SetBkMode(hdc, TRANSPARENT);
+        ::SetTextColor(hdc, RGB(0xFF, 0xF3, 0xDF));
+
+        static HBRUSH previewBrush = ::CreateHatchBrush(
+            HS_DIAGCROSS, RGB(0xF2, 0x98, 0x32));
+        static HBRUSH previewFrameBrush = ::CreateSolidBrush(
+            RGB(0xF2, 0x98, 0x32));
+        static HBRUSH guideBrush = ::CreateSolidBrush(
+            RGB(0x9A, 0x58, 0x24));
+        static HBRUSH hoveredGuideBrush = ::CreateSolidBrush(
+            RGB(0xE2, 0x83, 0x2C));
+
+        if (layout.hovered_preview.size.x > 1.0f
+            && layout.hovered_preview.size.y > 1.0f)
+        {
+            RECT preview = native_rect(layout.hovered_preview);
+            ::FillRect(hdc, &preview, previewBrush);
+            ::FrameRect(hdc, &preview, previewFrameBrush);
+        }
+
+        for (std::uint32_t i = 0; i < layout.count; ++i)
+        {
+            const auto& guide = layout.guides[i];
+            RECT rect = native_rect(guide.target_bounds);
+            ::FillRect(hdc, &rect, guide.hovered ? hoveredGuideBrush : guideBrush);
+            ::FrameRect(hdc, &rect, previewFrameBrush);
+
+            const wchar_t* label = guide.target
+                == epochengine::gui::DockGuideTarget::left_context
+                ? L"Left Context"
+                : L"Right Context";
+            ::DrawTextW(
+                hdc,
+                label,
+                -1,
+                &rect,
+                DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+
+        ::RestoreDC(hdc, savedDc);
     }
 
     inline void remember_gui_input_owner(HWND hwnd) noexcept
@@ -760,6 +995,9 @@ namespace
     [[nodiscard]] inline bool accepts_gui_keyboard_input(HWND hwnd) noexcept
     {
         if (!hwnd || ::IsWindow(hwnd) == FALSE)
+            return false;
+
+        if (!resolve_gui_context_for_hwnd(hwnd))
             return false;
 
         if (const HWND focused = ::GetFocus();
@@ -1183,8 +1421,6 @@ namespace
     {
         if (!is_sfml_proxy_candidate(window))
             return;
-        if (window->pinnedToParent.load(std::memory_order_acquire))
-            return;
 
         window->isFloating = true;
         position_top_level_shell(
@@ -1374,11 +1610,6 @@ namespace
         const HWND target = owner_thread_dock_handle(window);
         if (!target)
             return false;
-        if (window->pinnedToParent.load(std::memory_order_acquire)
-            && (command == ProxyDockCmd::Undock || command == ProxyDockCmd::MoveDetached))
-        {
-            return false;
-        }
 
         if (command == ProxyDockCmd::Redock
             && (!parent || ::IsWindow(parent) == FALSE))
@@ -1471,7 +1702,7 @@ namespace
         case WM_SYSCHAR:
             if (!accepts_gui_keyboard_input(hwnd))
                 break;
-            if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
+            if (wParam >= 0x20u || wParam == 13u)
                 push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
             break;
         default:
@@ -1497,14 +1728,17 @@ namespace
         case WM_SYSCHAR:
             forward_gui_input_message(hwnd, msg, wp, lp);
             return 0;
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+            forward_gui_input_message(hwnd, msg, wp, lp);
+            return 0;
+
         case WM_LBUTTONDOWN:
         case WM_RBUTTONDOWN:
         case WM_MOUSEMOVE:
         case WM_LBUTTONUP:
         case WM_RBUTTONUP:
         case WM_MOUSEWHEEL:
-        case WM_KEYDOWN:
-        case WM_SYSKEYDOWN:
             forward_gui_input_message(hwnd, msg, wp, lp);
             if (msg == WM_LBUTTONDOWN || msg == WM_MOUSEMOVE || msg == WM_LBUTTONUP)
             {
@@ -1558,12 +1792,6 @@ namespace
         {
             if (static_cast<DockCmd>(wp) == DockCmd::Undock)
             {
-                if (auto* window = resolve_window_data_for_hwnd(hwnd);
-                    window && window->pinnedToParent.load(std::memory_order_acquire))
-                {
-                    return 0;
-                }
-
                 // Convert to a top-level window, preserving client size.
                 RECT clientRect{};
                 ::GetClientRect(hwnd, &clientRect);
@@ -1605,7 +1833,18 @@ namespace
             if (wcsncmp(cls, L"GLFW", 4) == 0)
                 return DefSubclassProc(hwnd, msg, wp, lp);
 
-            ::DestroyWindow(hwnd);
+            if (auto* const manager = g_activeManager;
+                manager && resolve_window_data_for_hwnd(hwnd))
+            {
+                // Backend-owned children release their renderer and native
+                // surface on the renderer thread. The manager destroys only
+                // the host after that thread has completed.
+                manager->RemoveWindow(hwnd);
+            }
+            else
+            {
+                ::DestroyWindow(hwnd);
+            }
             return 0;
         }
 
@@ -1634,7 +1873,7 @@ namespace
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
             forward_gui_input_message(hwnd, msg, wp, lp);
-            return DefSubclassProc(hwnd, msg, wp, lp);
+            return 0;
         }
 
         return DefSubclassProc(hwnd, msg, wp, lp);
@@ -1998,6 +2237,52 @@ namespace epochengine::core
     // ------------------------------------------------------------
     std::unordered_map<HWND, std::thread>& Threads() noexcept { return g_threads; }
     DragState& Drag() noexcept { return g_drag; }
+
+    RoutedPanelDockDragProjection routed_panel_dock_drag_projection() noexcept
+    {
+        const DragState& drag = Drag();
+        if (!drag.dragging || !drag.draggedWindow)
+            return {};
+
+        const WindowData* window =
+            resolve_window_data_for_hwnd(drag.draggedWindow);
+        if (!window)
+            return {};
+        const std::string& projectionLabel = window->guiRoute.empty()
+            ? window->titleNarrow
+            : window->guiRoute;
+
+        HWND parent = drag.originalParent;
+        if (!parent || ::IsWindow(parent) == FALSE)
+            parent = stored_dock_parent(drag.draggedWindow);
+        if (!parent || ::IsWindow(parent) == FALSE)
+            return {};
+
+        RECT client{};
+        if (::GetClientRect(parent, &client) == FALSE)
+            return {};
+        POINT local = drag.lastMousePos;
+        if (::ScreenToClient(parent, &local) == FALSE)
+            return {};
+
+        return RoutedPanelDockDragProjection{
+            .active = true,
+            .routed_panel = !window->guiRoute.empty(),
+            .host_overlay = window->guiRoute.empty(),
+            .route = projectionLabel,
+            .cursor_x = static_cast<float>(local.x),
+            .cursor_y = static_cast<float>(local.y),
+            .host_width = static_cast<float>(
+                (std::max)(1L, client.right - client.left)),
+            .host_height = static_cast<float>(
+                (std::max)(1L, client.bottom - client.top)),
+            .target = routed_panel_target_for_parent(
+                parent,
+                drag.lastMousePos,
+                !window->guiRoute.empty())
+        };
+    }
+
     MultiContextManager* GetActiveMultiContextManager() noexcept { return g_activeManager; }
 
     void RequestActiveParentLayout() noexcept
@@ -2161,12 +2446,103 @@ namespace epochengine::core
                 return false;
             }
 
-            for (auto& window : windows)
-                window->pinnedToParent.store(window.get() == target, std::memory_order_release);
         }
 
         ArrangeDockedWindowsGrid();
         return true;
+    }
+
+    void MultiContextManager::ConstrainPrimaryWindowToWorkArea(
+        const std::shared_ptr<Context>& context)
+    {
+        HWND topLevel = parent;
+        if (!topLevel || ::IsWindow(topLevel) == FALSE)
+        {
+            std::scoped_lock lock(windowsMutex);
+            const auto target = std::find_if(
+                windows.begin(),
+                windows.end(),
+                [&](const std::unique_ptr<WindowData>& window)
+                {
+                    return window
+                        && (!context
+                            || (window->context
+                                && window->context.get()
+                                    == static_cast<void*>(context.get())));
+                });
+            if (target == windows.end())
+                return;
+
+            const WindowData& window = **target;
+            HWND nativeWindow = window.host_hwnd;
+            if (!nativeWindow || ::IsWindow(nativeWindow) == FALSE)
+                nativeWindow = window.hwndChild;
+            if (!nativeWindow || ::IsWindow(nativeWindow) == FALSE)
+                nativeWindow = window.hwnd;
+            if (!nativeWindow || ::IsWindow(nativeWindow) == FALSE)
+                return;
+
+            topLevel = ::GetAncestor(nativeWindow, GA_ROOT);
+            if (!topLevel)
+                topLevel = nativeWindow;
+        }
+
+        if (::IsWindow(topLevel) == FALSE || ::IsZoomed(topLevel) != FALSE)
+            return;
+
+        MONITORINFO monitorInfo{};
+        monitorInfo.cbSize = sizeof(MONITORINFO);
+        const HMONITOR monitor = ::MonitorFromWindow(
+            topLevel,
+            MONITOR_DEFAULTTONEAREST);
+        if (!monitor || ::GetMonitorInfoW(monitor, &monitorInfo) == FALSE)
+            return;
+
+        RECT windowRect{};
+        if (::GetWindowRect(topLevel, &windowRect) == FALSE)
+            return;
+
+        const RECT& workArea = monitorInfo.rcWork;
+        const int workWidth = (std::max)(
+            1,
+            static_cast<int>(workArea.right - workArea.left));
+        const int workHeight = (std::max)(
+            1,
+            static_cast<int>(workArea.bottom - workArea.top));
+        const int windowWidth = (std::clamp)(
+            static_cast<int>(windowRect.right - windowRect.left),
+            1,
+            workWidth);
+        const int windowHeight = (std::clamp)(
+            static_cast<int>(windowRect.bottom - windowRect.top),
+            1,
+            workHeight);
+        const int x = (std::clamp)(
+            static_cast<int>(windowRect.left),
+            static_cast<int>(workArea.left),
+            static_cast<int>(workArea.right) - windowWidth);
+        const int y = (std::clamp)(
+            static_cast<int>(windowRect.top),
+            static_cast<int>(workArea.top),
+            static_cast<int>(workArea.bottom) - windowHeight);
+
+        if (x == windowRect.left
+            && y == windowRect.top
+            && windowWidth == windowRect.right - windowRect.left
+            && windowHeight == windowRect.bottom - windowRect.top)
+        {
+            return;
+        }
+
+        ::SetWindowPos(
+            topLevel,
+            nullptr,
+            x,
+            y,
+            windowWidth,
+            windowHeight,
+            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOZORDER
+                | SWP_SHOWWINDOW);
     }
 
     // ------------------------------------------------------------
@@ -2316,7 +2692,6 @@ namespace epochengine::core
 
         DetachedContextWindowRequest dockedRequest = request;
         dockedRequest.start_docked = true;
-        dockedRequest.pinned_to_parent = true;
         return CreateDetachedContextWindowOnOwnerThread(dockedRequest, createdContext);
     }
 
@@ -2511,10 +2886,7 @@ namespace epochengine::core
         winPtr->titleNarrow = epochengine::text::narrow_utf8(title);
         winPtr->guiRoute = request.gui_route;
         winPtr->isFloating = !startDocked;
-        winPtr->pinnedToParent.store(request.pinned_to_parent && startDocked, std::memory_order_release);
-        winPtr->firstPresentComplete.store(
-            request.type != ContextType::OpenGL && request.type != ContextType::RayLib,
-            std::memory_order_release);
+        winPtr->firstPresentComplete.store(false, std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -2715,18 +3087,57 @@ namespace epochengine::core
             int clientW = cli::window_width;
             int clientH = cli::window_height;
 
-            if (totalRequested > 1)
+            POINT launchPoint{};
+            (void)::GetCursorPos(&launchPoint);
+            RECT workArea{};
+            MONITORINFO monitorInfo{};
+            monitorInfo.cbSize = sizeof(MONITORINFO);
+            const HMONITOR launchMonitor = ::MonitorFromPoint(
+                launchPoint,
+                MONITOR_DEFAULTTOPRIMARY);
+            const bool hasWorkArea = launchMonitor
+                && ::GetMonitorInfoW(launchMonitor, &monitorInfo) != FALSE;
+            if (hasWorkArea)
+                workArea = monitorInfo.rcWork;
+            else
+                (void)::SystemParametersInfoW(
+                    SPI_GETWORKAREA,
+                    0,
+                    &workArea,
+                    0);
+
+            const int workWidth = (std::max)(
+                1,
+                static_cast<int>(workArea.right - workArea.left));
+            const int workHeight = (std::max)(
+                1,
+                static_cast<int>(workArea.bottom - workArea.top));
+
+            if (!cli::window_width_overridden
+                && !cli::window_height_overridden
+                && totalRequested == 1)
             {
-                RECT workArea{};
+                const auto desktopPolicy =
+                    epochengine::platform::recommended_desktop_window(
+                        epochengine::perf::tier_from_env(),
+                        static_cast<std::uint32_t>(workWidth),
+                        static_cast<std::uint32_t>(workHeight),
+                        static_cast<std::uint32_t>(
+                            std::thread::hardware_concurrency()));
+                clientW = static_cast<int>(desktopPolicy.client_width);
+                clientH = static_cast<int>(desktopPolicy.client_height);
+            }
+            else if (totalRequested > 1)
+            {
                 constexpr int kMargin = 24;
-                if (::SystemParametersInfoW(SPI_GETWORKAREA, 0, &workArea, 0))
+                if (workWidth > 1 && workHeight > 1)
                 {
                     clientW = (std::max)(
                         960,
-                        static_cast<int>(workArea.right - workArea.left) - (kMargin * 2));
+                        workWidth - (kMargin * 2));
                     clientH = (std::max)(
                         720,
-                        static_cast<int>(workArea.bottom - workArea.top) - (kMargin * 2));
+                        workHeight - (kMargin * 2));
                 }
                 else
                 {
@@ -2738,16 +3149,24 @@ namespace epochengine::core
             RECT want{ 0, 0, clientW, clientH };
             const DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN;
             ::AdjustWindowRect(&want, style, FALSE);
+            const int outerWidth = want.right - want.left;
+            const int outerHeight = want.bottom - want.top;
+            const int launchX = workArea.right > workArea.left
+                ? workArea.left + (std::max)(0, (workWidth - outerWidth) / 2)
+                : CW_USEDEFAULT;
+            const int launchY = workArea.bottom > workArea.top
+                ? workArea.top + (std::max)(0, (workHeight - outerHeight) / 2)
+                : CW_USEDEFAULT;
 
             parent = ::CreateWindowExW(
                 0,
                 L"EpochParent",
                 L"Epoch Docking",
                 style,
-                CW_USEDEFAULT,
-                CW_USEDEFAULT,
-                want.right - want.left,
-                want.bottom - want.top,
+                launchX,
+                launchY,
+                outerWidth,
+                outerHeight,
                 nullptr,
                 nullptr,
                 hInst,
@@ -2922,7 +3341,6 @@ namespace epochengine::core
 
                     {
                         std::scoped_lock lock(windowsMutex);
-                        winPtr->pinnedToParent.store(parent && windows.empty(), std::memory_order_release);
                         windows.emplace_back(std::move(winPtr));
                     }
 
@@ -3240,9 +3658,7 @@ namespace epochengine::core
         winPtr->running = true;
         winPtr->onResize = std::move(onResize);
         winPtr->context = ctx;
-        winPtr->firstPresentComplete.store(
-            type != ContextType::OpenGL && type != ContextType::RayLib,
-            std::memory_order_release);
+        winPtr->firstPresentComplete.store(false, std::memory_order_release);
         ctx->windowData = winPtr.get();
 
         RECT rc{};
@@ -3635,39 +4051,69 @@ namespace epochengine::core
     {
         if (!parent) return;
 
-        std::scoped_lock lock(windowsMutex);
-        if (windows.empty()) return;
-
         std::vector<WindowData*> dockedWindows;
-        dockedWindows.reserve(windows.size());
-        for (auto& win : windows)
         {
-            const HWND liveHwnd = dock_slot_handle(win.get(), parent);
-            if (!liveHwnd || ::IsWindow(liveHwnd) == FALSE)
-                continue;
+            std::scoped_lock lock(windowsMutex);
+            if (windows.empty()) return;
 
-            dockedWindows.push_back(win.get());
+            dockedWindows.reserve(windows.size());
+            for (auto& win : windows)
+            {
+                if (win)
+                    dockedWindows.push_back(win.get());
+            }
         }
+
+        // Window retirement transfers ownership to the UI thread before
+        // erasing registry entries. Snapshot registry-owned pointers while
+        // locked, then perform native window work without holding the registry
+        // mutex: SetWindowPos can synchronously enter a backend WndProc, and
+        // HandleResize must reacquire windowsMutex to publish the new size.
+        std::erase_if(
+            dockedWindows,
+            [this](WindowData* win)
+            {
+                const HWND liveHwnd = dock_slot_handle(win, parent);
+                return !liveHwnd || ::IsWindow(liveHwnd) == FALSE;
+            });
 
         if (dockedWindows.empty())
             return;
 
         const auto dock_order = [](const WindowData* win) noexcept
         {
-            if (win && win->pinnedToParent.load(std::memory_order_acquire))
-                return -1;
+            if (!win)
+                return 999;
+
+            const auto preferredTarget = static_cast<RoutedPanelDockTarget>(
+                win->dockTargetPreference.load(std::memory_order_acquire));
+            switch (preferredTarget)
+            {
+            case RoutedPanelDockTarget::left_tabs:
+            case RoutedPanelDockTarget::left_context:
+                return 0;
+            case RoutedPanelDockTarget::right_tabs:
+            case RoutedPanelDockTarget::right_context:
+                return 200;
+            case RoutedPanelDockTarget::bottom_left_tabs:
+            case RoutedPanelDockTarget::bottom_right_tabs:
+                return 300;
+            case RoutedPanelDockTarget::none:
+            default:
+                break;
+            }
 
             const auto liveContext = (win && win->context) ? typed_context(win->context) : nullptr;
             const auto type = liveContext ? liveContext->type : ContextType::None;
             switch (type)
             {
-            case ContextType::RayLib: return 0;
-            case ContextType::SDL: return 1;
-            case ContextType::SFML: return 2;
-            case ContextType::Vulkan: return 3;
-            case ContextType::OpenGL: return 4;
-            case ContextType::DirectX: return 5;
-            case ContextType::Software: return 6;
+            case ContextType::RayLib: return 100;
+            case ContextType::SDL: return 101;
+            case ContextType::SFML: return 102;
+            case ContextType::Vulkan: return 103;
+            case ContextType::OpenGL: return 104;
+            case ContextType::DirectX: return 105;
+            case ContextType::Software: return 106;
             default: return 99;
             }
         };
@@ -3727,6 +4173,15 @@ namespace epochengine::core
             ::ClientToScreen(parent, &slotScreen);
 
             WindowData& win = *dockedWindows[i];
+            if (!backend_window_exposable(&win))
+            {
+                if (win.hwndChild && ::IsWindow(win.hwndChild) != FALSE)
+                    ::ShowWindow(win.hwndChild, SW_HIDE);
+                if (win.host_hwnd && ::IsWindow(win.host_hwnd) != FALSE)
+                    ::ShowWindow(win.host_hwnd, SW_HIDE);
+                continue;
+            }
+
             if ((win.type == ContextType::SDL || win.type == ContextType::SFML)
                 && has_proxy_shell_pair(&win))
             {
@@ -3755,6 +4210,16 @@ namespace epochengine::core
                     post_proxy_host_command(&win, ProxyDockCmd::Redock, parent, slotScreen.x, slotScreen.y, cw, ch);
                     win.set_size(cw, ch);
                 }
+                else if (uses_visible_proxy_host(&win))
+                {
+                    ::ShowWindow(win.host_hwnd, SW_SHOWNA);
+                    ::ShowWindow(win.hwndChild, SW_SHOWNA);
+                }
+                else
+                {
+                    ::ShowWindow(win.hwndChild, SW_SHOWNA);
+                    ::ShowWindow(win.host_hwnd, SW_HIDE);
+                }
                 continue;
             }
 
@@ -3779,10 +4244,9 @@ namespace epochengine::core
                     ch);
                 if (!placementMatches || win.width != cw || win.height != ch)
                 {
-                    // Raylib owns this GLFW HWND on the render thread. Calling
-                    // SetWindowPos here while windowsMutex is held can deadlock
-                    // against the subclass input path when the user clicks the
-                    // pane. Queue the complete layout mutation for its owner.
+                    // Raylib owns this GLFW HWND on the render thread. Queue
+                    // the complete layout mutation for its owner instead of
+                    // entering GLFW's window procedure from the host thread.
                     if (post_owner_thread_dock_command(
                         &win,
                         ProxyDockCmd::Redock,
@@ -3955,17 +4419,24 @@ namespace epochengine::core
 
     void MultiContextManager::RenderLoop(WindowData& win)
     {
+        const auto publishLifecycle = [&]() noexcept
+        {
+            request_parent_layout(parent);
+        };
+
         auto ctx = typed_context(win.context);
         if (!ctx)
         {
             win.running = false;
             win.set_backend_lifecycle(BackendLifecycleState::failed);
+            publishLifecycle();
             return;
         }
 
         ctx->windowData = &win;
         MultiContextManager::SetCurrent(ctx);
         win.set_backend_lifecycle(BackendLifecycleState::initializing);
+        publishLifecycle();
         ctx->init_failed = false;
 
         struct ResetGuard { ~ResetGuard() { MultiContextManager::SetCurrent(nullptr); } } resetGuard;
@@ -3974,6 +4445,7 @@ namespace epochengine::core
         {
             win.running = false;
             win.set_backend_lifecycle(BackendLifecycleState::stopped);
+            publishLifecycle();
             return;
         }
 
@@ -4002,6 +4474,7 @@ namespace epochengine::core
                 win.running = false;
                 win.set_backend_lifecycle(BackendLifecycleState::failed);
                 epochengine::raylibcontext::raylib_cleanup(ctx);
+                publishLifecycle();
                 return;
             }
         }
@@ -4021,6 +4494,7 @@ namespace epochengine::core
             {
                 win.running = false;
                 win.set_backend_lifecycle(BackendLifecycleState::failed);
+                publishLifecycle();
                 return;
             }
         }
@@ -4036,6 +4510,7 @@ namespace epochengine::core
             win.set_backend_lifecycle(BackendLifecycleState::failed);
             if (ctx->cleanup)
                 ctx->cleanup_safe();
+            publishLifecycle();
             return;
         }
 
@@ -4050,6 +4525,7 @@ namespace epochengine::core
             win.set_backend_lifecycle(BackendLifecycleState::failed);
             if (ctx->cleanup)
                 ctx->cleanup_safe();
+            publishLifecycle();
             return;
         }
 
@@ -4059,6 +4535,7 @@ namespace epochengine::core
         const auto publishRenderReady = [&]()
         {
             win.set_backend_lifecycle(BackendLifecycleState::ready);
+            publishLifecycle();
             epochengine::logger::get(kLogSys).logf(
                 epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),
@@ -4067,6 +4544,7 @@ namespace epochengine::core
                 static_cast<void*>(win.hwnd));
         };
 
+        const ScopedWindowsTimerResolution coreFrameTimerResolution{};
         epochengine::perf::frame_limiter coreFrameLimiter{};
         double activeCoreFrameLimit = -1.0;
         const auto resolveCoreFrameLimit = []() noexcept -> double
@@ -4166,6 +4644,7 @@ namespace epochengine::core
         if (ctx->cleanup) ctx->cleanup_safe();
         if (win.backend_lifecycle() != BackendLifecycleState::failed)
             win.set_backend_lifecycle(BackendLifecycleState::stopped);
+        publishLifecycle();
     }
 
     void MultiContextManager::HandleDropFiles(HWND, HDROP hDrop)
@@ -4235,6 +4714,7 @@ namespace epochengine::core
             PAINTSTRUCT ps{};
             HDC hdc = ::BeginPaint(hwnd, &ps);
             ::FillRect(hdc, &ps.rcPaint, parent_background_brush());
+            paint_parent_context_dock_overlay(hwnd, hdc);
             ::EndPaint(hwnd, &ps);
             return 0;
         }
@@ -4384,17 +4864,6 @@ namespace epochengine::core
         case WM_LBUTTONDOWN:
         {
             auto* const window = resolve_window_data_for_hwnd(hwnd);
-            if (window && window->pinnedToParent.load(std::memory_order_acquire))
-            {
-                if (msg == WM_LBUTTONDOWN)
-                {
-                    remember_gui_input_owner(hwnd);
-                    ::SetFocus(hwnd);
-                    const auto ctx = resolveGuiContext();
-                    push_gui_mouse_event(ctx.get(), hwnd, epochengine::gui::EventType::MouseDown, lParam);
-                }
-                return ::DefWindowProcW(hwnd, msg, wParam, lParam);
-            }
 
             const bool detachedProxyHost =
                 window
@@ -4446,6 +4915,8 @@ namespace epochengine::core
                 drag.originalParent = stored_dock_parent(hwnd);
             drag.lastMousePos = screen_mouse_point(hwnd, msg, lParam);
             drag.dragStartMousePos = drag.lastMousePos;
+            if (drag.originalParent && window && window->guiRoute.empty())
+                ::InvalidateRect(drag.originalParent, nullptr, FALSE);
 
             HWND dragFrame = hwnd;
             if (!detachedProxyHost && window && is_sfml_proxy_candidate(window))
@@ -4525,6 +4996,8 @@ namespace epochengine::core
             }
 
             drag.lastMousePos = pt;
+            if (drag.originalParent && window && window->guiRoute.empty())
+                ::InvalidateRect(drag.originalParent, nullptr, FALSE);
             const bool proxyDragActivated =
                 window
                 && is_sfml_proxy_candidate(window)
@@ -4882,11 +5355,6 @@ namespace epochengine::core
             if (!request || !is_sfml_proxy_candidate(window))
                 return 0;
             const auto command = static_cast<ProxyDockCmd>(wParam);
-            if (window->pinnedToParent.load(std::memory_order_acquire)
-                && command != ProxyDockCmd::Redock)
-            {
-                return 0;
-            }
 
             switch (command)
             {
@@ -5040,6 +5508,8 @@ namespace epochengine::core
                 drag.dragStartMousePos = POINT{};
                 drag.proxyUndockPending = false;
                 drag.proxyRedockPending = false;
+                if (originalParent && ::IsWindow(originalParent) != FALSE)
+                    ::InvalidateRect(originalParent, nullptr, FALSE);
 
                 if (originalParent
                     && ::IsWindow(originalParent) != FALSE)
@@ -5058,10 +5528,16 @@ namespace epochengine::core
                     const bool centerInsideParent = point_in_rect(parentRect, windowCenter);
                     const bool releaseOutsideParent = !should_redock_to_parent(originalParent, releasePoint, wndRect);
                     const bool detachedProxy = window && is_sfml_proxy_detached(window);
-                    const bool wantsRedock = detachedProxy
+                    const RoutedPanelDockTarget dockTarget =
+                        routed_panel_target_for_parent(
+                            originalParent,
+                            releasePoint,
+                            window && !window->guiRoute.empty());
+                    const bool hasDockTarget = dockTarget != RoutedPanelDockTarget::none;
+                    const bool wantsRedock = hasDockTarget && (detachedProxy
                         ? releaseInsideParent
                         : (((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent)
-                            && should_redock_to_parent(originalParent, releasePoint, wndRect));
+                            && should_redock_to_parent(originalParent, releasePoint, wndRect)));
 #if defined(_DEBUG)
                     if (window && is_sfml_proxy_candidate(window))
                     {
@@ -5091,7 +5567,18 @@ namespace epochengine::core
 
                     if (wantsRedock)
                     {
-                        if (window && is_sfml_proxy_detached(window))
+                        const bool restoreRoutedPaneAsTab = window
+                            && !window->guiRoute.empty()
+                            && dockTarget != RoutedPanelDockTarget::left_context
+                            && dockTarget != RoutedPanelDockTarget::right_context;
+                        if (restoreRoutedPaneAsTab)
+                        {
+                            window->routedDockTarget.store(
+                                static_cast<std::uint8_t>(dockTarget),
+                                std::memory_order_release);
+                            request_routed_panel_redock_close(window);
+                        }
+                        else if (window && is_sfml_proxy_detached(window))
                         {
                             post_proxy_host_command(
                                 window,
@@ -5133,9 +5620,15 @@ namespace epochengine::core
                             if (window)
                                 window->isFloating = false;
                         }
-                        if (auto* mgr = s_activeInstance)
-                            mgr->HandleResize(hwnd, clientW, clientH);
-                        request_routed_panel_redock_close(window);
+                        if (!restoreRoutedPaneAsTab)
+                        {
+                            if (auto* mgr = s_activeInstance)
+                                mgr->HandleResize(hwnd, clientW, clientH);
+                            if (window)
+                                window->dockTargetPreference.store(
+                                    static_cast<std::uint8_t>(dockTarget),
+                                    std::memory_order_release);
+                        }
                     }
                     else if (window
                         && is_sfml_proxy_candidate(window)
@@ -5253,7 +5746,7 @@ namespace epochengine::core
                 return 0;
 
             const auto ctx = resolveGuiContext();
-            if (wParam >= 0x20u || wParam == 13u || wParam == 8u)
+            if (wParam >= 0x20u || wParam == 13u)
                 push_gui_text_event(ctx.get(), static_cast<char32_t>(wParam));
             return 0;
         }

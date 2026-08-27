@@ -1,6 +1,6 @@
 # Build Configuration Flags
 
-Current source version: `v0.89.16`
+Current source version: `v0.89.28`
 
 This guide describes the main build-time switches exposed by the engine. Public
 build knobs now prefer the `EPOCH_*` prefix, while lower-level compatibility
@@ -20,6 +20,8 @@ building during the migration.
 | `EPOCH_ENABLE_DIRECTX` | On on Windows, off elsewhere | Enable the first-pass Windows DirectX/D3D11 renderer path. Keep this off on Linux/WSL. |
 | `EPOCH_GLAD_PROVIDER` | `auto` | Select the OpenGL loader owner: `auto`, `vcpkg`, or `bundled`. |
 | `EPOCH_REQUIRE_OPTIONAL_DEPENDENCIES` | Off | Turn missing optional backend deps into configure errors. |
+| `EPOCH_BUILD_STATIC_RUNTIME` | Off | Build the canonical `epoch` target as reusable `EpochRuntime` static runtime instead of the desktop editor executable. |
+| `EPOCH_BINARY_ONLY_DISTRIBUTION` | Off | Disable authorized source download, source-rebuild fallback, and project-source download while retaining signed packaged updates. |
 | `EPOCH_ENABLE_AUTHORING_PLATFORM` | On | Declare and compile the shared authoring-document/editor foundation as implementation units land. |
 | `EPOCH_ENABLE_TEXTURE_EDITOR` | On | Gate future texture painting, compositing, and texture-node implementation units. |
 | `EPOCH_ENABLE_MODEL_EDITOR` | On | Gate future mesh editing, procedural modeling, and sculpt implementation units. |
@@ -28,6 +30,7 @@ building during the migration.
 | `EPOCH_ENABLE_ANIMATION_EDITOR` | On | Permit canonical default animation source materialization; compiled runtime artifacts remain available when off. |
 | `EPOCH_ENABLE_AUTHORING_COLLABORATION` | Off | Gate future branch sharing, review, and collaboration contracts. Network/server activation remains separately human-gated. |
 | `EPOCH_ENABLE_AUTHORING_METRICS` | On | Gate future document, history, cache, GPU, and evaluation metrics. |
+| `EPOCH_ENABLE_PHYSICAL_INPUT` | On | Compile the renderer-neutral controller snapshot service and process-owned SDL3 gamepad provider. |
 
 `EPOCH_ENABLE_AUTHORING_PLATFORM` and `EPOCH_ENABLE_TEXTURE_EDITOR` now gate the
 `authoring.texture` module, implementation, engine contract, and standalone
@@ -40,6 +43,22 @@ SDL renderer does not disable an explicitly enabled SDL3 audio device, while
 disabling physical audio retains logical scheduling and PCM contract coverage.
 The model, node, material, collaboration, and metrics options reserve stable
 build vocabulary until their implementation units land.
+
+Generated child projects declare the `epoch-runtime-static` build profile. Their
+CMake fragment enables `EPOCH_BUILD_STATIC_RUNTIME`, disables tests and native
+extensions, links the child executable to the canonical `epoch` target, and
+keeps the default full editor build unchanged. This is the first proven product
+exclusion boundary; broader editor, authoring, and backend source pruning remains
+explicit follow-up rather than a current game-only claim.
+
+Authorized encrypted source distribution is enabled in normal builds. A
+binary-only CMake product uses `-DEPOCH_BINARY_ONLY_DISTRIBUTION=ON`; the Visual
+Studio solution exposes the equivalent
+`/p:EpochBinaryOnlyDistribution=true` property on both the runtime and shared
+engine projects. The switch is intentionally opt-in and does not weaken or
+disable packaged release signature and hash verification.
+
+Updater module interfaces are declarations-only. `updater.source_access` owns its crypto/network implementation unit; `updater.system` owns a separate orchestration implementation; and Windows worker-script generation is isolated again. The oversized implementation units compile without Release optimization/inlining because they are update-path code, not frame-critical code. Windows Debug and Release editor targets and their build-safe contracts pass in the normal source-enabled policy; the opt-in binary-only Debug target and contract also pass.
 
 ## Entry points
 

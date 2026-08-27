@@ -323,6 +323,12 @@ namespace epochengine::updater
     {
         namespace fs = std::filesystem;
 
+        if (!url.starts_with("https://"))
+        {
+            detail::log_error("Download rejected because Epoch requires HTTPS transport.");
+            return false;
+        }
+
         detail::log_info("Downloading: " + url + " -> " + output_path);
 
         std::error_code ec;
@@ -342,7 +348,7 @@ namespace epochengine::updater
 
 #if defined(_WIN32)
         const std::string command =
-            "\"curl.exe\" -L --fail --silent --show-error "
+            "\"curl.exe\" --proto \"=https\" --proto-redir \"=https\" --tlsv1.2 -L --fail --silent --show-error "
             "-A \"EpochUpdater\" "
             "-H \"Accept: application/vnd.github.raw+json, application/octet-stream, application/vnd.github+json\" "
             "-H \"X-GitHub-Api-Version: 2022-11-28\" "
@@ -351,7 +357,7 @@ namespace epochengine::updater
             + detail::quote_shell_arg(url);
 #else
         const std::string command =
-            "wget --quiet --show-progress "
+            "wget --https-only --secure-protocol=TLSv1_2 --quiet --show-progress "
             "--header=\"Accept: application/vnd.github.raw+json\" "
             "--header=\"X-GitHub-Api-Version: 2022-11-28\" "
             "--header=\"Cache-Control: no-cache\" "

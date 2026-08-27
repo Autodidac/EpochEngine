@@ -112,7 +112,10 @@ export namespace epochengine::canvas2d::runtime
                 && scene_.generation == acquired.generation
                 && scene_.frame_sequence == acquired.frame_sequence
                 && scene_.content_hash == acquired.content_hash
-                && output_ == output)
+                && output_ == output
+                && canvas_limits_ == canvasLimits
+                && raster_limits_ == rasterLimits
+                && raster_policy_ == rasterPolicy)
             {
                 ++metrics_.reused_frames;
                 return view(PrepareCode::reused);
@@ -145,6 +148,9 @@ export namespace epochengine::canvas2d::runtime
                 frame_ = std::move(nextFrame);
                 raster_ = std::move(nextRaster);
                 output_ = output;
+                canvas_limits_ = canvasLimits;
+                raster_limits_ = rasterLimits;
+                raster_policy_ = rasterPolicy;
                 ++metrics_.prepared_frames;
                 metrics_.last_generation = scene_.generation;
                 metrics_.last_frame_sequence = frame_.frame_sequence;
@@ -197,6 +203,9 @@ export namespace epochengine::canvas2d::runtime
         Canvas2DFramePlan frame_{};
         cpu::RasterResult raster_{};
         CanvasExtent output_{};
+        CanvasLimits canvas_limits_{};
+        cpu::RasterLimits raster_limits_{};
+        cpu::RasterPolicy raster_policy_{};
         SessionMetrics metrics_{};
     };
 
@@ -208,6 +217,8 @@ export namespace epochengine::canvas2d::runtime
         publication,
         first_prepare,
         reuse,
+        limit_change,
+        resize,
         replacement,
         retirement,
         metrics
@@ -224,6 +235,8 @@ export namespace epochengine::canvas2d::runtime
         case RuntimeContractFailure::publication: return "publication";
         case RuntimeContractFailure::first_prepare: return "first_prepare";
         case RuntimeContractFailure::reuse: return "reuse";
+        case RuntimeContractFailure::limit_change: return "limit_change";
+        case RuntimeContractFailure::resize: return "resize";
         case RuntimeContractFailure::replacement: return "replacement";
         case RuntimeContractFailure::retirement: return "retirement";
         case RuntimeContractFailure::metrics: return "metrics";
@@ -281,6 +294,42 @@ export namespace epochengine::canvas2d::runtime
             return RuntimeContractFailure::reuse;
         }
 
+        cpu::RasterLimits constrained{};
+        constrained.maximum_canvas_pixels = 63u;
+        const PreparedSceneView constrainedResult = session.prepare(
+            &owner,
+            {16, 16},
+            {},
+            constrained);
+        const PreparedSceneView reuseAfterRefusal = session.prepare(
+            &owner,
+            {16, 16});
+        if (constrainedResult.code != PrepareCode::raster_failed
+            || !reuseAfterRefusal
+            || reuseAfterRefusal.code != PrepareCode::reused
+            || reuseAfterRefusal.raster->canvas_hash != firstHash)
+        {
+            (void)scene_content::retire(&owner);
+            return RuntimeContractFailure::limit_change;
+        }
+
+        const PreparedSceneView resized = session.prepare(&owner, {24, 20});
+        if (!resized || resized.code != PrepareCode::ready
+            || resized.raster->canvas_hash != firstHash
+            || resized.frame->compose.viewport.output_surface
+                != CanvasExtent{24, 20})
+        {
+            (void)scene_content::retire(&owner);
+            return RuntimeContractFailure::resize;
+        }
+        const PreparedSceneView resizedReuse = session.prepare(&owner, {24, 20});
+        if (!resizedReuse || resizedReuse.code != PrepareCode::reused
+            || resizedReuse.raster->canvas_hash != firstHash)
+        {
+            (void)scene_content::retire(&owner);
+            return RuntimeContractFailure::resize;
+        }
+
         content.source_revision = 2;
         content.sprites.front().tint = {1.0f, 0.2f, 0.1f, 1.0f};
         if (!scene_content::publish(&owner, std::move(content)))
@@ -288,7 +337,7 @@ export namespace epochengine::canvas2d::runtime
             (void)scene_content::retire(&owner);
             return RuntimeContractFailure::replacement;
         }
-        const PreparedSceneView replaced = session.prepare(&owner, {16, 16});
+        const PreparedSceneView replaced = session.prepare(&owner, {24, 20});
         if (!replaced || replaced.code != PrepareCode::ready
             || replaced.raster->canvas_hash == firstHash)
         {
@@ -297,15 +346,15 @@ export namespace epochengine::canvas2d::runtime
         }
 
         if (scene_content::retire(&owner) != scene_content::SceneCode::ready
-            || session.prepare(&owner, {16, 16}).code
+            || session.prepare(&owner, {24, 20}).code
                 != PrepareCode::missing_scene)
         {
             return RuntimeContractFailure::retirement;
         }
         const SessionMetrics& metrics = session.metrics();
-        if (metrics.requests != 6 || metrics.prepared_frames != 2
-            || metrics.reused_frames != 1 || metrics.scene_misses != 2
-            || metrics.compile_failures != 0 || metrics.raster_failures != 0)
+        if (metrics.requests != 10 || metrics.prepared_frames != 3
+            || metrics.reused_frames != 3 || metrics.scene_misses != 2
+            || metrics.compile_failures != 0 || metrics.raster_failures != 1)
         {
             return RuntimeContractFailure::metrics;
         }

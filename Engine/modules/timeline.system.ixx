@@ -91,8 +91,10 @@ export namespace epochengine::timeline
         std::uint64_t playhead_frame = 0;
         double duration_seconds = 120.0;
         double fixed_dt_seconds = 1.0 / 60.0;
+        double last_simulation_seconds = 0.0;
         bool playing = false;
         bool recording = false;
+        bool simulation_clock_initialized = false;
     };
 
     struct TimelineViewConfig
@@ -205,11 +207,24 @@ export namespace epochengine::timeline
     inline void sync_to_simulation(TimelineState& state, const epochengine::core::time::simulation_stats& stats) noexcept
     {
         state.fixed_dt_seconds = stats.fixed_dt_seconds;
-        if (state.playing)
+        if (!state.simulation_clock_initialized)
         {
-            state.playhead_seconds = stats.simulated_seconds;
-            state.playhead_frame = stats.frame_index;
+            state.last_simulation_seconds = stats.simulated_seconds;
+            state.simulation_clock_initialized = true;
             clamp_state(state);
+            return;
+        }
+
+        const double elapsed = stats.simulated_seconds >= state.last_simulation_seconds
+            ? stats.simulated_seconds - state.last_simulation_seconds
+            : 0.0;
+        state.last_simulation_seconds = stats.simulated_seconds;
+        if (state.playing && elapsed > 0.0)
+        {
+            state.playhead_seconds += elapsed;
+            clamp_state(state);
+            if (state.playhead_seconds >= state.duration_seconds)
+                state.playing = false;
         }
     }
 

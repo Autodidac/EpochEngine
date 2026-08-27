@@ -1,12 +1,14 @@
-[![CMake Build](https://github.com/Autodidac/EpochEngine/actions/workflows/cmake-multi-platform.yml/badge.svg?branch=main)](https://github.com/Autodidac/EpochEngine/actions/workflows/cmake-multi-platform.yml)
-[![MSBuild](https://github.com/Autodidac/EpochEngine/actions/workflows/msbuild.yml/badge.svg?branch=main)](https://github.com/Autodidac/EpochEngine/actions/workflows/msbuild.yml)
-
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.16-1F7A4C?style=for-the-badge" alt="Current development source v0.89.16" />
-  <img src="https://img.shields.io/badge/Published_Stable_Release-v0.89.06-2C6A8A?style=for-the-badge" alt="Published stable release v0.89.06" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.28-1F7A4C?style=for-the-badge" alt="Current development source v0.89.28" />
+  <img src="https://img.shields.io/badge/Published_Runtime_Release-v0.89.28-2C6A8A?style=for-the-badge" alt="Published runtime release v0.89.28" />
 </p>
+
+EpochEngine development source is restricted. Public distribution is through
+the [Epoch release site](https://epoch.adamrushford.chatgpt.site), which exposes
+verified runtime packages and updater evidence without an anonymous source or
+Git endpoint. EpochGui remains an independently published library.
 
 <p align="center">
   <img src="Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card" />
@@ -51,8 +53,8 @@ For newcomers:
   updates, and then open the editor.
 - The editor is the work room. You can look at scenes, run the project, build
   scripts, check systems, and use AI tools there.
-- The AI workspace has its own sub-workspaces. `Sandbox` is the separate
-  self-iteration control room, `Harness` runs editor tool scripts and captures
+- The AI workspace has its own sub-workspaces. `Engine Development` is the separate
+  guarded source-work sandbox, `Harness` runs editor tool scripts and captures
   before/after state, `Assistant` is for normal game-engine/project guidance,
   `Launcher` tracks project/build evidence, and `Evidence` reviews explicit
   tool traces and evals. Epoch runs an operator-selected model; it does not
@@ -60,8 +62,8 @@ For newcomers:
 - Epoch can also draw the same project in different ways. Those are called
   rendering backends, but you can think of them as different drawing engines
   under the hood.
-- The downloadable builds are kept small on purpose. The full source code and
-  the deeper engine work still live here in the repository.
+- The downloadable builds are kept small on purpose. EpochEngine source and
+  deeper engine work remain in the restricted development repository.
 
 For engine/tooling developers:
 
@@ -76,10 +78,16 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.16`; the published stable Windows/Linux
-  runtime is `v0.89.06`.
-- The accepted `v0.89.06` updater and packages are sealed while source development
-  continues on the capability-tier and playable-2D plan.
+- Active development source and the published Windows/Linux runtime are
+  `v0.89.28`. The release Site's signed latest-release API is authoritative;
+  v0.89.27 and immutable v0.89.06 packages remain historical release evidence.
+- The public updater consumes Epoch-owned runtime releases, checksums, and build
+  evidence from the ChatGPT Site instead of GitHub. Anonymous source discovery,
+  source archives, and EpochEngine smart-Git are disabled.
+- EpochGui remains independently public and is kept identical to
+  `Engine/dep/EpochGui`. The historical `multicontext-base-stable` branch remains
+  fixed at `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development
+  history.
 - Epoch now has one forward plan:
   [the capability-tier architecture](Engine/docs/engine/capability_tier_architecture.md).
   It selects implementations per subsystem and operation from `T0-CPU` through
@@ -130,14 +138,23 @@ For engine/tooling developers:
   capture, save/reopen, and repeated context-switch evidence passes.
 - `authoring.tilemap` now provides stable semantic map editing and deterministic
   compiled artifacts; project Library publication/restore and Canvas2D visible
-  chunk compilation are build-proven. The EpochGui palette/workspace, canonical
-  map source, standalone restoration, and project input profile feed one
+  chunk compilation are build-proven. The EpochGui palette/workspace now exposes
+  generation-checked object and layer authoring with staged semantic properties,
+  hierarchy actions, direct object drag, layer visibility/lock/collision/order,
+  and exact source/Library/runtime restoration. The canonical map source,
+  standalone restoration, and project input profile feed one
   deterministic fixed-step actor runtime with spawn, pause, reset, map collision,
   snapshots, and Canvas2D publication. A canonical sprite-animation source and
   compiled artifact now select idle/run/rise/fall frames deterministically, and
   actor events drive process-owned jump/landing cues without tying audio lifetime
-  to a renderer context. Imported clip decoding, authored audio events, controller
-  polling, one-way/slope semantics, and approved live interaction remain work.
+  to a renderer context. Project now exposes generation-checked keyboard binding
+  selectors that publish one matching source/artifact revision and feed the live
+  runtime sampler independently of editor-camera input. Physical controller polling,
+  imported clip decoding, authored audio events, and approved live interaction
+  remain work. Palette collision now
+  stages solid, one-way, both slope orientations, and bounded custom-box intent
+  as one semantic operation; exact shape/filter data reaches Library artifacts,
+  Canvas2D preview, and the deterministic actor solver.
 - The launcher directly opens three application profiles after a prelaunch
   context choice: standard Editor, Plant Lab, and GUI Editor. They share engine
   services and one shell implementation but own separate source files, scene
@@ -148,8 +165,10 @@ For engine/tooling developers:
   project-library browsing and compiled Plant Lab asset import remain the next
   production slice. GUI Editor owns its canonical Canvas2D scene without legacy
   transform rewriting.
-- One renderer owns the baked primary surface; secondary diagnostic contexts
-  and application-compatible routed panes keep optional popout/redock.
+- One renderer owns logical active-editor authority at a time, independent of
+  context creation order, parent-grid side, or dock state. Physical renderer
+  contexts remain movable, while diagnostic contexts and application-compatible
+  routed panes keep optional popout/redock.
 - Engine Arcade now uses a validated cabinet silhouette with screen and control
   details instead of overlapping boxes. Its screen uses one shared attract
   pattern rendered into backend-owned sampled surfaces in OpenGL, SDL3, SFML3,
@@ -197,7 +216,7 @@ validation tool rather than the runtime selection model.
   handles or physical placement canonical authoring state.
 - Package and extension gates for optional terrain, voxel, ocean, networking,
   and technique-gallery work in
-  [EpochEngineExtensions](https://github.com/Autodidac/EpochEngineExtensions).
+  [EpochEngineExtensions](https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git).
 
 ## Evidence
 

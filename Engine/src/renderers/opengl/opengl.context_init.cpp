@@ -1,10 +1,5 @@
 /************************************************
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•—  â–ˆâ–ˆâ•—   *
- *  â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â–ˆâ–ˆâ•—â–ˆâ–ˆâ•”â•â•â•â•â•â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ•”â•â•â•  â–ˆâ–ˆâ•”â•â•â•â• â–ˆâ–ˆâ•‘   â–ˆâ–ˆâ•‘â–ˆâ–ˆâ•‘     â–ˆâ–ˆâ•”â•â•â–ˆâ–ˆâ•‘   *
- *  â–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘     â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•”â•â•šâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ–ˆâ•—â–ˆâ–ˆâ•‘  â–ˆâ–ˆâ•‘   *
- *  â•šâ•â•â•â•â•â•â•â•šâ•â•      â•šâ•â•â•â•â•â•  â•šâ•â•â•â•â•â•â•šâ•â•  â•šâ•â•   *
+ *                 Epoch Engine                 *
  *                                              *
  *   This file is part of the Epoch   Project.  *
  *   epochengine - Modular C++ Framework        *
@@ -28,7 +23,6 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
- // opengl.context.ixx
 module;
 
 #include "core.format_text.hpp"
@@ -43,6 +37,7 @@ module;
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -636,6 +631,37 @@ namespace epochengine::openglcontext
         (void)parentWindowOpaque;
         throw std::runtime_error("[ OpenGL ] - Unsupported platform");
 #endif
+
+        const bool swapIntervalDisabled =
+            PlatformGL::set_swap_interval(0);
+        const PlatformGL::SwapIntervalStatus reportedSwapInterval =
+            PlatformGL::query_swap_interval();
+        if (swapIntervalDisabled
+            && (!reportedSwapInterval.available
+                || reportedSwapInterval.interval == 0))
+        {
+            logger::get("OpenGL").log(
+                logger::LogLevel::INFO,
+                reportedSwapInterval.available
+                    ? "Swap interval requested=0 and reported=0; shared Epoch frame pacing owns the editor limit."
+                    : "Swap interval requested=0; the driver exposes no interval query.",
+                std::source_location::current());
+        }
+        else if (swapIntervalDisabled)
+        {
+            logger::get("OpenGL").logf(
+                logger::LogLevel::WARN,
+                std::source_location::current(),
+                "Swap interval disable returned success but the active context reports interval {}.",
+                reportedSwapInterval.interval);
+        }
+        else
+        {
+            logger::get("OpenGL").log(
+                logger::LogLevel::WARN,
+                "Swap interval disable failed; driver VSync may cap OpenGL below the shared Epoch frame limit.",
+                std::source_location::current());
+        }
 
         if (!epochengine::openglquad::ensure_quad_pipeline(glState))
             throw std::runtime_error("[ OpenGL ] - Failed to build/ensure quad pipeline");

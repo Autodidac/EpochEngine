@@ -73,7 +73,8 @@ namespace epochengine::project_tilemap_runtime
             std::uint64_t projectKey,
             const project_textures::TexturePipelineResult& texture,
             std::string name,
-            std::uint64_t sequence) noexcept
+            std::uint64_t sequence,
+            bool includeVisibleCell = true) noexcept
         {
             asset::tilemap::CompiledTileMapArtifact artifact{};
             artifact.identity.source_revision = {
@@ -112,10 +113,13 @@ namespace epochengine::project_tilemap_runtime
                 .revision = sequence,
                 .world_bounds = {0.0f, 0.0f, 4.0f, 4.0f},
                 .first_cell = 0u,
-                .cell_count = 1u});
-            artifact.cells.push_back({
-                .coordinate = {1u, 1u},
-                .palette_index = 0u});
+                .cell_count = includeVisibleCell ? 1u : 0u});
+            if (includeVisibleCell)
+            {
+                artifact.cells.push_back({
+                    .coordinate = {1u, 1u},
+                    .palette_index = 0u});
+            }
             artifact.identity.key =
                 asset::tilemap::compiled_tilemap_payload_content(artifact);
             return artifact;
@@ -297,6 +301,37 @@ namespace epochengine::project_tilemap_runtime
             != canvas2d::scene_content::ResourceClosureCode::ready)
         {
             return ContractFailure::resource_closure;
+        }
+        if (restored.scene.resources.bindings.textures.size() != 1u
+            || restored.scene.resources.bindings.textures.front().logical
+                != texture.logical)
+        {
+            return ContractFailure::visible_resource_selection;
+        }
+
+        const auto emptyCompiled = compiled_map(
+            texturePipeline.project_key(), texture, "Empty Runtime", 10u, false);
+        if (!mapPipeline.publish("Assets/Maps/empty.epochmap", emptyCompiled))
+            return ContractFailure::source_creation;
+
+        ProjectTileMapRuntime emptyRuntime{
+            std::string{projectId}, projectRoot};
+        const auto empty = emptyRuntime.prepare({
+            .logical_path = "Assets/Maps/empty.epochmap",
+            .source_policy = SourcePolicy::compiled_only});
+        const RuntimeMetrics emptyMetrics = emptyRuntime.metrics();
+        if (!empty
+            || !empty.scene.sprites.empty()
+            || empty.scene.resources.owner
+            || !empty.scene.resources.bindings.textures.empty()
+            || !empty.scene.resources.bindings.clips.empty()
+            || empty.texture_dependencies.size() != 1u
+            || emptyMetrics.texture_restorations != 1u
+            || canvas2d::scene_content::validate_resource_closure(
+                    empty.scene.sprites, empty.scene.resources)
+                != canvas2d::scene_content::ResourceClosureCode::ready)
+        {
+            return ContractFailure::visible_resource_selection;
         }
 
         const auto missingSource = compiledRuntime.prepare({

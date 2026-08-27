@@ -8,6 +8,7 @@
     "glad",
     "glfw3",
     "glm",
+    "openssl",
 
     "vulkan-headers",
     {

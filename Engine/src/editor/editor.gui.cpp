@@ -11,7 +11,7 @@ namespace epochengine
             .kind = EditorApplicationKind::GuiEditor,
             .id = "epoch.gui_editor",
             .display_name = "GUI Editor",
-            .project_id = "twodstudio",
+            .project_id = {},
             .scene_id = "editor:gui",
             .scene_source_path = "Engine/src/editor/editor.gui.cpp",
             .purpose = "GUI document, Canvas2D, sprite, layout, and 2D interaction authoring.",
@@ -47,9 +47,6 @@ namespace epochengine
                 { "GuiDocument", "Level", "UI" },
                 { "CanvasCamera", "Camera", "Editor", { 0.0f, 7.5f, 0.0f }, { -90.0f, 0.0f, 0.0f } },
                 { "RootCanvas", "Canvas2D", "UI", {}, {}, { 16.0f, 9.0f, 1.0f } },
-                { "SafeArea", "GuiSafeArea", "UI", {}, {}, { 14.4f, 8.1f, 1.0f }, true, true },
-                { "PrimaryPanel", "GuiPanel", "UI", { 0.0f, 0.0f, 0.1f }, {}, { 6.0f, 3.5f, 1.0f } },
-                { "PrimaryAction", "GuiButton", "UI", { 0.0f, -0.8f, 0.2f }, {}, { 2.4f, 0.7f, 1.0f } },
                 { "InteractionOrigin", "Spawn", "UI", { -4.0f, -2.8f, 0.0f } }
             }
         };

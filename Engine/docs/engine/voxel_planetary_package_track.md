@@ -37,7 +37,7 @@ Epoch now treats the voxel and plant direction as two layers:
   source/runtime packages. Package source is pulled into projects only through a
   visible Package Manager/updater-style gate and never by hidden automation.
 - Bulky source packages should be curated in
-  `https://github.com/Autodidac/EpochEngineExtensions` before any reviewed
+  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git` before any reviewed
   subset is promoted into EpochEngine API contracts. The engine repo keeps
   descriptors, package gates, cache/update plumbing, and stable interfaces
   rather than cloning terrain/ocean/server prototype trees into mainline.
@@ -50,7 +50,7 @@ Epoch now treats the voxel and plant direction as two layers:
 - The production Forest Factory package contract is tracked in
   `forest_factory_package_contract.md`. The Plant Lab launcher application is
   engine-owned; the external Plant Lab repository is provenance/reference
-  source; `Autodidac/EpochEngineExtensions` owns package payload
+  source; the Site-hosted `EpochEngineExtensions` repository owns package payload
   routing; EpochEngine mainline owns the renderer-neutral contract and
   activation gate first.
 

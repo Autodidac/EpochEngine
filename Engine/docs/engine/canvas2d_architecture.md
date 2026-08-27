@@ -12,47 +12,20 @@ specializes the document/runtime separation in
 implementation evidence. This document defines architecture, not evidence or
 release history.
 
-Canvas2D must support one authored scene through editor Play, external Run, and
-Build without introducing a second renderer spine. Source `v0.88.77` adds the
-renderer-neutral project/submission foundation: camera and viewport policy,
-stable sprite identity, logical material intent, deterministic bounded quad
-batching, tile descriptors, compose plans, diagnostics, editor snapshot policy,
-and build-safe contracts. Source `v0.88.78` adds the deterministic `T0-CPU`
-reference raster: explicit RGBA8 resources and clips, fixed-point triangle
-coverage, texture sampling, alpha composition, offscreen-to-presentation
-compose, bounded metrics, deterministic image hashes, and staged failure
-evidence. Source `v0.88.79` adds the first physical execution-cache layer:
-stable artifact keys, generation-checked residency handles, bounded base-mip
-uploads, reuse, pinning, priority/LRU eviction, backend epochs, recreation,
-metrics, and context-guarded OpenGL allocation/upload/destruction hooks. Source
-`v0.88.80` adds a renderer-neutral raster-to-residency/native-presentation
-boundary plus the primary-context OpenGL final compositor. The packet carries
-frame/content identity, image semantics, compose policy, and an explicit scene
-surface; the adapter confines clears/draws and restores borrowed GL state.
-Source `v0.88.81` adds deterministic owning RGBA8 mip compilation and complete
-artifact-integrity validation, then maps project-supplied logical identity and
-a one-time sealed linear mip 0 into the shared standalone residency cache.
-The synthetic-device bridge contract proves synchronous payload ownership,
-reuse, transactional recreation, backend
-reset, and stale-handle rejection without storing physical state in documents.
-Source `v0.88.87` adds
-the runtime-owned project asset registry and texture resource service:
-generation-checked project handles, portable logical paths, content-derived
-artifact revisions, full source/artifact authentication, bounded owning CPU
-resource sets, optional residency acquisition, and logical-only tileset
-references. Equivalent content at a later temporal source sequence reuses the
-same artifact/cache identity.
-Source v0.89.10 completes the first saved semantic texture path: project images
-compile into authenticated artifacts, persist in the Project Library, restore
-through exact logical identity, survive snapshot-format-3 save/reopen, and bind
-immutable Canvas2D resource leases. The primary OpenGL adapter consumes that
-content in the protected editor scene slot while preserving GUI replay and
-present order. Approved native capture exactly matches the T0-CPU image across
-1,178,872 pixels, and the generated GUI project passes the standalone external
-Run path.
-Interactive Assets-tab assignment, secondary GL share groups, non-OpenGL
-texture presentation, sRGB/compressed/mip-chain execution, tilemap authoring,
-and the complete built-game loop remain Partial.
+Canvas2D carries one authored project scene through save/reopen, editor Play,
+external Run, and Build without introducing a second renderer spine. The
+current foundation includes renderer-neutral camera/viewport policy, stable
+sprite and material identity, deterministic batching, T0-CPU raster and image
+hashes, authenticated texture artifacts, disposable residency, semantic scene
+assignment, sparse tilemap authoring/compilation, generated-runtime preparation,
+and backend presentation adapters for all seven baseline contexts.
+
+Approved OpenGL capture matches the T0-CPU reference across 1,178,872 pixels.
+Non-OpenGL live pixel parity, resize and repeated-replacement evidence,
+interactive texture/tilemap eye proof, sRGB/compressed/mip-chain execution,
+secondary GL share groups, and the complete acceptance-game loop remain
+`Partial`. Version chronology belongs in `Changes/changelog.txt`; this document
+records the current architectural contract only.
 
 ## Product Contract
 
@@ -203,6 +176,29 @@ Compilation produces deterministic layer/chunk bounds, visible-cell data,
 sprite instances, animation tables, collision artifacts, and dependency keys.
 Runtime culling uses camera bounds plus explicit margins and emits visible
 chunks in stable order. Empty or unloaded chunks consume no draw allocation.
+Runtime restoration authenticates every texture dependency declared by the map
+artifact, but the immutable scene lease contains only unique logical textures
+referenced by the visible textured sprite set. A map with declared textures and
+no visible textured cells therefore publishes an empty valid lease; it does not
+retain an unrelated physical binding merely because the dependency exists.
+
+The editor tile workspace resolves object hit targets through stable map-object
+handles before underlying cell tools. Inspector changes use a disposable staged
+descriptor; Apply commits one semantic property operation while Duplicate and
+Delete use the same temporal document. Object hierarchy rows and runtime preview
+output resolve from the canonical snapshot rather than mutable UI indexes.
+Direct dragging captures that stable handle, stages clamped movement using the
+rotated object bounds, and publishes one semantic operation on release; pointer
+motion itself never enters document history.
+
+Layer rows retain a portable UI index only for view restoration; authoring
+commands resolve the selected generation-checked layer handle. Name, visibility,
+lock, collision-source intent, phase, draw order, opacity, and parallax are
+staged together and Apply records one layer-property operation. Create and
+Duplicate produce unique canonical names, Duplicate selects a deterministic
+topmost draw order, Delete preserves at least one layer, and locked layers reject
+cell edits. Handoff, source reload, compiled Library restore, and runtime
+visibility metrics must all resolve the same accepted descriptors.
 
 Large maps are chunked and budgeted. Editing one region invalidates only the
 affected chunks and causal dependents. Renderer buffers, atlas placement, and
@@ -276,9 +272,11 @@ The standard Editor owns project scene and 2D game authoring: hierarchy,
 selection, transform, camera, sprite/tile placement, inspector, Play/Stop,
 Run, and Build. It edits the same saved documents consumed by runtime.
 
-GUI Editor owns reusable GUI/layout document authoring and preview. It may use
-Canvas2D primitives and compiled texture artifacts, but it is not the game scene
-editor and does not own renderer or project-runtime state.
+GUI Editor owns reusable GUI/layout document authoring and preview. Its canonical
+project source is `Assets/Gui/main.epochgui`; the scene/canvas representation is
+a disposable projection of that exact temporal document revision. It may use
+Canvas2D primitives and authenticated compiled texture artifacts, but it is not
+the game scene editor and does not own renderer or project-runtime state.
 
 Runtime reads compiled artifacts and selected project settings. Game, mobile,
 console, server, and headless profiles can exclude authoring workspaces,
@@ -311,6 +309,19 @@ Required metrics include:
 Metrics distinguish CPU, GPU, disk/cache, authoring/history, and presentation
 costs. They are observations, not canonical state and not passive multicontext
 benchmark evidence.
+
+`project.gameplay2d_runtime` exposes one request-driven logical cost snapshot.
+It compiles the current immutable Canvas2D submission without rasterizing and
+joins sprite/batch geometry, logical RGBA8 texture bytes, actor collision/input
+activity, and process-audio residency. The Project Runtime Preview samples that
+snapshot on a bounded visible-frame cadence. Native allocations, atlas pressure,
+GPU residency, and backend timing remain backend-owned measured evidence.
+
+`platform.budgets` owns the portable limits consumed by that assessment:
+logical canvas pixels, logical texture bytes, visible sprites, logical batches,
+collision surfaces, and resident audio bytes. Mobile (`T1-GLES`), deck,
+desktop, and editor tiers are bounded independently. A nonzero Canvas2D
+rejection count is always a budget violation regardless of numeric headroom.
 
 ## Persistence And Migration
 
@@ -346,98 +357,47 @@ Build-safe contract tests must cover:
 presentation, resize, alpha, sampling, and operator visual proof. Each later
 backend earns evidence separately.
 
-## Delivery Phases
+## Current Foundation
 
-### Phase 1: Canvas Core
+The shared spine currently provides typed camera, viewport, material, draw-item,
+stable ordering, deterministic CPU reference rasterization, immutable image
+artifacts, project-scoped logical texture identity, bounded generation-checked
+residency, OpenGL presentation, capability admission, Project Library
+persistence, semantic scene material bindings, exact save/reopen restoration,
+and build-safe contracts. Shared contracts prove resize invalidation/reuse,
+exact native packet metadata, malformed-host-surface refusal, rollback after a
+failed new native dispatch, 64 same-epoch revisions bounded to two transactional
+slots and one live texture, 64 forward-only backend replacements, and idempotent
+balanced retirement on a fake device. The `render.canvas2d_limits` adapter
+maps selected capability-profile budgets into the same compile, CPU-raster,
+native-upload, and residency ceilings for all seven baseline renderer paths.
+Presenter-backed paths receive a two-slot transactional output budget so a
+rejected replacement cannot evict the currently displayed image; Vulkan uses
+the mapped canvas/upload ceiling instead of a desktop-size constant, and
+Software applies compile/raster bounds without claiming GPU residency. Raster
+cache keys include limits and policy, preventing a stricter tier from reusing
+an image admitted under a broader tier. This boundary passes MSVC Debug/Release,
+the full managed Clang 22 build, and all 32 Clang CTest contracts.
+Physical atlas, bindless, sparse,
+streaming, mip, and backend-native caches remain disposable implementations
+behind that boundary.
 
-Landed in `v0.88.77`: typed camera, viewport, material, draw-item, stable
-ordering, tile validation, immutable submission, compose planning, metrics, and
-build-safe contracts behind the existing capability and render spines.
+## Remaining Delivery Order
 
-Landed in `v0.88.78`: deterministic CPU raster/reference image output, texture
-and clip bindings, fixed-point coverage, nearest/linear sampling, alpha modes,
-final presentation composition, bounded metrics, image hashes, staged contract
-diagnostics, and MSVC/Clang build-safe proof.
-
-Landed in `v0.88.79`: renderer-neutral validated texture uploads and a bounded,
-generation-checked residency cache with logical-artifact reuse, pinning,
-priority/LRU eviction, upload/byte/entry budgets, backend reset/recreation,
-metrics, staged fake-device proof, and context-guarded OpenGL native texture
-hooks. The first contract intentionally supports standalone base-mip sampled
-color resources; atlas, bindless, sparse, streaming, and mip-aware policies
-remain extensions of the same cache boundary.
-
-Landed in `v0.88.80`: full-frame CPU raster presentation through the physical
-residency cache, byte-derived artifact identity, explicit image/surface packets,
-atomic backend-epoch hook replacement, context-owned OpenGL texture records,
-and a primary OpenGL final compositor with viewport/scissor confinement and
-complete borrowed-state restoration. MSVC Debug/Release and managed Clang 22
-build proof passes; no live-pixel claim is made.
-
-Landed in `v0.88.81`: deterministic RGBA8 artifact payload compilation,
-integrity validation, and the project-logical-identity-to-standalone-residency
-bridge. Build-safe synthetic-device contracts prove immutable sealing,
-synchronous upload copying, exact reuse, transactional backend recreation/reset,
-stale-handle rejection, and mutation refusal. Ordinary misses plan eviction
-without mutation, reserve host bookkeeping before native allocation, and commit
-victims only after the replacement is uploaded and ready. Failed replacement
-work therefore preserves prior handles and gauges, while explicit transient
-limits expose the temporary physical-memory cost of atomic swaps.
-
-### Phase 2: Sprite Composition
-
-Landed in `v0.88.87`: a runtime-owned project asset registry and texture
-resource service authenticate project/source/artifact identity, derive logical
-artifact revisions from content, bind owning CPU resource sets, and acquire
-optional disposable residency. Contracts cover portable path identity,
-collisions, stale handles/revisions, equivalent-content temporal reuse,
-duplicate/missing bindings, cache recreation, retirement, and bounded metrics.
-Tilesets now depend on logical texture material intent rather than physical
-handles.
-Landed through v0.89.10: sampled-image capability admission, project-scoped
-texture services, serialized Project Library persistence, bounded image import,
-semantic scene materials, exact immutable resource closure, snapshot save/reopen,
-runtime restoration, and exact OpenGL/T0-CPU capture evidence. Contracts reject
-foreign registries, unsupported providers, budget violations, stale or
-incomplete bindings, and failed replacement without mutating the published
-scene. Next complete interactive Assets assignment, tilemap authoring, and
-explicit GL-family/backend adapters without duplicating the renderer spine.
-
-### Phase 3: Tilemap Authoring
-
-Land tileset/palette/tilemap documents, semantic commands, chunk compilation,
-culling, collision artifacts, standard-editor tools, and save/reopen.
-
-### Phase 4: Playable Loop
-
-Connect configurable input, deterministic 2D physics, animation, physical
-audio, Play/Stop, Run, and Build to the same project-owned scene.
-
-### Phase 5: Portability And Hardening
-
-Prove GLES-shaped limits, editor-free builds, cache deletion/rebuild, restart
-and resource retirement, bounded soak, diagnostics, and backend evidence without
-weakening T0/T1 behavior.
-
-## Completion Criteria
-
-Canvas2D is complete for the baseline product only when:
-
-- the acceptance map and actor are authored without source edits;
-- logical resolution, scaling, letterbox/crop, input mapping, alpha, sampling,
-  and deterministic ordering are proven;
-- sprites, animation, tilemaps, collision, and audio form one playable loop;
-- editor Play, external Run, and Build consume the same saved scene/artifacts;
-- `T0-CPU` reference and `T1-GL` presentation pass their required evidence;
-- unsupported profiles fail closed and no backend is overclaimed;
-- deleting `Library/` and `Cache/` regenerates equivalent output;
-- save/reopen and repeated Play/Stop do not leak or duplicate resources;
-- runtime products can exclude authoring UI, floating hosts, and unused systems;
-- settings, metrics, diagnostics, persistence, tests, and documentation agree
-  with the implementation.
-
-The final invariant is:
-
-> Canvas2D expresses stable 2D project meaning once, compiles it
-> deterministically, and lets capability-selected providers realize disposable
-> physical output without changing the authored game.
+1. Compile canonical GUI documents into editor-free runtime artifacts and bind
+   widget action/focus/input execution to the Canvas2D runtime without importing
+   authoring history, docking, floating hosts, or editor state.
+2. Complete the playable 2D interaction loop: physical controller sampling and
+   binding/dead-zone editing, decoded cue/music controls, Play/Stop, and
+   acceptance game proof against one saved project revision. Keyboard binding
+   authoring already publishes matching source/runtime artifact revisions and
+   feeds the live project sampler independently of editor-camera controls.
+   Authored solid, one-way, rising-right, falling-right, and
+   custom-box collision now reaches exact Library/preview artifacts and the
+   deterministic reference solver; sensor dispatch remains gated.
+3. Complete GL-family and explicit-backend Canvas2D visual evidence through the
+   shared submission and residency contracts. Do not duplicate authoring state
+   or the renderer spine inside a backend.
+4. Prove GLES-shaped limits, editor-free builds, cache deletion/rebuild,
+   restart and native resource retirement, per-backend bounded soak, and the
+   seven-backend acceptance matrix without weakening T0/T1 behavior.

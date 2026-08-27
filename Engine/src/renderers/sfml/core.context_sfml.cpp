@@ -41,8 +41,10 @@ import image.loader;
 import package.registry;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
+import render.device;
 import render.device_sfml;
 import sfml.state;
 import sfml.textures;
@@ -77,10 +79,14 @@ namespace
             const epochengine::core::Context* owner,
             std::uint64_t backendEpoch)
             : owner_(owner),
+              execution_limits_(
+                  epochengine::canvas2d::limits::for_backend(
+                      epochengine::RendererBackendKind::sfml3)),
               presenter_(
                   device_,
                   backendEpoch,
-                  {this, &SfmlCanvas2DPresenter::dispatch_present})
+                  {this, &SfmlCanvas2DPresenter::dispatch_present},
+                  execution_limits_.residency)
         {
         }
 
@@ -95,7 +101,9 @@ namespace
                 owner_,
                 {
                     static_cast<std::uint32_t>(viewport.width),
-                    static_cast<std::uint32_t>(viewport.height)});
+                    static_cast<std::uint32_t>(viewport.height)},
+                execution_limits_.canvas,
+                execution_limits_.raster);
             if (prepared.code
                 == epochengine::canvas2d::runtime::PrepareCode::missing_scene)
             {
@@ -317,6 +325,7 @@ namespace
         }
 
         const epochengine::core::Context* owner_{};
+        epochengine::canvas2d::limits::NativeExecutionLimits execution_limits_{};
         epochengine::SfmlRenderDevice device_{};
         epochengine::canvas2d::runtime::SceneRasterSession session_{};
         epochengine::canvas2d::presentation::Canvas2DPresenter presenter_;
@@ -602,8 +611,9 @@ namespace
             camera.target,
             camera.up);
         const auto mvp = epochengine::previewgrid::multiply(proj, view);
-        const auto vertices = epochengine::previewgrid::grid_vertices();
-        const auto indices = epochengine::previewgrid::grid_indices();
+        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+        const auto& vertices = gridGeometry->vertices;
+        const auto& indices = gridGeometry->indices;
         sf::VertexArray lines(sf::PrimitiveType::Lines);
 
         for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
@@ -798,7 +808,11 @@ namespace
         }
 
         RECT client{};
-        UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW;
+        UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED;
+        if (ctx && ctx->windowData && ctx->windowData->backend_ready())
+            positionFlags |= SWP_SHOWWINDOW;
+        else
+            positionFlags |= SWP_HIDEWINDOW;
         const HWND childParent = ::GetParent(s_childWindow);
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE && childParent == s_hostWindow)
         {
@@ -904,7 +918,7 @@ namespace
 
             LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
             style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
-            style |= WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+            style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
             ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
             epochengine::core::MakeDockable(s_childWindow, liveDockParent);
 
@@ -921,7 +935,7 @@ namespace
                 0,
                 s_width,
                 s_height,
-                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_HIDEWINDOW);
 
             // Keep SFML's render target size aligned with the dock slot before the
             // first display so startup does not depend on a later resize event.
@@ -992,7 +1006,9 @@ namespace
 
 #if defined(_WIN32)
         const HWND focusWindow = s_childWindow ? s_childWindow : s_hostWindow;
-        if (focusWindow && ::IsWindow(focusWindow) != FALSE)
+        if ((!s_dockParent || ::IsWindow(s_dockParent) == FALSE)
+            && focusWindow
+            && ::IsWindow(focusWindow) != FALSE)
         {
             ::SetFocus(focusWindow);
             s_window->requestFocus();
@@ -1159,9 +1175,17 @@ namespace
             static_cast<std::uint8_t>(clearColor[3] * 255.0f)));
 
         s_window->resetGLStates();
+        const bool overlayPriority = ctx->gui_overlay_priority();
         (void)queue.drain();
+        if (!overlayPriority)
+        {
+            s_window->resetGLStates();
+            (void)epochengine::gui::render_deferred_batch(ctx.get());
+        }
         s_window->resetGLStates();
         render_scene_preview(ctx);
+        s_window->resetGLStates();
+        (void)queue.drain();
         s_window->resetGLStates();
         (void)epochengine::gui::render_deferred_batch(ctx.get());
         s_window->resetGLStates();

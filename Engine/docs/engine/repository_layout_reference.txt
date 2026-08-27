@@ -8,7 +8,7 @@
 |   |   |-- platform/     executable-root/runtime path ownership and platform-side internals
 |   |   |-- render/       internal render helpers that are not part of the public API
 |   |-- resource/         Windows resources, icon, rc, and resource headers
-|   |-- ai/               curated AI datasets, schemas, evals, manifests, prompts
+|   |-- ai/               external-model policy, reviewed eval fixtures, manifests, prompts
 |   |-- docs/             current engine documentation
 |   |-- examples/         sample launcher and assets
 |   |-- build.sh / run.sh / install.sh / clean.sh

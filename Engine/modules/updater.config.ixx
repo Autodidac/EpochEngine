@@ -47,6 +47,17 @@ namespace epochengine::updater
 
     export inline constexpr bool LEAVE_NO_FILES_ALWAYS_REDOWNLOAD = true;
 
+#if defined(EPOCH_BINARY_ONLY_DISTRIBUTION) && EPOCH_BINARY_ONLY_DISTRIBUTION
+    export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = false;
+#else
+    export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = true;
+#endif
+
+    export inline constexpr bool SOURCE_UPDATE_FALLBACK_ENABLED =
+        AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED;
+    export inline constexpr bool SOURCE_PROJECT_DOWNLOAD_ENABLED =
+        AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED;
+
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Project identity
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -157,12 +168,47 @@ namespace epochengine::updater
     }
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // GitHub base URLs
+    // GitHub base URLs retained for managed third-party tool downloads
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     export inline constexpr std::string_view GITHUB_BASE = "https://github.com/";
     export inline constexpr std::string_view GITHUB_RAW_BASE = "https://raw.githubusercontent.com/";
     export inline constexpr std::string_view GITHUB_API_BASE = "https://api.github.com/repos/";
+    export inline constexpr std::string_view EPOCH_SITE_BASE =
+        "https://epoch.adamrushford.chatgpt.site";
+
+    export inline std::string PROJECT_SOURCE_DEVICE_START_URL()
+    {
+        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
+            ? std::string{ EPOCH_SITE_BASE } + "/api/private/epoch-engine/device/start"
+            : std::string{};
+    }
+
+    export inline std::string PROJECT_SOURCE_DEVICE_TOKEN_URL()
+    {
+        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
+            ? std::string{ EPOCH_SITE_BASE } + "/api/private/epoch-engine/device/token"
+            : std::string{};
+    }
+
+    export inline std::string PROJECT_SOURCE_DEVICE_CHALLENGE_URL()
+    {
+        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
+            ? std::string{ EPOCH_SITE_BASE } + "/api/private/epoch-engine/device/challenge"
+            : std::string{};
+    }
+
+    export inline constexpr std::string_view PROJECT_PRIVATE_SOURCE_MANIFEST_SCHEMA =
+        "https://epoch.adamrushford.chatgpt.site/schemas/private-source/v1";
+    export inline constexpr std::string_view PROJECT_PRIVATE_SOURCE_WRAP_INFO =
+        "EpochEngine private source DEK wrap v1";
+    export inline constexpr std::string_view PROJECT_PRIVATE_SOURCE_WRAP_AAD_PREFIX =
+        "epoch-source-key-wrap-v1";
+
+    export inline std::string PROJECT_REPOSITORY_URL()
+    {
+        return {};
+    }
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Version / package URLs
@@ -170,11 +216,7 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
-        return std::string{ GITHUB_API_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO }
-            + "/contents/Engine/modules/engine.version.ixx?ref="
-            + std::string{ BRANCH };
+        return {};
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
@@ -261,46 +303,18 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_URL()
     {
-        return std::string{ GITHUB_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO }
-            + "/archive/refs/heads/"
-            + std::string{ BRANCH } + PROJECT_SOURCE_ARCHIVE_EXTENSION();
+        return {};
+    }
+
+    export inline std::string PROJECT_SOURCE_CHECKSUM_URL()
+    {
+        const std::string source_url = PROJECT_SOURCE_URL();
+        return source_url.empty() ? std::string{} : source_url + ".sha256";
     }
 
     export inline std::vector<std::string> PROJECT_SOURCE_FALLBACK_URLS()
     {
-        const auto extension = PROJECT_SOURCE_ARCHIVE_EXTENSION();
-        std::vector<std::string> urls;
-
-        if (extension == ".tar.gz")
-        {
-            urls.push_back(
-                "https://codeload.github.com/"
-                + std::string{ OWNER } + "/"
-                + std::string{ REPO } + "/tar.gz/refs/heads/"
-                + std::string{ BRANCH });
-            urls.push_back(
-                std::string{ GITHUB_API_BASE }
-                + std::string{ OWNER } + "/"
-                + std::string{ REPO } + "/tarball/"
-                + std::string{ BRANCH });
-        }
-        else
-        {
-            urls.push_back(
-                "https://codeload.github.com/"
-                + std::string{ OWNER } + "/"
-                + std::string{ REPO } + "/zip/refs/heads/"
-                + std::string{ BRANCH });
-            urls.push_back(
-                std::string{ GITHUB_API_BASE }
-                + std::string{ OWNER } + "/"
-                + std::string{ REPO } + "/zipball/"
-                + std::string{ BRANCH });
-        }
-
-        return urls;
+        return {};
     }
 
     export inline std::string PROJECT_BINARY_URL()
@@ -310,10 +324,7 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_ACTION_RUNS_API_URL()
     {
-        return std::string{ GITHUB_API_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO } + "/actions/runs?branch="
-            + std::string{ BRANCH } + "&per_page=10";
+        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/actions/runs";
     }
 
     export inline std::string PROJECT_UPDATE_BUILD_JOB_NAME()
@@ -331,17 +342,26 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_RELEASE_API_URL()
     {
-        return std::string{ GITHUB_API_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO } + "/releases/latest";
+        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/releases/latest";
     }
 
     export inline std::string PROJECT_RELEASES_API_URL()
     {
-        return std::string{ GITHUB_API_BASE }
-            + std::string{ OWNER } + "/"
-            + std::string{ REPO } + "/releases?per_page=20";
+        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/releases";
     }
+
+    export inline std::string PROJECT_RELEASE_INTEGRITY_URL()
+    {
+        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/release-integrity";
+    }
+
+    export inline constexpr std::string_view PROJECT_RELEASE_INTEGRITY_SCHEMA =
+        "https://epoch.adamrushford.chatgpt.site/schemas/release-integrity/v1";
+    export inline constexpr std::string_view PROJECT_RELEASE_SIGNING_ALGORITHM = "Ed25519";
+    export inline constexpr std::string_view PROJECT_RELEASE_SIGNING_KEY_ID =
+        "epoch-release-e76c3921327a2cd0";
+    export inline constexpr std::string_view PROJECT_RELEASE_SIGNING_PUBLIC_KEY_BASE64URL =
+        "7W8_nJDpPERrsA2QsGQecnTCFbs8i7LTTsS9ORLQGKk";
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Managed updater tools

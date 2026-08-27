@@ -174,11 +174,14 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\image.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\node_graph_workspace.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_control.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_editor.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\tile_workspace.cpp" />
+
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\system_workspace.cpp" />
   </ItemGroup>
   <ItemGroup Condition="'$(EpochGuiEnableRoundedRect)'=='true'">
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.rounded_rect.ixx" />
@@ -194,11 +197,14 @@
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\floating_window.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\font.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\layout_primitives.hpp" />
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\node_graph_workspace.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\panel_host.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\popup_layout.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\text_control.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\text_editor.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\version.hpp" />
+
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\system_workspace.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

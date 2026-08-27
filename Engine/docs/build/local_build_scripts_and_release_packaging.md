@@ -236,8 +236,36 @@ three source identity macros in lockstep with `epoch.version.ixx`; packaged
 version overrides remain release-staging inputs rather than source metadata.
 
 
-GitHub source archives should stay full source snapshots. Do not trim them down
-to match packaged runtime or updater-shell assets.
+EpochEngine development source is restricted. The public ChatGPT Site must not
+advertise or anonymously serve its smart-Git repository, source archives,
+commit/tree browser, or mutable source aliases. Approved source access requires
+a server-side user entitlement and an authenticated, short-lived download; a
+client-only gate or static shared secret is not acceptable. EpochGui remains an
+independent public smart-Git repository at
+`https://epoch.adamrushford.chatgpt.site/git/EpochGui.git`.
+
+Hosted repositories and source archives must be full committed-source
+snapshots. Freeze the reviewed publishable working set into one commit before
+hosting it; never expose transient uncommitted state or trim source to match a
+runtime/updater-shell payload. The standalone EpochGui repository must be
+byte-for-byte equivalent to `Engine/dep/EpochGui` at the corresponding release.
+Preserve `multicontext-base-stable` at exact commit
+`ad6c416d930b348a61bc37ceb7d4522742be084a`; do not recreate that history from
+a runtime archive or substitute the v0.89.06 tag.
+
+Epoch-owned update publication is Site-native. Publish release/build manifests
+under `/api/epoch/` and immutable versioned runtime assets under
+`/downloads/releases/vX.Y.Z/` or a signed key-revision subpath. Every runtime
+asset must have a companion
+`.sha256` object whose first token is the 64-character digest. Runtime reads
+require no credential; source reads require server authorization; administrative
+writes remain protected by a hosted secret that must never enter source,
+manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
+GitHub. `v0.89.28` is the current development source authority and latest fully
+published runtime. Keep `v0.89.27` and `v0.89.06` available as release history
+rather than as the active updater default. Publish Windows ZIP and Linux tar.gz
+runtime forms, with a checksum
+sidecar for every public object and live post-deploy digest verification.
 
 The updater contract stays binary-first:
 
@@ -251,9 +279,9 @@ Install/update type matrix:
   `epoch_win10_x64_vX.Y.Z.zip` asset
 - packaged Linux and WSL runtime installs use the newest matching
   `epoch_linux_x64_vX.Y.Z.tar.gz` asset
-- source checkout installs still check packaged runtime first, then rebuild from
-  the GitHub source snapshot only when the packaged runtime is already
-  version-equal/newer or no newer packaged asset exists
+- public and source-checkout installs consume the same packaged runtime lane;
+  private source synchronization remains a separate authenticated development
+  operation and never supersedes an available public package
 - WSL is treated as Linux for release-asset naming; do not publish a separate
   WSL-only runtime asset unless the runtime/package layout actually diverges
 - updater-shell packages are bootstrap installers only and must keep their own
@@ -295,6 +323,12 @@ Before publishing a Windows packaged runtime zip:
 
 Before publishing a Linux/WSL2 asset:
 
+- `stage_epoch_linux_release.ps1 -SkipRuntimeSmoke` is a deliberate build-safe
+  packaging lane for sessions where opening a renderer would disrupt the
+  operator. It still verifies version, engine contracts, notices, dependencies,
+  `$ORIGIN/lib`, GLIBC baseline, archive contents, and checksums, but the result
+  must be reported as lacking fresh runtime-smoke evidence. Omit the switch for
+  a fully runtime-smoked release candidate.
 - rebuild from the same bumped source commit that will be tagged
 - use the validated Clang full-engine path for the package build, through
   `Engine/build.sh clang Release`, unless a later release pass proves another
@@ -320,8 +354,8 @@ Before publishing a Linux/WSL2 asset:
   prove the active OpenGL, SDL, and software editor lanes instead; do not ship
   a Raylib-linked archive that crashes other renderer selections at startup
 - keep the packaged versioned Linux runtime asset, for example
-  `epoch_linux_x64_vX.Y.Z.tar.gz`, and the GitHub source snapshot aligned
-  to the same commit, not just the same version string
+  `epoch_linux_x64_vX.Y.Z.tar.gz`, and its private reviewed source authority
+  aligned to the same commit, not just the same version string
 - verify the packaged Linux artifact starts the main runtime path by default
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
@@ -394,64 +428,36 @@ already regressed:
 
 ## OS AI asset policy
 
-Epoch documents OS/open-source model integration, not bundled model weights:
+Epoch integrates operator-selected external models; release packages do not
+contain model weights, training datasets, or a hidden model runtime. Discovery
+may inventory local OpenAI-compatible endpoints or an explicitly configured
+`llama-cli`, but Epoch sends no request until the operator confirms a model for
+the current run.
 
-- an engine-owned OS-model harness for prompts, memory, tools, verification,
-  evidence metrics, and dataset/eval gates
-- local MCP/control/tool harnesses that operate the engine and collect proof
-- operator-selected model lanes for Qwen, Nemotron, FLUX, Wan, and TRELLIS
+Normal chat and scene authoring send only visible, bounded prompt context. A
+source-development request is stricter: the host ranks existing paths without
+reading or transmitting source, gives an exact canonical objective path
+precedence, and displays the reviewed selection and endpoint. Share Curated
+Context is a separate explicit operator action that revalidates the source root,
+unchanged objective, endpoint, and byte budgets, then sends complete counted
+content through 48 KiB or one UTF-8-safe 16 KiB objective-centered excerpt for a
+larger reviewed file. It performs no model-directed path discovery and retains no
+source context beyond the request. Existing-file proposals remain blocked without
+that exact evidence; only a strict exact-block packet may stage, and model output
+never certifies its own build, test, review, or promotion evidence.
 
-External local LLMs such as LM Studio are development helpers. They are useful
-for testing, curation, evaluation, and speeding up documentation/build work,
-but they are selected reviewer providers rather than hidden authority.
+Git-safe AI contracts live under:
 
-Future automated passes should use available local helpers aggressively for
-draft reasoning, documentation, screenshot review, and bounded code sketches
-before spending main-model tokens on the final implementation path.
-
-At the start of each phase:
-
-- probe `/v1/models`
-- respect operator-selected/allowed models before sending helper traffic
-- treat discovered models as available helper pools, not as the active in-engine
-  model
-- keep the engine runtime/chat/tool path disabled until the operator selects a
-  model in the editor
-- when the operator allows it, fan out up to five bounded LM Studio helper
-  prompts for roadmap phrasing, code-shape proposals, docs, screenshot review,
-  bounded subsystem design, and changelog drafting
-
-When possible, route direct helper drafting through LM Studio `/v1/responses`
-or `/v1/chat/completions` with bounded output tokens. If an allowed helper model
-rejects an explicit reasoning setting, retry without the reasoning field
-instead of treating the helper as broken or empty.
-
-Git-safe AI assets live under:
-
-- `Engine/ai/datasets/curated/`
-- `Engine/ai/datasets/schema/`
 - `Engine/ai/evals/`
 - `Engine/ai/manifests/`
 - `Engine/ai/prompts/`
+- `Engine/ai/control/`
 
-Downloaded model/package artifacts stay out of Git:
-
-- executable-local `cache/packages/`
-- executable-local `cache/updates/`
-- future package-manager model cache folders
-
-Git-safe staging capture paths include:
-
-- `Engine/examples/ConsoleApplication1/workspace/model_exchange.jsonl`
-- `Engine/examples/ConsoleApplication1/workspace/tool_trace.jsonl`
-
-Explicit `model_exchange.jsonl` and `tool_trace.jsonl` writes are session
-evidence, not automatic model training. Review or delete stale traces and
-promote only intentional fixtures into `Engine/ai/evals/` or reviewed evidence
-sets.When using local helpers through LM Studio direct responses, prefer the
-lightest visible-output settings the loaded model actually accepts. For helpers
-that expose reasoning controls, disable reasoning when supported; for
-non-reasoning models, omit the reasoning field entirely.
+Downloaded models and disposable execution state stay out of Git under
+executable-local `cache/models/`, `cache/packages/`, and `cache/updates/`.
+Explicit `model_exchange.jsonl` and `tool_trace.jsonl` files are operator-review
+evidence only. Epoch does not automatically promote chat, build output, traces,
+or source proposals into training data or live source.
 
 ## Hardware support strategy
 
@@ -473,39 +479,25 @@ Support strategy:
 The point is broad automatic support first, not making every game carry every
 integration by default.
 
-## LM Studio development-helper notes
+## Local OpenAI-compatible endpoint notes
 
-When a local helper model is available:
+A local endpoint such as LM Studio is an operator-selected provider, not an
+automatic helper pool. Discovery may query `/v1/models`, but Epoch does not
+activate a model, broadcast work to several models, or send prompt/source data
+until the operator confirms the exact model for the current run.
 
-- endpoint is usually `http://localhost:1234`
-- discovery lists available models, but the editor must not name or activate
-  one until the operator selects it
-- helper lanes can be used for drafting, evaluation, and smoke prompts only
-  when the operator has allowed that loaded model
+Use the selected endpoint for visible chat, bounded scene/GUI proposals, strict
+source-context requests, and only source context the operator explicitly shares
+from the reviewed path list. Existing-file proposals require exact counted
+source evidence. Generic logger/singleton/entry rewrites, placeholders, stubs,
+duplicate wrappers, unrelated cleanup, invented architecture, generated reasoning
+text, and model-authored build/test claims are rejected rather than promoted into
+chat, traces, evals, or source.
 
-Use the helper model for:
-
-- editor-context smoke prompts
-- dataset cleanup suggestions
-- roadmap/doc phrasing assistance
-- drafted reasoning and code-outline assistance for bounded engine tasks
-- validating that selected OS models produce visible answers through the engine path
-
-If multiple helper models are loaded:
-
-- use only the models the operator has allowed for helper drafting
-- fan out up to five bounded prompts total when the local server supports it
-- keep the in-engine runtime path on the explicitly selected editor model
-- when only one allowed helper has reliable vision, reserve that helper for
-  screenshot/layout review, pane/layout checks, and color/parity triage
-
-When the helper returns mostly reasoning text or stalls:
-
-- use the helper for bounded drafting, not as a blocker for compile-critical work
-- prefer refining small helper drafts locally over waiting on long monolithic answers
-- if `content` is blank but `reasoning_content` contains useful-looking text,
-  reject it as engine assistant output. Do not harvest hidden reasoning into
-  AI chat, explicit MCP tool traces, model exchanges, or reviewed eval fixtures.
+If a selected endpoint returns blank content, reasoning-only content, or stalls,
+surface the failure and let the operator retry or select another model. Do not
+silently harvest hidden reasoning or fan requests out to other discovered
+models.
 
 ## Related docs
 

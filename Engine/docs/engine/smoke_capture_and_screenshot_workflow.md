@@ -60,7 +60,7 @@ When the pass is multicontext-specific, validate:
 - for Raylib dock probes, treat the docked state as valid when the visible
   `GLFW30` child is parented directly into the grid and the parked `EpochChild`
   helper host remains hidden under the parent with no proxy child in use
-- for Raylib redock probes after `v0.84.35`, remember that undock/move/redock
+- for Raylib redock probes, remember that undock/move/redock
   commands are routed through the Raylib owner/render thread command queue.
   Do not reintroduce direct cross-thread `SetParent` / style / position changes
   against the GLFW/Raylib child from the Win32 dock proc just to make a harness
@@ -140,10 +140,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - refresh the README multicontext proof at least every 10th feature version, or
   sooner whenever visible renderer color, layout, or docking behavior changes
   enough that the existing proof is misleading
-- `v0.84.35` README proof uses Raylib, SDL, SFML, Vulkan, OpenGL, and DirectX
-  as the normal Windows six-context set. Software remains fallback/debug/headless
-  proof and should not replace DirectX in the README multicontext lineup unless
-  the pass is specifically proving safe-launch behavior.
+- README proof must reflect the current source and evidence matrix. Use the
+  seven-provider regression plan for release evidence; include Software when
+  proving the CPU fallback rather than presenting an obsolete fixed lineup.
 - the current PowerShell harness screenshot is diagnostic proof, not the final
   long-term screenshot system; the target remains an engine-owned parent-window
   proof path for fullscreen multicontext captures
@@ -172,11 +171,9 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
   `epoch --renderer opengl --standalone --editor --smoke --capture`.
   A plain runtime smoke can exit correctly while writing a black capture because
   it does not necessarily open the editor/workbench surface being proven.
-- `v0.84.35` revalidated Ubuntu WSL2/WSLg with accelerated OpenGL 4.2, Linux
-  Clang build/CTest, and a non-black single OpenGL editor capture. If that path
-  regresses, start by checking WSL distro visibility, `DISPLAY`,
-  `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, and `glxinfo -B` before changing engine
-  code.
+- If Linux/WSL visual proof regresses, start by checking distro visibility,
+  DISPLAY, WAYLAND_DISPLAY, XDG_RUNTIME_DIR, and glxinfo -B before
+  changing engine code.
 - when operator-provided specialty screenshots are promoted into README proof,
   copy them into `Images/readme/` with versioned names and keep the original
   screenshots untouched.
@@ -222,7 +219,7 @@ Expected smoke behavior:
   pass as a model/API configuration failure for user-visible chat. Do not
   surface or harvest hidden reasoning as an assistant answer; retry with a
   content-producing model/configuration or keep the pass as private diagnostic
-  private diagnostic evidence outside reviewed session traces.
+  evidence outside reviewed session traces.
 - if allowed helpers split text and vision strengths, keep the selected editor
   model as runtime parity and use the vision-capable helper for screenshot
   review, pane/layout checks, and color/parity triage

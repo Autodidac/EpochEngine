@@ -214,7 +214,12 @@ namespace epochengine::spritepool
             auto node = std::make_unique<Node>(std::move(task));
             node->Label = "SpritePoolAllocate";
 
-            g_taskGraph->AddNode(std::move(node));
+            if (!g_taskGraph->AddNode(std::move(node)).valid())
+            {
+                index = try_allocate_round_robin();
+                if (awaiting) awaiting.resume();
+                return;
+            }
             g_taskGraph->Execute();
         }
 

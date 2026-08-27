@@ -8,6 +8,7 @@ module;
 #include <array>
 #include <bit>
 #include <charconv>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -17,6 +18,7 @@ module;
 #include <mutex>
 #include <new>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -33,7 +35,215 @@ namespace epochengine::authoring::texture
         constexpr std::uint64_t kFnvPrime = 1'099'511'628'211ull;
         constexpr std::uint64_t kSubpixelsPerPixel = 256;
         constexpr std::uint64_t kChannelMaximum = 65'535;
+        constexpr std::uint64_t kMaximumSerializedDocumentBytes =
+            512ull * 1024ull * 1024ull;
+        constexpr std::uint32_t kTextureSourceSchemaVersion = 3u;
+        constexpr std::array<std::byte, 8> kTextureSourceMagic{
+            std::byte{'E'}, std::byte{'P'}, std::byte{'T'}, std::byte{'E'},
+            std::byte{'X'}, std::byte{'D'}, std::byte{'0'}, std::byte{'1'}};
 
+        class ByteWriter final
+        {
+        public:
+            explicit ByteWriter(std::uint64_t limit) noexcept
+                : limit_(limit)
+            {
+            }
+
+            [[nodiscard]] bool good() const noexcept
+            {
+                return good_;
+            }
+
+            [[nodiscard]] std::vector<std::byte> take() noexcept
+            {
+                return std::move(bytes_);
+            }
+
+            void raw(std::span<const std::byte> value)
+            {
+                if (!reserve(value.size()))
+                    return;
+                bytes_.insert(bytes_.end(), value.begin(), value.end());
+            }
+
+            template<std::unsigned_integral Value>
+            void integer(Value value)
+            {
+                if (!reserve(sizeof(Value)))
+                    return;
+                for (std::size_t byte = 0u; byte < sizeof(Value); ++byte)
+                {
+                    bytes_.push_back(static_cast<std::byte>(
+                        (value >> (byte * 8u))
+                        & static_cast<Value>(0xffu)));
+                }
+            }
+
+            template<std::signed_integral Value>
+            void integer(Value value)
+            {
+                integer(static_cast<std::make_unsigned_t<Value>>(value));
+            }
+
+            template<typename Enum>
+                requires std::is_enum_v<Enum>
+            void enumeration(Enum value)
+            {
+                integer(static_cast<std::underlying_type_t<Enum>>(value));
+            }
+
+            void boolean(bool value)
+            {
+                integer<std::uint8_t>(value ? 1u : 0u);
+            }
+
+            void string(std::string_view value)
+            {
+                if (value.size()
+                    > (std::numeric_limits<std::uint32_t>::max)())
+                {
+                    good_ = false;
+                    return;
+                }
+                integer(static_cast<std::uint32_t>(value.size()));
+                raw(std::as_bytes(std::span{value.data(), value.size()}));
+            }
+
+            void hash(ContentHash value)
+            {
+                for (const std::uint64_t word : value.words)
+                    integer(word);
+            }
+
+        private:
+            [[nodiscard]] bool reserve(std::size_t additional)
+            {
+                if (!good_
+                    || additional > limit_
+                    || bytes_.size() > limit_ - additional)
+                {
+                    good_ = false;
+                    return false;
+                }
+                bytes_.reserve(bytes_.size() + additional);
+                return true;
+            }
+
+            std::vector<std::byte> bytes_{};
+            std::uint64_t limit_{};
+            bool good_{true};
+        };
+
+        class ByteReader final
+        {
+        public:
+            explicit ByteReader(
+                std::span<const std::byte> bytes) noexcept
+                : bytes_(bytes)
+            {
+            }
+
+            [[nodiscard]] bool good() const noexcept
+            {
+                return good_;
+            }
+
+            [[nodiscard]] bool done() const noexcept
+            {
+                return good_ && offset_ == bytes_.size();
+            }
+
+            void fail() noexcept
+            {
+                good_ = false;
+            }
+
+            [[nodiscard]] std::span<const std::byte> raw(
+                std::size_t count)
+            {
+                if (!good_ || count > bytes_.size() - offset_)
+                {
+                    good_ = false;
+                    return {};
+                }
+                const auto value = bytes_.subspan(offset_, count);
+                offset_ += count;
+                return value;
+            }
+
+            template<std::unsigned_integral Value>
+            [[nodiscard]] Value integer()
+            {
+                const auto valueBytes = raw(sizeof(Value));
+                if (!good_)
+                    return {};
+                Value value{};
+                for (std::size_t byte = 0u; byte < sizeof(Value); ++byte)
+                {
+                    value |= static_cast<Value>(
+                        std::to_integer<std::uint8_t>(valueBytes[byte]))
+                        << (byte * 8u);
+                }
+                return value;
+            }
+
+            template<std::signed_integral Value>
+            [[nodiscard]] Value signed_integer()
+            {
+                return static_cast<Value>(
+                    integer<std::make_unsigned_t<Value>>());
+            }
+
+            template<typename Enum>
+                requires std::is_enum_v<Enum>
+            [[nodiscard]] Enum enumeration()
+            {
+                using Underlying = std::underlying_type_t<Enum>;
+                if constexpr (std::is_signed_v<Underlying>)
+                    return static_cast<Enum>(signed_integer<Underlying>());
+                else
+                    return static_cast<Enum>(integer<Underlying>());
+            }
+
+            [[nodiscard]] bool boolean()
+            {
+                const std::uint8_t value = integer<std::uint8_t>();
+                if (value > 1u)
+                    good_ = false;
+                return value != 0u;
+            }
+
+            [[nodiscard]] std::string string(
+                std::uint32_t maximumBytes)
+            {
+                const std::uint32_t size = integer<std::uint32_t>();
+                if (!good_ || size > maximumBytes)
+                {
+                    good_ = false;
+                    return {};
+                }
+                const auto bytes = raw(size);
+                if (!good_)
+                    return {};
+                return std::string{
+                    reinterpret_cast<const char*>(bytes.data()),
+                    bytes.size()};
+            }
+
+            [[nodiscard]] ContentHash hash()
+            {
+                ContentHash value{};
+                for (std::uint64_t& word : value.words)
+                    word = integer<std::uint64_t>();
+                return value;
+            }
+
+        private:
+            std::span<const std::byte> bytes_{};
+            std::size_t offset_{};
+            bool good_{true};
+        };
         class StableHash final
         {
         public:
@@ -385,12 +595,23 @@ namespace epochengine::authoring::texture
             const LayerDescriptor& descriptor) noexcept
         {
             hash.add_string(descriptor.name);
+            hash.add_integral(descriptor.role);
             hash.add_integral(descriptor.blend);
             hash.add_integral(descriptor.opacity);
+            hash.add_integral(descriptor.transform.offset_x_pixels);
+            hash.add_integral(descriptor.transform.offset_y_pixels);
+            hash.add_integral(descriptor.transform.mirror_x);
+            hash.add_integral(descriptor.transform.mirror_y);
+            hash.add_integral(descriptor.filter.brightness);
+            hash.add_integral(descriptor.filter.grayscale);
+            hash.add_integral(descriptor.filter.invert);
+            hash.add_integral(descriptor.mask.source.index);
+            hash.add_integral(descriptor.mask.source.generation);
+            hash.add_integral(descriptor.mask.strength);
+            hash.add_integral(descriptor.mask.invert);
             hash.add_integral(descriptor.visible);
             hash.add_integral(descriptor.locked);
         }
-
         void hash_tile(
             StableHash& hash,
             const TileCoordinate coordinate,
@@ -408,7 +629,7 @@ namespace epochengine::authoring::texture
             const LayerSlot& slot) noexcept
         {
             StableHash hash{};
-            hash.add_string("epoch.texture.layer.v1");
+            hash.add_string("epoch.texture.layer.v3");
             hash_layer_descriptor(hash, slot.descriptor);
             hash.add_integral(slot.tiles.size());
             for (const auto& [coordinate, tile] : slot.tiles)
@@ -435,12 +656,91 @@ namespace epochengine::authoring::texture
             return hash.finish();
         }
 
+        void hash_layer_descriptor_v1(
+            StableHash& hash,
+            const LayerDescriptor& descriptor) noexcept
+        {
+            hash.add_string(descriptor.name);
+            hash.add_integral(descriptor.blend);
+            hash.add_integral(descriptor.opacity);
+            hash.add_integral(descriptor.visible);
+            hash.add_integral(descriptor.locked);
+        }
+
+        void hash_layer_descriptor_v2(
+            StableHash& hash,
+            const LayerDescriptor& descriptor) noexcept
+        {
+            hash.add_string(descriptor.name);
+            hash.add_integral(descriptor.blend);
+            hash.add_integral(descriptor.opacity);
+            hash.add_integral(descriptor.transform.offset_x_pixels);
+            hash.add_integral(descriptor.transform.offset_y_pixels);
+            hash.add_integral(descriptor.transform.mirror_x);
+            hash.add_integral(descriptor.transform.mirror_y);
+            hash.add_integral(descriptor.filter.brightness);
+            hash.add_integral(descriptor.filter.grayscale);
+            hash.add_integral(descriptor.filter.invert);
+            hash.add_integral(descriptor.visible);
+            hash.add_integral(descriptor.locked);
+        }
+
+        [[nodiscard]] ContentHash snapshot_content_hash(
+            const DocumentSnapshot& snapshot,
+            std::uint32_t sourceSchemaVersion) noexcept
+        {
+            const bool legacyV1 = sourceSchemaVersion == 1u;
+            const bool legacyV2 = sourceSchemaVersion == 2u;
+            StableHash documentHash{};
+            documentHash.add_string(legacyV1
+                ? "epoch.texture.document.v1"
+                : legacyV2
+                    ? "epoch.texture.document.v2"
+                    : "epoch.texture.document.v3");
+            hash_canvas(documentHash, snapshot.descriptor);
+            documentHash.add_integral(snapshot.layers.size());
+            for (std::uint32_t orderIndex = 0u;
+                 orderIndex < snapshot.layers.size();
+                 ++orderIndex)
+            {
+                const LayerSnapshot& layer = snapshot.layers[orderIndex];
+                StableHash layerHash{};
+                layerHash.add_string(legacyV1
+                    ? "epoch.texture.layer.v1"
+                    : legacyV2
+                        ? "epoch.texture.layer.v2"
+                        : "epoch.texture.layer.v3");
+                if (legacyV1)
+                    hash_layer_descriptor_v1(layerHash, layer.descriptor);
+                else if (legacyV2)
+                    hash_layer_descriptor_v2(layerHash, layer.descriptor);
+                else
+                    hash_layer_descriptor(layerHash, layer.descriptor);
+                layerHash.add_integral(layer.tiles.size());
+                for (const TileSnapshot& tile : layer.tiles)
+                {
+                    layerHash.add_integral(tile.coordinate.mip);
+                    layerHash.add_integral(tile.coordinate.x);
+                    layerHash.add_integral(tile.coordinate.y);
+                    layerHash.add_integral(tile.width);
+                    layerHash.add_integral(tile.height);
+                    layerHash.add_bytes(
+                        tile.texels.data(),
+                        tile.texels.size());
+                }
+                documentHash.add_integral(orderIndex);
+                documentHash.add_integral(layer.handle.index);
+                documentHash.add_integral(layer.handle.generation);
+                documentHash.add_hash(layerHash.finish());
+            }
+            return documentHash.finish();
+        }
         [[nodiscard]] ContentHash document_content_hash(
             const CanvasDescriptor& descriptor,
             const DocumentState& state) noexcept
         {
             StableHash hash{};
-            hash.add_string("epoch.texture.document.v1");
+            hash.add_string("epoch.texture.document.v3");
             hash_canvas(hash, descriptor);
             hash.add_integral(state.order.size());
             for (std::uint32_t orderIndex = 0;
@@ -509,6 +809,10 @@ namespace epochengine::authoring::texture
                 || descriptor.mip_count == 0
                 || descriptor.mip_count > limits.maximum_mip_count
                 || descriptor.mip_count > 32
+                || (descriptor.format != PixelFormat::rgba8_unorm
+                    && descriptor.format != PixelFormat::rgba8_srgb)
+                || (descriptor.color_space != ColorSpace::linear
+                    && descriptor.color_space != ColorSpace::srgb)
                 || descriptor.schema_version == 0)
             {
                 return false;
@@ -520,10 +824,71 @@ namespace epochengine::authoring::texture
             const LayerDescriptor& descriptor,
             const DocumentLimits& limits) noexcept
         {
-            return !descriptor.name.empty()
-                && descriptor.name.size() <= limits.maximum_layer_name_bytes;
+            const std::int64_t maximumOffset =
+                static_cast<std::int64_t>(limits.maximum_dimension);
+            if (descriptor.name.empty()
+                || descriptor.name.size() > limits.maximum_layer_name_bytes
+                || (descriptor.role != LayerRole::content
+                    && descriptor.role != LayerRole::mask)
+                || descriptor.transform.offset_x_pixels < -maximumOffset
+                || descriptor.transform.offset_x_pixels > maximumOffset
+                || descriptor.transform.offset_y_pixels < -maximumOffset
+                || descriptor.transform.offset_y_pixels > maximumOffset
+                || descriptor.filter.brightness < -255
+                || descriptor.filter.brightness > 255)
+            {
+                return false;
+            }
+            if (descriptor.role == LayerRole::mask)
+            {
+                return !descriptor.mask.source
+                    && descriptor.mask.strength == 65'535u
+                    && !descriptor.mask.invert
+                    && descriptor.blend == BlendMode::normal
+                    && descriptor.opacity == 65'535u
+                    && descriptor.transform == LayerTransformDescriptor{}
+                    && descriptor.filter == LayerFilterDescriptor{};
+            }
+            return true;
         }
 
+        [[nodiscard]] bool valid_mask_source(
+            const DocumentState& state,
+            std::uint32_t ownerSlot,
+            const LayerDescriptor& descriptor) noexcept
+        {
+            if (descriptor.role == LayerRole::mask)
+                return !descriptor.mask.source;
+            if (!descriptor.mask.source)
+                return true;
+            if (descriptor.mask.source.index == ownerSlot
+                || descriptor.mask.source.index >= state.slots.size())
+            {
+                return false;
+            }
+            const LayerSlot& source =
+                state.slots[descriptor.mask.source.index];
+            return source.active
+                && source.generation == descriptor.mask.source.generation
+                && source.descriptor.role == LayerRole::mask;
+        }
+
+        [[nodiscard]] bool valid_mask_bindings(
+            const DocumentState& state) noexcept
+        {
+            for (std::uint32_t index = 0u;
+                 index < state.slots.size();
+                 ++index)
+            {
+                const LayerSlot& slot = state.slots[index];
+                if (slot.active
+                    && !valid_mask_source(state, index, slot.descriptor))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
         [[nodiscard]] constexpr std::uint32_t next_generation(
             std::uint32_t generation) noexcept
         {
@@ -554,6 +919,159 @@ namespace epochengine::authoring::texture
                 bit >>= 2;
             }
             return result;
+        }
+
+        [[nodiscard]] ResultCode build_stroke_execution_samples(
+            const StrokeDescriptor& stroke,
+            std::uint32_t width,
+            std::uint32_t height,
+            std::uint32_t maximumSamples,
+            std::vector<StrokeSample>& output)
+        {
+            output.clear();
+            if (stroke.program == BrushProgram::round_stamp_v1
+                && stroke.algorithm_version == 1u)
+            {
+                output = stroke.samples;
+                return ResultCode::success;
+            }
+            if (stroke.program != BrushProgram::round_path_v2
+                || stroke.algorithm_version != 2u)
+            {
+                return ResultCode::unsupported_brush;
+            }
+            if (stroke.samples.empty() || maximumSamples == 0u)
+                return ResultCode::stroke_sample_limit_exceeded;
+
+            const std::int64_t radius =
+                static_cast<std::int64_t>(stroke.radius_subpixels);
+            const std::int64_t minimumCoordinate = -radius;
+            const std::int64_t maximumX =
+                static_cast<std::int64_t>(width)
+                    * static_cast<std::int64_t>(kSubpixelsPerPixel)
+                - 1 + radius;
+            const std::int64_t maximumY =
+                static_cast<std::int64_t>(height)
+                    * static_cast<std::int64_t>(kSubpixelsPerPixel)
+                - 1 + radius;
+            for (const StrokeSample& sample : stroke.samples)
+            {
+                if (sample.x_subpixels < minimumCoordinate
+                    || sample.x_subpixels > maximumX
+                    || sample.y_subpixels < minimumCoordinate
+                    || sample.y_subpixels > maximumY)
+                {
+                    return ResultCode::invalid_descriptor;
+                }
+            }
+
+            const auto magnitude = [](std::int64_t value) noexcept
+            {
+                return value < 0
+                    ? static_cast<std::uint64_t>(-(value + 1)) + 1u
+                    : static_cast<std::uint64_t>(value);
+            };
+            const auto interpolate = [](
+                std::int64_t first,
+                std::int64_t last,
+                std::uint64_t step,
+                std::uint64_t count) noexcept
+            {
+                const std::int64_t delta = last - first;
+                std::int64_t numerator =
+                    delta * static_cast<std::int64_t>(step);
+                const std::int64_t half =
+                    static_cast<std::int64_t>(count / 2u);
+                numerator += numerator < 0 ? -half : half;
+                return first
+                    + numerator / static_cast<std::int64_t>(count);
+            };
+
+            output.reserve(stroke.samples.size());
+            output.push_back(stroke.samples.front());
+            const std::uint64_t spacing = (std::max)(
+                std::uint64_t{64},
+                static_cast<std::uint64_t>(
+                    stroke.radius_subpixels) / 2u);
+            for (std::size_t index = 1u;
+                 index < stroke.samples.size();
+                 ++index)
+            {
+                const StrokeSample& first = stroke.samples[index - 1u];
+                const StrokeSample& last = stroke.samples[index];
+                const std::int64_t deltaX =
+                    last.x_subpixels - first.x_subpixels;
+                const std::int64_t deltaY =
+                    last.y_subpixels - first.y_subpixels;
+                const std::uint64_t distance = (std::max)(
+                    magnitude(deltaX),
+                    magnitude(deltaY));
+                const std::uint64_t stepCount = (std::max)(
+                    std::uint64_t{1},
+                    (distance + spacing - 1u) / spacing);
+                if (stepCount
+                    > static_cast<std::uint64_t>(maximumSamples)
+                        - output.size())
+                {
+                    output.clear();
+                    return ResultCode::stroke_sample_limit_exceeded;
+                }
+
+                // Coordinates were bounded above, so interpolation cannot
+                // overflow signed 64-bit arithmetic at the admitted sample cap.
+                for (std::uint64_t step = 1u;
+                     step <= stepCount;
+                     ++step)
+                {
+                    StrokeSample sample{
+                        .x_subpixels = interpolate(
+                            first.x_subpixels,
+                            last.x_subpixels,
+                            step,
+                            stepCount),
+                        .y_subpixels = interpolate(
+                            first.y_subpixels,
+                            last.y_subpixels,
+                            step,
+                            stepCount),
+                        .pressure = static_cast<std::uint16_t>(
+                            std::clamp<std::int64_t>(
+                                interpolate(
+                                    first.pressure,
+                                    last.pressure,
+                                    step,
+                                    stepCount),
+                                0,
+                                static_cast<std::int64_t>(
+                                    kChannelMaximum))),
+                        .tilt_x = static_cast<std::int16_t>(
+                            std::clamp<std::int64_t>(
+                                interpolate(
+                                    first.tilt_x,
+                                    last.tilt_x,
+                                    step,
+                                    stepCount),
+                                (std::numeric_limits<
+                                    std::int16_t>::min)(),
+                                (std::numeric_limits<
+                                    std::int16_t>::max)())),
+                        .tilt_y = static_cast<std::int16_t>(
+                            std::clamp<std::int64_t>(
+                                interpolate(
+                                    first.tilt_y,
+                                    last.tilt_y,
+                                    step,
+                                    stepCount),
+                                (std::numeric_limits<
+                                    std::int16_t>::min)(),
+                                (std::numeric_limits<
+                                    std::int16_t>::max)()))
+                    };
+                    if (sample != output.back())
+                        output.push_back(sample);
+                }
+            }
+            return ResultCode::success;
         }
 
         [[nodiscard]] std::uint32_t multiply_unit(
@@ -877,6 +1395,47 @@ namespace epochengine::authoring::texture
             };
         }
 
+        [[nodiscard]] PixelRgba8 apply_layer_filter(
+            PixelRgba8 pixel,
+            const LayerFilterDescriptor& filter) noexcept
+        {
+            if (filter.grayscale)
+            {
+                const std::uint32_t luminance =
+                    (77u * pixel.r + 150u * pixel.g + 29u * pixel.b + 128u)
+                    / 256u;
+                pixel.r = static_cast<std::uint8_t>(luminance);
+                pixel.g = static_cast<std::uint8_t>(luminance);
+                pixel.b = static_cast<std::uint8_t>(luminance);
+            }
+            if (filter.invert)
+            {
+                pixel.r = static_cast<std::uint8_t>(255u - pixel.r);
+                pixel.g = static_cast<std::uint8_t>(255u - pixel.g);
+                pixel.b = static_cast<std::uint8_t>(255u - pixel.b);
+            }
+            const auto adjust = [brightness = filter.brightness](
+                std::uint8_t channel) noexcept
+            {
+                return static_cast<std::uint8_t>(std::clamp(
+                    static_cast<std::int32_t>(channel) + brightness,
+                    0,
+                    255));
+            };
+            pixel.r = adjust(pixel.r);
+            pixel.g = adjust(pixel.g);
+            pixel.b = adjust(pixel.b);
+            return pixel;
+        }
+
+        [[nodiscard]] constexpr std::int64_t layer_offset_for_mip(
+            std::int32_t offset,
+            std::uint8_t mipLevel) noexcept
+        {
+            return static_cast<std::int64_t>(offset)
+                / static_cast<std::int64_t>(std::uint64_t{1} << mipLevel);
+        }
+
         [[nodiscard]] std::uint8_t blend_mode_channel(
             BlendMode mode,
             std::uint8_t destination,
@@ -946,6 +1505,79 @@ namespace epochengine::authoring::texture
             };
         }
 
+        [[nodiscard]] bool valid_layer_tiles(
+            const CanvasDescriptor& canvas,
+            const LayerSlot& slot) noexcept
+        {
+            const std::uint64_t pixelBytes =
+                slot.descriptor.role == LayerRole::mask ? 1u : 4u;
+            for (const auto& [coordinate, tile] : slot.tiles)
+            {
+                if (!valid_coordinate(canvas, coordinate)
+                    || tile.width != tile_width(canvas, coordinate)
+                    || tile.height != tile_height(canvas, coordinate)
+                    || tile.texels.size()
+                        != static_cast<std::uint64_t>(tile.width)
+                            * tile.height * pixelBytes)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::optional<std::uint8_t> layer_mask_reveal(
+            const CanvasDescriptor& canvas,
+            const DocumentState& state,
+            const LayerDescriptor& descriptor,
+            std::uint8_t mip,
+            std::uint32_t x,
+            std::uint32_t y) noexcept
+        {
+            if (!descriptor.mask.source)
+                return std::uint8_t{255u};
+            if (descriptor.mask.source.index >= state.slots.size())
+                return std::nullopt;
+            const LayerSlot& mask =
+                state.slots[descriptor.mask.source.index];
+            if (!mask.active
+                || mask.generation != descriptor.mask.source.generation
+                || mask.descriptor.role != LayerRole::mask)
+            {
+                return std::nullopt;
+            }
+            if (!mask.descriptor.visible)
+                return std::uint8_t{255u};
+
+            const TileCoordinate coordinate{
+                mip,
+                x / canvas.tile_extent,
+                y / canvas.tile_extent
+            };
+            std::uint8_t coverage{};
+            const auto tile = mask.tiles.find(coordinate);
+            if (tile != mask.tiles.end())
+            {
+                const std::uint32_t localX = x % canvas.tile_extent;
+                const std::uint32_t localY = y % canvas.tile_extent;
+                const std::size_t offset =
+                    static_cast<std::size_t>(localY) * tile->second.width
+                    + localX;
+                if (offset >= tile->second.texels.size())
+                    return std::nullopt;
+                coverage = std::to_integer<std::uint8_t>(
+                    tile->second.texels[offset]);
+            }
+            const std::uint32_t reveal = descriptor.mask.invert
+                ? coverage
+                : 255u - coverage;
+            const std::uint32_t hidden =
+                ((255u - reveal) * descriptor.mask.strength
+                    + kChannelMaximum / 2u)
+                / kChannelMaximum;
+            return static_cast<std::uint8_t>(255u - hidden);
+        }
+
         [[nodiscard]] ContentHash compiled_mip_hash(
             const CompiledTextureMip& mip) noexcept
         {
@@ -966,12 +1598,22 @@ namespace epochengine::authoring::texture
                 static_cast<std::size_t>(output.row_pitch_bytes)
                 * output.height);
 
+            if (!valid_mask_bindings(state))
+                return false;
+            for (const LayerSlot& slot : state.slots)
+            {
+                if (slot.active && !valid_layer_tiles(canvas, slot))
+                    return false;
+            }
+
             for (const std::uint32_t slotIndex : state.order)
             {
                 if (slotIndex >= state.slots.size())
                     return false;
                 const LayerSlot& slot = state.slots[slotIndex];
-                if (!slot.active || !slot.descriptor.visible
+                if (!slot.active
+                    || slot.descriptor.role == LayerRole::mask
+                    || !slot.descriptor.visible
                     || slot.descriptor.opacity == 0)
                 {
                     continue;
@@ -996,17 +1638,60 @@ namespace epochengine::authoring::texture
                         for (std::uint32_t x = 0; x < tile.width; ++x)
                         {
                             const std::size_t sourceOffset =
-                                (static_cast<std::size_t>(y) * tile.width + x) * 4u;
+                                (static_cast<std::size_t>(y) * tile.width + x)
+                                * 4u;
+                            const std::uint32_t sourceX = originX + x;
+                            const std::uint32_t sourceY = originY + y;
+                            std::int64_t destinationX =
+                                slot.descriptor.transform.mirror_x
+                                    ? static_cast<std::int64_t>(
+                                        output.width - 1u - sourceX)
+                                    : static_cast<std::int64_t>(sourceX);
+                            std::int64_t destinationY =
+                                slot.descriptor.transform.mirror_y
+                                    ? static_cast<std::int64_t>(
+                                        output.height - 1u - sourceY)
+                                    : static_cast<std::int64_t>(sourceY);
+                            destinationX += layer_offset_for_mip(
+                                slot.descriptor.transform.offset_x_pixels,
+                                mipLevel);
+                            destinationY += layer_offset_for_mip(
+                                slot.descriptor.transform.offset_y_pixels,
+                                mipLevel);
+                            if (destinationX < 0
+                                || destinationY < 0
+                                || destinationX >= output.width
+                                || destinationY >= output.height)
+                            {
+                                continue;
+                            }
                             const std::size_t destinationOffset =
-                                static_cast<std::size_t>(originY + y)
+                                static_cast<std::size_t>(destinationY)
                                     * output.row_pitch_bytes
-                                + static_cast<std::size_t>(originX + x) * 4u;
+                                + static_cast<std::size_t>(destinationX) * 4u;
+                            PixelRgba8 source = apply_layer_filter(
+                                read_pixel(tile.texels, sourceOffset),
+                                slot.descriptor.filter);
+                            const auto reveal = layer_mask_reveal(
+                                canvas,
+                                state,
+                                slot.descriptor,
+                                mipLevel,
+                                sourceX,
+                                sourceY);
+                            if (!reveal)
+                                return false;
+                            source.a = static_cast<std::uint8_t>(
+                                (static_cast<std::uint32_t>(source.a)
+                                    * *reveal
+                                    + 127u)
+                                / 255u);
                             write_pixel(
                                 output.texels,
                                 destinationOffset,
                                 composite_pixel(
                                     read_pixel(output.texels, destinationOffset),
-                                    read_pixel(tile.texels, sourceOffset),
+                                    source,
                                     slot.descriptor.blend,
                                     slot.descriptor.opacity));
                         }
@@ -1429,6 +2114,15 @@ namespace epochengine::authoring::texture
         HistoryPolicy history,
         DocumentLimits limits) noexcept
     {
+        if (!handle
+            || !branch
+            || !valid_limits(limits)
+            || !valid_history(history)
+            || !valid_canvas(descriptor, limits))
+        {
+            return;
+        }
+
         try
         {
             auto implementation = std::make_unique<Impl>();
@@ -1438,18 +2132,10 @@ namespace epochengine::authoring::texture
             implementation->history = history;
             implementation->limits = limits;
             implementation->now = TemporalPoint{ branch, 0 };
-            implementation->initialized =
-                static_cast<bool>(handle)
-                && static_cast<bool>(branch)
-                && valid_limits(limits)
-                && valid_history(history)
-                && valid_canvas(descriptor, limits);
-            if (implementation->initialized)
-            {
-                implementation->revision.content =
-                    document_content_hash(descriptor, implementation->state);
-                implementation->revision.sequence = 1;
-            }
+            implementation->initialized = true;
+            implementation->revision.content =
+                document_content_hash(descriptor, implementation->state);
+            implementation->revision.sequence = 1;
             impl_ = std::move(implementation);
         }
         catch (...)
@@ -1462,6 +2148,405 @@ namespace epochengine::authoring::texture
     TextureDocument::TextureDocument(TextureDocument&&) noexcept = default;
     TextureDocument& TextureDocument::operator=(
         TextureDocument&&) noexcept = default;
+
+    RestoreResult TextureDocument::restore(
+        const DocumentSnapshot& snapshot,
+        DocumentLimits limits) noexcept
+    {
+        try
+        {
+            if (!snapshot.handle
+                || !snapshot.branch
+                || !snapshot.current_time
+                || snapshot.current_time.stream != snapshot.branch
+                || snapshot.current_time.tick < 0
+                || snapshot.revision.sequence == 0u
+                || snapshot.revision.content.empty()
+                || !valid_limits(limits)
+                || !valid_history(snapshot.history)
+                || !valid_canvas(snapshot.descriptor, limits)
+                || snapshot.layers.size() > limits.maximum_layers)
+            {
+                return { ResultCode::invalid_descriptor, {} };
+            }
+
+            auto document = std::make_unique<TextureDocument>(
+                snapshot.handle,
+                snapshot.branch,
+                snapshot.descriptor,
+                snapshot.history,
+                limits);
+            if (!document->valid())
+                return { ResultCode::invalid_document, {} };
+
+            Impl& impl = *document->impl_;
+            std::uint64_t tileCount{};
+            std::uint64_t tileBytes{};
+            for (const LayerSnapshot& layer : snapshot.layers)
+            {
+                if (!layer.handle
+                    || layer.handle.index >= limits.maximum_layers
+                    || !valid_layer_descriptor(layer.descriptor, limits))
+                {
+                    return { ResultCode::invalid_descriptor, {} };
+                }
+                if (impl.state.slots.size() <= layer.handle.index)
+                    impl.state.slots.resize(layer.handle.index + 1u);
+                LayerSlot& slot = impl.state.slots[layer.handle.index];
+                if (slot.active)
+                    return { ResultCode::invalid_descriptor, {} };
+
+                slot.generation = layer.handle.generation;
+                slot.active = true;
+                slot.descriptor = layer.descriptor;
+                for (const TileSnapshot& tile : layer.tiles)
+                {
+                    if (!valid_coordinate(snapshot.descriptor, tile.coordinate)
+                        || tile.width != tile_width(
+                            snapshot.descriptor, tile.coordinate)
+                        || tile.height != tile_height(
+                            snapshot.descriptor, tile.coordinate)
+                        || tile.texels.empty())
+                    {
+                        return { ResultCode::invalid_descriptor, {} };
+                    }
+                    std::uint64_t texelCount{};
+                    const std::uint64_t pixelBytes =
+                        layer.descriptor.role == LayerRole::mask ? 1u : 4u;
+                    if (!checked_multiply(
+                            tile.width, tile.height, texelCount)
+                        || !checked_multiply(
+                            texelCount, pixelBytes, texelCount)
+                        || texelCount != tile.texels.size()
+                        || tile.content != tile_content_hash(
+                            tile.coordinate,
+                            tile.width,
+                            tile.height,
+                            tile.texels))
+                    {
+                        return { ResultCode::integrity_failure, {} };
+                    }
+                    if (std::ranges::all_of(
+                            tile.texels,
+                            [](std::byte value)
+                            {
+                                return value == std::byte{};
+                            }))
+                    {
+                        return { ResultCode::invalid_descriptor, {} };
+                    }
+                    if (tileCount == limits.maximum_sparse_tiles
+                        || texelCount
+                            > limits.maximum_canonical_tile_bytes
+                        || tileBytes
+                            > limits.maximum_canonical_tile_bytes
+                                - texelCount)
+                    {
+                        return {
+                            tileCount == limits.maximum_sparse_tiles
+                                ? ResultCode::tile_limit_exceeded
+                                : ResultCode::
+                                    canonical_memory_budget_exceeded,
+                            {}
+                        };
+                    }
+                    const auto [position, inserted] = slot.tiles.emplace(
+                        tile.coordinate,
+                        TileData{
+                            tile.width,
+                            tile.height,
+                            tile.texels
+                        });
+                    (void)position;
+                    if (!inserted)
+                        return { ResultCode::invalid_descriptor, {} };
+                    ++tileCount;
+                    tileBytes += texelCount;
+                }
+                impl.state.order.push_back(layer.handle.index);
+            }
+            if (!valid_mask_bindings(impl.state))
+                return { ResultCode::invalid_descriptor, {} };
+
+            const ContentHash expected = document_content_hash(
+                impl.canvas,
+                impl.state);
+            if (expected.empty() || expected != snapshot.revision.content)
+                return { ResultCode::integrity_failure, {} };
+
+            impl.revision = snapshot.revision;
+            impl.now = snapshot.current_time;
+            return {
+                ResultCode::success,
+                std::move(document)
+            };
+        }
+        catch (const std::bad_alloc&)
+        {
+            return { ResultCode::allocation_failure, {} };
+        }
+        catch (...)
+        {
+            return { ResultCode::malformed_payload, {} };
+        }
+    }
+
+    RestoreResult TextureDocument::deserialize(
+        std::span<const std::byte> bytes,
+        DocumentLimits limits) noexcept
+    {
+        try
+        {
+            if (!valid_limits(limits)
+                || bytes.empty()
+                || bytes.size() > kMaximumSerializedDocumentBytes)
+            {
+                return {
+                    ResultCode::serialized_budget_exceeded,
+                    {}
+                };
+            }
+
+            ByteReader reader{ bytes };
+            if (!std::ranges::equal(
+                    reader.raw(kTextureSourceMagic.size()),
+                    kTextureSourceMagic))
+            {
+                return { ResultCode::malformed_payload, {} };
+            }
+            const std::uint32_t sourceSchemaVersion =
+                reader.integer<std::uint32_t>();
+            if (sourceSchemaVersion != 1u
+                && sourceSchemaVersion != 2u
+                && sourceSchemaVersion != kTextureSourceSchemaVersion)
+            {
+                return { ResultCode::unsupported_schema, {} };
+            }
+
+            DocumentSnapshot snapshot{};
+            snapshot.revision.content = reader.hash();
+            snapshot.revision.sequence = reader.integer<std::uint64_t>();
+            snapshot.handle.index = reader.integer<std::uint32_t>();
+            snapshot.handle.generation = reader.integer<std::uint32_t>();
+            snapshot.branch.timeline = reader.integer<std::uint64_t>();
+            snapshot.branch.branch = reader.integer<std::uint64_t>();
+            snapshot.current_time.stream = snapshot.branch;
+            snapshot.current_time.tick =
+                reader.signed_integer<std::int64_t>();
+
+            snapshot.descriptor.width = reader.integer<std::uint32_t>();
+            snapshot.descriptor.height = reader.integer<std::uint32_t>();
+            snapshot.descriptor.tile_extent =
+                reader.integer<std::uint16_t>();
+            snapshot.descriptor.mip_count =
+                reader.integer<std::uint8_t>();
+            snapshot.descriptor.format =
+                reader.enumeration<PixelFormat>();
+            snapshot.descriptor.color_space =
+                reader.enumeration<ColorSpace>();
+            snapshot.descriptor.schema_version =
+                reader.integer<std::uint32_t>();
+
+            snapshot.history.mode =
+                reader.enumeration<HistoryMode>();
+            snapshot.history.checkpoint_interval_operations =
+                reader.integer<std::uint32_t>();
+            snapshot.history.maximum_operations =
+                reader.integer<std::uint32_t>();
+            snapshot.history.maximum_checkpoints =
+                reader.integer<std::uint32_t>();
+            snapshot.history.maximum_operation_bytes =
+                reader.integer<std::uint64_t>();
+            snapshot.history.maximum_checkpoint_bytes =
+                reader.integer<std::uint64_t>();
+            snapshot.history.allow_branching = reader.boolean();
+
+            const std::uint32_t layerCount =
+                reader.integer<std::uint32_t>();
+            if (!reader.good() || layerCount > limits.maximum_layers)
+                return { ResultCode::invalid_descriptor, {} };
+            snapshot.layers.reserve(layerCount);
+            std::uint64_t totalTiles{};
+            std::uint64_t totalBytes{};
+            for (std::uint32_t layerIndex = 0u;
+                 layerIndex < layerCount && reader.good();
+                 ++layerIndex)
+            {
+                LayerSnapshot layer{};
+                layer.handle.index = reader.integer<std::uint32_t>();
+                layer.handle.generation =
+                    reader.integer<std::uint32_t>();
+                layer.descriptor.name =
+                    reader.string(limits.maximum_layer_name_bytes);
+                layer.descriptor.blend =
+                    reader.enumeration<BlendMode>();
+                layer.descriptor.opacity =
+                    reader.integer<std::uint16_t>();
+                layer.descriptor.visible = reader.boolean();
+                layer.descriptor.locked = reader.boolean();
+
+                const std::uint64_t layerTileCount =
+                    reader.integer<std::uint64_t>();
+                if (!reader.good()
+                    || layerTileCount
+                        > limits.maximum_sparse_tiles - (std::min)(
+                            totalTiles,
+                            limits.maximum_sparse_tiles)
+                    || layerTileCount
+                        > static_cast<std::uint64_t>(
+                            (std::numeric_limits<std::size_t>::max)()))
+                {
+                    return { ResultCode::tile_limit_exceeded, {} };
+                }
+                layer.tiles.reserve(
+                    static_cast<std::size_t>(layerTileCount));
+                for (std::uint64_t tileIndex = 0u;
+                     tileIndex < layerTileCount && reader.good();
+                     ++tileIndex)
+                {
+                    TileSnapshot tile{};
+                    tile.coordinate.mip =
+                        reader.integer<std::uint8_t>();
+                    tile.coordinate.x =
+                        reader.integer<std::uint32_t>();
+                    tile.coordinate.y =
+                        reader.integer<std::uint32_t>();
+                    tile.width = reader.integer<std::uint16_t>();
+                    tile.height = reader.integer<std::uint16_t>();
+                    tile.content = reader.hash();
+                    const std::uint64_t byteCount =
+                        reader.integer<std::uint64_t>();
+                    if (!reader.good()
+                        || byteCount
+                            > limits.maximum_canonical_tile_bytes
+                        || totalBytes
+                            > limits.maximum_canonical_tile_bytes
+                                - byteCount
+                        || byteCount
+                            > static_cast<std::uint64_t>(
+                                (std::numeric_limits<std::size_t>::max)()))
+                    {
+                        return {
+                            ResultCode::
+                                canonical_memory_budget_exceeded,
+                            {}
+                        };
+                    }
+                    const auto texels = reader.raw(
+                        static_cast<std::size_t>(byteCount));
+                    if (!reader.good())
+                        return { ResultCode::malformed_payload, {} };
+                    tile.texels.assign(texels.begin(), texels.end());
+                    totalBytes += byteCount;
+                    layer.tiles.push_back(std::move(tile));
+                }
+                totalTiles += layerTileCount;
+                snapshot.layers.push_back(std::move(layer));
+            }
+            if (sourceSchemaVersion >= 2u)
+            {
+                const std::uint32_t descriptorExtensionCount =
+                    reader.integer<std::uint32_t>();
+                if (!reader.good()
+                    || descriptorExtensionCount != snapshot.layers.size())
+                {
+                    return { ResultCode::invalid_descriptor, {} };
+                }
+                for (std::uint32_t layerIndex = 0u;
+                     layerIndex < descriptorExtensionCount;
+                     ++layerIndex)
+                {
+                    const LayerHandle extensionHandle{
+                        .index = reader.integer<std::uint32_t>(),
+                        .generation = reader.integer<std::uint32_t>()
+                    };
+                    LayerDescriptor& descriptor =
+                        snapshot.layers[layerIndex].descriptor;
+                    descriptor.transform.offset_x_pixels =
+                        reader.signed_integer<std::int32_t>();
+                    descriptor.transform.offset_y_pixels =
+                        reader.signed_integer<std::int32_t>();
+                    descriptor.transform.mirror_x = reader.boolean();
+                    descriptor.transform.mirror_y = reader.boolean();
+                    descriptor.filter.brightness =
+                        reader.signed_integer<std::int16_t>();
+                    descriptor.filter.grayscale = reader.boolean();
+                    descriptor.filter.invert = reader.boolean();
+                    if (!reader.good())
+                        return { ResultCode::malformed_payload, {} };
+                    if (extensionHandle
+                            != snapshot.layers[layerIndex].handle
+                        || !valid_layer_descriptor(descriptor, limits))
+                    {
+                        return { ResultCode::invalid_descriptor, {} };
+                    }
+                }
+            }
+            if (sourceSchemaVersion >= 3u)
+            {
+                const std::uint32_t maskExtensionCount =
+                    reader.integer<std::uint32_t>();
+                if (!reader.good()
+                    || maskExtensionCount != snapshot.layers.size())
+                {
+                    return { ResultCode::invalid_descriptor, {} };
+                }
+                for (std::uint32_t layerIndex = 0u;
+                     layerIndex < maskExtensionCount;
+                     ++layerIndex)
+                {
+                    const LayerHandle extensionHandle{
+                        .index = reader.integer<std::uint32_t>(),
+                        .generation = reader.integer<std::uint32_t>()
+                    };
+                    LayerDescriptor& descriptor =
+                        snapshot.layers[layerIndex].descriptor;
+                    descriptor.role = reader.enumeration<LayerRole>();
+                    descriptor.mask.source.index =
+                        reader.integer<std::uint32_t>();
+                    descriptor.mask.source.generation =
+                        reader.integer<std::uint32_t>();
+                    descriptor.mask.strength =
+                        reader.integer<std::uint16_t>();
+                    descriptor.mask.invert = reader.boolean();
+                    if (!reader.good())
+                        return { ResultCode::malformed_payload, {} };
+                    if (extensionHandle
+                            != snapshot.layers[layerIndex].handle
+                        || !valid_layer_descriptor(descriptor, limits))
+                    {
+                        return { ResultCode::invalid_descriptor, {} };
+                    }
+                }
+            }
+            if (!reader.done())
+                return { ResultCode::malformed_payload, {} };
+            if (sourceSchemaVersion < kTextureSourceSchemaVersion)
+            {
+                const ContentHash legacyContent =
+                    snapshot_content_hash(
+                        snapshot,
+                        sourceSchemaVersion);
+                if (legacyContent.empty()
+                    || legacyContent != snapshot.revision.content)
+                {
+                    return { ResultCode::integrity_failure, {} };
+                }
+                snapshot.revision.content = snapshot_content_hash(
+                    snapshot,
+                    kTextureSourceSchemaVersion);
+            }
+            return restore(snapshot, limits);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return { ResultCode::allocation_failure, {} };
+        }
+        catch (...)
+        {
+            return { ResultCode::malformed_payload, {} };
+        }
+    }
 
     bool TextureDocument::valid() const noexcept
     {
@@ -1649,19 +2734,29 @@ namespace epochengine::authoring::texture
             x % impl_->canvas.tile_extent;
         const std::uint32_t localY =
             y % impl_->canvas.tile_extent;
-        const std::size_t offset =
-            (static_cast<std::size_t>(localY) * found->second.width + localX)
-            * 4;
-        if (offset + 3 >= found->second.texels.size())
+        const std::size_t pixelIndex =
+            static_cast<std::size_t>(localY) * found->second.width
+            + localX;
+        if (slot.descriptor.role == LayerRole::mask)
+        {
+            if (pixelIndex >= found->second.texels.size())
+                return {};
+            const std::uint8_t coverage =
+                std::to_integer<std::uint8_t>(
+                    found->second.texels[pixelIndex]);
+            return {coverage, coverage, coverage, coverage};
+        }
+
+        const std::size_t offset = pixelIndex * 4u;
+        if (offset + 3u >= found->second.texels.size())
             return {};
         return PixelRgba8{
             std::to_integer<std::uint8_t>(found->second.texels[offset]),
-            std::to_integer<std::uint8_t>(found->second.texels[offset + 1]),
-            std::to_integer<std::uint8_t>(found->second.texels[offset + 2]),
-            std::to_integer<std::uint8_t>(found->second.texels[offset + 3])
+            std::to_integer<std::uint8_t>(found->second.texels[offset + 1u]),
+            std::to_integer<std::uint8_t>(found->second.texels[offset + 2u]),
+            std::to_integer<std::uint8_t>(found->second.texels[offset + 3u])
         };
     }
-
     MutationResult TextureDocument::create_layer(
         LayerDescriptor descriptor,
         std::uint32_t insertionIndex,
@@ -1700,6 +2795,14 @@ namespace epochengine::authoring::texture
                 slotIndex = index;
                 break;
             }
+        }
+
+        if (!valid_mask_source(impl_->state, slotIndex, descriptor))
+        {
+            return {
+                .code = ResultCode::invalid_descriptor,
+                .revision = impl_->revision
+            };
         }
 
         LayerSlot before{};
@@ -1758,6 +2861,19 @@ namespace epochengine::authoring::texture
             impl_->validate_layer(layerHandle, slotIndex);
         if (layerCode != ResultCode::success)
             return { .code = layerCode, .revision = impl_->revision };
+
+        for (const LayerSlot& candidate : impl_->state.slots)
+        {
+            if (candidate.active
+                && candidate.descriptor.mask.source == layerHandle)
+            {
+                return {
+                    .code = ResultCode::invalid_operation,
+                    .revision = impl_->revision,
+                    .layer = layerHandle
+                };
+            }
+        }
 
         const auto found = std::ranges::find(
             impl_->state.order,
@@ -1859,7 +2975,14 @@ namespace epochengine::authoring::texture
             impl_->validate_layer(layerHandle, slotIndex);
         if (layerCode != ResultCode::success)
             return { .code = layerCode, .revision = impl_->revision };
-        if (!valid_layer_descriptor(descriptor, impl_->limits))
+        const LayerDescriptor before =
+            impl_->state.slots[slotIndex].descriptor;
+        if (!valid_layer_descriptor(descriptor, impl_->limits)
+            || descriptor.role != before.role
+            || !valid_mask_source(
+                impl_->state,
+                slotIndex,
+                descriptor))
         {
             return {
                 .code = ResultCode::invalid_descriptor,
@@ -1867,8 +2990,6 @@ namespace epochengine::authoring::texture
             };
         }
 
-        const LayerDescriptor before =
-            impl_->state.slots[slotIndex].descriptor;
         if (before == descriptor)
         {
             return {
@@ -1918,8 +3039,15 @@ namespace epochengine::authoring::texture
                 .revision = impl_->revision
             };
         }
-        if (stroke.program != BrushProgram::round_stamp_v1
-            || stroke.algorithm_version != 1)
+        const bool maskStroke =
+            impl_->state.slots[slotIndex].descriptor.role
+                == LayerRole::mask;
+        const bool supportedProgram =
+            (stroke.program == BrushProgram::round_stamp_v1
+                && stroke.algorithm_version == 1u)
+            || (stroke.program == BrushProgram::round_path_v2
+                && stroke.algorithm_version == 2u);
+        if (!supportedProgram)
         {
             return {
                 .code = ResultCode::unsupported_brush,
@@ -1931,7 +3059,8 @@ namespace epochengine::authoring::texture
             || stroke.radius_subpixels
                 > impl_->limits.maximum_brush_radius_subpixels
             || stroke.channel_mask == 0
-            || (stroke.channel_mask & 0xf0u) != 0)
+            || (stroke.channel_mask & 0xf0u) != 0
+            || (maskStroke && stroke.channel_mask != 0x08u))
         {
             return {
                 .code = ResultCode::invalid_descriptor,
@@ -1951,6 +3080,21 @@ namespace epochengine::authoring::texture
             mip_dimension(impl_->canvas.width, stroke.mip);
         const std::uint32_t height =
             mip_dimension(impl_->canvas.height, stroke.mip);
+        std::vector<StrokeSample> executionSamples{};
+        const ResultCode samplingCode =
+            build_stroke_execution_samples(
+                stroke,
+                width,
+                height,
+                impl_->limits.maximum_stroke_samples,
+                executionSamples);
+        if (samplingCode != ResultCode::success)
+        {
+            return {
+                .code = samplingCode,
+                .revision = impl_->revision
+            };
+        }
 
         // Bound raster work before any pixel or canonical tile allocation.
         std::map<TileCoordinate, bool, TileCoordinateLess> candidateTiles{};
@@ -1981,7 +3125,7 @@ namespace epochengine::authoring::texture
         const std::int64_t canvasMaximumY =
             static_cast<std::int64_t>(height)
             * static_cast<std::int64_t>(kSubpixelsPerPixel) - 1;
-        for (const StrokeSample& sample : stroke.samples)
+        for (const StrokeSample& sample : executionSamples)
         {
             const std::uint64_t radius =
                 (static_cast<std::uint64_t>(stroke.radius_subpixels)
@@ -2070,7 +3214,10 @@ namespace epochengine::authoring::texture
                     tile_width(impl_->canvas, coordinate),
                     tile_height(impl_->canvas, coordinate),
                     pixels)
-                || !checked_multiply(pixels, 4, bytes)
+                || !checked_multiply(
+                    pixels,
+                    maskStroke ? 1u : 4u,
+                    bytes)
                 || !checked_add(
                     projectedTileBytes,
                     bytes,
@@ -2101,7 +3248,7 @@ namespace epochengine::authoring::texture
 
         std::map<TileCoordinate, TileData, TileCoordinateLess> changed{};
 
-        for (const StrokeSample& sample : stroke.samples)
+        for (const StrokeSample& sample : executionSamples)
         {
             const std::uint64_t radius =
                 (static_cast<std::uint64_t>(stroke.radius_subpixels)
@@ -2236,7 +3383,8 @@ namespace epochengine::authoring::texture
                         {
                             tileData.texels.resize(
                                 static_cast<std::size_t>(tileData.width)
-                                    * tileData.height * 4);
+                                    * tileData.height
+                                    * (maskStroke ? 1u : 4u));
                         }
                         changedTile = changed.emplace(
                             coordinate,
@@ -2250,29 +3398,46 @@ namespace epochengine::authoring::texture
                     const std::uint32_t localY =
                         static_cast<std::uint32_t>(y)
                         % impl_->canvas.tile_extent;
-                    const std::size_t offset =
-                        (static_cast<std::size_t>(localY) * tile.width
-                            + localX)
-                        * 4;
-                    const std::array<std::uint8_t, 4> source{
-                        stroke.color.r,
-                        stroke.color.g,
-                        stroke.color.b,
-                        stroke.color.a
-                    };
-                    for (std::size_t channel = 0; channel < 4; ++channel)
+                    const std::size_t pixelIndex =
+                        static_cast<std::size_t>(localY) * tile.width
+                        + localX;
+                    if (maskStroke)
                     {
-                        if ((stroke.channel_mask & (1u << channel)) == 0)
-                            continue;
                         const std::uint8_t before =
                             std::to_integer<std::uint8_t>(
-                                tile.texels[offset + channel]);
-                        tile.texels[offset + channel] = std::byte{
+                                tile.texels[pixelIndex]);
+                        tile.texels[pixelIndex] = std::byte{
                             blend_channel(
                                 before,
-                                source[channel],
+                                stroke.color.a,
                                 amount)
                         };
+                    }
+                    else
+                    {
+                        const std::size_t offset = pixelIndex * 4u;
+                        const std::array<std::uint8_t, 4> source{
+                            stroke.color.r,
+                            stroke.color.g,
+                            stroke.color.b,
+                            stroke.color.a
+                        };
+                        for (std::size_t channel = 0;
+                             channel < source.size();
+                             ++channel)
+                        {
+                            if ((stroke.channel_mask & (1u << channel)) == 0)
+                                continue;
+                            const std::uint8_t before =
+                                std::to_integer<std::uint8_t>(
+                                    tile.texels[offset + channel]);
+                            tile.texels[offset + channel] = std::byte{
+                                blend_channel(
+                                    before,
+                                    source[channel],
+                                    amount)
+                            };
+                        }
                     }
                 }
             }
@@ -2600,6 +3765,186 @@ namespace epochengine::authoring::texture
         for (const OperationEntry& entry : impl_->operations)
             result.push_back(entry.record);
         return result;
+    }
+
+    DocumentSnapshot TextureDocument::snapshot() const
+    {
+        DocumentSnapshot result{};
+        if (!impl_)
+            return result;
+        const std::scoped_lock lock{ impl_->mutex };
+        if (!impl_->initialized)
+            return result;
+
+        result.handle = impl_->document;
+        result.branch = impl_->stream;
+        result.descriptor = impl_->canvas;
+        result.history = impl_->history;
+        result.revision = impl_->revision;
+        result.current_time = impl_->now;
+        result.layers.reserve(impl_->state.order.size());
+        for (const std::uint32_t slotIndex : impl_->state.order)
+        {
+            if (slotIndex >= impl_->state.slots.size())
+                continue;
+            const LayerSlot& slot = impl_->state.slots[slotIndex];
+            if (!slot.active)
+                continue;
+            LayerSnapshot layer{
+                .handle = LayerHandle{
+                    slotIndex,
+                    slot.generation
+                },
+                .descriptor = slot.descriptor
+            };
+            layer.tiles.reserve(slot.tiles.size());
+            for (const auto& [coordinate, tile] : slot.tiles)
+            {
+                layer.tiles.push_back(TileSnapshot{
+                    .coordinate = coordinate,
+                    .width = tile.width,
+                    .height = tile.height,
+                    .texels = tile.texels,
+                    .content = tile_content_hash(
+                        coordinate,
+                        tile.width,
+                        tile.height,
+                        tile.texels)
+                });
+            }
+            result.layers.push_back(std::move(layer));
+        }
+        return result;
+    }
+
+    SnapshotSerializationResult TextureDocument::serialize(
+        std::uint64_t maximumBytes) const noexcept
+    {
+        try
+        {
+            if (!valid())
+                return { ResultCode::invalid_document, {} };
+            if (maximumBytes == 0u
+                || maximumBytes > kMaximumSerializedDocumentBytes)
+            {
+                return {
+                    ResultCode::serialized_budget_exceeded,
+                    {}
+                };
+            }
+
+            const DocumentSnapshot state = snapshot();
+            ByteWriter writer{ maximumBytes };
+            writer.raw(kTextureSourceMagic);
+            writer.integer(kTextureSourceSchemaVersion);
+            writer.hash(state.revision.content);
+            writer.integer(state.revision.sequence);
+            writer.integer(state.handle.index);
+            writer.integer(state.handle.generation);
+            writer.integer(state.branch.timeline);
+            writer.integer(state.branch.branch);
+            writer.integer(state.current_time.tick);
+
+            writer.integer(state.descriptor.width);
+            writer.integer(state.descriptor.height);
+            writer.integer(state.descriptor.tile_extent);
+            writer.integer(state.descriptor.mip_count);
+            writer.enumeration(state.descriptor.format);
+            writer.enumeration(state.descriptor.color_space);
+            writer.integer(state.descriptor.schema_version);
+
+            writer.enumeration(state.history.mode);
+            writer.integer(
+                state.history.checkpoint_interval_operations);
+            writer.integer(state.history.maximum_operations);
+            writer.integer(state.history.maximum_checkpoints);
+            writer.integer(state.history.maximum_operation_bytes);
+            writer.integer(state.history.maximum_checkpoint_bytes);
+            writer.boolean(state.history.allow_branching);
+
+            if (state.layers.size()
+                > (std::numeric_limits<std::uint32_t>::max)())
+            {
+                return {
+                    ResultCode::serialized_budget_exceeded,
+                    {}
+                };
+            }
+            writer.integer(
+                static_cast<std::uint32_t>(state.layers.size()));
+            for (const LayerSnapshot& layer : state.layers)
+            {
+                writer.integer(layer.handle.index);
+                writer.integer(layer.handle.generation);
+                writer.string(layer.descriptor.name);
+                writer.enumeration(layer.descriptor.blend);
+                writer.integer(layer.descriptor.opacity);
+                writer.boolean(layer.descriptor.visible);
+                writer.boolean(layer.descriptor.locked);
+                writer.integer(
+                    static_cast<std::uint64_t>(layer.tiles.size()));
+                for (const TileSnapshot& tile : layer.tiles)
+                {
+                    writer.integer(tile.coordinate.mip);
+                    writer.integer(tile.coordinate.x);
+                    writer.integer(tile.coordinate.y);
+                    writer.integer(tile.width);
+                    writer.integer(tile.height);
+                    writer.hash(tile.content);
+                    writer.integer(
+                        static_cast<std::uint64_t>(
+                            tile.texels.size()));
+                    writer.raw(tile.texels);
+                }
+            }
+            writer.integer(
+                static_cast<std::uint32_t>(state.layers.size()));
+            for (const LayerSnapshot& layer : state.layers)
+            {
+                writer.integer(layer.handle.index);
+                writer.integer(layer.handle.generation);
+                writer.integer(
+                    layer.descriptor.transform.offset_x_pixels);
+                writer.integer(
+                    layer.descriptor.transform.offset_y_pixels);
+                writer.boolean(layer.descriptor.transform.mirror_x);
+                writer.boolean(layer.descriptor.transform.mirror_y);
+                writer.integer(layer.descriptor.filter.brightness);
+                writer.boolean(layer.descriptor.filter.grayscale);
+                writer.boolean(layer.descriptor.filter.invert);
+            }
+            writer.integer(
+                static_cast<std::uint32_t>(state.layers.size()));
+            for (const LayerSnapshot& layer : state.layers)
+            {
+                writer.integer(layer.handle.index);
+                writer.integer(layer.handle.generation);
+                writer.enumeration(layer.descriptor.role);
+                writer.integer(layer.descriptor.mask.source.index);
+                writer.integer(layer.descriptor.mask.source.generation);
+                writer.integer(layer.descriptor.mask.strength);
+                writer.boolean(layer.descriptor.mask.invert);
+            }
+            if (!writer.good())
+            {
+                return {
+                    ResultCode::serialized_budget_exceeded,
+                    {}
+                };
+            }
+            return {
+                ResultCode::success,
+                writer.take()
+            };
+        }
+        catch (const std::bad_alloc&)
+        {
+            return { ResultCode::allocation_failure, {} };
+        }
+        catch (...)
+        {
+            return { ResultCode::malformed_payload, {} };
+        }
     }
 
     CompiledTextureArtifactIdentity
@@ -3084,7 +4429,13 @@ namespace epochengine::authoring::texture
             return "invalid_compile_profile";
         case ResultCode::residency_unavailable:
             return "residency_unavailable";
+        case ResultCode::allocation_failure: return "allocation_failure";
         case ResultCode::arithmetic_overflow: return "arithmetic_overflow";
+        case ResultCode::malformed_payload: return "malformed_payload";
+        case ResultCode::unsupported_schema: return "unsupported_schema";
+        case ResultCode::serialized_budget_exceeded:
+            return "serialized_budget_exceeded";
+        case ResultCode::integrity_failure: return "integrity_failure";
         }
         return "unknown";
     }

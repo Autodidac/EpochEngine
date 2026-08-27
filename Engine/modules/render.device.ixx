@@ -36,7 +36,7 @@ module;
 
 export module render.device;
 
-//import <string>;
+export import render.camera;
 
 export namespace epochengine
 {
@@ -289,9 +289,17 @@ export namespace epochengine
 
     struct RenderPassDesc
     {
+        struct ViewBinding
+        {
+            render_camera::ViewDescriptor view{};
+            bool enabled{};
+            bool require_clip_planes{};
+        };
+
         bool clear_color = true;
         bool clear_depth = true;
         float clear[4] = { 0.07f, 0.09f, 0.12f, 1.0f };
+        ViewBinding view_binding{};
         const char* debug_name = nullptr;
     };
 
@@ -301,7 +309,9 @@ export namespace epochengine
         arcade_cabinet,
         ui_surface,
         capture,
-        package_preview
+        package_preview,
+        portal,
+        mirror
     };
 
     struct RenderTextureAssetDesc

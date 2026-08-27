@@ -6,6 +6,7 @@ module;
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -42,8 +43,10 @@ import core.logger;
 import image.loader;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
+import render.device;
 import render.device_sdl;
 import package.registry;
 import sdl.renderer;
@@ -54,15 +57,104 @@ namespace
 {
     SDL_Window* s_window = nullptr;
     SDL_Renderer* s_renderer = nullptr;
+    SDL_WindowID s_windowId = 0;
     bool s_running = false;
+    bool s_videoSubsystemLease = false;
+    bool s_ownsWindow = false;
+    bool s_ownsRenderer = false;
+    bool s_pollStandaloneEvents = false;
     int s_width = 0;
     int s_height = 0;
+    int s_framebufferWidth = 0;
+    int s_framebufferHeight = 0;
+    int s_dockWidth = 0;
+    int s_dockHeight = 0;
+    int s_logicalPresentationWidth = 0;
+    int s_logicalPresentationHeight = 0;
 
 #if defined(_WIN32)
     HWND s_hostWindow = nullptr;
     HWND s_childWindow = nullptr;
     HWND s_dockParent = nullptr;
+
+    class ScopedParentDpiAwareness final
+    {
+    public:
+        explicit ScopedParentDpiAwareness(HWND parent) noexcept
+        {
+            if (!parent || ::IsWindow(parent) == FALSE)
+                return;
+
+            const HMODULE user32 = ::GetModuleHandleW(L"user32.dll");
+            if (!user32)
+                return;
+
+            getWindowContext_ = reinterpret_cast<GetWindowContextFn>(
+                ::GetProcAddress(user32, "GetWindowDpiAwarenessContext"));
+            setThreadContext_ = reinterpret_cast<SetThreadContextFn>(
+                ::GetProcAddress(user32, "SetThreadDpiAwarenessContext"));
+            if (!getWindowContext_ || !setThreadContext_)
+                return;
+
+            const DPI_AWARENESS_CONTEXT target = getWindowContext_(parent);
+            if (target)
+                previous_ = setThreadContext_(target);
+        }
+
+        ~ScopedParentDpiAwareness()
+        {
+            if (setThreadContext_ && previous_)
+                static_cast<void>(setThreadContext_(previous_));
+        }
+
+    private:
+        using GetWindowContextFn = DPI_AWARENESS_CONTEXT(WINAPI*)(HWND);
+        using SetThreadContextFn = DPI_AWARENESS_CONTEXT(WINAPI*)(
+            DPI_AWARENESS_CONTEXT);
+
+        GetWindowContextFn getWindowContext_{};
+        SetThreadContextFn setThreadContext_{};
+        DPI_AWARENESS_CONTEXT previous_{};
+    };
 #endif
+
+    void release_owned_sdl_runtime() noexcept
+    {
+        std::scoped_lock runtimeGuard{
+            epochengine::sdlcontext::state::runtime_api_mutex()};
+
+        s_running = false;
+        epochengine::sdltextures::sdl_renderer = nullptr;
+        epochengine::sdlcontext::sdl_renderer.renderer = nullptr;
+
+        if (s_ownsRenderer && s_renderer)
+            SDL_DestroyRenderer(s_renderer);
+        s_renderer = nullptr;
+        s_ownsRenderer = false;
+
+        if (s_ownsWindow && s_window)
+            SDL_DestroyWindow(s_window);
+        s_window = nullptr;
+        s_ownsWindow = false;
+        s_windowId = 0;
+
+        if (s_videoSubsystemLease)
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        s_videoSubsystemLease = false;
+        s_pollStandaloneEvents = false;
+
+        s_framebufferWidth = 0;
+        s_framebufferHeight = 0;
+        s_dockWidth = 0;
+        s_dockHeight = 0;
+        s_logicalPresentationWidth = 0;
+        s_logicalPresentationHeight = 0;
+#if defined(_WIN32)
+        s_hostWindow = nullptr;
+        s_childWindow = nullptr;
+        s_dockParent = nullptr;
+#endif
+    }
 
     enum class CanvasSceneStatus : std::uint8_t
     {
@@ -78,10 +170,14 @@ namespace
             const epochengine::core::Context* owner,
             std::uint64_t backendEpoch)
             : owner_(owner),
+              execution_limits_(
+                  epochengine::canvas2d::limits::for_backend(
+                      epochengine::RendererBackendKind::sdl3)),
               presenter_(
                   device_,
                   backendEpoch,
-                  {this, &SdlCanvas2DPresenter::dispatch_present})
+                  {this, &SdlCanvas2DPresenter::dispatch_present},
+                  execution_limits_.residency)
         {
         }
 
@@ -96,7 +192,9 @@ namespace
                 owner_,
                 {
                     static_cast<std::uint32_t>(viewport.width),
-                    static_cast<std::uint32_t>(viewport.height)});
+                    static_cast<std::uint32_t>(viewport.height)},
+                execution_limits_.canvas,
+                execution_limits_.raster);
             if (prepared.code
                 == epochengine::canvas2d::runtime::PrepareCode::missing_scene)
             {
@@ -366,6 +464,7 @@ namespace
         }
 
         const epochengine::core::Context* owner_{};
+        epochengine::canvas2d::limits::NativeExecutionLimits execution_limits_{};
         epochengine::SdlRenderDevice device_{};
         epochengine::canvas2d::runtime::SceneRasterSession session_{};
         epochengine::canvas2d::presentation::Canvas2DPresenter presenter_;
@@ -441,6 +540,15 @@ namespace
             x = epochengine::input::mouseX.load(std::memory_order_relaxed);
             y = epochengine::input::mouseY.load(std::memory_order_relaxed);
         };
+#if defined(_WIN32)
+        ctx->normalize_mouse_position = [](int& x, int& y)
+        {
+            x = epochengine::sdlcontext::state::normalize_presented_coordinate(
+                x, s_width, s_framebufferWidth);
+            y = epochengine::sdlcontext::state::normalize_presented_coordinate(
+                y, s_height, s_framebufferHeight);
+        };
+#endif
         ctx->is_mouse_button_held = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_held(button); };
         ctx->is_mouse_button_down = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_down(button); };
     }
@@ -718,8 +826,9 @@ namespace
             (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
         };
 
-        const auto vertices = epochengine::previewgrid::grid_vertices();
-        const auto indices = epochengine::previewgrid::grid_indices();
+        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+        const auto& vertices = gridGeometry->vertices;
+        const auto& indices = gridGeometry->indices;
 
         for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
         {
@@ -769,7 +878,8 @@ namespace
             triangle[1].color = faceColor;
             triangle[2].position = SDL_FPoint{ cx, cy };
             triangle[2].color = faceColor;
-            if (!SDL_RenderGeometry(s_renderer, nullptr, triangle, 3, nullptr, 0))
+            constexpr int triangleIndices[3]{ 0, 1, 2 };
+            if (!SDL_RenderGeometry(s_renderer, nullptr, triangle, 3, triangleIndices, 3))
             {
                 epochengine::sdlcontext::check_sdl_error("SDL_RenderGeometry scene solid");
                 epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
@@ -797,42 +907,118 @@ namespace
 
     void refresh_dimensions(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
-#if defined(_WIN32)
-        if (s_childWindow && ::IsWindow(s_childWindow) != FALSE)
-        {
-            RECT client{};
-            if (::GetClientRect(s_childWindow, &client))
-            {
-                s_width = (std::max)(1, static_cast<int>(client.right - client.left));
-                s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
-            }
-        }
-        else if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE)
-        {
-            RECT client{};
-            if (::GetClientRect(s_hostWindow, &client))
-            {
-                s_width = (std::max)(1, static_cast<int>(client.right - client.left));
-                s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
-            }
-        }
-#else
+        int logicalWidth = (std::max)(1, s_width);
+        int logicalHeight = (std::max)(1, s_height);
+        bool resolvedWindowSize = false;
         if (s_window)
         {
-            int w = 0;
-            int h = 0;
-            SDL_GetWindowSize(s_window, &w, &h);
-            s_width = (std::max)(1, w);
-            s_height = (std::max)(1, h);
+            int windowWidth = 0;
+            int windowHeight = 0;
+            if (SDL_GetWindowSize(s_window, &windowWidth, &windowHeight)
+                && windowWidth > 0 && windowHeight > 0)
+            {
+                logicalWidth = windowWidth;
+                logicalHeight = windowHeight;
+                resolvedWindowSize = true;
+            }
+        }
+
+#if defined(_WIN32)
+        if (!resolvedWindowSize)
+        {
+            const HWND sizeSource =
+                s_childWindow && ::IsWindow(s_childWindow) != FALSE
+                    ? s_childWindow
+                    : s_hostWindow;
+            if (sizeSource && ::IsWindow(sizeSource) != FALSE)
+            {
+                RECT client{};
+                if (::GetClientRect(sizeSource, &client))
+                {
+                    logicalWidth = (std::max)(
+                        1,
+                        static_cast<int>(client.right - client.left));
+                    logicalHeight = (std::max)(
+                        1,
+                        static_cast<int>(client.bottom - client.top));
+                }
+            }
         }
 #endif
+
+        int framebufferWidth = logicalWidth;
+        int framebufferHeight = logicalHeight;
+        if (s_renderer)
+        {
+            int renderWidth = 0;
+            int renderHeight = 0;
+            if (SDL_GetRenderOutputSize(
+                    s_renderer,
+                    &renderWidth,
+                    &renderHeight)
+                && renderWidth > 0 && renderHeight > 0)
+            {
+                framebufferWidth = renderWidth;
+                framebufferHeight = renderHeight;
+            }
+        }
+
+        auto dimensions =
+            epochengine::sdlcontext::state::make_presentation_dimensions(
+                logicalWidth,
+                logicalHeight,
+                framebufferWidth,
+                framebufferHeight);
+        if (s_window)
+        {
+            const float displayScale = SDL_GetWindowDisplayScale(s_window);
+            const auto displayScaledDimensions =
+                epochengine::sdlcontext::state::
+                    make_display_scaled_presentation_dimensions(
+                        framebufferWidth,
+                        framebufferHeight,
+                        displayScale);
+            if (displayScaledDimensions.valid())
+                dimensions = displayScaledDimensions;
+        }
+        s_width = dimensions.logicalWidth;
+        s_height = dimensions.logicalHeight;
+        s_framebufferWidth = dimensions.framebufferWidth;
+        s_framebufferHeight = dimensions.framebufferHeight;
+
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
+        if (s_renderer
+            && SDL_GetRenderTarget(s_renderer) == nullptr
+            && (s_logicalPresentationWidth != s_width
+                || s_logicalPresentationHeight != s_height))
+        {
+            if (!SDL_SetRenderLogicalPresentation(
+                    s_renderer,
+                    s_width,
+                    s_height,
+                    SDL_LOGICAL_PRESENTATION_STRETCH))
+            {
+                epochengine::logger::error(
+                    "SDL",
+                    std::string("SDL_SetRenderLogicalPresentation failed: ")
+                        + SDL_GetError());
+                state.renderFaulted = true;
+            }
+            else
+            {
+                s_logicalPresentationWidth = s_width;
+                s_logicalPresentationHeight = s_height;
+            }
+        }
 
         if (ctx)
         {
             ctx->width = s_width;
             ctx->height = s_height;
-            ctx->framebufferWidth = s_width;
-            ctx->framebufferHeight = s_height;
+            ctx->virtualWidth = s_width;
+            ctx->virtualHeight = s_height;
+            ctx->framebufferWidth = s_framebufferWidth;
+            ctx->framebufferHeight = s_framebufferHeight;
             if (ctx->windowData)
             {
                 ctx->windowData->sdl_window = s_window;
@@ -840,7 +1026,6 @@ namespace
             }
         }
 
-        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.window.sdl_window = s_window;
         state.set_dimensions(s_width, s_height);
     }
@@ -854,7 +1039,11 @@ namespace
         }
 
         RECT client{};
-        UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW;
+        UINT positionFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED;
+        if (ctx && ctx->windowData && ctx->windowData->backend_ready())
+            positionFlags |= SWP_SHOWWINDOW;
+        else
+            positionFlags |= SWP_HIDEWINDOW;
         const HWND childParent = ::GetParent(s_childWindow);
         if (s_hostWindow && ::IsWindow(s_hostWindow) != FALSE && childParent == s_hostWindow)
         {
@@ -870,11 +1059,20 @@ namespace
 
         const int width = (std::max)(1, static_cast<int>(client.right - client.left));
         const int height = (std::max)(1, static_cast<int>(client.bottom - client.top));
-        if (width == s_width && height == s_height)
+        const bool sizeChanged =
+            width != s_dockWidth || height != s_dockHeight;
+        const bool shouldShow =
+            ctx && ctx->windowData && ctx->windowData->backend_ready();
+        const bool visibilityChanged =
+            (::IsWindowVisible(s_childWindow) != FALSE) != shouldShow;
+        if (!sizeChanged && !visibilityChanged)
             return;
 
-        s_width = width;
-        s_height = height;
+        if (sizeChanged)
+        {
+            s_dockWidth = width;
+            s_dockHeight = height;
+        }
 
         ::SetWindowPos(
             s_childWindow,
@@ -885,12 +1083,15 @@ namespace
             height,
             positionFlags);
 
+        if (!sizeChanged)
+            return;
+
         if (s_window)
             SDL_SetWindowSize(s_window, width, height);
 
         refresh_dimensions(ctx);
         if (ctx && ctx->onResize)
-            ctx->onResize(width, height);
+            ctx->onResize(s_framebufferWidth, s_framebufferHeight);
 #else
         (void)ctx;
 #endif
@@ -906,13 +1107,54 @@ namespace
             ctx->windowData->set_should_close(true);
     }
 
+#if defined(_WIN32)
+    bool pump_hosted_window_messages(
+        const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
+    {
+        if (s_pollStandaloneEvents
+            || !s_childWindow
+            || ::IsWindow(s_childWindow) == FALSE)
+        {
+            return true;
+        }
+
+        // SDL creates the hosted child on this backend thread. Service only that
+        // child without draining SDL's process-global peer event queue.
+        MSG message{};
+        while (::PeekMessageW(&message, s_childWindow, 0, 0, PM_REMOVE))
+        {
+            if (message.message == WM_CLOSE)
+            {
+                request_host_shutdown(ctx);
+                return false;
+            }
+
+            ::TranslateMessage(&message);
+            ::DispatchMessageW(&message);
+        }
+        return true;
+    }
+#endif
+
     void sdl_initialize_adapter()
     {
         auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
 
+        std::scoped_lock runtimeGuard{
+            epochengine::sdlcontext::state::runtime_api_mutex()};
+
         ctx->init_failed = false;
+        if (s_videoSubsystemLease || s_window || s_renderer)
+        {
+            ctx->init_failed = true;
+            epochengine::logger::error(
+                "SDL",
+                "SDL adapter initialization rejected because a prior SDL adapter lease is still active.");
+            return;
+        }
+
         s_width = (std::max)(1, ctx->width);
         s_height = (std::max)(1, ctx->height);
 
@@ -921,6 +1163,13 @@ namespace
         const bool hostedWindow =
             s_hostWindow
             && ::IsWindow(s_hostWindow) != FALSE;
+        const HWND preferredDockParent =
+            hostedWindow ? ::GetParent(s_hostWindow) : nullptr;
+        const HWND hostedDockParent =
+            preferredDockParent
+                && ::IsWindow(preferredDockParent) != FALSE
+                    ? preferredDockParent
+                    : s_hostWindow;
 #endif
 
         if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
@@ -929,6 +1178,13 @@ namespace
             epochengine::logger::error("SDL", std::string("SDL_Init failed: ") + SDL_GetError());
             return;
         }
+        s_videoSubsystemLease = true;
+#if defined(_WIN32)
+        ScopedParentDpiAwareness dpiAwareness{ hostedDockParent };
+        s_pollStandaloneEvents = !hostedWindow;
+#else
+        s_pollStandaloneEvents = true;
+#endif
 
         const std::string title = (ctx->windowData && !ctx->windowData->titleNarrow.empty())
             ? ctx->windowData->titleNarrow
@@ -939,7 +1195,7 @@ namespace
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_CreateProperties failed: ") + SDL_GetError());
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            release_owned_sdl_runtime();
             return;
         }
 
@@ -958,23 +1214,21 @@ namespace
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            release_owned_sdl_runtime();
             return;
         }
+        s_ownsWindow = true;
+        s_windowId = SDL_GetWindowID(s_window);
 
         s_renderer = SDL_CreateRenderer(s_window, nullptr);
         if (!s_renderer)
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
-            SDL_DestroyWindow(s_window);
-            s_window = nullptr;
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            release_owned_sdl_runtime();
             return;
         }
-
-        epochengine::sdlcontext::init_renderer(s_renderer);
-        epochengine::sdltextures::sdl_renderer = s_renderer;
+        s_ownsRenderer = true;
 
 #if defined(_WIN32)
         SDL_PropertiesID windowProps = SDL_GetWindowProperties(s_window);
@@ -982,11 +1236,7 @@ namespace
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", std::string("SDL_GetWindowProperties failed: ") + SDL_GetError());
-            SDL_DestroyRenderer(s_renderer);
-            SDL_DestroyWindow(s_window);
-            s_renderer = nullptr;
-            s_window = nullptr;
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            release_owned_sdl_runtime();
             return;
         }
 
@@ -996,79 +1246,77 @@ namespace
         {
             ctx->init_failed = true;
             epochengine::logger::error("SDL", "Failed to retrieve SDL HWND");
-            SDL_DestroyRenderer(s_renderer);
-            SDL_DestroyWindow(s_window);
-            s_renderer = nullptr;
-            s_window = nullptr;
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+            release_owned_sdl_runtime();
             return;
         }
 
         if (hostedWindow)
         {
-            const HWND dockParent = ::GetParent(s_hostWindow);
-            if (dockParent && ::IsWindow(dockParent) != FALSE)
+            const HWND dockParent = hostedDockParent;
+            s_dockParent = dockParent;
+            LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
+            style &= ~static_cast<LONG_PTR>(
+                WS_OVERLAPPEDWINDOW | WS_POPUP);
+            style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+            ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
+
+            ::SetLastError(ERROR_SUCCESS);
+            ::SetParent(s_childWindow, dockParent);
+            const DWORD parentError = ::GetLastError();
+            if (::GetParent(s_childWindow) != dockParent)
             {
-                s_dockParent = dockParent;
-                ::SetParent(s_childWindow, dockParent);
-
-                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
-                style &= ~static_cast<LONG_PTR>(WS_OVERLAPPEDWINDOW);
-                style |= WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-                epochengine::core::MakeDockable(s_childWindow, dockParent);
-
-                RECT client{};
-                ::GetClientRect(s_hostWindow, &client);
-                s_width = (std::max)(1, static_cast<int>(client.right - client.left));
-                s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
-
-                // Keep SDL's internal window/backbuffer size aligned with the dock slot
-                // before showing so the pane does not flash as a top-level window.
-                SDL_SetWindowSize(s_window, s_width, s_height);
-                ::SetWindowPos(
-                    s_childWindow,
-                    nullptr,
-                    0,
-                    0,
-                    s_width,
-                    s_height,
-                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-                ::RedrawWindow(
-                    s_childWindow,
-                    nullptr,
-                    nullptr,
-                    RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
-
-                if (s_hostWindow != s_childWindow)
-                    ::ShowWindow(s_hostWindow, SW_HIDE);
+                ctx->init_failed = true;
+                epochengine::logger::error(
+                    "SDL",
+                    "Failed to parent SDL child window into the hosted dock"
+                    " (GetLastError="
+                    + std::to_string(parentError)
+                    + ", child="
+                    + std::to_string(reinterpret_cast<std::uintptr_t>(s_childWindow))
+                    + ", parent="
+                    + std::to_string(reinterpret_cast<std::uintptr_t>(dockParent))
+                    + ").");
+                release_owned_sdl_runtime();
+                return;
             }
-            else
-            {
-                s_dockParent = nullptr;
-                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
-                style &= ~static_cast<LONG_PTR>(WS_CHILD);
-                style |= WS_OVERLAPPEDWINDOW | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-                ::SetWindowPos(
-                    s_childWindow,
-                    nullptr,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
 
-                if (s_hostWindow != s_childWindow)
-                    ::ShowWindow(s_hostWindow, SW_HIDE);
-            }
+            epochengine::core::MakeDockable(s_childWindow, dockParent);
+
+            RECT client{};
+            ::GetClientRect(s_hostWindow, &client);
+            s_width = (std::max)(1, static_cast<int>(client.right - client.left));
+            s_height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+            s_dockWidth = s_width;
+            s_dockHeight = s_height;
+
+            // Keep SDL's internal window/backbuffer size aligned with the dock slot
+            // and hidden until the backend reports ready.
+            SDL_SetWindowSize(s_window, s_width, s_height);
+            ::SetWindowPos(
+                s_childWindow,
+                nullptr,
+                0,
+                0,
+                s_width,
+                s_height,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_HIDEWINDOW);
+            ::RedrawWindow(
+                s_childWindow,
+                nullptr,
+                nullptr,
+                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+
+            if (dockParent != s_hostWindow && s_hostWindow != s_childWindow)
+                ::ShowWindow(s_hostWindow, SW_HIDE);
         }
 
 #endif
 
+        epochengine::sdlcontext::init_renderer(s_renderer);
+        epochengine::sdltextures::sdl_renderer = s_renderer;
         refresh_dimensions(ctx);
         if (ctx->onResize)
-            ctx->onResize(s_width, s_height);
+            ctx->onResize(s_framebufferWidth, s_framebufferHeight);
         if (ctx->windowData)
         {
 #if defined(_WIN32)
@@ -1110,7 +1358,12 @@ namespace
  #endif
 
         s_running = true;
+#if defined(_WIN32)
+        if (!hostedWindow)
+            SDL_ShowWindow(s_window);
+#else
         SDL_ShowWindow(s_window);
+#endif
         epochengine::atlasmanager::register_backend_uploader(
             epochengine::core::ContextType::SDL,
             [](const epochengine::TextureAtlas& atlas)
@@ -1121,6 +1374,9 @@ namespace
 
     void sdl_cleanup_adapter()
     {
+        std::scoped_lock runtimeGuard{
+            epochengine::sdlcontext::state::runtime_api_mutex()};
+
         epochengine::atlasmanager::unregister_backend_uploader(epochengine::core::ContextType::SDL);
         release_canvas2d_presenter();
         epochengine::sdltextures::clear_gpu_atlases();
@@ -1133,48 +1389,12 @@ namespace
         state.mark_should_close(false);
         state.window.sdl_window = nullptr;
 #if defined(_WIN32)
-        if (s_childWindow && ::IsWindow(s_childWindow) != FALSE)
-        {
+        if (s_ownsWindow && s_childWindow && ::IsWindow(s_childWindow) != FALSE)
             ::ShowWindow(s_childWindow, SW_HIDE);
-            if (::GetParent(s_childWindow))
-            {
-                LONG_PTR style = ::GetWindowLongPtrW(s_childWindow, GWL_STYLE);
-                style &= ~static_cast<LONG_PTR>(WS_CHILD);
-                style |= WS_POPUP;
-                ::SetWindowLongPtrW(s_childWindow, GWL_STYLE, style);
-                ::SetParent(s_childWindow, nullptr);
-                ::SetWindowPos(
-                    s_childWindow,
-                    nullptr,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_HIDEWINDOW);
-            }
-        }
-        if (s_hostWindow && s_hostWindow != s_childWindow && ::IsWindow(s_hostWindow) != FALSE)
-            ::ShowWindow(s_hostWindow, SW_HIDE);
 #endif
         destroy_arcade_screen_preview_target();
+        release_owned_sdl_runtime();
 
-        if (s_renderer)
-        {
-            SDL_DestroyRenderer(s_renderer);
-            s_renderer = nullptr;
-        }
-        if (s_window)
-        {
-            SDL_DestroyWindow(s_window);
-            s_window = nullptr;
-        }
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-
-#if defined(_WIN32)
-        s_hostWindow = nullptr;
-        s_childWindow = nullptr;
-        s_dockParent = nullptr;
-#endif
         s_width = 0;
         s_height = 0;
     }
@@ -1183,6 +1403,9 @@ namespace
         std::shared_ptr<epochengine::core::Context> ctx,
         epochengine::core::CommandQueue& queue)
     {
+        std::scoped_lock runtimeGuard{
+            epochengine::sdlcontext::state::runtime_api_mutex()};
+
         if (!ctx || !s_running || !s_window || !s_renderer)
             return false;
 
@@ -1200,24 +1423,46 @@ namespace
         }
 
 #if defined(_WIN32)
-        if (s_childWindow && ::IsWindow(s_childWindow) == FALSE)
+        if (!s_childWindow || ::IsWindow(s_childWindow) == FALSE)
+        {
+            request_host_shutdown(ctx);
+            queue.clear();
             return false;
+        }
+        if (!pump_hosted_window_messages(ctx))
+        {
+            queue.clear();
+            return false;
+        }
 #endif
 
-        SDL_Event event{};
-        while (SDL_PollEvent(&event))
+        if (s_pollStandaloneEvents)
         {
-            if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
+            // SDL owns one process-global event queue. Hosted contexts leave it to
+            // the native multicontext host so this adapter cannot steal peer events.
+            SDL_Event event{};
+            while (SDL_PollEvent(&event))
             {
-                request_host_shutdown(ctx);
-                return false;
-            }
+                if (event.type == SDL_EVENT_QUIT)
+                {
+                    request_host_shutdown(ctx);
+                    return false;
+                }
 
-            if (event.type == SDL_EVENT_WINDOW_RESIZED)
-            {
-                refresh_dimensions(ctx);
-                if (ctx->onResize)
-                    ctx->onResize(ctx->framebufferWidth, ctx->framebufferHeight);
+                if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED
+                    && event.window.windowID == s_windowId)
+                {
+                    request_host_shutdown(ctx);
+                    return false;
+                }
+
+                if (event.type == SDL_EVENT_WINDOW_RESIZED
+                    && event.window.windowID == s_windowId)
+                {
+                    refresh_dimensions(ctx);
+                    if (ctx->onResize)
+                        ctx->onResize(ctx->framebufferWidth, ctx->framebufferHeight);
+                }
             }
         }
 
@@ -1238,9 +1483,13 @@ namespace
         SDL_RenderClear(s_renderer);
 
         epochengine::atlasmanager::process_pending_uploads(epochengine::core::ContextType::SDL);
+        const bool overlayPriority = ctx->gui_overlay_priority();
+        (void)queue.drain();
+        if (!overlayPriority)
+            (void)epochengine::gui::render_deferred_batch(ctx.get());
+        render_scene_preview(ctx);
         (void)queue.drain();
         (void)epochengine::gui::render_deferred_batch(ctx.get());
-        render_scene_preview(ctx);
         (void)epochengine::gui::render_top_layer_batch(ctx.get());
         epochengine::sdlcontext::end_frame();
         if (state.renderFaulted)

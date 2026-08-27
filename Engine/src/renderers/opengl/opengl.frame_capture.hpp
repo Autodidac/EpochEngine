@@ -34,5 +34,8 @@
 
 namespace epochengine::openglcapture
 {
-    void capture_frame_if_requested(int framebufferWidth, int framebufferHeight, std::uintptr_t windowId);
+    void capture_frame_if_requested(
+        int framebufferWidth,
+        int framebufferHeight,
+        std::uintptr_t windowId);
 }

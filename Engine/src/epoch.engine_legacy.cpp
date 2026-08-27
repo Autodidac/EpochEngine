@@ -99,6 +99,7 @@
 // Engine/module imports
 // -----------------------------
 import platform.engine;
+import platform.child_process;
 //import engine.config;
 
 import epoch.facade;
@@ -108,6 +109,7 @@ import epoch.version;
 import engine.updater;
 import launcher.update;
 import input.engine;
+import input.controller;
 import ecs.legacy_components;
 
 import context.multiplexer;
@@ -125,6 +127,7 @@ import audio.manager;
 import audio.device;
 import audio.mixer;
 import audio.playback_runtime;
+import asset.audio_import;
 #if EPOCH_ENABLE_PHYSICAL_AUDIO
 import audio.device_sdl;
 #endif
@@ -136,13 +139,20 @@ import authoring.texture;
 import asset.texture_import;
 import capability.profile;
 import editor.project_textures;
+import editor.workspace_layout;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import editor.tilemap_workspace;
 #endif
 import forest.factory;
 import package.registry;
+import extension.catalog;
+#if EPOCH_ENABLE_NATIVE_EXTENSIONS
+import extension.plugin;
+#endif
 import physics.manager;
+import render.camera;
 import render.lighting;
+import render.portal;
 import render.ray;
 import scene.document;
 import scene.interaction;
@@ -163,6 +173,14 @@ import gui.engine;
 import gui.menu;
 import editor.core;
 import ai.engine;
+import ai.development_proposal_codec;
+import ai.iteration_loop;
+import editor.ai_development_controller;
+import editor.ai_development_panel;
+import editor.systems_workspace;
+import authoring.gui_document;
+import authoring.gui_compiler;
+import authoring.task_graph;
 import render.device;
 import render.device_null;
 import render.device_opengl_family;
@@ -173,16 +191,25 @@ import opengl.textures;
 import render.canvas2d;
 import render.canvas2d_scene;
 import render.canvas2d_cpu;
+import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.texture_residency;
 import canvas2d.scene_contracts;
 import project.contracts;
 import project.tilemap_runtime;
+import project.gui_library;
+import project.gui_runtime;
+import project.gui_epochgui;
 import asset.tilemap_artifact;
 import render.canvas2d_tilemap;
 import project.input_profile;
+import project.input_controller;
 import project.actor2d_runtime;
+import project.gameplay2d_runtime;
+import perf.tier;
+import platform.budgets;
 import project.sprite_animation;
+import project.audio_profile;
 import render.texture_artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
@@ -223,6 +250,7 @@ import software.context;
 #endif
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import sdl.context;
+import sdl.state;
 #endif
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
 import sfml.context;
@@ -418,7 +446,7 @@ namespace epochengine::core
         std::string_view project_root,
         std::string_view title,
         std::string_view summary,
-        std::string_view packet_path,
+        std::string_view evidence_path,
         std::string_view model_name,
         std::string_view manifest_path,
         std::string_view scene_path,
@@ -450,13 +478,13 @@ namespace epochengine::core
         out << "\n## " << title << "\n\n";
         out << "- Summary: " << summary << "\n";
         out << "- Model: " << (model_name.empty() ? std::string_view{ "(none selected)" } : model_name) << "\n";
-        out << "- Packet: " << (packet_path.empty() ? std::string_view{ "(packet staging failed)" } : packet_path) << "\n";
+        out << "- Evidence: " << (evidence_path.empty() ? std::string_view{ "(missing)" } : evidence_path) << "\n";
         out << "- Manifest: " << (manifest_path.empty() ? std::string_view{ "(missing)" } : manifest_path) << "\n";
         out << "- Scene: " << (scene_path.empty() ? std::string_view{ "(missing)" } : scene_path) << "\n";
         out << "- Active script: " << (script_path.empty() ? std::string_view{ "(missing)" } : script_path) << "\n";
         out << "- Build log: " << (build_log_path.empty() ? std::string_view{ "(missing)" } : build_log_path) << "\n";
         out << "- Output: " << (output_path.empty() ? std::string_view{ "(missing)" } : output_path) << "\n";
-        out << "- Gate: human review required before source changes, dataset promotion, or eval promotion.\n";
+        out << "- Gate: human review required before source changes or reviewed eval-fixture admission.\n";
     }
 
     struct GeneratedProjectSelfTestResult
@@ -467,11 +495,6 @@ namespace epochengine::core
         std::string summary = "child self-test skipped";
     };
 
-    [[nodiscard]] inline std::string quote_shell_path(const std::filesystem::path& path)
-    {
-        return "\"" + path.string() + "\"";
-    }
-
     [[nodiscard]] inline GeneratedProjectSelfTestResult run_generated_project_self_test(
         std::string_view executable_path,
         std::string_view project_root)
@@ -481,8 +504,10 @@ namespace epochengine::core
             return result;
 
         const std::filesystem::path executable{ std::string{ executable_path } };
-        const std::filesystem::path log_dir = std::filesystem::path{ std::string{ project_root } } / "logs";
-        const std::filesystem::path log_path = log_dir / "project-self-test.log";
+        const std::filesystem::path log_dir =
+            std::filesystem::path{ std::string{ project_root } } / "logs";
+        const std::filesystem::path log_path =
+            log_dir / "project-self-test.log";
         result.log_path = log_path.generic_string();
 
         std::error_code ec;
@@ -500,99 +525,162 @@ namespace epochengine::core
         }
 
         result.attempted = true;
-
-#if defined(_WIN32)
-        SECURITY_ATTRIBUTES securityAttributes{};
-        securityAttributes.nLength = sizeof(securityAttributes);
-        securityAttributes.bInheritHandle = TRUE;
-
-        HANDLE logFile = CreateFileW(
-            log_path.wstring().c_str(),
-            GENERIC_WRITE,
-            FILE_SHARE_READ,
-            &securityAttributes,
-            CREATE_ALWAYS,
-            FILE_ATTRIBUTE_NORMAL,
-            nullptr);
-        if (logFile == INVALID_HANDLE_VALUE)
+        constexpr std::uint32_t requiredRuns = 2u;
+        constexpr std::uint64_t childTimeoutNs = 30'000'000'000ull;
+        constexpr std::size_t maximumLogBytes = 2u * 1024u * 1024u;
+        std::string evidence{};
+        evidence.reserve(64u * 1024u);
+        for (std::uint32_t run = 0u; run < requiredRuns; ++run)
         {
-            result.summary = "failed to create child self-test log file: win32=" + std::to_string(GetLastError());
+            const std::filesystem::path runLogPath = log_dir
+                / ("project-self-test.run-" + std::to_string(run + 1u)
+                    + ".log");
+            platform::child_process::LaunchRequest request{};
+            request.executable = executable;
+            request.working_directory = executable.parent_path();
+            request.merged_output_path = runLogPath;
+            request.arguments = {"--project-self-test"};
+            request.correlation_key = "generated-project-self-test:"
+                + std::to_string(run);
+            request.exclusive_group = "generated-project-self-test";
+            request.display_name = "Generated Project Self-Test";
+            request.window_mode =
+                platform::child_process::WindowMode::hidden;
+            request.append_output = false;
+
+            const auto launched =
+                platform::child_process::launch_or_focus(request);
+            if (launched.code
+                    != platform::child_process::LaunchCode::started
+                || !launched.handle.valid())
+            {
+                if (launched.handle.valid())
+                    (void)platform::child_process::release(launched.handle);
+                result.summary =
+                    "failed to launch supervised child self-test run "
+                    + std::to_string(run + 1u) + ": " + launched.message;
+                return result;
+            }
+
+            const auto waited = platform::child_process::wait(
+                launched.handle, {}, childTimeoutNs);
+            bool released =
+                platform::child_process::release(launched.handle);
+            if (!released)
+            {
+                (void)platform::child_process::stop(
+                    launched.handle,
+                    platform::child_process::StopMode::force);
+                (void)platform::child_process::wait(
+                    launched.handle, {}, 5'000'000'000ull);
+                released =
+                    platform::child_process::release(launched.handle);
+            }
+            if (waited.code != platform::child_process::WaitCode::exited
+                || !waited.process || !waited.process->exit_code_valid
+                || waited.process->exit_code != 0 || !released)
+            {
+                result.summary = "supervised child self-test run "
+                    + std::to_string(run + 1u) + " failed: "
+                    + waited.message;
+                if (waited.process && waited.process->exit_code_valid)
+                {
+                    result.summary += " exit="
+                        + std::to_string(waited.process->exit_code);
+                }
+                if (!released)
+                    result.summary += " handle-release-failed";
+                return result;
+            }
+
+            std::ifstream runLog{runLogPath, std::ios::binary};
+            if (!runLog)
+            {
+                result.summary = "supervised child self-test run "
+                    + std::to_string(run + 1u)
+                    + " log could not be opened";
+                return result;
+            }
+            runLog.seekg(0, std::ios::end);
+            const std::streamoff runLength = runLog.tellg();
+            if (runLength < 0
+                || static_cast<std::uint64_t>(runLength)
+                    > maximumLogBytes - evidence.size())
+            {
+                result.summary = "supervised child self-test run "
+                    + std::to_string(run + 1u)
+                    + " log exceeded the aggregate bound";
+                return result;
+            }
+            const std::size_t offset = evidence.size();
+            evidence.resize(offset + static_cast<std::size_t>(runLength));
+            runLog.seekg(0, std::ios::beg);
+            if (runLength != 0)
+            {
+                runLog.read(
+                    evidence.data() + offset,
+                    static_cast<std::streamsize>(runLength));
+                if (!runLog)
+                {
+                    result.summary = "supervised child self-test run "
+                        + std::to_string(run + 1u)
+                        + " log could not be read exactly";
+                    return result;
+                }
+            }
+        }
+
+        {
+            std::ofstream log{
+                log_path,
+                std::ios::binary | std::ios::trunc};
+            if (!log)
+            {
+                result.summary =
+                    "supervised child self-test aggregate could not be opened";
+                return result;
+            }
+            if (!evidence.empty())
+            {
+                log.write(
+                    evidence.data(),
+                    static_cast<std::streamsize>(evidence.size()));
+            }
+            log.flush();
+            if (!log)
+            {
+                result.summary =
+                    "supervised child self-test aggregate could not be written exactly";
+                return result;
+            }
+        }
+        const auto count_marker = [&evidence](std::string_view marker)
+        {
+            std::uint32_t count{};
+            std::size_t cursor{};
+            while ((cursor = evidence.find(marker, cursor))
+                != std::string::npos)
+            {
+                ++count;
+                cursor += marker.size();
+            }
+            return count;
+        };
+        if (count_marker("artifact_acceptance.stage=complete")
+                != requiredRuns
+            || count_marker("library_regeneration.stage=complete")
+                != requiredRuns
+            || count_marker("gameplay_acceptance.stage=complete")
+                != requiredRuns)
+        {
+            result.summary =
+                "supervised child self-test log lacks repeated acceptance evidence";
             return result;
         }
 
-        STARTUPINFOW startup{};
-        startup.cb = sizeof(startup);
-        startup.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-        startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-        startup.hStdOutput = logFile;
-        startup.hStdError = logFile;
-        startup.wShowWindow = SW_HIDE;
-
-        PROCESS_INFORMATION process{};
-        std::wstring commandLine = L"\"" + executable.wstring() + L"\" --project-self-test";
-        const std::wstring currentDirectory = executable.parent_path().wstring();
-
-        const BOOL launched = CreateProcessW(
-            executable.wstring().c_str(),
-            commandLine.data(),
-            nullptr,
-            nullptr,
-            TRUE,
-            CREATE_NO_WINDOW,
-            nullptr,
-            currentDirectory.empty() ? nullptr : currentDirectory.c_str(),
-            &startup,
-            &process);
-        if (!launched)
-        {
-            const DWORD error = GetLastError();
-            CloseHandle(logFile);
-            std::ofstream out(log_path, std::ios::app | std::ios::binary);
-            if (out)
-                out << "CreateProcessW failed: win32=" << error << "\n";
-            result.summary = "failed to launch child self-test: win32=" + std::to_string(error);
-            return result;
-        }
-
-        constexpr DWORD kChildSelfTestTimeoutMs = 30000;
-        const DWORD waitResult = WaitForSingleObject(process.hProcess, kChildSelfTestTimeoutMs);
-        if (waitResult == WAIT_TIMEOUT)
-        {
-            TerminateProcess(process.hProcess, 124);
-            WaitForSingleObject(process.hProcess, 5000);
-            CloseHandle(process.hThread);
-            CloseHandle(process.hProcess);
-            CloseHandle(logFile);
-            std::ofstream out(log_path, std::ios::app | std::ios::binary);
-            if (out)
-                out << "Child self-test timed out after " << kChildSelfTestTimeoutMs << " ms.\n";
-            result.summary = "child self-test timed out";
-            return result;
-        }
-
-        DWORD exitCode = 1;
-        if (!GetExitCodeProcess(process.hProcess, &exitCode))
-            exitCode = GetLastError();
-
-        CloseHandle(process.hThread);
-        CloseHandle(process.hProcess);
-        CloseHandle(logFile);
-
-        result.succeeded = (exitCode == 0);
-        result.summary = result.succeeded
-            ? "child self-test passed"
-            : "child self-test failed with exit code " + std::to_string(exitCode);
+        result.succeeded = true;
+        result.summary = "2/2 supervised child self-test runs passed";
         return result;
-#else
-        const std::string command =
-            quote_shell_path(executable) + " --project-self-test > " + quote_shell_path(log_path) + " 2>&1";
-        const int code = std::system(command.c_str());
-        result.succeeded = (code == 0);
-        result.summary = result.succeeded
-            ? "child self-test passed"
-            : "child self-test failed with exit code " + std::to_string(code);
-        return result;
-#endif
     }
 
     inline void log_editor_self_test_line(std::string_view message)
@@ -1913,11 +2001,37 @@ namespace epochengine::core
             return false;
 
         const auto second = atlas.snapshot_pixels();
-        return second.width == first.width
-            && second.height == first.height
-            && second.pixels.size() == first.pixels.size()
-            && second.version > first.version
-            && second.pixels != first.pixels;
+        if (second.width != first.width
+            || second.height != first.height
+            || second.pixels.size() != first.pixels.size()
+            || second.version <= first.version
+            || second.pixels == first.pixels
+            || atlas.entry_count() != 2u)
+        {
+            return false;
+        }
+
+        for (std::uint32_t iteration = 0u; iteration < 1'024u; ++iteration)
+        {
+            const auto replacement = makeTexture(
+                "snapshot.red",
+                iteration % 2u == 0u ? 255u : 0u,
+                iteration % 2u == 0u ? 255u : 0u,
+                iteration % 2u == 0u ? 0u : 255u);
+            if (!atlas.replace_entry_pixels("snapshot.red", replacement)
+                || atlas.entry_count() != 2u)
+            {
+                return false;
+            }
+        }
+
+        const auto replaced = atlas.snapshot_pixels();
+        return replaced.width == second.width
+            && replaced.height == second.height
+            && replaced.pixels.size() == second.pixels.size()
+            && replaced.version >= second.version + 1'024u
+            && replaced.pixels != second.pixels
+            && atlas.entry_count() == 2u;
     }
 
     [[nodiscard]] constexpr bool editor_session_restore_allowed(
@@ -1973,6 +2087,10 @@ namespace epochengine::core
             && epochengine::format_text("{:04}", -7) == "-007");
 
         check(
+            "updater.private_source_crypto_policy",
+            epochengine::updater::private_source_access_contract_self_test());
+
+        check(
             "context.session_restore_readiness",
             !editor_session_restore_allowed(epochengine::core::BackendLifecycleState::pending)
             && !editor_session_restore_allowed(epochengine::core::BackendLifecycleState::initializing)
@@ -1993,6 +2111,84 @@ namespace epochengine::core
                 nullptr, &replacementIdentities[0], false)
             && !editor_session_deferred_for_active_replacement(
                 &replacementIdentities[0], nullptr, false));
+
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        const auto sdlLifecycleContract = []
+        {
+            auto& runtimeMutex =
+                epochengine::sdlcontext::state::runtime_api_mutex();
+            bool recursiveOwnership = false;
+            bool contenderExcluded = false;
+            {
+                std::scoped_lock runtimeGuard{runtimeMutex};
+                recursiveOwnership = runtimeMutex.try_lock();
+                if (recursiveOwnership)
+                    runtimeMutex.unlock();
+
+                std::thread contender(
+                    [&runtimeMutex, &contenderExcluded]
+                    {
+                        const bool acquired = runtimeMutex.try_lock();
+                        contenderExcluded = !acquired;
+                        if (acquired)
+                            runtimeMutex.unlock();
+                    });
+                contender.join();
+            }
+
+            bool contenderAdmittedAfterRelease = false;
+            std::thread admitted(
+                [&runtimeMutex, &contenderAdmittedAfterRelease]
+                {
+                    {
+                        std::scoped_lock runtimeGuard{runtimeMutex};
+                        contenderAdmittedAfterRelease = true;
+                    }
+                });
+            admitted.join();
+            return recursiveOwnership
+                && contenderExcluded
+                && contenderAdmittedAfterRelease;
+        };
+        check(
+            "context.sdl_runtime_lifecycle_serialization",
+            sdlLifecycleContract());
+        const auto sdlHighDpiDimensions =
+            epochengine::sdlcontext::state::
+                make_display_scaled_presentation_dimensions(
+                2'478,
+                1'344,
+                1.5f);
+        const auto sdlNativeScaleDimensions =
+            epochengine::sdlcontext::state::
+                make_display_scaled_presentation_dimensions(
+                1'920,
+                1'080,
+                1.0f);
+        const auto sdlInvalidDimensions =
+            epochengine::sdlcontext::state::make_presentation_dimensions(
+                0,
+                1'080,
+                1'920,
+                1'080);
+        check(
+            "context.sdl_high_dpi_logical_presentation",
+            sdlHighDpiDimensions.valid()
+            && sdlHighDpiDimensions.pixel_scale_x() == 1.5f
+            && sdlHighDpiDimensions.pixel_scale_y() == 1.5f
+            && sdlNativeScaleDimensions.valid()
+            && sdlNativeScaleDimensions.pixel_scale_x() == 1.0f
+            && sdlNativeScaleDimensions.pixel_scale_y() == 1.0f
+            && !sdlInvalidDimensions.valid()
+            && sdlInvalidDimensions.pixel_scale_x() == 0.0f
+            && sdlInvalidDimensions.pixel_scale_y() == 0.0f
+            && epochengine::sdlcontext::state::normalize_presented_coordinate(
+                900, 1'652, 2'478) == 600
+            && epochengine::sdlcontext::state::normalize_presented_coordinate(
+                -90, 1'652, 2'478) == -60
+            && epochengine::sdlcontext::state::normalize_presented_coordinate(
+                900, 1'920, 1'920) == 900);
+#endif
 
         check(
             "context.session_restored_frame_acknowledgement",
@@ -2051,9 +2247,12 @@ namespace epochengine::core
         check(
             "editor.application_ownership",
             plantLabPreviewIdentity
+            && plantLabApplication.project_id.empty()
+            && guiApplication.project_id.empty()
+            && epochengine::editor_find_project_profile("plantlab") == nullptr
             && epochengine::editor_application_for_project("projectlauncher") == &standardApplication
             && epochengine::editor_application_for_project("plantlab") == &plantLabApplication
-            && epochengine::editor_application_for_project("twodstudio") == &guiApplication
+            && epochengine::editor_application_for_project("twodstudio") == nullptr
             && epochengine::editor_application_supports_surface(
                 standardApplication, epochengine::EditorApplicationSurface::ForestFactory)
             && !epochengine::editor_application_supports_surface(
@@ -2068,9 +2267,35 @@ namespace epochengine::core
                 plantLabApplication, epochengine::EditorApplicationSurface::AISandbox)
             && epochengine::editor_application_supports_surface(
                 guiApplication, epochengine::EditorApplicationSurface::Game2D)
+            && epochengine::editor_application_owns_dedicated_gui_workspace(
+                guiApplication.kind)
+            && !epochengine::editor_application_owns_dedicated_gui_workspace(
+                standardApplication.kind)
+            && !epochengine::editor_application_owns_dedicated_gui_workspace(
+                plantLabApplication.kind)
             && !epochengine::editor_application_supports_surface(
                 guiApplication, epochengine::EditorApplicationSurface::Scene)
             && epochengine::editor_application_for_project("forestfactory") == &standardApplication);
+
+        constexpr double editorFrameDt = 1.0 / 120.0;
+        const double initialFrameDeadline =
+            epochengine::perf::next_frame_deadline(
+                0.0, 100.0, editorFrameDt, false);
+        const double staleFrameDeadline =
+            epochengine::perf::next_frame_deadline(
+                50.0, 100.0, editorFrameDt, true);
+        const double currentFrameDeadline =
+            epochengine::perf::next_frame_deadline(
+                100.0 + editorFrameDt * 0.25,
+                100.0,
+                editorFrameDt,
+                true);
+        check(
+            "perf.frame_limiter_deadline_rebase",
+            std::abs(initialFrameDeadline - (100.0 + editorFrameDt)) < 1.0e-12
+            && std::abs(staleFrameDeadline - (100.0 + editorFrameDt)) < 1.0e-12
+            && std::abs(currentFrameDeadline
+                    - (100.0 + editorFrameDt * 1.25)) < 1.0e-12);
 
         auto forestProfile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
@@ -2093,7 +2318,170 @@ namespace epochengine::core
             && sceneActivation.emitPackageManifest
             && sceneActivation.attachToMainScene);
 
+        check(
+            "editor.workspace_layout",
+            epochengine::editor_workspace::run_contract()
+                == epochengine::editor_workspace::ContractFailure::none);
+        check(
+            "extension.catalog",
+            epochengine::extension_catalog::run_contract()
+                == epochengine::extension_catalog::ContractFailure::none);
+
+#if EPOCH_ENABLE_NATIVE_EXTENSIONS
+        check(
+            "extension.plugin.admission",
+            epochengine::extensions::run_contract()
+                == epochengine::extensions::ContractFailure::none);
+#endif
+        check(
+            "gui.runtime_surface_atlas",
+            epochengine::gui::run_runtime_surface_contract());
+        const epochengine::gui::DockGuideLayout guideLayout =
+            epochengine::gui::make_dock_guide_layout(
+                epochengine::gui::DockGuideOptions{
+                    .guide_bounds = { { 0.0f, 0.0f }, { 600.0f, 400.0f } },
+                    .left_tabs_preview = { { 0.0f, 40.0f }, { 160.0f, 360.0f } },
+                    .right_tabs_preview = { { 440.0f, 40.0f }, { 160.0f, 360.0f } },
+                    .bottom_left_tabs_preview = { { 0.0f, 300.0f }, { 300.0f, 100.0f } },
+                    .bottom_right_tabs_preview = { { 300.0f, 300.0f }, { 300.0f, 100.0f } },
+                    .left_context_preview = { { 0.0f, 40.0f }, { 300.0f, 360.0f } },
+                    .right_context_preview = { { 300.0f, 40.0f }, { 300.0f, 360.0f } },
+                    .floating_preview = { { 180.0f, 90.0f }, { 240.0f, 220.0f } },
+                    .pointer = { 210.0f, 200.0f },
+                    .guide_extent = 94.0f,
+                    .guide_gap = 8.0f,
+                    .allow_side_tabs = true,
+                    .allow_bottom_tabs = true,
+                    .allow_contexts = true,
+                    .allow_float = true
+                });
+        check(
+            "gui.dock_guide_selection",
+            guideLayout.count == 7U
+            && guideLayout.hovered_target == epochengine::gui::DockGuideTarget::left_tabs
+            && guideLayout.hovered_preview.position.x == 0.0f
+            && guideLayout.hovered_preview.size.x == 160.0f);
+        const epochengine::gui::DockGuideLayout contextGuideLayout =
+            epochengine::gui::make_dock_guide_layout(
+                epochengine::gui::DockGuideOptions{
+                    .guide_bounds = { { 0.0f, 0.0f }, { 800.0f, 400.0f } },
+                    .left_context_preview = { { 0.0f, 0.0f }, { 400.0f, 400.0f } },
+                    .right_context_preview = { { 400.0f, 0.0f }, { 400.0f, 400.0f } },
+                    .pointer = { 200.0f, 200.0f },
+                    .guide_extent = 94.0f,
+                    .guide_gap = 8.0f,
+                    .allow_side_tabs = false,
+                    .allow_bottom_tabs = false,
+                    .allow_contexts = true,
+                    .allow_float = false,
+                    .center_context_guides_in_previews = true
+                });
+        check(
+            "gui.context_dock_guide_projection",
+            contextGuideLayout.count == 2U
+            && contextGuideLayout.hovered_target
+                == epochengine::gui::DockGuideTarget::left_context
+            && contextGuideLayout.guides[0].target_bounds.position.x == 153.0f
+            && contextGuideLayout.guides[0].target_bounds.position.y == 153.0f
+            && contextGuideLayout.guides[1].target_bounds.position.x == 553.0f
+            && contextGuideLayout.guides[1].target_bounds.position.y == 153.0f
+            && contextGuideLayout.hovered_preview.size.x == 400.0f);
+        check(
+            "ai.assistant_reply_normalization",
+            epochengine::ai::normalize_assistant_reply(
+                "<think>private draft</think><final>Final answer.</final>")
+                == "Final answer."
+            && epochengine::ai::normalize_assistant_reply(
+                "<reasoning>unterminated private draft").empty());
+        check(
+            "ai.direct_llama_reply_normalization",
+            epochengine::ai::normalize_direct_llama_cpp_reply(
+                "User:\nready\n\nAssistant:\n"
+                "[Start thinking]\nprivate draft\n[End thinking]\n"
+                "Ready.\n\nExiting...\n",
+                "ready")
+                == "Ready."
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\n",
+                "large source prompt")
+                == "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1"
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\n"
+                "EPOCH_SOURCE_PATCH_PROPOSAL_V1\n"
+                "end_proposal\n"
+                "Trailing model commentary must stay outside the packet.\n",
+                "large source prompt")
+                == "EPOCH_SOURCE_PATCH_PROPOSAL_V1\n"
+                   "end_proposal"
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "Assistant:\nEPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\n",
+                "large source prompt")
+                == "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1"
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "I will return the packet now.\r\n```text\r\n"
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\r\n```\r\n",
+                "large source prompt")
+                == "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1"
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "Preamble EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\n",
+                "large source prompt").empty()
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "User:\nlarge source prompt\n\nAssistant:\n"
+                "Plain explanatory prose.\n",
+                "large source prompt").empty()
+            && epochengine::ai::normalize_direct_llama_cpp_source_reply(
+                "User:\nlarge source prompt\n\nAssistant:\n"
+                "I will return the packet now.\n"
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\n",
+                "large source prompt")
+                == "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1"
+            && epochengine::ai::normalize_direct_llama_cpp_reply(
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1\n",
+                "large source prompt")
+                .empty());
+        check(
+            "ai.direct_llama_prompt_file_transport",
+            epochengine::ai::direct_llama_cpp_prompt_transport_contract());
         check("ai.mcp.tool_protocol", epochengine::ai::run_mcp_contract());
+        check(
+            "ai.epoch_local_install",
+            epochengine::ai::epoch_local_ai_install_contract());
+        check(
+            "ai.development_proposal_codec",
+            epochengine::ai::development_proposal_codec::run_contract());
+        check(
+            "ai.iteration_loop",
+            epochengine::ai::iteration::run_contract());
+        check(
+            "ai.development_guard",
+            epochengine::editor_ai_development::run_contract());
+        check(
+            "ai.development_panel",
+            epochengine::editor_ai_development_panel::Panel::run_contract());
+        check(
+            "authoring.gui_document",
+            epochengine::authoring::gui::run_contract()
+                == epochengine::authoring::gui::ContractFailure::none);
+        check(
+            "authoring.gui_compiler",
+            epochengine::authoring::gui::run_compiler_contract()
+                == epochengine::authoring::gui::CompilerContractFailure::none);
+        check(
+            "project.gui_library",
+            epochengine::project_gui::run_library_contract()
+                == epochengine::project_gui::LibraryContractFailure::none);
+        check(
+            "project.gui_runtime",
+            epochengine::project_gui_runtime::run_contract()
+                == epochengine::project_gui_runtime::ContractFailure::none);
+        check(
+            "authoring.task_graph",
+            epochengine::authoring::task_graph::run_contract()
+                == epochengine::authoring::task_graph::ContractFailure::none);
+        check(
+            "editor.systems_workspace",
+            epochengine::editor_systems::run_contract()
+                == epochengine::editor_systems::ContractFailure::none);
 
         const auto morphologyContract =
             epochengine::authoring::morphology::run_contract();
@@ -2118,6 +2506,78 @@ namespace epochengine::core
             && forestMorphology.content_hash != 0u
             && !forestMorphologyLods.levels.empty()
             && epochengine::voxel::morphology_semantics(forestMorphologyLods.semantics));
+        auto forestDocument = epochengine::forest::make_forest_asset_document(
+            "Contract Tree", epochengine::forest::ForestPreset::Tree);
+        const auto forestInitialHash = forestDocument.contentHash;
+        const bool forestEdited = epochengine::forest::apply_forest_profile_edit(
+            forestDocument,
+            epochengine::forest::ForestProfileProperty::TargetHeightMeters,
+            forestDocument.profile.config.targetHeightMeters + 1.0f);
+        const auto forestEditedHash = forestDocument.contentHash;
+        const bool forestUndone =
+            epochengine::forest::undo_forest_profile_edit(forestDocument);
+        const bool forestRedone =
+            epochengine::forest::redo_forest_profile_edit(forestDocument);
+        const auto compiledForest =
+            epochengine::forest::compile_forest_asset(forestDocument);
+        check(
+            "forest.temporal_document",
+            forestEdited
+            && forestUndone
+            && forestRedone
+            && forestInitialHash != forestEditedHash
+            && forestDocument.contentHash == forestEditedHash
+            && forestDocument.historyCursor == forestDocument.journal.size()
+            && compiledForest.valid
+            && compiledForest.sourceRevision == forestDocument.revision
+            && compiledForest.sourceContentHash == forestDocument.contentHash
+            && compiledForest.graph.content_hash != 0u
+            && !compiledForest.sample.segments.empty()
+            && !compiledForest.voxelLods.levels.empty()
+            && compiledForest.voxelLods.source_content_hash ==
+                compiledForest.graph.content_hash
+            && compiledForest.voxelOccupancy.activeCells > 0u);
+
+        auto plantLabDocument =
+            epochengine::forest::make_default_plant_lab_document();
+        const auto plantLabDefaultHistory = plantLabDocument.journal.size();
+        const auto plantLabDefaultHash = plantLabDocument.contentHash;
+        const auto plantLabDefaultCompiled =
+            epochengine::forest::compile_forest_asset(plantLabDocument);
+        const bool plantLabEdited =
+            epochengine::forest::apply_forest_profile_edit(
+                plantLabDocument,
+                epochengine::forest::ForestProfileProperty::BranchStartHeightMeters,
+                plantLabDocument.profile.branch.startHeightMeters + 0.11f);
+        const auto plantLabEditedHash = plantLabDocument.contentHash;
+        const bool plantLabUndone =
+            epochengine::forest::undo_forest_profile_edit(plantLabDocument);
+        const bool plantLabRedone =
+            epochengine::forest::redo_forest_profile_edit(plantLabDocument);
+        const auto plantLabEditedCompiled =
+            epochengine::forest::compile_forest_asset(plantLabDocument);
+        check(
+            "forest.plant_lab_compiler",
+            plantLabDefaultHistory == 5u
+            && plantLabDefaultHash != 0u
+            && plantLabDefaultCompiled.valid
+            && !plantLabDefaultCompiled.preview.segments.empty()
+            && !plantLabDefaultCompiled.preview.leaves.empty()
+            && !plantLabDefaultCompiled.voxelLods.levels.empty()
+            && plantLabDefaultCompiled.voxelOccupancy.activeCells > 0u
+            && plantLabEdited
+            && plantLabUndone
+            && plantLabRedone
+            && plantLabEditedHash != plantLabDefaultHash
+            && plantLabDocument.contentHash == plantLabEditedHash
+            && plantLabDocument.historyCursor == plantLabDocument.journal.size()
+            && plantLabEditedCompiled.valid
+            && plantLabEditedCompiled.sourceRevision == plantLabDocument.revision
+            && plantLabEditedCompiled.sourceContentHash == plantLabEditedHash
+            && plantLabEditedCompiled.graph.content_hash !=
+                plantLabDefaultCompiled.graph.content_hash
+            && plantLabEditedCompiled.voxelLods.source_content_hash ==
+                plantLabEditedCompiled.graph.content_hash);
         const auto packageValidation = epochengine::package_registry::validate_registry();
         const auto* forestPackage = epochengine::package_registry::find(epochengine::package_registry::kEngineForestFactoryPackageId);
         const auto* bonsaiPackage = epochengine::package_registry::find(epochengine::package_registry::recommended_local_image_model_id());
@@ -2575,6 +3035,16 @@ namespace epochengine::core
             "audio.playback_runtime_contract",
             epochengine::audio::
                 run_audio_playback_runtime_contract_tests() == 0);
+        check(
+            "asset.audio_import_contract",
+            epochengine::asset::audio::audio_import_contract_failure()
+                == epochengine::asset::audio::
+                    AudioImportContractFailure::none);
+        check(
+            "project.audio_profile_contract",
+            epochengine::project_audio::
+                project_audio_profile_contract_failure()
+                == epochengine::project_audio::ContractFailure::none);
         const auto capabilityContract =
             epochengine::capability::run_contract_checks();
         constexpr std::uint32_t expectedCapabilityChecks = (1u << 18u) - 1u;
@@ -2676,6 +3146,12 @@ namespace epochengine::core
         check("authoring.texture_document", textureDocumentReady);
 #endif
 
+        const auto cameraContract =
+            epochengine::render_camera::run_contract_checks();
+        const auto portalContract =
+            epochengine::render_portal::run_portal_contract_checks();
+        check("render.camera", cameraContract.passed());
+        check("render.portal", portalContract.passed());
         const auto arcadeContract = epochengine::render_arcade::run_contract_checks();
         const auto arcadePreviewRouting =
             epochengine::previewgrid::run_arcade_preview_routing_contract();
@@ -2684,6 +3160,90 @@ namespace epochengine::core
             "render.arcade_attract_pattern",
             epochengine::render_arcade::arcade_attract_pattern_contract());
         check("render.arcade_preview_routing", arcadePreviewRouting.passed());
+
+        epochengine::previewgrid::ObjectMarker solidSceneMarker{};
+        solidSceneMarker.primitive = epochengine::previewgrid::ObjectPreviewPrimitive::Cube;
+        epochengine::previewgrid::ObjectMarker cameraHelperMarker{};
+        cameraHelperMarker.primitive = epochengine::previewgrid::ObjectPreviewPrimitive::Camera;
+        cameraHelperMarker.editorOnly = true;
+        epochengine::previewgrid::ObjectMarker lightHelperMarker{};
+        lightHelperMarker.primitive = epochengine::previewgrid::ObjectPreviewPrimitive::Light;
+        lightHelperMarker.editorOnly = true;
+        epochengine::previewgrid::ObjectMarker canvasMarker{};
+        canvasMarker.primitive = epochengine::previewgrid::ObjectPreviewPrimitive::Canvas2D;
+        canvasMarker.editorOnly = true;
+        check(
+            "render.preview_fill_policy",
+            epochengine::previewgrid::object_marker_uses_solid_fill(solidSceneMarker)
+            && !epochengine::previewgrid::object_marker_uses_solid_fill(cameraHelperMarker)
+            && !epochengine::previewgrid::object_marker_uses_solid_fill(lightHelperMarker)
+            && epochengine::previewgrid::object_marker_uses_solid_fill(canvasMarker));
+
+        const auto previewGrid = epochengine::previewgrid::grid_geometry_for(nullptr);
+        const bool previewGridIndicesValid = previewGrid
+            && std::all_of(
+                previewGrid->indices.begin(),
+                previewGrid->indices.end(),
+                [previewGrid](std::uint32_t index) noexcept
+                {
+                    return index < previewGrid->vertices.size();
+                });
+        check(
+            "render.preview_grid",
+            previewGrid
+            && previewGrid->signature != 0u
+            && previewGrid->spacing >= 0.25f
+            && previewGrid->spacing <= 64.0f
+            && !previewGrid->vertices.empty()
+            && previewGrid->vertices.size() <= 80u
+            && previewGrid->indices.size() % 2u == 0u
+            && previewGridIndicesValid);
+        const auto cubePreviewRoute =
+            epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::Cube);
+        const auto cameraPreviewRoute =
+            epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::Camera);
+        const auto lightPreviewRoute =
+            epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::Light);
+        check(
+            "render.preview_geometry_routing",
+            cubePreviewRoute.solid_scene
+            && !cubePreviewRoute.marker_wire
+            && cubePreviewRoute.selection_wire
+            && !cubePreviewRoute.sampled_surface
+            && !cameraPreviewRoute.solid_scene
+            && cameraPreviewRoute.marker_wire
+            && !cameraPreviewRoute.selection_wire
+            && !cameraPreviewRoute.sampled_surface
+            && !lightPreviewRoute.solid_scene
+            && lightPreviewRoute.marker_wire
+            && !lightPreviewRoute.selection_wire
+            && !lightPreviewRoute.sampled_surface);
+        const auto forestTrunkRoute =
+            epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::ForestTrunk);
+        const auto forestBranchRoute =
+            epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::ForestBranch);
+        const auto forestLeafRoute =
+            epochengine::previewgrid::object_preview_geometry_route(
+                epochengine::previewgrid::ObjectPreviewPrimitive::ForestLeafCluster);
+        check(
+            "render.forest_preview_routing",
+            forestTrunkRoute.solid_scene
+            && !forestTrunkRoute.marker_wire
+            && forestTrunkRoute.selection_wire
+            && !forestTrunkRoute.sampled_surface
+            && forestBranchRoute.solid_scene
+            && !forestBranchRoute.marker_wire
+            && forestBranchRoute.selection_wire
+            && !forestBranchRoute.sampled_surface
+            && forestLeafRoute.solid_scene
+            && !forestLeafRoute.marker_wire
+            && forestLeafRoute.selection_wire
+            && !forestLeafRoute.sampled_surface);
         check("render.canvas2d.core", epochengine::canvas2d::canvas2d_runtime_contract());
         const auto cpuCanvasContract =
             epochengine::canvas2d::cpu::canvas2d_cpu_runtime_contract_failure();
@@ -2691,6 +3251,13 @@ namespace epochengine::core
             std::string{"render.canvas2d.cpu."}
                 + epochengine::canvas2d::cpu::cpu_contract_failure_name(cpuCanvasContract),
             cpuCanvasContract == epochengine::canvas2d::cpu::CpuContractFailure::none);
+        const auto canvasLimitsContract =
+            epochengine::canvas2d::limits::runtime_contract_failure();
+        check(
+            std::string{"render.canvas2d.limits."}
+                + epochengine::canvas2d::limits::contract_failure_name(canvasLimitsContract),
+            canvasLimitsContract
+                == epochengine::canvas2d::limits::ContractFailure::none);
         const auto canvasPresentationContract =
             epochengine::canvas2d::presentation::canvas2d_presentation_runtime_contract_failure();
         check(
@@ -2872,7 +3439,46 @@ namespace epochengine::core
         timelineState.playing = true;
         timelineState.duration_seconds = 8.0;
         timelineState.fixed_dt_seconds = 1.0 / 60.0;
-        epochengine::timeline::sync_to_simulation(timelineState, timeStats);
+        auto timelinePlaybackStats = timeStats;
+        epochengine::timeline::sync_to_simulation(
+            timelineState, timelinePlaybackStats);
+        timelinePlaybackStats.simulated_seconds += 4.0;
+        timelinePlaybackStats.frame_index += 240u;
+        epochengine::timeline::sync_to_simulation(
+            timelineState, timelinePlaybackStats);
+
+        epochengine::timeline::TimelineState latePlaybackState{};
+        epochengine::core::time::simulation_stats latePlaybackStats{};
+        latePlaybackStats.fixed_dt_seconds = 1.0 / 60.0;
+        latePlaybackStats.simulated_seconds = 900.0;
+        latePlaybackStats.frame_index = 54'000u;
+        epochengine::timeline::sync_to_simulation(
+            latePlaybackState, latePlaybackStats);
+        latePlaybackState.playing = true;
+        latePlaybackStats.simulated_seconds += 0.25;
+        latePlaybackStats.frame_index += 15u;
+        epochengine::timeline::sync_to_simulation(
+            latePlaybackState, latePlaybackStats);
+        const double activePlayhead = latePlaybackState.playhead_seconds;
+        latePlaybackState.playing = false;
+        latePlaybackStats.simulated_seconds += 30.0;
+        latePlaybackStats.frame_index += 1'800u;
+        epochengine::timeline::sync_to_simulation(
+            latePlaybackState, latePlaybackStats);
+        const double pausedPlayhead = latePlaybackState.playhead_seconds;
+        latePlaybackState.playing = true;
+        latePlaybackStats.simulated_seconds += 1.0 / 60.0;
+        ++latePlaybackStats.frame_index;
+        epochengine::timeline::sync_to_simulation(
+            latePlaybackState, latePlaybackStats);
+        check(
+            "timeline.delta_playback",
+            activePlayhead > 0.249 && activePlayhead < 0.251
+            && pausedPlayhead == activePlayhead
+            && latePlaybackState.playhead_seconds > pausedPlayhead
+            && latePlaybackState.playhead_seconds < 0.27
+            && latePlaybackState.playing);
+
         std::vector<epochengine::timeline::TimelineEvent> timelineEvents{};
         timelineEvents.push_back(epochengine::timeline::make_event_from_stats(
             "save",
@@ -3153,6 +3759,52 @@ namespace epochengine::core
         if (!ensured.succeeded)
             return 2;
 
+        const std::filesystem::path projectRoot{ensured.root_path};
+        const auto readGeneratedText = [](const std::filesystem::path& path)
+        {
+            std::ifstream input{path, std::ios::binary};
+            std::ostringstream text{};
+            if (input)
+                text << input.rdbuf();
+            return text.str();
+        };
+        const std::string generatedManifest = readGeneratedText(
+            projectRoot / "project.epoch.json");
+        const std::string generatedCmakeFragment = readGeneratedText(
+            projectRoot / "epoch.project.cmake");
+        const std::string generatedCmakeLists = readGeneratedText(
+            projectRoot / "CMakeLists.txt");
+        const std::string generatedLinuxBuild = readGeneratedText(
+            projectRoot / "build_project.sh");
+        const bool staticRuntimeProfileReady =
+            generatedManifest.find(
+                "\"project_format\": \"epoch-project-v1\"")
+                != std::string::npos
+            && generatedManifest.find(
+                "\"build_profile\": \"epoch-runtime-static\"")
+                != std::string::npos
+            && generatedCmakeFragment.find(
+                "EPOCH_MANAGED_GENERATED_FILE: cmake_fragment_v2")
+                != std::string::npos
+            && generatedCmakeFragment.find(
+                "set(EPOCH_BUILD_STATIC_RUNTIME ON")
+                != std::string::npos
+            && generatedCmakeFragment.find(
+                "set(EPOCH_ENABLE_NATIVE_EXTENSIONS OFF")
+                != std::string::npos
+            && generatedCmakeLists.find(
+                "epoch_configure_embedded_project(epoch_project_runtime)")
+                != std::string::npos
+            && generatedLinuxBuild.find(
+                "EPOCH_MANAGED_GENERATED_FILE: linux_build_v2")
+                != std::string::npos
+            && generatedLinuxBuild.find(
+                "--target epoch_project_runtime")
+                != std::string::npos;
+        log_editor_self_test_line(
+            std::string("editor_project_self_test.static_runtime_profile=")
+            + (staticRuntimeProfileReady ? "pass" : "fail"));
+
         std::filesystem::path scenePath =
             profile == nullptr
                 ? std::filesystem::path{}
@@ -3207,7 +3859,6 @@ namespace epochengine::core
         }
 
         const auto evidencePathsConfig = epochengine::ai::default_evidence_paths();
-        const auto manifest = epochengine::ai::active_model_manifest();
         std::vector<std::string> evidencePaths{};
         const auto add_evidence_path = [&evidencePaths](std::string path)
         {
@@ -3228,10 +3879,16 @@ namespace epochengine::core
         add_evidence_path(evidencePathsConfig.model_exchange_jsonl);
         add_evidence_path(evidencePathsConfig.tool_trace_jsonl);
 
-        const bool verifierReady = build.succeeded && childSelfTest.succeeded;
+        const bool verifierReady =
+            staticRuntimeProfileReady
+            && sceneRoundTrip
+            && build.succeeded
+            && childSelfTest.succeeded;
         const std::string normalizedOutput =
             "project=" + projectId +
             "; materialize=" + (ensured.succeeded ? std::string{ "pass" } : std::string{ "fail" }) +
+            "; static_runtime_profile=" + (staticRuntimeProfileReady ? std::string{ "pass" } : std::string{ "fail" }) +
+            "; save_reopen=" + (sceneRoundTrip ? std::string{ "pass" } : std::string{ "fail" }) +
             "; build=" + (build.succeeded ? std::string{ "pass" } : std::string{ "fail" }) +
             "; child_self_test=" + (childSelfTest.attempted
                 ? (childSelfTest.succeeded ? std::string{ "pass" } : std::string{ "fail" })
@@ -3254,54 +3911,14 @@ namespace epochengine::core
             .state = verifierReady ? epochengine::ai::McpCallState::succeeded : epochengine::ai::McpCallState::failed,
             .error = verifierReady ? epochengine::ai::McpErrorCode::none : epochengine::ai::McpErrorCode::execution_failed});
 
-        epochengine::ai::IterationPacket packet{};
-        packet.packet_name = projectId + "-cli-self-test";
-        packet.task_prompt =
-            "Review the staged editor project self-test evidence, identify the next safe builder/verifier action, "
-            "and do not modify source without an explicit human-approved pass.";
-        packet.assistant_hint =
-            "Treat compiler output, generated project files, captures, and logs as evidence. "
-            "No evidence means no belief; promotion remains human-gated.";
-        packet.operator_notes =
-            "Generated by --editor-project-self-test so the selected model can reason from the real editor/tool loop instead of a silent build.";
-        packet.control_loop_stage = verifierReady
-            ? "Verifier staged: materialize, build, and child self-test evidence available"
-            : build.succeeded
-                ? "Verifier blocked: generated child self-test failed"
-            : "Builder blocked: inspect generated project build log";
-        packet.review_gate_state = verifierReady
-            ? "ready_for_human_review"
-            : build.succeeded ? "blocked_child_self_test_failed" : "blocked_build_failed";
-        packet.review_gate_evidence = normalizedOutput;
-        packet.project_id = projectId;
-        packet.project_name = profile == nullptr ? projectId : std::string{ profile->display_name };
-        packet.scene_id = profile == nullptr ? std::string{} : std::string{ profile->runtime_scene_id };
-        packet.project_root = ensured.root_path;
-        packet.scene_path = profile == nullptr ? std::string{} : std::string{ profile->scene_path };
-        packet.active_script = ensured.default_script_path;
-        packet.build_log_path = build.log_path;
-        packet.output_path = build.output_path;
-        packet.provider_summary = epochengine::ai::active_provider_summary();
-        packet.active_model = epochengine::ai::active_model_name();
-        packet.manifest_path = manifest.manifest_path;
-        packet.workspace_root = evidencePathsConfig.workspace_root;
-        packet.model_exchange_path = evidencePathsConfig.model_exchange_jsonl;
-        packet.tool_trace_path = evidencePathsConfig.tool_trace_jsonl;
-        packet.session_root = evidencePathsConfig.session_root;
-        packet.model_root = evidencePathsConfig.model_root;
-        packet.cache_root = evidencePathsConfig.cache_root;
-        packet.curated_dataset_root = evidencePathsConfig.curated_dataset_root;
-        packet.eval_root = evidencePathsConfig.eval_root;
-        packet.evidence_paths = std::move(evidencePaths);
 
-        const std::string packetPath = epochengine::ai::stage_iteration_packet(packet);
         append_editor_project_self_test_note(
             ensured.root_path,
-            build.succeeded ? "CLI Self-Iteration Self-Test Completed" : "CLI Self-Iteration Self-Test Blocked",
+            build.succeeded ? "CLI Engine Development Self-Test Completed" : "CLI Engine Development Self-Test Blocked",
             verifierReady
                 ? "Materialize, child build, and child self-test evidence staged."
                 : build.succeeded ? childSelfTest.summary : "Materialize succeeded but child build failed; inspect the build log.",
-            packetPath,
+            evidencePathsConfig.tool_trace_jsonl,
             epochengine::ai::active_model_name(),
             ensured.manifest_path,
             profile == nullptr ? std::string_view{} : profile->scene_path,
@@ -3309,9 +3926,6 @@ namespace epochengine::core
             build.log_path,
             build.output_path);
         log_editor_self_test_line("editor_project_self_test.mcp_capture=" + evidencePathsConfig.tool_trace_jsonl);
-        log_editor_self_test_line("editor_project_self_test.packet=" + (packetPath.empty() ? std::string{ "fail" } : packetPath));
-        if (packetPath.empty())
-            return build.succeeded ? 4 : 3;
 
         return verifierReady ? 0 : (build.succeeded ? 5 : 3);
     }
@@ -3329,6 +3943,12 @@ namespace epochengine::core
             std::string_view name{};
             std::string_view reply{};
             bool should_promote = false;
+        };
+        struct NormalizeCase
+        {
+            std::string_view name{};
+            std::string_view reply{};
+            std::string_view expected{};
         };
 
         const std::vector<GateCase> cases{
@@ -3376,6 +3996,23 @@ namespace epochengine::core
                 .name = "final-evidence-answer-capture-allow",
                 .reply = "Packet evidence is staged, the build log reports build=pass, output artifact exists, child_self_test verifier passed, and promotion remains human-gated.",
                 .should_promote = true
+            }
+        };
+        const std::vector<NormalizeCase> normalizeCases{
+            NormalizeCase{
+                .name = "think-wrapper-keeps-final",
+                .reply = "<think>private draft</think>Final answer.",
+                .expected = "Final answer."
+            },
+            NormalizeCase{
+                .name = "adjacent-wrappers-keep-final",
+                .reply = "<analysis>draft one</analysis><reasoning>draft two</reasoning><final>Final answer.</final>",
+                .expected = "Final answer."
+            },
+            NormalizeCase{
+                .name = "unterminated-reasoning-is-blocked",
+                .reply = "<reasoning>private draft",
+                .expected = ""
             }
         };
 
@@ -3450,6 +4087,19 @@ namespace epochengine::core
                 test.name,
                 test.should_promote ? "promote" : "block",
                 actual ? "promote" : "block",
+                ok ? "pass" : "fail");
+        }
+
+        for (const auto& test : normalizeCases)
+        {
+            const std::string actual = epochengine::ai::normalize_assistant_reply(test.reply);
+            const bool ok = actual == test.expected;
+            failed = failed || !ok;
+            logger::get("Engine.AI.Gate").logf(
+                logger::LogLevel::INFO,
+                std::source_location::current(),
+                "editor_ai_gate_self_test.normalize_case={} result={}",
+                test.name,
                 ok ? "pass" : "fail");
         }
 
@@ -4259,34 +4909,66 @@ namespace epochengine::core
 
         [[nodiscard]] DetachedPanelRouteMetadata detached_panel_route_metadata(std::string_view route) noexcept
         {
-            if (route == "pane.outliner")
+            const bool outlinerTool =
+                route == "pane.world_outliner"
+                || route == "pane.asset_browser"
+                || route == "pane.gui_hierarchy"
+                || route == "pane.script_browser"
+                || route == "pane.tile_map"
+                || route == "pane.outliner";
+            if (outlinerTool)
             {
+                const std::string_view title =
+                    route == "pane.asset_browser" ? "Epoch Assets"
+                    : route == "pane.gui_hierarchy" ? "Epoch GUI"
+                    : route == "pane.script_browser" ? "Epoch Scripts"
+                    : route == "pane.tile_map" ? "Epoch Map"
+                    : "Epoch World Outliner";
                 return DetachedPanelRouteMetadata{
-                    .title = "Epoch World Outliner",
-                    .width = 430,
-                    .height = 620,
-                    .open_success = "World Outliner popout requested.",
-                    .open_failure = "World Outliner popout request failed."
+                    .title = title,
+                    .width = 520,
+                    .height = 660,
+                    .open_success = "Tool window popout requested.",
+                    .open_failure = "Tool window popout request failed."
                 };
             }
-            if (route == "pane.inspector")
+            const bool inspectorTool =
+                route == "pane.properties"
+                || route == "pane.world_settings"
+                || route == "pane.inspector";
+            if (inspectorTool)
             {
                 return DetachedPanelRouteMetadata{
-                    .title = "Epoch Inspector",
+                    .title = route == "pane.world_settings"
+                        ? "Epoch World Settings"
+                        : "Epoch Properties",
                     .width = 460,
                     .height = 620,
-                    .open_success = "Inspector popout requested.",
-                    .open_failure = "Inspector popout request failed."
+                    .open_success = "Inspector tool popout requested.",
+                    .open_failure = "Inspector tool popout request failed."
                 };
             }
-            if (route == "pane.console")
+            const bool statusTool =
+                route == "pane.output"
+                || route == "pane.project_status"
+                || route == "pane.asset_status"
+                || route == "pane.ai_status"
+                || route == "pane.systems_status"
+                || route == "pane.console";
+            if (statusTool)
             {
+                const std::string_view title =
+                    route == "pane.project_status" ? "Epoch Project"
+                    : route == "pane.asset_status" ? "Epoch Asset Status"
+                    : route == "pane.ai_status" ? "Epoch AI Status"
+                    : route == "pane.systems_status" ? "Epoch Systems Status"
+                    : "Epoch Output";
                 return DetachedPanelRouteMetadata{
-                    .title = "Epoch Console Dock",
+                    .title = title,
                     .width = 760,
                     .height = 420,
-                    .open_success = "Console Dock popout requested.",
-                    .open_failure = "Console Dock popout request failed."
+                    .open_success = "Status tool popout requested.",
+                    .open_failure = "Status tool popout request failed."
                 };
             }
             if (route == "pane.ai_chat")
@@ -4299,6 +4981,7 @@ namespace epochengine::core
                     .open_failure = "AI Chat popout request failed."
                 };
             }
+
             if (route == "floating.gui")
             {
                 return DetachedPanelRouteMetadata{
@@ -5199,6 +5882,8 @@ namespace epochengine::core
             Exit
         };
 
+        constexpr double kLauncherLoadingMinimumSeconds = 0.45;
+
         struct ContextSession
         {
             SessionMode mode{ SessionMode::Menu };
@@ -5209,17 +5894,19 @@ namespace epochengine::core
             bool has_last_frame{ false };
             epochengine::core::time::simulation_clock simulation{};
             bool routed_gui_upload_refreshed{ false };
-            std::optional<std::string> pending_editor_project_id{};
-            EditorApplicationKind pending_editor_application{ EditorApplicationKind::Standard };
-            std::uint32_t launcher_loading_frames{ 0 };
-            std::uint32_t launcher_loading_total_frames{ 0 };
+            bool shared_camera_bootstrap_applied{ false };
+            std::optional<EditorApplicationKind> pending_editor_application{};
+            std::optional<timing::Clock::time_point> launcher_loading_started{};
+            std::uint64_t launcher_loading_required_batch_generation{};
         };
 
         struct PreviewLookState
         {
             gui::Vec2 last_mouse{};
-            bool looking = false;
+            bool orbiting = false;
             bool panning = false;
+            bool dollying = false;
+            bool flying = false;
         };
 
         thread_local std::unordered_map<Context*, PreviewLookState> g_preview_look_states{};
@@ -5366,90 +6053,60 @@ namespace epochengine::core
                 return false;
             }
 
-#if defined(_WIN32)
-            STARTUPINFOW startup{};
-            startup.cb = sizeof(startup);
-            startup.dwFlags = STARTF_USESHOWWINDOW;
-            startup.wShowWindow = SW_SHOWNORMAL;
-
-            PROCESS_INFORMATION process{};
-            std::wstring command_line = L"\"" + executable.wstring() + L"\"";
-            command_line += L" --standalone --window-mode standalone";
+            platform::child_process::LaunchRequest request{};
+            request.executable = executable;
+            request.working_directory = executable.parent_path();
+            request.arguments = {
+                "--standalone",
+                "--window-mode",
+                "standalone"};
             if (!scene_to_launch.empty())
             {
-                const std::wstring scene_wide{ scene_to_launch.begin(), scene_to_launch.end() };
-                command_line += L" --scene \"" + scene_wide + L"\"";
+                request.arguments.emplace_back("--scene");
+                request.arguments.emplace_back(scene_to_launch);
             }
-            if (!backend_argument.empty())
-            {
-                const std::wstring backend_wide{ backend_argument.begin(), backend_argument.end() };
-                command_line += L" --backend \"" + backend_wide + L"\"";
-            }
+            request.arguments.emplace_back("--backend");
+            request.arguments.emplace_back(backend_argument);
             if (!frame_limit_argument.empty())
             {
-                const std::wstring frame_limit_wide{ frame_limit_argument.begin(), frame_limit_argument.end() };
-                command_line += L" --frame-limit \"" + frame_limit_wide + L"\"";
+                request.arguments.emplace_back("--frame-limit");
+                request.arguments.emplace_back(frame_limit_argument);
             }
-            std::wstring working_directory = executable.parent_path().wstring();
-            const BOOL created = CreateProcessW(
-                executable.wstring().c_str(),
-                command_line.data(),
-                nullptr,
-                nullptr,
-                FALSE,
-                0,
-                nullptr,
-                working_directory.empty() ? nullptr : working_directory.c_str(),
-                &startup,
-                &process);
+            request.correlation_key =
+                "legacy-project:"
+                + executable.generic_string()
+                + "|scene="
+                + scene_to_launch
+                + "|backend="
+                + backend_argument
+                + "|fps="
+                + frame_limit_argument;
+            request.exclusive_group = "epoch.project.runtime";
+            request.display_name = executable.stem().string();
+            request.window_mode =
+                platform::child_process::WindowMode::normal;
 
-            if (!created)
+            const auto launched =
+                platform::child_process::launch_or_focus(request);
+            if (!launched)
             {
                 logger::get(kEditorLog).logf(
                     logger::LogLevel::Error,
                     std::source_location::current(),
-                    "Failed to launch built project executable: {} (GetLastError={})",
+                    "Failed to launch built project executable: {} ({})",
                     executable.generic_string(),
-                    static_cast<unsigned long>(GetLastError()));
+                    launched.message);
                 return false;
             }
 
             logger::get(kEditorLog).logf(
                 logger::LogLevel::INFO,
                 std::source_location::current(),
-                "Launched built project executable in standalone {} mode: {}",
-                backend_argument,
-                executable.generic_string());
-
-            CloseHandle(process.hThread);
-            CloseHandle(process.hProcess);
-            return true;
-#else
-            std::string command = "\"" + executable.string() + "\" --standalone --window-mode standalone";
-            if (!scene_to_launch.empty())
-                command += " --scene \"" + scene_to_launch + "\"";
-            if (!backend_argument.empty())
-                command += " --backend \"" + backend_argument + "\"";
-            if (!frame_limit_argument.empty())
-                command += " --frame-limit \"" + frame_limit_argument + "\"";
-            command += " &";
-            if (std::system(command.c_str()) != 0)
-            {
-                logger::get(kEditorLog).logf(
-                    logger::LogLevel::Error,
-                    std::source_location::current(),
-                    "Failed to launch built project executable: {}",
-                    executable.generic_string());
-                return false;
-            }
-            logger::get(kEditorLog).logf(
-                logger::LogLevel::INFO,
-                std::source_location::current(),
-                "Launched built project executable in standalone {} mode: {}",
+                "{} built project executable in standalone {} mode: {}",
+                platform::child_process::launch_code_name(launched.code),
                 backend_argument,
                 executable.generic_string());
             return true;
-#endif
         }
 
         using ProjectRuntimeEntity = epochengine::scene_runtime::RuntimeEntity;
@@ -5671,20 +6328,23 @@ namespace epochengine::core
 
             std::vector<epochengine::previewgrid::ObjectMarker> markers{};
             markers.reserve(entities.size());
-            for (std::size_t i = 0; i < entities.size(); ++i)
+            for (const auto& entity : entities)
             {
-                const auto& entity = entities[i];
-                if (!entity.visible())
+                if (!entity.visible() || entity.editor_only()
+                    || entity.category == "Editor"
+                    || entity.type == "Camera"
+                    || entity.type == "Light"
+                    || entity.type == "Spawn")
                     continue;
 
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
                     .position{ entity.transform.position[0], entity.transform.position[1], entity.transform.position[2] },
-                    .color = runtime_marker_color_for_entity(entity, i == 0u),
+                    .color = runtime_marker_color_for_entity(entity, false),
                     .scale{ entity.transform.scale[0], entity.transform.scale[1], entity.transform.scale[2] },
                     .radius = runtime_marker_radius_for_entity(entity),
                     .primitive = runtime_preview_primitive_for_entity(entity),
-                    .selected = i == 0u,
-                    .editorOnly = entity.editor_only() || entity.category == "Editor",
+                    .selected = false,
+                    .editorOnly = false,
                     .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen"
                 });
             }
@@ -5734,10 +6394,6 @@ namespace epochengine::core
             return (runtimeRoot / path).lexically_normal();
         }
 
-        inline constexpr epochengine::audio::ClipId kActorJumpCue{
-            0x4550'4f43'485f'3244ull, 1u};
-        inline constexpr epochengine::audio::ClipId kActorLandCue{
-            0x4550'4f43'485f'3244ull, 2u};
 
         epochengine::audio::PlaybackRuntime* g_processAudioRuntime{};
 
@@ -5764,161 +6420,35 @@ namespace epochengine::core
             epochengine::audio::PlaybackRuntime* previous_{};
         };
 
-        [[nodiscard]] std::uint64_t stable_project_audio_session_id(
-            std::string_view projectId) noexcept
+        class ScopedPhysicalInputRuntime final
         {
-            std::uint64_t value{1469598103934665603ull};
-            for (const unsigned char byte : projectId)
+        public:
+            ScopedPhysicalInputRuntime() noexcept
+                : initialization_{
+                    epochengine::controller_input::initialize_physical_input()}
             {
-                value ^= byte;
-                value *= 1099511628211ull;
             }
-            value ^= 0x4155'4449'4f5f'3244ull;
-            value *= 1099511628211ull;
-            return value == 0u ? 1u : value;
-        }
 
-        [[nodiscard]] epochengine::audio::OwnedPcmClip make_actor_tone(
-            epochengine::audio::ClipId id,
-            float frequency,
-            float durationSeconds,
-            float amplitude)
-        {
-            constexpr std::uint32_t sampleRate{48'000u};
-            constexpr double tau{6.283185307179586476925286766559};
-            const std::uint64_t frameCount = static_cast<std::uint64_t>(
-                std::llround(
-                    static_cast<double>(sampleRate) * durationSeconds));
-            epochengine::audio::OwnedPcmClip clip{
-                .id = id,
-                .format = {
-                    .sample_format =
-                        epochengine::audio::PcmSampleFormat::float32_interleaved,
-                    .channel_layout =
-                        epochengine::audio::PcmChannelLayout::mono,
-                    .sample_rate = sampleRate},
-                .frame_count = frameCount};
-            clip.interleaved_samples.resize(frameCount);
-            for (std::uint64_t frame = 0u; frame < frameCount; ++frame)
+            ~ScopedPhysicalInputRuntime()
             {
-                const double progress = frameCount <= 1u
-                    ? 1.0
-                    : static_cast<double>(frame)
-                        / static_cast<double>(frameCount - 1u);
-                const double phase = tau * static_cast<double>(frequency)
-                    * static_cast<double>(frame)
-                    / static_cast<double>(sampleRate);
-                const double envelope = (1.0 - progress)
-                    * (1.0 - progress);
-                clip.interleaved_samples[frame] = static_cast<float>(
-                    std::sin(phase) * envelope * amplitude);
+                epochengine::controller_input::shutdown_physical_input();
             }
-            return clip;
-        }
 
-        [[nodiscard]] epochengine::audio::PlaybackSessionRequest
-        make_actor_audio_session_request(std::string_view projectId)
-        {
-            epochengine::audio::PlaybackSessionRequest request{};
-            request.stable_session_id =
-                stable_project_audio_session_id(projectId);
-            request.request_physical_output =
-                EPOCH_ENABLE_PHYSICAL_AUDIO != 0;
-            request.cues.push_back({
-                .clip = make_actor_tone(
-                    kActorJumpCue, 660.0f, 0.095f, 0.24f),
-                .gain = 1.0f,
-                .looping = false});
-            request.cues.push_back({
-                .clip = make_actor_tone(
-                    kActorLandCue, 165.0f, 0.075f, 0.20f),
-                .gain = 1.0f,
-                .looping = false});
-            return request;
-        }
-        struct PreparedProjectInput final
-        {
-            std::optional<epochengine::project_input::CompiledInputProfile> artifact{};
-            std::string diagnostic{};
+            ScopedPhysicalInputRuntime(
+                const ScopedPhysicalInputRuntime&) = delete;
+            ScopedPhysicalInputRuntime& operator=(
+                const ScopedPhysicalInputRuntime&) = delete;
+
+            [[nodiscard]] epochengine::controller_input::ControllerCode
+            initialization() const noexcept
+            {
+                return initialization_;
+            }
+
+        private:
+            epochengine::controller_input::ControllerCode initialization_{
+                epochengine::controller_input::ControllerCode::unavailable};
         };
-
-        [[nodiscard]] PreparedProjectInput prepare_project_input(
-            std::string_view projectId,
-            const std::filesystem::path& projectRoot,
-            std::string_view declaredPath)
-        {
-            namespace project_input = epochengine::project_input;
-            PreparedProjectInput result{};
-            const std::string normalized = std::filesystem::path{declaredPath}
-                .lexically_normal().generic_string();
-            if (normalized != project_input::canonical_source_path)
-            {
-                result.diagnostic = "unsupported project input path";
-                return result;
-            }
-
-            project_input::ProjectInputProfileStore store{
-                std::string{projectId}, projectRoot};
-            if (!store.valid())
-            {
-                result.diagnostic = "invalid project input store";
-                return result;
-            }
-
-            std::error_code existsError{};
-            const bool sourceExists = std::filesystem::exists(
-                store.source_path(), existsError) && !existsError;
-            if (sourceExists)
-            {
-                const auto loaded = store.load_source();
-                if (!loaded)
-                {
-                    result.diagnostic = std::string{"source "}
-                        + std::string{project_input::store_code_name(loaded.code)};
-                    return result;
-                }
-                auto compiled = project_input::compile_profile(
-                    projectId, loaded.source);
-                if (!compiled)
-                {
-                    result.diagnostic = std::string{"compile "}
-                        + std::string{
-                            project_input::validation_code_name(compiled.code)};
-                    return result;
-                }
-                const auto published = store.publish_artifact(compiled.artifact);
-                result.diagnostic = published
-                    ? "source compiled and cached"
-                    : std::string{"source compiled; cache "}
-                        + std::string{project_input::store_code_name(published.code)};
-                result.artifact = std::move(compiled.artifact);
-                return result;
-            }
-            if (existsError)
-            {
-                result.diagnostic = "input source existence check failed";
-                return result;
-            }
-
-            const auto loadedArtifact = store.load_artifact();
-            if (loadedArtifact)
-            {
-                result.artifact = loadedArtifact.artifact;
-                result.diagnostic = "compiled project input restored";
-                return result;
-            }
-
-            auto fallback = project_input::compile_profile(
-                projectId, project_input::make_legacy_default_profile());
-            if (!fallback)
-            {
-                result.diagnostic = "default project input compile failed";
-                return result;
-            }
-            result.artifact = std::move(fallback.artifact);
-            result.diagnostic = "in-memory default input (source absent)";
-            return result;
-        }
 
         [[nodiscard]] std::optional<input::Key> engine_key(
             epochengine::project_input::KeyCode key) noexcept
@@ -6010,9 +6540,15 @@ namespace epochengine::core
         [[nodiscard]] epochengine::project_input::InputSnapshot
         project_input_snapshot(
             const epochengine::project_input::CompiledInputProfile& profile,
-            std::uint64_t frameIndex)
+            std::uint64_t frameIndex,
+            bool samplePhysicalInput)
         {
             namespace project_input = epochengine::project_input;
+            project_input::InputSnapshot snapshot{};
+            snapshot.frame_index = frameIndex;
+            if (!samplePhysicalInput)
+                return snapshot;
+
             std::vector<project_input::KeyCode> keys{};
             for (const auto& binding : profile.bindings)
             {
@@ -6025,8 +6561,6 @@ namespace epochengine::core
             std::sort(keys.begin(), keys.end());
             keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
 
-            project_input::InputSnapshot snapshot{};
-            snapshot.frame_index = frameIndex;
             snapshot.modifiers = project_modifier_snapshot();
             snapshot.keyboard.reserve(keys.size());
             for (const auto projectKey : keys)
@@ -6043,264 +6577,6 @@ namespace epochengine::core
             return snapshot;
         }
 
-        [[nodiscard]] epochengine::project_actor2d::FixedInputFrame
-        actor_input_frame(
-            const epochengine::project_input::CompiledInputProfile& profile,
-            const epochengine::project_input::ActionFrame& frame) noexcept
-        {
-            namespace project_input = epochengine::project_input;
-            epochengine::project_actor2d::FixedInputFrame result{};
-            result.sequence = frame.frame_index;
-            const auto action = [&](project_input::ActionSemantic semantic)
-                -> const project_input::ActionValue*
-            {
-                return project_input::find_action(frame, semantic, profile);
-            };
-            if (const auto* value = action(project_input::ActionSemantic::move_x))
-            {
-                result.move_x = static_cast<double>(value->value_q15)
-                    / static_cast<double>(project_input::normalized_unit);
-            }
-            if (const auto* value = action(project_input::ActionSemantic::move_y))
-            {
-                result.move_y = static_cast<double>(value->value_q15)
-                    / static_cast<double>(project_input::normalized_unit);
-            }
-            if (const auto* value = action(project_input::ActionSemantic::jump))
-                result.jump_pressed = value->pressed;
-            if (const auto* value = action(project_input::ActionSemantic::pause))
-                result.pause_pressed = value->pressed;
-            if (const auto* value = action(project_input::ActionSemantic::reset))
-                result.reset_pressed = value->pressed;
-            return result;
-        }
-
-        [[nodiscard]] std::uint64_t tile_collision_identity(
-            const epochengine::asset::tilemap::CollisionPrimitive& primitive,
-            std::uint64_t sequence) noexcept
-        {
-            std::uint64_t value = 1469598103934665603ull;
-            const auto mix = [&](std::uint64_t word)
-            {
-                value ^= word;
-                value *= 1099511628211ull;
-            };
-            mix(primitive.layer.value);
-            mix(primitive.palette_entry.value);
-            mix(primitive.cell_coordinate.x);
-            mix(primitive.cell_coordinate.y);
-            mix(static_cast<std::uint64_t>(primitive.kind));
-            mix(sequence);
-            return value == 0u ? sequence + 1u : value;
-        }
-
-        [[nodiscard]] epochengine::project_actor2d::StaticCollisionKind
-        actor_collision_kind(
-            epochengine::asset::tilemap::CollisionKind kind) noexcept
-        {
-            using AssetKind = epochengine::asset::tilemap::CollisionKind;
-            using ActorKind =
-                epochengine::project_actor2d::StaticCollisionKind;
-            switch (kind)
-            {
-            case AssetKind::full_cell:
-            case AssetKind::custom_box:
-                return ActorKind::solid_box;
-            case AssetKind::one_way_up:
-                return ActorKind::one_way_up;
-            case AssetKind::slope_up_right:
-                return ActorKind::slope_up_right;
-            case AssetKind::slope_down_right:
-                return ActorKind::slope_down_right;
-            case AssetKind::none:
-                return ActorKind::unsupported;
-            }
-            return ActorKind::unsupported;
-        }
-
-        [[nodiscard]] std::vector<epochengine::project_actor2d::StaticCollision>
-        actor_collision_from_tilemap(
-            std::span<const epochengine::asset::tilemap::CollisionPrimitive>
-                collision)
-        {
-            std::vector<epochengine::project_actor2d::StaticCollision> result{};
-            result.reserve(collision.size());
-            std::uint64_t sequence{};
-            for (const auto& primitive : collision)
-            {
-                ++sequence;
-                result.push_back({
-                    .stable_id = tile_collision_identity(primitive, sequence),
-                    .bounds = {
-                        primitive.world_bounds.x,
-                        primitive.world_bounds.y,
-                        primitive.world_bounds.width,
-                        primitive.world_bounds.height},
-                    .layer_bits = primitive.layer_bits,
-                    .mask_bits = primitive.mask_bits,
-                    .sensor = primitive.sensor,
-                    .kind = actor_collision_kind(primitive.kind)
-                });
-            }
-            return result;
-        }
-
-        [[nodiscard]] epochengine::project_actor2d::ActorConfiguration
-        actor_configuration_from_tilemap(
-            std::span<const epochengine::canvas2d::tilemap_runtime::VisibleObject>
-                objects) noexcept
-        {
-            epochengine::project_actor2d::ActorConfiguration result{};
-            for (const auto& object : objects)
-            {
-                if (object.type == "spawn" || object.name == "PlayerSpawn")
-                {
-                    result.spawn_x = object.position.x;
-                    result.spawn_y = object.position.y;
-                    break;
-                }
-            }
-            return result;
-        }
-
-        [[nodiscard]] std::optional<
-            epochengine::project_sprite_animation::DefaultActorSheet>
-        default_actor_sheet_from_tilemap(
-            const epochengine::project_tilemap_runtime::PreparedTileMap& map)
-        {
-            namespace sprite_animation =
-                epochengine::project_sprite_animation;
-            for (const auto& tileSet : map.tile_sets)
-            {
-                if (tileSet.dependency_index
-                        >= map.texture_dependencies.size()
-                    || tileSet.tile_count == 0u)
-                {
-                    continue;
-                }
-                const auto& dependency =
-                    map.texture_dependencies[tileSet.dependency_index];
-                sprite_animation::DefaultActorSheet result{};
-                result.material.logical_texture_path =
-                    dependency.logical_path;
-                result.material.texture_artifact_key =
-                    epochengine::asset::texture::ContentHash{
-                        dependency.artifact_key};
-                result.material.texture_artifact_revision =
-                    dependency.artifact_revision;
-                result.material.stable_material_key =
-                    dependency.stable_material_key;
-                result.material.texture_extent = {
-                    dependency.texture_extent.x,
-                    dependency.texture_extent.y};
-                result.tile_extent = {
-                    tileSet.tile_extent.x, tileSet.tile_extent.y};
-                result.grid = {tileSet.grid.x, tileSet.grid.y};
-                result.margin = {tileSet.margin.x, tileSet.margin.y};
-                result.spacing = {tileSet.spacing.x, tileSet.spacing.y};
-                result.tile_count = tileSet.tile_count;
-                if (result.valid())
-                    return result;
-            }
-            return std::nullopt;
-        }
-
-        [[nodiscard]] epochengine::canvas2d::scene_content::SceneContent
-        actor_canvas_scene(
-            const epochengine::canvas2d::scene_content::SceneContent& base,
-            const epochengine::project_actor2d::ActorConfiguration& configuration,
-            const epochengine::project_actor2d::ActorState& actor,
-            const epochengine::project_sprite_animation::RuntimeSpriteSample*
-                animation,
-            bool facingLeft)
-        {
-            namespace canvas2d = epochengine::canvas2d;
-            auto scene = base;
-            std::uint32_t nextSpriteIndex{};
-            std::uint64_t nextSequence{1u};
-            std::int32_t actorLayer{};
-            for (const auto& sprite : scene.sprites)
-            {
-                if (sprite.sprite.index != canvas2d::invalid_index)
-                    nextSpriteIndex = (std::max)(nextSpriteIndex, sprite.sprite.index + 1u);
-                nextSequence = (std::max)(nextSequence, sprite.stable_sequence + 1u);
-                actorLayer = (std::max)(actorLayer, sprite.layer + 1);
-            }
-
-            canvas2d::SpriteSubmission sprite{};
-            sprite.sprite = {nextSpriteIndex, 1u};
-            sprite.material.stable_key = 0xe001'0001u;
-            sprite.material.source = canvas2d::SpriteSourceKind::solid_color;
-            sprite.material.alpha = canvas2d::SpriteAlphaMode::opaque;
-            sprite.material.color_space = canvas2d::SpriteColorSpace::linear;
-            sprite.transform.position = {
-                static_cast<float>(actor.x), static_cast<float>(actor.y)};
-            sprite.transform.size = {
-                static_cast<float>(configuration.width),
-                static_cast<float>(configuration.height)};
-            sprite.tint = actor.paused
-                ? canvas2d::LinearColor{0.95f, 0.72f, 0.18f, 1.0f}
-                : (actor.grounded
-                    ? canvas2d::LinearColor{0.14f, 0.82f, 0.72f, 1.0f}
-                    : canvas2d::LinearColor{0.20f, 0.62f, 1.0f, 1.0f});
-            if (animation && *animation)
-            {
-                const canvas2d::LogicalTextureReference logical{
-                    animation->material.texture_asset_key,
-                    animation->material.texture_artifact_revision};
-                const auto matchingMaterial = std::find_if(
-                    base.sprites.begin(),
-                    base.sprites.end(),
-                    [logical](const canvas2d::SpriteSubmission& candidate)
-                    {
-                        return candidate.material.source
-                                == canvas2d::SpriteSourceKind::texture
-                            && candidate.material.logical_texture == logical;
-                    });
-                if (matchingMaterial != base.sprites.end())
-                    sprite.material = matchingMaterial->material;
-                else
-                {
-                    sprite.material.stable_key =
-                        animation->material.stable_material_key;
-                    sprite.material.source =
-                        canvas2d::SpriteSourceKind::texture;
-                    sprite.material.logical_texture = logical;
-                    sprite.material.alpha =
-                        canvas2d::SpriteAlphaMode::premultiplied;
-                    sprite.material.color_space =
-                        canvas2d::SpriteColorSpace::srgb;
-                }
-                const float textureWidth = static_cast<float>(
-                    animation->material.texture_extent.x);
-                const float textureHeight = static_cast<float>(
-                    animation->material.texture_extent.y);
-                sprite.source_uv = {
-                    static_cast<float>(animation->source_rectangle.x)
-                        / textureWidth,
-                    static_cast<float>(animation->source_rectangle.y)
-                        / textureHeight,
-                    static_cast<float>(animation->source_rectangle.width)
-                        / textureWidth,
-                    static_cast<float>(animation->source_rectangle.height)
-                        / textureHeight};
-                sprite.tint = actor.paused
-                    ? canvas2d::LinearColor{0.72f, 0.72f, 0.72f, 1.0f}
-                    : canvas2d::LinearColor{1.0f, 1.0f, 1.0f, 1.0f};
-                sprite.flip_x = facingLeft;
-            }
-            sprite.phase = canvas2d::SpritePhase::world;
-            sprite.layer = actorLayer;
-            sprite.stable_sequence = nextSequence;
-            scene.sprites.push_back(sprite);
-            scene.source_revision = base.source_revision
-                ^ (actor.revision * 0x9e3779b97f4a7c15ull);
-            if (animation && *animation)
-                scene.source_revision ^= animation->frame.value;
-            if (scene.source_revision == 0u)
-                scene.source_revision = 1u;
-            return scene;
-        }
         class ProjectPlayScene final : public epochengine::scene::Scene
         {
         public:
@@ -6326,10 +6602,17 @@ namespace epochengine::core
                 m_inputProfilePath = std::string(profile->input_profile_path);
                 m_spriteAnimationPath =
                     std::string(profile->sprite_animation_path);
+                m_audioProfilePath =
+                    std::string(profile->audio_profile_path);
                 m_worldName = std::string(profile->world_name);
                 m_scriptName = std::string(profile->default_script);
                 m_description = std::string(profile->description);
+                m_runtimeBudgets =
+                    epochengine::platform::recommended_budgets_for_tier(
+                        epochengine::perf::tier::mobile_30);
+                m_runtimeBudgetProfile = "T1-GLES/mobile_30";
                 m_modelSummary = epochengine::editor_project_model_summary(m_projectId);
+                prepare_project_gui();
                 const auto seedEntities = epochengine::editor_seed_entities_for_project(m_projectId);
                 const auto sourceSnapshot = load_project_runtime_snapshot(
                     m_scenePath,
@@ -6341,7 +6624,7 @@ namespace epochengine::core
                     sourceSnapshot,
                     epochengine::scene_runtime::RuntimeScenePolicy{
                         .include_hidden_objects = false,
-                        .include_editor_only_objects = true
+                        .include_editor_only_objects = false
                     });
                 if (compileReport.committed())
                 {
@@ -6350,74 +6633,26 @@ namespace epochengine::core
                 }
                 m_lightingFrame = build_project_play_lighting(
                     std::span<const ProjectRuntimeEntity>{ m_entities.data(), m_entities.size() });
-                if (m_cameraMode == epochengine::previewgrid::CameraMode::Canvas2D
-                    && !m_tileMapPath.empty() && !m_projectRoot.empty())
-                {
-                    m_tileMapRuntime =
-                        std::make_unique<epochengine::project_tilemap_runtime::ProjectTileMapRuntime>(
-                            m_projectId, m_projectRoot);
-                    auto prepared = m_tileMapRuntime->prepare({
-                        .logical_path = m_tileMapPath,
-                        .source_policy =
-                            epochengine::project_tilemap_runtime::SourcePolicy::prefer_source});
-                    m_tileMapStatus = prepared.diagnostic;
-                    if (prepared)
-                    {
-                        m_tileMap = std::move(prepared);
-                        if (!m_inputProfilePath.empty())
-                        {
-                            auto input = prepare_project_input(
-                                m_projectId,
-                                std::filesystem::path{m_projectRoot},
-                                m_inputProfilePath);
-                            m_projectInputStatus = std::move(input.diagnostic);
-                            m_projectInput = std::move(input.artifact);
-                        }
-                        if (m_projectInput)
-                        {
-                            auto configuration = actor_configuration_from_tilemap(
-                                m_tileMap->objects);
-                            m_actorRuntime =
-                                std::make_unique<epochengine::project_actor2d::ActorRuntime>(
-                                    configuration);
-                            const auto collision = actor_collision_from_tilemap(
-                                m_tileMap->collision);
-                            const auto collisionCode =
-                                m_actorRuntime->replace_collision(collision);
-                            m_actorStatus = std::string{
-                                epochengine::project_actor2d::result_code_name(
-                                    collisionCode)};
-                            if (collisionCode
-                                == epochengine::project_actor2d::ResultCode::ready)
-                            {
-                                prepare_sprite_animations();
-                                begin_audio_session();
-                                refresh_actor_scene(true);
-                            }
-                            else
-                            {
-                                m_actorRuntime.reset();
-                            }
-                        }
-                    }
-                    else
-                    {
-                        m_tileMapStatus =
-                            std::string(epochengine::project_tilemap_runtime::runtime_code_name(
-                                prepared.code))
-                            + ": " + prepared.diagnostic;
-                    }
-                }
             }
 
             void load() override
             {
                 Scene::load();
+                prepare_gameplay();
+            }
+
+            void unload() override
+            {
+                shutdown_gameplay();
+                retire_canvas2d_scenes();
+                m_cameraApplied.clear();
+                m_hasLastFrame = false;
+                Scene::unload();
             }
 
             ~ProjectPlayScene() override
             {
-                close_audio_session();
+                shutdown_gameplay();
                 retire_canvas2d_scenes();
             }
 
@@ -6441,8 +6676,6 @@ namespace epochengine::core
                     dt = std::chrono::duration<float>(now - m_lastFrame).count();
                 m_lastFrame = now;
                 m_hasLastFrame = true;
-                advance_actor(dt);
-                advance_audio(dt);
 
                 int mx = 0;
                 int my = 0;
@@ -6456,9 +6689,26 @@ namespace epochengine::core
                     ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
                 const bool mouse_right_down =
                     ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseRight);
+                const bool mouse_middle_down =
+                    ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseMiddle);
 
                 const int width = (std::max)(1, ctx->width > 0 ? ctx->width : ctx->get_width_safe());
                 const int height = (std::max)(1, ctx->height > 0 ? ctx->height : ctx->get_height_safe());
+                bool projectGuiCapturesPointer{};
+                bool projectGuiCapturesKeyboard{};
+                if (m_projectGuiRuntime)
+                {
+                    (void)m_projectGuiRuntime->build_frame({
+                        static_cast<float>(width),
+                        static_cast<float>(height)});
+                    projectGuiCapturesPointer =
+                        m_projectGuiRuntime->pointer_captured({
+                            mouse_pos.x, mouse_pos.y});
+                    projectGuiCapturesKeyboard =
+                        m_projectGuiRuntime->keyboard_captured();
+                }
+                advance_gameplay(dt, projectGuiCapturesKeyboard);
+
                 const bool backendOwnsFrameClear =
                     ctx->type == core::ContextType::OpenGL;
                 if (!backendOwnsFrameClear)
@@ -6485,9 +6735,10 @@ namespace epochengine::core
                     const auto published = m_canvas2dPublished.find(ctx.get());
                     const auto acquired =
                         epochengine::canvas2d::scene_content::acquire(ctx.get());
-                    const auto* desiredScene = m_canvas2dScene
-                        ? &*m_canvas2dScene
-                        : (m_tileMap ? &m_tileMap->scene : nullptr);
+                    const auto* desiredScene = m_gameplayRuntime
+                        ? m_gameplayRuntime->scene()
+                        : (m_staticCanvasScene
+                            ? &*m_staticCanvasScene : nullptr);
                     const bool needsPublication = desiredScene
                         && (published == m_canvas2dPublished.end()
                             || !acquired
@@ -6511,7 +6762,7 @@ namespace epochengine::core
                                         publication.code));
                         }
                     }
-                    else if (!m_tileMap)
+                    else if (!desiredScene)
                     {
                         (void)epochengine::canvas2d::scene_content::retire(ctx.get());
                     }
@@ -6534,23 +6785,40 @@ namespace epochengine::core
                 if (input::action_pressed(input::Action::ResetCamera))
                     epochengine::previewgrid::reset_camera(ctx.get());
 
-                const float forwardInput =
+                const bool altHeld = input::is_key_held(input::Key::LeftAlt)
+                    || input::is_key_held(input::Key::RightAlt);
+                const bool shiftHeld = input::is_key_held(input::Key::LeftShift)
+                    || input::is_key_held(input::Key::RightShift);
+                const bool controlHeld = input::is_key_held(input::Key::LeftControl)
+                    || input::is_key_held(input::Key::RightControl);
+                const auto navigationGestures =
+                    epochengine::previewgrid::resolve_camera_navigation_gestures(
+                        altHeld, mouse_left_down, mouse_middle_down, mouse_right_down);
+                const bool orbiting = !projectGuiCapturesPointer && navigationGestures.orbiting;
+                const bool panning = !projectGuiCapturesPointer && navigationGestures.panning;
+                const bool dollying = !projectGuiCapturesPointer && navigationGestures.dollying;
+                const bool flying = !projectGuiCapturesPointer && navigationGestures.flying;
+                const bool keyboardNavigation = !projectGuiCapturesKeyboard && flying;
+                const float navigationMultiplier = shiftHeld ? 4.0f : (controlHeld ? 0.25f : 1.0f);
+
+                const float forwardInput = !keyboardNavigation ? 0.0f :
                     (input::action_held(input::Action::MoveForward) ? 1.0f : 0.0f)
                     - (input::action_held(input::Action::MoveBackward) ? 1.0f : 0.0f);
-                const float rightInput =
+                const float rightInput = !keyboardNavigation ? 0.0f :
                     (input::action_held(input::Action::MoveRight) ? 1.0f : 0.0f)
                     - (input::action_held(input::Action::MoveLeft) ? 1.0f : 0.0f);
-                const float upInput =
+                const float upInput = !keyboardNavigation ? 0.0f :
                     (input::action_held(input::Action::MoveUp) ? 1.0f : 0.0f)
                     - (input::action_held(input::Action::MoveDown) ? 1.0f : 0.0f);
-                const float yawInput =
+                const float yawInput = !keyboardNavigation ? 0.0f :
                     (input::action_held(input::Action::LookRight) ? 1.0f : 0.0f)
                     - (input::action_held(input::Action::LookLeft) ? 1.0f : 0.0f);
-                const float pitchInput =
+                const float pitchInput = !keyboardNavigation ? 0.0f :
                     (input::action_held(input::Action::LookUp) ? 1.0f : 0.0f)
                     - (input::action_held(input::Action::LookDown) ? 1.0f : 0.0f);
 
-                if (mouse_right_down && m_lookState.looking)
+
+                if ((flying && m_lookState.flying) || (orbiting && m_lookState.orbiting))
                 {
                     const float mouseDeltaX = mouse_pos.x - m_lookState.last_mouse.x;
                     const float mouseDeltaY = mouse_pos.y - m_lookState.last_mouse.y;
@@ -6560,7 +6828,8 @@ namespace epochengine::core
                         mouseDeltaX * sensitivity,
                         -mouseDeltaY * sensitivity);
                 }
-                else if (mouse_left_down && !mouse_right_down && m_lookState.panning)
+
+                else if (panning && m_lookState.panning)
                 {
                     const float mouseDeltaX = mouse_pos.x - m_lookState.last_mouse.x;
                     const float mouseDeltaY = mouse_pos.y - m_lookState.last_mouse.y;
@@ -6570,11 +6839,21 @@ namespace epochengine::core
                         -mouseDeltaY);
                 }
 
-                if (wheelDelta != 0)
+                else if (dollying && m_lookState.dollying)
                 {
-                    epochengine::previewgrid::zoom_camera(
-                        ctx.get(),
-                        (static_cast<float>(wheelDelta) / 120.0f) * input::wheel_zoom_step());
+                    const float mouseDeltaY = mouse_pos.y - m_lookState.last_mouse.y;
+                    epochengine::previewgrid::dolly_camera_drag(ctx.get(), mouseDeltaY);
+                }
+
+
+                if (wheelDelta != 0 && !projectGuiCapturesPointer)
+                {
+                    const float wheelSteps = static_cast<float>(wheelDelta) / 120.0f;
+                    if (flying)
+                        epochengine::previewgrid::adjust_fly_speed(ctx.get(), wheelSteps);
+                    else
+                        epochengine::previewgrid::zoom_camera(
+                            ctx.get(), wheelSteps * input::wheel_zoom_step());
                 }
 
                 epochengine::previewgrid::step_camera(
@@ -6584,24 +6863,69 @@ namespace epochengine::core
                     rightInput,
                     upInput,
                     yawInput,
-                    pitchInput);
+                    pitchInput,
+                    navigationMultiplier);
 
                 m_lookState.last_mouse = mouse_pos;
-                m_lookState.looking = mouse_right_down;
-                m_lookState.panning = mouse_left_down && !mouse_right_down;
+                m_lookState.orbiting = orbiting;
+                m_lookState.panning = panning;
+                m_lookState.dollying = dollying;
+                m_lookState.flying = flying;
 
                 bool returnToEditor = false;
+                if (m_projectGuiRuntime && m_projectGuiAdapter)
+                {
+                    auto guiResult = m_projectGuiAdapter->render(
+                        *m_projectGuiRuntime,
+                        {
+                            static_cast<float>(width),
+                            static_cast<float>(height)});
+                    if (guiResult)
+                    {
+                        for (const auto& event : guiResult.events)
+                        {
+                            if (event.action.empty())
+                                continue;
+                            if (event.action == "editor.return")
+                            {
+                                if (event.kind
+                                    == epochengine::project_gui_runtime::EventKind::activated)
+                                {
+                                    returnToEditor = true;
+                                    m_projectGuiStatus =
+                                        "GUI host command: return to editor.";
+                                }
+                                else
+                                {
+                                    m_projectGuiStatus =
+                                        "GUI host command rejected for this event.";
+                                }
+                                continue;
+                            }
+                            queue_project_gui_action(event);
+                        }
+                    }
+                    else
+                    {
+                        m_projectGuiStatus = std::string{"GUI runtime: "}
+                            + std::string{
+                                epochengine::project_gui_runtime::runtime_code_name(
+                                    guiResult.code)};
+                    }
+                }
                 gui::begin_top_layer();
                 gui::begin_window(
                     "Project Runtime Preview",
                     {24.0f, 24.0f},
-                    {430.0f, m_actorRuntime
-                        ? 590.0f
-                        : (m_tileMapPath.empty() ? 210.0f : 272.0f)});
+                    {430.0f, m_gameplayRuntime
+                            && m_gameplayRuntime->active()
+                        ? 724.0f
+                        : (m_tileMapPath.empty() ? 210.0f : 306.0f)});
                 gui::label(std::string("Project: ") + m_projectName);
                 gui::label(std::string("World: ") + m_worldName);
                 gui::label(std::string("Scene: ") + m_scenePath);
                 gui::label(std::string("Script: ") + m_scriptName);
+                gui::wrapped_label(m_projectGuiStatus, 390.0f);
                 gui::label(std::string("Preview Objects: ") + std::to_string(visible_runtime_entity_count(m_entities)));
                 if (!m_tileMapPath.empty())
                 {
@@ -6634,11 +6958,17 @@ namespace epochengine::core
                                     : m_spriteAnimationStatus),
                             390.0f);
                     }
-                    if (m_actorRuntime)
+                    gui::wrapped_label(
+                        std::string{"Gameplay: "}
+                            + (m_actorStatus.empty()
+                                ? std::string{"not prepared"}
+                                : m_actorStatus),
+                        390.0f);
+                    if (m_gameplayRuntime && m_gameplayRuntime->active())
                     {
-                        const auto actor = m_actorRuntime->state();
-                        const auto metrics = m_actorRuntime->metrics();
-                        gui::label(std::string("Actor: ") + m_actorStatus);
+                        const auto snapshot = m_gameplayRuntime->snapshot();
+                        const auto& actor = snapshot.actor;
+                        const auto metrics = snapshot.metrics;
                         gui::label(
                             std::string("Position: ")
                             + std::to_string(actor.x) + ", "
@@ -6647,8 +6977,75 @@ namespace epochengine::core
                             std::string("Physics Tick: ")
                             + std::to_string(actor.fixed_tick));
                         gui::label(
-                            std::string("Contacts: ")
-                            + std::to_string(metrics.contact_events));
+                            std::string("Fixed Steps: ")
+                            + std::to_string(metrics.fixed_steps));
+                        gui::label(
+                            std::string("Actor Events: ")
+                            + std::to_string(metrics.actor_events));
+                        gui::label(
+                            std::string("Audio Triggers: ")
+                            + std::to_string(metrics.audio_triggers));
+                        if (!m_runtimeCosts
+                            || m_costFramesUntilRefresh == 0u)
+                        {
+                            m_runtimeCosts =
+                                m_gameplayRuntime->cost_snapshot();
+                            m_runtimeBudgetAssessment =
+                                epochengine::project_gameplay2d::
+                                    assess_runtime_costs(
+                                        *m_runtimeCosts, m_runtimeBudgets);
+                            m_costFramesUntilRefresh = 15u;
+                        }
+                        else
+                            --m_costFramesUntilRefresh;
+                        if (m_runtimeCosts)
+                        {
+                            const auto& costs = *m_runtimeCosts;
+                            gui::label(
+                                std::string{"Canvas Cost: "}
+                                + std::to_string(costs.emitted_sprites)
+                                + " sprites / "
+                                + std::to_string(costs.emitted_batches)
+                                + " batches / "
+                                + std::to_string(costs.emitted_vertices)
+                                + " vertices");
+                            gui::label(
+                                std::string{"Texture Cost: "}
+                                + std::to_string(
+                                    costs.source_texture_views)
+                                + " views / "
+                                + std::to_string(
+                                    costs.source_texture_bytes / 1024u)
+                                + " KiB logical");
+                            gui::label(
+                                std::string{"Physics Cost: "}
+                                + std::to_string(
+                                    costs.collision_surfaces)
+                                + " surfaces / "
+                                + std::to_string(
+                                    costs.peak_contacts_per_step)
+                                + " peak contacts");
+                            gui::label(
+                                std::string{"Audio Cost: "}
+                                + std::to_string(
+                                    costs.audio_resident_bytes / 1024u)
+                                + " KiB / "
+                                + std::to_string(
+                                    costs.audio_frames_mixed)
+                                + " mixed frames");
+                            gui::wrapped_label(
+                                std::string{"Cost Status: "}
+                                    + costs.diagnostic,
+                                390.0f);
+                            if (m_runtimeBudgetAssessment)
+                            {
+                                gui::wrapped_label(
+                                    std::string{"Tier Budget ("}
+                                        + m_runtimeBudgetProfile + "): "
+                                        + m_runtimeBudgetAssessment->diagnostic,
+                                    390.0f);
+                            }
+                        }
                         gui::wrapped_label(
                             std::string("Audio: ")
                                 + (m_audioStatus.empty()
@@ -6659,34 +7056,28 @@ namespace epochengine::core
                             actor.paused ? "Resume" : "Pause",
                             {190.0f, 30.0f}))
                         {
-                            const auto code = m_actorRuntime->set_paused(
+                            const auto code = m_gameplayRuntime->set_paused(
                                 !actor.paused);
                             m_actorStatus = std::string{
-                                epochengine::project_actor2d::result_code_name(code)};
-                            if (m_audioRuntime && m_audioSession)
-                            {
-                                (void)m_audioRuntime->set_paused(
-                                    m_audioSession, !actor.paused);
-                            }
-                            refresh_actor_scene(true);
+                                epochengine::project_gameplay2d::
+                                    session_code_name(code)}
+                                + ": " + std::string{
+                                    m_gameplayRuntime->diagnostic()};
                         }
                         if (gui::button("Reset Actor", {190.0f, 30.0f}))
                         {
-                            const auto code = m_actorRuntime->reset();
+                            const auto code = m_gameplayRuntime->reset();
                             m_actorStatus = std::string{
-                                epochengine::project_actor2d::result_code_name(code)};
-                            m_actorAccumulator = 0.0;
-                            if (m_audioRuntime && m_audioSession)
-                            {
-                                (void)m_audioRuntime->reset(m_audioSession);
-                                (void)m_audioRuntime->set_paused(
-                                    m_audioSession,
-                                    m_actorRuntime->state().paused);
-                            }
-                            refresh_actor_scene(true);
+                                epochengine::project_gameplay2d::
+                                    session_code_name(code)}
+                                + ": " + std::string{
+                                    m_gameplayRuntime->diagnostic()};
                         }
-                        if (gui::button("Return to Editor", {190.0f, 30.0f}))
-                            returnToEditor = true;
+                    }
+                    if (gui::button(
+                            "Return to Editor", {190.0f, 30.0f}))
+                    {
+                        returnToEditor = true;
                     }
                 }
                 gui::wrapped_label(
@@ -6707,212 +7098,259 @@ namespace epochengine::core
             }
 
         private:
-            void prepare_sprite_animations()
+            void prepare_gameplay()
             {
-                if (!m_tileMap || m_spriteAnimationPath.empty())
+                shutdown_gameplay();
+                m_staticCanvasScene.reset();
+                m_projectControllerSampler.reset();
+                m_inputFrameIndex = 0u;
+                m_runtimeCosts.reset();
+                m_runtimeBudgetAssessment.reset();
+                m_costFramesUntilRefresh = 0u;
+                for (auto& pending : m_pendingGuiActions)
+                    pending.reset();
+
+                if (m_cameraMode
+                        != epochengine::previewgrid::CameraMode::Canvas2D
+                    || m_tileMapPath.empty() || m_projectRoot.empty())
                 {
-                    m_spriteAnimationStatus =
-                        "Project does not declare sprite animations.";
                     return;
                 }
-                const auto fallback =
-                    default_actor_sheet_from_tilemap(*m_tileMap);
-#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_ANIMATION_EDITOR
-                const auto* fallbackSource =
-                    fallback ? &*fallback : nullptr;
-#else
-                const epochengine::project_sprite_animation::DefaultActorSheet*
-                    fallbackSource = nullptr;
-#endif
+
                 auto prepared =
-                    epochengine::project_sprite_animation::
-                        prepare_project_sprite_animations(
-                            m_projectId,
+                    epochengine::project_gameplay2d::prepare_project({
+                        .project_id = m_projectId,
+                        .project_root =
                             std::filesystem::path{m_projectRoot},
-                            m_spriteAnimationPath,
-                            fallbackSource);
-                m_spriteAnimationStatus = prepared.diagnostic;
-                if (prepared)
-                    m_spriteAnimations = std::move(prepared.artifact);
-            }
+                        .tilemap = {
+                            .logical_path = m_tileMapPath,
+                            .source_policy = epochengine::
+                                project_tilemap_runtime::SourcePolicy::
+                                    prefer_source},
+                        .input_profile_path = m_inputProfilePath,
+                        .sprite_animation_path = m_spriteAnimationPath,
+                        .audio_profile_path = m_audioProfilePath,
+                        .input_fallback = epochengine::project_gameplay2d::
+                            InputFallbackPolicy::allow_legacy_default,
+                        .request_physical_audio =
+                            EPOCH_ENABLE_PHYSICAL_AUDIO != 0,
+                        .allow_compatibility_audio = true,
+                        .require_sprite_animation = false,
+                        .require_audio = false});
 
-            void begin_audio_session()
-            {
-                if (!g_processAudioRuntime || m_audioSession)
-                    return;
-                const auto opened = g_processAudioRuntime->open_session(
-                    make_actor_audio_session_request(m_projectId));
-                if (!opened)
+                if (!prepared)
                 {
-                    m_audioStatus = std::string{"audio session "}
-                        + std::string{
-                            epochengine::audio::playback_runtime_code_name(
-                                opened.code)};
-                    return;
-                }
-                m_audioRuntime = g_processAudioRuntime;
-                m_audioSession = opened.handle;
-                const auto snapshot = m_audioRuntime->snapshot();
-                m_audioStatus = snapshot.device.state
-                        == epochengine::audio::AudioDeviceState::unavailable
-                    ? "logical audio ready; physical device unavailable"
-                    : std::string{"audio ready: "}
-                        + std::string{
-                            epochengine::audio::audio_device_state_name(
-                                snapshot.device.state)};
-            }
+                    m_actorStatus = std::string{"gameplay preparation "}
+                        + std::string{epochengine::project_gameplay2d::
+                            preparation_code_name(prepared.code)}
+                        + ": " + prepared.diagnostic;
+                    m_tileMapStatus = m_actorStatus;
 
-            void close_audio_session() noexcept
-            {
-                if (m_audioRuntime && m_audioSession)
-                    (void)m_audioRuntime->close_session(m_audioSession);
-                m_audioSession = {};
-                m_audioRuntime = nullptr;
-            }
-
-            void handle_actor_audio_events(
-                std::span<const epochengine::project_actor2d::ActorEvent>
-                    events)
-            {
-                if (!m_audioRuntime || !m_audioSession)
-                    return;
-                for (const auto& event : events)
-                {
-                    using EventKind =
-                        epochengine::project_actor2d::ActorEventKind;
-                    epochengine::audio::PlaybackRuntimeCode code =
-                        epochengine::audio::PlaybackRuntimeCode::success;
-                    switch (event.kind)
+                    epochengine::project_tilemap_runtime::
+                        ProjectTileMapRuntime fallback{
+                            m_projectId, m_projectRoot};
+                    auto staticMap = fallback.prepare({
+                        .logical_path = m_tileMapPath,
+                        .source_policy = epochengine::
+                            project_tilemap_runtime::SourcePolicy::
+                                prefer_source});
+                    if (staticMap)
                     {
-                    case EventKind::jump_started:
-                        code = m_audioRuntime->trigger(
-                            m_audioSession, kActorJumpCue);
-                        break;
-                    case EventKind::landed:
-                        code = m_audioRuntime->trigger(
-                            m_audioSession, kActorLandCue);
-                        break;
-                    case EventKind::pause_changed:
-                        code = m_audioRuntime->set_paused(
-                            m_audioSession, event.enabled);
-                        break;
-                    case EventKind::reset:
-                        code = m_audioRuntime->reset(m_audioSession);
-                        break;
-                    case EventKind::left_ground:
-                        continue;
+                        m_staticCanvasScene = std::move(staticMap.scene);
+                        m_tileMapStatus = std::move(staticMap.diagnostic);
                     }
-                    if (code !=
-                        epochengine::audio::PlaybackRuntimeCode::success)
-                    {
-                        m_audioStatus = std::string{"audio event "}
-                            + std::string{
-                                epochengine::audio::
-                                    playback_runtime_code_name(code)};
-                    }
-                }
-            }
-
-            void advance_audio(float frameSeconds)
-            {
-                if (!m_audioRuntime || !m_audioSession
-                    || !std::isfinite(frameSeconds)
-                    || frameSeconds <= 0.0f)
-                {
                     return;
                 }
-                const auto advanced = m_audioRuntime->advance(
-                    m_audioSession,
-                    std::clamp(
-                        static_cast<double>(frameSeconds), 0.000'001, 0.25));
-                if (advanced.code
-                        == epochengine::audio::PlaybackRuntimeCode::
-                            physical_queue_saturated)
+
+                const auto& evidence = prepared.project.evidence;
+                m_tileMapStatus = evidence.tilemap_diagnostic;
+                m_projectInputStatus = evidence.input_diagnostic;
+                m_spriteAnimationStatus =
+                    m_spriteAnimationPath.empty()
+                    ? "Project does not declare sprite animations."
+                    : evidence.animation_diagnostic;
+                m_audioStatus = evidence.audio_diagnostic.empty()
+                    ? "Project audio is not active."
+                    : evidence.audio_diagnostic;
+                m_staticCanvasScene = prepared.project.base_scene;
+
+                if (!g_processAudioRuntime && prepared.project.audio_program)
                 {
+                    prepared.project.audio_program.reset();
                     m_audioStatus =
-                        "audio ready; physical queue applying backpressure";
+                        "Process audio runtime unavailable; gameplay audio disabled.";
                 }
-                else if (!advanced)
+
+                auto gameplay = std::make_unique<
+                    epochengine::project_gameplay2d::Gameplay2DRuntime>();
+                const auto opened = gameplay->open(
+                    std::move(prepared.project), g_processAudioRuntime);
+                m_actorStatus =
+                    std::string{epochengine::project_gameplay2d::
+                        session_code_name(opened)}
+                    + ": " + std::string{gameplay->diagnostic()};
+                if (opened
+                        == epochengine::project_gameplay2d::SessionCode::ready
+                    || opened
+                        == epochengine::project_gameplay2d::SessionCode::degraded)
                 {
-                    m_audioStatus = std::string{"audio frame "}
-                        + std::string{
-                            epochengine::audio::playback_runtime_code_name(
-                                advanced.code)};
+                    m_gameplayRuntime = std::move(gameplay);
+                    m_staticCanvasScene.reset();
                 }
             }
 
-            void refresh_actor_animation()
+            void shutdown_gameplay() noexcept
             {
-                m_actorAnimationSample.reset();
-                if (!m_actorRuntime || !m_spriteAnimations)
-                    return;
-                const auto state = m_actorRuntime->state();
-                const auto pose =
-                    epochengine::project_sprite_animation::classify_actor_pose({
-                        .velocity_x = state.velocity_x,
-                        .velocity_y = state.velocity_y,
-                        .grounded = state.grounded,
-                        .paused = state.paused});
-                const auto animation =
-                    epochengine::project_sprite_animation::
-                        default_actor_animation_id(pose);
-                if (animation != m_actorAnimation
-                    || state.fixed_tick < m_actorAnimationStartTick)
-                {
-                    m_actorAnimation = animation;
-                    m_actorAnimationStartTick = state.fixed_tick;
-                }
-                const std::uint64_t relativeTick =
-                    state.fixed_tick - m_actorAnimationStartTick;
-                const std::int64_t sampleTick = relativeTick
-                        > static_cast<std::uint64_t>(
-                            (std::numeric_limits<std::int64_t>::max)())
-                    ? (std::numeric_limits<std::int64_t>::max)()
-                    : static_cast<std::int64_t>(relativeTick);
-                auto sample =
-                    epochengine::project_sprite_animation::sample_animation(
-                        *m_spriteAnimations,
-                        {
-                            .animation = animation,
-                            .tick = sampleTick,
-                            .direction = state.paused
-                                ? epochengine::project_sprite_animation::
-                                    TemporalDirection::frozen
-                                : epochengine::project_sprite_animation::
-                                    TemporalDirection::forward});
-                if (sample)
-                    m_actorAnimationSample = std::move(sample);
-                else
-                    m_spriteAnimationStatus =
-                        "sprite animation sample rejected";
+                if (m_gameplayRuntime)
+                    (void)m_gameplayRuntime->close();
+                m_gameplayRuntime.reset();
+                m_staticCanvasScene.reset();
+                m_projectControllerSampler.reset();
+                m_inputFrameIndex = 0u;
+                m_runtimeCosts.reset();
+                m_runtimeBudgetAssessment.reset();
+                m_costFramesUntilRefresh = 0u;
+                for (auto& pending : m_pendingGuiActions)
+                    pending.reset();
             }
 
-            void refresh_actor_scene(bool force = false)
+            void prepare_project_gui()
             {
-                if (!m_actorRuntime || !m_tileMap)
-                    return;
-                const auto state = m_actorRuntime->state();
-                refresh_actor_animation();
-                if (!force && m_canvas2dScene
-                    && m_actorSceneRevision == state.revision)
+                epochengine::project_gui::ArtifactLibrary library{
+                    m_projectId, m_projectRoot};
+                auto loaded = library.load_latest(
+                    project_gui::canonical_source_path);
+                if (!loaded)
                 {
+                    m_projectGuiStatus = loaded.code
+                            == epochengine::project_gui::LibraryCode::not_found
+                        ? "Project GUI: no compiled GUI artifact."
+                        : std::string{"Project GUI load failed: "}
+                            + std::string{
+                                epochengine::project_gui::library_code_name(
+                                    loaded.code)};
                     return;
                 }
-                m_canvas2dScene = actor_canvas_scene(
-                    m_tileMap->scene,
-                    m_actorRuntime->configuration(),
-                    state,
-                    m_actorAnimationSample
-                        ? &*m_actorAnimationSample
-                        : nullptr,
-                    m_actorFacingLeft);
-                m_actorSceneRevision = state.revision;
+
+                auto runtime = std::make_unique<
+                    epochengine::project_gui_runtime::RuntimeSession>(
+                        std::move(loaded.artifact));
+                if (!runtime->valid())
+                {
+                    m_projectGuiStatus =
+                        "Project GUI runtime rejected the compiled artifact.";
+                    return;
+                }
+                m_projectGuiRuntime = std::move(runtime);
+                m_projectGuiAdapter = std::make_unique<
+                    epochengine::project_gui::EpochGuiAdapter>(
+                        m_projectId, m_projectRoot);
+                m_projectGuiStatus = "Project GUI runtime ready.";
             }
 
-            void advance_actor(float frameSeconds)
+            void queue_project_gui_action(
+                const epochengine::project_gui_runtime::RuntimeEvent& event)
             {
-                if (!m_actorRuntime || !m_projectInput)
+                namespace project_input = epochengine::project_input;
+                const project_input::ActionSemantic semantic =
+                    project_input::action_semantic_from_name(event.action);
+                if (semantic == project_input::ActionSemantic::invalid)
+                {
+                    m_projectGuiStatus =
+                        "GUI action rejected: unknown project action '"
+                        + event.action + "'.";
                     return;
+                }
+                const auto* projectInput = m_gameplayRuntime
+                    ? m_gameplayRuntime->input_profile() : nullptr;
+                if (!projectInput)
+                {
+                    m_projectGuiStatus =
+                        "GUI action rejected: no compiled project input profile.";
+                    return;
+                }
+                const auto definition = std::find_if(
+                    projectInput->actions.begin(),
+                    projectInput->actions.end(),
+                    [&](const project_input::ActionDefinition& action)
+                    {
+                        return action.semantic == semantic
+                            && action.id
+                                == project_input::stable_action_id(semantic);
+                    });
+                if (definition == projectInput->actions.end())
+                {
+                    m_projectGuiStatus =
+                        "GUI action rejected: action is absent from the "
+                        "compiled project profile.";
+                    return;
+                }
+
+                project_input::ActionImpulse impulse{
+                    .semantic = semantic,
+                    .value_q15 = project_input::normalized_unit,
+                    .pressed = true};
+                if (event.kind
+                    == epochengine::project_gui_runtime::EventKind::slider_changed)
+                {
+                    if (definition->value_kind
+                        != project_input::ActionValueKind::axis)
+                    {
+                        m_projectGuiStatus =
+                            "GUI action rejected: slider requires an axis action.";
+                        return;
+                    }
+                    const double normalized = std::clamp(event.value, -1.0, 1.0);
+                    impulse.value_q15 = static_cast<std::int32_t>(
+                        std::llround(
+                            normalized
+                            * static_cast<double>(
+                                project_input::normalized_unit)));
+                    impulse.pressed = false;
+                }
+                else if (event.kind
+                    != epochengine::project_gui_runtime::EventKind::activated)
+                {
+                    m_projectGuiStatus =
+                        "GUI action rejected: event does not produce "
+                        "project input.";
+                    return;
+                }
+
+                const std::size_t index =
+                    static_cast<std::size_t>(semantic) - 1u;
+                m_pendingGuiActions[index] = impulse;
+                m_projectGuiStatus =
+                    "GUI action queued: " + event.action + ".";
+            }
+
+            void advance_gameplay(
+                float frameSeconds,
+                bool suppressPhysicalInput)
+            {
+                constexpr std::size_t actionCount =
+                    static_cast<std::size_t>(
+                        epochengine::project_input::ActionSemantic::count) - 1u;
+                std::array<epochengine::project_input::ActionImpulse, actionCount>
+                    guiImpulses{};
+                std::size_t guiImpulseCount{};
+                for (auto& pending : m_pendingGuiActions)
+                {
+                    if (pending)
+                        guiImpulses[guiImpulseCount++] = *pending;
+                    pending.reset();
+                }
+
+                if (!m_gameplayRuntime || !m_gameplayRuntime->active())
+                    return;
+                const auto* projectInput =
+                    m_gameplayRuntime->input_profile();
+                if (!projectInput)
+                {
+                    m_actorStatus =
+                        "gameplay runtime has no admitted input profile";
+                    return;
+                }
                 if (m_inputFrameIndex
                     == (std::numeric_limits<std::uint64_t>::max)())
                 {
@@ -6921,44 +7359,66 @@ namespace epochengine::core
                 }
 
                 ++m_inputFrameIndex;
-                const auto snapshot = project_input_snapshot(
-                    *m_projectInput, m_inputFrameIndex);
-                const auto actions =
-                    epochengine::project_input::evaluate_action_frame(
-                        *m_projectInput, snapshot);
-                if (!actions)
+                auto snapshot = project_input_snapshot(
+                    *projectInput,
+                    m_inputFrameIndex,
+                    !suppressPhysicalInput);
+                const auto physicalControllers =
+                    epochengine::controller_input::snapshot();
+                if (suppressPhysicalInput)
                 {
-                    m_actorStatus = "input evaluation rejected";
-                    return;
+                    epochengine::project_input::InputSnapshot discarded{
+                        .frame_index = m_inputFrameIndex};
+                    const auto consumed = m_projectControllerSampler.sample(
+                        *projectInput,
+                        physicalControllers,
+                        discarded);
+                    if (!consumed)
+                    {
+                        m_actorStatus = std::string{"controller input "}
+                            + std::string{epochengine::
+                                project_input_controller::
+                                    sample_code_name(consumed.code)};
+                        return;
+                    }
+                }
+                else
+                {
+                    const auto sampled = m_projectControllerSampler.sample(
+                        *projectInput,
+                        physicalControllers,
+                        snapshot);
+                    if (!sampled)
+                    {
+                        m_actorStatus = std::string{"controller input "}
+                            + std::string{epochengine::
+                                project_input_controller::
+                                    sample_code_name(sampled.code)};
+                        return;
+                    }
                 }
 
-                const double stepSeconds = 1.0
-                    / static_cast<double>(
-                        m_actorRuntime->configuration().fixed_steps_per_second);
-                m_actorAccumulator += std::clamp(
-                    static_cast<double>(frameSeconds), 0.0, 0.25);
-                std::uint32_t fixedSteps = static_cast<std::uint32_t>(
-                    std::floor(m_actorAccumulator / stepSeconds));
-                fixedSteps = (std::min)(fixedSteps, 8u);
-                m_actorAccumulator -= stepSeconds
-                    * static_cast<double>(fixedSteps);
-
-                const auto actorInput =
-                    actor_input_frame(*m_projectInput, actions);
-                if (actorInput.move_x < -0.05)
-                    m_actorFacingLeft = true;
-                else if (actorInput.move_x > 0.05)
-                    m_actorFacingLeft = false;
-                const auto result = m_actorRuntime->advance(
-                    actorInput, fixedSteps);
-                m_actorStatus = std::string{
-                    epochengine::project_actor2d::result_code_name(result.code)};
-                if (result.code == epochengine::project_actor2d::ResultCode::paused)
-                    m_actorAccumulator = 0.0;
-                if (result)
+                const auto result = m_gameplayRuntime->advance(
+                    snapshot,
+                    std::span<
+                        const epochengine::project_input::ActionImpulse>{
+                            guiImpulses.data(), guiImpulseCount},
+                    static_cast<double>(frameSeconds));
+                m_actorStatus = std::string{epochengine::
+                    project_gameplay2d::session_code_name(result.code)}
+                    + ": " + std::string{m_gameplayRuntime->diagnostic()};
+                if (result.audio_code == epochengine::audio::
+                        PlaybackRuntimeCode::physical_queue_saturated)
                 {
-                    handle_actor_audio_events(result.events);
-                    refresh_actor_scene();
+                    m_audioStatus =
+                        "audio ready; physical queue applying backpressure";
+                }
+                else if (result.audio_code
+                    != epochengine::audio::PlaybackRuntimeCode::success)
+                {
+                    m_audioStatus = std::string{"audio frame "}
+                        + std::string{epochengine::audio::
+                            playback_runtime_code_name(result.audio_code)};
                 }
             }
 
@@ -6981,8 +7441,14 @@ namespace epochengine::core
             std::string m_projectInputStatus{};
             std::string m_spriteAnimationPath{};
             std::string m_spriteAnimationStatus{};
+            std::string m_audioProfilePath{};
             std::string m_audioStatus{};
             std::string m_actorStatus{};
+            std::string m_projectGuiStatus{"Project GUI not prepared."};
+            std::unique_ptr<epochengine::project_gui_runtime::RuntimeSession>
+                m_projectGuiRuntime{};
+            std::unique_ptr<epochengine::project_gui::EpochGuiAdapter>
+                m_projectGuiAdapter{};
             std::string m_scenePath{};
             std::string m_worldName{};
             std::string m_scriptName{};
@@ -6990,33 +7456,28 @@ namespace epochengine::core
             epochengine::EditorProjectModelSummary m_modelSummary{};
             epochengine::scene_runtime::SceneRuntime m_sceneRuntime{};
             std::unique_ptr<
-                epochengine::project_tilemap_runtime::ProjectTileMapRuntime>
-                m_tileMapRuntime{};
+                epochengine::project_gameplay2d::Gameplay2DRuntime>
+                m_gameplayRuntime{};
             std::optional<
-                epochengine::project_tilemap_runtime::PreparedTileMap>
-                m_tileMap{};
-            std::optional<epochengine::project_input::CompiledInputProfile>
-                m_projectInput{};
-            std::optional<
-                epochengine::project_sprite_animation::
-                    CompiledSpriteAnimationArtifact>
-                m_spriteAnimations{};
-            std::optional<
-                epochengine::project_sprite_animation::RuntimeSpriteSample>
-                m_actorAnimationSample{};
-            epochengine::project_sprite_animation::AnimationId
-                m_actorAnimation{};
-            std::uint64_t m_actorAnimationStartTick{};
-            epochengine::audio::PlaybackRuntime* m_audioRuntime{};
-            epochengine::audio::PlaybackSessionHandle m_audioSession{};
-            std::unique_ptr<epochengine::project_actor2d::ActorRuntime>
-                m_actorRuntime{};
-            std::optional<epochengine::canvas2d::scene_content::SceneContent>
-                m_canvas2dScene{};
-            double m_actorAccumulator{};
+                epochengine::canvas2d::scene_content::SceneContent>
+                m_staticCanvasScene{};
+            epochengine::project_input_controller::SnapshotSampler
+                m_projectControllerSampler{};
             std::uint64_t m_inputFrameIndex{};
-            std::uint64_t m_actorSceneRevision{};
-            bool m_actorFacingLeft{};
+            std::optional<
+                epochengine::project_gameplay2d::RuntimeCostSnapshot>
+                m_runtimeCosts{};
+            std::optional<
+                epochengine::project_gameplay2d::RuntimeBudgetAssessment>
+                m_runtimeBudgetAssessment{};
+            epochengine::Budgets m_runtimeBudgets{};
+            std::string m_runtimeBudgetProfile{"portable"};
+            std::uint32_t m_costFramesUntilRefresh{};
+            std::array<
+                std::optional<epochengine::project_input::ActionImpulse>,
+                static_cast<std::size_t>(
+                    epochengine::project_input::ActionSemantic::count) - 1u>
+                m_pendingGuiActions{};
             std::vector<ProjectRuntimeEntity> m_entities{};
             epochengine::lighting::LightingFrame m_lightingFrame{};
             timing::Clock::time_point m_lastFrame{};
@@ -7113,20 +7574,7 @@ namespace epochengine::core
             }
         }
 
-        [[nodiscard]] std::string_view project_id_from_choice(epochengine::menu::Choice choice) noexcept
-        {
-            using Choice = epochengine::menu::Choice;
-
-            switch (choice)
-            {
-            case Choice::OpenEditor: return "projectlauncher";
-            case Choice::OpenPlantLab: return "plantlab";
-            case Choice::OpenGuiEditor: return "twodstudio";
-            default: return {};
-            }
-        }
-
-        [[nodiscard]] EditorApplicationKind application_from_choice(
+        [[nodiscard]] std::optional<EditorApplicationKind> application_from_choice(
             epochengine::menu::Choice choice) noexcept
         {
             using Choice = epochengine::menu::Choice;
@@ -7134,8 +7582,8 @@ namespace epochengine::core
             {
             case Choice::OpenPlantLab: return EditorApplicationKind::PlantLab;
             case Choice::OpenGuiEditor: return EditorApplicationKind::GuiEditor;
-            case Choice::OpenEditor:
-            default: return EditorApplicationKind::Standard;
+            case Choice::OpenEditor: return EditorApplicationKind::Standard;
+            default: return std::nullopt;
             }
         }
 
@@ -7238,7 +7686,14 @@ namespace epochengine::core
             epochengine::audio::PlaybackRuntime processAudio{};
 #endif
             ScopedProcessAudioRuntime audioBinding{processAudio};
+            ScopedPhysicalInputRuntime physicalInput{};
+#if defined(_WIN32)
+            if (startup_mode == SessionMode::Editor)
+                mgr.ConstrainPrimaryWindowToWorkArea();
+#endif
             std::unordered_map<Context*, ContextSession> sessions;
+            std::optional<epochengine::previewgrid::CameraRigSnapshot>
+                multicontextCameraBootstrap;
             std::vector<PendingEditorContextSnapshot> pendingEditorSwitchSnapshots;
 #if defined(_WIN32)
             std::optional<PendingEditorContextReplacement> pendingEditorContextReplacement;
@@ -7512,6 +7967,9 @@ namespace epochengine::core
                     break;
                 }
 
+                static_cast<void>(
+                    epochengine::controller_input::poll_physical_input());
+
                 if (!mgr.IsRunning())
                 {
                     logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
@@ -7560,8 +8018,7 @@ namespace epochengine::core
                                 .gui_route = {},
                                 .width = replacement.width,
                                 .height = replacement.height,
-                                .start_docked = true,
-                                .pinned_to_parent = true
+                                .start_docked = true
                             },
                             &createdContext))
                         {
@@ -7810,6 +8267,12 @@ namespace epochengine::core
 #endif
 #endif
 
+                auto arm_launcher_loading = [](ContextSession& targetSession)
+                {
+                    targetSession.launcher_loading_started = timing::Clock::now();
+                    targetSession.launcher_loading_required_batch_generation = 0u;
+                };
+
                 auto switch_session_to_editor = [&](
                     ContextSession& targetSession,
                     const std::shared_ptr<Context>& targetCtx,
@@ -7826,9 +8289,14 @@ namespace epochengine::core
                     targetSession.menu.cleanup();
                     targetSession.mode = SessionMode::Editor;
                     targetSession.return_mode = SessionMode::Menu;
+                    targetSession.launcher_loading_started.reset();
+                    targetSession.launcher_loading_required_batch_generation = 0u;
 
                     epochengine::editor_suppress_startup_update_check(targetCtx);
                     epochengine::editor_load_application(targetCtx, application);
+#if defined(_WIN32)
+                    mgr.ConstrainPrimaryWindowToWorkArea(targetCtx);
+#endif
 
                     targetCtx->clear_scene_viewport();
                     targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
@@ -8230,7 +8698,15 @@ namespace epochengine::core
                         if (win->routedRedockRequested.exchange(false))
                         {
                             if (!win->guiRoute.empty())
-                                epochengine::editor_notify_context_panel_closed(win->guiRoute);
+                            {
+                                const std::uint8_t dockTarget =
+                                    win->routedDockTarget.exchange(
+                                        0u,
+                                        std::memory_order_acq_rel);
+                                epochengine::editor_redock_context_panel(
+                                    win->guiRoute,
+                                    dockTarget);
+                            }
                             win->running = false;
                             win->set_should_close(true);
                             post_context_window_close(win);
@@ -8310,6 +8786,7 @@ namespace epochengine::core
                             pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
                             if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
                             {
+                                session.shared_camera_bootstrap_applied = true;
                                 logger::get(kEditorLog).logf(
                                     logger::LogLevel::INFO,
                                     std::source_location::current(),
@@ -8323,6 +8800,28 @@ namespace epochengine::core
                                     std::source_location::current(),
                                     "New {} context entered the session loop, but editor state restore failed.",
                                     context_type_label(ctx->type));
+                            }
+
+                            if (!win->guiRoute.empty())
+                            {
+                                session.shared_camera_bootstrap_applied = true;
+                            }
+                            else if (startup_mode == SessionMode::Editor
+                                && pendingRestoreStatus == PendingEditorRestoreStatus::none
+                                && multicontextCameraBootstrap)
+                            {
+                                session.shared_camera_bootstrap_applied =
+                                    epochengine::previewgrid::restore_camera_rig_snapshot(
+                                        ctx.get(),
+                                        *multicontextCameraBootstrap);
+                                if (!session.shared_camera_bootstrap_applied)
+                                {
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Could not apply the shared editor camera bootstrap to the {} context.",
+                                        context_type_label(ctx->type));
+                                }
                             }
                         }
 
@@ -8560,6 +9059,24 @@ namespace epochengine::core
                         {
                         case SessionMode::Editor:
                         {
+                            if (win->guiRoute.empty()
+                                && !session.shared_camera_bootstrap_applied
+                                && multicontextCameraBootstrap)
+                            {
+                                session.shared_camera_bootstrap_applied =
+                                    epochengine::previewgrid::restore_camera_rig_snapshot(
+                                        ctx.get(),
+                                        *multicontextCameraBootstrap);
+                                if (!session.shared_camera_bootstrap_applied)
+                                {
+                                    logger::get(kEditorLog).logf(
+                                        logger::LogLevel::Error,
+                                        std::source_location::current(),
+                                        "Could not apply the shared editor camera bootstrap before the first {} editor frame.",
+                                        context_type_label(ctx->type));
+                                }
+                            }
+
                             int mx = 0;
                             int my = 0;
                             ctx->get_mouse_position_safe(mx, my);
@@ -8573,11 +9090,24 @@ namespace epochengine::core
                                 ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
                             const bool mouse_right_down =
                                 ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseRight);
+                            const bool mouse_middle_down =
+                                ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseMiddle);
 
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                             clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochengine::editor_run(ctx);
+
+                            if (win->guiRoute.empty() && !multicontextCameraBootstrap)
+                            {
+                                const auto snapshot =
+                                    epochengine::previewgrid::capture_camera_rig_snapshot(ctx.get());
+                                if (snapshot.valid)
+                                {
+                                    multicontextCameraBootstrap = snapshot;
+                                    session.shared_camera_bootstrap_applied = true;
+                                }
+                            }
 
                             if (epochengine::core::cli::smoke_context_switch_requested
                                 && !smoke_context_switch_posted
@@ -8603,41 +9133,69 @@ namespace epochengine::core
                                 && mouse_pos.x < (viewport.position.x + viewport.size.x)
                                 && mouse_pos.y < (viewport.position.y + viewport.size.y);
 
+                            auto& look_state = g_preview_look_states[ctx.get()];
+                            const bool navigationContinues =
+                                (look_state.orbiting && mouse_left_down)
+                                || (look_state.panning && mouse_middle_down)
+                                || ((look_state.dollying || look_state.flying) && mouse_right_down);
+
                             if (ctx->scene_preview_mode() == core::ScenePreviewMode::Editor
                                 && viewport.size.x > 1.0f
                                 && viewport.size.y > 1.0f
-                                && mouse_in_scene)
+                                && (mouse_in_scene || navigationContinues))
                             {
-                                auto& look_state = g_preview_look_states[ctx.get()];
                                 if (editor_frame.scene_input_captured)
                                 {
                                     look_state.last_mouse = mouse_pos;
-                                    look_state.looking = false;
+                                    look_state.orbiting = false;
                                     look_state.panning = false;
+                                    look_state.dollying = false;
+                                    look_state.flying = false;
                                 }
                                 else
                                 {
                                     const int wheelDelta = epochengine::gui::consume_mouse_wheel_delta();
-                                    const float forwardInput =
+                                    const bool altHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftAlt)
+                                        || epochengine::input::is_key_held(epochengine::input::Key::RightAlt);
+                                    const bool shiftHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftShift)
+                                        || epochengine::input::is_key_held(epochengine::input::Key::RightShift);
+                                    const bool controlHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftControl)
+                                        || epochengine::input::is_key_held(epochengine::input::Key::RightControl);
+                                    const auto navigationGestures =
+                                        epochengine::previewgrid::resolve_camera_navigation_gestures(
+                                            altHeld, mouse_left_down, mouse_middle_down, mouse_right_down);
+                                    const bool orbiting = navigationGestures.orbiting
+                                        && (mouse_in_scene || look_state.orbiting);
+                                    const bool panning = navigationGestures.panning
+                                        && (mouse_in_scene || look_state.panning);
+                                    const bool dollying = navigationGestures.dollying
+                                        && (mouse_in_scene || look_state.dollying);
+                                    const bool flying = navigationGestures.flying
+                                        && (mouse_in_scene || look_state.flying);
+                                    const bool keyboardNavigation = flying;
+                                    const float navigationMultiplier = shiftHeld
+                                        ? 4.0f
+                                        : (controlHeld ? 0.25f : 1.0f);
+                                    const float forwardInput = !keyboardNavigation ? 0.0f :
                                         (epochengine::input::action_held(epochengine::input::Action::MoveForward) ? 1.0f : 0.0f)
                                         - (epochengine::input::action_held(epochengine::input::Action::MoveBackward) ? 1.0f : 0.0f);
-                                    const float rightInput =
+                                    const float rightInput = !keyboardNavigation ? 0.0f :
                                         (epochengine::input::action_held(epochengine::input::Action::MoveRight) ? 1.0f : 0.0f)
                                         - (epochengine::input::action_held(epochengine::input::Action::MoveLeft) ? 1.0f : 0.0f);
-                                    const float upInput =
+                                    const float upInput = !keyboardNavigation ? 0.0f :
                                         (epochengine::input::action_held(epochengine::input::Action::MoveUp) ? 1.0f : 0.0f)
                                         - (epochengine::input::action_held(epochengine::input::Action::MoveDown) ? 1.0f : 0.0f);
-                                    const float yawInput =
+                                    const float yawInput = !keyboardNavigation ? 0.0f :
                                         (epochengine::input::action_held(epochengine::input::Action::LookRight) ? 1.0f : 0.0f)
                                         - (epochengine::input::action_held(epochengine::input::Action::LookLeft) ? 1.0f : 0.0f);
-                                    const float pitchInput =
+                                    const float pitchInput = !keyboardNavigation ? 0.0f :
                                         (epochengine::input::action_held(epochengine::input::Action::LookUp) ? 1.0f : 0.0f)
                                         - (epochengine::input::action_held(epochengine::input::Action::LookDown) ? 1.0f : 0.0f);
 
                                     if (epochengine::input::action_pressed(epochengine::input::Action::ResetCamera))
                                         epochengine::previewgrid::reset_camera(ctx.get());
 
-                                    if (mouse_right_down && look_state.looking)
+                                    if ((flying && look_state.flying) || (orbiting && look_state.orbiting))
                                     {
                                         const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
                                         const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
@@ -8647,7 +9205,7 @@ namespace epochengine::core
                                             mouseDeltaX * mouseSensitivity,
                                             -mouseDeltaY * mouseSensitivity);
                                     }
-                                    else if (mouse_left_down && !mouse_right_down && look_state.panning)
+                                    else if (panning && look_state.panning)
                                     {
                                         const float mouseDeltaX = mouse_pos.x - look_state.last_mouse.x;
                                         const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
@@ -8656,12 +9214,20 @@ namespace epochengine::core
                                             mouseDeltaX,
                                             -mouseDeltaY);
                                     }
+                                    else if (dollying && look_state.dollying)
+                                    {
+                                        const float mouseDeltaY = mouse_pos.y - look_state.last_mouse.y;
+                                        epochengine::previewgrid::dolly_camera_drag(ctx.get(), mouseDeltaY);
+                                    }
 
                                     if (wheelDelta != 0)
                                     {
-                                        epochengine::previewgrid::zoom_camera(
-                                            ctx.get(),
-                                            (static_cast<float>(wheelDelta) / 120.0f) * epochengine::input::wheel_zoom_step());
+                                        const float wheelSteps = static_cast<float>(wheelDelta) / 120.0f;
+                                        if (flying)
+                                            epochengine::previewgrid::adjust_fly_speed(ctx.get(), wheelSteps);
+                                        else
+                                            epochengine::previewgrid::zoom_camera(
+                                                ctx.get(), wheelSteps * epochengine::input::wheel_zoom_step());
                                     }
 
                                     epochengine::previewgrid::step_camera(
@@ -8671,27 +9237,29 @@ namespace epochengine::core
                                         rightInput,
                                         upInput,
                                         yawInput,
-                                        pitchInput);
+                                        pitchInput,
+                                        navigationMultiplier);
 
                                     look_state.last_mouse = mouse_pos;
-                                    look_state.looking = mouse_right_down;
-                                    look_state.panning = mouse_left_down && !mouse_right_down;
+                                    look_state.orbiting = orbiting;
+                                    look_state.panning = panning;
+                                    look_state.dollying = dollying;
+                                    look_state.flying = flying;
                                 }
                             }
                             else
                             {
-                                auto& look_state = g_preview_look_states[ctx.get()];
                                 look_state.last_mouse = mouse_pos;
-                                look_state.looking = false;
+                                look_state.orbiting = false;
                                 look_state.panning = false;
+                                look_state.dollying = false;
+                                look_state.flying = false;
                             }
 
                             switch (editor_frame.command)
                             {
                             case epochengine::EditorCommand::OpenLauncher:
-                                session.launcher_loading_frames = (std::max)(session.launcher_loading_frames, std::uint32_t{ 18 });
-                                session.launcher_loading_total_frames =
-                                    (std::max)(session.launcher_loading_total_frames, session.launcher_loading_frames);
+                                arm_launcher_loading(session);
                                 reset_to_menu(session, ctx);
                                 ctx_running = true;
                                 break;
@@ -9072,25 +9640,23 @@ namespace epochengine::core
                             clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             std::optional<epochengine::menu::Choice> choice{};
-                            std::optional<std::string> pendingEditorProject{};
-                            EditorApplicationKind pendingEditorApplication = session.pending_editor_application;
+                            std::optional<EditorApplicationKind> pendingEditorApplication{};
+                            bool loadingMinimumElapsed = false;
                             const int transitionWidth = (std::max)(1, ctx ? ctx->get_width_safe() : (win ? win->width : 1));
                             const int transitionHeight = (std::max)(1, ctx ? ctx->get_height_safe() : (win ? win->height : 1));
-                            if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
-                            {
-                                session.launcher_loading_frames = 18;
-                                session.launcher_loading_total_frames = 18;
-                            }
-                            if (session.launcher_loading_frames > 0 && session.launcher_loading_total_frames == 0)
-                                session.launcher_loading_total_frames = session.launcher_loading_frames;
+                            if (session.pending_editor_application && !session.launcher_loading_started)
+                                arm_launcher_loading(session);
                             const bool draw_transition_loading =
-                                session.launcher_loading_frames > 0
-                                || session.pending_editor_project_id.has_value();
+                                session.launcher_loading_started.has_value();
                             if (draw_transition_loading)
                             {
-                                const bool loadingEditor = session.pending_editor_project_id.has_value();
+                                const auto loadingNow = timing::Clock::now();
+                                const double loadingElapsedSeconds = std::chrono::duration<double>(
+                                    loadingNow - *session.launcher_loading_started).count();
+                                loadingMinimumElapsed = loadingElapsedSeconds >= kLauncherLoadingMinimumSeconds;
+                                const bool loadingEditor = session.pending_editor_application.has_value();
                                 const std::string projectLabel = loadingEditor
-                                    ? std::string{ application_label(session.pending_editor_application) }
+                                    ? std::string{ application_label(*session.pending_editor_application) }
                                     : std::string{ "project launcher" };
                                 const std::string transitionTitle = loadingEditor ? "Loading Editor" : "Loading Launcher";
                                 const std::string transitionMessage = loadingEditor
@@ -9100,18 +9666,17 @@ namespace epochengine::core
                                 const double activitySeconds = std::chrono::duration<double>(
                                     std::chrono::steady_clock::now().time_since_epoch()).count();
                                 const float activityPhase = static_cast<float>(std::fmod(activitySeconds * 0.35, 1.0));
-                                const float remainingFrames = static_cast<float>(session.launcher_loading_frames);
-                                const float totalFrames = static_cast<float>((std::max)(std::uint32_t{ 1 }, session.launcher_loading_total_frames));
-                                const float finishHoldFrames = (std::min)(1.0f, totalFrames);
-                                const float activeFrames = (std::max)(1.0f, totalFrames - finishHoldFrames);
-                                const float activeRemaining = (std::max)(0.0f, remainingFrames - finishHoldFrames);
-                                const float completedFraction = std::clamp(1.0f - activeRemaining / activeFrames, 0.0f, 1.0f);
+                                const float completedFraction = std::clamp(
+                                    static_cast<float>(loadingElapsedSeconds / kLauncherLoadingMinimumSeconds),
+                                    0.0f,
+                                    1.0f);
                                 const float transitionProgress = std::clamp(0.12f + completedFraction * 0.88f, 0.12f, 1.0f);
                                 const std::string transitionStatus = completedFraction < 0.34f
                                     ? std::string{ "preparing" }
                                     : completedFraction < 0.92f
                                         ? std::string{ "loading" }
                                         : std::string{ "ready" };
+                                gui::begin_top_layer();
                                 gui::push_theme(gui::ThemeVariant::ClassicLauncher);
                                 gui::begin_window("", { 0.0f, 0.0f }, {
                                     static_cast<float>(transitionWidth),
@@ -9141,18 +9706,7 @@ namespace epochengine::core
                                 });
                                 gui::end_window();
                                 gui::pop_theme();
-
-                                if (session.launcher_loading_frames > 0)
-                                    --session.launcher_loading_frames;
-                                if (session.launcher_loading_frames == 0)
-                                    session.launcher_loading_total_frames = 0;
-                                if (session.pending_editor_project_id && session.launcher_loading_frames == 0)
-                                {
-                                    pendingEditorProject = std::move(session.pending_editor_project_id);
-                                    pendingEditorApplication = session.pending_editor_application;
-                                    session.pending_editor_project_id.reset();
-                                    session.pending_editor_application = EditorApplicationKind::Standard;
-                                }
+                                gui::end_top_layer();
                             }
                             else
                             {
@@ -9185,10 +9739,33 @@ namespace epochengine::core
 
                             if (draw_transition_loading)
                             {
+                                if (session.launcher_loading_required_batch_generation == 0u)
+                                {
+                                    session.launcher_loading_required_batch_generation =
+                                        gui::top_layer_batch_generation(ctx.get());
+                                    session.launcher_loading_started = timing::Clock::now();
+                                    loadingMinimumElapsed = false;
+                                }
+                                const std::uint64_t requiredBatchGeneration =
+                                    session.launcher_loading_required_batch_generation;
+                                const bool loadingBatchReplayed =
+                                    requiredBatchGeneration != 0u
+                                    && gui::replayed_top_layer_batch_generation(ctx.get()) >= requiredBatchGeneration;
+                                if (loadingMinimumElapsed && loadingBatchReplayed)
+                                {
+                                    session.launcher_loading_started.reset();
+                                    session.launcher_loading_required_batch_generation = 0u;
+                                    if (session.pending_editor_application)
+                                    {
+                                        pendingEditorApplication = session.pending_editor_application;
+                                        session.pending_editor_application.reset();
+                                    }
+                                }
                                 if (ctx_running)
                                     ctx->present_safe();
-                                if (pendingEditorProject)
-                                    switch_session_to_editor(session, ctx, pendingEditorApplication);
+                                if (pendingEditorApplication)
+                                    switch_session_to_editor(
+                                        session, ctx, *pendingEditorApplication);
                                 break;
                             }
 
@@ -9359,7 +9936,7 @@ namespace epochengine::core
                                         publish_current_launcher_update_status();
                                     }
                                 }
-                                else if (const auto project_id = project_id_from_choice(*choice); !project_id.empty())
+                                else if (const auto application = application_from_choice(*choice))
                                 {
                                     if (!launcher_update_blocks_mode_switch())
                                     {
@@ -9380,10 +9957,8 @@ namespace epochengine::core
                                             ensure_menu_initialized(targetSession, targetCtx);
                                         }
 
-                                        targetSession.pending_editor_project_id = project_id;
-                                        targetSession.pending_editor_application = application_from_choice(*choice);
-                                        targetSession.launcher_loading_frames = 18;
-                                        targetSession.launcher_loading_total_frames = 18;
+                                        targetSession.pending_editor_application = *application;
+                                        arm_launcher_loading(targetSession);
                                         targetSession.menu.guard_next_input_frames(3u);
                                         focus_context_window(targetCtx);
                                     }
@@ -9927,6 +10502,358 @@ namespace epochengine::core
         }
     }
 } // namespace epochengine::core
+namespace epochengine::project
+{
+    ArtifactAcceptanceReport VerifyArtifacts(
+        const ArtifactAcceptanceRequest& request) noexcept
+    {
+        namespace fs = std::filesystem;
+        ArtifactAcceptanceReport report{};
+
+        const auto artifact_bit = [](ArtifactKind kind) noexcept
+        {
+            return static_cast<std::uint32_t>(kind);
+        };
+        const auto require = [&](ArtifactKind kind, std::string_view path)
+        {
+            if (!path.empty())
+                report.required_mask |= artifact_bit(kind);
+        };
+        const auto fail = [&](std::string stage, std::string diagnostic)
+        {
+            report.stage = std::move(stage);
+            report.diagnostic = std::move(diagnostic);
+            return report;
+        };
+        const auto accept = [&](ArtifactKind kind)
+        {
+            report.verified_mask |= artifact_bit(kind);
+        };
+
+        require(ArtifactKind::scene, request.scene_path);
+        require(ArtifactKind::tilemap, request.tilemap_path);
+        require(ArtifactKind::input_profile, request.input_profile_path);
+        require(ArtifactKind::sprite_animation, request.sprite_animation_path);
+        require(ArtifactKind::audio_profile, request.audio_profile_path);
+        require(ArtifactKind::gui, request.gui_path);
+
+        if (request.project_id.empty() || request.project_root.empty())
+            return fail("request", "project identity and root are required");
+        if (report.required_mask == 0u)
+            return fail("request", "no project artifacts were declared");
+
+        try
+        {
+            std::error_code error{};
+            fs::path root = fs::canonical(
+                fs::path{request.project_root}, error);
+            if (error || !fs::is_directory(root, error) || error)
+                return fail("project_root", "project root is not an accessible directory");
+
+            if (!request.scene_path.empty())
+            {
+                fs::path scenePath{request.scene_path};
+                if (scenePath.is_relative())
+                    scenePath = root / scenePath;
+                scenePath = fs::canonical(scenePath, error);
+                if (error)
+                    return fail("scene", "scene path could not be resolved");
+
+                const fs::path relative = scenePath.lexically_relative(root);
+                if (relative.empty() || relative == fs::path{"."}
+                    || *relative.begin() == fs::path{".."})
+                {
+                    return fail("scene", "scene path is outside the project root");
+                }
+
+                const auto loaded =
+                    epochengine::scene::persistence::load_scene_snapshot(
+                        scenePath);
+                if (!loaded.result)
+                {
+                    return fail(
+                        "scene",
+                        std::string{"scene load "}
+                            + std::string{
+                                epochengine::scene::persistence::
+                                    scene_persistence_status_name(
+                                        loaded.result.status)}
+                            + ": " + loaded.result.error);
+                }
+                if (loaded.snapshot.project_id != request.project_id)
+                    return fail("scene", "scene project identity does not match the request");
+
+                epochengine::scene_runtime::SceneRuntime runtime{};
+                const auto compiled = runtime.replace(loaded.snapshot);
+                if (!compiled.committed())
+                    return fail("scene", "scene source is not runnable");
+                accept(ArtifactKind::scene);
+            }
+
+            if (!request.tilemap_path.empty())
+            {
+                epochengine::project_tilemap_runtime::ProjectTileMapRuntime
+                    sourceRuntime{std::string{request.project_id}, root.string()};
+                auto prepared = sourceRuntime.prepare({
+                    .logical_path = std::string{request.tilemap_path},
+                    .source_policy =
+                        epochengine::project_tilemap_runtime::SourcePolicy::
+                            prefer_source});
+                if (!prepared)
+                {
+                    return fail(
+                        "tilemap",
+                        std::string{
+                            epochengine::project_tilemap_runtime::
+                                runtime_code_name(prepared.code)}
+                            + ": " + prepared.diagnostic);
+                }
+
+                epochengine::project_tilemap_runtime::ProjectTileMapRuntime
+                    artifactRuntime{
+                        std::string{request.project_id}, root.string()};
+                auto restored = artifactRuntime.prepare({
+                    .logical_path = std::string{request.tilemap_path},
+                    .source_policy =
+                        epochengine::project_tilemap_runtime::SourcePolicy::
+                            compiled_only});
+                if (!restored
+                    || restored.provenance
+                        != epochengine::project_tilemap_runtime::Provenance::
+                            library_restored)
+                {
+                    return fail(
+                        "tilemap_artifact",
+                        std::string{
+                            epochengine::project_tilemap_runtime::
+                                runtime_code_name(restored.code)}
+                            + ": " + restored.diagnostic);
+                }
+                accept(ArtifactKind::tilemap);
+            }
+
+            if (!request.input_profile_path.empty())
+            {
+                const std::string normalized = fs::path{
+                    request.input_profile_path}.lexically_normal().generic_string();
+                if (normalized
+                    != epochengine::project_input::canonical_source_path)
+                {
+                    return fail(
+                        "input_profile",
+                        "input profile does not use the canonical logical path");
+                }
+
+                epochengine::project_input::ProjectInputProfileStore store{
+                    std::string{request.project_id}, root};
+                if (!store.valid())
+                    return fail("input_profile", "project input store is invalid");
+
+                error.clear();
+                const bool sourceExists =
+                    fs::exists(store.source_path(), error) && !error;
+                if (error)
+                    return fail("input_profile", "input source existence check failed");
+                if (sourceExists)
+                {
+                    const auto source = store.load_source();
+                    if (!source)
+                    {
+                        return fail(
+                            "input_profile",
+                            std::string{"source "}
+                                + std::string{
+                                    epochengine::project_input::
+                                        store_code_name(source.code)});
+                    }
+                    const auto compiled =
+                        epochengine::project_input::compile_profile(
+                            request.project_id, source.source);
+                    if (!compiled)
+                    {
+                        return fail(
+                            "input_profile",
+                            std::string{"compile "}
+                                + std::string{
+                                    epochengine::project_input::
+                                        validation_code_name(compiled.code)});
+                    }
+                    const auto published =
+                        store.publish_artifact(compiled.artifact);
+                    if (!published)
+                    {
+                        return fail(
+                            "input_profile_artifact",
+                            std::string{"publish "}
+                                + std::string{
+                                    epochengine::project_input::
+                                        store_code_name(published.code)});
+                    }
+                }
+
+                const auto loaded = store.load_artifact();
+                if (!loaded)
+                {
+                    return fail(
+                        "input_profile_artifact",
+                        std::string{"load "}
+                            + std::string{
+                                epochengine::project_input::
+                                    store_code_name(loaded.code)});
+                }
+                const auto validation =
+                    epochengine::project_input::validate_compiled_profile(
+                        loaded.artifact);
+                if (validation
+                    != epochengine::project_input::ValidationCode::ready)
+                {
+                    return fail(
+                        "input_profile_artifact",
+                        std::string{"validation "}
+                            + std::string{
+                                epochengine::project_input::
+                                    validation_code_name(validation)});
+                }
+                accept(ArtifactKind::input_profile);
+            }
+
+            if (!request.sprite_animation_path.empty())
+            {
+                auto prepared =
+                    epochengine::project_sprite_animation::
+                        prepare_project_sprite_animations(
+                            request.project_id,
+                            root,
+                            request.sprite_animation_path,
+                            nullptr);
+                if (!prepared)
+                {
+                    return fail(
+                        "sprite_animation",
+                        std::string{
+                            epochengine::project_sprite_animation::
+                                preparation_code_name(prepared.code)}
+                            + ": " + prepared.diagnostic);
+                }
+
+                epochengine::project_sprite_animation::
+                    ProjectSpriteAnimationStore store{
+                        std::string{request.project_id}, root};
+                const auto loaded = store.load_artifact();
+                if (!loaded)
+                {
+                    return fail(
+                        "sprite_animation_artifact",
+                        std::string{"load "}
+                            + std::string{
+                                epochengine::project_sprite_animation::
+                                    store_code_name(loaded.code)});
+                }
+                const auto validation =
+                    epochengine::project_sprite_animation::validate_artifact(
+                        loaded.artifact);
+                if (validation
+                    != epochengine::project_sprite_animation::
+                        ValidationCode::ready)
+                {
+                    return fail(
+                        "sprite_animation_artifact",
+                        std::string{"validation "}
+                            + std::string{
+                                epochengine::project_sprite_animation::
+                                    validation_code_name(validation)});
+                }
+                accept(ArtifactKind::sprite_animation);
+            }
+
+            if (!request.audio_profile_path.empty())
+            {
+                const std::string normalized = fs::path{
+                    request.audio_profile_path}.lexically_normal().generic_string();
+                if (normalized
+                    != epochengine::project_audio::canonical_source_path)
+                {
+                    return fail(
+                        "audio_profile",
+                        "audio profile does not use the canonical logical path");
+                }
+
+                epochengine::project_audio::ProjectAudioProfileStore store{
+                    std::string{request.project_id}, root};
+                auto prepared = store.prepare(false);
+                if (!prepared)
+                {
+                    return fail(
+                        "audio_profile",
+                        std::string{
+                            epochengine::project_audio::
+                                preparation_code_name(prepared.code)}
+                            + ": " + prepared.diagnostic);
+                }
+                const auto loaded = store.load_artifact(false);
+                if (!loaded)
+                {
+                    return fail(
+                        "audio_profile_artifact",
+                        std::string{"load "}
+                            + std::string{
+                                epochengine::project_audio::
+                                    store_code_name(loaded.code)});
+                }
+                accept(ArtifactKind::audio_profile);
+            }
+
+            if (!request.gui_path.empty())
+            {
+                epochengine::project_gui::ArtifactLibrary library{
+                    std::string{request.project_id}, root.string()};
+                auto loaded = library.load_latest(request.gui_path);
+                if (!loaded)
+                {
+                    return fail(
+                        "gui_artifact",
+                        std::string{"load "}
+                            + std::string{
+                                epochengine::project_gui::
+                                    library_code_name(loaded.code)});
+                }
+                epochengine::project_gui_runtime::RuntimeSession runtime{
+                    std::move(loaded.artifact)};
+                if (!runtime.valid())
+                    return fail("gui_runtime", "GUI runtime rejected the artifact");
+                const auto frame = runtime.build_frame({1'280.0f, 720.0f});
+                if (!frame)
+                {
+                    return fail(
+                        "gui_runtime",
+                        std::string{"frame "}
+                            + std::string{
+                                epochengine::project_gui_runtime::
+                                    runtime_code_name(frame.code)});
+                }
+                accept(ArtifactKind::gui);
+            }
+
+            report.succeeded =
+                report.required_mask == report.verified_mask;
+            report.stage = report.succeeded ? "complete" : "incomplete";
+            report.diagnostic = report.succeeded
+                ? "all declared project artifacts were accepted"
+                : "one or more declared project artifacts were not verified";
+            return report;
+        }
+        catch (const std::exception& exception)
+        {
+            return fail("exception", exception.what());
+        }
+        catch (...)
+        {
+            return fail(
+                "exception",
+                "project artifact acceptance failed with an unknown exception");
+        }
+    }
+}
 
 
 #if !defined(EPOCH_MAIN_IN_MAIN_CPP)

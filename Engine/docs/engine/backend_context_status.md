@@ -1,79 +1,95 @@
-# Backend Context Status
+# Backend Context Ownership
 
-This is the current high-level status of the context and renderer stack.
+This document defines renderer-context topology and lifetime ownership. It does
+not duplicate renderer feature evidence.
 
-| Surface | Status | Notes |
-| --- | --- | --- |
-| `core.context` | Active | Shared context abstraction used everywhere. |
-| `context.*` multiplexer/window/control/type/platform_utils | Active | Core windowing and command-routing layer. |
-| `opengl.*` | Active | Primary GPU renderer path. |
-| `sdl.*` | Active | Important desktop backend; Windows dock-host rendering is active and still being smoke-tested against GUI regressions. |
-| `raylib.*` | Active | Active and feature-rich, especially for docked-window workflows. |
-| `sfml.*` | Active | Supported, but still more delicate due to GL/context behavior and dock-host activation order. |
-| `software.*` | Fallback | Safe-launch, debug/error-message GUI, capture diagnostics, and headless validation path. Do not treat it as the long-term Windows production renderer once Direct3D is promoted. |
-| `directx.*` / D3D11 | Active first pass | Windows-native renderer slice with device/swapchain/render-target ownership, basic shader preview rendering, GUI replay, scene-preview gating, and v0.84.35 multicontext screenshot proof. |
-| D3D12 | Planned | Future explicit Windows renderer track. Do not claim D3D12 support until a separate device/context/swapchain/shader/resource path is implemented and validated. |
-| `noop.context` | Minimal | Headless placeholder. |
-| `vulkan.*` | Experimental | Under active migration, not a stable default backend. |
-| `opengl.renderer` | Review candidate | Looks more archival than central; keep under review. |
-| Retired legacy context stack | Retired | Historical snapshots have been removed; keep migration work in active modules and documented feature maps instead. |
+- `renderer_feature_matrix.md` owns capability truth.
+- `renderer_regression_smoke_plan.md` owns acceptance and evidence policy.
+- `runtime_and_editor_workflows.md` owns launcher and editor behavior.
+- `Changes/changelog.txt` owns version chronology.
 
-## Context Selection And Handoff Status
+## Active Context Families
 
-| Path | Status | Notes |
-| --- | --- | --- |
-| Editor Settings backend selector | Active first pass | Reflects the current backend and emits one explicit `SwitchContext` request only when the target is compiled, supported by the host, different from the active backend, and no replacement transaction is running. |
-| Whole-editor replacement | Windows first pass | The stable host captures editor state, retires the source backend, creates the exact selected backend, restores state, and holds selection closed until a restored frame is acknowledged. Snapshot or backend failure remains visible and falls back through the transaction. |
-| Replacement serialization | Active first pass | Manager transaction ownership is the authoritative selection gate. Rapid choices cannot overlap retirement, creation, restoration, or restored-frame acknowledgement; current and unavailable targets are no-ops with visible status. |
-| Linux/WSL Settings replacement | Unsupported today | The Linux replacement host currently returns false, so Settings reports compiled backends but keeps replacement unavailable. WSL proof remains single-context OpenGL unless explicitly changed. |
-| Mobile/console/headless replacement | Excluded by product policy | These targets may use portable `EpochGui` controls while omitting native popout and whole-editor replacement hosts. |
+| Family | Role |
+| --- | --- |
+| OpenGL | First Tier 1 reference implementation and shared GL behavior baseline. |
+| SDL3 | Specialized GL-derived desktop context using Epoch-owned scene and GUI contracts. |
+| SFML3 | Specialized GL-derived desktop context with explicit host/context activation ownership. |
+| Raylib3 | Specialized GL-derived context with Raylib-specific window and texture lifecycle rules. |
+| Vulkan | Explicit GPU backend with backend-owned synchronization and retirement. |
+| Direct3D 11 | Active Windows-native GPU backend. D3D12 remains a separate future backend. |
+| Software | Tier 0 CPU fallback, deterministic reference, diagnostics, and headless-compatible path. |
+| No-op/headless | Minimal lifecycle host for tests that must not initialize a renderer. |
 
-## Practical guidance
+Every active renderer consumes shared semantic scene, Canvas2D, texture,
+material, camera, selection, and GUI data. A backend may adapt those contracts;
+it must not invent a parallel authoring model.
 
-- Prefer module-backed active context surfaces under `Engine/modules/` and
-  `Engine/src/`.
-- Use the active modules plus `legacy_feature_map.md` for migration help, not
-  deleted archive snapshots.
-- On Windows, launch multi-context smoke runs from the asset-bearing output
-  directory so docked backend panes do not drift away from the editor host's
-  runtime assets.
-- Keep multicontext fixes backend-specific until the common shell is proven:
-  Raylib, SDL3, SFML3, OpenGL, Vulkan, DirectX, and the software fallback each have
-  different context ownership and shutdown rules.
-- Name the source slice before editing backend context code. The common slices
-  are host lifecycle, context bridge, device/resource allocation, preview
-  rendering, GUI replay, upload/capture, capability reporting, and build
-  metadata. Parallelize only across independent backend slices with disjoint
-  files; keep the main integration pass responsible for final build proof.
-- Do not use multicontext diagnostic grids to choose the editor's normal runtime
-  backend. Background context scoring should measure comparable single-context
-  editor sessions only; multicontext panes are useful for smoke/comparison but
-  distort performance, memory, input, and upload contention.
-- Current `v0.84.35` evidence: Windows six-context proof now uses Raylib, SDL,
-  SFML, Vulkan, OpenGL, and DirectX. DirectX owns a real D3D11
-  device/swapchain/render target, renders editor preview markers, replays the
-  GUI batch, skips scene geometry when the editor has not published a valid
-  scene viewport, clips preview geometry as whole primitives to avoid
-  angle-dependent floating line artifacts, and passed README screenshot startup
-  proof. Software remains fallback/debug/headless validation rather than the
-  normal Windows product pane.
-- DirectX is intentionally Windows-only. CMake/MSBuild must keep it disabled on
-  Linux and WSL; Linux parity means the repo still builds and runs the
-  non-DirectX lanes, not that D3D11 is available there.
-- DirectX now keeps the public `directx.context` module interface while splitting
-  real behavior across implementation units: `directx.context.cpp` for the
-  exported bridge, `directx.state.cpp` for lifetime/resize/render-target state,
-  `directx.device.cpp` for D3D11 device and shader setup, `directx.preview.cpp`
-  for editor preview geometry, and `directx.gui.cpp` for GUI atlas/sprite replay.
-- Shared editor preview projection now lives in `render.preview_grid`; backend
-  preview renderers should call that spine for perspective vs Canvas2D
-  orthographic selection instead of keeping backend-local projection branches.
-- DirectX still needs the next real renderer-resource step: depth/stencil,
-  resource lifetime, material/pipeline ownership, and deeper engine-facing
-  renderer-resource APIs should move together instead of papering over the
-  current first-pass renderer surface.
-- Treat Vulkan and a few minor archival helpers as incomplete until their paths
-  are explicitly finished and tested.
-- Treat D3D12 as planned Windows-native renderer work, not as an active backend,
-  until a build can create the device/swapchain, clear/present, own resources,
-  and pass editor screenshot smoke.
+## Normal Editor Topology
+
+The normal editor assigns one live renderer context logical active-editor
+authority at a time. On Windows, that authority is independent of the physical
+context's creation order, parent-grid side, or dock state. A missing-target
+context replacement is a single serialized transaction:
+
+1. capture editor and scene state;
+2. stop submissions to the source backend;
+3. retire and join backend-owned work;
+4. destroy source native and graphics resources;
+5. create the selected backend in the primary slot;
+6. restore the captured state;
+7. acknowledge one restored frame before another replacement may begin.
+
+The primary editor surface cannot be undocked. Secondary contexts are reserved
+for explicitly requested diagnostics, previews, and floating tool surfaces;
+they are not cloned editors and must not continue rendering after closure.
+Multicontext mode is a diagnostic topology, not the normal editor or a source
+of runtime backend-scoring evidence.
+
+Linux and WSL default to one OpenGL editor context. Additional Linux backend
+builds remain valid production targets, but context replacement is not claimed
+until the Linux host owns the same complete retirement and restoration
+transaction.
+
+## Protected Frame And GUI Order
+
+The established scene and GUI draw model is protected:
+
+1. acquire the frame and drain scene submissions;
+2. render the scene through the active backend;
+3. compose EpochGui menus, tool windows, modal layers, and diagnostics above it;
+4. present exactly once.
+
+Backends must not perform a second clear or present, mutate native windows from
+an unowned thread, replay GUI below scene content, or keep backend work alive
+after retirement. Changes to this order require a dedicated draw-model mission,
+build proof, and operator eye-test evidence.
+
+## Backend Ownership Notes
+
+- OpenGL owns the reference winding, alpha, texture sampling, resize, and
+  Canvas2D behavior used to compare specialized GL-derived contexts.
+- SDL3 and SFML3 own their native window and GL activation details while using
+  Epoch scene and GUI queues. Proxy ownership must be explicit during teardown.
+- The Windows parent host may inspect context registry state under its mutex, but
+  native placement, owner-thread commands, and resize callbacks execute after that
+  mutex is released because window procedures reenter context bookkeeping.
+- Raylib3 owns Raylib window/texture lifetime. It must preserve the same scene
+  orientation and must not create a second editor window during replacement.
+- Vulkan owns queues, fences, swapchain images, and deferred destruction.
+  Replacement cannot complete until backend work and resources are retired.
+- Direct3D 11 owns its device, immediate context, swapchain, render targets, and
+  Windows-native retirement. D3D12 must not be represented as D3D11 capability.
+- Software owns CPU rasterization and reference output without silently
+  initializing a GPU context.
+
+## Acceptance
+
+A context is accepted only when the regression plan proves startup, canonical
+scene orientation, alpha and sampling, resize, save/reopen, generated project
+Build and Run, replacement teardown, and bounded resource behavior. Build
+success alone proves availability, not visual parity.
+
+See `renderer_regression_smoke_plan.md` for the seven-backend matrix and
+evidence artifacts. See `renderer_feature_matrix.md` for current capability
+status.

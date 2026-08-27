@@ -77,6 +77,7 @@ import core.context;
 import input.engine;
 import render.canvas2d;
 import render.canvas2d_runtime;
+import render.device;
 import vulkan.camera;
 import atlas.texture;
 import sprite.handle;
@@ -107,8 +108,8 @@ namespace epochengine::vulkancontext
 
     export class Application
     {
-        struct Canvas2DContextState;
     public:
+        struct Canvas2DContextState;
         struct GuiContextState;
 
         void run();

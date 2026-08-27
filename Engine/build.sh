@@ -10,7 +10,7 @@ if [[ ! -f "${TOOLCHAIN_LOCK}" ]]; then
   exit 1
 fi
 # shellcheck source=unix/current_toolchain.env
-source "${TOOLCHAIN_LOCK}"
+source <(sed 's/\r$//' "${TOOLCHAIN_LOCK}")
 
 MINIMUM_CMAKE_VERSION="${EPOCH_CMAKE_VERSION}"
 

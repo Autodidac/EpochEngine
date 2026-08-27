@@ -66,6 +66,13 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\tile_workspace.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\node_graph_workspace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\system_workspace.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\dock_layout.hpp">
@@ -96,6 +103,13 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\version.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\node_graph_workspace.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\system_workspace.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

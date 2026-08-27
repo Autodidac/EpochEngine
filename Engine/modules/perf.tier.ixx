@@ -63,6 +63,19 @@ export namespace epochengine::perf
     [[nodiscard]] const char* to_string(frame_limit_preset preset) noexcept;
     [[nodiscard]] const char* label_for_frame_limit(double fps) noexcept;
 
+    [[nodiscard]] constexpr double next_frame_deadline(
+        double previous_deadline,
+        double now,
+        double target_dt,
+        bool started) noexcept
+    {
+        if (!(target_dt > 0.0))
+            return now;
+        if (!started || previous_deadline < now - target_dt)
+            previous_deadline = now;
+        return previous_deadline + target_dt;
+    }
+
     struct frame_limiter
     {
         double target_dt = 0.0;
@@ -178,13 +191,9 @@ namespace epochengine::perf
 
         const double now0 = epochengine::core::time::now_seconds();
 
-        if (!started)
-        {
-            started = true;
-            next_time = now0;
-        }
-
-        next_time += target_dt;
+        next_time = next_frame_deadline(
+            next_time, now0, target_dt, started);
+        started = true;
 
         for (;;)
         {

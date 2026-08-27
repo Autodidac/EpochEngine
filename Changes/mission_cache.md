@@ -1,14 +1,73 @@
 # Mission Cache
+- Preserve the temporal GUI authoring boundary: `authoring.gui_document` owns
+  stable widget meaning/history plus layout, style, interaction, image, and tab
+  state; EpochGui owns reusable image, tab, text, and graph controls; editor
+  scene entities remain a compatible scene projection. The portable bounded
+  GUI source codec, canonical Canvas/Runtime Preview/Component Graph/Styles
+  workspace, and deterministic compiled artifact are present. Finish
+  editor-free runtime focus, actions, text input, tab execution, and exact
+  image-resource consumption.
+- Preserve the professional camera contract across every presenting context:
+  stable logical view identity; independent perspective/free-orthographic/axis
+  framing; LMB selection; Alt+LMB orbit; MMB pan; Alt+RMB dolly; RMB fly with
+  WASD/QE and speed modifiers; Focus and Reset. Finish oriented grids/gizmos,
+  authored project-camera persistence, mobile/console input mappings, and live
+  all-context interaction proof without letting splitters or GUI controls leak
+  input into scene navigation.
+- Continue portals on the shared camera and render-pass spine. The bounded
+  recursive planner, cycle/depth/pixel refusal, clip descriptors, logical RTT
+  outputs, and disposable cache state are present. Add backend-native
+  oblique/stencil clipping, visible portal surfaces, traversal, audio/physics
+  policy, and approved cross-context pixels before claiming runtime portals.
+- Keep Standard Editor, Plant Lab, and GUI Editor as separate application
+  workspaces over one shared shell. Main document and scene tabs remain fixed;
+  every non-scene tool owns an independent routed tab that may join a compatible
+  left, right, or bottom tool stack or float in a native context-backed host.
+  Finish persistent layouts, arbitrary compatible stack placement, and
+  app-specific authored content without cloning editor state.
+- Reconstruct external extension payloads only from reviewed operator-owned
+  source or explicit local work. The main repo may retain descriptor-only
+  identity/provenance/integrity/activation contracts while remote access is
+  unavailable; it must not claim missing payloads are installed.
+- Continue the Asset Browser from its current real texture slice: canonical
+  `.epoch_texture` source, sparse layer/brush edits, undo/redo, atomic
+  save/reopen, deterministic compilation, exact previews, Library regeneration,
+  and semantic material controls are present. Add persistent catalog metadata,
+  thumbnail virtualization, folders, dependency inspection, and broader formats
+  without moving physical handles into source documents.
+- Keep graph UI reusable and data truthful. EpochGui owns generic node/pin/edge
+  viewport interaction; authoring.task_graph owns editable semantic meaning;
+  the shared editor scheduler remains read-only and must report dependency edges
+  and failures exactly.
 - Preserve the engine-wide one-dot C++ naming contract and run the naming
   validator with every source move; do not reintroduce generic bridge or flat
   root ownership.
-- Complete the click-driven temporal texture workflow over the existing
-  `asset.texture_artifact` import/Library/material pipeline: undo/redo,
-  save/reopen interaction proof, settings/cost visibility, cache rebuild, and
+- Complete the remaining temporal texture UX over the existing
+  `asset.texture_artifact` source/Library/material pipeline: live drag preview,
+  brush hardness/opacity/channels, rename/masks/transforms/filters, dependency
+  diagnostics, settings/cost visibility, approved interaction proof, and
   additional formats admitted through capability evidence.
 - Preserve the production project contract: every generated profile must
-  materialize, atomically save/reopen, build, and child-run. Finish shared
-  Play/Stop/Run focus and generation-safe process evidence in the visible UI.
+  materialize, atomically save/reopen, build, and child-run. Project Save, Build,
+  and external Run stay in `project.lifecycle`; selected-script compilation is a
+  separate C++23 lane with source/output revalidation, verified candidate,
+  atomic publication, and published-artifact verification. External Run now has
+  generation-safe child ownership, duplicate focus, PID/elapsed/exit evidence,
+  and graceful/forced Stop controls. Open/Switch/Close Project now admit and
+  release explicit project sessions without deleting source; Plant Lab remains
+  a launcher-owned application rather than a generated project. Finish
+  cooperative project/script build
+  cancellation, editor Play/Stop convergence, and operator-visible interaction
+  proof without weakening the lifecycle gate.
+- Make Systems useful without making the editor slower: collect timing only
+  while its central workspace is visible, project immutable revisioned snapshots
+  through EpochGui, and keep the editable learning graph isolated from the live
+  scheduler. The read-only Live Scheduler now reports shared editor TaskGraph
+  work while the separate Learning Graph remains non-executing.
+- Let AI propose engine/project work without owning authority: exact immutable
+  proposals, review, explicit operator approval, single-use permits, bounded
+  execution, and verified evidence are mandatory before any registered executor
+  may mutate or run.
 
 
 This file preserves durable operator intent and accepted constraints. The active
@@ -96,26 +155,72 @@ release history belong in the changelog/archive, not architecture docs.
 - EpochGui owns reusable renderer-neutral tile workspace state and layout. The
   Game2D adapter binds palette/layer/grid tools, texture attachment, semantic
   edit operations, diagnostics, exact publication, and revision-cached preview.
+  Generation-checked map objects now have canvas selection, hierarchy rows,
+  staged name/type/position/size/rotation controls, and single-operation
+  apply/duplicate/delete behavior. Direct dragging previews rotated-bounds
+  clamped motion and commits once on release. Handoff, source reload, exact
+  Library restoration, and compiled preview verify the same object output.
+  Layers now use generation-checked selection and staged name/visibility/lock/
+  collision/phase/order/opacity/parallax controls with semantic create,
+  duplicate, apply, and guarded delete. Locked paint rejection and exact
+  handoff/source/Library/runtime layer preservation are contract-proven.
+  Live layer interaction and full project restart proof remain pending.
   Context replacement restores serialized unsaved map history and portable view
   state without preserving physical resources.
 - Project Save and the current editor Run publication consume this document.
-  Standalone runtime preparation now regenerates canonical source or restores
-  exact Library artifacts and authenticated texture closure. Project input uses
-  its own canonical source/artifact pair with stable actions, keyboard/controller
-  bindings, fixed-point dead zones, and deterministic sampling.
+  `project.lifecycle` now defines a strict path binding selected project,
+  committed scene, materialized shell, build inputs, active build generation,
+  verified artifact, and runtime generation. Its contracts and production
+  editor integration reject stale or cross-project completion; Save,
+  materialize, Build, and external Run populate the same ledger, and accepted
+  executable bytes are SHA-256 checked before launch. The Project workspace
+  exposes its decision and generations. Standalone runtime
+  preparation regenerates canonical source or restores exact Library artifacts
+  and authenticated texture closure. Project input uses its own canonical
+  source/artifact pair with stable actions, keyboard/controller bindings,
+  fixed-point dead zones, and deterministic sampling.
 - `physics.solver2d` and `project.actor2d_runtime` now provide deterministic
-  fixed-step AABB/circle collision, stable contacts, map collision, spawn, pause,
-  reset, snapshots, bounded catch-up, and renderer-neutral Canvas2D publication.
-- Finish live controller polling and visible project rebinding. Keep the editor
-  camera profile separate from project input.
-- Add authored one-way platform and slope semantics; current map collision treats
-  accepted non-sensor records as full AABBs and must not be advertised otherwise.
-- Prove actor Play/Stop, restart persistence, generated-child external Run,
-  cache-deletion regeneration, and native presentation through approved runtime
-  evidence. Build-safe tests are not visual proof.
+  fixed-step AABB/circle collision, stable contacts, solid/one-way/slope map
+  collision, spawn, pause, reset, snapshots, bounded catch-up, and
+  renderer-neutral Canvas2D publication. Generation-checked palette selection
+  stages exact shape/bounds/filter intent as one semantic operation and preserves
+  it through source, handoff, Library artifacts, and runtime preview.
+- `project.gameplay2d_runtime` now composes authenticated map/texture closure,
+  project input, fixed-step actor physics, sprite animation, audio events, GUI,
+  and Canvas2D output. Fresh generated `twodstudio` acceptance proves all 63
+  artifact bits, deterministic frame/step/sample/event counts, a stable canvas
+  hash, and teardown on Windows. Live editor `ProjectPlayScene` now hosts this
+  composition while retaining host-owned physical input, GUI impulses, camera,
+  context publication, and protected GUI/present order. MSVC Debug/Release and
+  managed Clang Release build the path; contracts cover repeated sessions and
+  active-destination move-assignment teardown. Interactive Play/Stop, physical
+  audio, and native pixels remain unclaimed.
+- Visible project keyboard rebinding now owns stable binding selection,
+  duplicate-source refusal, revision advancement, exact source/artifact
+  publication, save/reopen proof, and the existing live runtime sampler. A
+  process-owned SDL3 provider publishes generation-checked controller snapshots
+  once per engine frame. A renderer-neutral per-scene adapter now maps authored
+  button/axis sources into project actions, consumes press edges once, and
+  preserves held/axis continuity. Project Controls persists controller source,
+  slot, and dead-zone edits through the canonical source/artifact path. Eye-test
+  physical-device behavior and reopen, then retain the editor camera profile as
+  a separate input domain.
+- Add sensor/trigger dispatch and richer collision diagnostics only after the
+  actor event contract owns them; sensors remain rejected by the play runtime.
+- Retain the proven fresh generated-child materialize/save-reopen/Build
+  acceptance path, then prove live actor Play/Stop, restart persistence,
+  interactive external Run, cache-deletion regeneration, native presentation,
+  and complete renderer/physics/audio teardown through approved runtime evidence.
+  Build-safe tests are not visual proof.
 - Keep the process-owned physical audio adapter behind `audio.manager` and
-  `audio.mixer`; add decoded project clips, authored bus/volume controls, looping
-  ambient/music, animation-event cue bindings, and approved device/restart proof.
+  `audio.mixer`. The canonical Project Audio profile owns content-addressed WAV
+  import, buses, cue semantics, volume/mute, loop/autoplay, jump/land bindings,
+  and one immutable decoded PCM artifact under `Library/Audio`. Valid source is
+  authoritative and refreshes that artifact; game-only runtime preparation may
+  restore the verified artifact without authoring source. Never fall back to an
+  older artifact when present source is malformed. Eye-test the controls, then
+  prove ambient/music and event cues through the physical device across
+  repeated Play/Stop/restart.
 - The editor must author and persist the same scene that Play, Run, and Build
   consume.
 - Default project state should include useful camera, ground/map, light where the
@@ -227,13 +332,41 @@ release history belong in the changelog/archive, not architecture docs.
 - A switch captures state, retires/cleans the source, creates the exact selected
   backend in the stable host, restores state, proves a frame, and fails closed.
 - No retired renderer continues in the background wasting resources.
+- The operator observed OpenGL near 60 FPS while the other active backends
+  reported near 120 FPS on 2026-08-25. Matched Windows Debug reruns on
+  2026-08-26, first with an explicit 120 FPS override and then with the default
+  editor policy, report swap interval 0, sustain 120-121 measured frames per
+  second with approximately 0.02 ms `SwapBuffers`, display 120 FPS in the
+  native title, retain the current launcher/editor GUI, and close cleanly. This
+  closes the current OpenGL frame-pacing/telemetry discrepancy without claiming
+  broader native pixel, resize, or repeated-switch coverage.
 - Floating GUI panes are individual routed panels, not context selectors or full
   editor clones.
-- Redocking ultimately needs visible professional guide zones and a dock control;
-  games/mobile/headless products can compile native popout hosts out.
+- World Outliner, Asset Browser, GUI Hierarchy, Script Browser, Tile Map,
+  Properties, World Settings, Output, and AI Chat own exact pane routes. Project,
+  Assets, AI Output, and Systems are filters within Output, not duplicate tool
+  windows; the selected filter persists with context snapshots. Each real tool
+  can move among the left, right, and bottom stacks or float in a native
+  context-backed host; main document and scene tabs never accept tool panes.
+  Floating content uses native chrome and guide/ghost feedback rather than Dock
+  Back or Close Window command buttons, and route restoration never clones
+  editor state.
+- Complete desktop docking with arbitrary compatible stack creation, tab
+  reordering, persisted layouts, and operator-approved multi-monitor interaction
+  proof. Keep native floating hosts and desktop docking optional so games,
+  mobile, console, and headless products can compile them out.
 - Operator proof accepts SDL3, SFML3, DirectX, and Software scene-solid
   orientation. Raylib and Vulkan remain `Partial` until their current correction
   candidate receives eye proof.
+- Authorized 2026-08-26 Windows SDL evidence at 150% display scale accepts the
+  launcher, replay-backed loading transition, current editor GUI, Systems
+  workspace, resize, World Script Browser, large source editor, wheel input,
+  120 FPS title, and clean close. SDL owns separate logical and physical
+  dimensions and normalizes both sampled and queued mouse coordinates through
+  one mapping. This closes the SDL GUI/loading/high-DPI interaction gate, not
+  sampled-RTT pixels, Canvas2D reference agreement, repeated context switching,
+  or native memory soak. Preserve the protected queue-drain, GUI-replay,
+  top-layer, scene, and present order.
 - Fill adapters preserve complete triangles, report failures, and must match the
   shared clockwise-outward contract without changing GUI/present order.
 - Vulkan keeps its scene-solid triangle pipeline and culling separate from line
@@ -247,9 +380,10 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## GUI And Editor
 
-- World Outliner owns dockable `World`, `Assets`, and `Scripting` tool tabs;
-  Assets/Scripting are not top-level workspace destinations. Preserve drag/drop,
-  pane popout/redock, selection, and project ownership as those tabs mature.
+- World Outliner, Asset Browser, GUI Hierarchy, Script Browser, and Tile Map are
+  independent structure-tool routes rather than nested Outliner modes or
+  top-level document destinations. Preserve exact selection/project ownership
+  while completing their route-specific floating content and persisted layout.
 - EpochGui now owns a primal `TextEditorController` over its text-control state:
   multi-line indexing, caret/selection, clipboard command routing, scroll,
   revision/dirty state, find, replacement, and save acknowledgement. The engine
@@ -263,6 +397,18 @@ release history belong in the changelog/archive, not architecture docs.
   visible pane needs focus, selection, overflow, resize, empty, error, and
   dock/popout behavior reviewed as part of the subsystem that owns it.
 - EpochGui is the reusable portable C++23 module/static-library layer.
+- Its `SystemWorkspace` controller owns bounded transactional row replacement,
+  filter/sort/category/status projection, hierarchy, selection, keyboard
+  navigation, summaries, and explicit empty/error/stale states. It knows nothing
+  about the engine registry, live TaskGraph, or authoring graph.
+- `editor.systems_workspace` adapts engine diagnostics, the real shared editor
+  scheduler, and the isolated learning document into that portable controller.
+  AI evidence builds, script builds, project builds, and the approved tool
+  harness use one TaskGraph shown as read-only Live Scheduler evidence. The
+  separately labeled Learning Graph remains editable but has no live execution
+  authority. Sampling lifetime, drawing, and evidence labels remain engine
+  responsibilities. The bounded Time view and real scheduler queue/run timing
+  are implemented; approved GUI responsiveness proof remains.
 - EpochGui owns backend-neutral text, font, image, input, selection, layout,
   popup, progress, rounded rectangle, panel, docking, and floating-window state.
 - `Engine/dep/EpochGui` is the engine's local integration copy. Reusable controls
@@ -277,11 +423,13 @@ release history belong in the changelog/archive, not architecture docs.
   deselection, and context menus.
 - Modal/dropdown/menu hit testing must capture input; events cannot fall through
   or close lower menu items prematurely.
-- Themes include system light/dark, explicit light, and explicit dark. Future
-  professional styling is separate from those functional choices.
+- Themes include System Light/Dark, Light, Dark, Classic Launcher, Midnight
+  Blue, Ember Forge, Forest Terminal, and Aurora Steel. Theme names, palette
+  contrast, modal/dropdown hover states, and text readability are EpochGui-owned
+  contracts rather than editor-local decoration.
 - Settings use progressive disclosure and match active capability evidence.
-  Rounded GUI controls are an opt-in EpochGui-owned style policy, disabled by
-  default and preserved across editor context handoff.
+  Rounded GUI controls are the default EpochGui-owned style policy, may be
+  disabled explicitly, and persist across editor context handoff.
 - The Console dock reports evidence/status; it is not a substitute for actual
   workspace controls.
 - Package Manager needs real rows, action/status, transfer/build progress,
@@ -293,6 +441,18 @@ release history belong in the changelog/archive, not architecture docs.
   not merge those editors or make Forest Factory the generator.
 - GUI Editor similarly authors reusable GUI documents/assets; the standard
   editor consumes those results without duplicating the dedicated designer.
+  Canonical project source is `Assets/Gui/main.epochgui`, persisted through the
+  bounded integrity-checked GUI codec. The next durable slice compiles that
+  source into an editor-free runtime artifact and executes focus, actions, text
+  input, images, and tab state without carrying authoring history, editor scene
+  vectors, docking, floating hosts, thumbnails, or renderer cache identity.
+- Project Assets and texture authoring continue as one logical resource spine.
+  Restart-safe source/Library catalogs, a virtualized reusable asset grid,
+  stable activation, canonical source matching, and eagerly hydrated bounded
+  artifact-keyed thumbnail batches are current. Canonical
+  dependency inspection, deeper folder models, broad import formats, texture
+  graph evaluation, mip/compression/color conversion, and native
+  sparse/bindless policy remain measured follow-up work.
 
 ## Shared Scene Systems
 
@@ -367,14 +527,26 @@ release history belong in the changelog/archive, not architecture docs.
 - Widgets never mutate document internals directly.
 - Build one typed node graph for texture, material, particles, animation, audio,
   AI, procedural model, and simulation domains; do not create incompatible graph
-  frameworks.
+  frameworks. `authoring.task_graph` is currently a narrow temporal learning
+  prototype with stable handles, semantic operations, undo/redo, validation,
+  topology, critical path, and parallel-wave simulation. It must inform the
+  shared graph design rather than become a competing universal framework.
+- The live `taskgraph.dotsystem` snapshot is scheduler evidence only. Editing the
+  learning document never creates, removes, schedules, or executes live tasks.
 - Graph execution compiles through validated IR into CPU, SIMD, GPU, or software
   plans. Evaluation caches are derived and shared by identical revisions.
 - Texture is the first domain because it directly unlocks the 2D product.
 - `authoring.morphology` is the first generalized branching-domain slice: stable
   node/segment/terminal IDs, deterministic domain recipes, per-organ temporal
-  sampling, and voxel LOD plans. Editable typed nodes, compiled morphology
-  artifacts, and sparse voxel rasterization remain subsequent slices.
+  sampling, and voxel LOD plans. `ForestAssetDocument` adds stable genome
+  identity, bounded semantic profile edits, undo/redo, revision/content hashing,
+  and deterministic compilation into morphology, preview, voxel LOD, and bounded
+  occupancy. Plant Lab edits and previews one live document; Forest Factory can
+  place that same compiled revision in the active scene, and package staging
+  emits matching revision/hash/LOD evidence. A bounded source codec, atomic
+  project Library publication/reopen, typed node editing, sparse voxel
+  materialization, mesh/impostor compilation, and restart-safe placement remain
+  subsequent slices.
 - Material, model, effects, animation, general scene, collaboration, and broad UX
   phases follow in dependency order.
 - Previews are budgeted, cancellable, cacheable, generation-checked, lower
@@ -401,10 +573,13 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## Extensions And Packages
 
-- `local_ai_llama_cpp_runtime` is a plan/validation package, not a downloader
-  or installer. It describes an offline `llama-cli` build, requires a reviewed
-  immutable llama.cpp revision before any future fetch, starts no server, and
-  keeps GGUF weights and licenses separate.
+- `local_ai_llama_cpp_runtime` is a pinned executable-local package installed
+  only by the tracked, operator-invoked Qwen3.8 installer. It verifies the
+  immutable llama.cpp artifact and separately licensed community GGUF before
+  writing readiness receipts, starts no server, and keeps weights out of source
+  and generated builds. Generated projects select Off, shared Epoch-local
+  Qwen3.8, or an operator-managed external model endpoint with Epoch MCP guards
+  through a disabled-by-default project profile.
 - The operator owns
   `Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab` and has
   explicitly authorized its Epoch integration. Source revision `40a3db7` is
@@ -412,43 +587,195 @@ release history belong in the changelog/archive, not architecture docs.
 - `authoring.morphology` generalizes the Plant Lab foundation across plant,
   vascular, respiratory, electrical, coral, and generic branching domains with
   stable IDs, per-organ time ranges, deterministic sampling, and voxel LOD
-  planning. Plant Lab owns generation; Forest Factory is the standard-editor placement portal that consumes authored tree and forest-configuration outputs.
+  planning. Plant Lab owns a temporal forest document and its compiled morphology,
+  preview, LOD, and occupancy outputs; Forest Factory is the standard-editor
+  placement portal and already consumes the live compiled revision. Portable
+  project-published tree and forest artifacts remain the restart-safe handoff.
 - Mainline owns stable contracts, validation, temporal/document identity, safe
   fallback, provenance policy, and project/runtime integration.
 - EpochEngineExtensions owns heavy optional generators, FFT ocean, planetary or
   game-specific world stacks, immutable payload source, manifests, licenses,
   hashes, tests, and generated artifacts.
+- If hosted repository access cannot be restored, recover the Bootstrap Loader
+  and EpochEngineExtensions into a temporary, source-controlled `Recovery/`
+  workspace inside EpochEngine. Keep both recovery projects excluded from the
+  default engine build, runtime, packages, and release payload. Inventory local
+  source, archives, manifests, checksums, notices, and revision evidence before
+  writing canonical files; never promote cache output or an unverifiable binary
+  as source. Acceptance requires clean independent builds, retained provenance
+  and licenses, reproducible checksum-bearing packages, and a documented split
+  into replacement remotes before `Recovery/` may be removed.
 - Extension activation fails closed. Current package preflight evaluates
   verifier-produced evidence; it is not itself a downloader/verifier.
 - Built-in mini-runtimes remain kernel-owned and can be exposed as package/script
   assets.
 - Anything that can listen, host, bind a port, execute downloaded native code,
   or expose a control surface requires explicit human approval.
+
 ## OS AI
 
-- Epoch does not own or train an internal LLM. It runs an operator-selected
-  external/source-available model through a local OpenAI-compatible endpoint or
-  a directly selected `llama-cli` plus separately licensed GGUF.
+- Epoch does not train or silently activate an LLM. It runs either an
+  operator-selected external/source-available model through an
+  OpenAI-compatible endpoint that may live on another machine, or the verified
+  Epoch-local `llama-cli` plus separately licensed GGUF.
+- The Epoch-local Qwen3.8 provider pins llama.cpp `b10516` and a community
+  Qwen3.8 27B Q4_K_M GGUF with exact revision, size, hashes, and executable-local
+  receipts. It is a peer to, not a replacement for, the external provider.
+- Generated project profiles default to Off and may explicitly select the
+  shared Epoch-local provider or external model compute with Epoch MCP guards;
+  builds copy the profile but never weights.
 - Model discovery is inventory only. Selection and runtime state are explicit
   and executable-local.
 - `ai.mcp` is model-provider-independent and owns bounded tool descriptors,
-  calls, results, errors, capabilities, approval gates, cancellation, evidence,
-  and session budgets. Epoch starts no MCP server/listener.
+  calls, results, errors, capabilities, cancellation, evidence, and session
+  budgets. Epoch starts no MCP server/listener.
+- `ai.development_guard` owns immutable SHA-256 proposals, normalized
+  allowlists, typed operations/risks/content transitions, separate review and
+  operator approval, bounded lifetimes, cancellation, evidence, and audit state.
+  Its private `ExecutionPermit` is issued only by the guard and claimed once
+  before work; callers cannot forge it from a digest.
+- `editor.ai_development_controller` uses trusted monotonic production time,
+  serializes execution entry, and accepts source completion only from its
+  registered transaction executor. It reads exact preimages from the live source
+  root, materializes them beneath a unique writable
+  `cache/ai/iterations/session_*` root, and never points model execution at live
+  source. Externally driven time is contract-only and rejects backward movement.
+- `ai.development_executor` applies exact engine/project source transitions only
+  inside the controller-selected iteration root. It verifies canonical paths and
+  content preimages/postimages, writes and flushes exclusive same-directory
+  temporaries, revalidates before commit, verifies publication, and emits
+  rollback evidence. Its contract proves the live file remains byte-identical
+  while the iteration sandbox receives the approved postimage.
+- This source executor is not an OS filesystem database. Hostile external-writer
+  exclusion, directory crash journaling/durability, and complete
+  ACL/xattr/alternate-stream/ownership preservation remain future hardening.
+- `ai.iteration_loop` preserves the build-safe policy/state-machine contract
+  for a bounded model-development campaign: architecture inspection, stated
+  invariants, guarded implementation, typed validation, bounded repair, and
+  risk-selected review. Engine Development now connects a contained live slice:
+  Qwen3.8-class related-files admission, source-specific 64K context/32K output
+  budgets, raw prompt bytes, exact-copy buildable workspaces, generation-owned
+  TaskGraph materialization, strict proposal/digest approval, sandbox-first
+  transactions, hidden direct MSBuild Debug and Release compiler passes, and
+  separate build-safe engine-contract children, followed by a separately
+  scheduled HeadlessCI Debug build and asset-light run. A further visible
+  operator approval runs the Release editor's full engine validation across
+  registered project profiles, generated-child self-tests, and the AI gate.
+  Failure in any actor may
+  start at most three fresh-generation repair proposals with bounded
+  diagnostics; every changed proposal needs a new digest and exact operator
+  approval. Only after all seven Debug, Release, HeadlessCI, and full-validation
+  completions pass for the current generation may a distinct
+  `Stage Live Promotion` action verify exact live preimages and sandbox
+  postimages, reparses the retained proposal through a new live-root controller,
+  requires identical operations, and presents a new digest without writing.
+  `Approve Live Promotion` rechecks that evidence and uses a fresh single-use
+  permit to atomically apply only the reviewed existing-file source changes.
+  Staleness, tampering, path changes, commit failure, cancellation, and replay
+  fail closed; success consumes the candidate and creates no autonomous follow-
+  on, shell, Git, release, updater, package, network, or approval authority.
+  Analyzer, sanitizer, architecture, visual, and frontier adapters remain
+  blocked rather than becoming model self-attestation.
+- The strict `EPOCH_TOOL_PLAN_V1` lane gives AI Chat `/tool` one bounded
+  non-source active-project proposal. The only argument-free calls are
+  `project.inspect`, `project.save`, `project.build`, `project.run`,
+  `project.test`, and `diagnostics.read`; paths, native commands, permissions,
+  and multiple calls are invalid protocol. The exact parsed call stays attached
+  to visible approval, is revalidated by the host-owned MCP registry, and then
+  reaches only existing project lifecycle owners. Approved test can request the
+  canonical prerequisite build before running a cancellable hidden
+  `--project-self-test` from accepted artifact evidence; stale-project
+  completion is discarded. Run remains a distinct visible approval. The model
+  receives no permit, shell, Git, network, release, updater, or self-approval
+  authority. Debug/Release editor builds and build-safe contracts prove the
+  source path, and the HeadlessCI Debug build/no-graphics run proves its distinct
+  actor; model/GUI use and approved child execution remain operator evidence.
 - The project tool registry covers inspect, create, save, document/script edit,
-  build, run, test, capture, and diagnostics. Current execution is
-  operator-invoked through real editor/project harness paths; model tool-call
-  parsing and multi-step dispatch remain unfinished.
-- Chat is not captured automatically. Explicit harness/trace work writes
-  `model_exchange.jsonl`, `tool_trace.jsonl`, and bounded session packets as
-  evidence, never hidden training or authority.
-- Engine-source tools require a separate developer capability, allowlisted
-  roots, patch preview, explicit approval, and build/test evidence. They never
-  commit, push, release, or grant themselves permission.
-- Network/server/model/package activity remains capability-, integrity-, and
-  approval-gated.
+  build, run, test, capture, and diagnostics. Ordinary AI Authoring accepts one
+  reviewed `scene.clear`, `scene.create`, exact-count `scene.reconcile`, stable-ID
+  `scene.transform`, or `gui.create` command per approval through fixed allowlists
+  and existing semantic gateways. Reconcile owns counts; transform owns exact
+  finite transforms and support placement; GUI commands switch visibly to GUI
+  Canvas and never become 3D scene markers. `/plan` owns one proposal. `/goal`
+  owns a persistent Play/Pause/Edit/Delete task whose next milestone queues only
+  after an approved canonical revision. Repeated or no-op semantics pause. The
+  source proposal lane is host-curated and context-first. Exact canonical paths in
+  the objective outrank vocabulary ranking; the first primary candidate may use
+  the 184 KiB evidence ceiling while related candidates remain under the 128 KiB
+  aggregate budget. Review Paths reads and sends nothing. Share Curated Context
+  revalidates the objective, selected endpoint, canonical source root, and exact
+  candidates, materializes an exact-copy disposable workspace, and opens the
+  reviewed files in the large source editor. Complete content is supplied only
+  through 48 KiB; larger files use one UTF-8-safe 16 KiB objective-centered
+  excerpt.
+  The production prompt accepts only
+  `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block operations or exactly
+  `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1`. Framed and raw direct-CLI replies
+  pass through the same line-boundary extractor; prose, absent or ambiguous
+  search blocks, no-op replacements, whole-file regeneration from excerpts,
+  generic logger/singleton/entry rewrites, placeholders, stubs, duplicate
+  wrappers, unrelated cleanup, invented architecture, textual `.ixx` includes,
+  destructive shrinkage, removed ownership metadata, and build/test claims fail
+  before staging. The trusted controller reconstructs full postimages from exact
+  live preimages and stages only immutable hashes and complete postimages.
+  Direct-CLI normalization prefers a complete structured packet and extracts it
+  only from an exact line-framed header through its matching terminator;
+  transcript prefix/suffix bytes remain outside the strict codec. A completed
+  generation is consumed exactly once, and pre-staging failures receive at most
+  two automatic host-diagnosed retries over the same evidence. The packet format
+  example is grounded in the first reviewed path and, for an explicit unique
+  quoted replacement, the exact reviewed search/replacement bytes. This
+  scaffolds the local model without weakening the decoder or approval boundary;
+  ambiguous text still fails closed. The live Qwen3.8 acceptance run reached a
+  staged sandbox proposal while live source remained read-only.
+
+  Direct local source inference uses below-normal process priority, half the
+  available logical CPUs for both generation and batch work, and CPU-only model
+  layers so the editor GPU remains responsive; ordinary AI chat keeps its
+  configured GPU path. AI Controls owns objective/evidence inspection;
+  response-specific Review/Approve/Cancel remains in AI Chat and a changed
+  objective invalidates earlier evidence. Save/Build/Run/Test iteration adapters
+  for the source-development campaign remain unfinished. Model-facing tools must
+  not expose approval, permit issuance, unrestricted native invocation, commit,
+  push, release, updater mutation, listener/server start, or downloaded native
+  code.
+- Chat is not captured automatically. Explicit harness/trace work may write
+  `model_exchange.jsonl`, `tool_trace.jsonl`, and reviewed eval fixtures as
+  evidence, never hidden training, automatic source application, or authority.
+- Retained review material lives under `Engine/ai/evals/fixtures/`; Epoch has no
+  dataset-promotion module, runtime training path, weight mutation, or access to
+  unrelated personal AI development.
+- Local API and direct CLI work publish through generation-checked shared state
+  with bounded transport timeout. Pause and goal edit/delete invalidate the active
+  generation without synchronously destroying WinHTTP from a GUI callback;
+  shutdown owns bounded hard cancellation. The sandbox compiler future has one
+  completion owner, so Bottom Dock diagnostics cannot race it or auto-stage an
+  obsolete packet. Goals are capped at 24 milestones, exactly one semantic
+  command, and eight bounded object consequences per milestone.
+- `ai.voice_session` owns provider-neutral per-session microphone consent,
+  bounded listening/transcription/review, conversation response state, separate
+  TTS admission, interruption, and cancellation. It stores no raw audio and
+  transcript review cannot be disabled.
+- Implement cross-platform capture plus operator-selected local STT/TTS provider
+  adapters before enabling Dictate or Conversation. Playback output alone is
+  not voice support. No adapter may start a server, bind a port, retain raw
+  audio, or listen outside a visible approved session.
+
 ## Build, Source, And Release Boundaries
 
-- The operator explicitly reopened release work for the `v0.89.x` line. Preserve updater behavior while producing and validating the new Windows/Linux baseline; reseal the accepted release afterward.
+- Source and packaged runtime `v0.89.28` are the current development and
+  publication authority. Its corrected post-rotation packages and persisted-key
+  signature are live and independently verified. EpochEngine source is
+  restricted: public update clients
+  receive runtime archives, build evidence, and checksums only; approved source
+  access must be server-authorized and never depend on a shipped static secret.
+  `v0.89.27` and `v0.89.06` remain release history, while
+  `multicontext-base-stable` remains fixed at
+  `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development
+  history. Standalone EpochGui remains public and must exactly match the bundled
+  `Engine/dep/EpochGui` tree.
+  Any later release mutation requires a fresh bounded validation and checksum
+  publication pass.
 - Linux and Windows normal builds use vcpkg according to their documented lanes;
   headless diagnostics may intentionally differ.
 - Linux/WSL runtime proof defaults to single-context OpenGL. Vulkan is explicit
