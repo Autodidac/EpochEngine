@@ -43,6 +43,11 @@ export namespace epochengine::editor_ai_development_panel
         float available_width{320.0f};
         std::string workspace_id{};
         std::string source_snapshot_root{};
+        std::string source_authority_kind{};
+        std::string source_authority_version{};
+        std::string source_authority_commit{};
+        std::string source_authority_receipt_digest{};
+        bool source_authority_verified{};
         std::string workspace_root{};
         std::string development_objective{};
         std::string architecture_evidence{};

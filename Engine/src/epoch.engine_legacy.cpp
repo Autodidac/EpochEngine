@@ -176,6 +176,7 @@ import editor.core;
 import ai.engine;
 import ai.development_proposal_codec;
 import ai.iteration_loop;
+import ai.iteration_session;
 import editor.ai_development_controller;
 import editor.ai_development_panel;
 import editor.systems_workspace;
@@ -2094,6 +2095,9 @@ namespace epochengine::core
         check(
             "updater.private_source_crypto_policy",
             epochengine::updater::private_source_access_contract_self_test());
+        check(
+            "updater.verified_source_authority",
+            epochengine::updater::verified_source_authority_contract_self_test());
 
         check(
             "context.session_restore_readiness",
@@ -2457,6 +2461,9 @@ namespace epochengine::core
         check(
             "ai.iteration_loop",
             epochengine::ai::iteration::run_contract());
+        check(
+            "ai.iteration_session",
+            epochengine::ai::iteration_session::run_contract());
         check(
             "ai.development_guard",
             epochengine::editor_ai_development::run_contract());

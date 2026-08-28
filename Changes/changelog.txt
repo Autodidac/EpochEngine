@@ -1,4 +1,14 @@
 ## [v0.89.31] - EpochEditor source-update compatibility checkpoint
+- Add the reusable non-GUI `ai.iteration_session` coordinator and connect Engine
+  Development to verified source authority rather than the runtime directory.
+  Explicit checkouts carry a validated Git identity; authenticated cached
+  source carries a receipt with archive SHA-256 provenance. Every curated file
+  is rehashed from current bytes before sharing, ambiguous curation returns
+  `selection_required`, and model-authored path fallback sends zero bytes.
+  Candidate validation is bound to the exact implementation digest across
+  Debug, Release, HeadlessCI, and full-validation actors. Automatic live
+  promotion, release/Git/network authority, durable cross-process restoration,
+  and the MCP coordinator adapter remain out of scope.
 - Advance both source-version authorities and Windows source-build metadata to
   v0.89.31 while deliberately retaining v0.89.30 as the Windows, Linux, and
   macOS packaged-runtime authority. This creates the real newer-source lane for

@@ -5552,6 +5552,290 @@ namespace epochengine::updater
         return false;
     }
 
+    namespace
+    {
+        [[nodiscard]] bool source_authority_shape(
+            const std::filesystem::path& root,
+            const bool require_checkout)
+        {
+            std::error_code ec{};
+            if (root.empty() || !root.is_absolute()
+                || !std::filesystem::is_directory(root, ec)
+                || std::filesystem::is_symlink(root, ec))
+            {
+                return false;
+            }
+            const std::array required{
+                root / "Engine.sln",
+                root / "Engine/modules/epoch.version.ixx",
+                root / "Engine/modules/engine.version.ixx"};
+            for (const auto& path : required)
+            {
+                ec.clear();
+                if (!std::filesystem::is_regular_file(path, ec)
+                    || std::filesystem::is_symlink(path, ec))
+                    return false;
+            }
+            if (require_checkout)
+            {
+                ec.clear();
+                const auto git = root / ".git";
+                if (!std::filesystem::exists(git, ec)
+                    || std::filesystem::is_symlink(git, ec))
+                    return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::optional<std::string> receipt_value(
+            const std::string_view receipt,
+            const std::string_view key)
+        {
+            const std::string prefix = std::string{key} + "=";
+            std::optional<std::string> result{};
+            std::size_t offset{};
+            while (offset <= receipt.size())
+            {
+                const std::size_t end = receipt.find('\n', offset);
+                const std::string_view line = receipt.substr(
+                    offset, end == std::string_view::npos
+                        ? receipt.size() - offset : end - offset);
+                if (line.starts_with(prefix))
+                {
+                    if (result)
+                        return std::nullopt;
+                    result = std::string{line.substr(prefix.size())};
+                }
+                if (end == std::string_view::npos)
+                    break;
+                offset = end + 1u;
+            }
+            return result;
+        }
+
+        [[nodiscard]] bool lowercase_hex_commit(const std::string_view commit)
+        {
+            return commit.size() == 40u
+                && std::all_of(commit.begin(), commit.end(), [](const char ch)
+                    { return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'); });
+        }
+
+        [[nodiscard]] std::optional<std::string> checkout_commit_identity(
+            const std::filesystem::path& checkout)
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec{};
+            fs::path git_dir = checkout / ".git";
+            if (fs::is_regular_file(git_dir, ec))
+            {
+                const std::string marker = system_detail::trim_ascii(
+                    system_detail::read_text_file(git_dir));
+                constexpr std::string_view prefix = "gitdir:";
+                if (!marker.starts_with(prefix))
+                    return std::nullopt;
+                git_dir = fs::path{system_detail::trim_ascii(
+                    marker.substr(prefix.size()))};
+                if (git_dir.is_relative())
+                    git_dir = checkout / git_dir;
+            }
+            ec.clear();
+            git_dir = fs::weakly_canonical(git_dir, ec);
+            if (ec || !fs::is_directory(git_dir, ec)
+                || fs::is_symlink(git_dir, ec))
+                return std::nullopt;
+
+            const std::string head = system_detail::trim_ascii(
+                system_detail::read_text_file(git_dir / "HEAD"));
+            if (lowercase_hex_commit(head))
+                return head;
+            constexpr std::string_view ref_prefix = "ref:";
+            if (!head.starts_with(ref_prefix))
+                return std::nullopt;
+            const std::string ref = system_detail::trim_ascii(
+                head.substr(ref_prefix.size()));
+            if (ref.empty() || ref.starts_with('/') || ref.find("..") != std::string::npos)
+                return std::nullopt;
+            const std::string loose = system_detail::trim_ascii(
+                system_detail::read_text_file(git_dir / fs::path{ref}));
+            if (lowercase_hex_commit(loose))
+                return loose;
+
+            const std::string packed = system_detail::read_text_file(
+                git_dir / "packed-refs");
+            std::size_t offset{};
+            while (offset <= packed.size())
+            {
+                const std::size_t end = packed.find('\n', offset);
+                const std::string_view line = std::string_view{packed}.substr(
+                    offset, end == std::string::npos
+                        ? packed.size() - offset : end - offset);
+                const std::size_t separator = line.find(' ');
+                if (separator == 40u && line.substr(separator + 1u) == ref)
+                {
+                    const std::string commit{line.substr(0u, separator)};
+                    if (lowercase_hex_commit(commit))
+                        return commit;
+                }
+                if (end == std::string::npos)
+                    break;
+                offset = end + 1u;
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] VerifiedSourceAuthority resolve_source_authority_at(
+            const std::filesystem::path& explicit_checkout,
+            const std::filesystem::path& cached_root)
+        {
+            namespace fs = std::filesystem;
+            std::error_code ec{};
+            if (!explicit_checkout.empty())
+            {
+                const auto checkout = fs::weakly_canonical(explicit_checkout, ec);
+                if (!ec && source_authority_shape(checkout, true))
+                {
+                    const std::string version = system_detail::read_local_source_version(checkout);
+                    const auto version_digest = system_detail::sha256_file_hex(
+                        checkout / "Engine/modules/engine.version.ixx");
+                    const auto commit = checkout_commit_identity(checkout);
+                    if (!version.empty() && version_digest && commit)
+                    {
+                        return VerifiedSourceAuthority{
+                            .kind = SourceAuthorityKind::explicit_checkout,
+                            .root = checkout,
+                            .source_version = version,
+                            .commit = *commit,
+                            .receipt_digest = *version_digest,
+                            .status_message = "Using the explicit verified Epoch development checkout.",
+                            .verified = true};
+                    }
+                }
+            }
+
+            ec.clear();
+            const auto cached = fs::weakly_canonical(cached_root, ec);
+            const auto receipt_path = cached / ".epoch-source-authority";
+            if (ec || !source_authority_shape(cached, false)
+                || !fs::is_regular_file(receipt_path, ec)
+                || fs::is_symlink(receipt_path, ec))
+            {
+                return VerifiedSourceAuthority{
+                    .status_message = "No explicit Epoch checkout or verified cached source receipt is available. Download Project Source explicitly, then retry."};
+            }
+            const std::string receipt = system_detail::read_text_file(receipt_path);
+            const auto schema = receipt_value(receipt, "schema");
+            const auto version = receipt_value(receipt, "source_version");
+            const auto commit = receipt_value(receipt, "commit");
+            const auto format = receipt_value(receipt, "archive_format");
+            const auto archive_digest = receipt_value(receipt, "archive_sha256");
+            const auto receipt_digest = system_detail::sha256_file_hex(receipt_path);
+            if (!schema || *schema != "epoch.source.authority.v1"
+                || !version || version->empty() || !commit
+                || !lowercase_hex_commit(*commit) || !format
+                || (*format != "zip" && *format != "tar.gz")
+                || !archive_digest
+                || !core::sha256::from_hex(*archive_digest)
+                || !receipt_digest
+                || system_detail::read_local_source_version(cached) != *version)
+            {
+                return VerifiedSourceAuthority{
+                    .status_message = "The cached source authority receipt is missing, malformed, or disagrees with the extracted source version."};
+            }
+            return VerifiedSourceAuthority{
+                .kind = SourceAuthorityKind::verified_cache,
+                .root = cached,
+                .source_version = *version,
+                .commit = *commit,
+                .receipt_digest = *receipt_digest,
+                .status_message = "Using an authenticated extracted source cache; each curated file is rehashed from current bytes before sharing.",
+                .verified = true};
+        }
+
+        [[nodiscard]] bool write_source_authority_receipt(
+            const std::filesystem::path& root,
+            const PreparedSourceArchive& source)
+        {
+            if (!source.ok || source.source_version.empty()
+                || !lowercase_hex_commit(source.commit)
+                || (source.archive_format != "zip" && source.archive_format != "tar.gz"))
+                return false;
+            const auto archive_digest = system_detail::sha256_file_hex(
+                source.archive_path);
+            if (!archive_digest)
+                return false;
+            const std::string receipt =
+                "schema=epoch.source.authority.v1\nsource_version="
+                + source.source_version + "\ncommit=" + source.commit
+                + "\narchive_format=" + source.archive_format
+                + "\narchive_sha256=" + *archive_digest + "\n";
+            const auto path = root / ".epoch-source-authority";
+            const auto temporary = root / ".epoch-source-authority.tmp";
+            std::ofstream out{temporary, std::ios::binary | std::ios::trunc};
+            out.write(receipt.data(), static_cast<std::streamsize>(receipt.size()));
+            out.close();
+            if (!out.good())
+                return false;
+            std::error_code ec{};
+            std::filesystem::rename(temporary, path, ec);
+            if (ec)
+            {
+                std::filesystem::remove(path, ec);
+                ec.clear();
+                std::filesystem::rename(temporary, path, ec);
+            }
+            return !ec;
+        }
+    }
+
+    VerifiedSourceAuthority resolve_verified_source_authority(
+        const std::filesystem::path& explicit_checkout)
+    {
+        return resolve_source_authority_at(
+            explicit_checkout,
+            system_detail::project_source_final_dir());
+    }
+
+    bool verified_source_authority_contract_self_test()
+    {
+        namespace fs = std::filesystem;
+        const auto root = fs::temp_directory_path()
+            / ("epoch_source_authority_" + system_detail::make_source_update_run_token());
+        const auto checkout = root / "checkout";
+        const auto cached = root / "cached";
+        const auto write_shape = [](const fs::path& path)
+            {
+                std::error_code ec{};
+                fs::create_directories(path / "Engine/modules", ec);
+                std::ofstream{path / "Engine.sln"} << "solution\n";
+                std::ofstream{path / "Engine/modules/epoch.version.ixx"}
+                    << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 31\n";
+                std::ofstream{path / "Engine/modules/engine.version.ixx"}
+                    << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 31\n";
+                return !ec;
+            };
+        const bool shaped = write_shape(checkout) && write_shape(cached);
+        std::error_code git_ec{};
+        fs::create_directories(checkout / ".git", git_ec);
+        std::ofstream{checkout / ".git/HEAD"}
+            << "fedcbafedcbafedcbafedcbafedcbafedcbafedc\n";
+        std::ofstream{cached / ".epoch-source-authority"}
+            << "schema=epoch.source.authority.v1\nsource_version=0.89.31\n"
+               "commit=0123456789012345678901234567890123456789\narchive_format=zip\n"
+               "archive_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n";
+        const auto explicit_result = shaped
+            ? resolve_source_authority_at(checkout, cached)
+            : VerifiedSourceAuthority{};
+        const auto cached_result = resolve_source_authority_at({}, cached);
+        std::error_code cleanup_ec{};
+        fs::remove_all(root, cleanup_ec);
+        return explicit_result.verified
+            && explicit_result.kind == SourceAuthorityKind::explicit_checkout
+            && explicit_result.commit == "fedcbafedcbafedcbafedcbafedcbafedcbafedc"
+            && cached_result.verified
+            && cached_result.kind == SourceAuthorityKind::verified_cache
+            && cached_result.commit == "0123456789012345678901234567890123456789";
+    }
+
     ProjectSourceDownloadResult download_project_source_code(
         const UpdateChannel& channel)
     {
@@ -5667,6 +5951,14 @@ namespace epochengine::updater
         }
 
         fs::remove_all(staging_dir, ec);
+        if (authorized_source.ok
+            && !write_source_authority_receipt(final_dir, authorized_source))
+        {
+            cleanup_authorized_source();
+            result.status_message = "Project source code was extracted, but its verified source-authority receipt could not be published.";
+            system_detail::log_error(result.status_message);
+            return result;
+        }
         cleanup_authorized_source();
         result.ok = true;
         result.project_root = final_dir;

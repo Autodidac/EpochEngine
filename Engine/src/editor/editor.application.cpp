@@ -9470,6 +9470,26 @@ namespace epochengine
             return ec ? std::filesystem::path{} : cwd.lexically_normal();
         }
 
+        void apply_verified_ai_source_authority(
+            editor_ai_development_panel::Input& input)
+        {
+            const auto checkout = epochengine::core::path::find_epoch_repo_root(
+                epochengine::core::path::executable_dir());
+            const auto authority = epochengine::updater::resolve_verified_source_authority(
+                checkout);
+            input.source_snapshot_root = authority.root.generic_string();
+            input.source_authority_kind = authority.kind
+                    == epochengine::updater::SourceAuthorityKind::explicit_checkout
+                ? "explicit_checkout"
+                : authority.kind
+                        == epochengine::updater::SourceAuthorityKind::verified_cache
+                    ? "verified_cache" : "unavailable";
+            input.source_authority_version = authority.source_version;
+            input.source_authority_commit = authority.commit;
+            input.source_authority_receipt_digest = authority.receipt_digest;
+            input.source_authority_verified = authority.verified;
+        }
+
         [[nodiscard]] constexpr std::string_view
             ai_source_architecture_contract() noexcept
         {
@@ -9482,9 +9502,9 @@ namespace epochengine
                 "core owns dependency-light lifecycle primitives; epoch owns "
                 "public runtime composition; domain prefixes own domain code. "
                 "Do not invent paths, symbols, services, includes, modules, "
-                "build results, or compatibility layers. Ask for exact files "
-                "with EPOCH_SOURCE_CONTEXT_REQUEST_V1 before proposing changes "
-                "to existing source. Model-authored bytes first apply only to "
+                "build results, or compatibility layers. Host curation ranks "
+                "only existing files and symbols; ambiguous objectives return "
+                "selection_required without sending bytes. Model-authored bytes first apply only to "
                 "a disposable guarded sandbox. Any later live-source promotion "
                 "is a separate host-verified, operator-staged, digest-approved "
                 "transaction; the model receives no promotion authority.";
@@ -25545,12 +25565,11 @@ namespace epochengine
                 editor.aiDevelopmentPanel = std::make_unique<
                     editor_ai_development_panel::Panel>();
             }
-            const editor_ai_development_panel::Input guardedInput{
+            editor_ai_development_panel::Input guardedInput{
                     .domain = editor_ai_development_panel::Domain::engine_source,
                     .available_width = inspectorWidth,
                     .workspace_id = "epoch.engine",
-                    .source_snapshot_root =
-                        editor_runtime_root().generic_string(),
+                    .source_snapshot_root = {},
                     .workspace_root = inspectorEvidence.workspace_root,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
@@ -25565,6 +25584,7 @@ namespace epochengine
                         || editor.aiSourceWorkspacePending.has_value()
                         || editor.aiSourceBuildPending.has_value()
                         || editor.aiSourceTestPending.has_value()};
+            apply_verified_ai_source_authority(guardedInput);
             if (editor.aiSourceAwaitingReply
                 && !chat.pending
                 && chat.completionGeneration
@@ -30064,13 +30084,12 @@ namespace epochengine
                     epochengine::ai::default_evidence_paths();
                 const auto manifest =
                     epochengine::ai::active_model_manifest();
-                const editor_ai_development_panel::Input promotionInput{
+                editor_ai_development_panel::Input promotionInput{
                     .domain =
                         editor_ai_development_panel::Domain::engine_source,
                     .available_width = availableChatSize.x,
                     .workspace_id = "epoch.engine",
-                    .source_snapshot_root =
-                        editor_runtime_root().generic_string(),
+                    .source_snapshot_root = {},
                     .workspace_root = evidence.workspace_root,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
@@ -30081,6 +30100,7 @@ namespace epochengine
                         || editor.aiSourceWorkspacePending.has_value()
                         || editor.aiSourceBuildPending.has_value()
                         || editor.aiSourceTestPending.has_value()};
+                apply_verified_ai_source_authority(promotionInput);
                 const auto promotionResult = sourcePromotionStaged
                     ? editor.aiDevelopmentPanel
                         ->approve_and_promote_verified_source(
@@ -30117,13 +30137,12 @@ namespace epochengine
                     epochengine::ai::default_evidence_paths();
                 const auto manifest =
                     epochengine::ai::active_model_manifest();
-                const editor_ai_development_panel::Input proposalInput{
+                editor_ai_development_panel::Input proposalInput{
                     .domain =
                         editor_ai_development_panel::Domain::engine_source,
                     .available_width = availableChatSize.x,
                     .workspace_id = "epoch.engine",
-                    .source_snapshot_root =
-                        editor_runtime_root().generic_string(),
+                    .source_snapshot_root = {},
                     .workspace_root = evidence.workspace_root,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
@@ -30135,6 +30154,7 @@ namespace epochengine
                         || editor.aiSourceWorkspacePending.has_value()
                         || editor.aiSourceBuildPending.has_value()
                         || editor.aiSourceTestPending.has_value()};
+                apply_verified_ai_source_authority(proposalInput);
                 const auto proposalResult = sourceContextPending
                     ? editor.aiDevelopmentPanel
                         ->share_requested_source_context(proposalInput)

@@ -369,8 +369,12 @@ set(EPOCH_SOURCES
     src/ai/ai.development_executor.cpp
     src/ai/ai.iteration_loop.cpp
     src/ai/ai.iteration_loop_contract.cpp
+    src/ai/ai.iteration_session.cpp
+    src/ai/ai.iteration_session_contract.cpp
     src/ai/ai.development_proposal_codec.cpp
     src/ai/ai.development_proposal_codec_contract.cpp
+    src/ai/ai.mcp_stdio.cpp
+    src/ai/ai.mcp_stdio_contract.cpp
     src/extensions/extension.catalog_contract.cpp
     src/audio/audio.device.cpp
     src/audio/audio.device_contract.cpp
@@ -1859,6 +1863,28 @@ if(BUILD_TESTING)
             COMMAND epoch_authoring_tilemap_contract
         )
     endif()
+
+    add_executable(epoch_ai_mcp_stdio_contract
+        src/ai/ai.mcp_stdio.cpp
+        src/ai/ai.mcp_stdio_contract.cpp
+    )
+    target_sources(epoch_ai_mcp_stdio_contract PRIVATE
+        FILE_SET epoch_ai_mcp_stdio_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
+    )
+    target_compile_definitions(epoch_ai_mcp_stdio_contract PRIVATE
+        EPOCH_AI_MCP_STDIO_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_mcp_stdio_contract)
+    epoch_apply_warnings(epoch_ai_mcp_stdio_contract)
+    epoch_apply_sanitizers(epoch_ai_mcp_stdio_contract)
+    add_test(
+        NAME epoch_ai_mcp_stdio_contract
+        COMMAND epoch_ai_mcp_stdio_contract
+    )
 
     add_executable(epoch_ai_voice_session_contract
         src/ai/ai.voice_session_contract.cpp

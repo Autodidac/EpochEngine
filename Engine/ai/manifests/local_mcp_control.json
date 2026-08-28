@@ -2,7 +2,9 @@
   "id": "epoch-mcp-tool-protocol",
   "display_name": "Epoch MCP Tool Protocol",
   "provider": "operator-selected-model-independent",
-  "transport": "in-process-registry",
+  "transport": "transport-neutral-newline-json-rpc-codec",
+  "stdio_framing": "one-utf8-json-rpc-message-per-line",
+  "protocol_version": "2025-11-25",
   "trace": "workspace/tool_trace.jsonl",
   "model_selection": "operator-selected-epoch-local-or-external-model",
   "network_listener": false,
@@ -16,10 +18,17 @@
     "bounded-calls-and-results",
     "structured-evidence",
     "model-tool-call-parser",
-    "single-step-dispatch"
+    "single-step-dispatch",
+    "typed-session-and-request-identities",
+    "bounded-newline-json-rpc-framing",
+    "initialize-and-initialized-lifecycle",
+    "capability-filtered-tools-list-codec",
+    "validated-tools-call-codec",
+    "one-result-response-codec",
+    "replay-hop-and-cancellation-guards"
   ],
   "pending": [
     "multi-step-dispatch",
-    "stdio-adapter"
+    "operator-authorized-process-stdio-byte-pump"
   ]
 }

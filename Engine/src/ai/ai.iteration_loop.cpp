@@ -540,13 +540,34 @@ namespace epochengine::ai::iteration
                 return Milestone::static_analysis;
             if (policy_.require_sanitizer)
                 return Milestone::sanitizer;
-            return Milestone::local_self_review;
+            if (policy_.require_local_self_review)
+                return Milestone::local_self_review;
+            if (capability_.architecture_review_required)
+                return Milestone::architecture_review;
+            if (policy_.require_visual_validation)
+                return Milestone::visual_validation;
+            return capability_.frontier_review_required
+                ? Milestone::frontier_review : Milestone::complete;
         case Milestone::static_analysis:
-            return policy_.require_sanitizer
-                ? Milestone::sanitizer
-                : Milestone::local_self_review;
+            if (policy_.require_sanitizer)
+                return Milestone::sanitizer;
+            if (policy_.require_local_self_review)
+                return Milestone::local_self_review;
+            if (capability_.architecture_review_required)
+                return Milestone::architecture_review;
+            if (policy_.require_visual_validation)
+                return Milestone::visual_validation;
+            return capability_.frontier_review_required
+                ? Milestone::frontier_review : Milestone::complete;
         case Milestone::sanitizer:
-            return Milestone::local_self_review;
+            if (policy_.require_local_self_review)
+                return Milestone::local_self_review;
+            if (capability_.architecture_review_required)
+                return Milestone::architecture_review;
+            if (policy_.require_visual_validation)
+                return Milestone::visual_validation;
+            return capability_.frontier_review_required
+                ? Milestone::frontier_review : Milestone::complete;
         case Milestone::local_self_review:
             if (capability_.architecture_review_required)
                 return Milestone::architecture_review;

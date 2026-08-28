@@ -135,6 +135,7 @@ export namespace epochengine::ai::iteration
         bool require_research{true};
         bool require_static_analysis{true};
         bool require_sanitizer{true};
+        bool require_local_self_review{true};
         bool require_visual_validation{};
     };
 

@@ -23,8 +23,10 @@ module editor.ai_development_panel;
 
 import ai.development_proposal_codec;
 import ai.iteration_loop;
+import ai.iteration_session;
 import editor.ai_development_controller;
 import gui.engine;
+import core.sha256;
 
 namespace epochengine::editor_ai_development_panel
 {
@@ -869,6 +871,7 @@ namespace epochengine::editor_ai_development_panel
 
         std::unique_ptr<editor_ai_development::DevelopmentController> controller{};
         std::unique_ptr<editor_ai_development::DevelopmentController> promotion_controller{};
+        std::unique_ptr<ai::iteration_session::IterationSession> iteration_session{};
         std::uint32_t generation{};
         std::string workspace_id{};
         std::string source_root{};
@@ -1021,6 +1024,7 @@ namespace epochengine::editor_ai_development_panel
                 || source_root != requestedSourceRoot
                 || sandbox_base_root != requestedSandboxBaseRoot)
             {
+                iteration_session.reset();
                 reset_controller(
                     std::move(requestedWorkspace),
                     std::move(requestedSourceRoot),
@@ -1071,6 +1075,35 @@ namespace epochengine::editor_ai_development_panel
                 source_root,
                 workspace_root,
                 source_candidate_operations);
+        }
+
+        [[nodiscard]] static std::string digest_text(
+            const std::string_view text)
+        {
+            return core::sha256::hex(core::sha256::hash(text));
+        }
+
+        [[nodiscard]] bool record_iteration_validation(
+            const ai::iteration_session::ValidationActor actor,
+            const bool succeeded,
+            const std::string_view summary,
+            const bool sequenceComplete)
+        {
+            if (!iteration_session)
+                return true;
+            const auto candidate = iteration_session->report().candidate_digest;
+            const auto recorded = iteration_session->record_validation(
+                iteration_session->identity(),
+                ai::iteration_session::ValidationEvidence{
+                    .actor = actor,
+                    .candidate_digest = candidate,
+                    .evidence_digest = digest_text(summary),
+                    .summary = std::string{summary},
+                    .passed = succeeded},
+                sequenceComplete);
+            if (!recorded)
+                status_message = recorded.status;
+            return static_cast<bool>(recorded);
         }
 
         [[nodiscard]] RenderResult source_context_model_request() const
@@ -1163,6 +1196,21 @@ namespace epochengine::editor_ai_development_panel
                     + report.transaction_status;
             if (report)
             {
+                if (iteration_session)
+                {
+                    const auto recorded = iteration_session->record_implementation(
+                        iteration_session->identity(),
+                        digest_text(report.evidence_manifest),
+                        report.transaction_status.empty()
+                            ? std::string{"Sandbox source transaction committed."}
+                            : report.transaction_status);
+                    if (!recorded)
+                    {
+                        status_message = recorded.status;
+                        output.status = status_message;
+                        return output;
+                    }
+                }
                 source_build_pending = true;
                 output.action = HostAction::compile_source_workspace;
                 output.source_root = source_root;
@@ -1452,6 +1500,17 @@ namespace epochengine::editor_ai_development_panel
             status_message = result.status;
             if (result)
             {
+                if (iteration_session)
+                {
+                    const auto staged = iteration_session->stage_candidate(
+                        iteration_session->identity(), reply);
+                    if (!staged)
+                    {
+                        status_message = staged.status;
+                        output.status = status_message;
+                        return output;
+                    }
+                }
                 active_domain = input.domain;
                 const auto snapshot = controller->snapshot();
                 source_candidate_raw_reply.assign(reply);
@@ -2425,12 +2484,14 @@ namespace epochengine::editor_ai_development_panel
                             else
                             {
                                 state.status_message =
-                                    selection.status
-                                    + " Asking Qwen to select one bounded "
-                                      "source slice from visible architecture "
-                                      "evidence; no source bytes are being sent.";
-                                output =
-                                    state.source_context_model_request();
+                                    "selection_required: " + selection.status
+                                    + " Name an existing path or symbol; no source bytes were read or sent.";
+                                if (!state.iteration_session)
+                                    state.iteration_session = std::make_unique<
+                                        ai::iteration_session::IterationSession>();
+                                (void)state.iteration_session->require_selection(
+                                    state.status_message);
+                                output.status = state.status_message;
                             }
                         }
                     }
@@ -2554,6 +2615,26 @@ namespace epochengine::editor_ai_development_panel
         }
         const std::vector<std::string> sharedSourcePaths =
             state.pending_source_context_paths;
+        ai::iteration_session::SourceAuthority authority{
+            .kind = input.source_authority_kind == "explicit_checkout"
+                ? ai::iteration_session::SourceAuthorityKind::explicit_checkout
+                : input.source_authority_kind == "verified_cache"
+                    ? ai::iteration_session::SourceAuthorityKind::verified_cache
+                    : ai::iteration_session::SourceAuthorityKind::unavailable,
+            .root = std::filesystem::path{input.source_snapshot_root},
+            .source_version = input.source_authority_version,
+            .commit = input.source_authority_commit,
+            .receipt_digest = input.source_authority_receipt_digest,
+            .verified = input.source_authority_verified};
+        const auto inspected = ai::iteration_session::inspect_curated_files(
+            authority, sharedSourcePaths);
+        if (!inspected.accepted)
+        {
+            state.status_message = "Verified source authority refused context sharing: "
+                + inspected.status + " No source bytes were read or sent.";
+            output.status = state.status_message;
+            return output;
+        }
         const auto loaded = load_reviewed_source_context(
             input.source_snapshot_root,
             sharedSourcePaths,
@@ -2597,6 +2678,30 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        state.iteration_session = std::make_unique<
+            ai::iteration_session::IterationSession>();
+        const auto configured = state.iteration_session->configure(
+            ai::iteration_session::SessionConfiguration{
+                .objective = state.development_objective,
+                .model_name = input.selected_model,
+                .source = authority,
+                .curated_files = inspected.files,
+                .policy = ai::iteration_session::CandidatePolicy::manual_each_candidate,
+                .maximum_repair_attempts = static_cast<std::uint32_t>(
+                    Implementation::maximum_source_repair_attempts)});
+        if (!configured)
+        {
+            state.status_message = configured.status;
+            output.status = state.status_message;
+            return output;
+        }
+        const auto shared = state.iteration_session->context_shared();
+        if (!shared)
+        {
+            state.status_message = shared.status;
+            output.status = state.status_message;
+            return output;
+        }
         state.source_context_evidence = loaded.evidence;
         state.source_baseline_evidence = loaded.evidence;
         state.source_repair_attempts = 0u;
@@ -2845,6 +2950,17 @@ namespace epochengine::editor_ai_development_panel
             output.status = state.status_message;
             return output;
         }
+        if (state.active_domain != Domain::tooling && state.iteration_session)
+        {
+            const auto approved = state.iteration_session->approve_candidate(
+                state.iteration_session->identity());
+            if (!approved)
+            {
+                state.status_message = approved.status;
+                output.status = state.status_message;
+                return output;
+            }
+        }
 
         if (state.active_domain == Domain::tooling)
         {
@@ -2880,6 +2996,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The Debug compiler completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::debug_compiler,
+                succeeded,
+                iterationEvidence,
+                false))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         state.source_build_pending = false;
         if (succeeded)
         {
@@ -2928,6 +3056,18 @@ namespace epochengine::editor_ai_development_panel
         {
             state.status_message =
                 "A stale sandbox-test completion was ignored.";
+            output.status = state.status_message;
+            return output;
+        }
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The Debug contract completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::debug_contract,
+                succeeded,
+                iterationEvidence,
+                false))
+        {
             output.status = state.status_message;
             return output;
         }
@@ -2989,6 +3129,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The Release compiler completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::release_compiler,
+                succeeded,
+                iterationEvidence,
+                false))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         state.source_release_build_pending = false;
         if (succeeded)
         {
@@ -3042,6 +3194,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The Release contract completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::release_contract,
+                succeeded,
+                iterationEvidence,
+                false))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         state.source_release_test_pending = false;
         if (succeeded)
         {
@@ -3102,6 +3266,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The HeadlessCI compiler completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::headless_compiler,
+                succeeded,
+                iterationEvidence,
+                false))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         state.source_headless_build_pending = false;
         if (succeeded)
         {
@@ -3159,6 +3335,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The HeadlessCI contract completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::headless_contract,
+                succeeded,
+                iterationEvidence,
+                false))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         state.source_headless_test_pending = false;
         if (succeeded)
         {
@@ -3259,6 +3447,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        const std::string iterationEvidence = status.empty()
+            ? std::string{"The full-validation completion contained no diagnostic text."}
+            : status;
+        if (!state.record_iteration_validation(
+                ai::iteration_session::ValidationActor::full_validation,
+                succeeded,
+                iterationEvidence,
+                true))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         state.source_full_validation_pending = false;
         if (succeeded)
         {

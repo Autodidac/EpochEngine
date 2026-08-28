@@ -4,6 +4,7 @@
  */
 module;
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -50,6 +51,29 @@ export namespace epochengine::updater
         std::string status_message{};
     };
 
+    enum class SourceAuthorityKind : std::uint8_t
+    {
+        unavailable,
+        explicit_checkout,
+        verified_cache
+    };
+
+    struct VerifiedSourceAuthority final
+    {
+        SourceAuthorityKind kind{SourceAuthorityKind::unavailable};
+        std::filesystem::path root{};
+        std::string source_version{};
+        std::string commit{};
+        std::string receipt_digest{};
+        std::string status_message{};
+        bool verified{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return verified;
+        }
+    };
+
     enum class UpdateHandoffMode
     {
         LaunchImmediately,
@@ -69,6 +93,9 @@ export namespace epochengine::updater
     void cleanup_previous_update_artifacts();
     bool update_discovery_contract_self_test();
     ProjectSourceDownloadResult download_project_source_code(const UpdateChannel& channel);
+    [[nodiscard]] VerifiedSourceAuthority resolve_verified_source_authority(
+        const std::filesystem::path& explicit_checkout = {});
+    [[nodiscard]] bool verified_source_authority_contract_self_test();
     std::filesystem::path source_update_log_path();
     std::filesystem::path update_handoff_log_path();
     bool source_update_worker_active();

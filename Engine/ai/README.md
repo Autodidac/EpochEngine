@@ -65,7 +65,20 @@ fine-tune, silently activate, or self-modify any model.
   most two host-diagnosed packet-correction requests before stopping for
   operator refinement. These retries stage no source and cannot bypass proposal
   review or exact digest approval.
-- A contract-proven `ai.iteration_loop` risk/milestone state machine plus one
+- `ai.iteration_session` now coordinates one typed, non-GUI source candidate
+  across a verified source authority, current-byte curated file SHA-256 values,
+  explicit context sharing, manual candidate approval, disposable execution,
+  bounded repair identity, and seven trusted Debug/Release/Headless/full-validation
+  actors. Validation evidence names the exact candidate digest. Source authority
+  resolves an explicit checkout with a readable Git identity first, then an
+  authenticated cached-source receipt, and otherwise fails visibly. In both
+  accepted cases the files actually shared are freshly hashed from current
+  bytes; neither a checkout commit nor an archive receipt claims the extracted
+  working tree stayed immutable.
+- Ambiguous host curation now returns visible `selection_required` and sends no
+  bytes. Engine Development no longer asks a model to invent source paths.
+  Live-source promotion, Git, release, network, and self-approval authority stay
+  outside the coordinator.- A contract-proven `ai.iteration_loop` risk/milestone state machine plus one
   contained Engine Development production slice: Qwen3.8-class proposal,
   digest approval, exact-copy sandbox application, hidden Debug and Release
   compiler passes, build-safe engine contract tests for both configurations, a

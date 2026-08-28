@@ -1,6 +1,6 @@
 # OS AI, MCP, Harness, And Evidence Policy
 
-Epoch source `v0.89.28` does not train or silently activate a model. It can
+Epoch source `v0.89.31` does not train or silently activate a model. It can
 invoke the verified Epoch-local Qwen3.8 installation or offload inference to an
 operator-managed external model machine, and it keeps model transport, MCP
 authority, execution, and evidence as separate concerns. The published
@@ -96,6 +96,41 @@ voice-conversation eye proof.
 capabilities, budgets, cancellation, and evidence attachment. It does not grant
 host authority. Epoch starts no MCP network server or hidden listener.
 
+`ai.mcp_stdio` is the transport-neutral, stdio-first JSON-RPC codec around that
+registry. It accepts and emits one bounded UTF-8 JSON-RPC message per line, with
+no embedded literal newline bytes, and implements the `2025-11-25` MCP
+`initialize` / `notifications/initialized`, `tools/list`, `tools/call`, and
+cancellation shapes. The lifecycle refuses tool operations until both
+initialization stages complete. Session and request identities are typed;
+duplicate IDs, result replay, excessive byte/depth/field/tool/call/hop budgets,
+nested model arguments, and model-selected paths, commands, URLs, Git, release,
+promotion, or approval fields fail closed. Tool discovery is filtered by the
+host-granted capabilities, and tool calls are still revalidated through the
+existing exact session capability and per-call approval authority plus optional
+host validation hooks.
+
+The codec owns no pipe, process, executable discovery, socket, listener, or tool
+executor. It yields an immutable validated pending call for a separately
+authorized host dispatcher and encodes one bounded terminal result. Connecting
+those bytes to an operator-approved child-process stdio pump remains separate
+integration work.
+
+`ai.iteration_session` is the non-GUI coordinator for one bounded source
+candidate. The trusted host supplies the selected model, verified authority,
+objective, and files; the coordinator rehashes every curated current file before
+accepting the scope. A cached authority receipt preserves the authenticated
+archive version, commit, format, and archive SHA-256 provenance, but it is not a
+claim that extracted files remained unchanged. An explicit checkout may also be
+dirty relative to its reported Git commit. Current curated-file digests are the
+source bytes authorized for that request.
+
+The default policy is `manual_each_candidate`. The data type reserves
+`auto_validate_within_approved_scope`, but no editor route enables it and no
+candidate can promote itself to live source. The coordinator exposes a bounded
+escaped report and fail-closed resume primitive; durable cross-process report
+storage/restoration is not wired in this pass and must not be claimed. The MCP
+stdio codec remains transport-only; connecting it to this coordinator is a
+separate host-adapter gate.
 `ai.development_guard` owns the development authority state machine. Its inputs
 are bounded data, not shell commands:
 

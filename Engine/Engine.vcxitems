@@ -308,6 +308,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.session.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.voice_session.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_stdio.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.eval.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.engine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx" />
@@ -659,12 +660,17 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_guard.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_executor.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_loop.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_session.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_proposal_codec.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_executor.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio_contract.cpp" />
 
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.task_graph.ixx" />
 
