@@ -13,6 +13,8 @@ module;
 
 module ai.mcp_orchestrator_bridge;
 
+import ai.iteration_campaign_scheduler;
+
 namespace epochengine::ai::mcp_orchestrator_bridge
 {
     namespace
@@ -405,6 +407,6 @@ namespace epochengine::ai::mcp_orchestrator_bridge
                     "late plan", {}, "Late result."), external_orchestrator).code
                 == Code::stale_state;
         fs::remove_all(root, ec);
-        return ok;
+        return ok && iteration_campaign_scheduler::run_contract();
     }
 }
