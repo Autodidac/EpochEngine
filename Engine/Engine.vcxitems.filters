@@ -1328,6 +1328,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_orchestrator_bridge.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_bundle.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_patch_adapter.ixx">
+      <Filter>Module Files\epochengine\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_validation_adapter.ixx">
+      <Filter>Module Files\epochengine\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_proposal_codec.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation_contract.cpp" />
@@ -1350,6 +1356,18 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter_contract.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter_contract.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp" />

@@ -111,9 +111,15 @@ host validation hooks.
 
 The codec owns no pipe, process, executable discovery, socket, listener, or tool
 executor. It yields an immutable validated pending call for a separately
-authorized host dispatcher and encodes one bounded terminal result. Connecting
-those bytes to an operator-approved child-process stdio pump remains separate
-integration work.
+authorized host dispatcher and encodes one bounded terminal result.
+
+`ai.mcp_child_host` owns the optional local stdio boundary. It is disabled by
+default and accepts only a host-approved canonical executable, digest, argument
+vector, working root, bounded environment, and explicit start action. The host
+uses injected process and byte-channel ports, never a shell, socket, listener,
+or server. Timeouts, stderr evidence, frame/request budgets, graceful stop,
+force-stop, and cancellation remain host-owned. Its contracts use fake ports
+and launch no process.
 
 `ai.iteration_session` is the non-GUI coordinator for one bounded source
 candidate. The trusted host supplies the selected model, verified authority,
@@ -126,11 +132,51 @@ source bytes authorized for that request.
 
 The default policy is `manual_each_candidate`. The data type reserves
 `auto_validate_within_approved_scope`, but no editor route enables it and no
-candidate can promote itself to live source. The coordinator exposes a bounded
-escaped report and fail-closed resume primitive; durable cross-process report
-storage/restoration is not wired in this pass and must not be claimed. The MCP
-stdio codec remains transport-only; connecting it to this coordinator is a
-separate host-adapter gate.
+candidate can promote itself to live source.
+
+The durable orchestration pipeline is now source- and contract-complete:
+
+- `ai.project_profile` strictly decodes generated-project choices for disabled,
+  Epoch-local, shared, or external MCP operation. It preserves
+  `engine_source_write=false` and rejects autostart, listener, server, network,
+  or invented provider authority.
+- `ai.iteration_campaign` stores bounded campaign reports atomically beneath the
+  admitted cache root. Resume revalidates source authority, curated-file
+  identity, budgets, generation, and state digest; interrupted work never
+  resumes as trusted evidence.
+- `ai.mcp_campaign`, `ai.mcp_orchestrator_bridge`, and `ai.mcp_child_host` join
+  the strict stdio protocol to campaign/orchestrator actions without moving
+  execution authority into the transport. Read-only inspection is synchronous;
+  every mutation remains an immutable host-pending receipt bound to request,
+  call, campaign, session, generation, state, and evidence digests.
+- `ai.self_iteration_orchestrator` owns the deterministic plan, curated
+  evidence, proposal, manual review, apply decision, sandbox result, validation,
+  checkpoint, resume, and cancellation state machine. Engine-source and
+  generated-project campaigns have distinct authority handles.
+- `ai.source_patch_bundle` owns the narrow text-only unified-diff artifact. Each
+  admitted file is bound to a curated relative path, exact preimage SHA-256,
+  size, encoding, and line-ending policy. Path escapes, binaries, symlinks,
+  duplicate/overlapping hunks, ambiguous input, replay, and partial commits fail
+  closed through an injected disposable-sandbox file port.
+- `ai.iteration_patch_adapter` binds one reviewed bundle and one approved MCP
+  receipt to one disposable sandbox transaction. It exposes per-file/hunk review
+  evidence, verifies postimages, journals stage/commit/evidence transitions, and
+  recovers fail-closed if the host crashes between them.
+- `ai.iteration_validation_adapter` schedules the seven trusted Debug, Release,
+  HeadlessCI, and full-validation actors only through injected host tasks. Every
+  task/result is bound to campaign, session, generation, orchestrator state,
+  candidate, bundle, authority, source commit/tree, toolchain, configuration,
+  task, receipt, and evidence digests. Ordered or explicitly bounded parallel
+  completion, retry budgets, cancellation, crash resume, and stale/replay/
+  forged/out-of-order refusal are contract-proven.
+
+The final adapter reuses `epoch.build_validation` receipts and admission policy.
+It emits deterministic machine-readable admission JSON suitable for later Site
+display or ingestion, but the record always states
+`upload_permitted=false` and `release_permitted=false`. It contains no upload
+credential and grants no Git, updater, publication, promotion, process, network,
+listener, or server authority. A trusted local build host must still perform the
+actual tasks and a separate human-owned publication pass must admit any release.
 `ai.development_guard` owns the development authority state machine. Its inputs
 are bounded data, not shell commands:
 

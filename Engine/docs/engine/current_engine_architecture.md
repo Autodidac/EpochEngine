@@ -228,6 +228,12 @@ storage growth are proven.
   extensions remain explicit human-gated capabilities.
 - OS AI remains operator-selected external tooling with evidence and promotion
   gates; it is not authoritative simulation and cannot silently activate itself.
+  The non-GUI self-iteration spine now has strict project-profile selection,
+  durable campaign restoration, guarded local/external MCP adapters, a
+  deterministic orchestrator, curated text-patch bundles, one-receipt sandbox
+  application, and seven-stage trusted build validation. Machine-readable
+  admission JSON is bound to exact source/build evidence and explicitly grants
+  neither upload nor release authority.
   The exact-content executor narrows approved writes but is not an OS transaction:
   hostile external-writer exclusion, directory crash journaling/durability, and
   complete ACL/xattr/alternate-stream metadata preservation remain unproved.

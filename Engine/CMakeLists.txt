@@ -389,6 +389,10 @@ set(EPOCH_SOURCES
     src/ai/ai.mcp_orchestrator_bridge_contract.cpp
     src/ai/ai.source_patch_bundle.cpp
     src/ai/ai.source_patch_bundle_contract.cpp
+    src/ai/ai.iteration_patch_adapter.cpp
+    src/ai/ai.iteration_patch_adapter_contract.cpp
+    src/ai/ai.iteration_validation_adapter.cpp
+    src/ai/ai.iteration_validation_adapter_contract.cpp
     src/ai/ai.development_proposal_codec.cpp
     src/ai/ai.development_proposal_codec_contract.cpp
     src/ai/ai.mcp_stdio.cpp

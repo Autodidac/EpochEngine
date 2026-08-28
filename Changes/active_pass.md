@@ -1,12 +1,14 @@
 - Engine Development now binds explicitly shared source to a typed non-GUI
-  `ai.iteration_session`: verified checkout/cache authority, current curated
-  file hashes, manual candidate approval, disposable implementation evidence,
-  bounded repairs, and candidate-bound Debug/Release/Headless/full-validation
-  actors. Ambiguous host curation stops at `selection_required` with zero bytes
-  sent. Cached receipts retain authenticated archive provenance while current
-  file hashes remain the actual request authority. Live promotion remains a
-  separate manual transaction; durable cross-process session restoration and
-  MCP dispatch integration remain later gates.- The v0.89.31 source-only updater checkpoint is now the active private-source
+  self-iteration pipeline. Verified checkout/cache authority, current curated
+  hashes, strict project profiles, durable campaign restoration, guarded local
+  or external MCP transport, manual proposal review, one-receipt disposable
+  patch application, bounded repairs, and candidate-bound Debug/Release/
+  Headless/full-validation evidence all retain exact generation and digest
+  bindings. Ambiguous host curation stops at `selection_required` with zero
+  bytes sent. The final local-build aggregate is deterministic Site-readable
+  admission JSON with upload and release authority explicitly false. Live
+  promotion and Site publication remain separate human-owned transactions.
+- The v0.89.31 source-only updater checkpoint is now the active private-source
   authority on Epoch Site v44 from exact Engine commit
   `7dd0be88c53338614fb702583ce2985ecb5c149e`. Source identity and the
   updater-parsed compatibility module advance together while Windows, Linux,

@@ -1330,6 +1330,24 @@ operator approval, bounded lifetimes, cancellation, and evidence. Its private
 4. issue and claim one expiring private capability;
 5. execute only the approved operation and return verified terminal evidence.
 
+The non-GUI self-iteration stack now carries this boundary end to end without
+turning the model transport into an executor. A strict project profile selects
+disabled, local, shared, or external MCP inference; the durable campaign and
+orchestrator restore exact generations and evidence digests; the MCP bridge
+returns mutating work as host-pending receipts; the patch adapter applies only a
+reviewed text bundle inside the disposable sandbox; and the validation adapter
+requests the seven trusted local build stages through injected host tasks. No
+adapter launches a shell, editor, renderer, child, or network connection by
+itself.
+
+Successful validation aggregates existing `epoch.build_validation` receipts
+into deterministic Site-readable JSON bound to the exact candidate, bundle,
+authority, source commit/tree, toolchain, and configuration. This is admission
+evidence, not publication authority: upload and release permissions are always
+false, and Site ingestion remains a separate explicitly authorized operation.
+Generated-project self-iteration uses the same mechanics only when its project
+profile enables it; engine-source authority is never inherited by that project.
+
 `editor.ai_development_controller` maps production calls to trusted monotonic
 time, serializes execution entry, and rejects caller-driven backdating. Before a
 source request reaches a model, the trusted host tokenizes the operator objective,

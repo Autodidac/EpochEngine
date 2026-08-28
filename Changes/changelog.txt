@@ -1,4 +1,14 @@
 ## [v0.89.31] - EpochEditor source-update compatibility checkpoint
+- Complete the non-GUI self-iteration production spine: strict generated-project
+  profiles, durable campaign reports, guarded local/external MCP campaign
+  adapters, deterministic orchestration, curated unified-diff bundles, one-
+  receipt disposable sandbox application, and seven-stage trusted build
+  validation. Crash resume, retry/cancellation budgets, exact campaign/session/
+  generation/state/candidate/bundle/authority/source/toolchain/configuration
+  bindings, and stale/replay/out-of-order/forged refusal are build-safe contract
+  proven. The aggregate reuses `epoch.build_validation` and emits deterministic
+  Site-readable admission JSON with upload/release authority always false; it
+  performs no Git, publication, updater, network, listener, or server action.
 - Add the reusable non-GUI `ai.iteration_session` coordinator and connect Engine
   Development to verified source authority rather than the runtime directory.
   Explicit checkouts carry a validated Git identity; authenticated cached
