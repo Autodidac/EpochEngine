@@ -36,6 +36,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -59,6 +60,7 @@ import core.context;
 import render.canvas2d;
 import render.canvas2d_cpu;
 import render.canvas2d_presentation;
+import render.canvas2d_evidence;
 import render.canvas2d_limits;
 import render.canvas2d_runtime;
 import render.device;
@@ -838,6 +840,202 @@ namespace epochengine::vulkancontext
         state.frameSequence = 0u;
         state.clearLetterbox = false;
         state.refusalLogged = false;
+        state.imageTransferSource = false;
+        state.evidenceContentHash = 0u;
+        state.evidenceFrames = 0u;
+        state.evidenceTerminal = false;
+    }
+    void Application::captureCanvas2DEvidence(
+        Canvas2DContextState& state,
+        const canvas2d::runtime::PreparedSceneView& prepared) noexcept
+    {
+        if (!prepared || !prepared.frame || !prepared.raster || !state.ready
+            || !state.image || !state.imageTransferSource)
+            return;
+        if (prepared.content_hash != state.evidenceContentHash)
+        {
+            state.evidenceContentHash = prepared.content_hash;
+            state.evidenceFrames = 0u;
+            state.evidenceTerminal = false;
+        }
+        if (!core::cli::capture_requested || state.evidenceTerminal)
+            return;
+        ++state.evidenceFrames;
+        const std::uint32_t warmupFrames = (std::max)(
+            std::uint32_t{1}, core::cli::capture_warmup_frames);
+        if (state.evidenceFrames < warmupFrames)
+            return;
+        state.evidenceTerminal = true;
+
+        try
+        {
+            const canvas2d::cpu::Image& reference = prepared.raster->canvas;
+            const std::uint64_t byteCount =
+                static_cast<std::uint64_t>(reference.extent.width)
+                    * reference.extent.height
+                    * sizeof(canvas2d::cpu::Rgba8);
+            if (!reference.valid() || byteCount == 0u
+                || byteCount > (std::numeric_limits<std::size_t>::max)())
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence extent is invalid.");
+
+            std::vector<vk::Fence> priorFrameFences{};
+            priorFrameFences.reserve(inFlightFences.size());
+            for (const auto& fence : inFlightFences)
+            {
+                if (fence)
+                    priorFrameFences.push_back(*fence);
+            }
+            if (!priorFrameFences.empty()
+                && device->waitForFences(
+                    static_cast<std::uint32_t>(priorFrameFences.size()),
+                    priorFrameFences.data(), VK_TRUE,
+                    (std::numeric_limits<std::uint64_t>::max)())
+                    != vk::Result::eSuccess)
+            {
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence frame synchronization failed.");
+            }
+
+            auto [stagingBuffer, stagingMemory] = createBuffer(
+                static_cast<vk::DeviceSize>(byteCount),
+                vk::BufferUsageFlagBits::eTransferDst,
+                vk::MemoryPropertyFlagBits::eHostVisible
+                    | vk::MemoryPropertyFlagBits::eHostCoherent);
+            vk::UniqueCommandBuffer command = beginSingleTimeCommands();
+
+            vk::ImageMemoryBarrier toTransfer{};
+            toTransfer.oldLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toTransfer.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+            toTransfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            toTransfer.image = *state.image;
+            toTransfer.subresourceRange = vk::ImageSubresourceRange{
+                vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u};
+            toTransfer.srcAccessMask = vk::AccessFlagBits::eShaderRead;
+            toTransfer.dstAccessMask = vk::AccessFlagBits::eTransferRead;
+            command->pipelineBarrier(
+                vk::PipelineStageFlagBits::eFragmentShader,
+                vk::PipelineStageFlagBits::eTransfer,
+                {}, nullptr, nullptr, toTransfer);
+
+            vk::BufferImageCopy copy{};
+            copy.imageSubresource = vk::ImageSubresourceLayers{
+                vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u};
+            copy.imageExtent = vk::Extent3D{
+                reference.extent.width, reference.extent.height, 1u};
+            command->copyImageToBuffer(
+                *state.image, vk::ImageLayout::eTransferSrcOptimal,
+                *stagingBuffer, copy);
+
+            vk::ImageMemoryBarrier toSample = toTransfer;
+            toSample.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+            toSample.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            toSample.srcAccessMask = vk::AccessFlagBits::eTransferRead;
+            toSample.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+            command->pipelineBarrier(
+                vk::PipelineStageFlagBits::eTransfer,
+                vk::PipelineStageFlagBits::eFragmentShader,
+                {}, nullptr, nullptr, toSample);
+            if (command->end() != vk::Result::eSuccess)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence command finalization failed.");
+
+            auto fenceResult = device->createFenceUnique(vk::FenceCreateInfo{});
+            if (fenceResult.result != vk::Result::eSuccess || !fenceResult.value)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence fence creation failed.");
+            vk::CommandBuffer rawCommand = *command;
+            vk::SubmitInfo submit{};
+            submit.commandBufferCount = 1u;
+            submit.pCommandBuffers = &rawCommand;
+            if (graphicsQueue.submit(1u, &submit, *fenceResult.value)
+                != vk::Result::eSuccess)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence submit failed.");
+            vk::Fence fence = *fenceResult.value;
+            if (device->waitForFences(
+                    1u, &fence, VK_TRUE,
+                    (std::numeric_limits<std::uint64_t>::max)())
+                != vk::Result::eSuccess)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence fence wait failed.");
+
+            auto [mapResult, mapped] = device->mapMemory(
+                *stagingMemory, 0u, static_cast<vk::DeviceSize>(byteCount));
+            if (mapResult != vk::Result::eSuccess || !mapped)
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D evidence staging map failed.");
+
+            struct MappedHook final
+            {
+                canvas2d::evidence::MappedNativeRows rows{};
+            } hook{{
+                reference.extent,
+                static_cast<std::uint64_t>(reference.extent.width) * 4u,
+                {static_cast<const std::byte*>(mapped),
+                    static_cast<std::size_t>(byteCount)},
+                canvas2d::evidence::PixelOrigin::top_left,
+                canvas2d::evidence::NativeChannelOrder::rgba}};
+            const auto describe = [](
+                void* user,
+                const canvas2d::evidence::NativeReadbackRegion& region) noexcept
+            {
+                const auto* value = static_cast<const MappedHook*>(user);
+                return value && value->rows.extent == region.framebuffer_extent
+                    ? canvas2d::evidence::NativeReadbackLayout{
+                        region.viewport.width,
+                        canvas2d::evidence::PixelOrigin::top_left}
+                    : canvas2d::evidence::NativeReadbackLayout{};
+            };
+            const auto read = [](
+                void* user,
+                const canvas2d::evidence::NativeReadbackRequest& request) noexcept
+            {
+                const auto* value = static_cast<const MappedHook*>(user);
+                return value
+                    && request.region.viewport.x == 0
+                    && request.region.viewport.y == 0
+                    && request.region.viewport.width == value->rows.extent.width
+                    && request.region.viewport.height == value->rows.extent.height
+                    && canvas2d::evidence::copy_mapped_rgba8(
+                        value->rows, request.layout, request.destination);
+            };
+            const auto result = canvas2d::evidence::compare_native_pixels(
+                reference,
+                prepared.raster->canvas_hash,
+                {
+                    reference.extent,
+                    {0, 0, reference.extent.width, reference.extent.height}},
+                {&hook, describe, read},
+                canvas2d::evidence::PixelEvidencePolicy{
+                    .channel_tolerance = 0u});
+            device->unmapMemory(*stagingMemory);
+
+            const std::string message =
+                "Canvas2D native-upload frame="
+                + std::to_string(prepared.frame->frame_sequence)
+                + " content=" + std::to_string(prepared.content_hash)
+                + " result=" + std::string{
+                    canvas2d::evidence::pixel_evidence_code_name(result.code)}
+                + " pixels=" + std::to_string(result.pixels_compared)
+                + " outliers=" + std::to_string(result.outlier_pixels);
+            logger::get(kLogSys).log(
+                result.matched()
+                    ? logger::LogLevel::INFO
+                    : logger::LogLevel::WARN,
+                message, std::source_location::current());
+        }
+        catch (const std::exception& error)
+        {
+            log_error(epochengine::format_text(
+                "Canvas2D native-upload evidence refused: {}", error.what()));
+        }
+        catch (...)
+        {
+            log_error(
+                "Canvas2D native-upload evidence refused with an unknown error.");
+        }
     }
 
     bool Application::prepareCanvas2D() noexcept {
@@ -964,7 +1162,8 @@ namespace epochengine::vulkancontext
             state.imageExtent != image.extent || !state.image ||
             !state.imageView ||
             state.nearestDescriptorSets.size() != swapChainImages.size() ||
-            state.linearDescriptorSets.size() != swapChainImages.size();
+            state.linearDescriptorSets.size() != swapChainImages.size() ||
+            (core::cli::capture_requested && !state.imageTransferSource);
         const bool imageReplacement = nativeResourcesMissing ||
             state.canvasHash != prepared.raster->canvas_hash;
         const bool uploadChanged = imageReplacement;
@@ -1000,6 +1199,8 @@ namespace epochengine::vulkancontext
             imageInfo.tiling = vk::ImageTiling::eOptimal;
             imageInfo.usage = vk::ImageUsageFlagBits::eTransferDst |
                               vk::ImageUsageFlagBits::eSampled;
+            if (core::cli::capture_requested)
+              imageInfo.usage |= vk::ImageUsageFlagBits::eTransferSrc;
             imageInfo.sharingMode = vk::SharingMode::eExclusive;
             imageInfo.initialLayout = vk::ImageLayout::eUndefined;
             auto imageResult = device->createImageUnique(imageInfo);
@@ -1207,6 +1408,8 @@ namespace epochengine::vulkancontext
           state.imageExtent = image.extent;
           state.canvasHash = prepared.raster->canvas_hash;
         }
+            state.imageTransferSource =
+                core::cli::capture_requested;
 
         createCanvas2DPipeline(state);
 
@@ -1294,6 +1497,8 @@ namespace epochengine::vulkancontext
             state.vertexBufferMemory = std::move(nextVertexMemory);
           }
         }
+        if (state.ready)
+          captureCanvas2DEvidence(state, prepared);
 
         state.surface = nextSurface;
         state.destination = nextDestination;

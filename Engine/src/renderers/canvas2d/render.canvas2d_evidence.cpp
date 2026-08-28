@@ -276,6 +276,49 @@ namespace epochengine::canvas2d::evidence
             : PixelEvidenceCode::mismatch;
         return result;
     }
+    bool copy_mapped_rgba8(
+        MappedNativeRows source,
+        NativeReadbackLayout destinationLayout,
+        std::span<cpu::Rgba8> destination) noexcept
+    {
+        if (!source.valid() || !destinationLayout.valid_for(source.extent))
+            return false;
+        const std::uint64_t required =
+            destinationLayout.required_pixels(source.extent);
+        if (required == 0 || required > destination.size())
+            return false;
+
+        for (std::uint32_t logicalY = 0;
+            logicalY < source.extent.height;
+            ++logicalY)
+        {
+            const std::uint32_t sourceY =
+                source.origin == PixelOrigin::top_left
+                ? logicalY
+                : source.extent.height - logicalY - 1u;
+            const std::uint32_t destinationY =
+                destinationLayout.origin == PixelOrigin::top_left
+                ? logicalY
+                : source.extent.height - logicalY - 1u;
+            const auto* const sourceRow = source.bytes.data()
+                + static_cast<std::size_t>(sourceY * source.row_pitch_bytes);
+            cpu::Rgba8* const destinationRow = destination.data()
+                + static_cast<std::size_t>(destinationY)
+                    * destinationLayout.row_stride_pixels;
+            for (std::uint32_t x = 0; x < source.extent.width; ++x)
+            {
+                const auto* const pixel = sourceRow + x * 4u;
+                const std::uint8_t c0 = std::to_integer<std::uint8_t>(pixel[0]);
+                const std::uint8_t c1 = std::to_integer<std::uint8_t>(pixel[1]);
+                const std::uint8_t c2 = std::to_integer<std::uint8_t>(pixel[2]);
+                const std::uint8_t alpha = std::to_integer<std::uint8_t>(pixel[3]);
+                destinationRow[x] = source.channels == NativeChannelOrder::rgba
+                    ? cpu::Rgba8{c0, c1, c2, alpha}
+                    : cpu::Rgba8{c2, c1, c0, alpha};
+            }
+        }
+        return true;
+    }
 
     PixelEvidenceResult compare_native_pixels(
         const cpu::Image& reference,
@@ -549,6 +592,56 @@ namespace epochengine::canvas2d::evidence
         {
             return PixelEvidenceContractFailure::native_origin;
         }
+        std::array<std::byte, 24> mappedBytes{};
+        const auto storeMapped = [&](std::size_t offset, cpu::Rgba8 pixel)
+        {
+            mappedBytes[offset + 0u] = static_cast<std::byte>(pixel.r);
+            mappedBytes[offset + 1u] = static_cast<std::byte>(pixel.g);
+            mappedBytes[offset + 2u] = static_cast<std::byte>(pixel.b);
+            mappedBytes[offset + 3u] = static_cast<std::byte>(pixel.a);
+        };
+        storeMapped(0u, reference.pixels[0]);
+        storeMapped(4u, reference.pixels[1]);
+        storeMapped(12u, reference.pixels[2]);
+        storeMapped(16u, reference.pixels[3]);
+        std::array<cpu::Rgba8, 6> mappedDestination{};
+        if (!copy_mapped_rgba8(
+                MappedNativeRows{
+                    reference.extent, 12u, mappedBytes,
+                    PixelOrigin::top_left, NativeChannelOrder::rgba},
+                {3u, PixelOrigin::top_left}, mappedDestination)
+            || mappedDestination[0] != reference.pixels[0]
+            || mappedDestination[1] != reference.pixels[1]
+            || mappedDestination[3] != reference.pixels[2]
+            || mappedDestination[4] != reference.pixels[3])
+        {
+            return PixelEvidenceContractFailure::mapped_row_pitch;
+        }
+        if (copy_mapped_rgba8(
+                MappedNativeRows{
+                    reference.extent, 7u, mappedBytes,
+                    PixelOrigin::top_left, NativeChannelOrder::rgba},
+                {2u, PixelOrigin::top_left}, mappedDestination))
+            return PixelEvidenceContractFailure::mapped_invalid;
+        if (copy_mapped_rgba8(
+                MappedNativeRows{
+                    reference.extent, 12u, mappedBytes,
+                    PixelOrigin::top_left, NativeChannelOrder::rgba},
+                {3u, PixelOrigin::top_left},
+                std::span<cpu::Rgba8>{mappedDestination}.first(4u)))
+            return PixelEvidenceContractFailure::mapped_capacity;
+        std::swap(mappedBytes[0], mappedBytes[2]);
+        std::swap(mappedBytes[4], mappedBytes[6]);
+        std::swap(mappedBytes[12], mappedBytes[14]);
+        std::swap(mappedBytes[16], mappedBytes[18]);
+        if (!copy_mapped_rgba8(
+                MappedNativeRows{
+                    reference.extent, 12u, mappedBytes,
+                    PixelOrigin::top_left, NativeChannelOrder::bgra},
+                {2u, PixelOrigin::top_left}, mappedDestination)
+            || !std::equal(reference.pixels.begin(), reference.pixels.end(),
+                mappedDestination.begin()))
+            return PixelEvidenceContractFailure::mapped_bgra;
 
         FakeNativeReadback paddedNative{
             .layout = {3, PixelOrigin::top_left},

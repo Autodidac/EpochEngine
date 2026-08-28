@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
 module;
+#include <cstddef>
 
 #include <cstdint>
 #include <limits>
@@ -101,6 +102,49 @@ export namespace epochengine::canvas2d::evidence
         NativeReadbackLayout layout{};
         std::span<cpu::Rgba8> destination{};
     };
+    enum class NativeChannelOrder : std::uint8_t
+    {
+        rgba,
+        bgra
+    };
+
+    [[nodiscard]] constexpr bool valid(NativeChannelOrder order) noexcept
+    {
+        return order == NativeChannelOrder::rgba
+            || order == NativeChannelOrder::bgra;
+    }
+
+    struct MappedNativeRows final
+    {
+        CanvasExtent extent{};
+        std::uint64_t row_pitch_bytes{};
+        std::span<const std::byte> bytes{};
+        PixelOrigin origin{PixelOrigin::top_left};
+        NativeChannelOrder channels{NativeChannelOrder::rgba};
+
+        [[nodiscard]] constexpr bool valid() const noexcept
+        {
+            if (extent.empty() || !evidence::valid(origin)
+                || !evidence::valid(channels))
+            {
+                return false;
+            }
+            const std::uint64_t tightRow =
+                static_cast<std::uint64_t>(extent.width) * 4u;
+            if (row_pitch_bytes < tightRow)
+                return false;
+            const std::uint64_t required =
+                static_cast<std::uint64_t>(extent.height - 1u)
+                    * row_pitch_bytes
+                + tightRow;
+            return required <= bytes.size();
+        }
+    };
+
+    [[nodiscard]] bool copy_mapped_rgba8(
+        MappedNativeRows source,
+        NativeReadbackLayout destinationLayout,
+        std::span<cpu::Rgba8> destination) noexcept;
 
     using DescribeNativeReadback = NativeReadbackLayout (*)(
         void*, const NativeReadbackRegion&) noexcept;
@@ -236,7 +280,11 @@ export namespace epochengine::canvas2d::evidence
         native_capacity,
         native_refusal,
         native_origin,
-        native_stride
+        native_stride,
+        mapped_invalid,
+        mapped_capacity,
+        mapped_row_pitch,
+        mapped_bgra
     };
 
     [[nodiscard]] constexpr std::string_view
@@ -274,6 +322,10 @@ export namespace epochengine::canvas2d::evidence
         case PixelEvidenceContractFailure::native_origin:
             return "native_origin";
         case PixelEvidenceContractFailure::native_stride:
+        case PixelEvidenceContractFailure::mapped_invalid: return "mapped_invalid";
+        case PixelEvidenceContractFailure::mapped_capacity: return "mapped_capacity";
+        case PixelEvidenceContractFailure::mapped_row_pitch: return "mapped_row_pitch";
+        case PixelEvidenceContractFailure::mapped_bgra: return "mapped_bgra";
             return "native_stride";
         }
         return "unknown";

@@ -76,6 +76,8 @@ import context.commandqueue;
 import core.context;
 import input.engine;
 import render.canvas2d;
+import render.canvas2d_evidence;
+import render.canvas2d_cpu;
 import render.canvas2d_runtime;
 import render.device;
 import vulkan.camera;
@@ -130,6 +132,9 @@ namespace epochengine::vulkancontext
         void createGuiPipeline();
         void createCanvas2DPipeline(Canvas2DContextState& canvasState);
         bool prepareCanvas2D() noexcept;
+        void captureCanvas2DEvidence(
+            Canvas2DContextState& state,
+            const canvas2d::runtime::PreparedSceneView& prepared) noexcept;
         void recordCanvas2DCommands(vk::CommandBuffer cmd, std::uint32_t imageIndex);
         void recordCommandBuffer(std::uint32_t imageIndex);
         void recordGuiCommands(vk::CommandBuffer cmd, std::uint32_t imageIndex, struct GuiContextState& guiState);
@@ -442,6 +447,10 @@ namespace epochengine::vulkancontext
             bool clearLetterbox{};
             bool ready{};
             bool refusalLogged{};
+            bool imageTransferSource{};
+            std::uint64_t evidenceContentHash{};
+            std::uint32_t evidenceFrames{};
+            bool evidenceTerminal{};
         };
 
         struct GuiContextState

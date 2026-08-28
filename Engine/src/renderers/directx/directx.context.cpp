@@ -17,6 +17,7 @@ module;
 #include <memory>
 #include <mutex>
 #include <source_location>
+#include <string>
 #include <span>
 #include <unordered_map>
 #include <utility>
@@ -34,6 +35,7 @@ import atlas.texture;
 import render.canvas2d;
 import render.canvas2d_cpu;
 import render.canvas2d_limits;
+import render.canvas2d_evidence;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
 import render.canvas2d_scene;
@@ -404,6 +406,163 @@ namespace epochengine::directxcontext::detail
             }
             return true;
         }
+        [[nodiscard]] static canvas2d::evidence::NativeReadbackLayout
+            describe_native_readback(
+                void* user,
+                const canvas2d::evidence::NativeReadbackRegion& region) noexcept
+        {
+            auto* const canvas = static_cast<DirectXCanvasState*>(user);
+            if (!canvas || !canvas->owner || !canvas->owner->swapchain
+                || !canvas->owner->device || !canvas->owner->immediate
+                || region.framebuffer_extent.width
+                    != static_cast<std::uint32_t>(canvas->owner->width)
+                || region.framebuffer_extent.height
+                    != static_cast<std::uint32_t>(canvas->owner->height))
+            {
+                return {};
+            }
+            return {
+                region.viewport.width,
+                canvas2d::evidence::PixelOrigin::top_left};
+        }
+
+        [[nodiscard]] static bool read_native_pixels(
+            void* user,
+            const canvas2d::evidence::NativeReadbackRequest& request) noexcept
+        {
+            auto* const canvas = static_cast<DirectXCanvasState*>(user);
+            if (!canvas || !canvas->owner || request.region.viewport.x < 0
+                || request.region.viewport.y < 0)
+            {
+                return false;
+            }
+            DirectXState& state = *canvas->owner;
+            if (!state.swapchain || !state.device || !state.immediate)
+                return false;
+
+            ID3D11Texture2D* backBuffer{};
+            HRESULT hr = state.swapchain->GetBuffer(
+                0u, __uuidof(ID3D11Texture2D),
+                reinterpret_cast<void**>(&backBuffer));
+            if (!succeeded(hr) || !backBuffer)
+                return false;
+
+            D3D11_TEXTURE2D_DESC sourceDesc{};
+            backBuffer->GetDesc(&sourceDesc);
+            const auto& viewport = request.region.viewport;
+            const std::uint64_t right =
+                static_cast<std::uint64_t>(viewport.x) + viewport.width;
+            const std::uint64_t bottom =
+                static_cast<std::uint64_t>(viewport.y) + viewport.height;
+            if (sourceDesc.Format != DXGI_FORMAT_R8G8B8A8_UNORM
+                || sourceDesc.SampleDesc.Count != 1u
+                || right > sourceDesc.Width || bottom > sourceDesc.Height)
+            {
+                safe_release(backBuffer);
+                return false;
+            }
+
+            D3D11_TEXTURE2D_DESC stagingDesc = sourceDesc;
+            stagingDesc.Width = viewport.width;
+            stagingDesc.Height = viewport.height;
+            stagingDesc.MipLevels = 1u;
+            stagingDesc.ArraySize = 1u;
+            stagingDesc.Usage = D3D11_USAGE_STAGING;
+            stagingDesc.BindFlags = 0u;
+            stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            stagingDesc.MiscFlags = 0u;
+            ID3D11Texture2D* staging{};
+            hr = state.device->CreateTexture2D(&stagingDesc, nullptr, &staging);
+            if (!succeeded(hr) || !staging)
+            {
+                safe_release(backBuffer);
+                return false;
+            }
+
+            const D3D11_BOX sourceBox{
+                static_cast<UINT>(viewport.x),
+                static_cast<UINT>(viewport.y),
+                0u,
+                static_cast<UINT>(right),
+                static_cast<UINT>(bottom),
+                1u};
+            state.immediate->CopySubresourceRegion(
+                staging, 0u, 0u, 0u, 0u, backBuffer, 0u, &sourceBox);
+            D3D11_MAPPED_SUBRESOURCE mapped{};
+            hr = state.immediate->Map(
+                staging, 0u, D3D11_MAP_READ, 0u, &mapped);
+            bool copied{};
+            if (succeeded(hr) && mapped.pData)
+            {
+                const std::uint64_t mappedBytes =
+                    static_cast<std::uint64_t>(mapped.RowPitch)
+                        * (viewport.height - 1u)
+                    + static_cast<std::uint64_t>(viewport.width) * 4u;
+                copied = canvas2d::evidence::copy_mapped_rgba8(
+                    {
+                        {viewport.width, viewport.height},
+                        mapped.RowPitch,
+                        {static_cast<const std::byte*>(mapped.pData),
+                            static_cast<std::size_t>(mappedBytes)},
+                        canvas2d::evidence::PixelOrigin::top_left,
+                        canvas2d::evidence::NativeChannelOrder::rgba},
+                    request.layout,
+                    request.destination);
+                state.immediate->Unmap(staging, 0u);
+            }
+            safe_release(staging);
+            safe_release(backBuffer);
+            return copied;
+        }
+
+        void capture_evidence(
+            const canvas2d::runtime::PreparedSceneView& prepared,
+            canvas2d::presentation::PresentationSurface surface) noexcept
+        {
+            if (!prepared || !prepared.frame || !prepared.raster)
+                return;
+            if (prepared.content_hash != evidenceContentHash)
+            {
+                evidenceContentHash = prepared.content_hash;
+                evidenceFrames = 0u;
+                evidenceTerminal = false;
+            }
+            if (!core::cli::capture_requested || evidenceTerminal)
+                return;
+            ++evidenceFrames;
+            const std::uint32_t warmupFrames = (std::max)(
+                std::uint32_t{1}, core::cli::capture_warmup_frames);
+            if (evidenceFrames < warmupFrames)
+                return;
+
+            canvas2d::evidence::PixelEvidencePolicy policy{};
+            policy.channel_tolerance =
+                prepared.frame->compose.presentation_filter
+                    == FilterMode::nearest ? 0u : 1u;
+            const auto result = canvas2d::evidence::compare_native_pixels(
+                prepared.raster->presentation,
+                prepared.raster->presentation_hash,
+                {surface.framebuffer_extent, surface.viewport},
+                {this, &DirectXCanvasState::describe_native_readback,
+                    &DirectXCanvasState::read_native_pixels},
+                policy);
+            evidenceTerminal = true;
+            const std::string message =
+                "frame=" + std::to_string(prepared.frame->frame_sequence)
+                + " content=" + std::to_string(prepared.content_hash)
+                + " result=" + std::string{
+                    canvas2d::evidence::pixel_evidence_code_name(result.code)}
+                + " pixels=" + std::to_string(result.pixels_compared)
+                + " outliers=" + std::to_string(result.outlier_pixels)
+                + " max_channel_error="
+                + std::to_string(result.maximum_channel_error);
+            logger::get(kLogDirectX).log(
+                result.matched()
+                    ? logger::LogLevel::INFO
+                    : logger::LogLevel::WARN,
+                message,
+                std::source_location::current());
+        }
 
         [[nodiscard]] static bool present_native(
             void* user,
@@ -558,11 +717,14 @@ namespace epochengine::directxcontext::detail
                     executionLimits.raster);
             if (!prepared)
                 return false;
-            return static_cast<bool>(
+            const bool presented = static_cast<bool>(
                 presenter.present(
                     *prepared.frame,
                     *prepared.raster,
                     surface));
+            if (presented)
+                capture_evidence(prepared, surface);
+            return presented;
         }
 
         DirectXState* owner{};
@@ -574,6 +736,9 @@ namespace epochengine::directxcontext::detail
         ID3D11SamplerState* nearestSampler{};
         ID3D11SamplerState* linearSampler{};
         ID3D11BlendState* premultipliedBlend{};
+        std::uint64_t evidenceContentHash{};
+        std::uint32_t evidenceFrames{};
+        bool evidenceTerminal{};
     };
 
     void release_canvas2d_state(DirectXState& state) noexcept

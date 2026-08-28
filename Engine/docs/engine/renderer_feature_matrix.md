@@ -94,7 +94,7 @@ order.
 | Audio | Partial | Logical clips/sources/buses/listener/scheduling, deterministic stereo mixing, a physical-device boundary, and generation-checked project playback sessions are contract-proven. The optional SDL3 device remains renderer-independent across context replacement; decoded project assets, authored cue bindings, editor controls, and approved live physical-output proof remain incomplete. |
 | Sparse voxel/water | Partial | Deterministic sparse voxel storage and explicit-time analytic water queries/projection exist. Generation/residency, mesh/render resources, buoyancy, and native presentation are Missing. |
 | Text and GUI | Partial | Engine GUI rendering and expanded EpochGui portable control primitives exist. Engine-wide integration, professional docking, complete text behavior, and portable profile exclusion remain work. |
-| Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. One bounded caller-buffer coordinator normalizes origin and stride while refusing absent contexts, excessive capacity, or native readback failure. OpenGL, SDL3, SFML3, and Raylib3 invoke it only for explicit capture evidence; normal frames do not pay that readback cost. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
+| Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. One bounded caller-buffer coordinator normalizes origin, channel order, padded native row pitch, and destination stride while refusing absent contexts, excessive capacity, or native readback failure. OpenGL, SDL3, SFML3, Raylib3, DirectX/D3D11, and Vulkan invoke it only for explicit capture evidence; normal frames do not pay that readback cost. D3D11 stages and maps the composed scene viewport before GUI/top-layer/present. Vulkan stages and fence-synchronizes the native Canvas2D upload before frame command recording because its Canvas2D and GUI draws share one protected render pass; final Vulkan composed-surface comparison therefore remains open. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
 
 Canvas2D native composition now has one deterministic admission policy for
 top-left RGBA8, linear color, premultiplied alpha, clamp-to-edge sampling, and
@@ -127,11 +127,16 @@ readback coordinator are compiled and bounded. OpenGL preserves its scoped GL
 readback state; SDL3 converts `SDL_RenderReadPixels` to tight top-left RGBA8;
 SFML3 crops `copyToImage`; Raylib3 crops its RGBA8 screen image. Each adapter runs
 only on an explicit capture request before GUI/top-layer/present, and Raylib's
-legacy diagnostic probe is likewise capture-gated. Live allocation, drawing,
-project-texture presentation, and pixel agreement still require an approved
-registered-context capture. `Scene surface` records the backend-owned Engine
-Arcade path and stays `Partial` until visual proof. System Info must keep every
-evidence layer separate.
+legacy diagnostic probe is likewise capture-gated. D3D11 copies the exact
+composed scene viewport into a staging texture, normalizes mapped `RowPitch`, and
+compares before GUI/top-layer/present. Vulkan capture-only evidence instead copies
+the backend-owned RGBA8 Canvas upload into a staging buffer and waits one exact
+submission fence before normal frame command recording; it does not split or
+reorder the protected Canvas2D-plus-GUI render pass, so final Vulkan surface
+agreement remains unclaimed. Live allocation, drawing, project-texture
+presentation, and pixel agreement still require an approved registered-context
+capture. `Scene surface` records the backend-owned Engine Arcade path and stays
+`Partial` until visual proof. System Info must keep every evidence layer separate.
 
 ## Scene-Solid Repair Contract
 
