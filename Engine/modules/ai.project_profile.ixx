@@ -16,7 +16,8 @@ export namespace epochengine::ai::project_profile
     {
         disabled,
         epoch_local_qwen38,
-        external_mcp
+        external_mcp,
+        engine_selected
     };
 
     struct Profile final

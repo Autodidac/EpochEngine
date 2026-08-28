@@ -168,6 +168,7 @@ namespace epochengine::ai::project_profile
             case Provider::disabled: return "disabled";
             case Provider::epoch_local_qwen38: return "epoch_local_qwen38";
             case Provider::external_mcp: return "external_mcp";
+            case Provider::engine_selected: return "engine_selected";
             }
             return "disabled";
         }
@@ -180,6 +181,8 @@ namespace epochengine::ai::project_profile
                 return Provider::epoch_local_qwen38;
             if (name == "external_mcp")
                 return Provider::external_mcp;
+            if (name == "engine_selected")
+                return Provider::engine_selected;
             return std::nullopt;
         }
 
@@ -222,18 +225,23 @@ namespace epochengine::ai::project_profile
         const bool enabled = provider != Provider::disabled;
         const bool local = provider == Provider::epoch_local_qwen38;
         const bool external = provider == Provider::external_mcp;
+        const bool selected = provider == Provider::engine_selected;
         return Profile{
             .provider = provider,
             .enabled = enabled,
             .model_binding = local ? "os_model_qwen_3_8_27b"
-                : (external ? "operator_selected_external" : "none"),
+                : (external ? "operator_selected_external"
+                    : (selected ? "engine_selected_runtime_model" : "none")),
             .runtime_binding = local ? "epoch_shared"
-                : (external ? "external_mcp" : "none"),
+                : (external ? "external_mcp"
+                    : (selected ? "epoch_engine_selected" : "none")),
             .inference_transport = local ? "llama_cpp_cli_child_process"
-                : (external ? "operator_managed_openai_compatible" : "none"),
+                : (external ? "operator_managed_openai_compatible"
+                    : (selected ? "engine_selected_existing" : "none")),
             .tool_protocol = "epoch_mcp_v1",
             .endpoint_binding = external
-                ? "operator_selected_runtime_endpoint" : "none",
+                ? "operator_selected_runtime_endpoint"
+                : (selected ? "engine_selected_runtime" : "none"),
             .self_iteration = enabled
                 ? "operator_approved_project_source_only" : "disabled",
             .project_source_write = enabled,

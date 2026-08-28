@@ -773,6 +773,11 @@ namespace epochengine::ai
                     ? "Project selected external MCP/OpenAI-compatible inference; choose the operator-managed model."
                     : "Project selected the existing external MCP/OpenAI-compatible provider.";
                 return;
+            case project_profile::Provider::engine_selected:
+                g_modelUseConfirmedForSession = false;
+                g_modelDetectionStatus =
+                    "Project delegates AI to the engine-selected provider; confirm the current local or external model for this session.";
+                return;
             }
         }
         [[nodiscard]] static std::filesystem::path find_path_executable(std::string_view name)

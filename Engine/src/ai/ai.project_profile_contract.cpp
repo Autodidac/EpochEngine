@@ -15,7 +15,8 @@ namespace epochengine::ai::project_profile
         for (const Provider provider : {
                 Provider::disabled,
                 Provider::epoch_local_qwen38,
-                Provider::external_mcp})
+                Provider::external_mcp,
+                Provider::engine_selected})
         {
             const CodecResult encoded = serialize_profile(make_profile(provider));
             const CodecResult decoded = parse_profile(encoded.canonical_bytes);

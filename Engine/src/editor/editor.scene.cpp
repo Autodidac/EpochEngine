@@ -3792,7 +3792,7 @@ namespace
                     == epochengine::project_ai_iteration::Provision::
                         external_mcp_client
                 ? epochengine::ai::project_profile::Provider::external_mcp
-                : epochengine::ai::project_profile::Provider::disabled);
+                : epochengine::ai::project_profile::Provider::engine_selected);
         const auto defaultAiProfile =
             epochengine::ai::project_profile::serialize_profile(
                 epochengine::ai::project_profile::make_profile(

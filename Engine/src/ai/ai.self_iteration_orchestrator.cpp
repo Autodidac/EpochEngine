@@ -264,7 +264,7 @@ namespace epochengine::ai::self_iteration_orchestrator
             if (!number("transport", raw) || raw > 1u) return false;
             result.transport = static_cast<TransportKind>(raw);
             if (!number("provider", raw)
-                || raw > static_cast<unsigned>(project_profile::Provider::external_mcp)) return false;
+                || raw > static_cast<unsigned>(project_profile::Provider::engine_selected)) return false;
             result.provider = static_cast<project_profile::Provider>(raw);
             std::string decoded{};
             if (!take("host_id", value) || !unescape_field(value, decoded)) return false;
