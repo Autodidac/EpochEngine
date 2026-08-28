@@ -4,10 +4,13 @@
  ************************************************/
 module;
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 export module project.ai_self_iteration_session;
 
@@ -28,7 +31,10 @@ export namespace epochengine::project_ai_iteration_session
         provider_conflict,
         authority_rejected,
         stale_generation,
-        cross_project_checkpoint
+        cross_project_checkpoint,
+        checkpoint_malformed,
+        checkpoint_integrity,
+        checkpoint_noncanonical
     };
 
     [[nodiscard]] constexpr std::string_view code_name(Code code) noexcept
@@ -46,6 +52,9 @@ export namespace epochengine::project_ai_iteration_session
         case Code::stale_generation: return "stale_generation";
         case Code::cross_project_checkpoint:
             return "cross_project_checkpoint";
+        case Code::checkpoint_malformed: return "checkpoint_malformed";
+        case Code::checkpoint_integrity: return "checkpoint_integrity";
+        case Code::checkpoint_noncanonical: return "checkpoint_noncanonical";
         }
         return "unknown";
     }
@@ -92,6 +101,8 @@ export namespace epochengine::project_ai_iteration_session
         std::string descriptor_set_sha256{};
         std::string project_profile_sha256{};
         std::string binding_sha256{};
+        std::string orchestrator_configuration_sha256{};
+        std::string bridge_configuration_sha256{};
         ai::project_profile::Provider concrete_provider{
             ai::project_profile::Provider::disabled};
         std::uint64_t generation{};
@@ -133,6 +144,42 @@ export namespace epochengine::project_ai_iteration_session
         }
     };
 
+    inline constexpr std::uint32_t checkpoint_format_version{1u};
+
+    struct SerializedCheckpoint final
+    {
+        Code code{Code::invalid_request};
+        std::vector<std::uint8_t> canonical_bytes{};
+        std::string sha256{};
+        std::string status{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return code == Code::ready;
+        }
+    };
+
+    struct RestoreExpectation final
+    {
+        std::string project_id{};
+        std::filesystem::path project_root{};
+        std::uint64_t current_generation{};
+        std::string checkpoint_sha256{};
+    };
+
+    struct RestoredCheckpoint final
+    {
+        Code code{Code::invalid_request};
+        Plan plan{};
+        std::string canonical_sha256{};
+        std::string status{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return code == Code::ready;
+        }
+    };
+
     enum class ContractFailure : std::uint8_t
     {
         none,
@@ -144,7 +191,16 @@ export namespace epochengine::project_ai_iteration_session
         descriptor_tamper,
         cross_project,
         stale_generation,
-        authority_boundary
+        authority_boundary,
+        checkpoint_roundtrip,
+        checkpoint_truncated,
+        checkpoint_trailing,
+        checkpoint_tamper,
+        checkpoint_noncanonical,
+        checkpoint_cross_project,
+        checkpoint_stale,
+        checkpoint_unresolved,
+        checkpoint_authority
     };
 
     [[nodiscard]] constexpr std::string_view contract_failure_name(
@@ -162,6 +218,19 @@ export namespace epochengine::project_ai_iteration_session
         case ContractFailure::cross_project: return "cross_project";
         case ContractFailure::stale_generation: return "stale_generation";
         case ContractFailure::authority_boundary: return "authority_boundary";
+        case ContractFailure::checkpoint_roundtrip: return "checkpoint_roundtrip";
+        case ContractFailure::checkpoint_truncated: return "checkpoint_truncated";
+        case ContractFailure::checkpoint_trailing: return "checkpoint_trailing";
+        case ContractFailure::checkpoint_tamper: return "checkpoint_tamper";
+        case ContractFailure::checkpoint_noncanonical:
+            return "checkpoint_noncanonical";
+        case ContractFailure::checkpoint_cross_project:
+            return "checkpoint_cross_project";
+        case ContractFailure::checkpoint_stale: return "checkpoint_stale";
+        case ContractFailure::checkpoint_unresolved:
+            return "checkpoint_unresolved";
+        case ContractFailure::checkpoint_authority:
+            return "checkpoint_authority";
         }
         return "unknown";
     }
@@ -169,5 +238,10 @@ export namespace epochengine::project_ai_iteration_session
     [[nodiscard]] Result admit(
         const Request& request,
         const Checkpoint* prior = nullptr) noexcept;
+    [[nodiscard]] SerializedCheckpoint serialize_checkpoint(
+        const Plan& plan) noexcept;
+    [[nodiscard]] RestoredCheckpoint restore_checkpoint(
+        std::span<const std::uint8_t> bytes,
+        const RestoreExpectation& expectation) noexcept;
     [[nodiscard]] ContractFailure run_contract() noexcept;
 }
