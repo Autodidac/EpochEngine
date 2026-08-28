@@ -701,6 +701,64 @@ namespace epochengine::editor_code_workspace
         return result(ResultCode::success, "Activated the requested code tab.", document);
     }
 
+    OperationResult Controller::close(
+        const DocumentHandle handle,
+        const WorkspaceAuthority& expected,
+        const std::uint64_t expected_revision,
+        const bool discard_dirty)
+    {
+        if (!implementation_)
+            return result(ResultCode::unavailable, "The code-workspace controller is unavailable.");
+        const Implementation::Document* checked{};
+        if (const OperationResult validation = validate_document_operation(
+                *implementation_, handle, expected, expected_revision, checked);
+            !validation)
+        {
+            return validation;
+        }
+        if (checked->text != checked->persisted_text && !discard_dirty)
+            return result(ResultCode::dirty_document, "Closing a modified code document requires explicit discard permission.", handle);
+
+        const bool closing_active = implementation_->active
+            && *implementation_->active == handle;
+        std::optional<fs::path> retained_active_path{};
+        if (!closing_active && implementation_->active)
+        {
+            if (const auto* active = implementation_->find(*implementation_->active))
+                retained_active_path = active->canonical_path;
+        }
+        implementation_->documents.erase(
+            implementation_->documents.begin()
+                + static_cast<std::ptrdiff_t>(handle.index));
+        for (std::size_t index = 0u; index < implementation_->documents.size(); ++index)
+        {
+            implementation_->documents[index].handle.index =
+                static_cast<std::uint32_t>(index);
+        }
+        implementation_->active.reset();
+        if (retained_active_path)
+        {
+            const auto retained = std::find_if(
+                implementation_->documents.begin(),
+                implementation_->documents.end(),
+                [&](const Implementation::Document& document)
+                {
+                    return document.canonical_path == *retained_active_path;
+                });
+            if (retained != implementation_->documents.end())
+                implementation_->active = retained->handle;
+        }
+        if (!implementation_->active && !implementation_->documents.empty())
+        {
+            const std::size_t next = (std::min)(
+                static_cast<std::size_t>(handle.index),
+                implementation_->documents.size() - 1u);
+            implementation_->active = implementation_->documents[next].handle;
+        }
+        ++implementation_->revision;
+        return result(ResultCode::success, "Closed the code document.", handle);
+    }
+
     OperationResult Controller::replace_text(
         const DocumentHandle handle,
         const WorkspaceAuthority& expected,

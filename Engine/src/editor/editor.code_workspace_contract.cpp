@@ -219,6 +219,33 @@ namespace epochengine::editor_code_workspace
             {
                 return false;
             }
+            if (controller.close(
+                    alpha.handle,
+                    request.authority,
+                    changed.revision,
+                    false).code != ResultCode::dirty_document)
+            {
+                return false;
+            }
+            if (!controller.close(
+                    alpha.handle,
+                    request.authority,
+                    changed.revision,
+                    true))
+            {
+                return false;
+            }
+            const WorkspaceSnapshot closed = controller.snapshot();
+            if (closed.documents.size() != 1u
+                || closed.documents.front().relative_path
+                    != "Scripts/beta.ascript.cpp"
+                || !closed.active_document
+                || closed.active_document
+                    != closed.documents.front().handle
+                || controller.document(alpha.handle))
+            {
+                return false;
+            }
             return true;
         }
 

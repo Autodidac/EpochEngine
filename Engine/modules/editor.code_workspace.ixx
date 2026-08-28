@@ -186,6 +186,11 @@ export namespace epochengine::editor_code_workspace
         [[nodiscard]] OperationResult activate(
             DocumentHandle document,
             const WorkspaceAuthority& expected);
+        [[nodiscard]] OperationResult close(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            bool discard_dirty);
         [[nodiscard]] OperationResult replace_text(
             DocumentHandle document,
             const WorkspaceAuthority& expected,
