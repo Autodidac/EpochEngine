@@ -472,6 +472,22 @@ namespace epochengine
         float outliner_split{ 0.20f };
         float inspector_split{ 0.22f };
         float dock_split{ 0.24f };
+        std::array<float, 9> workspace_bottom_grid_splits{
+            0.68f, 0.68f, 0.68f, 0.68f, 0.68f,
+            0.68f, 0.68f, 0.68f, 0.68f
+        };
+        std::array<float, 9> workspace_dock_splits{
+            0.24f, 0.24f, 0.24f, 0.24f, 0.24f,
+            0.24f, 0.24f, 0.24f, 0.24f
+        };
+        std::array<bool, 9> workspace_output_follow{
+            true, true, true, true, true,
+            true, true, true, true
+        };
+        std::array<bool, 9> workspace_ai_chat_follow{
+            true, true, true, true, true,
+            true, true, true, true
+        };
         bool show_outliner{ true };
         bool show_inspector{ true };
         bool show_console_dock{ true };

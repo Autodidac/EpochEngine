@@ -458,6 +458,39 @@ namespace
             .active_index = 4u,
             .intent = ResponsiveTabNavigationIntent::next
         }));
+
+        const auto standardDock = make_bottom_dock_height_layout({
+            .viewport_height = 1080.0f,
+            .toolbar_height = 98.0f,
+            .requested_fraction = 0.24f
+        });
+        EPOCHGUI_CHECK(standardDock.valid && standardDock.visible);
+        EPOCHGUI_CHECK(standardDock.bottom_height >= 120.0f);
+        EPOCHGUI_CHECK(standardDock.center_height >= 240.0f);
+        EPOCHGUI_CHECK(standardDock.bottom_height < standardDock.center_height);
+
+        const auto constrainedDock = make_bottom_dock_height_layout({
+            .viewport_height = 480.0f,
+            .toolbar_height = 98.0f,
+            .requested_fraction = 0.80f
+        });
+        EPOCHGUI_CHECK(constrainedDock.valid);
+        EPOCHGUI_CHECK(constrainedDock.bottom_height >= 120.0f);
+        EPOCHGUI_CHECK(constrainedDock.center_height >= 240.0f);
+
+        const auto hiddenDock = make_bottom_dock_height_layout({
+            .viewport_height = 720.0f,
+            .toolbar_height = 98.0f,
+            .visible = false
+        });
+        EPOCHGUI_CHECK(hiddenDock.valid && !hiddenDock.visible);
+        EPOCHGUI_CHECK(hiddenDock.bottom_height == 0.0f);
+        EPOCHGUI_CHECK(hiddenDock.splitter_height == 0.0f);
+        EPOCHGUI_CHECK(hiddenDock.center_height == 622.0f);
+
+        EPOCHGUI_CHECK(!make_bottom_dock_height_layout({
+            .viewport_height = std::numeric_limits<float>::quiet_NaN()
+        }).valid);
         return 0;
     }
     int responsive_chrome_layout()

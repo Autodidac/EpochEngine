@@ -240,6 +240,9 @@ namespace epochengine::gui
         const std::vector<std::string>& lines;
         std::span<const TextMessageRole> line_roles{};
         std::size_t max_visible_lines{ 200 };
+        std::string_view log_id{};
+        bool follow_tail{ true };
+        std::uint64_t scroll_to_end_generation{};
 
         std::string* input{ nullptr };
         std::size_t max_input_chars{ 4096 };
@@ -272,6 +275,10 @@ namespace epochengine::gui
         std::optional<std::size_t> header_action_index{};
         std::optional<std::size_t> message_action_index{};
         std::optional<std::size_t> footer_action_index{};
+        bool log_user_scrolled{};
+        bool log_at_end{ true };
+        float log_scroll_y{};
+        float log_maximum_scroll_y{};
     };
 
     export struct ScrollTextPanelOptions
@@ -284,6 +291,7 @@ namespace epochengine::gui
         bool selectable{ true };
         bool stick_to_bottom{ true };
         bool wrap_lines{ true };
+        std::uint64_t scroll_to_end_generation{};
     };
 
     export struct ScrollTextPanelResult
@@ -291,6 +299,10 @@ namespace epochengine::gui
         std::size_t first_visible_line{};
         std::optional<std::size_t> selected_line{};
         bool wheel_scrolled{};
+        bool user_scrolled{};
+        bool at_end{ true };
+        float scroll_y{};
+        float maximum_scroll_y{};
     };
 
     export struct ScrollAreaOptions

@@ -80,6 +80,7 @@ module;
 module editor.core;
 
 import gui.engine;
+import epoch.gui;
 import editor.code_workspace;
 import visuals.engine;
 import epoch.version;
@@ -379,6 +380,24 @@ namespace epochengine
         }
 
         using EditorMainSurface = EditorApplicationSurface;
+        constexpr std::size_t kEditorMainSurfaceCount =
+            static_cast<std::size_t>(EditorMainSurface::Count);
+
+        [[nodiscard]] constexpr std::size_t editor_main_surface_index(
+            EditorMainSurface surface) noexcept
+        {
+            const std::size_t index = static_cast<std::size_t>(surface);
+            return index < kEditorMainSurfaceCount ? index : 0u;
+        }
+
+        template <typename Value>
+        [[nodiscard]] constexpr std::array<Value, kEditorMainSurfaceCount>
+            filled_workspace_values(Value value) noexcept
+        {
+            std::array<Value, kEditorMainSurfaceCount> values{};
+            values.fill(value);
+            return values;
+        }
 
         struct SystemsSurfaceState
         {
@@ -1005,6 +1024,20 @@ namespace epochengine
             float outlinerSplit{ 0.20f };
             float inspectorSplit{ 0.22f };
             float dockSplit{ 0.24f };
+            std::array<float, kEditorMainSurfaceCount> workspaceBottomGridSplits{
+                filled_workspace_values(0.68f) };
+            std::array<float, kEditorMainSurfaceCount> workspaceDockSplits{
+                filled_workspace_values(0.24f) };
+            std::array<bool, kEditorMainSurfaceCount> workspaceOutputFollow{
+                filled_workspace_values(true) };
+            std::array<bool, kEditorMainSurfaceCount> workspaceAiChatFollow{
+                filled_workspace_values(true) };
+            EditorMainSurface dockPreferenceSurface{
+                initial_editor_main_surface(initial_editor_workspace_tab()) };
+            bool outputFollowTail{ true };
+            bool aiChatFollowTail{ true };
+            std::uint64_t outputScrollToEndGeneration{};
+            std::uint64_t aiChatScrollToEndGeneration{};
             bool showOutliner{ true };
             bool showInspector{ true };
             bool showConsoleDock{ true };
@@ -2498,7 +2531,7 @@ namespace epochengine
             const EditorState& state)
         {
             std::ostringstream output{};
-            output << "EPOCH_EDITOR_LAYOUT 2\n";
+            output << "EPOCH_EDITOR_LAYOUT 3\n";
             output << "application "
                 << static_cast<unsigned int>(state.applicationKind) << '\n';
             output << "splits "
@@ -2506,6 +2539,26 @@ namespace epochengine
                 << state.outlinerSplit << ' '
                 << state.inspectorSplit << ' '
                 << state.dockSplit << '\n';
+            auto workspaceBottomGridSplits = state.workspaceBottomGridSplits;
+            auto workspaceDockSplits = state.workspaceDockSplits;
+            auto workspaceOutputFollow = state.workspaceOutputFollow;
+            auto workspaceAiChatFollow = state.workspaceAiChatFollow;
+            const std::size_t activeSurface = editor_main_surface_index(
+                state.mainSurface);
+            workspaceBottomGridSplits[activeSurface] = state.bottomGridSplit;
+            workspaceDockSplits[activeSurface] = state.dockSplit;
+            workspaceOutputFollow[activeSurface] = state.outputFollowTail;
+            workspaceAiChatFollow[activeSurface] = state.aiChatFollowTail;
+            output << "workspace_splits " << kEditorMainSurfaceCount;
+            for (std::size_t index = 0u; index < kEditorMainSurfaceCount; ++index)
+                output << ' ' << workspaceBottomGridSplits[index]
+                    << ' ' << workspaceDockSplits[index];
+            output << '\n';
+            output << "workspace_follow " << kEditorMainSurfaceCount;
+            for (std::size_t index = 0u; index < kEditorMainSurfaceCount; ++index)
+                output << ' ' << static_cast<unsigned int>(workspaceOutputFollow[index])
+                    << ' ' << static_cast<unsigned int>(workspaceAiChatFollow[index]);
+            output << '\n';
             output << "visibility "
                 << static_cast<unsigned int>(state.showOutliner) << ' '
                 << static_cast<unsigned int>(state.showInspector) << ' '
@@ -2572,7 +2625,7 @@ namespace epochengine
             std::string token{};
             unsigned int schema{};
             if (!(input >> token >> schema)
-                || token != "EPOCH_EDITOR_LAYOUT" || (schema != 1u && schema != 2u))
+                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 3u)
             {
                 return false;
             }
@@ -2598,6 +2651,54 @@ namespace epochengine
                 || !std::isfinite(dockSplit))
             {
                 return false;
+            }
+
+            auto workspaceBottomGridSplits = state.workspaceBottomGridSplits;
+            auto workspaceDockSplits = state.workspaceDockSplits;
+            auto workspaceOutputFollow = state.workspaceOutputFollow;
+            auto workspaceAiChatFollow = state.workspaceAiChatFollow;
+            if (schema == 3u)
+            {
+                std::size_t count{};
+                if (!(input >> token >> count)
+                    || token != "workspace_splits"
+                    || count != kEditorMainSurfaceCount)
+                {
+                    return false;
+                }
+                for (std::size_t index = 0u; index < count; ++index)
+                {
+                    if (!(input >> workspaceBottomGridSplits[index]
+                            >> workspaceDockSplits[index])
+                        || !std::isfinite(workspaceBottomGridSplits[index])
+                        || !std::isfinite(workspaceDockSplits[index]))
+                    {
+                        return false;
+                    }
+                    workspaceBottomGridSplits[index] = std::clamp(
+                        workspaceBottomGridSplits[index], 0.25f, 0.75f);
+                    workspaceDockSplits[index] = std::clamp(
+                        workspaceDockSplits[index], 0.08f, 0.80f);
+                }
+                if (!(input >> token >> count)
+                    || token != "workspace_follow"
+                    || count != kEditorMainSurfaceCount)
+                {
+                    return false;
+                }
+                for (std::size_t index = 0u; index < count; ++index)
+                {
+                    unsigned int outputFollow{};
+                    unsigned int aiChatFollow{};
+                    if (!(input >> outputFollow >> aiChatFollow)
+                        || !valid_layout_boolean(outputFollow)
+                        || !valid_layout_boolean(aiChatFollow))
+                    {
+                        return false;
+                    }
+                    workspaceOutputFollow[index] = outputFollow != 0u;
+                    workspaceAiChatFollow[index] = aiChatFollow != 0u;
+                }
             }
 
             unsigned int showOutliner{};
@@ -2671,6 +2772,17 @@ namespace epochengine
             state.outlinerSplit = std::clamp(outlinerSplit, 0.06f, 0.70f);
             state.inspectorSplit = std::clamp(inspectorSplit, 0.06f, 0.70f);
             state.dockSplit = std::clamp(dockSplit, 0.08f, 0.80f);
+            const std::size_t activeSurface = editor_main_surface_index(
+                state.mainSurface);
+            workspaceBottomGridSplits[activeSurface] = state.bottomGridSplit;
+            workspaceDockSplits[activeSurface] = state.dockSplit;
+            state.workspaceBottomGridSplits = workspaceBottomGridSplits;
+            state.workspaceDockSplits = workspaceDockSplits;
+            state.workspaceOutputFollow = workspaceOutputFollow;
+            state.workspaceAiChatFollow = workspaceAiChatFollow;
+            state.outputFollowTail = workspaceOutputFollow[activeSurface];
+            state.aiChatFollowTail = workspaceAiChatFollow[activeSurface];
+            state.dockPreferenceSurface = state.mainSurface;
             state.showOutliner = showOutliner != 0u;
             state.showInspector = showInspector != 0u;
             state.showConsoleDock = showConsoleDock != 0u;
@@ -19409,6 +19521,19 @@ namespace epochengine
         snapshot.outliner_split = snapshot_layout_split(editor.outlinerSplit, 0.20f);
         snapshot.inspector_split = snapshot_layout_split(editor.inspectorSplit, 0.22f);
         snapshot.dock_split = snapshot_layout_split(editor.dockSplit, 0.24f);
+        snapshot.workspace_bottom_grid_splits = editor.workspaceBottomGridSplits;
+        snapshot.workspace_dock_splits = editor.workspaceDockSplits;
+        snapshot.workspace_output_follow = editor.workspaceOutputFollow;
+        snapshot.workspace_ai_chat_follow = editor.workspaceAiChatFollow;
+        const std::size_t activeSurface = editor_main_surface_index(
+            editor.mainSurface);
+        snapshot.workspace_bottom_grid_splits[activeSurface] =
+            snapshot.bottom_grid_split;
+        snapshot.workspace_dock_splits[activeSurface] = snapshot.dock_split;
+        snapshot.workspace_output_follow[activeSurface] =
+            editor.outputFollowTail;
+        snapshot.workspace_ai_chat_follow[activeSurface] =
+            editor.aiChatFollowTail;
         snapshot.show_outliner = editor.showOutliner;
         snapshot.show_inspector = editor.showInspector;
         snapshot.show_console_dock = editor.showConsoleDock;
@@ -19591,6 +19716,24 @@ namespace epochengine
         editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
         editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.22f);
         editor.dockSplit = snapshot_layout_split(snapshot.dock_split, 0.24f);
+        for (std::size_t index = 0u; index < kEditorMainSurfaceCount; ++index)
+        {
+            editor.workspaceBottomGridSplits[index] = snapshot_layout_split(
+                snapshot.workspace_bottom_grid_splits[index], 0.68f);
+            editor.workspaceDockSplits[index] = snapshot_layout_split(
+                snapshot.workspace_dock_splits[index], 0.24f);
+            editor.workspaceOutputFollow[index] =
+                snapshot.workspace_output_follow[index];
+            editor.workspaceAiChatFollow[index] =
+                snapshot.workspace_ai_chat_follow[index];
+        }
+        const std::size_t activeSurface = editor_main_surface_index(
+            editor.mainSurface);
+        editor.workspaceBottomGridSplits[activeSurface] = editor.bottomGridSplit;
+        editor.workspaceDockSplits[activeSurface] = editor.dockSplit;
+        editor.outputFollowTail = editor.workspaceOutputFollow[activeSurface];
+        editor.aiChatFollowTail = editor.workspaceAiChatFollow[activeSurface];
+        editor.dockPreferenceSurface = editor.mainSurface;
         editor.showOutliner = snapshot.show_outliner && application.panes.outliner;
         editor.showInspector = snapshot.show_inspector && application.panes.inspector;
         editor.showConsoleDock = snapshot.show_console_dock && application.panes.console;
@@ -20451,6 +20594,27 @@ namespace epochengine
             return std::clamp(value, lo, hi);
         };
 
+        if (editor.dockPreferenceSurface != editor.mainSurface)
+        {
+            const std::size_t previous = editor_main_surface_index(
+                editor.dockPreferenceSurface);
+            editor.workspaceBottomGridSplits[previous] = editor.bottomGridSplit;
+            editor.workspaceDockSplits[previous] = editor.dockSplit;
+            editor.workspaceOutputFollow[previous] = editor.outputFollowTail;
+            editor.workspaceAiChatFollow[previous] = editor.aiChatFollowTail;
+
+            const std::size_t active = editor_main_surface_index(
+                editor.mainSurface);
+            editor.bottomGridSplit = editor.workspaceBottomGridSplits[active];
+            editor.dockSplit = editor.workspaceDockSplits[active];
+            editor.outputFollowTail = editor.workspaceOutputFollow[active];
+            editor.aiChatFollowTail = editor.workspaceAiChatFollow[active];
+            editor.dockPreferenceSurface = editor.mainSurface;
+            editor.layoutDrag = EditorLayoutDrag::None;
+            editor.surfaceSettleFrames = (std::max)(
+                editor.surfaceSettleFrames, 1);
+        }
+
         editor.outlinerSplit = std::clamp(editor.outlinerSplit, 0.06f, 0.70f);
         editor.inspectorSplit = std::clamp(editor.inspectorSplit, 0.06f, 0.70f);
         editor.dockSplit = std::clamp(editor.dockSplit, 0.08f, 0.80f);
@@ -20582,11 +20746,19 @@ namespace epochengine
         const float toolbar_h = 98.0f;
         const float splitter_w = 7.0f;
         const float splitter_h = 7.0f;
-        const float raw_bottom_h = bottom_visible ? h * editor.dockSplit : 0.0f;
-        const float bottom_h = bottom_visible
-            ? clamp_layout(raw_bottom_h, (std::min)(96.0f, h * 0.22f), (std::max)(96.0f, h * 0.82f))
-            : 0.0f;
-        const float bottom_split_h = bottom_visible ? splitter_h : 0.0f;
+        const gui_lib::BottomDockHeightLayout bottomDockLayout =
+            gui_lib::make_bottom_dock_height_layout({
+                .viewport_height = h,
+                .toolbar_height = toolbar_h,
+                .splitter_height = splitter_h,
+                .requested_fraction = editor.dockSplit,
+                .minimum_bottom_height = 120.0f,
+                .minimum_center_height = 240.0f,
+                .maximum_bottom_fraction = 0.58f,
+                .visible = bottom_visible
+            });
+        const float bottom_h = bottomDockLayout.bottom_height;
+        const float bottom_split_h = bottomDockLayout.splitter_height;
 
         const float left_min = (std::min)(140.0f, (std::max)(0.0f, w * 0.20f));
         const float left_max = (std::max)(left_min, (std::min)(960.0f, w * 0.72f));
@@ -20634,7 +20806,7 @@ namespace epochengine
         const gui::Vec2 bottomRightSize{ bottomRightWidth, bottom_h };
 
         const float main_y = toolbar_h;
-        const float main_h = (std::max)(0.0f, h - toolbar_h - bottom_h - bottom_split_h);
+        const float main_h = bottomDockLayout.center_height;
 
         const gui::Vec2 outliner_pos{ 0.0f, main_y };
         const gui::Vec2 outliner_size{ left_w, main_h };
@@ -23309,7 +23481,13 @@ namespace epochengine
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::Dock:
-                editor.dockSplit = std::clamp((h - mouse.y) / (std::max)(1.0f, h), 0.08f, 0.80f);
+                editor.dockSplit = std::clamp(
+                    (h - mouse.y - splitter_h)
+                        / (std::max)(
+                            1.0f,
+                            h - toolbar_h - splitter_h),
+                    0.08f,
+                    0.80f);
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::BottomColumns:
@@ -30667,16 +30845,34 @@ namespace epochengine
         case EditorWorkspaceTab::Output:
         default:
             {
+                const bool wasFollowing = editor.outputFollowTail;
+                if (gui::button(
+                        wasFollowing ? "Pause Follow" : "Resume Follow",
+                        { 128.0f, 27.0f }))
+                {
+                    editor.outputFollowTail = !wasFollowing;
+                    if (editor.outputFollowTail)
+                        ++editor.outputScrollToEndGeneration;
+                }
                 const gui::Vec2 outputCursor = gui::cursor_position();
                 const float outputHeight = (std::max)(72.0f, console_render_pos.y + console_render_size.y - outputCursor.y - 12.0f);
-                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
-                    .id = "editor-output-log",
+                const std::string outputPanelId = epochengine::format_text(
+                    "editor-output-log.{}.{}",
+                    editor.projectId.empty() ? "no-project" : editor.projectId,
+                    editor_main_surface_index(editor.mainSurface));
+                const gui::ScrollTextPanelResult outputScroll =
+                    gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                    .id = outputPanelId,
                     .size = { (std::max)(180.0f, console_render_size.x - 24.0f), outputHeight },
                     .lines = editor.logLines,
                     .max_line_chars = 1024,
                     .selectable = true,
-                    .stick_to_bottom = true
+                    .stick_to_bottom = editor.outputFollowTail,
+                    .scroll_to_end_generation =
+                        editor.outputScrollToEndGeneration
                 });
+                if (outputScroll.user_scrolled && !outputScroll.at_end)
+                    editor.outputFollowTail = false;
             }
             break;
         }
@@ -30867,6 +31063,14 @@ namespace epochengine
                 .width = 108.0f,
                 .activate_on_press = true}
         };
+        const std::array followActions{
+            gui::ConsoleWindowActionSpec{
+                .label = editor.aiChatFollowTail
+                    ? "Pause Follow"
+                    : "Resume Follow",
+                .width = 128.0f,
+                .activate_on_press = true}
+        };
         const std::span<const gui::ConsoleWindowActionSpec> messageActions =
             toolTestPending
             ? std::span<const gui::ConsoleWindowActionSpec>{toolTestActions}
@@ -30901,6 +31105,10 @@ namespace epochengine
             chat_render_pos,
             chat_render_size);
         const auto chatLineRoles = ai_chat_message_roles(chat.lines);
+        const std::string aiChatPanelId = epochengine::format_text(
+            "editor-ai-chat.{}.{}",
+            editor.projectId.empty() ? "no-project" : editor.projectId,
+            editor_main_surface_index(editor.mainSurface));
         gui::ConsoleWindowOptions opts{
             .title = "AI Chat",
             .position = chat_render_pos,
@@ -30908,6 +31116,10 @@ namespace epochengine
             .lines = chat.lines,
             .line_roles = chatLineRoles,
             .max_visible_lines = 180,
+            .log_id = aiChatPanelId,
+            .follow_tail = editor.aiChatFollowTail,
+            .scroll_to_end_generation =
+                editor.aiChatScrollToEndGeneration,
             .input = &chat.input,
             .max_input_chars = 1024,
             .multiline_input = false,
@@ -30924,10 +31136,19 @@ namespace epochengine
             .task_edit_buffer = editor.aiGoalEditing ? &editor.aiGoalDraft : nullptr,
             .task_editing = editor.aiGoalEditing,
             .task_actions = taskActions,
+            .header_actions = followActions,
             .message_actions = messageActions,
         };
 
         gui::ConsoleWindowResult r = gui::console_window(opts);
+        if (r.header_action_index)
+        {
+            editor.aiChatFollowTail = !editor.aiChatFollowTail;
+            if (editor.aiChatFollowTail)
+                ++editor.aiChatScrollToEndGeneration;
+        }
+        if (r.log_user_scrolled && !r.log_at_end)
+            editor.aiChatFollowTail = false;
 
         if ((r.input.submitted || r.send_clicked) && !chat.pending)
         {

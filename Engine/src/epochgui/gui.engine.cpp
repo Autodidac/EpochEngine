@@ -377,6 +377,7 @@ namespace epochengine::gui
             float scrollY = 0.0f;
             float lastContentPixelHeight = 0.0f;
             float lastViewportHeight = 0.0f;
+            std::uint64_t scrollToEndGeneration = 0u;
             bool draggingScrollbar = false;
             bool draggingSelection = false;
             float dragGrabOffset = 0.0f;
@@ -9461,7 +9462,13 @@ namespace epochengine::gui
         const float previousMaxScrollY = (std::max)(0.0f, state.lastContentPixelHeight - state.lastViewportHeight);
         const bool wasAtBottom = state.lastLineCount == 0
             || state.scrollY >= previousMaxScrollY - linePitch;
-        if (options.stick_to_bottom && lineCount != state.lastLineCount && wasAtBottom)
+        if (options.scroll_to_end_generation != 0u
+            && options.scroll_to_end_generation != state.scrollToEndGeneration)
+        {
+            state.scrollY = maxScrollY;
+            state.scrollToEndGeneration = options.scroll_to_end_generation;
+        }
+        else if (options.stick_to_bottom && lineCount != state.lastLineCount && wasAtBottom)
             state.scrollY = maxScrollY;
         else
             state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScrollY);
@@ -9481,6 +9488,7 @@ namespace epochengine::gui
 
             g_frame.mouseWheelDelta = 0;
             result.wheel_scrolled = true;
+            result.user_scrolled = true;
         }
 
         const bool canScroll = maxScrollY > 0.5f;
@@ -9516,6 +9524,7 @@ namespace epochengine::gui
                 const float requested = (g_frame.mousePos.y - trackY - state.dragGrabOffset) / travel;
                 state.scrollY = (std::clamp)(requested, 0.0f, 1.0f) * maxScrollY;
                 result.first_visible_line = state.firstLine;
+                result.user_scrolled = true;
             }
         }
 
@@ -9724,6 +9733,9 @@ namespace epochengine::gui
             }
         }
 
+        result.scroll_y = state.scrollY;
+        result.maximum_scroll_y = maxScrollY;
+        result.at_end = state.scrollY >= maxScrollY - linePitch;
         advance_cursor({ 0.0f, height + kContentPadding });
         return result;
     }
@@ -9884,16 +9896,23 @@ namespace epochengine::gui
         if (availableWidth > 0.0f && logHeight > 0.0f)
         {
             set_cursor(logPos);
-            const std::string panelId = std::string(options.title) + ".log";
-            (void)scroll_text_panel(ScrollTextPanelOptions{
+            const std::string panelId = options.log_id.empty()
+                ? std::string(options.title) + ".log"
+                : std::string(options.log_id);
+            const ScrollTextPanelResult log = scroll_text_panel(ScrollTextPanelOptions{
                 .id = panelId,
                 .size = { availableWidth, logHeight },
                 .lines = options.lines,
                 .line_roles = options.line_roles,
                 .max_line_chars = options.max_visible_lines == 0 ? 768u : options.max_visible_lines * 16u,
                 .selectable = true,
-                .stick_to_bottom = true
+                .stick_to_bottom = options.follow_tail,
+                .scroll_to_end_generation = options.scroll_to_end_generation
             });
+            result.log_user_scrolled = log.user_scrolled;
+            result.log_at_end = log.at_end;
+            result.log_scroll_y = log.scroll_y;
+            result.log_maximum_scroll_y = log.maximum_scroll_y;
         }
 
         const float messageY = logPos.y + logHeight

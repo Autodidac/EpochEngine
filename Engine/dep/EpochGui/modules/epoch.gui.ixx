@@ -426,6 +426,83 @@ export namespace epochengine::gui_lib
         return std::nullopt;
     }
 
+    struct BottomDockHeightOptions
+    {
+        float viewport_height{};
+        float toolbar_height{};
+        float splitter_height{ 7.0f };
+        float requested_fraction{ 0.24f };
+        float minimum_bottom_height{ 120.0f };
+        float minimum_center_height{ 240.0f };
+        float maximum_bottom_fraction{ 0.58f };
+        bool visible{ true };
+    };
+
+    struct BottomDockHeightLayout
+    {
+        float bottom_height{};
+        float center_height{};
+        float splitter_height{};
+        float normalized_fraction{};
+        bool visible{};
+        bool valid{};
+    };
+
+    [[nodiscard]] inline BottomDockHeightLayout
+        make_bottom_dock_height_layout(
+            const BottomDockHeightOptions& options) noexcept
+    {
+        BottomDockHeightLayout result{};
+        if (!std::isfinite(options.viewport_height)
+            || !std::isfinite(options.toolbar_height)
+            || !std::isfinite(options.splitter_height)
+            || !std::isfinite(options.requested_fraction)
+            || !std::isfinite(options.minimum_bottom_height)
+            || !std::isfinite(options.minimum_center_height)
+            || !std::isfinite(options.maximum_bottom_fraction)
+            || options.viewport_height < 0.0f
+            || options.toolbar_height < 0.0f)
+        {
+            return result;
+        }
+
+        result.visible = options.visible;
+        result.splitter_height = options.visible
+            ? (std::max)(0.0f, options.splitter_height)
+            : 0.0f;
+        const float available = (std::max)(
+            0.0f,
+            options.viewport_height - options.toolbar_height
+                - result.splitter_height);
+        if (!options.visible)
+        {
+            result.center_height = available;
+            result.valid = true;
+            return result;
+        }
+
+        const float minimumBottom = (std::min)(
+            available, (std::max)(0.0f, options.minimum_bottom_height));
+        const float minimumCenter = (std::min)(
+            available, (std::max)(0.0f, options.minimum_center_height));
+        const float maximumFraction = std::clamp(
+            options.maximum_bottom_fraction, 0.10f, 0.90f);
+        const float maximumBottom = (std::max)(
+            minimumBottom,
+            (std::min)(available - minimumCenter, available * maximumFraction));
+        const float requested = available * std::clamp(
+            options.requested_fraction, 0.0f, 1.0f);
+        result.bottom_height = std::clamp(
+            requested, minimumBottom, maximumBottom);
+        result.center_height = (std::max)(
+            0.0f, available - result.bottom_height);
+        result.normalized_fraction = available > 0.0f
+            ? result.bottom_height / available
+            : 0.0f;
+        result.valid = true;
+        return result;
+    }
+
     enum class ChromeDensity : std::uint8_t
     {
         full,
