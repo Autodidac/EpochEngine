@@ -103,6 +103,7 @@ namespace epochengine::directxcontext::detail
         int height{ 1 };
         std::function<void(int, int)> onResize{};
         std::uint32_t smokeFrames{ 0 };
+        unsigned presentSyncInterval{ 0 };
 
         ID3D11Device* device{};
         ID3D11DeviceContext* immediate{};

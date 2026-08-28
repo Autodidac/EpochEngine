@@ -142,6 +142,17 @@ namespace epochengine::core::detail
         ctx->initialize = softrenderer_initialize_adapter;
         ctx->cleanup = softrenderer_cleanup_adapter;
         ctx->process = softrenderer_process_adapter;
+        ctx->frame_pacing_capabilities = {false, false};
+        ctx->apply_frame_pacing = [](
+            epochengine::perf::frame_pacing_mode,
+            double)
+        {
+            return epochengine::perf::native_frame_pacing_result{
+                true,
+                false,
+                epochengine::perf::frame_pacing_mode::uncapped,
+                0.0};
+        };
 
         bind_default_input(ctx);
 

@@ -54,6 +54,9 @@ export namespace epochengine::directxcontext
         std::function<void(int, int)> onResize = nullptr);
 
     bool directx_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue);
+    bool directx_set_vsync(
+        const std::shared_ptr<core::Context>& ctx,
+        bool enabled) noexcept;
     void directx_draw_sprite(
         SpriteHandle sprite,
         std::span<const TextureAtlas* const> atlases,

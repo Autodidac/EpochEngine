@@ -350,6 +350,25 @@ namespace epochengine::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return epochengine::raylib_api::get_render_width(); };
         ctx->get_height = []() { return epochengine::raylib_api::get_render_height(); };
+        ctx->frame_pacing_capabilities = {false, true};
+        ctx->apply_frame_pacing = [](
+            const epochengine::perf::frame_pacing_mode mode,
+            const double hz)
+        {
+            const bool wantsTarget =
+                mode == epochengine::perf::frame_pacing_mode::target_hz;
+            const int target = wantsTarget
+                ? static_cast<int>((std::clamp)(hz, 1.0, 1000.0) + 0.5)
+                : 0;
+            epochengine::raylib_api::set_target_fps(target);
+            return epochengine::perf::native_frame_pacing_result{
+                true,
+                wantsTarget,
+                wantsTarget
+                    ? epochengine::perf::frame_pacing_mode::target_hz
+                    : epochengine::perf::frame_pacing_mode::uncapped,
+                wantsTarget ? static_cast<double>(target) : 0.0};
+        };
         ctx->draw_sprite = epochengine::raylibrenderer::draw_sprite;
         ctx->add_texture = &default_add_texture;
         ctx->add_atlas = +[](const epochengine::TextureAtlas& atlas)

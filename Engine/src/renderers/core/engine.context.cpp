@@ -242,6 +242,8 @@ namespace epochengine::core
         clone->registry_get = prototype.registry_get;
         clone->draw_sprite = prototype.draw_sprite;
         clone->add_model = prototype.add_model;
+        clone->frame_pacing_capabilities = prototype.frame_pacing_capabilities;
+        clone->apply_frame_pacing = prototype.apply_frame_pacing;
 
         clone->is_key_held = prototype.is_key_held;
         clone->is_key_down = prototype.is_key_down;

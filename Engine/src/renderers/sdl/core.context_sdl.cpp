@@ -1525,6 +1525,23 @@ namespace epochengine::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return s_width; };
         ctx->get_height = []() { return s_height; };
+        ctx->frame_pacing_capabilities = {true, false};
+        ctx->apply_frame_pacing = [](
+            const epochengine::perf::frame_pacing_mode mode,
+            double)
+        {
+            const bool wantsVsync =
+                mode == epochengine::perf::frame_pacing_mode::vsync;
+            const bool configured = s_renderer
+                && SDL_SetRenderVSync(s_renderer, wantsVsync ? 1 : 0);
+            return epochengine::perf::native_frame_pacing_result{
+                configured,
+                configured && wantsVsync,
+                wantsVsync
+                    ? epochengine::perf::frame_pacing_mode::vsync
+                    : epochengine::perf::frame_pacing_mode::uncapped,
+                0.0};
+        };
         ctx->draw_sprite = epochengine::sdltextures::draw_sprite;
         ctx->add_texture = &default_add_texture;
         ctx->add_atlas = +[](const epochengine::TextureAtlas& atlas)

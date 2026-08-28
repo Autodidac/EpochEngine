@@ -78,6 +78,26 @@ export namespace epochengine::perf
         double minimized_hz = 10.0;
     };
 
+    struct frame_pacing_capabilities final
+    {
+        bool vsync = false;
+        bool target_hz = false;
+
+        [[nodiscard]] constexpr bool operator==(
+            const frame_pacing_capabilities&) const noexcept = default;
+    };
+
+    struct native_frame_pacing_result final
+    {
+        bool configured = false;
+        bool pacing_active = false;
+        frame_pacing_mode effective_mode = frame_pacing_mode::uncapped;
+        double effective_hz = 0.0;
+
+        [[nodiscard]] constexpr bool operator==(
+            const native_frame_pacing_result&) const noexcept = default;
+    };
+
     struct frame_pacing_plan final
     {
         frame_pacing_mode requested_mode = frame_pacing_mode::target_hz;
@@ -86,6 +106,9 @@ export namespace epochengine::perf
         double configured_hz = 120.0;
         double effective_hz = 120.0;
         bool native_vsync_requested = false;
+        bool native_pacing_requested = false;
+        bool native_pacing_configured = false;
+        bool native_pacing_active = false;
         bool cpu_deadline_wait = true;
 
         [[nodiscard]] constexpr bool operator==(const frame_pacing_plan&) const noexcept = default;
@@ -120,10 +143,10 @@ export namespace epochengine::perf
             sanitize_frame_hz(minimized_hz, 10.0)};
     }
 
-    [[nodiscard]] constexpr frame_pacing_plan resolve_frame_pacing(
+    [[nodiscard]] constexpr frame_pacing_plan resolve_frame_pacing_with_capabilities(
         frame_pacing_policy policy,
         frame_activity activity,
-        bool native_vsync_available) noexcept
+        frame_pacing_capabilities capabilities) noexcept
     {
         policy.target_hz = policy.mode == frame_pacing_mode::uncapped
             ? 0.0
@@ -138,20 +161,25 @@ export namespace epochengine::perf
             policy.target_hz,
             policy.target_hz,
             false,
+            false,
+            false,
+            false,
             policy.mode == frame_pacing_mode::target_hz};
 
         if (activity == frame_activity::background)
         {
             plan.effective_mode = frame_pacing_mode::target_hz;
             plan.effective_hz = policy.background_hz;
-            plan.cpu_deadline_wait = true;
+            plan.native_pacing_requested = capabilities.target_hz;
+            plan.cpu_deadline_wait = !plan.native_pacing_requested;
             return plan;
         }
         if (activity == frame_activity::minimized)
         {
             plan.effective_mode = frame_pacing_mode::target_hz;
             plan.effective_hz = policy.minimized_hz;
-            plan.cpu_deadline_wait = true;
+            plan.native_pacing_requested = capabilities.target_hz;
+            plan.cpu_deadline_wait = !plan.native_pacing_requested;
             return plan;
         }
 
@@ -163,18 +191,67 @@ export namespace epochengine::perf
         }
         if (policy.mode == frame_pacing_mode::vsync)
         {
-            if (native_vsync_available)
+            if (capabilities.vsync)
             {
                 plan.effective_hz = 0.0;
                 plan.native_vsync_requested = true;
+                plan.native_pacing_requested = true;
                 plan.cpu_deadline_wait = false;
             }
             else
             {
                 plan.effective_mode = frame_pacing_mode::target_hz;
                 plan.effective_hz = policy.target_hz;
-                plan.cpu_deadline_wait = true;
+                plan.native_pacing_requested = capabilities.target_hz;
+                plan.cpu_deadline_wait = !plan.native_pacing_requested;
             }
+        }
+        else if (policy.mode == frame_pacing_mode::target_hz
+            && capabilities.target_hz)
+        {
+            plan.native_pacing_requested = true;
+            plan.cpu_deadline_wait = false;
+        }
+        return plan;
+    }
+
+    [[nodiscard]] constexpr frame_pacing_plan resolve_frame_pacing(
+        frame_pacing_policy policy,
+        frame_activity activity,
+        bool native_vsync_available) noexcept
+    {
+        return resolve_frame_pacing_with_capabilities(
+            policy,
+            activity,
+            {native_vsync_available, false});
+    }
+
+    [[nodiscard]] constexpr frame_pacing_plan finalize_native_frame_pacing(
+        frame_pacing_plan plan,
+        native_frame_pacing_result native) noexcept
+    {
+        plan.native_pacing_configured = native.configured;
+        plan.native_pacing_active = native.pacing_active;
+
+        if (native.pacing_active)
+        {
+            plan.effective_mode = native.effective_mode;
+            plan.effective_hz = native.effective_hz;
+            plan.cpu_deadline_wait = false;
+            plan.native_vsync_requested =
+                native.effective_mode == frame_pacing_mode::vsync;
+            return plan;
+        }
+
+        if (plan.native_pacing_requested)
+        {
+            const double fallback_hz = plan.effective_hz > 0.0
+                ? plan.effective_hz
+                : (plan.configured_hz > 0.0 ? plan.configured_hz : 60.0);
+            plan.effective_mode = frame_pacing_mode::target_hz;
+            plan.effective_hz = fallback_hz;
+            plan.cpu_deadline_wait = true;
+            plan.native_vsync_requested = false;
         }
         return plan;
     }

@@ -21,6 +21,7 @@ import context.type;
 import core.logger;
 import image.loader;
 import opengl.context;
+import opengl.platform;
 import opengl.textures;
 
 namespace epochengine::openglbackend
@@ -163,6 +164,37 @@ namespace epochengine::openglbackend
         ctx->present = nullptr;
         ctx->get_width = openglcontext::opengl_get_width;
         ctx->get_height = openglcontext::opengl_get_height;
+        ctx->frame_pacing_capabilities = {true, false};
+        ctx->apply_frame_pacing = [](
+            const perf::frame_pacing_mode mode,
+            double)
+        {
+            const bool wantsVsync = mode == perf::frame_pacing_mode::vsync;
+            const bool requested = openglcontext::PlatformGL::set_swap_interval(
+                wantsVsync ? 1 : 0);
+            const auto reported = openglcontext::PlatformGL::query_swap_interval();
+            const bool active = reported.available
+                ? reported.interval > 0
+                : requested && wantsVsync;
+            const bool configured = requested
+                && (!reported.available
+                    || (wantsVsync ? active : !active));
+            if (!configured && reported.available && active)
+            {
+                return perf::native_frame_pacing_result{
+                    false,
+                    true,
+                    perf::frame_pacing_mode::vsync,
+                    0.0};
+            }
+            return perf::native_frame_pacing_result{
+                configured,
+                configured && wantsVsync,
+                wantsVsync
+                    ? perf::frame_pacing_mode::vsync
+                    : perf::frame_pacing_mode::uncapped,
+                0.0};
+        };
         ctx->draw_sprite = opengltextures::draw_sprite;
         ctx->add_texture = &detail::default_add_texture;
         ctx->add_atlas = +[](const TextureAtlas& atlas) { return detail::default_add_atlas(atlas); };

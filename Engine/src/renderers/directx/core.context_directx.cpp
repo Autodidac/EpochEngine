@@ -143,6 +143,25 @@ namespace epochengine::core::detail
         ctx->process = directx_process_adapter;
         ctx->get_width = epochengine::directxcontext::directx_get_width;
         ctx->get_height = epochengine::directxcontext::directx_get_height;
+        ctx->frame_pacing_capabilities = {true, false};
+        ctx->apply_frame_pacing = [](
+            const epochengine::perf::frame_pacing_mode mode,
+            double)
+        {
+            const bool wantsVsync =
+                mode == epochengine::perf::frame_pacing_mode::vsync;
+            const bool configured =
+                epochengine::directxcontext::directx_set_vsync(
+                    epochengine::core::get_current_render_context(),
+                    wantsVsync);
+            return epochengine::perf::native_frame_pacing_result{
+                configured,
+                configured && wantsVsync,
+                wantsVsync
+                    ? epochengine::perf::frame_pacing_mode::vsync
+                    : epochengine::perf::frame_pacing_mode::uncapped,
+                0.0};
+        };
 
         bind_default_input(ctx);
 

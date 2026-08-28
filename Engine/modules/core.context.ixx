@@ -84,6 +84,7 @@ import atlas.texture;
 import atlas.manager;   // reacquire atlas vector inside queued draw
 import sprite.handle;
 import image.loader;
+import perf.tier;
 
 namespace epochengine::core
 {
@@ -176,6 +177,9 @@ namespace epochengine::core
         using AddTextureFunc = std::uint32_t(*)(TextureAtlas&, std::string, const ImageData&);
         using AddAtlasFunc = std::uint32_t(*)(const TextureAtlas&);
         using AddModelFunc = int(*)(const char*, const char*);
+        using ApplyFramePacingFunc = std::function<perf::native_frame_pacing_result(
+            perf::frame_pacing_mode,
+            double)>;
 
         Context() = default;
 
@@ -686,6 +690,8 @@ namespace epochengine::core
         RegistryGetFunc registry_get = nullptr;
         DrawSpriteFunc  draw_sprite = nullptr;
         AddModelFunc    add_model = nullptr;
+        perf::frame_pacing_capabilities frame_pacing_capabilities{};
+        ApplyFramePacingFunc apply_frame_pacing{};
 
         // Input hooks
         std::function<bool(input::Key)>         is_key_held;

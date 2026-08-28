@@ -220,9 +220,18 @@ namespace epochengine::core::cli
             return WindowMode::Auto;
         }
 
-        [[nodiscard]] inline bool parse_frame_limit(const std::string_view value, double& out_fps)
+        [[nodiscard]] inline bool parse_frame_limit(
+            const std::string_view value,
+            double& out_fps,
+            bool& out_vsync)
         {
             const std::string lowered = to_lower(value);
+            out_vsync = lowered == "vsync" || lowered == "v-sync";
+            if (out_vsync)
+            {
+                out_fps = 60.0;
+                return true;
+            }
             if (lowered == "unlimited" || lowered == "uncapped" || lowered == "off" || lowered == "0")
             {
                 out_fps = 0.0;
@@ -260,6 +269,7 @@ namespace epochengine::core::cli
     export inline bool updater_shell_requested = false;
     export inline bool backend_selection_explicit = false;
     export inline bool frame_limit_explicit = false;
+    export inline bool frame_vsync_requested = false;
     export inline double frame_limit_fps = 0.0;
     export inline std::uint32_t capture_warmup_frames = 12;
     export std::string scene_name{};
@@ -466,6 +476,7 @@ namespace epochengine::core::cli
         backend_selection_explicit = false;
         frame_limit_explicit = false;
         frame_limit_fps = 0.0;
+        frame_vsync_requested = false;
 
         (void)apply_backend_selection("auto");
 
@@ -562,8 +573,8 @@ namespace epochengine::core::cli
                     "  --renderer <backend|auto>  Select one backend; auto requests the backend grid\n"
                     "                             Backends: auto, opengl, directx/d3d11, vulkan, raylib, sdl, sfml, software\n"
                     "  --backend <backend|auto>   Alias for --renderer\n"
-                    "  --frame-limit <fps|unlimited>\n"
-                    "                             Use the engine core frame limiter; common values: 60, 120, unlimited\n"
+                    "  --frame-limit <fps|vsync|unlimited>\n"
+                    "                             Select shared/native pacing; common values: 60, 120, vsync, unlimited\n"
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"
                     "  --smoke                    Run bounded smoke flow where supported\n"
@@ -741,9 +752,11 @@ namespace epochengine::core::cli
                 if (!parsed.empty())
                 {
                     double requested = 0.0;
-                    if (detail::parse_frame_limit(parsed, requested))
+                    bool requestedVsync = false;
+                    if (detail::parse_frame_limit(parsed, requested, requestedVsync))
                     {
                         frame_limit_explicit = true;
+                        frame_vsync_requested = requestedVsync;
                         frame_limit_fps = requested;
                     }
                     else

@@ -1215,6 +1215,32 @@ namespace epochengine::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return s_width; };
         ctx->get_height = []() { return s_height; };
+        ctx->frame_pacing_capabilities = {true, true};
+        ctx->apply_frame_pacing = [](
+            const epochengine::perf::frame_pacing_mode mode,
+            const double hz)
+        {
+            if (!s_window || !s_window->isOpen())
+                return epochengine::perf::native_frame_pacing_result{};
+            const bool wantsVsync =
+                mode == epochengine::perf::frame_pacing_mode::vsync;
+            const bool wantsTarget =
+                mode == epochengine::perf::frame_pacing_mode::target_hz;
+            const unsigned target = wantsTarget
+                ? static_cast<unsigned>((std::clamp)(hz, 1.0, 1000.0) + 0.5)
+                : 0u;
+            s_window->setVerticalSyncEnabled(wantsVsync);
+            s_window->setFramerateLimit(target);
+            return epochengine::perf::native_frame_pacing_result{
+                true,
+                wantsVsync || wantsTarget,
+                wantsVsync
+                    ? epochengine::perf::frame_pacing_mode::vsync
+                    : (wantsTarget
+                        ? epochengine::perf::frame_pacing_mode::target_hz
+                        : epochengine::perf::frame_pacing_mode::uncapped),
+                wantsTarget ? static_cast<double>(target) : 0.0};
+        };
         ctx->draw_sprite = epochengine::sfmlcontext::draw_sprite;
         ctx->add_texture = &default_add_texture;
         ctx->add_atlas = +[](const epochengine::TextureAtlas& atlas)

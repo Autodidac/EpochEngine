@@ -701,6 +701,20 @@ namespace epochengine::directxcontext
         return true;
     }
 
+    bool directx_set_vsync(
+        const std::shared_ptr<core::Context>& ctx,
+        bool enabled) noexcept
+    {
+        if (!ctx)
+            return false;
+        std::lock_guard lock(detail::g_directxMutex);
+        const auto it = detail::g_states.find(ctx.get());
+        if (it == detail::g_states.end() || !it->second.swapchain)
+            return false;
+        it->second.presentSyncInterval = enabled ? 1u : 0u;
+        return true;
+    }
+
     bool directx_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue)
     {
         if (!ctx)
@@ -785,7 +799,7 @@ namespace epochengine::directxcontext
         (void)gui::render_deferred_batch(ctx.get());
         (void)gui::render_top_layer_batch(ctx.get());
 
-        (void)state.swapchain->Present(0, 0);
+        (void)state.swapchain->Present(state.presentSyncInterval, 0);
 
         if (core::cli::smoke_requested)
         {

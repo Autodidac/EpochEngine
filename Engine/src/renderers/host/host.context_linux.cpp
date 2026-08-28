@@ -1893,6 +1893,7 @@ namespace
         };
 
         epochengine::perf::frame_limiter coreFrameLimiter{};
+        epochengine::perf::frame_pacing_plan activeDesiredFramePlan{};
         epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
         bool hasActiveCoreFramePlan = false;
         const auto resolveCoreFramePolicy = []() noexcept
@@ -1902,7 +1903,9 @@ namespace
                 && !cli::editor_requested
                 && !cli::run_menu_loop;
             const double requestedHz = cli::frame_limit_fps;
-            const auto requestedMode = requestedHz > 0.0
+            const auto requestedMode = cli::frame_vsync_requested
+                ? epochengine::perf::frame_pacing_mode::vsync
+                : requestedHz > 0.0
                 ? epochengine::perf::frame_pacing_mode::target_hz
                 : epochengine::perf::frame_pacing_mode::uncapped;
             return epochengine::perf::select_frame_pacing_policy(
@@ -1916,6 +1919,46 @@ namespace
             if (win.width <= 0 || win.height <= 0)
                 return epochengine::perf::frame_activity::minimized;
             return epochengine::perf::frame_activity::foreground;
+        };
+        const auto configureFramePacing = [&]()
+        {
+            const auto desiredPlan =
+                epochengine::perf::resolve_frame_pacing_with_capabilities(
+                    resolveCoreFramePolicy(),
+                    resolveFrameActivity(),
+                    ctx->frame_pacing_capabilities);
+            if (hasActiveCoreFramePlan && desiredPlan == activeDesiredFramePlan)
+                return;
+
+            epochengine::perf::native_frame_pacing_result nativeResult{};
+            if (ctx->apply_frame_pacing)
+            {
+                nativeResult = ctx->apply_frame_pacing(
+                    desiredPlan.effective_mode,
+                    desiredPlan.effective_hz);
+            }
+            const auto framePlan =
+                epochengine::perf::finalize_native_frame_pacing(
+                    desiredPlan,
+                    nativeResult);
+            coreFrameLimiter.set_plan(framePlan);
+            activeDesiredFramePlan = desiredPlan;
+            activeCoreFramePlan = framePlan;
+            hasActiveCoreFramePlan = true;
+            epochengine::logger::get(kLogSys).logf(
+                epochengine::logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Backend {} pacing requested={} configured_hz={} effective={} effective_hz={} activity={} native_requested={} native_configured={} native_active={} cpu_wait={}.",
+                ctx->backendName,
+                epochengine::perf::to_string(framePlan.requested_mode),
+                framePlan.configured_hz,
+                epochengine::perf::to_string(framePlan.effective_mode),
+                framePlan.effective_hz,
+                epochengine::perf::to_string(framePlan.activity),
+                framePlan.native_pacing_requested,
+                framePlan.native_pacing_configured,
+                framePlan.native_pacing_active,
+                framePlan.cpu_deadline_wait);
         };
 
         while (running.load(std::memory_order_acquire) && win.running)
@@ -1937,6 +1980,8 @@ namespace
                         reinterpret_cast<std::uintptr_t>(win.hwnd)
                     });
             }
+
+            configureFramePacing();
 
             keepRunning = ctx->process_safe(ctx, win.commandQueue);
 
@@ -1965,29 +2010,6 @@ namespace
             }
 
             record_native_title_frame(localDisplay, xwin, win);
-
-            const auto framePlan = epochengine::perf::resolve_frame_pacing(
-                resolveCoreFramePolicy(),
-                resolveFrameActivity(),
-                false);
-            if (!hasActiveCoreFramePlan || framePlan != activeCoreFramePlan)
-            {
-                coreFrameLimiter.set_plan(framePlan);
-                activeCoreFramePlan = framePlan;
-                hasActiveCoreFramePlan = true;
-                epochengine::logger::get(kLogSys).logf(
-                    epochengine::logger::LogLevel::INFO,
-                    std::source_location::current(),
-                    "Backend {} pacing requested={} configured_hz={} effective={} effective_hz={} activity={} native_vsync={} cpu_wait={}.",
-                    ctx->backendName,
-                    epochengine::perf::to_string(framePlan.requested_mode),
-                    framePlan.configured_hz,
-                    epochengine::perf::to_string(framePlan.effective_mode),
-                    framePlan.effective_hz,
-                    epochengine::perf::to_string(framePlan.activity),
-                    framePlan.native_vsync_requested,
-                    framePlan.cpu_deadline_wait);
-            }
             coreFrameLimiter.wait_for_next_frame();
         }
 
