@@ -43,8 +43,8 @@ features must be individually capability-gated.
 | OpenGL | First `T1-GL` desktop presentation and portable technique proof | Context, editor scene, GUI composition, sampled RTT preview, and basic resources exist | Complete Canvas2D/resource/material/settings proof |
 | OpenGL ES | T1-GLES mobile target contract | Profile/limits are represented | No production GLES runtime/presentation proof yet |
 | SDL3 | OpenGL-derived context/tool adapter | Accepted Windows launcher/loading/editor, high-DPI input/resize, and clean close plus native Canvas2D texture/presentation source builds | Sampled-RTT/Canvas2D reference pixels and repeated-switch/native-memory soak remain `Partial` |
-| SFML3 | OpenGL-derived context/tool adapter | Existing window/GUI/RTT evidence plus native Canvas2D texture/presentation source builds | Pixel parity, resize, and repeated-switch proof remain `Partial` |
-| Raylib3 | Specialized OpenGL-derived context | Existing scene/ownership repairs plus exact native-context Canvas2D texture/presentation source builds | Pixel parity and single/multicontext lifecycle proof remain `Partial` |
+| SFML3 | OpenGL-derived context/tool adapter | Existing window/GUI/RTT evidence plus native Canvas2D texture/presentation and capture-only `copyToImage` evidence source builds | Pixel parity, resize, and repeated-switch proof remain `Partial` |
+| Raylib3 | Specialized OpenGL-derived context | Existing scene/ownership repairs plus exact native-context Canvas2D texture/presentation and capture-only screen-image evidence source builds | Pixel parity and single/multicontext lifecycle proof remain `Partial` |
 | Vulkan | Explicit backend and future `T2-VK` provider | Existing swapchain/scene/GUI evidence plus Canvas2D upload, compose pipeline, sampling, and transactional residency source builds | Pixel parity, asynchronous animated residency, and repeated-switch proof remain `Partial` |
 | DirectX | Active Windows-native D3D11 lane | Existing context/scene/GUI evidence plus native Canvas2D texture, premultiplied blend, sampling, and compose source builds | Pixel parity and repeated-switch proof remain `Partial`; this does not prove D3D12 |
 | DirectX 12 | Future `T2-DX` family | Capability vocabulary only | Device, queues, resources, pipelines, and runtime proof are missing |
@@ -94,7 +94,7 @@ order.
 | Audio | Partial | Logical clips/sources/buses/listener/scheduling, deterministic stereo mixing, a physical-device boundary, and generation-checked project playback sessions are contract-proven. The optional SDL3 device remains renderer-independent across context replacement; decoded project assets, authored cue bindings, editor controls, and approved live physical-output proof remain incomplete. |
 | Sparse voxel/water | Partial | Deterministic sparse voxel storage and explicit-time analytic water queries/projection exist. Generation/residency, mesh/render resources, buoyancy, and native presentation are Missing. |
 | Text and GUI | Partial | Engine GUI rendering and expanded EpochGui portable control primitives exist. Engine-wide integration, professional docking, complete text behavior, and portable profile exclusion remain work. |
-| Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. The OpenGL capture lane exposes a one-shot queryable evidence snapshot without normal-frame readback cost. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
+| Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. One bounded caller-buffer coordinator normalizes origin and stride while refusing absent contexts, excessive capacity, or native readback failure. OpenGL, SDL3, SFML3, and Raylib3 invoke it only for explicit capture evidence; normal frames do not pay that readback cost. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
 
 Canvas2D native composition now has one deterministic admission policy for
 top-left RGBA8, linear color, premultiplied alpha, clamp-to-edge sampling, and
@@ -122,11 +122,14 @@ live GL context, and the native adapter implements context-guarded allocation,
 upload, readiness, and destruction. The renderer-neutral presenter and primary
 OpenGL compositor are compiled and contract-proven, including safe no-context
 refusal. Immutable semantic editor content now routes through the protected live
-scene slot. The origin/stride-aware pixel comparator and capture-only viewport
-readback are compiled, bounded, and state-restoring, but live allocation,
-drawing, project-texture presentation, and pixel agreement still require an
-approved registered-context capture. SDL/SFML/Raylib no-runtime refusal proves
-the generic-device guard only. `Scene surface` records the backend-owned Engine
+scene slot. The origin/stride-aware pixel comparator and shared caller-buffer
+readback coordinator are compiled and bounded. OpenGL preserves its scoped GL
+readback state; SDL3 converts `SDL_RenderReadPixels` to tight top-left RGBA8;
+SFML3 crops `copyToImage`; Raylib3 crops its RGBA8 screen image. Each adapter runs
+only on an explicit capture request before GUI/top-layer/present, and Raylib's
+legacy diagnostic probe is likewise capture-gated. Live allocation, drawing,
+project-texture presentation, and pixel agreement still require an approved
+registered-context capture. `Scene surface` records the backend-owned Engine
 Arcade path and stays `Partial` until visual proof. System Info must keep every
 evidence layer separate.
 

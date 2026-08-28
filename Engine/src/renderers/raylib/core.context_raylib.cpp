@@ -14,6 +14,7 @@ import input.engine;
 import atlas.texture;
 import context.commandqueue;
 import context.type;
+import core.commandline;
 import core.context;
 import core.logger;
 import image.loader;
@@ -296,9 +297,10 @@ namespace epochengine::core::detail
                 const int sampleY = viewport.valid()
                     ? viewport.y + (viewport.height / 2)
                     : epochengine::raylib_api::get_render_height() / 2;
-                const RaylibFrameProbe probe = capture_raylib_frame_probe(
-                    sampleX,
-                    sampleY);
+                const RaylibFrameProbe probe =
+                    epochengine::core::cli::capture_requested
+                    ? capture_raylib_frame_probe(sampleX, sampleY)
+                    : RaylibFrameProbe{};
                 std::ostringstream message;
                 const auto appendColor = [&message](const epochengine::raylib_api::Color color)
                 {

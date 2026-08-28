@@ -3,6 +3,7 @@ module;
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstring>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -36,11 +37,13 @@ import input.engine;
 import atlas.manager;
 import atlas.texture;
 import context.commandqueue;
+import core.commandline;
 import core.logger;
 import image.loader;
 import package.registry;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_evidence;
 import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
@@ -87,6 +90,87 @@ namespace
     static_assert(!sfml_native_filter_is_linear(
         epochengine::canvas2d::presentation::NativeSampleFilter::invalid));
 
+    [[nodiscard]] epochengine::canvas2d::evidence::NativeReadbackLayout
+        describe_sfml_canvas2d_readback(
+            void* user,
+            const epochengine::canvas2d::evidence::NativeReadbackRegion& region)
+            noexcept
+    {
+        auto* const window = static_cast<sf::RenderWindow*>(user);
+        if (window == nullptr || window != s_window.get() || !window->isOpen()
+            || region.viewport.empty())
+        {
+            return {};
+        }
+        return {
+            region.viewport.width,
+            epochengine::canvas2d::evidence::PixelOrigin::top_left};
+    }
+
+    [[nodiscard]] bool read_sfml_canvas2d_pixels(
+        void* user,
+        const epochengine::canvas2d::evidence::NativeReadbackRequest& request)
+        noexcept
+    {
+        auto* const window = static_cast<sf::RenderWindow*>(user);
+        const auto& viewport = request.region.viewport;
+        const std::uint64_t requiredPixels =
+            request.layout.required_pixels({viewport.width, viewport.height});
+        if (window == nullptr || window != s_window.get() || !window->isOpen()
+            || requiredPixels == 0
+            || requiredPixels > request.destination.size())
+        {
+            return false;
+        }
+
+        const sf::Vector2u framebuffer = window->getSize();
+        if (framebuffer.x != request.region.framebuffer_extent.width
+            || framebuffer.y != request.region.framebuffer_extent.height)
+        {
+            return false;
+        }
+
+        try
+        {
+            sf::Texture frameTexture{};
+            if (!epochengine::sfml_compat::resize_texture(
+                    frameTexture, framebuffer.x, framebuffer.y))
+            {
+                return false;
+            }
+            frameTexture.update(*window);
+            const sf::Image image = frameTexture.copyToImage();
+            const sf::Vector2u imageExtent = image.getSize();
+            const auto* const source = image.getPixelsPtr();
+            if (source == nullptr
+                || imageExtent.x != framebuffer.x
+                || imageExtent.y != framebuffer.y)
+            {
+                return false;
+            }
+
+            const std::size_t rowBytes = static_cast<std::size_t>(viewport.width)
+                * sizeof(epochengine::canvas2d::cpu::Rgba8);
+            for (std::uint32_t y = 0; y < viewport.height; ++y)
+            {
+                const std::size_t sourcePixel =
+                    static_cast<std::size_t>(viewport.y + y) * framebuffer.x
+                    + static_cast<std::size_t>(viewport.x);
+                std::memcpy(
+                    request.destination.data()
+                        + static_cast<std::size_t>(y)
+                            * request.layout.row_stride_pixels,
+                    source + sourcePixel * sizeof(epochengine::canvas2d::cpu::Rgba8),
+                    rowBytes);
+            }
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
     class SfmlCanvas2DPresenter final
     {
     public:
@@ -124,6 +208,9 @@ namespace
             {
                 presenter_.retire_all();
                 refusal_logged_ = false;
+                evidence_content_hash_ = 0;
+                evidence_frames_ = 0;
+                evidence_terminal_ = false;
                 return CanvasSceneStatus::missing_scene;
             }
             if ((prepared.code
@@ -167,6 +254,56 @@ namespace
                 return refuse("presentation_allocation_failure");
             }
 
+            if (prepared.content_hash != evidence_content_hash_)
+            {
+                evidence_content_hash_ = prepared.content_hash;
+                evidence_frames_ = 0;
+                evidence_terminal_ = false;
+            }
+            if (epochengine::core::cli::capture_requested
+                && !evidence_terminal_)
+            {
+                ++evidence_frames_;
+                const std::uint32_t warmupFrames = (std::max)(
+                    std::uint32_t{1},
+                    epochengine::core::cli::capture_warmup_frames);
+                if (evidence_frames_ >= warmupFrames)
+                {
+                    epochengine::canvas2d::evidence::PixelEvidencePolicy policy{};
+                    policy.channel_tolerance =
+                        prepared.frame->compose.presentation_filter
+                            == epochengine::FilterMode::nearest
+                        ? 0u
+                        : 1u;
+                    const auto compared =
+                        epochengine::canvas2d::evidence::compare_native_pixels(
+                            prepared.raster->presentation,
+                            prepared.raster->presentation_hash,
+                            {surface.framebuffer_extent, surface.viewport},
+                            {
+                                s_window.get(),
+                                &describe_sfml_canvas2d_readback,
+                                &read_sfml_canvas2d_pixels},
+                            policy);
+                    evidence_terminal_ = true;
+                    const std::string message =
+                        "frame="
+                        + std::to_string(prepared.frame->frame_sequence)
+                        + " content=" + std::to_string(prepared.content_hash)
+                        + " result=" + std::string{
+                            epochengine::canvas2d::evidence::pixel_evidence_code_name(
+                                compared.code)}
+                        + " pixels=" + std::to_string(compared.pixels_compared)
+                        + " outliers=" + std::to_string(compared.outlier_pixels)
+                        + " max_channel_error="
+                        + std::to_string(compared.maximum_channel_error);
+                    if (compared.matched())
+                        epochengine::logger::info("SFML.Canvas2D.Evidence", message);
+                    else
+                        epochengine::logger::warn("SFML.Canvas2D.Evidence", message);
+                }
+            }
+
             refusal_logged_ = false;
             return CanvasSceneStatus::presented;
         }
@@ -177,6 +314,9 @@ namespace
             session_.reset();
             owner_ = nullptr;
             refusal_logged_ = false;
+            evidence_content_hash_ = 0;
+            evidence_frames_ = 0;
+            evidence_terminal_ = false;
         }
 
         [[nodiscard]] const epochengine::core::Context* owner() const noexcept
@@ -348,6 +488,9 @@ namespace
         epochengine::canvas2d::runtime::SceneRasterSession session_{};
         epochengine::canvas2d::presentation::Canvas2DPresenter presenter_;
         bool refusal_logged_{};
+        std::uint64_t evidence_content_hash_{};
+        std::uint32_t evidence_frames_{};
+        bool evidence_terminal_{};
     };
 
     std::unique_ptr<SfmlCanvas2DPresenter> s_canvas2d_presenter{};

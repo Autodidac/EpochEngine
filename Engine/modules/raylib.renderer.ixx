@@ -34,6 +34,7 @@ module;
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -46,6 +47,7 @@ module;
 export module raylib.renderer;
 
 import core.context;
+import core.commandline;
 import core.logger;
 import raylib.state;
 import raylib.textures;
@@ -54,6 +56,7 @@ import sprite.handle;
 import raylib.api;
 import render.canvas2d;
 import render.canvas2d_cpu;
+import render.canvas2d_evidence;
 import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
@@ -263,6 +266,81 @@ namespace epochengine::raylibrenderer
             return true;
         }
 
+        [[nodiscard]] inline canvas2d::evidence::NativeReadbackLayout
+            describe_raylib_canvas2d_readback(
+                void* user,
+                const canvas2d::evidence::NativeReadbackRegion& region) noexcept
+        {
+            auto* const binding = static_cast<PresentationBinding*>(user);
+            if (binding == nullptr || binding->device == nullptr
+                || binding->owner == nullptr
+                || !binding->device->native_presentation_context_available(
+                    binding->owner)
+                || region.viewport.empty())
+            {
+                return {};
+            }
+            return {
+                region.viewport.width,
+                canvas2d::evidence::PixelOrigin::top_left};
+        }
+
+        [[nodiscard]] inline bool read_raylib_canvas2d_pixels(
+            void* user,
+            const canvas2d::evidence::NativeReadbackRequest& request) noexcept
+        {
+            auto* const binding = static_cast<PresentationBinding*>(user);
+            const auto& viewport = request.region.viewport;
+            const std::uint64_t requiredPixels =
+                request.layout.required_pixels({viewport.width, viewport.height});
+            const auto& state = epochengine::raylibstate::s_raylibstate;
+            if (binding == nullptr || binding->device == nullptr
+                || binding->owner == nullptr
+                || !binding->device->native_presentation_context_available(
+                    binding->owner)
+                || !state.frameActive || state.frameInTextureMode
+                || requiredPixels == 0
+                || requiredPixels > request.destination.size())
+            {
+                return false;
+            }
+
+            epochengine::raylib_api::flush_render_batch();
+            const epochengine::raylib_api::Image image =
+                epochengine::raylib_api::load_image_from_screen();
+            bool copied = image.data != nullptr
+                && image.width > 0 && image.height > 0
+                && image.format == epochengine::raylib_api::pixelformat_rgba8
+                && static_cast<std::uint32_t>(image.width)
+                    == request.region.framebuffer_extent.width
+                && static_cast<std::uint32_t>(image.height)
+                    == request.region.framebuffer_extent.height;
+            if (copied)
+            {
+                const auto* const source =
+                    static_cast<const std::byte*>(image.data);
+                const std::size_t rowBytes =
+                    static_cast<std::size_t>(viewport.width)
+                    * sizeof(canvas2d::cpu::Rgba8);
+                for (std::uint32_t y = 0; y < viewport.height; ++y)
+                {
+                    const std::size_t sourcePixel =
+                        static_cast<std::size_t>(viewport.y + y)
+                            * static_cast<std::size_t>(image.width)
+                        + static_cast<std::size_t>(viewport.x);
+                    std::memcpy(
+                        request.destination.data()
+                            + static_cast<std::size_t>(y)
+                                * request.layout.row_stride_pixels,
+                        source + sourcePixel * sizeof(canvas2d::cpu::Rgba8),
+                        rowBytes);
+                }
+            }
+            if (image.data != nullptr)
+                epochengine::raylib_api::unload_image(image);
+            return copied;
+        }
+
         struct LiveCanvasPresenter final
         {
             std::mutex mutex{};
@@ -272,6 +350,9 @@ namespace epochengine::raylibrenderer
             PresentationBinding binding{};
             std::unique_ptr<canvas2d::presentation::Canvas2DPresenter> presenter{};
             canvas2d::runtime::SceneRasterSession rasterSession{};
+            std::uint64_t evidenceContentHash{};
+            std::uint32_t evidenceFrames{};
+            bool evidenceTerminal{};
 
             LiveCanvasPresenter(
                 const core::Context* owner,
@@ -314,12 +395,68 @@ namespace epochengine::raylibrenderer
                         == canvas2d::runtime::PrepareCode::missing_scene)
                     {
                         presenter->retire_all();
+                        evidenceContentHash = 0;
+                        evidenceFrames = 0;
+                        evidenceTerminal = false;
                     }
                     return false;
                 }
 
-                return static_cast<bool>(
-                    presenter->present(*prepared.frame, *prepared.raster, surface));
+                const auto presented = presenter->present(
+                    *prepared.frame, *prepared.raster, surface);
+                if (!presented)
+                    return false;
+
+                if (prepared.content_hash != evidenceContentHash)
+                {
+                    evidenceContentHash = prepared.content_hash;
+                    evidenceFrames = 0;
+                    evidenceTerminal = false;
+                }
+                if (core::cli::capture_requested && !evidenceTerminal)
+                {
+                    ++evidenceFrames;
+                    const std::uint32_t warmupFrames = (std::max)(
+                        std::uint32_t{1}, core::cli::capture_warmup_frames);
+                    if (evidenceFrames >= warmupFrames)
+                    {
+                        canvas2d::evidence::PixelEvidencePolicy policy{};
+                        policy.channel_tolerance =
+                            prepared.frame->compose.presentation_filter
+                                == FilterMode::nearest
+                            ? 0u
+                            : 1u;
+                        const auto compared =
+                            canvas2d::evidence::compare_native_pixels(
+                                prepared.raster->presentation,
+                                prepared.raster->presentation_hash,
+                                {surface.framebuffer_extent, surface.viewport},
+                                {
+                                    &binding,
+                                    &describe_raylib_canvas2d_readback,
+                                    &read_raylib_canvas2d_pixels},
+                                policy);
+                        evidenceTerminal = true;
+                        const std::string message =
+                            "frame="
+                            + std::to_string(prepared.frame->frame_sequence)
+                            + " content=" + std::to_string(prepared.content_hash)
+                            + " result=" + std::string{
+                                canvas2d::evidence::pixel_evidence_code_name(
+                                    compared.code)}
+                            + " pixels="
+                            + std::to_string(compared.pixels_compared)
+                            + " outliers="
+                            + std::to_string(compared.outlier_pixels)
+                            + " max_channel_error="
+                            + std::to_string(compared.maximum_channel_error);
+                        if (compared.matched())
+                            logger::info("Raylib.Canvas2D.Evidence", message);
+                        else
+                            logger::warn("Raylib.Canvas2D.Evidence", message);
+                    }
+                }
+                return true;
             }
 
             void retire() noexcept
@@ -328,6 +465,9 @@ namespace epochengine::raylibrenderer
                 if (presenter)
                     presenter->retire_all();
                 rasterSession.reset();
+                evidenceContentHash = 0;
+                evidenceFrames = 0;
+                evidenceTerminal = false;
                 presenter.reset();
             }
         };
