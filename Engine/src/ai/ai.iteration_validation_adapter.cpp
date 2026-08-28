@@ -12,6 +12,7 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 module ai.iteration_validation_adapter;
 
