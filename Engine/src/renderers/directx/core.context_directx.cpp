@@ -144,7 +144,9 @@ namespace epochengine::core::detail
         ctx->process = directx_process_adapter;
         ctx->get_width = epochengine::directxcontext::directx_get_width;
         ctx->get_height = epochengine::directxcontext::directx_get_height;
-        ctx->frame_pacing_capabilities = {true, false};
+        ctx->frame_pacing_capabilities =
+            epochengine::perf::frame_pacing_capabilities_for(
+                epochengine::perf::frame_pacing_backend::directx);
         ctx->apply_frame_pacing = [](
             const epochengine::perf::frame_pacing_mode mode,
             double)

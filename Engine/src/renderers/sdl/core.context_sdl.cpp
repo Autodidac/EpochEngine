@@ -1701,7 +1701,9 @@ namespace epochengine::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return s_width; };
         ctx->get_height = []() { return s_height; };
-        ctx->frame_pacing_capabilities = {true, false};
+        ctx->frame_pacing_capabilities =
+            epochengine::perf::frame_pacing_capabilities_for(
+                epochengine::perf::frame_pacing_backend::sdl);
         ctx->apply_frame_pacing = [](
             const epochengine::perf::frame_pacing_mode mode,
             double)

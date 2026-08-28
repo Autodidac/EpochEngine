@@ -165,10 +165,11 @@ namespace epochengine::openglbackend
         ctx->present = nullptr;
         ctx->get_width = openglcontext::opengl_get_width;
         ctx->get_height = openglcontext::opengl_get_height;
-        ctx->frame_pacing_capabilities = {true, false};
+        ctx->frame_pacing_capabilities = perf::frame_pacing_capabilities_for(
+            perf::frame_pacing_backend::opengl);
         ctx->apply_frame_pacing = [](
             const perf::frame_pacing_mode mode,
-            double)
+            const double hz)
         {
             const bool wantsVsync = mode == perf::frame_pacing_mode::vsync;
             const bool requested = openglcontext::PlatformGL::set_swap_interval(
@@ -182,6 +183,12 @@ namespace epochengine::openglbackend
                     || (wantsVsync ? active : !active));
             if (!configured && reported.available && active)
             {
+                logger::get("OpenGL").logf(
+                    logger::LogLevel::WARN,
+                    std::source_location::current(),
+                    "Driver-enforced VSync remains active while Epoch requested {} at {:.2f} Hz; OpenGL presentation may be display-refresh limited.",
+                    perf::to_string(mode),
+                    hz);
                 return perf::native_frame_pacing_result{
                     false,
                     true,

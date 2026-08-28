@@ -87,6 +87,38 @@ export namespace epochengine::perf
             const frame_pacing_capabilities&) const noexcept = default;
     };
 
+    enum class frame_pacing_backend : std::uint8_t
+    {
+        opengl,
+        sdl,
+        vulkan,
+        raylib,
+        sfml,
+        directx,
+        software
+    };
+
+    [[nodiscard]] constexpr frame_pacing_capabilities
+        frame_pacing_capabilities_for(
+            const frame_pacing_backend backend) noexcept
+    {
+        switch (backend)
+        {
+        case frame_pacing_backend::raylib:
+            return {false, true};
+        case frame_pacing_backend::sfml:
+            return {true, true};
+        case frame_pacing_backend::opengl:
+        case frame_pacing_backend::sdl:
+        case frame_pacing_backend::vulkan:
+        case frame_pacing_backend::directx:
+            return {true, false};
+        case frame_pacing_backend::software:
+        default:
+            return {false, false};
+        }
+    }
+
     struct native_frame_pacing_result final
     {
         bool configured = false;

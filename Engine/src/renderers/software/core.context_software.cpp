@@ -143,7 +143,9 @@ namespace epochengine::core::detail
         ctx->initialize = softrenderer_initialize_adapter;
         ctx->cleanup = softrenderer_cleanup_adapter;
         ctx->process = softrenderer_process_adapter;
-        ctx->frame_pacing_capabilities = {false, false};
+        ctx->frame_pacing_capabilities =
+            epochengine::perf::frame_pacing_capabilities_for(
+                epochengine::perf::frame_pacing_backend::software);
         ctx->apply_frame_pacing = [](
             epochengine::perf::frame_pacing_mode,
             double)

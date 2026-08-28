@@ -353,7 +353,9 @@ namespace epochengine::core::detail
         ctx->present = nullptr;
         ctx->get_width = []() { return epochengine::raylib_api::get_render_width(); };
         ctx->get_height = []() { return epochengine::raylib_api::get_render_height(); };
-        ctx->frame_pacing_capabilities = {false, true};
+        ctx->frame_pacing_capabilities =
+            epochengine::perf::frame_pacing_capabilities_for(
+                epochengine::perf::frame_pacing_backend::raylib);
         ctx->apply_frame_pacing = [](
             const epochengine::perf::frame_pacing_mode mode,
             const double hz)

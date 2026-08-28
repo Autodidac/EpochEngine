@@ -2349,6 +2349,33 @@ namespace epochengine::core
                 && std::abs(standalonePacing.effective_hz - 60.0) < 1.0e-12
                 && standalonePacing.cpu_deadline_wait);
 
+        constexpr epochengine::perf::frame_pacing_backend editorBackends[]{
+            epochengine::perf::frame_pacing_backend::opengl,
+            epochengine::perf::frame_pacing_backend::sdl,
+            epochengine::perf::frame_pacing_backend::vulkan,
+            epochengine::perf::frame_pacing_backend::raylib,
+            epochengine::perf::frame_pacing_backend::sfml};
+        bool editorBackendTargetsAgree = true;
+        for (const auto backend : editorBackends)
+        {
+            const auto backendPlan =
+                epochengine::perf::resolve_frame_pacing_with_capabilities(
+                    editorPacingPolicy,
+                    epochengine::perf::frame_activity::foreground,
+                    epochengine::perf::frame_pacing_capabilities_for(backend));
+            editorBackendTargetsAgree = editorBackendTargetsAgree
+                && backendPlan.requested_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && backendPlan.effective_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && std::abs(backendPlan.configured_hz - 120.0) < 1.0e-12
+                && std::abs(backendPlan.effective_hz - 120.0) < 1.0e-12
+                && !backendPlan.native_vsync_requested;
+        }
+        check(
+            "perf.frame_pacing_editor_backend_target_parity",
+            editorBackendTargetsAgree);
+
         const auto uncappedPolicy =
             epochengine::perf::select_frame_pacing_policy(
                 epochengine::perf::frame_pacing_mode::uncapped,
@@ -2409,6 +2436,44 @@ namespace epochengine::core
                 && std::abs(fallbackVsync.effective_hz - 60.0) < 1.0e-12
                 && !fallbackVsync.native_vsync_requested
                 && fallbackVsync.cpu_deadline_wait);
+
+        bool editorBackendVsyncBehaviorAgrees = true;
+        for (const auto backend : editorBackends)
+        {
+            const auto capabilities =
+                epochengine::perf::frame_pacing_capabilities_for(backend);
+            const auto backendPlan =
+                epochengine::perf::resolve_frame_pacing_with_capabilities(
+                    vsyncPolicy,
+                    epochengine::perf::frame_activity::foreground,
+                    capabilities);
+            if (capabilities.vsync)
+            {
+                editorBackendVsyncBehaviorAgrees =
+                    editorBackendVsyncBehaviorAgrees
+                    && backendPlan.effective_mode
+                        == epochengine::perf::frame_pacing_mode::vsync
+                    && backendPlan.native_vsync_requested
+                    && backendPlan.native_pacing_requested
+                    && !backendPlan.cpu_deadline_wait;
+            }
+            else
+            {
+                editorBackendVsyncBehaviorAgrees =
+                    editorBackendVsyncBehaviorAgrees
+                    && backend
+                        == epochengine::perf::frame_pacing_backend::raylib
+                    && backendPlan.effective_mode
+                        == epochengine::perf::frame_pacing_mode::target_hz
+                    && std::abs(backendPlan.effective_hz - 60.0) < 1.0e-12
+                    && backendPlan.native_pacing_requested
+                    && !backendPlan.native_vsync_requested
+                    && !backendPlan.cpu_deadline_wait;
+            }
+        }
+        check(
+            "perf.frame_pacing_editor_backend_vsync_behavior",
+            editorBackendVsyncBehaviorAgrees);
 
         const auto nativeTargetDesired =
             epochengine::perf::resolve_frame_pacing_with_capabilities(

@@ -174,7 +174,9 @@ namespace epochengine::core::detail
         ctx->present = epochengine::vulkancontext::vulkan_present;
         ctx->get_width = epochengine::vulkancontext::vulkan_get_width;
         ctx->get_height = epochengine::vulkancontext::vulkan_get_height;
-        ctx->frame_pacing_capabilities = {true, false};
+        ctx->frame_pacing_capabilities =
+            perf::frame_pacing_capabilities_for(
+                perf::frame_pacing_backend::vulkan);
         ctx->apply_frame_pacing = [](
             const perf::frame_pacing_mode mode,
             double)
