@@ -8038,17 +8038,20 @@ namespace epochengine::gui
             presentation == TabBarPresentation::Workbench;
         for (const auto& tab : tabs)
         {
-            const float requestedWidth = tab.width > 0.0f
-                ? tab.width
-                : workbenchPresentation
-                    ? (std::max)(
-                        52.0f,
-                        measure_text_width(tab.label, kFontScale)
-                            + 24.0f
-                            + (tab.closable ? 18.0f : 0.0f)
-                            + (tab.dirty ? 8.0f : 0.0f))
+            const float measuredLabel = measure_text_width(
+                tab.label, kFontScale);
+            const float requestedWidth = workbenchPresentation
+                ? gui_lib::resolve_responsive_tab_width({
+                    .requested_width = tab.width,
+                    .measured_label_width = measuredLabel,
+                    .minimum_hit_width = 72.0f,
+                    .horizontal_padding = 24.0f,
+                    .close_extent = tab.closable ? 18.0f : 0.0f,
+                    .dirty_extent = tab.dirty ? 8.0f : 0.0f})
+                : tab.width > 0.0f
+                    ? tab.width
                     : gui_lib::preferred_tool_tab_width(
-                        measure_text_width(tab.label, kFontScale),
+                        measuredLabel,
                         tab.closable,
                         tab.dirty);
             widths.push_back((std::max)(1.0f, requestedWidth));
@@ -8296,22 +8299,27 @@ namespace epochengine::gui
         const bool workbenchPresentation =
             options.presentation == TabBarPresentation::Workbench;
         std::size_t activeIndex = (std::numeric_limits<std::size_t>::max)();
+        float longestLabelWidth{};
         for (std::size_t index = 0; index < options.tabs.size(); ++index)
         {
             const TabButtonSpec& tab = options.tabs[index];
             if (tab.active)
                 activeIndex = index;
-            const float requestedWidth = tab.width > 0.0f
-                ? tab.width
-                : workbenchPresentation
-                    ? (std::max)(
-                        52.0f,
-                        measure_text_width(tab.label, kFontScale)
-                            + 24.0f
-                            + (tab.closable ? 18.0f : 0.0f)
-                            + (tab.dirty ? 8.0f : 0.0f))
+            const float measuredLabel = measure_text_width(
+                tab.label, kFontScale);
+            longestLabelWidth = (std::max)(longestLabelWidth, measuredLabel);
+            const float requestedWidth = workbenchPresentation
+                ? gui_lib::resolve_responsive_tab_width({
+                    .requested_width = tab.width,
+                    .measured_label_width = measuredLabel,
+                    .minimum_hit_width = 72.0f,
+                    .horizontal_padding = 24.0f,
+                    .close_extent = tab.closable ? 18.0f : 0.0f,
+                    .dirty_extent = tab.dirty ? 8.0f : 0.0f})
+                : tab.width > 0.0f
+                    ? tab.width
                     : gui_lib::preferred_tool_tab_width(
-                        measure_text_width(tab.label, kFontScale),
+                        measuredLabel,
                         tab.closable,
                         tab.dirty);
             widths.push_back((std::max)(1.0f, requestedWidth));
@@ -8359,7 +8367,11 @@ namespace epochengine::gui
                 .active_index = activeIndex,
                 .available_width = options.available_width,
                 .gap = options.gap,
-                .overflow_width = options.overflow_width
+                .overflow_width = (std::max)({
+                    options.overflow_width,
+                    measure_text_width(options.overflow_label, kFontScale)
+                        + 52.0f,
+                    longestLabelWidth + 32.0f})
             });
         if (!layout.valid || !layout.overflowed)
         {

@@ -386,6 +386,27 @@ namespace
             72.0f, 104.0f, 126.0f, 92.0f, 88.0f,
             78.0f, 76.0f, 130.0f, 86.0f
         };
+        EPOCHGUI_CHECK(approximately(
+            resolve_responsive_tab_width({
+                .requested_width = 76.0f,
+                .measured_label_width = 92.0f,
+                .minimum_hit_width = 72.0f,
+                .horizontal_padding = 24.0f}),
+            116.0f));
+        EPOCHGUI_CHECK(approximately(
+            resolve_responsive_tab_width({
+                .requested_width = 140.0f,
+                .measured_label_width = 20.0f,
+                .minimum_hit_width = 72.0f,
+                .horizontal_padding = 24.0f}),
+            140.0f));
+        EPOCHGUI_CHECK(approximately(
+            resolve_responsive_tab_width({
+                .requested_width = 20.0f,
+                .measured_label_width = 10.0f,
+                .minimum_hit_width = 72.0f,
+                .horizontal_padding = 24.0f}),
+            72.0f));
         ResponsiveTabStripLayout responsive =
             make_responsive_tab_strip_layout({
                 .item_widths = workspaceWidths,
