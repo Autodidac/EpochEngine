@@ -316,11 +316,7 @@ export namespace epochengine::openglcanvas2d
             if (!packet.texture || packet.compose == nullptr
                 || packet.frame_sequence == 0 || packet.content_hash == 0
                 || packet.image.extent.empty()
-                || packet.image.format != TextureFormat::rgba8_unorm
-                || packet.image.origin != canvas2d::presentation::PixelOrigin::top_left
-                || packet.image.color_space != canvas2d::SpriteColorSpace::linear
-                || packet.image.alpha_encoding
-                    != canvas2d::cpu::AlphaEncoding::premultiplied)
+                || packet.image.format != TextureFormat::rgba8_unorm)
                 return false;
             const auto& compose = *packet.compose;
             const auto& viewport = compose.viewport;
@@ -350,6 +346,23 @@ export namespace epochengine::openglcanvas2d
                 && visible.y + visible.height
                     <= static_cast<float>(record.desc.height) + 0.001f;
         }
+
+        [[nodiscard]] constexpr GLint native_texture_filter(
+            canvas2d::presentation::NativeSampleFilter filter) noexcept
+        {
+            if (filter == canvas2d::presentation::NativeSampleFilter::nearest)
+                return GL_NEAREST;
+            if (filter == canvas2d::presentation::NativeSampleFilter::linear)
+                return GL_LINEAR;
+            return 0;
+        }
+
+        static_assert(native_texture_filter(
+            canvas2d::presentation::NativeSampleFilter::nearest) == GL_NEAREST);
+        static_assert(native_texture_filter(
+            canvas2d::presentation::NativeSampleFilter::linear) == GL_LINEAR);
+        static_assert(native_texture_filter(
+            canvas2d::presentation::NativeSampleFilter::invalid) == 0);
 
         [[nodiscard]] inline OpenGLFamilyNativeTextureAllocation
             contract_allocate_texture(
@@ -383,9 +396,12 @@ export namespace epochengine::openglcanvas2d
             || !packet.texture || packet.compose == nullptr)
             return false;
 
+        const auto native_policy =
+            canvas2d::presentation::make_native_compose_policy(
+                *packet.compose, packet.image);
         const OpenGLFamilyTextureRecord* const record =
             binding->device->resolve_texture(packet.texture);
-        if (!record || !record->native_work_order_ready()
+        if (!native_policy || !record || !record->native_work_order_ready()
             || !detail::valid_compose_bounds(packet, *record))
         {
             return false;
@@ -484,9 +500,8 @@ export namespace epochengine::openglcanvas2d
         if (state_guard.sampler_objects_available)
             glBindSampler(0, 0);
         detail::ScopedTextureParameters texture_parameters{};
-        const GLint filter = compose.presentation_filter == FilterMode::nearest
-            ? GL_NEAREST
-            : GL_LINEAR;
+        const GLint filter =
+            detail::native_texture_filter(native_policy.sample_filter);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

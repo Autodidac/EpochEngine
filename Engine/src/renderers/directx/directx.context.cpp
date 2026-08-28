@@ -249,15 +249,10 @@ namespace epochengine::directxcontext::detail
                 || !texture.active || !texture.ready || !texture.view)
                 return false;
 
-            if (packet.image.origin
-                != canvas2d::presentation::PixelOrigin::top_left)
-                return false;
-
-            if (packet.image.color_space != canvas2d::SpriteColorSpace::linear)
-                return false;
-
-            if (packet.image.alpha_encoding
-                != canvas2d::cpu::AlphaEncoding::premultiplied)
+            const auto nativePolicy =
+                canvas2d::presentation::make_native_compose_policy(
+                    *packet.compose, packet.image);
+            if (!nativePolicy)
                 return false;
 
             const auto& compose = *packet.compose;
@@ -279,6 +274,20 @@ namespace epochengine::directxcontext::detail
                 && visible.y + visible.height
                     <= static_cast<float>(texture.desc.height) + 0.001f;
         }
+
+        [[nodiscard]] constexpr int native_sampler_slot(
+            canvas2d::presentation::NativeSampleFilter filter) noexcept
+        {
+            if (filter == canvas2d::presentation::NativeSampleFilter::nearest)
+                return 0;
+            if (filter == canvas2d::presentation::NativeSampleFilter::linear)
+                return 1;
+            return -1;
+        }
+
+        static_assert(native_sampler_slot(canvas2d::presentation::NativeSampleFilter::nearest) == 0);
+        static_assert(native_sampler_slot(canvas2d::presentation::NativeSampleFilter::linear) == 1);
+        static_assert(native_sampler_slot(canvas2d::presentation::NativeSampleFilter::invalid) == -1);
 
         [[nodiscard]] std::vector<DirectXVertex> solid_quad(
             const canvas2d::LinearColor& color)
@@ -414,6 +423,11 @@ namespace epochengine::directxcontext::detail
                 return false;
             }
 
+            const auto nativePolicy =
+                canvas2d::presentation::make_native_compose_policy(
+                    *packet.compose, packet.image);
+            if (!nativePolicy)
+                return false;
             const auto& compose = *packet.compose;
             const auto& output = compose.viewport.output_surface;
             const auto& destination = compose.viewport.clipped_destination;
@@ -516,9 +530,9 @@ namespace epochengine::directxcontext::detail
             ID3D11ShaderResourceView* view = texture->view;
             state.immediate->PSSetShaderResources(0u, 1u, &view);
             ID3D11SamplerState* sampler =
-                compose.presentation_filter == FilterMode::nearest
-                ? canvas->nearestSampler
-                : canvas->linearSampler;
+                detail::native_sampler_slot(nativePolicy.sample_filter) == 0
+                    ? canvas->nearestSampler
+                    : canvas->linearSampler;
             state.immediate->PSSetSamplers(0u, 1u, &sampler);
             state.immediate->Draw(6u, 0u);
 

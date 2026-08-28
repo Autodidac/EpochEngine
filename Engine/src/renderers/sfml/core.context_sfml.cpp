@@ -73,6 +73,20 @@ namespace
         refused
     };
 
+    [[nodiscard]] constexpr bool sfml_native_filter_is_linear(
+        epochengine::canvas2d::presentation::NativeSampleFilter filter) noexcept
+    {
+        return filter
+            == epochengine::canvas2d::presentation::NativeSampleFilter::linear;
+    }
+
+    static_assert(!sfml_native_filter_is_linear(
+        epochengine::canvas2d::presentation::NativeSampleFilter::nearest));
+    static_assert(sfml_native_filter_is_linear(
+        epochengine::canvas2d::presentation::NativeSampleFilter::linear));
+    static_assert(!sfml_native_filter_is_linear(
+        epochengine::canvas2d::presentation::NativeSampleFilter::invalid));
+
     class SfmlCanvas2DPresenter final
     {
     public:
@@ -212,6 +226,11 @@ namespace
             }
 
             const auto& compose = *packet.compose;
+            const auto nativePolicy =
+                epochengine::canvas2d::presentation::make_native_compose_policy(
+                    compose, packet.image);
+            if (!nativePolicy)
+                return false;
             const auto& destination = compose.viewport.clipped_destination;
             const auto& visible = compose.viewport.visible_canvas;
             if (destination.empty() || destination.x < 0 || destination.y < 0
@@ -275,9 +294,7 @@ namespace
                 clearStates.blendMode = sf::BlendNone;
             }
 
-            record->texture->setSmooth(
-                compose.presentation_filter
-                    != epochengine::FilterMode::nearest);
+            record->texture->setSmooth(sfml_native_filter_is_linear(nativePolicy.sample_filter));
             sf::RenderStates states{};
             states.texture = record->texture.get();
 #if EPOCH_SFML_HAS_V3_API

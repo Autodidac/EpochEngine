@@ -164,6 +164,23 @@ namespace
         refused
     };
 
+    [[nodiscard]] constexpr int sdl_native_scale_mode_index(
+        epochengine::canvas2d::presentation::NativeSampleFilter filter) noexcept
+    {
+        if (filter == epochengine::canvas2d::presentation::NativeSampleFilter::nearest)
+            return 0;
+        if (filter == epochengine::canvas2d::presentation::NativeSampleFilter::linear)
+            return 1;
+        return -1;
+    }
+
+    static_assert(sdl_native_scale_mode_index(
+        epochengine::canvas2d::presentation::NativeSampleFilter::nearest) == 0);
+    static_assert(sdl_native_scale_mode_index(
+        epochengine::canvas2d::presentation::NativeSampleFilter::linear) == 1);
+    static_assert(sdl_native_scale_mode_index(
+        epochengine::canvas2d::presentation::NativeSampleFilter::invalid) == -1);
+
     class SdlCanvas2DPresenter final
     {
     public:
@@ -322,6 +339,11 @@ namespace
             }
 
             const auto& compose = *packet.compose;
+            const auto nativePolicy =
+                epochengine::canvas2d::presentation::make_native_compose_policy(
+                    compose, packet.image);
+            if (!nativePolicy)
+                return false;
             const auto& surface = packet.surface.viewport;
             const auto& composeDestination = compose.viewport.clipped_destination;
             const auto& visible = compose.viewport.visible_canvas;
@@ -336,9 +358,9 @@ namespace
             }
 
             const SDL_ScaleMode scaleMode =
-                compose.presentation_filter == epochengine::FilterMode::nearest
-                ? SDL_SCALEMODE_NEAREST
-                : SDL_SCALEMODE_LINEAR;
+                sdl_native_scale_mode_index(nativePolicy.sample_filter) == 0
+                    ? SDL_SCALEMODE_NEAREST
+                    : SDL_SCALEMODE_LINEAR;
             if (!SDL_SetTextureScaleMode(record->texture, scaleMode))
                 return false;
 
