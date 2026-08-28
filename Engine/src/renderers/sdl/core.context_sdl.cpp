@@ -45,6 +45,7 @@ import core.logger;
 import image.loader;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_cpu;
 import render.canvas2d_evidence;
 import render.canvas2d_limits;
 import render.canvas2d_presentation;
