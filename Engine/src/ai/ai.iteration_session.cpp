@@ -132,6 +132,21 @@ namespace epochengine::ai::iteration_session
                 && lowercase_hex(source.project_profile_digest, 64u);
         }
 
+        [[nodiscard]] bool same_curated_files(
+            const std::vector<CuratedFile>& left,
+            const std::vector<CuratedFile>& right)
+        {
+            return left.size() == right.size()
+                && std::equal(
+                    left.begin(), left.end(), right.begin(), right.end(),
+                    [](const CuratedFile& left_file, const CuratedFile& right_file)
+                    {
+                        return left_file.relative_path == right_file.relative_path
+                            && left_file.sha256 == right_file.sha256
+                            && left_file.byte_count == right_file.byte_count;
+                    });
+        }
+
         [[nodiscard]] std::string escape_field(const std::string_view text)
         {
             constexpr char digits[] = "0123456789abcdef";
@@ -274,7 +289,8 @@ namespace epochengine::ai::iteration_session
         }
         const auto inspected = inspect_curated_files(
             configuration.source, curated_paths);
-        if (!inspected.accepted || inspected.files != configuration.curated_files)
+        if (!inspected.accepted
+            || !same_curated_files(inspected.files, configuration.curated_files))
             return reject("Iteration session refused curated metadata not derived from verified live files.");
 
         static std::atomic<std::uint64_t> next_session_id{0u};
@@ -566,7 +582,7 @@ namespace epochengine::ai::iteration_session
             || digest_text(report.objective) != report.objective_digest
             || !valid_source_authority(current_source)
             || report.source != current_source
-            || report.curated_files != current_files)
+            || !same_curated_files(report.curated_files, current_files))
         {
             report_ = report;
             report_.phase = SessionPhase::blocked;
