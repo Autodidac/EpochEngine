@@ -2,7 +2,7 @@
 
 EpochGui is a portable C++23 GUI layout, input-adapter, raster-data, and geometry library used by EpochEngine and standalone applications.
 
-The current bundled and standalone source release is `v0.89.28`. EpochEngine
+The current bundled and standalone source release is `v0.89.29`. EpochEngine
 mirrors this tree under `Engine/dep/EpochGui`; hosted publication verifies that
 the standalone repository and bundled tree remain identical.
 
@@ -34,6 +34,31 @@ The core module provides:
 ```cpp
 import epoch.gui;
 ```
+
+### `gui/hierarchy_tree.hpp`
+
+The renderer-neutral hierarchy controller is a public header/source API for
+dense trees such as outliners, GUI/component hierarchies, script browsers, and
+evidence explorers. It provides stable numeric identities, transactional tree
+replacement, deterministic ordering, expand/collapse state, ancestor-retaining
+filtering, single/toggle/range selection, keyboard traversal, virtualized row
+planning, scroll-to-visible calculations, locked and disabled row policy, and
+deterministic context-action routing.
+
+```cpp
+#include <gui/hierarchy_tree.hpp>
+
+namespace tree = epochengine::gui_lib::hierarchy_tree;
+
+tree::Controller hierarchy{};
+const tree::ReplaceResult admitted = hierarchy.replace_nodes(nodes);
+const tree::LayoutPlan visible = hierarchy.plan_rows(viewport);
+```
+
+EpochGui owns the portable state and calculations. A consuming application
+still supplies its domain nodes, draws the planned rows, feeds input commands,
+and executes accepted context routes. This standalone release does not claim
+that a particular EpochEngine editor surface has adopted the control yet.
 
 ### `epoch.gui.tile_workspace`
 
