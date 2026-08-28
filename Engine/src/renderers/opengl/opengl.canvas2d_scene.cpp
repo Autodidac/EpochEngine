@@ -23,10 +23,10 @@ import core.logger;
 import opengl.canvas2d;
 import opengl.textures;
 import render.canvas2d;
-import render.canvas2d_cpu;
 import render.canvas2d_evidence;
 import render.canvas2d_limits;
 import render.canvas2d_presentation;
+import render.canvas2d_runtime;
 import render.canvas2d_scene;
 import render.device;
 import render.device_opengl_family;
@@ -42,10 +42,7 @@ namespace epochengine::openglcanvas2d
             canvas2d::limits::NativeExecutionLimits execution_limits{
                 canvas2d::limits::for_backend(RendererBackendKind::opengl)};
             std::unique_ptr<openglcanvas2d::Presenter> presenter{};
-            canvas2d::Canvas2DFramePlan frame{};
-            canvas2d::cpu::RasterResult raster{};
-            canvas2d::CanvasExtent output{};
-            std::uint64_t content_hash{};
+            canvas2d::runtime::SceneRasterSession session{};
             Canvas2DPixelEvidenceSnapshot evidence{};
             std::uint32_t evidence_frames{};
 
@@ -69,38 +66,26 @@ namespace epochengine::openglcanvas2d
             }
 
             [[nodiscard]] bool render(
-                const canvas2d::scene_content::AcquiredScene& scene,
+                const core::Context* owner,
                 canvas2d::CanvasExtent nextOutput,
                 canvas2d::presentation::PresentationSurface surface)
             {
                 std::scoped_lock lock(mutex);
-                if (!presenter || !scene || nextOutput.empty())
+                if (!presenter || !owner || nextOutput.empty())
                     return false;
-                if (content_hash != scene.content_hash || output != nextOutput
-                    || !frame || !raster)
+                const canvas2d::runtime::PreparedSceneView prepared =
+                    session.prepare(
+                        owner,
+                        nextOutput,
+                        execution_limits.canvas,
+                        execution_limits.raster);
+                if (!prepared)
+                    return false;
+                if (prepared.code == canvas2d::runtime::PrepareCode::ready)
                 {
-                    canvas2d::Canvas2DFramePlan nextFrame =
-                        canvas2d::scene_content::compile(
-                            scene,
-                            nextOutput,
-                            execution_limits.canvas);
-                    if (!nextFrame)
-                        return false;
-                    canvas2d::cpu::RasterResult nextRaster =
-                        canvas2d::cpu::rasterize(
-                            nextFrame,
-                            scene.content->resources.bindings,
-                            execution_limits.raster);
-                    if (!nextRaster)
-                        return false;
-
-                    frame = std::move(nextFrame);
-                    raster = std::move(nextRaster);
-                    output = nextOutput;
-                    content_hash = scene.content_hash;
                     evidence = {};
-                    evidence.frame_sequence = frame.frame_sequence;
-                    evidence.content_hash = content_hash;
+                    evidence.frame_sequence = prepared.frame->frame_sequence;
+                    evidence.content_hash = prepared.content_hash;
                     evidence_frames = 0;
                 }
 
@@ -117,7 +102,10 @@ namespace epochengine::openglcanvas2d
                 }
 
                 const canvas2d::presentation::PresentationResult presented =
-                    presenter->present(frame, raster, surface);
+                    presenter->present(
+                        *prepared.frame,
+                        *prepared.raster,
+                        surface);
                 if (!presented)
                     return false;
 
@@ -128,18 +116,18 @@ namespace epochengine::openglcanvas2d
                 {
                     canvas2d::evidence::PixelEvidencePolicy policy{};
                     policy.channel_tolerance =
-                        frame.compose.presentation_filter
+                        prepared.frame->compose.presentation_filter
                             == FilterMode::nearest
                         ? 0u
                         : 1u;
                     const canvas2d::evidence::PixelEvidenceResult compared =
                         presenter->compare_native(
-                            raster.presentation,
-                            raster.presentation_hash,
+                            prepared.raster->presentation,
+                            prepared.raster->presentation_hash,
                             surface,
                             policy);
-                    evidence.frame_sequence = frame.frame_sequence;
-                    evidence.content_hash = content_hash;
+                    evidence.frame_sequence = prepared.frame->frame_sequence;
+                    evidence.content_hash = prepared.content_hash;
                     evidence.reference_hash = compared.reference_hash;
                     evidence.observed_hash = compared.observed_hash;
                     evidence.pixels_compared = compared.pixels_compared;
@@ -208,10 +196,7 @@ namespace epochengine::openglcanvas2d
                 if (presenter)
                     presenter->retire_all();
                 presenter.reset();
-                frame = {};
-                raster = {};
-                output = {};
-                content_hash = 0;
+                session.reset();
                 evidence = {};
                 evidence_frames = 0;
             }
@@ -296,7 +281,7 @@ namespace epochengine::openglcanvas2d
         if (!presenter)
             return false;
         return presenter->render(
-            scene,
+            ctx.get(),
             output,
             canvas2d::presentation::PresentationSurface{
                 {

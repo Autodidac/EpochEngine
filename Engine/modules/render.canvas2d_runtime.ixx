@@ -219,6 +219,7 @@ export namespace epochengine::canvas2d::runtime
         reuse,
         limit_change,
         resize,
+        revision_only_replacement,
         replacement,
         retirement,
         metrics
@@ -237,6 +238,8 @@ export namespace epochengine::canvas2d::runtime
         case RuntimeContractFailure::reuse: return "reuse";
         case RuntimeContractFailure::limit_change: return "limit_change";
         case RuntimeContractFailure::resize: return "resize";
+        case RuntimeContractFailure::revision_only_replacement:
+            return "revision_only_replacement";
         case RuntimeContractFailure::replacement: return "replacement";
         case RuntimeContractFailure::retirement: return "retirement";
         case RuntimeContractFailure::metrics: return "metrics";
@@ -329,8 +332,34 @@ export namespace epochengine::canvas2d::runtime
             (void)scene_content::retire(&owner);
             return RuntimeContractFailure::resize;
         }
+        const std::uint64_t resizedGeneration = resizedReuse.generation;
+        const std::uint64_t resizedFrameSequence =
+            resizedReuse.frame->frame_sequence;
+        const std::uint64_t resizedContentHash = resizedReuse.content_hash;
 
-        content.source_revision = 2;
+        scene_content::SceneContent revisionOnly = content;
+        revisionOnly.source_revision = 2;
+        if (!scene_content::publish(&owner, std::move(revisionOnly)))
+        {
+            (void)scene_content::retire(&owner);
+            return RuntimeContractFailure::revision_only_replacement;
+        }
+        const PreparedSceneView revisionReplaced = session.prepare(
+            &owner,
+            {24, 20});
+        if (!revisionReplaced
+            || revisionReplaced.code != PrepareCode::ready
+            || revisionReplaced.content_hash != resizedContentHash
+            || revisionReplaced.raster->canvas_hash != firstHash
+            || revisionReplaced.generation == resizedGeneration
+            || revisionReplaced.frame->frame_sequence
+                == resizedFrameSequence)
+        {
+            (void)scene_content::retire(&owner);
+            return RuntimeContractFailure::revision_only_replacement;
+        }
+
+        content.source_revision = 3;
         content.sprites.front().tint = {1.0f, 0.2f, 0.1f, 1.0f};
         if (!scene_content::publish(&owner, std::move(content)))
         {
@@ -352,7 +381,7 @@ export namespace epochengine::canvas2d::runtime
             return RuntimeContractFailure::retirement;
         }
         const SessionMetrics& metrics = session.metrics();
-        if (metrics.requests != 10 || metrics.prepared_frames != 3
+        if (metrics.requests != 11 || metrics.prepared_frames != 4
             || metrics.reused_frames != 3 || metrics.scene_misses != 2
             || metrics.compile_failures != 0 || metrics.raster_failures != 1)
         {
