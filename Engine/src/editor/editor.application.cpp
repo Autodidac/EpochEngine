@@ -20778,6 +20778,11 @@ namespace epochengine
         auto dispatch_ai_development_action = [&](
             const editor_ai_development_panel::RenderResult& action)
         {
+            for (const auto& evidence : action.campaign_evidence)
+            {
+                chat.append_status(evidence);
+                push_ai_development_log(editor, "[self-iteration] " + evidence);
+            }
             if (!action.source_paths.empty())
             {
                 if (action.source_root.empty())
@@ -26622,6 +26627,9 @@ namespace epochengine
                     .workspace_id = "epoch.engine",
                     .source_snapshot_root = {},
                     .workspace_root = inspectorEvidence.workspace_root,
+                    .source_cache_root = inspectorEvidence.cache_root,
+                    .curated_scope_digest = editor.curatedCodeWorkspace.evidenceDigest,
+                    .curated_source_paths = editor.sourceWorkspaceLabels,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
                     .tool_output_relative_path = inspectorActiveScriptSource,
@@ -31184,6 +31192,9 @@ namespace epochengine
                     .workspace_id = "epoch.engine",
                     .source_snapshot_root = {},
                     .workspace_root = evidence.workspace_root,
+                    .source_cache_root = evidence.cache_root,
+                    .curated_scope_digest = editor.curatedCodeWorkspace.evidenceDigest,
+                    .curated_source_paths = editor.sourceWorkspaceLabels,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
                     .selected_model = manifest.display_name,
@@ -31237,6 +31248,9 @@ namespace epochengine
                     .workspace_id = "epoch.engine",
                     .source_snapshot_root = {},
                     .workspace_root = evidence.workspace_root,
+                    .source_cache_root = evidence.cache_root,
+                    .curated_scope_digest = editor.curatedCodeWorkspace.evidenceDigest,
+                    .curated_source_paths = editor.sourceWorkspaceLabels,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
                     .latest_raw_model_reply = chat.latestRawReply,

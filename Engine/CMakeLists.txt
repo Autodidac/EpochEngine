@@ -379,6 +379,16 @@ set(EPOCH_SOURCES
     src/ai/ai.project_profile_contract.cpp
     src/ai/ai.iteration_campaign.cpp
     src/ai/ai.iteration_campaign_contract.cpp
+    src/ai/ai.mcp_campaign.cpp
+    src/ai/ai.mcp_campaign_contract.cpp
+    src/ai/ai.mcp_child_host.cpp
+    src/ai/ai.mcp_child_host_contract.cpp
+    src/ai/ai.self_iteration_orchestrator.cpp
+    src/ai/ai.self_iteration_orchestrator_contract.cpp
+    src/ai/ai.mcp_orchestrator_bridge.cpp
+    src/ai/ai.mcp_orchestrator_bridge_contract.cpp
+    src/ai/ai.source_patch_bundle.cpp
+    src/ai/ai.source_patch_bundle_contract.cpp
     src/ai/ai.development_proposal_codec.cpp
     src/ai/ai.development_proposal_codec_contract.cpp
     src/ai/ai.mcp_stdio.cpp

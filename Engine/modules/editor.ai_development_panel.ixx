@@ -49,6 +49,9 @@ export namespace epochengine::editor_ai_development_panel
         std::string source_authority_receipt_digest{};
         bool source_authority_verified{};
         std::string workspace_root{};
+        std::string source_cache_root{};
+        std::string curated_scope_digest{};
+        std::vector<std::string> curated_source_paths{};
         std::string development_objective{};
         std::string architecture_evidence{};
         std::string tool_output_relative_path{};
@@ -69,6 +72,7 @@ export namespace epochengine::editor_ai_development_panel
         std::vector<std::string> include_paths{};
         std::vector<std::string> source_paths{};
         std::vector<std::string> excluded_components{};
+        std::vector<std::string> campaign_evidence{};
         std::uint32_t workspace_generation{};
     };
 

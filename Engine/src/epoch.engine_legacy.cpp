@@ -181,6 +181,11 @@ import ai.project_profile;
 import ai.iteration_loop;
 import ai.iteration_session;
 import ai.iteration_campaign;
+import ai.mcp_campaign;
+import ai.mcp_child_host;
+import ai.self_iteration_orchestrator;
+import ai.mcp_orchestrator_bridge;
+import ai.source_patch_bundle;
 import epoch.build_validation;
 import editor.ai_development_controller;
 import editor.ai_development_panel;
@@ -2700,6 +2705,21 @@ namespace epochengine::core
         check(
             "ai.iteration_campaign",
             epochengine::ai::iteration_campaign::run_contract());
+        check(
+            "ai.mcp_campaign",
+            epochengine::ai::mcp_campaign::run_contract());
+        check(
+            "ai.mcp_child_host",
+            epochengine::ai::mcp_child_host::run_contract());
+        check(
+            "ai.self_iteration_orchestrator",
+            epochengine::ai::self_iteration_orchestrator::run_contract());
+        check(
+            "ai.mcp_orchestrator_bridge",
+            epochengine::ai::mcp_orchestrator_bridge::run_contract());
+        check(
+            "ai.source_patch_bundle",
+            epochengine::ai::source_patch_bundle::run_contract());
         check(
             "epoch.build_validation",
             epochengine::build_validation::run_contract()
