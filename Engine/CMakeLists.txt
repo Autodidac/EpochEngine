@@ -378,6 +378,8 @@ set(EPOCH_SOURCES
     src/ai/ai.iteration_session_contract.cpp
     src/ai/ai.project_profile.cpp
     src/ai/ai.project_profile_contract.cpp
+    src/ai/ai.curated_context_bundle.cpp
+    src/ai/ai.curated_context_bundle_contract.cpp
     src/ai/ai.iteration_campaign.cpp
     src/ai/ai.iteration_campaign_contract.cpp
     src/ai/ai.iteration_campaign_queue.cpp
@@ -2100,6 +2102,29 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_ai_iteration_supervisor_control_contract
         COMMAND epoch_ai_iteration_supervisor_control_contract
+    )
+
+    add_executable(epoch_ai_curated_context_bundle_contract
+        src/ai/ai.curated_context_bundle.cpp
+        src/ai/ai.curated_context_bundle_contract.cpp
+    )
+    target_sources(epoch_ai_curated_context_bundle_contract PRIVATE
+        FILE_SET epoch_ai_curated_context_bundle_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
+                ${EPOCH_MODULE_DIR}/ai.curated_context_bundle.ixx
+    )
+    target_compile_definitions(epoch_ai_curated_context_bundle_contract PRIVATE
+        EPOCH_AI_CURATED_CONTEXT_BUNDLE_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_curated_context_bundle_contract)
+    epoch_apply_warnings(epoch_ai_curated_context_bundle_contract)
+    epoch_apply_sanitizers(epoch_ai_curated_context_bundle_contract)
+    add_test(
+        NAME epoch_ai_curated_context_bundle_contract
+        COMMAND epoch_ai_curated_context_bundle_contract
     )
 
     add_executable(epoch_ai_voice_session_contract

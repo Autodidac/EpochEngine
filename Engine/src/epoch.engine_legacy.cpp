@@ -179,6 +179,7 @@ import editor.core;
 import ai.engine;
 import ai.development_proposal_codec;
 import ai.project_profile;
+import ai.curated_context_bundle;
 import ai.iteration_loop;
 import ai.iteration_session;
 import ai.iteration_campaign;
@@ -2703,6 +2704,10 @@ namespace epochengine::core
         check(
             "ai.project_profile",
             epochengine::ai::project_profile::run_contract());
+        check(
+            "ai.curated_context_bundle",
+            epochengine::ai::curated_context_bundle::run_contract()
+                == epochengine::ai::curated_context_bundle::ContractFailure::none);
         check(
             "ai.iteration_loop",
             epochengine::ai::iteration::run_contract());
