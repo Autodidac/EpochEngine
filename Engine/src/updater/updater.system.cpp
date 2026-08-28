@@ -5877,10 +5877,11 @@ namespace epochengine::updater
                !system_detail::json_document_within_release_limits(too_many_fields) &&
                !system_detail::json_document_within_release_limits(too_long_string) &&
                !system_detail::json_document_within_release_limits(too_large) &&
-               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.29") > 0 &&
+               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.30") > 0 &&
                system_detail::compare_versions(PROJECT_PACKAGED_VERSION, "0.89.29") > 0 &&
-               system_detail::compare_versions(PROJECT_SOURCE_VERSION, PROJECT_PACKAGED_VERSION) ==
-                   0 &&
+               system_detail::compare_versions(PROJECT_PACKAGED_VERSION, "0.89.30") == 0 &&
+               system_detail::compare_versions(
+                   PROJECT_SOURCE_VERSION, PROJECT_PACKAGED_VERSION) > 0 &&
                PROJECT_SOURCE_VERSION_URL() ==
                    std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version";
     }

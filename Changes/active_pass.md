@@ -1,3 +1,18 @@
+- The next source-only updater checkpoint is v0.89.31. Source identity and the
+  updater-parsed compatibility module advance together while Windows, Linux,
+  and macOS packaged-version authorities intentionally remain v0.89.30. The
+  build-safe discovery contract proves source 31 is newer than packaged 30,
+  packaged 30 is newer than the prior 29 authority, and discovery still uses the Site.
+  Fresh Debug and Release builds/contracts pass; source-build Windows metadata
+  reports 0.89.31. Site v43 now satisfies the binary-first prerequisite with an
+  independently verified v0.89.30 runtime; source activation remains a separate
+  exact-commit admission.
+- The updater-equivalent managed Clang 22.1.8 Release lane builds the full Linux
+  engine in 1325 steps with source delivery enabled. The 24,731,808-byte
+  executable has SHA-256 `ef6e880195c7fd596685bba57642eaacd21c9bc9270ac3e79200374c9086854e`,
+  reports v0.89.31, and passes the aggregate build-safe engine contract without
+  opening a renderer or GUI.
+  All 33 no-display Linux CTests pass.
 - The local v0.89.30 editor/library identity baseline is source- and build-proven.
   `ConsoleApplication1` is now `EpochEditor`; `StaticLib1` is now `EpochEngine`.
   Solution/project paths, updater source target, generated-project links,
@@ -23,7 +38,7 @@
   and 9,596,416 bytes / SHA-256
   `ef50e4836ccb555ad95b233d8b6c5f052248e109c1ee51b097ffec4f46f90903`.
   Exact-build eye evidence remains an operator gate.
-- The binary-first v0.89.30 release candidate is staged from exact commit
+- The binary-first v0.89.30 runtime is published from exact commit
   `5d6fcf982d9d8e062d0dc919502444bb5cf3458d`. The Windows ZIP is 29,736,248
   bytes with SHA-256
   `fb222ac7ae0ed21ce4f231c30e942db82f0a6226c8f7c569016eb985af70580a`;
@@ -32,14 +47,14 @@
   `bc5cedb8e59614d8dc38327a1657e4fcd63f5cd0b82dccc576365f70b6e60435`
   under one package prefix with the same debris checks. Both staged packages
   report v0.89.30 and pass the build-safe aggregate engine contract. The Linux
-  candidate is build/contract-proven only because native renderer smoke was
-  explicitly skipped. Publish this runtime before activating renamed source.
+  release is build/contract-proven only because native renderer smoke was
+  explicitly skipped. Site v43 independently re-downloaded and verified both
+  immutable packages before making v0.89.30 the signed latest runtime.
 - The identity baseline is checkpointed at exact local commit
-  `2d0f3c9a1df7a7ca52eb0419b01840ece80483cc` and held by the Site task as
-  not published/not active. Do not activate renamed source for the shipped
-  v0.89.29 updater: first publish a packaged runtime carrying `EpochEditor`,
-  then activate a later source checkpoint to test rebuild. Keep each Site
-  release/checkpoint visible until explicit cleanup.
+  `2d0f3c9a1df7a7ca52eb0419b01840ece80483cc`. Published v0.89.30 now carries
+  `EpochEditor`, satisfying the binary-first compatibility prerequisite. Activate
+  only a later exact v0.89.31 source checkpoint to test the renamed rebuild lane,
+  and keep each Site release/checkpoint visible until explicit cleanup.
 - Continue substantial concept-guided parity cycles
   across shared EpochGui shell primitives, editor hierarchy/inspector/timeline/
   task/evidence composition, engine-backed data, and every supported renderer
@@ -50,8 +65,8 @@
   retained origin/version/license evidence, and deterministic package admission;
   generated concept art remains design reference only.
 - EpochEngine source distribution is now a restricted development boundary for
-  `v0.89.30`; Site source discovery is `v0.89.30` while packaged runtime remains `v0.89.29`. Smart Update is
-  binary-first; authorized encrypted source is its
+  `v0.89.30`; Site source discovery and packaged runtime are both `v0.89.30`.
+  Smart Update is binary-first; authorized encrypted source is its
   missing/failed-package fallback and remains available explicitly for a local
   rebuild or project-cache extraction. First native enrollment uses explicit
   browser approval; later access can use a short server challenge signed by a
@@ -62,9 +77,9 @@
   unavailable, no static source credential ships in Epoch or browser code, and
   a binary-only compile policy can remove all source lanes. EpochGui remains
   independently public.
-- Current Site presentation is v41; its EpochEngine distribution state remains
-  the v34 artifact/device deployment from exact Site commit
-  `6c7bb8145445a456ae97914adb475aa13410fb4a` at environment revision 7.
+- Current Site runtime authority is v43 from exact Site commit
+  `1b7ef1fce6a9bc1fdd00dc7b7655494b99e3546b`; its private-source artifact/device
+  state retains the compatible v34 contract at environment revision 7.
   `/admin` remains owner-only through direct Sign in
   with ChatGPT. Remembered devices authorize until explicitly revoked; per-update
   browser approval remains disabled and unavailable to the shipped v0.89.29
@@ -79,8 +94,8 @@
   Linux retains the exact same-commit tar.gz sibling. Signed manifests use
   platform-correct formats, lowercase hexadecimal SHA-256 fields, and the legacy
   literal-backslash-n AAD descriptor required by v0.89.29. Packaged runtime
-  v0.89.29 and signed integrity remain unchanged; five older source artifacts
-  remain inactive for rollback. No bearer, private key, DEK, identity, device
+  v0.89.30 and signed integrity are live; v0.89.29 and five older source
+  artifacts remain available for rollback. No bearer, private key, DEK, identity, device
   code, or private response is recorded here.
 - Site v31 is live from exact Site commit `46be28d97a76d51c6b35d44fa7cd4a63f6b2c51e`
   at environment revision 7. `/admin` is an owner-only CMS using direct Sign in
@@ -213,8 +228,8 @@
 
 ## Gate
 
-Prepare the distinct v0.89.30 source-update visibility candidate so a published
-v0.89.29 editor can exercise authenticated source discovery and acquisition.
+Prepare the distinct v0.89.31 source-only checkpoint so a published v0.89.30
+editor can exercise authenticated source discovery and acquisition.
 Preserve the accepted editor work around explicit project sessions,
 launcher-owned authoring applications, semantic GUI deletion, and a
 process-owned physical controller boundary. The operator accepted the v0.89.23
@@ -366,18 +381,19 @@ staged Windows/Linux artifacts whose checksums are published and independently
 verified; do not convert build evidence into native interaction evidence.
 ## Release Baseline
 
-`v0.89.30` is the current development source and locally staged Windows/Linux
-runtime candidate. MSVC Debug/Release and managed Clang Release builds plus
-their build-safe contracts pass; no GUI or renderer was launched. The Windows
-ZIP is 29,731,430 bytes with SHA-256
-`d1314a0900f085ab00c9c2f732b65f7b9ec8bc13c61439fb123c31d670a63bcd`
-and contains `EpochEditor.exe` at archive root. The Linux tar.gz is 31,114,081
+`v0.89.31` is the current development source. `v0.89.30` is the published
+binary-first Windows/Linux runtime from exact source commit
+`5d6fcf982d9d8e062d0dc919502444bb5cf3458d`. Its build-safe Windows and Linux
+contracts pass; no GUI or renderer was launched. The Windows ZIP is 29,736,248
 bytes with SHA-256
-`f1a00dc60ae9b16e223dac5d538fbe2347b974cc0a01d77625614f7b7f0e4520`;
+`fb222ac7ae0ed21ce4f231c30e942db82f0a6226c8f7c569016eb985af70580a`
+and contains one root `EpochEditor.exe`. The Linux tar.gz is 31,119,632 bytes
+with SHA-256
+`bc5cedb8e59614d8dc38327a1657e4fcd63f5cd0b82dccc576365f70b6e60435`;
 its renderer smoke was deliberately skipped, so native pixels remain
-unverified. Published signed runtime `v0.89.29`, historical `v0.89.28`,
-`v0.89.27`, and immutable `v0.89.06` remain the live release assets until an explicitly
-authorized Site publication. The independent historical
+unverified. Site v43 independently verified these immutable package bytes and
+made `v0.89.30` the signed latest runtime. Published v0.89.29, historical
+v0.89.28, v0.89.27, and immutable v0.89.06 remain available for rollback. The independent historical
 `multicontext-base-stable` branch remains fixed at
 `ad6c416d930b348a61bc37ceb7d4522742be084a`. EpochGui remains a public Site
 repository while EpochEngine development source
@@ -1335,8 +1351,8 @@ presentation, and Project Audio cue/music playback over one authored map. GUI
 runtime artifact work must reconcile the existing compiler/runtime contracts
 with the editor adapter before any completion claim.
 Bounded scene/GUI creation is the first host-authorized non-source AI lane; project save/build/run/test and broader document tools remain follow-up behind their existing human-owned authority. Preserve the
-verified published `v0.89.29` runtime release, staged `v0.89.30` candidate,
-historical `v0.89.28`, `v0.89.27`, and `v0.89.06` assets, the exact
+verified published `v0.89.30` runtime release, historical `v0.89.29`,
+`v0.89.28`, `v0.89.27`, and `v0.89.06` assets, the exact
 `multicontext-base-stable` ref, and the Site-hosted updater contract.
 The canonical schedule is
 `Changes/roadmap.md`; durable follow-up is `Changes/mission_cache.md`.

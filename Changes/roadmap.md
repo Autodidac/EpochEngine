@@ -33,16 +33,16 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
   mobile specialization, and effects cannot consume the playable-2D schedule.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
-- `v0.89.30` is the current development source authority; `v0.89.29` remains the
-  latest fully published runtime. Preserve `v0.89.28`, `v0.89.27`, and immutable
-  `v0.89.06` as release history, and preserve
+- `v0.89.31` is the current development source authority; `v0.89.30` is the
+  latest fully published binary-first packaged runtime. Preserve `v0.89.29`,
+  `v0.89.28`, `v0.89.27`, and immutable `v0.89.06` as release history, and preserve
   `multicontext-base-stable` at exact commit
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Future release changes require a
   new bounded build, contract, package, checksum, and publication pass.
 
 ## Current Foundation
 
-Source v0.89.30 contains these completed or intentionally partial contracts:
+Source v0.89.31 contains these completed or intentionally partial contracts:
 
 - a stable renderer-neutral camera/view contract now carries logical view,
   scene, purpose, projection, orientation, clip, and revision state through

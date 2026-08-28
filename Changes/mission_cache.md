@@ -1,4 +1,17 @@
 # Mission Cache
+- v0.89.31 is the intentionally source-only successor to the binary-first
+  v0.89.30 package. Advance both source authorities and source-build Windows
+  metadata to 31 while leaving all platform packaged-version authorities at 30.
+  The updater build-safe contract must prove `source 31 > packaged 30 > prior
+  29`; never restore source/package equality merely to simplify the test. Site
+  v43 has now published and independently verified the v0.89.30 EpochEditor
+  runtime; activate v0.89.31 source only through a separate exact-commit pass.
+- Linux v0.89.31 source proof uses the updater-equivalent managed Clang 22.1.8
+  Release lane with source delivery enabled. All 1325 build steps pass; the
+  24,731,808-byte executable has SHA-256
+  `ef6e880195c7fd596685bba57642eaacd21c9bc9270ac3e79200374c9086854e`, reports
+  v0.89.31, and passes the aggregate build-safe contract without renderer startup.
+  All 33 no-display Linux CTests pass.
 - The local v0.89.30 editor-identity baseline now names the executable project
   `EpochEditor` and the static engine project/library `EpochEngine` everywhere
   active: solution/project paths, project references, updater source-build
@@ -65,7 +78,7 @@
   renamed source checkpoint for source rebuilds. A following newer source
   checkpoint then exercises the renamed updater lane without stranding the old
   client.
-- The final binary-first v0.89.30 candidate is built from exact commit
+- The published binary-first v0.89.30 runtime is built from exact commit
   `5d6fcf982d9d8e062d0dc919502444bb5cf3458d`. Windows is 29,736,248 bytes /
   SHA-256
   `fb222ac7ae0ed21ce4f231c30e942db82f0a6226c8f7c569016eb985af70580a`;
@@ -74,7 +87,10 @@
   Both staged packages pass version and build-safe engine contracts. Windows has
   one root `EpochEditor.exe`; both archives exclude legacy target names, Git
   metadata, logs, and caches. Linux native pixels remain unclaimed because its
-  renderer smoke was explicitly skipped.
+  renderer smoke was explicitly skipped. Site v43 at exact Site commit
+  `1b7ef1fce6a9bc1fdd00dc7b7655494b99e3546b` independently re-downloaded both
+  immutable assets, verified these hashes and the Ed25519 envelope, and retained
+  v0.89.29/v0.89.28/v0.89.27/v0.89.06 for rollback.
 - Preserve the temporal GUI authoring boundary: `authoring.gui_document` owns
   stable widget meaning/history plus layout, style, interaction, image, and tab
   state; EpochGui owns reusable image, tab, text, and graph controls; editor
@@ -859,10 +875,10 @@ release history belong in the changelog/archive, not architecture docs.
   without public EpochEngine Git/source, a long-lived inbound listener, or a
   static updater credential.
 - Development/private source discovery is `v0.89.30`; packaged runtime/latest
-  remains the signed `v0.89.29` authority until an explicitly admitted Site
-  publication. Public update clients receive runtime archives, build evidence,
+  is now the signed `v0.89.30` authority from Site v43. Public update clients
+  receive runtime archives, build evidence,
   and checksums only; approved EpochEngine source access is server-authorized
-  and never depends on a shipped static secret. Preserve `v0.89.28`,
+  and never depends on a shipped static secret. Preserve `v0.89.29`, `v0.89.28`,
   `v0.89.27`, and immutable `v0.89.06` as release history, and keep
   `multicontext-base-stable` fixed at
   `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development

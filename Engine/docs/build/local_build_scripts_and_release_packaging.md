@@ -97,7 +97,7 @@ Removes:
 
 When a pass changes runtime, editor, backend, AI, or capture behavior:
 
-- sync with `origin/main` if the local branch has drifted
+- reconcile against the current Site-admitted Epoch checkpoint when the local branch has drifted
 - keep unrelated dirt out of the commit
 - commit only stable, verified changes
 - bump canonical `Engine/modules/epoch.version.ixx` and mirror the source
@@ -117,12 +117,12 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - do not include `cache/updates/`, `cache/packages/`, or `cache/atlases/` in
   public runtime packages
 - when the README or other public-facing markdown changes, verify the rendered
-  GitHub result after push instead of trusting the raw file text alone
+  Site result after publication instead of trusting the raw file text alone
 
 If a pass touches Linux or WSL behavior, validate the matching Linux build path
 too instead of pretending Windows proof is enough.
 
-GitHub CI/workflow discipline:
+Hosted build/report discipline:
 
 - keep workflows build-only unless a real headless/runtime-safe automation path
   exists
@@ -261,11 +261,11 @@ asset must have a companion
 require no credential; source reads require server authorization; administrative
 writes remain protected by a hosted secret that must never enter source,
 manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
-GitHub. `v0.89.30` is the current development source and packaged-runtime
-candidate; `v0.89.29` remains the fully published runtime authority until the
-separate binary-first Site publication completes. Keep `v0.89.28`, `v0.89.27`,
-and `v0.89.06` available as release history rather than as the active updater
-default. Publish Windows ZIP and Linux tar.gz
+GitHub. `v0.89.31` is the current development source; `v0.89.30` is the fully
+published packaged-runtime authority. Preserve v0.89.29, v0.89.28, v0.89.27,
+and immutable v0.89.06 as rollback history until an explicit cleanup pass. The
+Site remains the only EpochEngine release authority. Publish Windows ZIP and
+Linux tar.gz
 runtime forms, with a checksum
 sidecar for every public object and live post-deploy digest verification.
 

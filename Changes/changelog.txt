@@ -1,3 +1,29 @@
+## [v0.89.31] - EpochEditor source-update compatibility checkpoint
+- Advance both source-version authorities and Windows source-build metadata to
+  v0.89.31 while deliberately retaining v0.89.30 as the Windows, Linux, and
+  macOS packaged-runtime authority. This creates the real newer-source lane for
+  the binary-first v0.89.30 EpochEditor client without advertising a v0.89.31
+  package that does not exist.
+- Strengthen the updater discovery contract to prove source 31 is newer than
+  packaged 30, packaged 30 is newer than the prior 29 authority, and source
+  discovery remains rooted at the Epoch Site. The prior equality assertion is removed
+  because equality would erase the source-only update test.
+- Rebuild MSVC Debug and Release EpochEditor and pass both build-safe aggregate
+  contracts. Debug is 30,267,392 bytes with SHA-256
+  `11095800c31063a08e4ad6b8e817388221b8db05c77359e226245f88dd00ebab`;
+  Release is 9,596,416 bytes with SHA-256
+  `d34fb427257c11708f8c36535f09bf93bd0ad5c9acfe249d99888b3133e8fc98`.
+  Windows file/product metadata and the tracked version tool report 0.89.31;
+  no GUI or renderer was launched. Site v43 has now published and independently
+  verified the v0.89.30 packaged runtime; v0.89.31 source activation remains a
+  separate exact-commit admission.
+- Build the full Linux source lane with the updater-equivalent managed Clang
+  22.1.8 Release toolchain and source delivery enabled. All 1325 steps pass; the
+  24,731,808-byte executable has SHA-256
+  `ef6e880195c7fd596685bba57642eaacd21c9bc9270ac3e79200374c9086854e`, reports
+  v0.89.31, and passes the aggregate build-safe contract without a GUI launch.
+  All 33 no-display Linux CTests pass.
+
 ## [v0.89.30] - Distinct source-update discovery candidate
 - Rename the legacy Visual Studio executable/static-library identities to
   `EpochEditor` and `EpochEngine`. Align solution/project paths, project
@@ -28,6 +54,12 @@
   contract. Windows contains exactly one root `EpochEditor.exe`; neither archive
   contains the legacy target, Git metadata, logs, or caches. Linux renderer
   smoke remains explicitly skipped and native pixels unclaimed.
+- Publish the exact v0.89.30 runtime set through Site v43 from Site commit
+  `1b7ef1fce6a9bc1fdd00dc7b7655494b99e3546b`. Independent live downloads match
+  the staged Windows/Linux sizes and SHA-256 values above; the minimal Ed25519
+  release envelope verifies, and v0.89.29/v0.89.28/v0.89.27/v0.89.06 remain
+  available as immutable rollback history. No EpochEngine source checkpoint was
+  activated in this packaged-runtime publication.
 - Record commercial asset admission as a provenance gate: professional content
   requires an explicit compatible commercial-use license, exact origin/version,
   attribution terms, archive digest, and installed-path record. Concept art and
