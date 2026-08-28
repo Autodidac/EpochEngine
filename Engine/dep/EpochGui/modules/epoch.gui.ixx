@@ -335,6 +335,31 @@ export namespace epochengine::gui_lib
         float dirty_extent{ 8.0f };
     };
 
+    struct ResponsiveTabStripOptions
+    {
+        std::span<const float> item_widths{};
+        std::size_t active_index{ (std::numeric_limits<std::size_t>::max)() };
+        float available_width{};
+        float gap{ 2.0f };
+        float overflow_width{ 120.0f };
+    };
+
+    struct ResponsiveTabStripLayout
+    {
+        std::vector<std::uint32_t> visible_indices{};
+        std::vector<std::uint32_t> overflow_indices{};
+        float visible_width{};
+        float overflow_width{};
+        bool overflowed{};
+        bool valid{};
+
+        [[nodiscard]] bool is_visible(std::size_t index) const noexcept
+        {
+            return std::find(visible_indices.begin(), visible_indices.end(), index)
+                != visible_indices.end();
+        }
+    };
+
     [[nodiscard]] inline std::string scoped_control_key(
         std::string_view host,
         std::string_view window,
@@ -375,6 +400,105 @@ export namespace epochengine::gui_lib
             labelWidth + padding * 2.0f + closeExtent + dirtyExtent,
             minimumWidth,
             maximumWidth);
+    }
+
+    [[nodiscard]] inline ResponsiveTabStripLayout
+        make_responsive_tab_strip_layout(
+            const ResponsiveTabStripOptions& options)
+    {
+        ResponsiveTabStripLayout result{};
+        if (options.item_widths.empty())
+            return result;
+
+        std::vector<float> widths{};
+        widths.reserve(options.item_widths.size());
+        for (const float requested : options.item_widths)
+        {
+            widths.push_back(std::isfinite(requested)
+                ? (std::max)(1.0f, requested)
+                : 1.0f);
+        }
+
+        const float gap = std::isfinite(options.gap)
+            ? (std::max)(0.0f, options.gap)
+            : 0.0f;
+        const float available = std::isfinite(options.available_width)
+            ? (std::max)(0.0f, options.available_width)
+            : 0.0f;
+        float completeWidth{};
+        for (std::size_t index = 0; index < widths.size(); ++index)
+        {
+            if (index > 0u)
+                completeWidth += gap;
+            completeWidth += widths[index];
+        }
+
+        result.valid = true;
+        if (available <= 0.0f || completeWidth <= available)
+        {
+            result.visible_indices.reserve(widths.size());
+            for (std::size_t index = 0; index < widths.size(); ++index)
+                result.visible_indices.push_back(static_cast<std::uint32_t>(index));
+            result.visible_width = completeWidth;
+            return result;
+        }
+
+        result.overflowed = true;
+        const float requestedOverflow = std::isfinite(options.overflow_width)
+            ? (std::max)(1.0f, options.overflow_width)
+            : 120.0f;
+        result.overflow_width = (std::min)(available, requestedOverflow);
+        const float overflowGap = available > result.overflow_width ? gap : 0.0f;
+        const float visibleBudget = (std::max)(
+            0.0f,
+            available - result.overflow_width - overflowGap);
+
+        auto width_with = [&](std::size_t index) noexcept
+        {
+            return result.visible_width
+                + (result.visible_indices.empty() ? 0.0f : gap)
+                + widths[index];
+        };
+        for (std::size_t index = 0; index < widths.size(); ++index)
+        {
+            if (width_with(index) > visibleBudget)
+                break;
+            result.visible_width = width_with(index);
+            result.visible_indices.push_back(static_cast<std::uint32_t>(index));
+        }
+
+        const bool activeValid = options.active_index < widths.size();
+        if (activeValid && !result.is_visible(options.active_index)
+            && widths[options.active_index] <= visibleBudget)
+        {
+            while (!result.visible_indices.empty()
+                && width_with(options.active_index) > visibleBudget)
+            {
+                const std::size_t removed = result.visible_indices.back();
+                result.visible_indices.pop_back();
+                result.visible_width -= widths[removed];
+                if (!result.visible_indices.empty())
+                    result.visible_width -= gap;
+            }
+            if (width_with(options.active_index) <= visibleBudget)
+            {
+                result.visible_width = width_with(options.active_index);
+                result.visible_indices.push_back(
+                    static_cast<std::uint32_t>(options.active_index));
+                std::sort(
+                    result.visible_indices.begin(),
+                    result.visible_indices.end());
+            }
+        }
+
+        result.overflow_indices.reserve(
+            widths.size() - result.visible_indices.size());
+        for (std::size_t index = 0; index < widths.size(); ++index)
+        {
+            if (!result.is_visible(index))
+                result.overflow_indices.push_back(static_cast<std::uint32_t>(index));
+        }
+        return result;
     }
 
     struct SliderLayoutOptions

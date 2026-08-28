@@ -290,9 +290,20 @@ canonical state.
 The current editor keeps its main World/GUI/Forest/Plant/Timeline/Project/
 Assets/AI/Systems strip document-only. Tool routes use the Left, Right, Bottom
 Left, and Bottom Right tab groups. Output and AI Chat default to the two bottom
-groups, but neither route nor group is special after initialization. Dragging a
-tool to Float starts its existing context-backed native host; dragging that
-native titlebar over the primary host publishes all four logical tab targets,
+groups, but neither route nor group is special after initialization.
+
+Document and reviewed-source tab strips use EpochGui's responsive strip
+planner. The planner measures requested tab widths against the host content
+width, keeps the active route visible whenever one full tab plus the overflow
+control can fit, and moves the remaining stable routes into a bounded selectable
+overflow list. The engine adapter owns rendering and input for that layout;
+editor workspaces only map returned indices to semantic routes. No context may
+solve clipping with editor-local label truncation, magic last-item widths, or
+an unreachable off-window tab.
+
+Dragging a tool to Float starts its existing context-backed native host;
+dragging that native titlebar over the primary host publishes all four logical
+tab targets,
 upper-left and upper-right physical-context targets, and a matching placement
 ghost. A logical target retires the pane-owned native context and restores the
 same pane as an in-host tool tab. A context target preserves and grid-docks the

@@ -9,6 +9,15 @@
   34-pixel height so its controls are easier to target and Assets/Systems do not
   clip. This changes only editor composition; protected backend frame, queue,
   replay, and present order remain untouched.
+- Move the clipping fix into reusable EpochGui ownership with a responsive
+  tab-strip planner and engine adapter overflow selector. The planner retains
+  stable route indices, preserves the active full-width tab when space permits,
+  and exposes all remaining routes through a bounded dropdown. Use it for both
+  main editor workspaces and reviewed engine-source files. Direct
+  `EpochGui.TextControl` CTest passes, as do fresh Debug and Release editor builds
+  and build-safe aggregate contracts. Rebuilt Debug/Release executables are
+  30,265,344 / 9,596,416 bytes with SHA-256 `72386063...886a8` /
+  `ef50e483...90903`; no GUI or renderer was launched.
 - Rebuild the cleaned targets in MSVC Debug and Release and pass both build-safe
   aggregate contracts without launching a GUI. Debug EpochEditor/EpochEngine.lib
   are 30,246,400 / 637,881,618 bytes with SHA-256

@@ -820,6 +820,18 @@ namespace epochengine::gui
         std::optional<std::size_t> closed_index{};
     };
 
+    export struct ResponsiveTabBarOptions
+    {
+        std::string_view overflow_id{ "tab-overflow" };
+        std::string_view overflow_label{ "More" };
+        std::span<const TabButtonSpec> tabs{};
+        float available_width{};
+        float overflow_width{ 120.0f };
+        float height{ 30.0f };
+        float gap{ 1.0f };
+        TabBarPresentation presentation{ TabBarPresentation::Document };
+    };
+
     export struct InlineButtonSpec
     {
         std::string_view label{};
@@ -992,6 +1004,8 @@ namespace epochengine::gui
         float height = 30.0f,
         float gap = 1.0f,
         TabBarPresentation presentation = TabBarPresentation::Document) noexcept;
+    export TabBarResult responsive_tab_bar_buttons(
+        const ResponsiveTabBarOptions& options) noexcept;
     export std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height = 24.0f,

@@ -378,6 +378,53 @@ namespace
         EPOCHGUI_CHECK(
             preferred_tool_tab_width(84.0f, true, true, policy)
             > preferred_tool_tab_width(84.0f, true, false, policy));
+
+        const std::array<float, 9> workspaceWidths{
+            72.0f, 104.0f, 126.0f, 92.0f, 88.0f,
+            78.0f, 76.0f, 130.0f, 86.0f
+        };
+        ResponsiveTabStripLayout responsive =
+            make_responsive_tab_strip_layout({
+                .item_widths = workspaceWidths,
+                .active_index = 8u,
+                .available_width = 900.0f,
+                .gap = 0.0f,
+                .overflow_width = 120.0f
+            });
+        EPOCHGUI_CHECK(responsive.valid);
+        EPOCHGUI_CHECK(!responsive.overflowed);
+        EPOCHGUI_CHECK(responsive.visible_indices.size() == workspaceWidths.size());
+        EPOCHGUI_CHECK(responsive.overflow_indices.empty());
+
+        responsive = make_responsive_tab_strip_layout({
+            .item_widths = workspaceWidths,
+            .active_index = 8u,
+            .available_width = 520.0f,
+            .gap = 2.0f,
+            .overflow_width = 120.0f
+        });
+        EPOCHGUI_CHECK(responsive.valid);
+        EPOCHGUI_CHECK(responsive.overflowed);
+        EPOCHGUI_CHECK(responsive.is_visible(8u));
+        EPOCHGUI_CHECK(!responsive.overflow_indices.empty());
+        EPOCHGUI_CHECK(
+            responsive.visible_width + 2.0f + responsive.overflow_width
+            <= 520.0f);
+        for (const std::uint32_t hidden : responsive.overflow_indices)
+            EPOCHGUI_CHECK(!responsive.is_visible(hidden));
+
+        responsive = make_responsive_tab_strip_layout({
+            .item_widths = workspaceWidths,
+            .active_index = 4u,
+            .available_width = 80.0f,
+            .gap = 2.0f,
+            .overflow_width = 120.0f
+        });
+        EPOCHGUI_CHECK(responsive.valid);
+        EPOCHGUI_CHECK(responsive.overflowed);
+        EPOCHGUI_CHECK(responsive.visible_indices.empty());
+        EPOCHGUI_CHECK(responsive.overflow_indices.size() == workspaceWidths.size());
+        EPOCHGUI_CHECK(responsive.overflow_width == 80.0f);
         return 0;
     }
 }

@@ -8210,6 +8210,134 @@ namespace epochengine::gui
         return clicked;
     }
 
+    TabBarResult responsive_tab_bar_buttons(
+        const ResponsiveTabBarOptions& options) noexcept
+    {
+        TabBarResult result{};
+        if (options.tabs.empty())
+            return result;
+
+        static thread_local std::vector<float> widths{};
+        widths.clear();
+        widths.reserve(options.tabs.size());
+        const bool workbenchPresentation =
+            options.presentation == TabBarPresentation::Workbench;
+        std::size_t activeIndex = (std::numeric_limits<std::size_t>::max)();
+        for (std::size_t index = 0; index < options.tabs.size(); ++index)
+        {
+            const TabButtonSpec& tab = options.tabs[index];
+            if (tab.active)
+                activeIndex = index;
+            const float requestedWidth = tab.width > 0.0f
+                ? tab.width
+                : workbenchPresentation
+                    ? (std::max)(
+                        52.0f,
+                        measure_text_width(tab.label, kFontScale)
+                            + 24.0f
+                            + (tab.closable ? 18.0f : 0.0f)
+                            + (tab.dirty ? 8.0f : 0.0f))
+                    : gui_lib::preferred_tool_tab_width(
+                        measure_text_width(tab.label, kFontScale),
+                        tab.closable,
+                        tab.dirty);
+            widths.push_back((std::max)(1.0f, requestedWidth));
+        }
+
+        const gui_lib::ResponsiveTabStripLayout layout =
+            gui_lib::make_responsive_tab_strip_layout({
+                .item_widths = widths,
+                .active_index = activeIndex,
+                .available_width = options.available_width,
+                .gap = options.gap,
+                .overflow_width = options.overflow_width
+            });
+        if (!layout.valid || !layout.overflowed)
+        {
+            return tab_bar_buttons(
+                options.tabs,
+                options.height,
+                options.gap,
+                options.presentation);
+        }
+
+        const Vec2 rowStart = cursor_position();
+        static thread_local std::vector<TabButtonSpec> visibleTabs{};
+        visibleTabs.clear();
+        visibleTabs.reserve(layout.visible_indices.size());
+        for (const std::uint32_t index : layout.visible_indices)
+            visibleTabs.push_back(options.tabs[index]);
+
+        if (!visibleTabs.empty())
+        {
+            const TabBarResult visibleResult = tab_bar_buttons(
+                visibleTabs,
+                options.height,
+                options.gap,
+                options.presentation);
+            if (visibleResult.pressed_index)
+                result.pressed_index = layout.visible_indices[*visibleResult.pressed_index];
+            if (visibleResult.selected_index)
+                result.selected_index = layout.visible_indices[*visibleResult.selected_index];
+            if (visibleResult.closed_index)
+                result.closed_index = layout.visible_indices[*visibleResult.closed_index];
+        }
+
+        static thread_local std::vector<std::string_view> overflowLabels{};
+        static thread_local std::vector<std::uint32_t> overflowSelectableIndices{};
+        overflowLabels.clear();
+        overflowSelectableIndices.clear();
+        overflowLabels.reserve(layout.overflow_indices.size());
+        overflowSelectableIndices.reserve(layout.overflow_indices.size());
+        std::string_view selectedOverflow{};
+        for (const std::uint32_t index : layout.overflow_indices)
+        {
+            if (!options.tabs[index].enabled)
+                continue;
+            overflowLabels.push_back(options.tabs[index].label);
+            overflowSelectableIndices.push_back(index);
+            if (options.tabs[index].active)
+                selectedOverflow = options.tabs[index].label;
+        }
+        const std::string overflowLabel = std::string(options.overflow_label)
+            + " (" + std::to_string(layout.overflow_indices.size()) + ")";
+        set_cursor({
+            rowStart.x + layout.visible_width
+                + (visibleTabs.empty() ? 0.0f : options.gap),
+            rowStart.y
+        });
+        if (overflowSelectableIndices.empty())
+        {
+            (void)button_with_state(
+                overflowLabel,
+                { layout.overflow_width, options.height },
+                false,
+                false);
+        }
+        else
+        {
+            const SelectBoxResult overflowResult = select_box(SelectBoxOptions{
+                .id = options.overflow_id,
+                .placeholder = overflowLabel,
+                .selected = selectedOverflow,
+                .options = overflowLabels,
+                .size = { layout.overflow_width, options.height },
+                .row_height = options.height,
+                .max_visible_options = 10u
+            });
+            if (overflowResult.changed && overflowResult.selected_index)
+            {
+                result.selected_index =
+                    overflowSelectableIndices[*overflowResult.selected_index];
+            }
+        }
+        set_cursor({
+            rowStart.x,
+            rowStart.y + (std::max)(22.0f, options.height) + kContentPadding
+        });
+        return result;
+    }
+
     SelectBoxResult select_box(const SelectBoxOptions& options) noexcept
     {
         SelectBoxResult result{};

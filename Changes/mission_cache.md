@@ -28,6 +28,15 @@
   `%LOCALAPPDATA%/EpochEngine/config/standard_editor.layout`. The workspace
   strip now uses explicit full-label widths and a 34-pixel height so Assets and
   Systems do not truncate; new-build eye proof remains separate.
+- EpochGui now owns a renderer-neutral responsive tab-strip layout. It preserves
+  full requested widths, keeps the active route visible when space permits, and
+  returns stable visible/overflow index sets. The engine GUI adapter renders the
+  bounded overflow selector; the editor consumes it for the main workspace row
+  and reviewed engine-source tabs. Direct EpochGui CTest plus fresh Debug and
+  Release editor/aggregate contracts pass. Rebuilt editor evidence is Debug
+  30,265,344 bytes / `7238606367b635289bebb404ae968fcff848500201f808b49b25bd9fcc1886a8`
+  and Release 9,596,416 bytes /
+  `ef50e4836ccb555ad95b233d8b6c5f052248e109c1ee51b097ffec4f46f90903`.
 - The operator's professional-editor concept art is a design target, not runtime
   evidence. Close its gaps through shared ownership: EpochGui provides compact
   icon toolbars, responsive non-truncating strips/overflow, hierarchy/table

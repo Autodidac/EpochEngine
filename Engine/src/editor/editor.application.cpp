@@ -21987,11 +21987,16 @@ namespace epochengine
 
         gui::set_cursor({ 16.0f, tab_y });
         if (const auto documentTabResult =
-                gui::tab_bar_buttons(
-                    documentTabs,
-                    34.0f,
-                    0.0f,
-                    gui::TabBarPresentation::Workbench);
+                gui::responsive_tab_bar_buttons(gui::ResponsiveTabBarOptions{
+                    .overflow_id = "document-workspace-overflow",
+                    .overflow_label = "Workspaces",
+                    .tabs = documentTabs,
+                    .available_width = (std::max)(120.0f, w - 32.0f),
+                    .overflow_width = 132.0f,
+                    .height = 34.0f,
+                    .gap = 0.0f,
+                    .presentation = gui::TabBarPresentation::Workbench
+                });
             documentTabResult.selected_index
             && *documentTabResult.selected_index < documentSurfaces.size())
         {
@@ -28637,8 +28642,17 @@ namespace epochengine
                             && editor.engineSourceEditorPath
                                 == editor.sourceWorkspacePaths[index]});
                 }
-                const auto selectedTab =
-                    gui::tab_bar_buttons(sourceTabs, 30.0f, 2.0f);
+                const auto selectedTab = gui::responsive_tab_bar_buttons(
+                    gui::ResponsiveTabBarOptions{
+                        .overflow_id = "engine-source-tabs-overflow",
+                        .overflow_label = "Reviewed files",
+                        .tabs = sourceTabs,
+                        .available_width = centerWidth,
+                        .overflow_width = 154.0f,
+                        .height = 30.0f,
+                        .gap = 2.0f,
+                        .presentation = gui::TabBarPresentation::Document
+                    });
                 if (selectedTab.selected_index
                     && *selectedTab.selected_index
                         < editor.sourceWorkspacePaths.size())

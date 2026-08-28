@@ -11,15 +11,25 @@
   artifact sizes and SHA-256 evidence are preserved in `Changes/mission_cache.md`
   and the v0.89.30 changelog.
 - The main workspace strip now uses explicit full-label widths and a 34-pixel
-  height, closing the observed small buttons and clipped Assets/Systems text.
-  Current Release eye evidence already restores the canonical World/Outliner
-  shell; fresh pixels for this exact build remain an operator eye-test gate.
-- Next, checkpoint this focused baseline locally. Do not activate its renamed
-  source for the shipped v0.89.29 updater: first publish a packaged runtime that
-  carries the `EpochEditor` source target, then publish a later source checkpoint
-  to test source rebuild. Keep each Site release/checkpoint visible for rollback
-  until the operator explicitly removes old test records.
-- After that compatibility gate, run substantial concept-guided parity cycles
+  height. EpochGui now also owns responsive tab-strip planning and an engine
+  adapter-backed overflow selector, so narrow workspace and reviewed-source
+  strips retain the active route and keep every hidden route selectable instead
+  of clipping Assets, Systems, or later files outside the window.
+- Direct `EpochGui.TextControl` CTest passes for full-width, constrained-active,
+  and overflow-only layouts. Fresh MSVC Debug and Release `EpochEditor` builds
+  pass their build-safe aggregate contracts without a GUI launch. The rebuilt
+  executables are 30,265,344 bytes / SHA-256
+  `7238606367b635289bebb404ae968fcff848500201f808b49b25bd9fcc1886a8`
+  and 9,596,416 bytes / SHA-256
+  `ef50e4836ccb555ad95b233d8b6c5f052248e109c1ee51b097ffec4f46f90903`.
+  Exact-build eye evidence remains an operator gate.
+- The identity baseline is checkpointed at exact local commit
+  `2d0f3c9a1df7a7ca52eb0419b01840ece80483cc` and held by the Site task as
+  not published/not active. Do not activate renamed source for the shipped
+  v0.89.29 updater: first publish a packaged runtime carrying `EpochEditor`,
+  then activate a later source checkpoint to test rebuild. Keep each Site
+  release/checkpoint visible until explicit cleanup.
+- Continue substantial concept-guided parity cycles
   across shared EpochGui shell primitives, editor hierarchy/inspector/timeline/
   task/evidence composition, engine-backed data, and every supported renderer
   context. Local Debug/Release/headless admission precedes each intermittent
