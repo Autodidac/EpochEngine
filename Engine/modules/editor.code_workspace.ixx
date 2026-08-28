@@ -6,16 +6,16 @@
  */
 module;
 
-export module editor.code_workspace;
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
-import <cstddef>;
-import <cstdint>;
-import <filesystem>;
-import <memory>;
-import <optional>;
-import <string>;
-import <string_view>;
-import <vector>;
+export module editor.code_workspace;
 
 export namespace epochengine::editor_code_workspace
 {
