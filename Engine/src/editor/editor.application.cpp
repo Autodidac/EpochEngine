@@ -110,6 +110,7 @@ import project.asset_registry;
 import project.forest_library;
 import project.gui_library;
 import project.input_profile;
+import project.ai_self_iteration;
 import editor.project_input_settings;
 import project.lifecycle;
 import platform.child_process;
@@ -889,6 +890,8 @@ namespace epochengine
             previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
             previewgrid::CameraMode viewportCameraMode{ previewgrid::CameraMode::Editor };
             input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
+            project_ai_iteration::Provision projectSelfIterationDefault{
+                project_ai_iteration::Provision::disabled};
             gui::ThemePreference themePreference{ gui::ThemePreference::FollowSystemDark };
             bool roundedRectangles{ true };
             double editorFrameLimitFps{ 120.0 };
@@ -2585,6 +2588,9 @@ namespace epochengine
             output << "theme "
                 << static_cast<unsigned int>(state.themePreference) << ' '
                 << static_cast<unsigned int>(state.roundedRectangles) << '\n';
+            output << "project_creation_self_iteration "
+                << static_cast<unsigned int>(
+                    state.projectSelfIterationDefault) << '\n';
             return output.str();
         }
 
@@ -2771,8 +2777,22 @@ namespace epochengine
             {
                 return false;
             }
+            project_ai_iteration::Provision projectSelfIterationDefault{
+                project_ai_iteration::Provision::disabled};
             if (input >> token)
-                return false;
+            {
+                unsigned int provision{};
+                if (token != "project_creation_self_iteration"
+                    || !(input >> provision)
+                    || provision > static_cast<unsigned int>(
+                        project_ai_iteration::Provision::external_mcp_client)
+                    || (input >> token))
+                {
+                    return false;
+                }
+                projectSelfIterationDefault =
+                    static_cast<project_ai_iteration::Provision>(provision);
+            }
 
             state.bottomGridSplit = std::clamp(bottomGridSplit, 0.25f, 0.75f);
             state.outlinerSplit = std::clamp(outlinerSplit, 0.06f, 0.70f);
@@ -2826,6 +2846,7 @@ namespace epochengine
             state.themePreference = snapshot_theme_preference(
                 static_cast<gui::ThemePreference>(theme));
             state.roundedRectangles = rounded != 0u;
+            state.projectSelfIterationDefault = projectSelfIterationDefault;
             return true;
         }
 
@@ -9615,6 +9636,37 @@ namespace epochengine
             std::string_view label{};
             input::ProfilePreset preset{ input::ProfilePreset::EditorDefault };
         };
+
+        struct ProjectSelfIterationChoice final
+        {
+            std::string_view label{};
+            project_ai_iteration::Provision provision{
+                project_ai_iteration::Provision::disabled};
+        };
+
+        [[nodiscard]] constexpr std::array<ProjectSelfIterationChoice, 3>
+            project_self_iteration_choices() noexcept
+        {
+            return {{
+                {"Off", project_ai_iteration::Provision::disabled},
+                {"Engine Selected",
+                    project_ai_iteration::Provision::engine_selected},
+                {"External MCP Client",
+                    project_ai_iteration::Provision::external_mcp_client}
+            }};
+        }
+
+        [[nodiscard]] constexpr std::string_view
+            project_self_iteration_label(
+                project_ai_iteration::Provision provision) noexcept
+        {
+            for (const auto& choice : project_self_iteration_choices())
+            {
+                if (choice.provision == provision)
+                    return choice.label;
+            }
+            return "Off";
+        }
 
         [[nodiscard]] std::span<const epochengine::project_input::KeyCode>
             project_key_choices() noexcept
@@ -28022,6 +28074,64 @@ namespace epochengine
                     push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
                 }
                 gui::property_row("[editor] Camera input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
+                gui::label("New Project Self-Iteration");
+                gui::wrapped_label(
+                    "Creation default only. Existing projects are never changed. Enabled kits may propose project-source edits only, require explicit approval, and never auto-connect, listen, bind, serve, or launch a model.",
+                    centerWidth);
+                const auto selfIterationChoices =
+                    project_self_iteration_choices();
+                std::array<std::string_view, 3> selfIterationLabels{};
+                for (std::size_t index = 0u;
+                    index < selfIterationChoices.size(); ++index)
+                {
+                    selfIterationLabels[index] =
+                        selfIterationChoices[index].label;
+                }
+                const auto selfIterationSelect = gui::select_box(
+                    gui::SelectBoxOptions{
+                        .id = "project-self-iteration-default-select",
+                        .placeholder = "Choose new-project AI provision",
+                        .selected = project_self_iteration_label(
+                            editor.projectSelfIterationDefault),
+                        .options = std::span<const std::string_view>{
+                            selfIterationLabels.data(),
+                            selfIterationLabels.size()},
+                        .size = {(std::min)(centerWidth, 340.0f), 30.0f},
+                        .row_height = 28.0f,
+                        .max_visible_options = 3});
+                if (selfIterationSelect.changed
+                    && selfIterationSelect.selected_index
+                    && *selfIterationSelect.selected_index
+                        < selfIterationChoices.size())
+                {
+                    editor.projectSelfIterationDefault =
+                        selfIterationChoices[
+                            *selfIterationSelect.selected_index].provision;
+                    push_editor_log(
+                        editor,
+                        "[project] New-project self-iteration default set to "
+                            + std::string{project_self_iteration_label(
+                                editor.projectSelfIterationDefault)}
+                            + ". Existing projects were not changed.");
+                }
+                gui::property_row(
+                    "[creation] Self-iteration",
+                    project_self_iteration_label(
+                        editor.projectSelfIterationDefault),
+                    148.0f);
+                if (project_ai_iteration::enabled(
+                        editor.projectSelfIterationDefault))
+                {
+                    gui::wrapped_label(
+                        "Creates Assets/AI/SelfIteration/source_review.epochreview, iteration.epochiteration, and mcp_bridge.epochmcp. Engine Selected retains Epoch's current local/external model choice; External MCP Client uses the operator-managed outbound client bridge.",
+                        centerWidth);
+                }
+                else
+                {
+                    gui::wrapped_label(
+                        "Off creates no self-iteration descriptors. The ordinary project AI profile remains disabled by default.",
+                        centerWidth);
+                }
                 }
 
                 if (editor.projectWorkspaceSection >= 1u
@@ -32600,7 +32710,10 @@ namespace epochengine
                     }
                     else
                     {
-                        const auto created = editor_create_project_shell(EditorProjectKind::Game);
+                        const auto created = editor_create_project_shell(
+                            EditorProjectKind::Game,
+                            EditorProjectInputProvision::project_default,
+                            editor.projectSelfIterationDefault);
                         if (created.succeeded)
                         {
                             set_project(editor, created.project_id, true);
