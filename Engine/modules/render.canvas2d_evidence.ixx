@@ -50,6 +50,75 @@ export namespace epochengine::canvas2d::evidence
         }
     };
 
+    struct NativeReadbackRegion final
+    {
+        CanvasExtent framebuffer_extent{};
+        RectI viewport{};
+
+        [[nodiscard]] constexpr bool valid_for(
+            CanvasExtent output) const noexcept
+        {
+            return !framebuffer_extent.empty()
+                && !output.empty()
+                && !viewport.empty()
+                && viewport.x >= 0
+                && viewport.y >= 0
+                && viewport.width == output.width
+                && viewport.height == output.height
+                && static_cast<std::uint64_t>(viewport.x)
+                    + viewport.width <= framebuffer_extent.width
+                && static_cast<std::uint64_t>(viewport.y)
+                    + viewport.height <= framebuffer_extent.height;
+        }
+    };
+
+    struct NativeReadbackLayout final
+    {
+        std::uint32_t row_stride_pixels{};
+        PixelOrigin origin{PixelOrigin::top_left};
+
+        [[nodiscard]] constexpr bool valid_for(
+            CanvasExtent extent) const noexcept
+        {
+            return !extent.empty()
+                && row_stride_pixels >= extent.width
+                && evidence::valid(origin);
+        }
+
+        [[nodiscard]] constexpr std::uint64_t required_pixels(
+            CanvasExtent extent) const noexcept
+        {
+            return valid_for(extent)
+                ? static_cast<std::uint64_t>(extent.height - 1u)
+                    * row_stride_pixels + extent.width
+                : 0u;
+        }
+    };
+
+    struct NativeReadbackRequest final
+    {
+        NativeReadbackRegion region{};
+        NativeReadbackLayout layout{};
+        std::span<cpu::Rgba8> destination{};
+    };
+
+    using DescribeNativeReadback = NativeReadbackLayout (*)(
+        void*, const NativeReadbackRegion&) noexcept;
+    using ReadNativePixels = bool (*)(
+        void*, const NativeReadbackRequest&) noexcept;
+
+    struct NativeReadbackHooks final
+    {
+        void* user{};
+        DescribeNativeReadback describe{};
+        ReadNativePixels read{};
+
+        [[nodiscard]] constexpr bool ready() const noexcept
+        {
+            return describe != nullptr && read != nullptr;
+        }
+    };
+
     struct PixelEvidencePolicy final
     {
         std::uint64_t maximum_pixels{33'554'432};
@@ -142,6 +211,13 @@ export namespace epochengine::canvas2d::evidence
         PixelReadbackView observed,
         const PixelEvidencePolicy& policy = {}) noexcept;
 
+    [[nodiscard]] PixelEvidenceResult compare_native_pixels(
+        const cpu::Image& reference,
+        std::uint64_t referenceHash,
+        NativeReadbackRegion region,
+        NativeReadbackHooks hooks,
+        const PixelEvidencePolicy& policy = {}) noexcept;
+
     enum class PixelEvidenceContractFailure : std::uint8_t
     {
         none,
@@ -155,7 +231,12 @@ export namespace epochengine::canvas2d::evidence
         mismatch_metrics,
         tolerance,
         alpha_policy,
-        hash_validation
+        hash_validation,
+        missing_native_hook,
+        native_capacity,
+        native_refusal,
+        native_origin,
+        native_stride
     };
 
     [[nodiscard]] constexpr std::string_view
@@ -184,6 +265,16 @@ export namespace epochengine::canvas2d::evidence
         case PixelEvidenceContractFailure::alpha_policy: return "alpha_policy";
         case PixelEvidenceContractFailure::hash_validation:
             return "hash_validation";
+        case PixelEvidenceContractFailure::missing_native_hook:
+            return "missing_native_hook";
+        case PixelEvidenceContractFailure::native_capacity:
+            return "native_capacity";
+        case PixelEvidenceContractFailure::native_refusal:
+            return "native_refusal";
+        case PixelEvidenceContractFailure::native_origin:
+            return "native_origin";
+        case PixelEvidenceContractFailure::native_stride:
+            return "native_stride";
         }
         return "unknown";
     }

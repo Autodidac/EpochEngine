@@ -4,6 +4,7 @@ module;
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -39,10 +40,12 @@ import atlas.manager;
 import atlas.texture;
 import context.commandqueue;
 import context.type;
+import core.commandline;
 import core.logger;
 import image.loader;
 import render.arcade;
 import render.preview_grid;
+import render.canvas2d_evidence;
 import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
@@ -181,6 +184,96 @@ namespace
     static_assert(sdl_native_scale_mode_index(
         epochengine::canvas2d::presentation::NativeSampleFilter::invalid) == -1);
 
+    [[nodiscard]] epochengine::canvas2d::evidence::NativeReadbackLayout
+        describe_sdl_canvas2d_readback(
+            void* user,
+            const epochengine::canvas2d::evidence::NativeReadbackRegion& region)
+            noexcept
+    {
+        auto* const renderer = static_cast<SDL_Renderer*>(user);
+        if (renderer == nullptr || renderer != s_renderer
+            || SDL_GetRenderTarget(renderer) != nullptr
+            || region.viewport.empty())
+        {
+            return {};
+        }
+        return {
+            region.viewport.width,
+            epochengine::canvas2d::evidence::PixelOrigin::top_left};
+    }
+
+    [[nodiscard]] bool read_sdl_canvas2d_pixels(
+        void* user,
+        const epochengine::canvas2d::evidence::NativeReadbackRequest& request)
+        noexcept
+    {
+        auto* const renderer = static_cast<SDL_Renderer*>(user);
+        const auto& viewport = request.region.viewport;
+        const std::uint64_t requiredPixels =
+            request.layout.required_pixels({viewport.width, viewport.height});
+        constexpr auto maximumInt =
+            static_cast<std::uint32_t>((std::numeric_limits<int>::max)());
+        if (renderer == nullptr || renderer != s_renderer
+            || SDL_GetRenderTarget(renderer) != nullptr
+            || viewport.width > maximumInt || viewport.height > maximumInt
+            || requiredPixels == 0
+            || requiredPixels > request.destination.size())
+        {
+            return false;
+        }
+
+        int outputWidth = 0;
+        int outputHeight = 0;
+        if (!SDL_GetCurrentRenderOutputSize(
+                renderer, &outputWidth, &outputHeight)
+            || outputWidth <= 0 || outputHeight <= 0
+            || static_cast<std::uint32_t>(outputWidth)
+                != request.region.framebuffer_extent.width
+            || static_cast<std::uint32_t>(outputHeight)
+                != request.region.framebuffer_extent.height)
+        {
+            return false;
+        }
+
+        const SDL_Rect rect{
+            viewport.x,
+            viewport.y,
+            static_cast<int>(viewport.width),
+            static_cast<int>(viewport.height)};
+        SDL_Surface* const captured = SDL_RenderReadPixels(renderer, &rect);
+        if (captured == nullptr)
+            return false;
+        SDL_Surface* rgba = captured;
+        if (captured->format != SDL_PIXELFORMAT_RGBA32)
+            rgba = SDL_ConvertSurface(captured, SDL_PIXELFORMAT_RGBA32);
+
+        bool copied = rgba != nullptr
+            && rgba->pixels != nullptr
+            && rgba->w == rect.w
+            && rgba->h == rect.h
+            && rgba->pitch >= static_cast<int>(
+                viewport.width * sizeof(epochengine::canvas2d::cpu::Rgba8));
+        if (copied)
+        {
+            const std::size_t rowBytes = static_cast<std::size_t>(viewport.width)
+                * sizeof(epochengine::canvas2d::cpu::Rgba8);
+            const auto* const source = static_cast<const std::byte*>(rgba->pixels);
+            for (std::uint32_t y = 0; y < viewport.height; ++y)
+            {
+                std::memcpy(
+                    request.destination.data()
+                        + static_cast<std::size_t>(y)
+                            * request.layout.row_stride_pixels,
+                    source + static_cast<std::size_t>(y) * rgba->pitch,
+                    rowBytes);
+            }
+        }
+        if (rgba != captured)
+            SDL_DestroySurface(rgba);
+        SDL_DestroySurface(captured);
+        return copied;
+    }
+
     class SdlCanvas2DPresenter final
     {
     public:
@@ -218,6 +311,9 @@ namespace
             {
                 presenter_.retire_all();
                 refusal_logged_ = false;
+                evidence_content_hash_ = 0;
+                evidence_frames_ = 0;
+                evidence_terminal_ = false;
                 return CanvasSceneStatus::missing_scene;
             }
             if ((prepared.code
@@ -268,6 +364,56 @@ namespace
                 return refuse("presentation_allocation_failure");
             }
 
+            if (prepared.content_hash != evidence_content_hash_)
+            {
+                evidence_content_hash_ = prepared.content_hash;
+                evidence_frames_ = 0;
+                evidence_terminal_ = false;
+            }
+            if (epochengine::core::cli::capture_requested
+                && !evidence_terminal_)
+            {
+                ++evidence_frames_;
+                const std::uint32_t warmupFrames = (std::max)(
+                    std::uint32_t{1},
+                    epochengine::core::cli::capture_warmup_frames);
+                if (evidence_frames_ >= warmupFrames)
+                {
+                    epochengine::canvas2d::evidence::PixelEvidencePolicy policy{};
+                    policy.channel_tolerance =
+                        prepared.frame->compose.presentation_filter
+                            == epochengine::FilterMode::nearest
+                        ? 0u
+                        : 1u;
+                    const auto compared =
+                        epochengine::canvas2d::evidence::compare_native_pixels(
+                            prepared.raster->presentation,
+                            prepared.raster->presentation_hash,
+                            {surface.framebuffer_extent, surface.viewport},
+                            {
+                                s_renderer,
+                                &describe_sdl_canvas2d_readback,
+                                &read_sdl_canvas2d_pixels},
+                            policy);
+                    evidence_terminal_ = true;
+                    const std::string message =
+                        "frame="
+                        + std::to_string(prepared.frame->frame_sequence)
+                        + " content=" + std::to_string(prepared.content_hash)
+                        + " result=" + std::string{
+                            epochengine::canvas2d::evidence::pixel_evidence_code_name(
+                                compared.code)}
+                        + " pixels=" + std::to_string(compared.pixels_compared)
+                        + " outliers=" + std::to_string(compared.outlier_pixels)
+                        + " max_channel_error="
+                        + std::to_string(compared.maximum_channel_error);
+                    if (compared.matched())
+                        epochengine::logger::info("SDL.Canvas2D.Evidence", message);
+                    else
+                        epochengine::logger::warn("SDL.Canvas2D.Evidence", message);
+                }
+            }
+
             refusal_logged_ = false;
             return CanvasSceneStatus::presented;
         }
@@ -278,6 +424,9 @@ namespace
             session_.reset();
             owner_ = nullptr;
             refusal_logged_ = false;
+            evidence_content_hash_ = 0;
+            evidence_frames_ = 0;
+            evidence_terminal_ = false;
         }
 
         [[nodiscard]] const epochengine::core::Context* owner() const noexcept
@@ -492,6 +641,9 @@ namespace
         epochengine::canvas2d::runtime::SceneRasterSession session_{};
         epochengine::canvas2d::presentation::Canvas2DPresenter presenter_;
         bool refusal_logged_{};
+        std::uint64_t evidence_content_hash_{};
+        std::uint32_t evidence_frames_{};
+        bool evidence_terminal_{};
     };
 
     std::unique_ptr<SdlCanvas2DPresenter> s_canvas2d_presenter{};

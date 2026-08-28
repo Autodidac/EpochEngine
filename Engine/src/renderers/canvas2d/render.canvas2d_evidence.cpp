@@ -9,8 +9,10 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <new>
 #include <span>
 #include <type_traits>
+#include <vector>
 
 module render.canvas2d_evidence;
 
@@ -97,6 +99,58 @@ namespace epochengine::canvas2d::evidence
             return left > right
                 ? static_cast<std::uint8_t>(left - right)
                 : static_cast<std::uint8_t>(right - left);
+        }
+
+        [[nodiscard]] PixelEvidenceResult native_failure(
+            const cpu::Image& reference,
+            std::uint64_t referenceHash,
+            PixelEvidenceCode code) noexcept
+        {
+            PixelEvidenceResult result{};
+            result.code = code;
+            result.extent = reference.extent;
+            result.reference_hash = canonical_image_hash(reference);
+            if (!reference.valid()
+                || result.reference_hash == 0
+                || (referenceHash != 0
+                    && referenceHash != result.reference_hash))
+            {
+                result.code = PixelEvidenceCode::invalid_reference;
+            }
+            return result;
+        }
+
+        struct FakeNativeReadback final
+        {
+            NativeReadbackLayout layout{};
+            std::span<const cpu::Rgba8> source{};
+            std::uint32_t describe_calls{};
+            std::uint32_t read_calls{};
+            bool refuse{};
+        };
+
+        [[nodiscard]] NativeReadbackLayout describe_fake_native(
+            void* user,
+            const NativeReadbackRegion&) noexcept
+        {
+            auto& fake = *static_cast<FakeNativeReadback*>(user);
+            ++fake.describe_calls;
+            return fake.layout;
+        }
+
+        [[nodiscard]] bool read_fake_native(
+            void* user,
+            const NativeReadbackRequest& request) noexcept
+        {
+            auto& fake = *static_cast<FakeNativeReadback*>(user);
+            ++fake.read_calls;
+            if (fake.refuse || fake.source.size() < request.destination.size())
+                return false;
+            std::copy_n(
+                fake.source.begin(),
+                request.destination.size(),
+                request.destination.begin());
+            return true;
         }
     }
 
@@ -221,6 +275,88 @@ namespace epochengine::canvas2d::evidence
             ? PixelEvidenceCode::match
             : PixelEvidenceCode::mismatch;
         return result;
+    }
+
+    PixelEvidenceResult compare_native_pixels(
+        const cpu::Image& reference,
+        std::uint64_t referenceHash,
+        NativeReadbackRegion region,
+        NativeReadbackHooks hooks,
+        const PixelEvidencePolicy& policy) noexcept
+    {
+        if (!reference.valid())
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::invalid_reference);
+        const std::uint64_t canonicalHash = canonical_image_hash(reference);
+        if (canonicalHash == 0
+            || (referenceHash != 0 && referenceHash != canonicalHash))
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::invalid_reference);
+        }
+        if (!policy.valid())
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::invalid_policy);
+        }
+        if (!region.valid_for(reference.extent))
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::invalid_observation);
+        }
+
+        const std::uint64_t pixelCount =
+            static_cast<std::uint64_t>(reference.extent.width)
+                * reference.extent.height;
+        if (pixelCount == 0 || pixelCount > policy.maximum_pixels)
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::capacity_exceeded);
+        }
+        if (!hooks.ready())
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::readback_unavailable);
+        }
+
+        const NativeReadbackLayout layout = hooks.describe(hooks.user, region);
+        if (!layout.valid_for(reference.extent))
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::invalid_observation);
+        }
+        const std::uint64_t requiredPixels =
+            layout.required_pixels(reference.extent);
+        if (requiredPixels == 0 || requiredPixels > policy.maximum_pixels
+            || requiredPixels > (std::numeric_limits<std::size_t>::max)())
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::capacity_exceeded);
+        }
+
+        try
+        {
+            std::vector<cpu::Rgba8> storage(
+                static_cast<std::size_t>(requiredPixels));
+            const NativeReadbackRequest request{region, layout, storage};
+            if (!hooks.read(hooks.user, request))
+            {
+                return native_failure(reference, referenceHash,
+                    PixelEvidenceCode::readback_unavailable);
+            }
+            return compare_pixels(reference, referenceHash,
+                PixelReadbackView{
+                    reference.extent,
+                    layout.row_stride_pixels,
+                    storage,
+                    layout.origin},
+                policy);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return native_failure(reference, referenceHash,
+                PixelEvidenceCode::allocation_failure);
+        }
     }
 
     PixelEvidenceContractFailure
@@ -353,6 +489,81 @@ namespace epochengine::canvas2d::evidence
             != PixelEvidenceCode::invalid_reference)
         {
             return PixelEvidenceContractFailure::hash_validation;
+        }
+
+        const NativeReadbackRegion nativeRegion{
+            reference.extent,
+            RectI{0, 0, reference.extent.width, reference.extent.height}};
+        if (compare_native_pixels(
+                reference, referenceHash, nativeRegion, {}).code
+            != PixelEvidenceCode::readback_unavailable)
+        {
+            return PixelEvidenceContractFailure::missing_native_hook;
+        }
+
+        FakeNativeReadback capacityNative{
+            .layout = {reference.extent.width, PixelOrigin::top_left},
+            .source = reference.pixels};
+        if (compare_native_pixels(
+                reference,
+                referenceHash,
+                nativeRegion,
+                NativeReadbackHooks{
+                    &capacityNative, describe_fake_native, read_fake_native},
+                capacity).code != PixelEvidenceCode::capacity_exceeded
+            || capacityNative.describe_calls != 0
+            || capacityNative.read_calls != 0)
+        {
+            return PixelEvidenceContractFailure::native_capacity;
+        }
+
+        FakeNativeReadback refusingNative{
+            .layout = {reference.extent.width, PixelOrigin::top_left},
+            .source = reference.pixels,
+            .refuse = true};
+        if (compare_native_pixels(
+                reference,
+                referenceHash,
+                nativeRegion,
+                NativeReadbackHooks{
+                    &refusingNative, describe_fake_native, read_fake_native})
+                .code != PixelEvidenceCode::readback_unavailable
+            || refusingNative.describe_calls != 1
+            || refusingNative.read_calls != 1)
+        {
+            return PixelEvidenceContractFailure::native_refusal;
+        }
+
+        FakeNativeReadback bottomLeftNative{
+            .layout = {reference.extent.width, PixelOrigin::bottom_left},
+            .source = bottomLeft};
+        if (!compare_native_pixels(
+                reference,
+                referenceHash,
+                nativeRegion,
+                NativeReadbackHooks{
+                    &bottomLeftNative, describe_fake_native, read_fake_native},
+                PixelEvidencePolicy{.channel_tolerance = 0}).matched()
+            || bottomLeftNative.describe_calls != 1
+            || bottomLeftNative.read_calls != 1)
+        {
+            return PixelEvidenceContractFailure::native_origin;
+        }
+
+        FakeNativeReadback paddedNative{
+            .layout = {3, PixelOrigin::top_left},
+            .source = padded};
+        if (!compare_native_pixels(
+                reference,
+                referenceHash,
+                nativeRegion,
+                NativeReadbackHooks{
+                    &paddedNative, describe_fake_native, read_fake_native},
+                PixelEvidencePolicy{.channel_tolerance = 0}).matched()
+            || paddedNative.describe_calls != 1
+            || paddedNative.read_calls != 1)
+        {
+            return PixelEvidenceContractFailure::native_stride;
         }
         return PixelEvidenceContractFailure::none;
     }

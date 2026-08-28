@@ -9,8 +9,6 @@ module;
 #include <cstdint>
 #include <limits>
 #include <mutex>
-#include <new>
-#include <vector>
 
 #include "../include/engine.config.hpp"
 
@@ -269,19 +267,6 @@ export namespace epochengine::openglcanvas2d
             }
         };
 
-        [[nodiscard]] inline canvas2d::evidence::PixelEvidenceResult
-            evidence_failure(
-                const canvas2d::cpu::Image& reference,
-                canvas2d::evidence::PixelEvidenceCode code) noexcept
-        {
-            canvas2d::evidence::PixelEvidenceResult result{};
-            result.code = code;
-            result.extent = reference.extent;
-            result.reference_hash =
-                canvas2d::evidence::canonical_image_hash(reference);
-            return result;
-        }
-
         struct ScopedTextureParameters final
         {
             GLint minimum_filter{GL_LINEAR};
@@ -538,54 +523,51 @@ export namespace epochengine::openglcanvas2d
         return true;
     }
 
-    [[nodiscard]] inline canvas2d::evidence::PixelEvidenceResult
-        compare_native_canvas2d(
-            PresentationBinding& binding,
-            const canvas2d::cpu::Image& reference,
-            std::uint64_t referenceHash,
-            canvas2d::presentation::PresentationSurface surface,
-            const canvas2d::evidence::PixelEvidencePolicy& policy = {})
+    namespace detail
     {
-        using namespace canvas2d::evidence;
-        if (!static_cast<bool>(binding) || !reference.valid()
-            || !surface.valid_for(reference.extent))
+        [[nodiscard]] inline canvas2d::evidence::NativeReadbackLayout
+            describe_native_readback(
+                void* user,
+                const canvas2d::evidence::NativeReadbackRegion& region) noexcept
         {
-            return detail::evidence_failure(
-                reference,
-                PixelEvidenceCode::readback_unavailable);
+            auto* const binding = static_cast<PresentationBinding*>(user);
+            if (binding == nullptr || !static_cast<bool>(*binding)
+                || region.viewport.empty())
+            {
+                return {};
+            }
+            return {
+                region.viewport.width,
+                canvas2d::evidence::PixelOrigin::bottom_left};
         }
 
-        auto& backend = *binding.backend;
-        openglcontext::PlatformGL::ScopedContext contextGuard;
-        if (!opengltextures::activate_backend_context(
-                backend,
-                contextGuard,
-                "compare Canvas2D pixels"))
+        [[nodiscard]] inline bool read_native_pixels(
+            void* user,
+            const canvas2d::evidence::NativeReadbackRequest& request) noexcept
         {
-            return detail::evidence_failure(
-                reference,
-                PixelEvidenceCode::readback_unavailable);
-        }
+            auto* const binding = static_cast<PresentationBinding*>(user);
+            const std::uint64_t requiredPixels =
+                request.layout.required_pixels(
+                    {request.region.viewport.width,
+                     request.region.viewport.height});
+            if (binding == nullptr || !static_cast<bool>(*binding)
+                || requiredPixels == 0
+                || requiredPixels > request.destination.size())
+            {
+                return false;
+            }
 
-        const std::uint64_t pixelCount =
-            static_cast<std::uint64_t>(reference.extent.width)
-                * reference.extent.height;
-        if (!policy.valid() || pixelCount == 0
-            || pixelCount > policy.maximum_pixels
-            || pixelCount > (std::numeric_limits<std::size_t>::max)())
-        {
-            return detail::evidence_failure(
-                reference,
-                policy.valid()
-                    ? PixelEvidenceCode::capacity_exceeded
-                    : PixelEvidenceCode::invalid_policy);
-        }
+            auto& backend = *binding->backend;
+            openglcontext::PlatformGL::ScopedContext contextGuard;
+            if (!opengltextures::activate_backend_context(
+                    backend,
+                    contextGuard,
+                    "compare Canvas2D pixels"))
+            {
+                return false;
+            }
 
-        try
-        {
-            std::vector<canvas2d::cpu::Rgba8> pixels(
-                static_cast<std::size_t>(pixelCount));
-            detail::ScopedReadbackState stateGuard{};
+            ScopedReadbackState stateGuard{};
             GLboolean doubleBuffered = GL_TRUE;
             glGetBooleanv(GL_DOUBLEBUFFER, &doubleBuffered);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
@@ -596,9 +578,9 @@ export namespace epochengine::openglcanvas2d
             glPixelStorei(GL_PACK_SKIP_ROWS, 0);
             glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
 
-            const auto& viewport = surface.viewport;
+            const auto& viewport = request.region.viewport;
             const GLint readY =
-                static_cast<GLint>(surface.framebuffer_extent.height)
+                static_cast<GLint>(request.region.framebuffer_extent.height)
                 - static_cast<GLint>(viewport.y)
                 - static_cast<GLint>(viewport.height);
             glFinish();
@@ -609,24 +591,29 @@ export namespace epochengine::openglcanvas2d
                 static_cast<GLsizei>(viewport.height),
                 GL_RGBA,
                 GL_UNSIGNED_BYTE,
-                pixels.data());
+                request.destination.data());
+            return true;
+        }
+    }
 
-            return compare_pixels(
-                reference,
-                referenceHash,
-                PixelReadbackView{
-                    reference.extent,
-                    reference.extent.width,
-                    pixels,
-                    PixelOrigin::bottom_left},
-                policy);
-        }
-        catch (const std::bad_alloc&)
-        {
-            return detail::evidence_failure(
-                reference,
-                PixelEvidenceCode::allocation_failure);
-        }
+    [[nodiscard]] inline canvas2d::evidence::PixelEvidenceResult
+        compare_native_canvas2d(
+            PresentationBinding& binding,
+            const canvas2d::cpu::Image& reference,
+            std::uint64_t referenceHash,
+            canvas2d::presentation::PresentationSurface surface,
+            const canvas2d::evidence::PixelEvidencePolicy& policy = {})
+    {
+        using namespace canvas2d::evidence;
+        return compare_native_pixels(
+            reference,
+            referenceHash,
+            NativeReadbackRegion{surface.framebuffer_extent, surface.viewport},
+            NativeReadbackHooks{
+                &binding,
+                &detail::describe_native_readback,
+                &detail::read_native_pixels},
+            policy);
     }
 
     [[nodiscard]] inline canvas2d::presentation::NativePresentationHooks
