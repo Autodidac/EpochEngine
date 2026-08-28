@@ -65,6 +65,7 @@ export namespace epochengine::editor_ai_development_panel
     struct RenderResult final
     {
         HostAction action{HostAction::none};
+        bool reveal_source_workspace{true};
         std::string status{};
         std::string model_prompt{};
         std::string source_root{};

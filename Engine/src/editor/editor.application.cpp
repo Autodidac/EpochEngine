@@ -21215,7 +21215,8 @@ namespace epochengine
                 chat.append_status(evidence);
                 push_ai_development_log(editor, "[self-iteration] " + evidence);
             }
-            if (!action.source_paths.empty())
+            if (action.reveal_source_workspace
+                && !action.source_paths.empty())
             {
                 if (action.source_root.empty())
                 {
