@@ -14,9 +14,11 @@
   Release is 9,596,416 bytes with SHA-256
   `d34fb427257c11708f8c36535f09bf93bd0ad5c9acfe249d99888b3133e8fc98`.
   Windows file/product metadata and the tracked version tool report 0.89.31;
-  no GUI or renderer was launched. Site v43 has now published and independently
-  verified the v0.89.30 packaged runtime; v0.89.31 source activation remains a
-  separate exact-commit admission.
+  no GUI or renderer was launched. Site v44 admitted exact Engine commit
+  `7dd0be88c53338614fb702583ce2985ecb5c149e` as the active encrypted v0.89.31
+  private-source authority after platform-specific archive, ciphertext,
+  live-edge hash, and offline decrypt verification. The signed packaged runtime
+  remains v0.89.30, and every prior source artifact remains available for rollback.
 - Build the full Linux source lane with the updater-equivalent managed Clang
   22.1.8 Release toolchain and source delivery enabled. All 1325 steps pass; the
   24,731,808-byte executable has SHA-256

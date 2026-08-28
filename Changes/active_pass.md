@@ -1,12 +1,15 @@
-- The next source-only updater checkpoint is v0.89.31. Source identity and the
+- The v0.89.31 source-only updater checkpoint is now the active private-source
+  authority on Epoch Site v44 from exact Engine commit
+  `7dd0be88c53338614fb702583ce2985ecb5c149e`. Source identity and the
   updater-parsed compatibility module advance together while Windows, Linux,
   and macOS packaged-version authorities intentionally remain v0.89.30. The
   build-safe discovery contract proves source 31 is newer than packaged 30,
   packaged 30 is newer than the prior 29 authority, and discovery still uses the Site.
   Fresh Debug and Release builds/contracts pass; source-build Windows metadata
-  reports 0.89.31. Site v43 now satisfies the binary-first prerequisite with an
-  independently verified v0.89.30 runtime; source activation remains a separate
-  exact-commit admission.
+  reports 0.89.31. Site v44 activated exact committed Windows ZIP and Linux
+  tar.gz siblings only after independent encryption, live-edge hash, and offline
+  decrypt verification. Packaged runtime and signed integrity remain v0.89.30,
+  preserving the intended source-only update test and all prior rollback rows.
 - The updater-equivalent managed Clang 22.1.8 Release lane builds the full Linux
   engine in 1325 steps with source delivery enabled. The 24,731,808-byte
   executable has SHA-256 `ef6e880195c7fd596685bba57642eaacd21c9bc9270ac3e79200374c9086854e`,
