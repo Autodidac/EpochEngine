@@ -196,6 +196,9 @@ namespace epochengine::gui
         Vec2 size{};
         std::size_t max_chars{ 256u * 1024u };
         bool show_context_menu{ true };
+        bool read_only{};
+        std::size_t goto_line{ 1u };
+        std::uint64_t goto_generation{};
     };
 
     export struct SourceEditorResult
@@ -205,6 +208,10 @@ namespace epochengine::gui
         bool cut{};
         bool pasted{};
         bool selected_all{};
+        std::size_t cursor_line{ 1u };
+        std::size_t cursor_column{ 1u };
+        float horizontal_scroll{};
+        float vertical_scroll{};
     };
 
     export struct ConsoleWindowActionSpec

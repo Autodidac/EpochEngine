@@ -935,8 +935,12 @@ release history belong in the changelog/archive, not architecture docs.
   `multicontext-base-stable` fixed at
   `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development
   history. Standalone EpochGui remains public and must exactly match the bundled
-  `Engine/dep/EpochGui` tree. Every later release mutation requires a fresh
-  bounded validation, package, checksum, signed-admission, and Site publication
+  `Engine/dep/EpochGui` tree. The standalone EpochGui Epoch Site repository and
+  project are its dependency authority: publish and verify reusable EpochGui
+  changes there as a linked checkpoint before, or atomically with, updating
+  `Engine/dep/EpochGui`; never ship those changes only inside an EpochEngine
+  release. Every later release mutation requires a fresh bounded validation,
+  package, checksum, signed-admission, and Site publication
   pass; retain interim test releases until explicit operator cleanup.
 - Linux and Windows normal builds use vcpkg according to their documented lanes;
   headless diagnostics may intentionally differ.

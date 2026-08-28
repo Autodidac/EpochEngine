@@ -420,6 +420,8 @@ namespace epochengine::gui
             std::size_t selectionAnchor = 0;
             bool hasSelection = false;
             bool draggingSelection = false;
+            float scrollX = 0.0f;
+            std::uint64_t lastGotoGeneration{};
         };
 
         struct AssetGridContextMenuState
@@ -7438,6 +7440,16 @@ namespace epochengine::gui
         const bool pointerPressed = g_frame.justPressed || g_frame.rightJustPressed;
         const void* currentActiveWidget = ctxKey ? g_contextActiveWidgets[ctxKey] : nullptr;
         clamp_source_editor_cursor(state, text.size());
+        if (options.goto_generation != 0u
+            && options.goto_generation != state.lastGotoGeneration)
+        {
+            const std::size_t targetLine = (std::max)(std::size_t{ 1u }, options.goto_line);
+            state.cursorIndex = line_start_for_index(text, targetLine - 1u);
+            state.selectionAnchor = state.cursorIndex;
+            state.hasSelection = false;
+            state.lastGotoGeneration = options.goto_generation;
+            scrollState.scrollY = static_cast<float>(targetLine - 1u) * lineAdvance;
+        }
         if (pointerPressed)
         {
             if (hoveredEditor)
@@ -7469,7 +7481,8 @@ namespace epochengine::gui
                 switch (evt.type)
                 {
                 case EventType::TextInput:
-                    source_editor_insert_text_limited(text, state, evt.text, limit, result.edit.changed);
+                    if (!options.read_only)
+                        source_editor_insert_text_limited(text, state, evt.text, limit, result.edit.changed);
                     break;
 
                 case EventType::KeyDown:
@@ -7480,15 +7493,18 @@ namespace epochengine::gui
                     else if (evt.ctrl_down && (evt.key == 'X' || evt.key == 'x'))
                     {
                         result.cut = clipboard_write_text(source_editor_selected_text(text, state));
-                        if (source_editor_has_selection(state, text.size()))
+                        if (!options.read_only && source_editor_has_selection(state, text.size()))
                         {
                             replace_selection_if_needed();
                         }
                     }
                     else if (evt.ctrl_down && (evt.key == 'V' || evt.key == 'v'))
                     {
-                        source_editor_insert_text_limited(text, state, clipboard_read_text(), limit, result.edit.changed);
-                        result.pasted = true;
+                        if (!options.read_only)
+                        {
+                            source_editor_insert_text_limited(text, state, clipboard_read_text(), limit, result.edit.changed);
+                            result.pasted = true;
+                        }
                     }
                     else if (evt.ctrl_down && (evt.key == 'A' || evt.key == 'a'))
                     {
@@ -7499,11 +7515,11 @@ namespace epochengine::gui
                     }
                     else if (evt.key == 8 || evt.key == 127)
                     {
-                        if (source_editor_has_selection(state, text.size()))
+                        if (!options.read_only && source_editor_has_selection(state, text.size()))
                         {
                             replace_selection_if_needed();
                         }
-                        else if (evt.key == 8 && state.cursorIndex > 0u)
+                        else if (!options.read_only && evt.key == 8 && state.cursorIndex > 0u)
                         {
                             const std::size_t eraseIndex =
                                 previous_utf8_codepoint_start(
@@ -7515,7 +7531,7 @@ namespace epochengine::gui
                             state.selectionAnchor = eraseIndex;
                             result.edit.changed = true;
                         }
-                        else if (evt.key == 127
+                        else if (!options.read_only && evt.key == 127
                             && state.cursorIndex < text.size())
                         {
                             const std::size_t eraseEnd =
@@ -7537,7 +7553,8 @@ namespace epochengine::gui
                     }
                     else if (evt.key == 13)
                     {
-                        source_editor_insert_text_limited(text, state, "\n", limit, result.edit.changed);
+                        if (!options.read_only)
+                            source_editor_insert_text_limited(text, state, "\n", limit, result.edit.changed);
                     }
                     else if (evt.key == 37) // VK_LEFT
                     {
@@ -7611,6 +7628,43 @@ namespace epochengine::gui
                 scrollState.scrollY = caretTop;
             else if (caretBottom > scrollState.scrollY + height)
                 scrollState.scrollY = caretBottom - height;
+
+            std::size_t caretLineStart{};
+            for (std::size_t index = 0u; index < (std::min)(state.cursorIndex, text.size()); ++index)
+                if (text[index] == '\n')
+                    caretLineStart = index + 1u;
+            const float caretOffsetX = source_editor_x_for_index(
+                text, caretLineStart, (std::min)(state.cursorIndex, text.size()), kFontScale);
+            if (caretOffsetX < state.scrollX)
+                state.scrollX = caretOffsetX;
+            else if (caretOffsetX > state.scrollX + contentWidth - space_advance(kFontScale))
+                state.scrollX = caretOffsetX - contentWidth + space_advance(kFontScale);
+        }
+
+        float maximumLineWidth{};
+        std::size_t measuredOffset{};
+        for (std::size_t line = 0u; line < lineCount; ++line)
+        {
+            const std::size_t lineStart = measuredOffset;
+            const std::string_view lineText = line_view_from_offset(text, measuredOffset);
+            maximumLineWidth = (std::max)(maximumLineWidth,
+                source_editor_x_for_index(text, lineStart, lineStart + lineText.size(), kFontScale));
+        }
+        const float maximumScrollX = (std::max)(0.0f,
+            maximumLineWidth - contentWidth + kBoxInnerPadding);
+        state.scrollX = (std::clamp)(state.scrollX, 0.0f, maximumScrollX);
+        const bool horizontalWheel = std::any_of(
+            g_frame.events.begin(), g_frame.events.end(),
+            [](const InputEvent& event)
+            {
+                return event.type == EventType::MouseWheel && event.shift_down;
+            });
+        if (hoveredEditor && horizontalWheel && g_frame.mouseWheelDelta != 0)
+        {
+            const float steps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
+            state.scrollX = (std::clamp)(state.scrollX
+                - steps * space_advance(kFontScale) * 6.0f, 0.0f, maximumScrollX);
+            g_frame.mouseWheelDelta = 0;
         }
 
         draw_sprite(active ? palette.textFieldActive : palette.textField, pos.x, pos.y, editorWidth, height);
@@ -7623,7 +7677,7 @@ namespace epochengine::gui
             .show_scrollbar = true
         });
 
-        const float textX = g_frame.cursor.x + kBoxInnerPadding;
+        const float textX = g_frame.cursor.x + kBoxInnerPadding - state.scrollX;
         const float viewportTextY = pos.y + kBoxInnerPadding;
         const float firstTextY = g_frame.cursor.y + kBoxInnerPadding;
         const std::size_t firstVisibleLine = static_cast<std::size_t>((std::max)(0.0f, scroll.scroll_y) / (std::max)(1.0f, lineAdvance));
@@ -7700,10 +7754,8 @@ namespace epochengine::gui
                 }
             }
 
-            const float caretX = std::clamp(
-                textX + source_editor_x_for_index(text, caretLineStart, cursor, kFontScale),
-                textX,
-                textX + (std::max)(1.0f, contentWidth) - 1.0f);
+            const float caretX = textX
+                + source_editor_x_for_index(text, caretLineStart, cursor, kFontScale);
             const float caretY = firstTextY + static_cast<float>(caretLineIndex) * lineAdvance;
             if (caretY + baseHeight >= pos.y && caretY <= pos.y + height)
                 draw_caret(caretX, caretY, baseHeight);
@@ -7711,6 +7763,23 @@ namespace epochengine::gui
 
         g_frame.cursor = { pos.x, pos.y - scroll.scroll_y + editorContentHeight };
         end_scroll_area();
+
+        result.horizontal_scroll = state.scrollX;
+        result.vertical_scroll = scrollState.scrollY;
+        const std::size_t resultCursor = (std::min)(state.cursorIndex, text.size());
+        std::size_t resultLineStart{};
+        for (std::size_t index = 0u; index < resultCursor; ++index)
+            if (text[index] == '\n')
+                resultLineStart = index + 1u;
+        result.cursor_line = static_cast<std::size_t>(
+            std::count(text.begin(), text.begin()
+                + static_cast<std::ptrdiff_t>(resultCursor), '\n')) + 1u;
+        result.cursor_column = 1u;
+        for (std::size_t index = resultLineStart; index < resultCursor;)
+        {
+            index = next_utf8_codepoint_start(text, index);
+            ++result.cursor_column;
+        }
 
         bool openedThisFrame = false;
         if (options.show_context_menu && g_frame.rightJustPressed && hoveredEditor)
@@ -7778,7 +7847,7 @@ namespace epochengine::gui
                 if (button("Cut", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
                     result.cut = clipboard_write_text(source_editor_selected_text(text, state));
-                    if (result.cut && source_editor_has_selection(state, text.size()))
+                    if (!options.read_only && result.cut && source_editor_has_selection(state, text.size()))
                     {
                         (void)source_editor_delete_selection(text, state);
                         result.edit.changed = true;
@@ -7787,8 +7856,11 @@ namespace epochengine::gui
                 }
                 if (button("Paste", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
-                    source_editor_insert_text_limited(text, state, clipboard_read_text(), options.max_chars, result.edit.changed);
-                    result.pasted = true;
+                    if (!options.read_only)
+                    {
+                        source_editor_insert_text_limited(text, state, clipboard_read_text(), options.max_chars, result.edit.changed);
+                        result.pasted = true;
+                    }
                     state.contextMenuOpen = false;
                 }
 
