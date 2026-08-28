@@ -140,6 +140,7 @@ import render.device;
 import scene.serializer;
 import scene.snapshot;
 import project.input_profile;
+import project.ai_self_iteration;
 import project.texture_admission;
 import project.sprite_animation;
 import project.audio_profile;
@@ -3157,6 +3158,8 @@ namespace
         std::string demo_model_asset{};
         std::string capability_profile{ "portable" };
         bool include_engine_arcade_package{ false };
+        epochengine::project_ai_iteration::Provision self_iteration_provision{
+            epochengine::project_ai_iteration::Provision::disabled};
         bool overwrite_existing{ true };
     };
 
@@ -3420,6 +3423,32 @@ namespace
         const fs::path linuxBuildScript = generated_project_linux_build_script_path(root);
         const fs::path windowsProject = generated_project_windows_vcxproj_path(root);
         const fs::path aiProfile = root / "Assets" / "AI" / "project_ai.epochai";
+        const fs::path sourceReview = root / fs::path{
+            epochengine::project_ai_iteration::source_review_path};
+        const fs::path iterationConfig = root / fs::path{
+            epochengine::project_ai_iteration::iteration_config_path};
+        const fs::path mcpBridge = root / fs::path{
+            epochengine::project_ai_iteration::mcp_bridge_path};
+        const bool includeSelfIteration =
+            epochengine::project_ai_iteration::enabled(
+                spec.self_iteration_provision);
+        const auto selfIterationProvider =
+            epochengine::project_ai_iteration::provider_policy(
+                spec.self_iteration_provision);
+        const auto selfIterationKit = includeSelfIteration
+            ? epochengine::project_ai_iteration::serialize_kit(
+                epochengine::project_ai_iteration::make_kit(
+                    selfIterationProvider))
+            : epochengine::project_ai_iteration::ProvisionedFiles{};
+        if (includeSelfIteration && !selfIterationKit)
+        {
+            return EditorProjectCreationResult{
+                .succeeded = false,
+                .project_id = spec.project_id,
+                .root_path = root.generic_string(),
+                .manifest_path = manifest.generic_string(),
+                .summary = selfIterationKit.status};
+        }
         if (!spec.input_profile_path.empty()
             && spec.input_profile_path
                 != epochengine::project_input::canonical_source_path)
@@ -3578,6 +3607,12 @@ namespace
         const std::string inputProfileManifestLine = spec.input_profile_path.empty()
             ? std::string{}
             : "  \"input_profile\": \"" + json_escape(spec.input_profile_path) + "\",\n";
+        const std::string selfIterationManifestLine = includeSelfIteration
+            ? "  \"self_iteration_config\": \""
+                + std::string{
+                    epochengine::project_ai_iteration::iteration_config_path}
+                + "\",\n"
+            : std::string{};
         const std::string spriteAnimationManifestLine =
             spec.sprite_animation_path.empty()
             ? std::string{}
@@ -3636,6 +3671,12 @@ namespace
         const std::string pathsInputProfileLine = spec.input_profile_path.empty()
             ? std::string{}
             : "input_profile=" + spec.input_profile_path + "\n";
+        const std::string pathsSelfIterationLine = includeSelfIteration
+            ? "self_iteration_config="
+                + std::string{
+                    epochengine::project_ai_iteration::iteration_config_path}
+                + "\n"
+            : std::string{};
         const std::string pathsSpriteAnimationLine =
             spec.sprite_animation_path.empty()
             ? std::string{}
@@ -3671,6 +3712,7 @@ namespace
             + demoModelLine
             + tileMapManifestLine
             + inputProfileManifestLine
+            + selfIterationManifestLine
             + spriteAnimationManifestLine
             + audioProfileManifestLine
             + guiManifestLine
@@ -3730,6 +3772,7 @@ namespace
             + pathsDemoLine
             + pathsTileMapLine
             + pathsInputProfileLine
+            + pathsSelfIterationLine
             + pathsSpriteAnimationLine
             + pathsAudioProfileLine
             + pathsGuiLine
@@ -3743,10 +3786,17 @@ namespace
             + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
 
         const std::string worldText = make_project_world_scene_text(spec, kindText, includeEngineArcadePackage);
+        const auto aiProvider = !includeSelfIteration
+            ? epochengine::ai::project_profile::Provider::disabled
+            : (spec.self_iteration_provision
+                    == epochengine::project_ai_iteration::Provision::
+                        external_mcp_client
+                ? epochengine::ai::project_profile::Provider::external_mcp
+                : epochengine::ai::project_profile::Provider::disabled);
         const auto defaultAiProfile =
             epochengine::ai::project_profile::serialize_profile(
                 epochengine::ai::project_profile::make_profile(
-                    epochengine::ai::project_profile::Provider::disabled));
+                    aiProvider));
         const std::string defaultAiProfileText = defaultAiProfile
             ? defaultAiProfile.canonical_bytes : std::string{};
 
@@ -4282,6 +4332,16 @@ namespace
             && write_text_file_if_allowed(pathsFile, pathsText, spec.overwrite_existing)
             && write_text_file_if_allowed(worldFile, worldText, spec.overwrite_existing)
             && write_text_file_if_allowed(aiProfile, defaultAiProfileText, false)
+            && (!includeSelfIteration
+                || (write_text_file_if_allowed(
+                        sourceReview,
+                        selfIterationKit.source_review_bytes, false)
+                    && write_text_file_if_allowed(
+                        iterationConfig,
+                        selfIterationKit.iteration_config_bytes, false)
+                    && write_text_file_if_allowed(
+                        mcpBridge,
+                        selfIterationKit.mcp_bridge_bytes, false)))
             && (spec.input_profile_path.empty()
                 || (!defaultInputProfileBytes.empty()
                     && write_text_file_if_allowed(
@@ -4723,6 +4783,17 @@ namespace epochengine
             .template_family = "game-2d-project",
             .script_id = "project_demo_bootstrap"
         };
+        const ProjectShellSpec defaultProvisionSpec{};
+        const bool selfIterationProvisionGate =
+            !epochengine::project_ai_iteration::enabled(
+                defaultProvisionSpec.self_iteration_provision)
+            && epochengine::project_ai_iteration::enabled(
+                epochengine::project_ai_iteration::Provision::engine_selected)
+            && epochengine::project_ai_iteration::enabled(
+                epochengine::project_ai_iteration::Provision::
+                    external_mcp_client)
+            && epochengine::project_ai_iteration::run_contract()
+                == epochengine::project_ai_iteration::ContractFailure::none;
         const std::string defaultWorld =
             make_project_world_scene_text(projectSpec, "game", false);
         const std::string arcadeWorld =
@@ -4908,6 +4979,7 @@ namespace epochengine
             && explicitPackageGate
             && inputMigrationGate
             && generatedInputProvisionGate
+            && selfIterationProvisionGate
             && guiMigrationGate
             && projectFormatMigrationGate
             && buildProfileMigrationGate;
@@ -4922,6 +4994,16 @@ namespace epochengine
     EditorProjectCreationResult editor_create_project_shell(
         EditorProjectKind kind,
         EditorProjectInputProvision input_provision)
+    {
+        return editor_create_project_shell(
+            kind, input_provision,
+            epochengine::project_ai_iteration::Provision::disabled);
+    }
+
+    EditorProjectCreationResult editor_create_project_shell(
+        EditorProjectKind kind,
+        EditorProjectInputProvision input_provision,
+        epochengine::project_ai_iteration::Provision self_iteration_provision)
     {
         const std::string projectName = next_generated_project_name(kind);
         const std::string defaultScript = kind == EditorProjectKind::Tool
@@ -4948,6 +5030,7 @@ namespace epochengine
                 : "Generated game shell.",
             .demo_model_asset = std::string{},
             .include_engine_arcade_package = false,
+            .self_iteration_provision = self_iteration_provision,
             .overwrite_existing = false
         });
     }

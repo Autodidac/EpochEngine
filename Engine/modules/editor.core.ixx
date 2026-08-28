@@ -51,6 +51,7 @@ import render.preview_grid;
 import scene.snapshot;
 
 export import editor.application;
+export import project.ai_self_iteration;
 
 namespace epochengine
 {
@@ -76,6 +77,9 @@ namespace epochengine
         project_default = 0,
         explicitly_enabled
     };
+
+    export using EditorProjectSelfIterationProvision =
+        project_ai_iteration::Provision;
 
     export [[nodiscard]] constexpr bool editor_project_input_profile_enabled(
         EditorProjectKind kind,
@@ -549,6 +553,10 @@ namespace epochengine
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(
         EditorProjectKind kind,
         EditorProjectInputProvision input_provision);
+    export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(
+        EditorProjectKind kind,
+        EditorProjectInputProvision input_provision,
+        project_ai_iteration::Provision self_iteration_provision);
     export [[nodiscard]] bool editor_project_manifest_capability_contract() noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);

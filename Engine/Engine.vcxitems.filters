@@ -1550,6 +1550,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx">
       <Filter>Module Files\epochengine\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration.ixx">
+      <Filter>Module Files\epochengine\project</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_controller.ixx">
       <Filter>Module Files\epochengine\project</Filter>
     </ClCompile>
@@ -1713,6 +1716,9 @@
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp">
+      <Filter>Source Files\epochengine\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration.cpp">
       <Filter>Source Files\epochengine\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller.cpp">

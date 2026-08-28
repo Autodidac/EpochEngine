@@ -493,6 +493,7 @@ set(EPOCH_SOURCES
     src/project/project.tilemap_source.cpp
     src/project/project.input_profile.cpp
     src/project/project.input_profile_contract.cpp
+    src/project/project.ai_self_iteration.cpp
     src/project/project.input_controller.cpp
     src/project/project.input_controller_contract.cpp
     src/project/project.actor2d_runtime.cpp

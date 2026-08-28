@@ -12,6 +12,7 @@ import project.texture_pipeline;
 import project.tilemap_pipeline;
 import project.tilemap_runtime;
 import project.input_profile;
+import project.ai_self_iteration;
 import project.input_controller;
 import project.actor2d_runtime;
 import project.sprite_animation;
@@ -97,6 +98,13 @@ namespace epochengine::project_contracts
             return {
                 false,
                 project_input::contract_failure_name(inputProfile)};
+        }
+        const auto selfIteration = project_ai_iteration::run_contract();
+        if (selfIteration != project_ai_iteration::ContractFailure::none)
+        {
+            return {
+                false,
+                project_ai_iteration::contract_failure_name(selfIteration)};
         }
         const auto inputController = project_input_controller::run_contract();
         if (inputController
