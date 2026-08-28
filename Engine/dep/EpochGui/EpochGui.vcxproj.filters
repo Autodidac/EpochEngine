@@ -42,6 +42,9 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\hierarchy_tree.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\image.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -85,6 +88,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\font.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\hierarchy_tree.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\layout_primitives.hpp">

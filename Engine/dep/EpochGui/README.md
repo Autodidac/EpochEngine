@@ -25,6 +25,10 @@ The core module provides:
 - Docking, dock guides, context insertion grids, and dockable-window state
 - Panel-host state
 - Reusable node-graph, system, tile, and virtualized asset-grid workspaces
+- A reusable high-density hierarchy-tree controller with stable IDs,
+  ancestor-retaining filtering, range/toggle selection, keyboard traversal,
+  virtualized row planning, scroll-to-visible, locked/disabled rows, and
+  deterministic context-action routing
 - Text editing, selection, navigation, and scrolling
 
 ```cpp

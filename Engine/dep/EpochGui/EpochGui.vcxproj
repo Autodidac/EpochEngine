@@ -173,6 +173,7 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dockable_window.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\dock_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\floating_window.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\hierarchy_tree.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\image.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\node_graph_workspace.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp" />
@@ -196,6 +197,7 @@
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\dock_layout.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\floating_window.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\font.hpp" />
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\hierarchy_tree.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\layout_primitives.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\node_graph_workspace.hpp" />
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\panel_host.hpp" />
