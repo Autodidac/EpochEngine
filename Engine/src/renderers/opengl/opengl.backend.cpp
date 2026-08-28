@@ -23,6 +23,7 @@ import image.loader;
 import opengl.context;
 import opengl.platform;
 import opengl.textures;
+import perf.tier;
 
 namespace epochengine::openglbackend
 {
