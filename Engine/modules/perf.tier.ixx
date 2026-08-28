@@ -114,6 +114,63 @@ export namespace epochengine::perf
         [[nodiscard]] constexpr bool operator==(const frame_pacing_plan&) const noexcept = default;
     };
 
+    enum class native_present_mode : std::uint8_t
+    {
+        immediate,
+        mailbox,
+        fifo
+    };
+
+    struct native_present_mode_support final
+    {
+        bool immediate = false;
+        bool mailbox = false;
+        bool fifo = false;
+    };
+
+    struct native_present_mode_selection final
+    {
+        native_present_mode mode = native_present_mode::fifo;
+        bool available = false;
+        bool request_honored = false;
+        bool pacing_active = false;
+    };
+
+    [[nodiscard]] constexpr native_present_mode_selection
+        select_native_present_mode(
+            frame_pacing_mode requested,
+            native_present_mode_support support) noexcept
+    {
+        if (requested == frame_pacing_mode::vsync && support.fifo)
+            return {native_present_mode::fifo, true, true, true};
+
+        if (support.immediate)
+        {
+            return {
+                native_present_mode::immediate,
+                true,
+                requested != frame_pacing_mode::vsync,
+                false};
+        }
+        if (support.mailbox)
+        {
+            return {
+                native_present_mode::mailbox,
+                true,
+                requested != frame_pacing_mode::vsync,
+                false};
+        }
+        if (support.fifo)
+        {
+            return {
+                native_present_mode::fifo,
+                true,
+                requested == frame_pacing_mode::vsync,
+                true};
+        }
+        return {};
+    }
+
     [[nodiscard]] constexpr double sanitize_frame_hz(
         double requested,
         double fallback) noexcept
@@ -232,6 +289,7 @@ export namespace epochengine::perf
     {
         plan.native_pacing_configured = native.configured;
         plan.native_pacing_active = native.pacing_active;
+        const bool preserveCpuFallback = plan.cpu_deadline_wait;
 
         if (native.pacing_active)
         {
@@ -240,6 +298,7 @@ export namespace epochengine::perf
             plan.cpu_deadline_wait = false;
             plan.native_vsync_requested =
                 native.effective_mode == frame_pacing_mode::vsync;
+            plan.cpu_deadline_wait = preserveCpuFallback;
             return plan;
         }
 
@@ -284,6 +343,7 @@ export namespace epochengine::perf
     [[nodiscard]] const char* label_for_frame_limit(double fps) noexcept;
     [[nodiscard]] const char* to_string(frame_pacing_mode mode) noexcept;
     [[nodiscard]] const char* to_string(frame_activity activity) noexcept;
+    [[nodiscard]] const char* to_string(native_present_mode mode) noexcept;
 
     [[nodiscard]] constexpr double next_frame_deadline(
         double previous_deadline,
@@ -439,6 +499,17 @@ namespace epochengine::perf
         case frame_activity::minimized: return "minimized";
         }
         return "foreground";
+    }
+
+    const char* to_string(native_present_mode mode) noexcept
+    {
+        switch (mode)
+        {
+        case native_present_mode::immediate: return "immediate";
+        case native_present_mode::mailbox: return "mailbox";
+        case native_present_mode::fifo: return "fifo";
+        }
+        return "fifo";
     }
 
     void frame_limiter::wait_for_next_frame() noexcept

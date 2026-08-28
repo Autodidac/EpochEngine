@@ -106,17 +106,64 @@ namespace epochengine::vulkancontext
         return availableFormats.front();
     }
 
+    perf::native_frame_pacing_result Application::configure_frame_pacing(
+        const perf::frame_pacing_mode mode) noexcept
+    {
+        const bool wantsVsync = mode == perf::frame_pacing_mode::vsync;
+        if (wantsVsync != vsyncRequested)
+        {
+            vsyncRequested = wantsVsync;
+            presentModeRecreatePending = true;
+            set_framebuffer_resize_intent(true);
+            return {};
+        }
+
+        if (!presentModeReady || presentModeRecreatePending)
+            return {};
+
+        const bool fifoActive =
+            selectedPresentMode == perf::native_present_mode::fifo;
+        return {
+            true,
+            fifoActive,
+            fifoActive
+                ? perf::frame_pacing_mode::vsync
+                : perf::frame_pacing_mode::uncapped,
+            0.0};
+    }
+
     vk::PresentModeKHR Application::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& modes)
     {
+        perf::native_present_mode_support support{};
         for (const auto& mode : modes)
         {
-            if (mode == vk::PresentModeKHR::eImmediate)
-                return mode;
+            support.immediate = support.immediate
+                || mode == vk::PresentModeKHR::eImmediate;
+            support.mailbox = support.mailbox
+                || mode == vk::PresentModeKHR::eMailbox;
+            support.fifo = support.fifo
+                || mode == vk::PresentModeKHR::eFifo;
         }
-        for (const auto& mode : modes)
+
+        pendingPresentModeSelection = perf::select_native_present_mode(
+            vsyncRequested
+                ? perf::frame_pacing_mode::vsync
+                : perf::frame_pacing_mode::uncapped,
+            support);
+        if (!pendingPresentModeSelection.available)
         {
-            if (mode == vk::PresentModeKHR::eMailbox)
-                return mode;
+            throw RecoverableSwapChainError(
+                "[ Vulkan ] - No supported Immediate, Mailbox, or Fifo present mode is available.");
+        }
+
+        switch (pendingPresentModeSelection.mode)
+        {
+        case perf::native_present_mode::immediate:
+            return vk::PresentModeKHR::eImmediate;
+        case perf::native_present_mode::mailbox:
+            return vk::PresentModeKHR::eMailbox;
+        case perf::native_present_mode::fifo:
+            return vk::PresentModeKHR::eFifo;
         }
         return vk::PresentModeKHR::eFifo;
     }
@@ -166,14 +213,6 @@ namespace epochengine::vulkancontext
         const vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(details.formats);
         const vk::PresentModeKHR presentMode = chooseSwapPresentMode(details.presentModes);
         const vk::Extent2D extent = chooseSwapExtent(details.capabilities);
-
-        logger::get("Epoch.Vulkan").logf(
-            logger::LogLevel::INFO,
-            std::source_location::current(),
-            "Swapchain present mode: {}",
-            presentMode == vk::PresentModeKHR::eImmediate
-                ? "Immediate"
-                : (presentMode == vk::PresentModeKHR::eMailbox ? "Mailbox" : "Fifo"));
 
         if (extent.width == 0 || extent.height == 0)
             throw RecoverableSwapChainError("[ Vulkan ] - Swapchain extent is zero; waiting for a valid framebuffer size.");
@@ -251,6 +290,21 @@ namespace epochengine::vulkancontext
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
+        selectedPresentMode = pendingPresentModeSelection.mode;
+        selectedPresentRequestHonored =
+            pendingPresentModeSelection.request_honored;
+        presentModeReady = true;
+        presentModeRecreatePending = false;
+
+        logger::get("Epoch.Vulkan").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Swapchain present mode accepted: requested={} selected={} request_honored={} native_pacing_active={}.",
+            vsyncRequested ? "vsync" : "non-vsync",
+            perf::to_string(selectedPresentMode),
+            selectedPresentRequestHonored,
+            pendingPresentModeSelection.pacing_active);
+
     }
 
     vk::UniqueImageView Application::createImageViewUnique(
@@ -285,6 +339,8 @@ namespace epochengine::vulkancontext
 
     void Application::cleanupSwapChain()
     {
+        presentModeReady = false;
+
         if (commandPool && device)
         {
             (void)device->resetCommandPool(*commandPool);

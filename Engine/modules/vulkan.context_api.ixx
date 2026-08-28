@@ -54,6 +54,7 @@ export module vulkan.context:api;
 import core.context;
 import context.commandqueue;
 
+import perf.tier;
 namespace epochengine::vulkancontext
 {
     // Engine-facing API (no Vulkan types in the signatures).
@@ -66,6 +67,9 @@ namespace epochengine::vulkancontext
 
     export bool vulkan_process(std::shared_ptr<core::Context> ctx, core::CommandQueue& queue);
     export void vulkan_present();
+    export perf::native_frame_pacing_result vulkan_configure_frame_pacing(
+        std::shared_ptr<core::Context> ctx,
+        perf::frame_pacing_mode mode) noexcept;
     export void vulkan_cleanup(std::shared_ptr<core::Context> ctx);
     export int  vulkan_get_width();
     export int  vulkan_get_height();

@@ -173,6 +173,16 @@ namespace epochengine::core::detail
         ctx->present = epochengine::vulkancontext::vulkan_present;
         ctx->get_width = epochengine::vulkancontext::vulkan_get_width;
         ctx->get_height = epochengine::vulkancontext::vulkan_get_height;
+        ctx->frame_pacing_capabilities = {true, false};
+        ctx->apply_frame_pacing = [](
+            const perf::frame_pacing_mode mode,
+            double)
+        {
+            return epochengine::vulkancontext::vulkan_configure_frame_pacing(
+                epochengine::core::get_current_render_context(),
+                mode);
+        };
+
 
         bind_default_input(ctx);
 

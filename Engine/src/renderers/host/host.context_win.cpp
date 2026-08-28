@@ -4608,9 +4608,10 @@ namespace epochengine::core
                     desiredPlan,
                     nativeResult);
             coreFrameLimiter.set_plan(framePlan);
-            activeDesiredFramePlan = desiredPlan;
+            if (!ctx->apply_frame_pacing || nativeResult.configured)
+                activeDesiredFramePlan = desiredPlan;
             activeCoreFramePlan = framePlan;
-            hasActiveCoreFramePlan = true;
+            hasActiveCoreFramePlan = !ctx->apply_frame_pacing || nativeResult.configured;
             epochengine::logger::get(kLogSys).logf(
                 epochengine::logger::LogLevel::INFO,
                 std::source_location::current(),

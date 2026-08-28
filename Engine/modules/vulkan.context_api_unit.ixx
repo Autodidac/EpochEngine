@@ -91,11 +91,23 @@ namespace epochengine::vulkancontext
         auto ctx = core::get_current_render_context();
         if (!ctx)
             return 0;
-
         if (auto app = try_get_vulkan_app(ctx.get()))
             return app->get_framebuffer_width();
 
         return 0;
+    }
+
+    perf::native_frame_pacing_result vulkan_configure_frame_pacing(
+        std::shared_ptr<core::Context> ctx,
+        const perf::frame_pacing_mode mode) noexcept
+    {
+        if (!ctx)
+            return {};
+
+        if (auto app = try_get_vulkan_app(ctx.get()))
+            return app->configure_frame_pacing(mode);
+
+        return {};
     }
 
     int vulkan_get_height()

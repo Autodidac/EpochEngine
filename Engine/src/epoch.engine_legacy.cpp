@@ -2465,6 +2465,75 @@ namespace epochengine::core
         const auto forestGeometry = epochengine::forest::build_preview_geometry(forestProfile);
         const auto previewActivation = epochengine::forest::activation_for_editor_preview();
         const auto sceneActivation = epochengine::forest::activation_for_scene_use();
+        const auto presentVsync = epochengine::perf::select_native_present_mode(
+            epochengine::perf::frame_pacing_mode::vsync,
+            {true, true, true});
+        const auto presentImmediate = epochengine::perf::select_native_present_mode(
+            epochengine::perf::frame_pacing_mode::uncapped,
+            {true, true, true});
+        const auto presentMailbox = epochengine::perf::select_native_present_mode(
+            epochengine::perf::frame_pacing_mode::uncapped,
+            {false, true, true});
+        const auto presentForcedFifo = epochengine::perf::select_native_present_mode(
+            epochengine::perf::frame_pacing_mode::target_hz,
+            {false, false, true});
+        const auto presentUnavailable = epochengine::perf::select_native_present_mode(
+            epochengine::perf::frame_pacing_mode::uncapped,
+            {});
+        check(
+            "perf.native_present_mode_selection",
+            presentVsync.available
+                && presentVsync.request_honored
+                && presentVsync.pacing_active
+                && presentVsync.mode == epochengine::perf::native_present_mode::fifo
+                && presentImmediate.available
+                && presentImmediate.request_honored
+                && !presentImmediate.pacing_active
+                && presentImmediate.mode == epochengine::perf::native_present_mode::immediate
+                && presentMailbox.available
+                && presentMailbox.request_honored
+                && !presentMailbox.pacing_active
+                && presentMailbox.mode == epochengine::perf::native_present_mode::mailbox
+                && presentForcedFifo.available
+                && !presentForcedFifo.request_honored
+                && presentForcedFifo.pacing_active
+                && presentForcedFifo.mode == epochengine::perf::native_present_mode::fifo
+                && !presentUnavailable.available);
+
+        const auto vulkanTargetDesired =
+            epochengine::perf::resolve_frame_pacing_with_capabilities(
+                epochengine::perf::target_hz_policy(120.0),
+                epochengine::perf::frame_activity::foreground,
+                {true, false});
+        const auto vulkanTargetForcedFifo =
+            epochengine::perf::finalize_native_frame_pacing(
+                vulkanTargetDesired,
+                {
+                    true,
+                    true,
+                    epochengine::perf::frame_pacing_mode::vsync,
+                    0.0});
+        const auto vulkanVsyncPending =
+            epochengine::perf::finalize_native_frame_pacing(nativeVsync, {});
+        const auto vulkanVsyncAccepted =
+            epochengine::perf::finalize_native_frame_pacing(
+                nativeVsync,
+                {
+                    true,
+                    true,
+                    epochengine::perf::frame_pacing_mode::vsync,
+                    0.0});
+        check(
+            "perf.vulkan_present_mode_lifecycle",
+            vulkanTargetDesired.cpu_deadline_wait
+                && vulkanTargetForcedFifo.native_pacing_configured
+                && vulkanTargetForcedFifo.native_pacing_active
+                && vulkanTargetForcedFifo.cpu_deadline_wait
+                && !vulkanVsyncPending.native_pacing_configured
+                && vulkanVsyncPending.cpu_deadline_wait
+                && vulkanVsyncAccepted.native_pacing_configured
+                && vulkanVsyncAccepted.native_pacing_active
+                && !vulkanVsyncAccepted.cpu_deadline_wait);
         check("forest.config", epochengine::forest::valid(forestProfile.config));
         check("forest.estimate", forestEstimate.nodes > 1u && forestEstimate.branches > 0u);
         check(

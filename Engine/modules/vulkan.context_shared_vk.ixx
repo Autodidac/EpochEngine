@@ -80,6 +80,7 @@ import render.canvas2d_runtime;
 import render.device;
 import vulkan.camera;
 import atlas.texture;
+import perf.tier;
 import sprite.handle;
 
 #if !defined(EPOCH_VULKAN_STANDALONE)
@@ -139,6 +140,9 @@ namespace epochengine::vulkancontext
         int get_framebuffer_width() const noexcept;
         int get_framebuffer_height() const noexcept;
 
+        perf::native_frame_pacing_result configure_frame_pacing(
+            perf::frame_pacing_mode mode) noexcept;
+
         void set_context(std::shared_ptr<epochengine::core::Context> ctx, void* nativeWindow);
         void set_active_context(const epochengine::core::Context* ctx);
         bool should_stop_rendering() noexcept;
@@ -194,6 +198,12 @@ namespace epochengine::vulkancontext
         int framebufferWidth = 800;
         int framebufferHeight = 600;
         bool framebufferResized = false;
+        bool vsyncRequested = false;
+        bool presentModeReady = false;
+        bool presentModeRecreatePending = false;
+        perf::native_present_mode_selection pendingPresentModeSelection{};
+        perf::native_present_mode selectedPresentMode = perf::native_present_mode::fifo;
+        bool selectedPresentRequestHonored = false;
         bool stopRenderingRequested = false;
 
         std::thread::id renderThreadId{};
