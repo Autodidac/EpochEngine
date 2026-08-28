@@ -101,6 +101,107 @@ export namespace epochengine::canvas2d::presentation
         return {output, {0, 0, output.width, output.height}};
     }
 
+    enum class ImmutableImageTransition : std::uint8_t
+    {
+        invalid,
+        reuse,
+        replace
+    };
+
+    struct ImmutableImageSnapshot final
+    {
+        CanvasExtent extent{};
+        std::uint64_t content_hash{};
+        std::uint64_t generation{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return !extent.empty() && content_hash != 0u && generation != 0u;
+        }
+
+        friend constexpr bool operator==(
+            ImmutableImageSnapshot,
+            ImmutableImageSnapshot) noexcept = default;
+    };
+
+    struct ImmutableImagePlan final
+    {
+        ImmutableImageTransition transition{ImmutableImageTransition::invalid};
+        ImmutableImageSnapshot current{};
+        ImmutableImageSnapshot next{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return transition != ImmutableImageTransition::invalid
+                && static_cast<bool>(next);
+        }
+    };
+
+    class ImmutableImageLifecycle final
+    {
+    public:
+        [[nodiscard]] constexpr ImmutableImagePlan plan(
+            CanvasExtent extent,
+            std::uint64_t content_hash) const noexcept
+        {
+            if (extent.empty() || content_hash == 0u)
+                return {};
+
+            if (current_
+                && current_.extent == extent
+                && current_.content_hash == content_hash)
+            {
+                return {ImmutableImageTransition::reuse, current_, current_};
+            }
+
+            std::uint64_t generation = current_.generation + 1u;
+            if (generation == 0u)
+                generation = 1u;
+            return {
+                ImmutableImageTransition::replace,
+                current_,
+                ImmutableImageSnapshot{extent, content_hash, generation}};
+        }
+
+        [[nodiscard]] constexpr bool commit(
+            const ImmutableImagePlan& plan,
+            std::uint64_t* retired_generation = nullptr) noexcept
+        {
+            if (retired_generation)
+                *retired_generation = 0u;
+            if (!plan || plan.current != current_)
+                return false;
+
+            if (plan.transition == ImmutableImageTransition::reuse)
+                return plan.next == current_;
+            if (plan.transition != ImmutableImageTransition::replace
+                || plan.next.generation == current_.generation)
+            {
+                return false;
+            }
+
+            if (retired_generation && current_)
+                *retired_generation = current_.generation;
+            current_ = plan.next;
+            return true;
+        }
+
+        [[nodiscard]] constexpr std::uint64_t retire_all() noexcept
+        {
+            const std::uint64_t retired = current_.generation;
+            current_ = {};
+            return retired;
+        }
+
+        [[nodiscard]] constexpr ImmutableImageSnapshot snapshot() const noexcept
+        {
+            return current_;
+        }
+
+    private:
+        ImmutableImageSnapshot current_{};
+    };
+
     struct NativePresentationPacket final
     {
         TextureHandle texture{};
@@ -520,6 +621,12 @@ export namespace epochengine::canvas2d::presentation
             if (!hooks_.ready())
                 return reject(output, PresentationCode::missing_native_hook, false);
 
+            const ImmutableImagePlan image_plan = image_lifecycle_.plan(
+                raster.canvas.extent,
+                raster.canvas_hash);
+            if (!image_plan)
+                return reject(output, PresentationCode::invalid_raster, false);
+
             const std::uint64_t bytes = detail::image_bytes(raster.canvas);
             if (bytes == 0 || bytes > raster.canvas.pixels.size() * sizeof(cpu::Rgba8))
             {
@@ -579,6 +686,14 @@ export namespace epochengine::canvas2d::presentation
                 return reject(output, PresentationCode::native_present_failed, false);
             }
 
+            if (!image_lifecycle_.commit(image_plan))
+            {
+                if (acquired.handle != active_residency_)
+                    (void)residency_.release(acquired.handle);
+                ++metrics_.native_present_failures;
+                return reject(output, PresentationCode::native_present_failed, false);
+            }
+
             if (active_residency_ && active_residency_ != acquired.handle
                 && residency_.release(active_residency_)
                     == texture_residency::ResidencyCode::resident)
@@ -620,6 +735,7 @@ export namespace epochengine::canvas2d::presentation
             if (!residency_.reset_backend_epoch(epoch))
                 return false;
             active_residency_ = {};
+            (void)image_lifecycle_.retire_all();
             return true;
         }
 
@@ -630,6 +746,7 @@ export namespace epochengine::canvas2d::presentation
             if (!hooks.ready() || !residency_.reset_backend_epoch(backend_epoch))
                 return false;
             active_residency_ = {};
+            (void)image_lifecycle_.retire_all();
             hooks_ = hooks;
             return true;
         }
@@ -638,6 +755,7 @@ export namespace epochengine::canvas2d::presentation
         {
             residency_.retire_all();
             active_residency_ = {};
+            (void)image_lifecycle_.retire_all();
         }
 
         [[nodiscard]] const PresentationMetrics& metrics() const noexcept
@@ -664,6 +782,7 @@ export namespace epochengine::canvas2d::presentation
 
         texture_residency::TextureResidencyCache residency_;
         texture_residency::ResidencyHandle active_residency_{};
+        ImmutableImageLifecycle image_lifecycle_{};
         NativePresentationHooks hooks_{};
         PresentationMetrics metrics_{};
     };
@@ -685,6 +804,7 @@ export namespace epochengine::canvas2d::presentation
         backend_reset,
         lifecycle_soak,
         retirement,
+        immutable_lifecycle,
         metrics
     };
 
@@ -708,6 +828,7 @@ export namespace epochengine::canvas2d::presentation
         case PresentationContractFailure::backend_reset: return "backend_reset";
         case PresentationContractFailure::lifecycle_soak: return "lifecycle_soak";
         case PresentationContractFailure::retirement: return "retirement";
+        case PresentationContractFailure::immutable_lifecycle: return "immutable_lifecycle";
         case PresentationContractFailure::metrics: return "metrics";
         }
         return "unknown";
@@ -717,6 +838,45 @@ export namespace epochengine::canvas2d::presentation
         canvas2d_presentation_runtime_contract_failure()
     {
         SpriteIdentityRegistry identities{4};
+        ImmutableImageLifecycle imageLifecycle{};
+        const ImmutableImagePlan invalidImage = imageLifecycle.plan({0u, 8u}, 1u);
+        const ImmutableImagePlan initialImage = imageLifecycle.plan({8u, 8u}, 11u);
+        if (invalidImage || !initialImage
+            || initialImage.transition != ImmutableImageTransition::replace
+            || imageLifecycle.snapshot()
+            || !imageLifecycle.commit(initialImage)
+            || imageLifecycle.snapshot().generation != 1u)
+        {
+            return PresentationContractFailure::immutable_lifecycle;
+        }
+
+        const ImmutableImagePlan reusedImage = imageLifecycle.plan({8u, 8u}, 11u);
+        const ImmutableImagePlan sameSizeReplacement =
+            imageLifecycle.plan({8u, 8u}, 12u);
+        if (!reusedImage
+            || reusedImage.transition != ImmutableImageTransition::reuse
+            || !sameSizeReplacement
+            || sameSizeReplacement.transition != ImmutableImageTransition::replace
+            || sameSizeReplacement.current.generation != 1u
+            || sameSizeReplacement.next.generation != 2u)
+        {
+            return PresentationContractFailure::immutable_lifecycle;
+        }
+
+        std::uint64_t retiredGeneration = 0u;
+        if (!imageLifecycle.commit(sameSizeReplacement, &retiredGeneration)
+            || retiredGeneration != 1u
+            || imageLifecycle.snapshot().content_hash != 12u)
+        {
+            return PresentationContractFailure::immutable_lifecycle;
+        }
+
+        if (imageLifecycle.retire_all() != 2u
+            || imageLifecycle.snapshot())
+        {
+            return PresentationContractFailure::immutable_lifecycle;
+        }
+
         const auto sprite = identities.create();
         if (!sprite)
             return PresentationContractFailure::frame_compile;

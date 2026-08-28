@@ -949,14 +949,14 @@ namespace epochengine::vulkancontext
 
         const canvas2d::CanvasExtent previousImageExtent = state.imageExtent;
         bool synchronized = false;
-        const bool residencyChanged =
+        const bool nativeResourcesMissing =
             state.imageExtent != image.extent || !state.image ||
             !state.imageView ||
             state.nearestDescriptorSets.size() != swapChainImages.size() ||
             state.linearDescriptorSets.size() != swapChainImages.size();
-        const bool uploadChanged =
-            residencyChanged ||
+        const bool imageReplacement = nativeResourcesMissing ||
             state.canvasHash != prepared.raster->canvas_hash;
+        const bool uploadChanged = imageReplacement;
         if (uploadChanged) {
           vk::UniqueBuffer stagingBuffer{};
           vk::UniqueDeviceMemory stagingMemory{};
@@ -977,7 +977,7 @@ namespace epochengine::vulkancontext
           vk::UniqueImage nextImage{};
           vk::UniqueDeviceMemory nextMemory{};
           vk::Image uploadImage{};
-          if (residencyChanged) {
+          if (imageReplacement) {
             vk::ImageCreateInfo imageInfo{};
             imageInfo.imageType = vk::ImageType::e2D;
             imageInfo.format = vk::Format::eR8G8B8A8Unorm;
@@ -1023,7 +1023,7 @@ namespace epochengine::vulkancontext
 
           vk::UniqueCommandBuffer upload = beginSingleTimeCommands();
           vk::ImageMemoryBarrier toTransfer{};
-          toTransfer.oldLayout = residencyChanged
+          toTransfer.oldLayout = imageReplacement
                                      ? vk::ImageLayout::eUndefined
                                      : vk::ImageLayout::eShaderReadOnlyOptimal;
           toTransfer.newLayout = vk::ImageLayout::eTransferDstOptimal;
@@ -1032,12 +1032,12 @@ namespace epochengine::vulkancontext
           toTransfer.image = uploadImage;
           toTransfer.subresourceRange = vk::ImageSubresourceRange{
               vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u};
-          toTransfer.srcAccessMask = residencyChanged
+          toTransfer.srcAccessMask = imageReplacement
                                          ? vk::AccessFlags{}
                                          : vk::AccessFlagBits::eShaderRead;
           toTransfer.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
           upload->pipelineBarrier(
-              residencyChanged ? vk::PipelineStageFlagBits::eTopOfPipe
+              imageReplacement ? vk::PipelineStageFlagBits::eTopOfPipe
                                : vk::PipelineStageFlagBits::eFragmentShader,
               vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr,
               toTransfer);
@@ -1065,7 +1065,7 @@ namespace epochengine::vulkancontext
           endSingleTimeCommands(upload);
           synchronized = true;
 
-          if (residencyChanged) {
+          if (imageReplacement) {
             vk::UniqueImageView nextView =
                 createImageViewUnique(*nextImage, vk::Format::eR8G8B8A8Unorm,
                                       vk::ImageAspectFlagBits::eColor);
@@ -1172,6 +1172,7 @@ namespace epochengine::vulkancontext
             state.imageView.reset();
             state.image.reset();
             state.imageMemory.reset();
+
             state.image = std::move(nextImage);
             state.imageMemory = std::move(nextMemory);
             state.imageView = std::move(nextView);
