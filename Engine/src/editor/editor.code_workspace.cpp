@@ -40,7 +40,22 @@ namespace epochengine::editor_code_workspace
             fs::path canonical_path{};
             std::string relative_path{};
             std::string text{};
+            bool utf8_bom{};
         };
+
+        constexpr std::string_view kUtf8Bom{"\xEF\xBB\xBF", 3u};
+
+        [[nodiscard]] std::string encoded_source_bytes(
+            const std::string_view text,
+            const bool utf8_bom)
+        {
+            std::string bytes{};
+            bytes.reserve(text.size() + (utf8_bom ? kUtf8Bom.size() : 0u));
+            if (utf8_bom)
+                bytes.append(kUtf8Bom);
+            bytes.append(text);
+            return bytes;
+        }
 
         [[nodiscard]] OperationResult result(
             const ResultCode code,
@@ -193,9 +208,20 @@ namespace epochengine::editor_code_workspace
                     return ResultCode::stale_disk;
                 }
             }
+            if (text.starts_with(kUtf8Bom))
+            {
+                loaded.utf8_bom = true;
+                text.erase(0u, kUtf8Bom.size());
+            }
+            else if (text.starts_with(std::string_view{"\xFF\xFE", 2u})
+                || text.starts_with(std::string_view{"\xFE\xFF", 2u}))
+            {
+                reason = "The requested code file uses a UTF-16 BOM; convert it to UTF-8 before editing.";
+                return ResultCode::invalid_utf8;
+            }
             if (!valid_utf8(text))
             {
-                reason = "The requested code file is not valid UTF-8 text.";
+                reason = "The requested code file contains invalid UTF-8 bytes; no text was opened or replaced.";
                 return ResultCode::invalid_utf8;
             }
 
@@ -330,6 +356,7 @@ namespace epochengine::editor_code_workspace
             Viewport viewport{};
             std::size_t maximum_bytes{256u * 1024u};
             bool writable{};
+            bool utf8_bom{};
         };
 
         WorkspaceKind kind{WorkspaceKind::project_scripts};
@@ -426,7 +453,8 @@ namespace epochengine::editor_code_workspace
                 .viewport = document.viewport,
                 .active = active && *active == document.handle,
                 .dirty = document.text != document.persisted_text,
-                .writable = document.writable};
+                .writable = document.writable,
+                .utf8_bom = document.utf8_bom};
         }
     }
 
@@ -673,7 +701,8 @@ namespace epochengine::editor_code_workspace
                 .selection = {},
                 .viewport = {},
                 .maximum_bytes = request.maximum_file_bytes,
-                .writable = path_request.writable});
+                .writable = path_request.writable,
+                .utf8_bom = file.utf8_bom});
         }
         replacement.active = replacement.documents.front().handle;
         *implementation_ = std::move(replacement);
@@ -776,7 +805,8 @@ namespace epochengine::editor_code_workspace
         }
         if (!checked->writable)
             return result(ResultCode::read_only, "The reviewed code document is read-only.", handle);
-        if (text.size() > checked->maximum_bytes)
+        if (text.size() + (checked->utf8_bom ? kUtf8Bom.size() : 0u)
+            > checked->maximum_bytes)
             return result(ResultCode::oversized_file, "The edited code exceeds the workspace byte limit.", handle);
         if (!valid_utf8(text))
             return result(ResultCode::invalid_utf8, "The edited code is not valid UTF-8 text.", handle);
@@ -937,6 +967,7 @@ namespace epochengine::editor_code_workspace
             return result(ResultCode::stale_disk, "The code file identity changed before reload.", handle);
         document.text = std::move(loaded.text);
         document.persisted_text = document.text;
+        document.utf8_bom = loaded.utf8_bom;
         document.line_starts = line_starts(document.text);
         ++document.revision;
         document.persisted_revision = document.revision;
@@ -976,7 +1007,8 @@ namespace epochengine::editor_code_workspace
         if (code != ResultCode::success)
             return result(code, std::move(reason), handle);
         if (current.canonical_path != checked->canonical_path
-            || current.text != checked->persisted_text)
+            || current.text != checked->persisted_text
+            || current.utf8_bom != checked->utf8_bom)
         {
             return result(ResultCode::stale_disk, "The code file changed on disk after it was opened.", handle);
         }
@@ -989,8 +1021,10 @@ namespace epochengine::editor_code_workspace
         std::error_code error{};
         fs::remove(temporary, error);
         error.clear();
+        const std::string encoded = encoded_source_bytes(
+            checked->text, checked->utf8_bom);
         const std::span<const char> characters{
-            checked->text.data(), checked->text.size()};
+            encoded.data(), encoded.size()};
         if (!platform::filesystem::exclusive_create_and_write(
                 temporary, std::as_bytes(characters), error))
         {
@@ -999,15 +1033,17 @@ namespace epochengine::editor_code_workspace
 
         std::string temporary_bytes{};
         if (!read_exact(temporary, temporary_bytes)
-            || temporary_bytes != checked->text)
+            || temporary_bytes != encoded)
         {
             fs::remove(temporary, error);
             return result(ResultCode::verification_failed, "The temporary code file failed byte verification.", handle);
         }
 
         std::string precommit_bytes{};
+        const std::string expected_persisted = encoded_source_bytes(
+            checked->persisted_text, checked->utf8_bom);
         if (!read_exact(checked->canonical_path, precommit_bytes)
-            || precommit_bytes != checked->persisted_text)
+            || precommit_bytes != expected_persisted)
         {
             fs::remove(temporary, error);
             return result(ResultCode::stale_disk, "The code file changed immediately before atomic replacement.", handle);
@@ -1022,7 +1058,7 @@ namespace epochengine::editor_code_workspace
 
         std::string committed{};
         if (!read_exact(checked->canonical_path, committed)
-            || committed != checked->text)
+            || committed != encoded)
         {
             return result(ResultCode::verification_failed, "The committed code file failed byte verification.", handle);
         }

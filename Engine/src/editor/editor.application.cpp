@@ -11634,13 +11634,20 @@ namespace epochengine
             ProjectCodeWorkspaceDrawResult result{
                 .handled = !editor.projectRoot.empty()};
             auto& state = editor.projectCodeWorkspace;
+            editor.showOutliner = false;
             gui::label("Project Scripts");
             const std::array navigation{
-                gui::InlineButtonSpec{
+                gui::SegmentedButtonSpec{
                     .label = "3D Scene",
-                    .width = 104.0f}}
-            ;
-            if (gui::inline_button_row(navigation, 30.0f, 6.0f))
+                    .width = 104.0f,
+                    .active = false},
+                gui::SegmentedButtonSpec{
+                    .label = "Project Scripts",
+                    .width = 144.0f,
+                    .active = true}};
+            if (const auto selected = gui::segmented_button_row(
+                    navigation, 30.0f, 4.0f);
+                selected && *selected == 0u)
             {
                 result.returnToScene = true;
                 return result;
@@ -11790,6 +11797,12 @@ namespace epochengine
                 "Access",
                 active->writable ? "Writable project source" : "Read-only",
                 82.0f);
+            gui::property_row(
+                "Encoding",
+                active->utf8_bom
+                    ? "UTF-8 with preserved BOM"
+                    : "UTF-8",
+                82.0f);
             gui::label("Go To Line");
             (void)gui::edit_box(
                 state.gotoLine, {(std::min)(160.0f, width), 28.0f}, 12u, false);
@@ -11857,6 +11870,12 @@ namespace epochengine
             {
                 state.status = "Copied the selected UTF-8 project source.";
             }
+            if (edited.invalid_utf8_replacements != 0u)
+            {
+                state.status = epochengine::format_text(
+                    "Replaced {} invalid UTF-8 input byte(s) with visible U+FFFD markers; review before saving.",
+                    edited.invalid_utf8_replacements);
+            }
             gui::property_row(
                 "Cursor",
                 epochengine::format_text(
@@ -11872,7 +11891,8 @@ namespace epochengine
                     edited.vertical_scroll),
                 82.0f);
             gui::wrapped_label(
-                state.status + " Shift+mouse-wheel scrolls horizontally.",
+                state.status
+                    + " Mouse-wheel scrolls vertically; Shift+mouse-wheel scrolls horizontally. Up/Down, Page Up/Down, Home/End, and Ctrl+Home/End keep the caret visible.",
                 width);
             return result;
         }

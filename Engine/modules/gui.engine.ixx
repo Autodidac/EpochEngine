@@ -208,6 +208,7 @@ namespace epochengine::gui
         bool cut{};
         bool pasted{};
         bool selected_all{};
+        std::size_t invalid_utf8_replacements{};
         std::size_t cursor_line{ 1u };
         std::size_t cursor_column{ 1u };
         float horizontal_scroll{};

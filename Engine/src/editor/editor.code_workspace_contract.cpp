@@ -219,6 +219,13 @@ namespace epochengine::editor_code_workspace
             {
                 return false;
             }
+            if (!controller.open(request)
+                || !controller.active_document()
+                || controller.active_document()->handle != beta.handle
+                || !controller.document(alpha.handle)->dirty)
+            {
+                return false;
+            }
             if (controller.close(
                     alpha.handle,
                     request.authority,
@@ -247,6 +254,63 @@ namespace epochengine::editor_code_workspace
                 return false;
             }
             return true;
+        }
+
+        [[nodiscard]] bool bom_roundtrip_contract(
+            const Fixture& fixture)
+        {
+            Controller controller{};
+            const OpenRequest request{
+                .kind = WorkspaceKind::project_scripts,
+                .workspace_id = "project-bom",
+                .root = fixture.root,
+                .authority = authority(70u, 80u, 90u),
+                .paths = {{
+                    .relative_path = "Scripts/bom.ascript.cpp",
+                    .writable = true}},
+                .maximum_file_bytes = 1'024u,
+                .maximum_tabs = 2u};
+            if (!controller.open(request))
+                return false;
+            const DocumentSnapshot opened = *controller.active_document();
+            if (!opened.utf8_bom
+                || opened.text != "hello \xe2\x9c\x93\n"
+                || opened.text.starts_with("\xEF\xBB\xBF"))
+            {
+                return false;
+            }
+
+            if (!controller.replace_text(
+                    opened.handle,
+                    request.authority,
+                    opened.revision,
+                    "saved \xe7\x95\x8c\n"))
+            {
+                return false;
+            }
+            const DocumentSnapshot changed = *controller.active_document();
+            if (!controller.save(
+                    changed.handle,
+                    request.authority,
+                    changed.revision)
+                || fixture.read("Scripts/bom.ascript.cpp")
+                    != "\xEF\xBB\xBF" "saved \xe7\x95\x8c\n")
+            {
+                return false;
+            }
+
+            if (!fixture.write("Scripts/bom.ascript.cpp", "plain utf-8\n")
+                || !controller.reload(
+                    changed.handle,
+                    request.authority,
+                    changed.revision,
+                    true))
+            {
+                return false;
+            }
+            const DocumentSnapshot reloaded = *controller.active_document();
+            return !reloaded.utf8_bom
+                && reloaded.text == "plain utf-8\n";
         }
 
         [[nodiscard]] bool stale_and_atomic_save_contract(
@@ -402,6 +466,16 @@ namespace epochengine::editor_code_workspace
             if (controller.open(request).code != ResultCode::invalid_utf8)
                 return false;
 
+            request.paths = {{
+                .relative_path = "Scripts/utf16.ascript.cpp",
+                .writable = true}};
+            const OperationResult utf16 = controller.open(request);
+            if (utf16.code != ResultCode::invalid_utf8
+                || utf16.reason.find("UTF-16 BOM") == std::string::npos)
+            {
+                return false;
+            }
+
             request.paths = {
                 {.relative_path = "Scripts/alpha.ascript.cpp", .writable = true},
                 {.relative_path = "Scripts/alpha.ascript.cpp", .writable = true}};
@@ -423,6 +497,12 @@ namespace epochengine::editor_code_workspace
                 "Scripts/invalid.ascript.cpp",
                 std::string_view{"\xc0\x80", 2u})
             || !fixture.write(
+                "Scripts/bom.ascript.cpp",
+                "\xEF\xBB\xBF" "hello \xe2\x9c\x93\n")
+            || !fixture.write(
+                "Scripts/utf16.ascript.cpp",
+                std::string_view{"\xFF\xFEh\0i\0", 6u})
+            || !fixture.write(
                 "Engine/src/reviewed.cpp",
                 "int reviewed = 1;\n"))
         {
@@ -430,6 +510,7 @@ namespace epochengine::editor_code_workspace
         }
         return utf8_contract()
             && tabs_edit_selection_and_viewport_contract(fixture)
+            && bom_roundtrip_contract(fixture)
             && stale_and_atomic_save_contract(fixture)
             && reload_and_isolation_contract(fixture)
             && path_refusal_contract(fixture);

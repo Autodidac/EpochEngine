@@ -422,6 +422,8 @@ namespace epochengine::gui
             bool hasSelection = false;
             bool draggingSelection = false;
             float scrollX = 0.0f;
+            std::size_t preferredColumn{};
+            bool verticalColumnActive{};
             std::uint64_t lastGotoGeneration{};
         };
 
@@ -6415,8 +6417,12 @@ namespace epochengine::gui
         }
     }
 
+    [[nodiscard]] static bool source_editor_navigation_contract() noexcept;
+
     bool run_runtime_surface_contract() noexcept
     {
+        if (!source_editor_navigation_contract())
+            return false;
         constexpr std::string_view utf8Sample{
             "A\xE2\x96\x88\xF0\x9F\x9A\x80"};
         const DecodedUtf8Codepoint ascii =
@@ -7304,6 +7310,134 @@ namespace epochengine::gui
             state.selectionAnchor = index;
         state.cursorIndex = index;
         state.hasSelection = state.cursorIndex != state.selectionAnchor;
+        state.verticalColumnActive = false;
+    }
+
+    [[nodiscard]] static std::size_t source_editor_line_for_index(
+        const std::string_view text,
+        const std::size_t index) noexcept
+    {
+        return static_cast<std::size_t>(std::count(
+            text.begin(),
+            text.begin() + static_cast<std::ptrdiff_t>(
+                (std::min)(index, text.size())),
+            '\n'));
+    }
+
+    [[nodiscard]] static std::size_t source_editor_line_start_for_cursor(
+        const std::string_view text,
+        const std::size_t index) noexcept
+    {
+        const std::size_t clamped = (std::min)(index, text.size());
+        if (clamped == 0u)
+            return 0u;
+        const std::size_t newline = text.rfind('\n', clamped - 1u);
+        return newline == std::string_view::npos ? 0u : newline + 1u;
+    }
+
+    [[nodiscard]] static std::size_t source_editor_column_for_index(
+        const std::string_view text,
+        const std::size_t lineStart,
+        const std::size_t index) noexcept
+    {
+        std::size_t column{};
+        for (std::size_t cursor = (std::min)(lineStart, text.size());
+            cursor < (std::min)(index, text.size());)
+        {
+            cursor = next_utf8_codepoint_start(text, cursor);
+            ++column;
+        }
+        return column;
+    }
+
+    [[nodiscard]] static std::size_t source_editor_index_for_column(
+        const std::string_view text,
+        const std::size_t lineStart,
+        const std::size_t column) noexcept
+    {
+        const std::size_t lineEnd = source_editor_line_end_for_start(
+            text, lineStart);
+        std::size_t cursor = (std::min)(lineStart, lineEnd);
+        for (std::size_t current{};
+            current < column && cursor < lineEnd;
+            ++current)
+        {
+            cursor = next_utf8_codepoint_start(text, cursor);
+        }
+        return (std::min)(cursor, lineEnd);
+    }
+
+    static void source_editor_move_vertical(
+        SourceEditorState& state,
+        const std::string_view text,
+        const std::ptrdiff_t lineDelta,
+        const bool extendSelection) noexcept
+    {
+        const std::size_t cursor = (std::min)(state.cursorIndex, text.size());
+        const std::size_t currentLine = source_editor_line_for_index(text, cursor);
+        const std::size_t lineCount = line_count_for_text(text);
+        if (!state.verticalColumnActive)
+        {
+            state.preferredColumn = source_editor_column_for_index(
+                text,
+                source_editor_line_start_for_cursor(text, cursor),
+                cursor);
+            state.verticalColumnActive = true;
+        }
+
+        const std::ptrdiff_t targetSigned = (std::clamp)(
+            static_cast<std::ptrdiff_t>(currentLine) + lineDelta,
+            std::ptrdiff_t{0},
+            static_cast<std::ptrdiff_t>(lineCount - 1u));
+        const std::size_t targetLine = static_cast<std::size_t>(targetSigned);
+        const std::size_t target = source_editor_index_for_column(
+            text,
+            line_start_for_index(text, targetLine),
+            state.preferredColumn);
+        if (!extendSelection)
+            state.selectionAnchor = target;
+        state.cursorIndex = target;
+        state.hasSelection = state.cursorIndex != state.selectionAnchor;
+    }
+
+    [[nodiscard]] static float source_editor_clamped_scroll(
+        const float requested,
+        const float contentExtent,
+        const float viewportExtent) noexcept
+    {
+        return (std::clamp)(
+            requested,
+            0.0f,
+            (std::max)(0.0f, contentExtent - viewportExtent));
+    }
+
+    [[nodiscard]] bool source_editor_navigation_contract() noexcept
+    {
+        constexpr std::string_view text{"ab\nx\n1234\n\xe7\x95\x8cz"};
+        SourceEditorState state{
+            .cursorIndex = 2u,
+            .selectionAnchor = 2u};
+        source_editor_move_vertical(state, text, 1, false);
+        if (state.cursorIndex != 4u || state.preferredColumn != 2u)
+            return false;
+        source_editor_move_vertical(state, text, 1, false);
+        if (state.cursorIndex != 7u)
+            return false;
+        source_editor_move_vertical(state, text, -50, true);
+        if (state.cursorIndex != 2u || !state.hasSelection)
+            return false;
+        source_editor_move_vertical(state, text, 50, false);
+        if (source_editor_line_for_index(text, state.cursorIndex) != 3u
+            || source_editor_column_for_index(
+                text,
+                source_editor_line_start_for_cursor(text, state.cursorIndex),
+                state.cursorIndex) != 2u)
+        {
+            return false;
+        }
+        return source_editor_clamped_scroll(-12.0f, 500.0f, 100.0f) == 0.0f
+            && source_editor_clamped_scroll(900.0f, 500.0f, 100.0f) == 400.0f
+            && source_editor_clamped_scroll(20.0f, 80.0f, 100.0f) == 0.0f;
     }
 
     [[nodiscard]] static std::string source_editor_selected_text(std::string_view text, const SourceEditorState& state)
@@ -7328,6 +7462,7 @@ namespace epochengine::gui
         state.cursorIndex = begin;
         state.selectionAnchor = begin;
         state.hasSelection = false;
+        state.verticalColumnActive = false;
         return true;
     }
 
@@ -7336,9 +7471,12 @@ namespace epochengine::gui
         SourceEditorState& state,
         std::string_view incoming,
         std::size_t limit,
-        bool& changed)
+        bool& changed,
+        std::size_t& invalidUtf8Replacements)
     {
-        source_editor_delete_selection(text, state);
+        if (source_editor_delete_selection(text, state))
+            changed = true;
+        state.verticalColumnActive = false;
 
         const std::size_t cursor = (std::min)(state.cursorIndex, text.size());
         const std::size_t available = limit > text.size() ? limit - text.size() : 0u;
@@ -7364,6 +7502,12 @@ namespace epochengine::gui
                 ++incomingIndex;
                 continue;
             }
+            if (lead == static_cast<unsigned char>('\t'))
+            {
+                filtered.push_back('\t');
+                ++incomingIndex;
+                continue;
+            }
             if (lead < 32u)
             {
                 ++incomingIndex;
@@ -7377,7 +7521,11 @@ namespace epochengine::gui
             if (lead >= 0x80u && decoded.codepoint == U'?'
                 && byteCount == 1u)
             {
-                filtered.push_back('?');
+                constexpr std::string_view replacement{"\xEF\xBF\xBD", 3u};
+                if (replacement.size() > available - filtered.size())
+                    break;
+                filtered.append(replacement);
+                ++invalidUtf8Replacements;
                 ++incomingIndex;
                 continue;
             }
@@ -7448,6 +7596,7 @@ namespace epochengine::gui
             state.cursorIndex = line_start_for_index(text, targetLine - 1u);
             state.selectionAnchor = state.cursorIndex;
             state.hasSelection = false;
+            state.verticalColumnActive = false;
             state.lastGotoGeneration = options.goto_generation;
             scrollState.scrollY = static_cast<float>(targetLine - 1u) * lineAdvance;
         }
@@ -7483,7 +7632,10 @@ namespace epochengine::gui
                 {
                 case EventType::TextInput:
                     if (!options.read_only)
-                        source_editor_insert_text_limited(text, state, evt.text, limit, result.edit.changed);
+                        source_editor_insert_text_limited(
+                            text, state, evt.text, limit,
+                            result.edit.changed,
+                            result.invalid_utf8_replacements);
                     break;
 
                 case EventType::KeyDown:
@@ -7503,7 +7655,10 @@ namespace epochengine::gui
                     {
                         if (!options.read_only)
                         {
-                            source_editor_insert_text_limited(text, state, clipboard_read_text(), limit, result.edit.changed);
+                            source_editor_insert_text_limited(
+                                text, state, clipboard_read_text(), limit,
+                                result.edit.changed,
+                                result.invalid_utf8_replacements);
                             result.pasted = true;
                         }
                     }
@@ -7512,6 +7667,7 @@ namespace epochengine::gui
                         state.selectionAnchor = 0u;
                         state.cursorIndex = text.size();
                         state.hasSelection = !text.empty();
+                        state.verticalColumnActive = false;
                         result.selected_all = state.hasSelection;
                     }
                     else if (evt.key == 8 || evt.key == 127)
@@ -7530,6 +7686,7 @@ namespace epochengine::gui
                                 state.cursorIndex - eraseIndex);
                             state.cursorIndex = eraseIndex;
                             state.selectionAnchor = eraseIndex;
+                            state.verticalColumnActive = false;
                             result.edit.changed = true;
                         }
                         else if (!options.read_only && evt.key == 127
@@ -7541,6 +7698,7 @@ namespace epochengine::gui
                             text.erase(
                                 state.cursorIndex,
                                 eraseEnd - state.cursorIndex);
+                            state.verticalColumnActive = false;
                             result.edit.changed = true;
                         }
                     }
@@ -7555,7 +7713,10 @@ namespace epochengine::gui
                     else if (evt.key == 13)
                     {
                         if (!options.read_only)
-                            source_editor_insert_text_limited(text, state, "\n", limit, result.edit.changed);
+                            source_editor_insert_text_limited(
+                                text, state, "\n", limit,
+                                result.edit.changed,
+                                result.invalid_utf8_replacements);
                     }
                     else if (evt.key == 37) // VK_LEFT
                     {
@@ -7571,21 +7732,62 @@ namespace epochengine::gui
                                 text, state.cursorIndex);
                         source_editor_set_cursor(state, next, evt.shift_down, text.size());
                     }
+                    else if (evt.key == 38) // VK_UP
+                    {
+                        source_editor_move_vertical(
+                            state, text, -1, evt.shift_down);
+                    }
+                    else if (evt.key == 40) // VK_DOWN
+                    {
+                        source_editor_move_vertical(
+                            state, text, 1, evt.shift_down);
+                    }
+                    else if (evt.key == 33 || evt.key == 34) // VK_PRIOR / VK_NEXT
+                    {
+                        const std::size_t visibleLines = (std::max)(
+                            std::size_t{1u},
+                            static_cast<std::size_t>((std::max)(
+                                lineAdvance,
+                                height - 2.0f * kBoxInnerPadding)
+                                / (std::max)(1.0f, lineAdvance)));
+                        const std::ptrdiff_t pageLines = static_cast<std::ptrdiff_t>(
+                            visibleLines > 1u ? visibleLines - 1u : 1u);
+                        source_editor_move_vertical(
+                            state,
+                            text,
+                            evt.key == 33 ? -pageLines : pageLines,
+                            evt.shift_down);
+                    }
+                    else if (evt.ctrl_down && evt.key == 36) // Ctrl+Home
+                    {
+                        source_editor_set_cursor(
+                            state, 0u, evt.shift_down, text.size());
+                    }
+                    else if (evt.ctrl_down && evt.key == 35) // Ctrl+End
+                    {
+                        source_editor_set_cursor(
+                            state, text.size(), evt.shift_down, text.size());
+                    }
                     else if (evt.key == 36) // VK_HOME
                     {
-                        std::size_t lineStart = 0u;
-                        for (std::size_t i = 0u; i < (std::min)(state.cursorIndex, text.size()); ++i)
-                            if (text[i] == '\n')
-                                lineStart = i + 1u;
-                        source_editor_set_cursor(state, lineStart, evt.shift_down, text.size());
+                        source_editor_set_cursor(
+                            state,
+                            source_editor_line_start_for_cursor(
+                                text, state.cursorIndex),
+                            evt.shift_down,
+                            text.size());
                     }
                     else if (evt.key == 35) // VK_END
                     {
-                        std::size_t currentLineStart = 0u;
-                        for (std::size_t i = 0u; i < (std::min)(state.cursorIndex, text.size()); ++i)
-                            if (text[i] == '\n')
-                                currentLineStart = i + 1u;
-                        source_editor_set_cursor(state, source_editor_line_end_for_start(text, currentLineStart), evt.shift_down, text.size());
+                        const std::size_t currentLineStart =
+                            source_editor_line_start_for_cursor(
+                                text, state.cursorIndex);
+                        source_editor_set_cursor(
+                            state,
+                            source_editor_line_end_for_start(
+                                text, currentLineStart),
+                            evt.shift_down,
+                            text.size());
                     }
                     break;
 
@@ -7606,9 +7808,11 @@ namespace epochengine::gui
                     if (event.type != EventType::KeyDown)
                         return false;
                     return event.key == 8 || event.key == 127
-                        || event.key == 13 || event.key == 35
+                        || event.key == 13 || event.key == 33
+                        || event.key == 34 || event.key == 35
                         || event.key == 36 || event.key == 37
-                        || event.key == 39
+                        || event.key == 38 || event.key == 39
+                        || event.key == 40
                         || (event.ctrl_down
                             && (event.key == 'A' || event.key == 'a'
                                 || event.key == 'V' || event.key == 'v'
@@ -7642,6 +7846,11 @@ namespace epochengine::gui
                 state.scrollX = caretOffsetX - contentWidth + space_advance(kFontScale);
         }
 
+        scrollState.scrollY = source_editor_clamped_scroll(
+            scrollState.scrollY,
+            editorContentHeight,
+            height);
+
         float maximumLineWidth{};
         std::size_t measuredOffset{};
         for (std::size_t line = 0u; line < lineCount; ++line)
@@ -7653,7 +7862,10 @@ namespace epochengine::gui
         }
         const float maximumScrollX = (std::max)(0.0f,
             maximumLineWidth - contentWidth + kBoxInnerPadding);
-        state.scrollX = (std::clamp)(state.scrollX, 0.0f, maximumScrollX);
+        state.scrollX = source_editor_clamped_scroll(
+            state.scrollX,
+            maximumLineWidth + kBoxInnerPadding,
+            contentWidth);
         const bool horizontalWheel = std::any_of(
             g_frame.events.begin(), g_frame.events.end(),
             [](const InputEvent& event)
@@ -7664,7 +7876,9 @@ namespace epochengine::gui
         {
             const float steps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
             state.scrollX = (std::clamp)(state.scrollX
-                - steps * space_advance(kFontScale) * 6.0f, 0.0f, maximumScrollX);
+                - steps * space_advance(kFontScale) * 6.0f,
+                0.0f,
+                maximumScrollX);
             g_frame.mouseWheelDelta = 0;
         }
 
@@ -7859,7 +8073,13 @@ namespace epochengine::gui
                 {
                     if (!options.read_only)
                     {
-                        source_editor_insert_text_limited(text, state, clipboard_read_text(), options.max_chars, result.edit.changed);
+                        source_editor_insert_text_limited(
+                            text,
+                            state,
+                            clipboard_read_text(),
+                            options.max_chars,
+                            result.edit.changed,
+                            result.invalid_utf8_replacements);
                         result.pasted = true;
                     }
                     state.contextMenuOpen = false;

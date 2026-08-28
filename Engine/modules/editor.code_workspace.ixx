@@ -142,6 +142,7 @@ export namespace epochengine::editor_code_workspace
         bool active{};
         bool dirty{};
         bool writable{};
+        bool utf8_bom{};
     };
 
     struct WorkspaceSnapshot final
