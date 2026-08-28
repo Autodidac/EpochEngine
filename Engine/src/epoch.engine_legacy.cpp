@@ -188,6 +188,7 @@ import ai.mcp_child_host;
 import ai.self_iteration_orchestrator;
 import ai.mcp_orchestrator_bridge;
 import ai.source_patch_bundle;
+import ai.source_patch_stager;
 import ai.iteration_patch_adapter;
 import ai.iteration_validation_adapter;
 import epoch.build_validation;
@@ -2797,6 +2798,9 @@ namespace epochengine::core
         check(
             "ai.source_patch_bundle",
             epochengine::ai::source_patch_bundle::run_contract());
+        check(
+            "ai.source_patch_stager",
+            epochengine::ai::source_patch_stager::run_contract());
         check(
             "ai.iteration_patch_adapter",
             epochengine::ai::iteration_patch_adapter::run_contract());

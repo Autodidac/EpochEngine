@@ -400,6 +400,8 @@ set(EPOCH_SOURCES
     src/ai/ai.source_patch_bundle_contract.cpp
     src/ai/ai.source_patch_proposal.cpp
     src/ai/ai.source_patch_proposal_contract.cpp
+    src/ai/ai.source_patch_stager.cpp
+    src/ai/ai.source_patch_stager_contract.cpp
     src/ai/ai.iteration_patch_adapter.cpp
     src/ai/ai.iteration_patch_adapter_contract.cpp
     src/ai/ai.iteration_validation_adapter.cpp
@@ -2149,6 +2151,49 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_ai_source_patch_proposal_contract
         COMMAND epoch_ai_source_patch_proposal_contract
+    )
+
+    add_executable(epoch_ai_source_patch_stager_contract
+        src/epoch/epoch.build_validation.cpp
+        src/ai/ai.curated_context_bundle.cpp
+        src/ai/ai.source_patch_proposal.cpp
+        src/ai/ai.source_patch_stager.cpp
+        src/ai/ai.source_patch_stager_contract.cpp
+    )
+    target_sources(epoch_ai_source_patch_stager_contract PRIVATE
+        FILE_SET epoch_ai_source_patch_stager_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_loop.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_session.ixx
+                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
+                ${EPOCH_MODULE_DIR}/ai.curated_context_bundle.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_campaign.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_child_host.ixx
+                ${EPOCH_MODULE_DIR}/ai.self_iteration_orchestrator.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_orchestrator_bridge.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_scheduler.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_supervisor_control.ixx
+                ${EPOCH_MODULE_DIR}/ai.source_patch_bundle.ixx
+                ${EPOCH_MODULE_DIR}/ai.source_patch_proposal.ixx
+                ${EPOCH_MODULE_DIR}/epoch.build_validation.ixx
+                ${EPOCH_MODULE_DIR}/ai.source_patch_stager.ixx
+    )
+    target_compile_definitions(epoch_ai_source_patch_stager_contract PRIVATE
+        EPOCH_AI_SOURCE_PATCH_STAGER_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_source_patch_stager_contract)
+    epoch_apply_warnings(epoch_ai_source_patch_stager_contract)
+    epoch_apply_sanitizers(epoch_ai_source_patch_stager_contract)
+    add_test(
+        NAME epoch_ai_source_patch_stager_contract
+        COMMAND epoch_ai_source_patch_stager_contract
     )
 
     add_executable(epoch_ai_voice_session_contract

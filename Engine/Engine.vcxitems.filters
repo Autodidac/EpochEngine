@@ -1352,6 +1352,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_proposal.ixx">
       <Filter>Module Files\epochengine\ai</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_stager.ixx">
+      <Filter>Module Files\epochengine\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_patch_adapter.ixx">
       <Filter>Module Files\epochengine\ai</Filter>
     </ClCompile>
@@ -1408,6 +1411,12 @@
       <Filter>Source Files\epochengine\core\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal_contract.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager_contract.cpp">
       <Filter>Source Files\epochengine\core\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter.cpp">
