@@ -771,7 +771,8 @@ namespace
             s_framebufferHeight,
             { requested.x, requested.y, requested.width, requested.height },
             ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor,
-            ctx->gui_overlay_priority()
+            ctx->gui_overlay_priority(),
+            ctx->frame_window_state()
         });
         if (!frame.scene_visible)
             return;

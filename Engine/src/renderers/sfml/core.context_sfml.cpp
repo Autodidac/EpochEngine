@@ -562,7 +562,8 @@ namespace
             s_height,
             { requested.x, requested.y, requested.width, requested.height },
             ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor,
-            ctx->gui_overlay_priority()
+            ctx->gui_overlay_priority(),
+            ctx->frame_window_state()
         });
         if (!frame.scene_visible)
             return;
@@ -577,7 +578,13 @@ namespace
             return;
 
         const auto currentFrame = epochengine::rendercontext::resolve_frame_plan({
-            static_cast<int>(windowSize.x), static_cast<int>(windowSize.y), frame.scene, true, ctx->gui_overlay_priority() });
+            static_cast<int>(windowSize.x),
+            static_cast<int>(windowSize.y),
+            frame.scene,
+            true,
+            ctx->gui_overlay_priority(),
+            ctx->frame_window_state()
+        });
 
         const auto previousView = s_window->getView();
         sf::View previewView{ epochengine::sfml_compat::float_rect(

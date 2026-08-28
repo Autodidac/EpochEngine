@@ -588,7 +588,8 @@ namespace epochengine::directxcontext::detail
             state.height,
             { requested.x, requested.y, requested.width, requested.height },
             ctx->scene_preview_mode() == core::ScenePreviewMode::Editor,
-            ctx->gui_overlay_priority()
+            ctx->gui_overlay_priority(),
+            ctx->frame_window_state()
         });
         if (!frame.scene_visible)
             return false;
@@ -766,7 +767,8 @@ namespace epochengine::directxcontext
             { requestedSceneViewport.x, requestedSceneViewport.y,
                 requestedSceneViewport.width, requestedSceneViewport.height },
             ctx->scene_preview_mode() == core::ScenePreviewMode::Editor,
-            overlayPriority
+            overlayPriority,
+            ctx->frame_window_state()
         });
         if (sceneFrame.scene_visible)
         {

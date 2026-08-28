@@ -85,6 +85,7 @@ import atlas.manager;   // reacquire atlas vector inside queued draw
 import sprite.handle;
 import image.loader;
 import perf.tier;
+import render.context_frame;
 
 namespace epochengine::core
 {
@@ -296,6 +297,35 @@ namespace epochengine::core
                 return framebufferHeight;
             return height;
         }
+
+        void publish_frame_window_state(
+            const rendercontext::WindowState& state)
+        {
+            std::scoped_lock lock{frameWindowStateMutex};
+            frameWindowState = state;
+        }
+
+        [[nodiscard]] rendercontext::WindowState frame_window_state() const
+        {
+            std::scoped_lock lock{frameWindowStateMutex};
+            return frameWindowState;
+        }
+
+        [[nodiscard]] perf::frame_activity frame_pacing_activity() const
+        {
+            switch (frame_window_state().activity)
+            {
+            case rendercontext::WindowActivity::background:
+            case rendercontext::WindowActivity::occluded:
+                return perf::frame_activity::background;
+            case rendercontext::WindowActivity::minimized:
+                return perf::frame_activity::minimized;
+            case rendercontext::WindowActivity::foreground:
+                return perf::frame_activity::foreground;
+            }
+            return perf::frame_activity::foreground;
+        }
+
         [[nodiscard]] RenderViewport scene_viewport() const noexcept
         {
             for (int attempt = 0; attempt < 4; ++attempt)
@@ -661,6 +691,9 @@ namespace epochengine::core
         // physical framebuffer size
         int framebufferWidth = 400;
         int framebufferHeight = 300;
+
+        mutable std::mutex frameWindowStateMutex{};
+        rendercontext::WindowState frameWindowState{};
 
         std::atomic<int> sceneViewportX{ 0 };
         std::atomic<int> sceneViewportY{ 0 };

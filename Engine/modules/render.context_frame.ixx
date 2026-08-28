@@ -30,6 +30,72 @@ export namespace epochengine::rendercontext
         [[nodiscard]] constexpr bool operator==(const Viewport&) const noexcept = default;
     };
 
+    enum class WindowActivity : std::uint8_t
+    {
+        foreground,
+        background,
+        minimized,
+        occluded
+    };
+
+    struct WindowObservation final
+    {
+        int logical_width{};
+        int logical_height{};
+        int framebuffer_width{};
+        int framebuffer_height{};
+        std::uint32_t dpi_milli{1000u};
+        std::uint64_t resize_generation{};
+        bool visible{true};
+        bool focused{true};
+        bool minimized{};
+        bool occluded{};
+        bool visibility_known{};
+        bool focus_known{};
+        bool minimized_known{};
+        bool occlusion_known{};
+        bool dpi_known{};
+    };
+
+    struct WindowState final
+    {
+        WindowActivity activity{WindowActivity::foreground};
+        int logical_width{};
+        int logical_height{};
+        int framebuffer_width{};
+        int framebuffer_height{};
+        std::uint32_t dpi_milli{1000u};
+        std::uint64_t resize_generation{};
+        bool presentable{true};
+        bool visible{true};
+        bool focused{true};
+        bool minimized{};
+        bool occluded{};
+        bool visibility_known{};
+        bool focus_known{};
+        bool minimized_known{};
+        bool occlusion_known{};
+        bool dpi_known{};
+
+        [[nodiscard]] constexpr bool operator==(const WindowState&) const noexcept = default;
+    };
+
+    [[nodiscard]] constexpr WindowState resolve_window_state(
+        const WindowObservation& observation) noexcept;
+
+    [[nodiscard]] constexpr const char* window_activity_name(
+        WindowActivity activity) noexcept
+    {
+        switch (activity)
+        {
+        case WindowActivity::foreground: return "foreground";
+        case WindowActivity::background: return "background";
+        case WindowActivity::minimized: return "minimized";
+        case WindowActivity::occluded: return "occluded";
+        }
+        return "foreground";
+    }
+
     struct FrameRequest final
     {
         int framebuffer_width{};
@@ -37,6 +103,7 @@ export namespace epochengine::rendercontext
         Viewport requested_scene{};
         bool editor_preview{};
         bool gui_overlay_priority{};
+        WindowState window{};
     };
 
     struct FramePlan final
@@ -57,6 +124,8 @@ export namespace epochengine::rendercontext
         bool deferred_after_scene{true};
         bool top_layer_after_scene{true};
         bool capture_after_composition{true};
+        WindowState window{};
+        bool surface_presentable{true};
         std::uint64_t semantic_signature{};
 
         [[nodiscard]] constexpr bool operator==(const FramePlan&) const noexcept = default;
@@ -87,8 +156,58 @@ export namespace epochengine::rendercontext
             hash = hash_word(hash, static_cast<std::uint32_t>(request.requested_scene.width));
             hash = hash_word(hash, static_cast<std::uint32_t>(request.requested_scene.height));
             hash = hash_word(hash, request.editor_preview ? 1u : 0u);
-            return hash_word(hash, request.gui_overlay_priority ? 1u : 0u);
+            hash = hash_word(hash, request.gui_overlay_priority ? 1u : 0u);
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.activity));
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.logical_width));
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.logical_height));
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.framebuffer_width));
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.framebuffer_height));
+            hash = hash_word(hash, request.window.dpi_milli);
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.resize_generation));
+            hash = hash_word(hash, static_cast<std::uint32_t>(request.window.resize_generation >> 32u));
+            hash = hash_word(hash, request.window.presentable ? 1u : 0u);
+            hash = hash_word(hash, request.window.visibility_known ? 1u : 0u);
+            hash = hash_word(hash, request.window.focus_known ? 1u : 0u);
+            hash = hash_word(hash, request.window.minimized_known ? 1u : 0u);
+            hash = hash_word(hash, request.window.occlusion_known ? 1u : 0u);
+            return hash_word(hash, request.window.dpi_known ? 1u : 0u);
         }
+    }
+
+    [[nodiscard]] constexpr WindowState resolve_window_state(
+        const WindowObservation& observation) noexcept
+    {
+        WindowState state{};
+        state.logical_width = (std::max)(0, observation.logical_width);
+        state.logical_height = (std::max)(0, observation.logical_height);
+        state.framebuffer_width = (std::max)(0, observation.framebuffer_width);
+        state.framebuffer_height = (std::max)(0, observation.framebuffer_height);
+        state.resize_generation = observation.resize_generation;
+        state.visibility_known = observation.visibility_known;
+        state.focus_known = observation.focus_known;
+        state.minimized_known = observation.minimized_known;
+        state.occlusion_known = observation.occlusion_known;
+        state.dpi_known = observation.dpi_known
+            && observation.dpi_milli >= 250u
+            && observation.dpi_milli <= 8000u;
+        state.dpi_milli = state.dpi_known ? observation.dpi_milli : 1000u;
+        state.visible = !state.visibility_known || observation.visible;
+        state.focused = !state.focus_known || observation.focused;
+        state.minimized = (state.minimized_known && observation.minimized)
+            || state.framebuffer_width <= 0
+            || state.framebuffer_height <= 0;
+        state.occluded = state.occlusion_known && observation.occluded;
+        state.presentable = state.visible && !state.minimized && !state.occluded;
+
+        if (state.minimized)
+            state.activity = WindowActivity::minimized;
+        else if (!state.presentable)
+            state.activity = WindowActivity::occluded;
+        else if (state.focus_known && !state.focused)
+            state.activity = WindowActivity::background;
+        else
+            state.activity = WindowActivity::foreground;
+        return state;
     }
 
     [[nodiscard]] constexpr FramePlan resolve_frame_plan(const FrameRequest& request) noexcept
@@ -96,9 +215,12 @@ export namespace epochengine::rendercontext
         FramePlan plan{};
         plan.requested_scene = request.requested_scene;
         plan.deferred_before_scene = !request.gui_overlay_priority;
+        plan.window = request.window;
+        plan.surface_presentable = request.window.presentable;
         plan.semantic_signature = detail::signature_for(request);
 
-        if (!request.editor_preview
+        if (!plan.surface_presentable
+            || !request.editor_preview
             || request.framebuffer_width <= 0
             || request.framebuffer_height <= 0
             || !request.requested_scene.valid())

@@ -87,6 +87,7 @@ import telemetry.engine;
 import systems.registry;
 import perf.tier;
 import platform.budgets;
+import render.context_frame;
 
 // ---- helpers ----
 import utility.string_converter;     // epochengine::text::narrow_utf8
@@ -1896,6 +1897,8 @@ namespace
         epochengine::perf::frame_pacing_plan activeDesiredFramePlan{};
         epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
         bool hasActiveCoreFramePlan = false;
+        epochengine::rendercontext::WindowState activeFrameWindowState{};
+        bool hasActiveFrameWindowState = false;
         const auto resolveCoreFramePolicy = []() noexcept
         {
             const bool standaloneProject =
@@ -1914,18 +1917,52 @@ namespace
                 cli::frame_limit_explicit,
                 standaloneProject);
         };
-        const auto resolveFrameActivity = [&win]() noexcept
+        const auto resolveFrameWindowState = [&]() noexcept
         {
-            if (win.width <= 0 || win.height <= 0)
-                return epochengine::perf::frame_activity::minimized;
-            return epochengine::perf::frame_activity::foreground;
+            epochengine::rendercontext::WindowObservation observation{};
+            observation.logical_width = (std::max)(0, win.width);
+            observation.logical_height = (std::max)(0, win.height);
+            observation.framebuffer_width = (std::max)(0, ctx->framebufferWidth);
+            observation.framebuffer_height = (std::max)(0, ctx->framebufferHeight);
+            observation.resize_generation =
+                win.resizeGeneration.load(std::memory_order_acquire);
+            observation.minimized = win.width <= 0 || win.height <= 0;
+            observation.minimized_known = true;
+            return epochengine::rendercontext::resolve_window_state(observation);
+        };
+        const auto publishFrameWindowState = [&]()
+        {
+            const auto state = resolveFrameWindowState();
+            ctx->publish_frame_window_state(state);
+            if (!hasActiveFrameWindowState || state != activeFrameWindowState)
+            {
+                activeFrameWindowState = state;
+                hasActiveFrameWindowState = true;
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Backend {} window state activity={} presentable={} logical={}x{} framebuffer={}x{} dpi_milli={} dpi_known={} visibility_known={} focus_known={} occlusion_known={} resize_generation={}.",
+                    ctx->backendName,
+                    epochengine::rendercontext::window_activity_name(state.activity),
+                    state.presentable,
+                    state.logical_width,
+                    state.logical_height,
+                    state.framebuffer_width,
+                    state.framebuffer_height,
+                    state.dpi_milli,
+                    state.dpi_known,
+                    state.visibility_known,
+                    state.focus_known,
+                    state.occlusion_known,
+                    state.resize_generation);
+            }
         };
         const auto configureFramePacing = [&]()
         {
             const auto desiredPlan =
                 epochengine::perf::resolve_frame_pacing_with_capabilities(
                     resolveCoreFramePolicy(),
-                    resolveFrameActivity(),
+                    ctx->frame_pacing_activity(),
                     ctx->frame_pacing_capabilities);
             if (hasActiveCoreFramePlan && desiredPlan == activeDesiredFramePlan)
                 return;
@@ -1982,6 +2019,7 @@ namespace
                     });
             }
 
+            publishFrameWindowState();
             configureFramePacing();
 
             keepRunning = ctx->process_safe(ctx, win.commandQueue);

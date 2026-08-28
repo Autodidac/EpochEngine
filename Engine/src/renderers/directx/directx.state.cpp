@@ -276,7 +276,8 @@ namespace epochengine::directxcontext::detail
             state.height,
             { requested.x, requested.y, requested.width, requested.height },
             ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
-            ctx.gui_overlay_priority()
+            ctx.gui_overlay_priority(),
+            ctx.frame_window_state()
         });
         if (!frame.scene_visible)
             return full_window_viewport(state);

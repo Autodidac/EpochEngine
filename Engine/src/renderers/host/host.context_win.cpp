@@ -90,6 +90,7 @@ import telemetry.engine;
 import systems.registry;
 import perf.tier;
 import platform.budgets;
+import render.context_frame;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;
@@ -4549,6 +4550,8 @@ namespace epochengine::core
         epochengine::perf::frame_pacing_plan activeDesiredFramePlan{};
         epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
         bool hasActiveCoreFramePlan = false;
+        epochengine::rendercontext::WindowState activeFrameWindowState{};
+        bool hasActiveFrameWindowState = false;
         const auto resolveCoreFramePolicy = []() noexcept
         {
             const bool standaloneProject =
@@ -4567,7 +4570,7 @@ namespace epochengine::core
                 epochengine::core::cli::frame_limit_explicit,
                 standaloneProject);
         };
-        const auto resolveFrameActivity = [&win]() noexcept
+        const auto resolveFrameWindowState = [&]() noexcept
         {
             HWND observedWindow = win.host_hwnd ? win.host_hwnd : win.hwnd;
             HWND rootWindow = observedWindow
@@ -4575,23 +4578,81 @@ namespace epochengine::core
                 : nullptr;
             if (!rootWindow)
                 rootWindow = observedWindow;
-            if (rootWindow && ::IsIconic(rootWindow) != FALSE)
-                return epochengine::perf::frame_activity::minimized;
 
+            const bool validWindow = rootWindow
+                && ::IsWindow(rootWindow) != FALSE;
             const HWND foreground = ::GetForegroundWindow();
-            if (rootWindow && foreground && foreground != rootWindow
-                && ::IsChild(rootWindow, foreground) == FALSE)
+            DWORD cloaked = 0u;
+            const HRESULT cloakResult = validWindow
+                ? ::DwmGetWindowAttribute(
+                    rootWindow,
+                    DWMWA_CLOAKED,
+                    &cloaked,
+                    sizeof(cloaked))
+                : E_FAIL;
+            const UINT dpi = validWindow ? ::GetDpiForWindow(rootWindow) : 0u;
+            const bool minimized = validWindow
+                && ::IsIconic(rootWindow) != FALSE;
+
+            epochengine::rendercontext::WindowObservation observation{};
+            observation.logical_width = minimized ? 0 : (std::max)(0, win.width);
+            observation.logical_height = minimized ? 0 : (std::max)(0, win.height);
+            observation.framebuffer_width = minimized
+                ? 0 : (std::max)(0, ctx->framebufferWidth);
+            observation.framebuffer_height = minimized
+                ? 0 : (std::max)(0, ctx->framebufferHeight);
+            observation.dpi_milli = dpi > 0u
+                ? static_cast<std::uint32_t>((dpi * 1000u + 48u) / 96u)
+                : 1000u;
+            observation.resize_generation =
+                win.resizeGeneration.load(std::memory_order_acquire);
+            observation.visible = !validWindow
+                || ::IsWindowVisible(rootWindow) != FALSE;
+            observation.focused = !validWindow || !foreground
+                || foreground == rootWindow
+                || ::IsChild(rootWindow, foreground) != FALSE;
+            observation.minimized = minimized;
+            observation.occluded = SUCCEEDED(cloakResult) && cloaked != 0u;
+            observation.visibility_known = validWindow;
+            observation.focus_known = validWindow && foreground;
+            observation.minimized_known = validWindow;
+            observation.occlusion_known = SUCCEEDED(cloakResult);
+            observation.dpi_known = dpi > 0u;
+            return epochengine::rendercontext::resolve_window_state(observation);
+        };
+        const auto publishFrameWindowState = [&]()
+        {
+            const auto state = resolveFrameWindowState();
+            ctx->publish_frame_window_state(state);
+            if (!hasActiveFrameWindowState || state != activeFrameWindowState)
             {
-                return epochengine::perf::frame_activity::background;
+                activeFrameWindowState = state;
+                hasActiveFrameWindowState = true;
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Backend {} window state activity={} presentable={} logical={}x{} framebuffer={}x{} dpi_milli={} dpi_known={} visibility_known={} focus_known={} occlusion_known={} resize_generation={}.",
+                    ctx->backendName,
+                    epochengine::rendercontext::window_activity_name(state.activity),
+                    state.presentable,
+                    state.logical_width,
+                    state.logical_height,
+                    state.framebuffer_width,
+                    state.framebuffer_height,
+                    state.dpi_milli,
+                    state.dpi_known,
+                    state.visibility_known,
+                    state.focus_known,
+                    state.occlusion_known,
+                    state.resize_generation);
             }
-            return epochengine::perf::frame_activity::foreground;
         };
         const auto configureFramePacing = [&]()
         {
             const auto desiredPlan =
                 epochengine::perf::resolve_frame_pacing_with_capabilities(
                     resolveCoreFramePolicy(),
-                    resolveFrameActivity(),
+                    ctx->frame_pacing_activity(),
                     ctx->frame_pacing_capabilities);
             if (hasActiveCoreFramePlan && desiredPlan == activeDesiredFramePlan)
                 return;
@@ -4663,6 +4724,7 @@ namespace epochengine::core
                     });
             }
 
+            publishFrameWindowState();
             configureFramePacing();
 
             keepRunning = ctx->process_safe(ctx, win.commandQueue);

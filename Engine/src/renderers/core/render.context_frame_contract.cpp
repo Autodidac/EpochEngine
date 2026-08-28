@@ -6,6 +6,8 @@ namespace
 {
     using epochengine::rendercontext::FrameRequest;
     using epochengine::rendercontext::Viewport;
+    using epochengine::rendercontext::WindowActivity;
+    using epochengine::rendercontext::WindowObservation;
 
     [[nodiscard]] bool frame_contract() noexcept
     {
@@ -28,6 +30,62 @@ namespace
             || clipped.source_offset_x != 40 || clipped.source_offset_y != 0
             || clipped.bottom_left_y != 0
             || clipped.deferred_before_scene)
+        {
+            return false;
+        }
+
+        const auto foreground = epochengine::rendercontext::resolve_window_state(
+            WindowObservation{
+                1280, 720, 1920, 1080, 1500u, 7u,
+                true, true, false, false,
+                true, true, true, true, true});
+        const auto background = epochengine::rendercontext::resolve_window_state(
+            WindowObservation{
+                1280, 720, 1920, 1080, 0u, 8u,
+                true, false, false, false,
+                true, true, true, false, false});
+        const auto minimized = epochengine::rendercontext::resolve_window_state(
+            WindowObservation{
+                1280, 720, 0, 0, 1500u, 9u,
+                true, true, true, false,
+                true, true, true, true, true});
+        const auto occluded = epochengine::rendercontext::resolve_window_state(
+            WindowObservation{
+                1280, 720, 1920, 1080, 1500u, 10u,
+                true, true, false, true,
+                true, true, true, true, true});
+        const auto unknown = epochengine::rendercontext::resolve_window_state(
+            WindowObservation{1280, 720, 1280, 720});
+        if (foreground.activity != WindowActivity::foreground
+            || !foreground.presentable || !foreground.dpi_known
+            || foreground.dpi_milli != 1500u
+            || background.activity != WindowActivity::background
+            || !background.presentable || background.dpi_known
+            || minimized.activity != WindowActivity::minimized
+            || minimized.presentable
+            || occluded.activity != WindowActivity::occluded
+            || occluded.presentable
+            || unknown.activity != WindowActivity::foreground
+            || !unknown.presentable || unknown.focus_known
+            || unknown.visibility_known || unknown.dpi_known
+            || unknown.dpi_milli != 1000u)
+        {
+            return false;
+        }
+
+        const auto suspended = resolve_frame_plan(FrameRequest{
+            1920, 1080, {100, 50, 800, 600}, true, false, minimized});
+        const auto observed = resolve_frame_plan(FrameRequest{
+            1920, 1080, {100, 50, 800, 600}, true, false, foreground});
+        auto dpiChanged = foreground;
+        dpiChanged.dpi_milli = 2000u;
+        dpiChanged.resize_generation = 11u;
+        const auto changedWindow = resolve_frame_plan(FrameRequest{
+            1920, 1080, {100, 50, 800, 600}, true, false, dpiChanged});
+        if (suspended.scene_visible || suspended.surface_presentable
+            || !observed.scene_visible || !observed.surface_presentable
+            || observed.window != foreground
+            || observed.semantic_signature == changedWindow.semantic_signature)
         {
             return false;
         }

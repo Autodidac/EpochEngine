@@ -238,7 +238,8 @@ namespace epochengine::directxcontext::detail
             state.height,
             { requested.x, requested.y, requested.width, requested.height },
             ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
-            ctx.gui_overlay_priority()
+            ctx.gui_overlay_priority(),
+            ctx.frame_window_state()
         });
         const float aspect = frame.projection_aspect;
         const auto projection = previewgrid::projection_for(&ctx, aspect, camera);
@@ -371,7 +372,8 @@ namespace epochengine::directxcontext::detail
             state.height,
             { requested.x, requested.y, requested.width, requested.height },
             ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
-            ctx.gui_overlay_priority()
+            ctx.gui_overlay_priority(),
+            ctx.frame_window_state()
         });
         const core::RenderViewport viewport = frame.scene_visible
             ? core::RenderViewport{
