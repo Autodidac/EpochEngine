@@ -1014,6 +1014,7 @@ namespace
             .display_name = "PlatformerDemo",
             .root_path = "Projects/PlatformerDemo",
             .scene_path = "Projects/PlatformerDemo/worlds/platformer.epoch",
+            .input_profile_path = epochengine::project_input::canonical_source_path,
             .world_name = "Platformer_Main",
             .runtime_scene_id = "project:platformer",
             .manifest_path = "Projects/PlatformerDemo/project.epoch.json",
@@ -4832,6 +4833,69 @@ namespace epochengine
             && !invalidInputPath
             && !danglingInput
             && !nonObjectInput;
+        const auto generatedInputSource =
+            epochengine::project_input::make_legacy_default_profile();
+        const auto serializedGeneratedInput =
+            epochengine::project_input::serialize_profile_source(
+                generatedInputSource);
+        const auto decodedGeneratedInput = serializedGeneratedInput
+            ? epochengine::project_input::deserialize_profile_source(
+                serializedGeneratedInput.bytes)
+            : epochengine::project_input::DeserializedProfile{};
+        const auto compiledGeneratedInput = decodedGeneratedInput
+            ? epochengine::project_input::compile_profile(
+                "GameProjectContract", decodedGeneratedInput.source)
+            : epochengine::project_input::CompiledProfileResult{};
+        const bool hasKeyboardBinding = std::ranges::any_of(
+            generatedInputSource.bindings,
+            [](const epochengine::project_input::BindingDefinition& binding)
+            {
+                return binding.device
+                    == epochengine::project_input::BindingDevice::keyboard;
+            });
+        const bool hasControllerBinding = std::ranges::any_of(
+            generatedInputSource.bindings,
+            [](const epochengine::project_input::BindingDefinition& binding)
+            {
+                return binding.device
+                    == epochengine::project_input::BindingDevice::controller_button
+                    || binding.device
+                        == epochengine::project_input::BindingDevice::controller_axis;
+            });
+        const bool platformerInputGate = std::ranges::any_of(
+            kProjectProfiles,
+            [](const EditorProjectProfile& profile)
+            {
+                return profile.id == "platformer"
+                    && profile.kind == EditorProjectKind::Game
+                    && profile.input_profile_path
+                        == epochengine::project_input::canonical_source_path;
+            });
+        const bool generatedInputProvisionGate =
+            editor_project_input_profile_enabled(EditorProjectKind::Game)
+            && editor_project_input_profile_enabled(
+                EditorProjectKind::Game,
+                EditorProjectInputProvision::explicitly_enabled)
+            && !editor_project_input_profile_enabled(EditorProjectKind::Tool)
+            && !editor_project_input_profile_enabled(
+                EditorProjectKind::EngineDevelopment)
+            && editor_project_input_profile_enabled(
+                EditorProjectKind::Tool,
+                EditorProjectInputProvision::explicitly_enabled)
+            && editor_project_input_profile_enabled(
+                EditorProjectKind::EngineDevelopment,
+                EditorProjectInputProvision::explicitly_enabled)
+            && serializedGeneratedInput
+            && decodedGeneratedInput
+            && decodedGeneratedInput.source == generatedInputSource
+            && compiledGeneratedInput
+            && compiledGeneratedInput.artifact.actions
+                == generatedInputSource.actions
+            && compiledGeneratedInput.artifact.bindings
+                == generatedInputSource.bindings
+            && hasKeyboardBinding
+            && hasControllerBinding
+            && platformerInputGate;
         return missing.state == JsonStringFieldState::missing
             && valid.state == JsonStringFieldState::present
             && valid.value == "portable"
@@ -4843,12 +4907,21 @@ namespace epochengine
             && unterminated.state == JsonStringFieldState::malformed
             && explicitPackageGate
             && inputMigrationGate
+            && generatedInputProvisionGate
             && guiMigrationGate
             && projectFormatMigrationGate
             && buildProfileMigrationGate;
     }
 
     EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind)
+    {
+        return editor_create_project_shell(
+            kind, EditorProjectInputProvision::project_default);
+    }
+
+    EditorProjectCreationResult editor_create_project_shell(
+        EditorProjectKind kind,
+        EditorProjectInputProvision input_provision)
     {
         const std::string projectName = next_generated_project_name(kind);
         const std::string defaultScript = kind == EditorProjectKind::Tool
@@ -4864,6 +4937,10 @@ namespace epochengine
                 ? fs::path{ "Projects" } / projectName / "worlds" / "tool.epoch"
                 : fs::path{ "Projects" } / projectName / "worlds" / "main.epoch",
             .world_name = kind == EditorProjectKind::Tool ? "ToolWorkspace" : "PersistentLevel",
+            .input_profile_path = editor_project_input_profile_enabled(
+                kind, input_provision)
+                ? std::string{epochengine::project_input::canonical_source_path}
+                : std::string{},
             .template_family = kind == EditorProjectKind::Tool ? "tool-project" : "game-project",
             .script_id = defaultScript,
             .description = kind == EditorProjectKind::Tool

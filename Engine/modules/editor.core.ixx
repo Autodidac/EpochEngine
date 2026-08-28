@@ -71,6 +71,21 @@ namespace epochengine
         EngineDevelopment
     };
 
+    export enum class EditorProjectInputProvision : unsigned char
+    {
+        project_default = 0,
+        explicitly_enabled
+    };
+
+    export [[nodiscard]] constexpr bool editor_project_input_profile_enabled(
+        EditorProjectKind kind,
+        EditorProjectInputProvision provision =
+            EditorProjectInputProvision::project_default) noexcept
+    {
+        return kind == EditorProjectKind::Game
+            || provision == EditorProjectInputProvision::explicitly_enabled;
+    }
+
     export enum class EditorCommand : unsigned char
     {
         None = 0,
@@ -531,6 +546,9 @@ namespace epochengine
     export [[nodiscard]] std::string_view editor_runtime_scene_for_project(std::string_view project_id) noexcept;
     export [[nodiscard]] std::string_view editor_project_kind_name(EditorProjectKind kind) noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
+    export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(
+        EditorProjectKind kind,
+        EditorProjectInputProvision input_provision);
     export [[nodiscard]] bool editor_project_manifest_capability_contract() noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);

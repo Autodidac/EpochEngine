@@ -1190,6 +1190,11 @@ the write ranges are explicitly isolated.
   generated Game2D projects persist canonical action and keyboard/controller
   bindings under `Assets/Config`, compile reproducible Library artifacts, and
   evaluate fixed-point dead zones without coupling gameplay to editor shortcuts.
+  Generated Game shells and the registered Platformer profile always materialize
+  the same canonical source and compiled artifact. Tool and engine-development
+  sandboxes remain input-profile-free by default; only the explicit
+  `EditorProjectInputProvision::explicitly_enabled` creation route opts those
+  project kinds into runtime input ownership.
   A process-owned SDL3 provider publishes generation-checked controller state
   once per engine frame. ProjectPlayScene maps that snapshot through the
   compiled project bindings without replaying press edges; physical-device and
