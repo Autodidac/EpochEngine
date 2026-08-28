@@ -23156,7 +23156,7 @@ namespace epochengine
         addDocumentTab(EditorMainSurface::Timeline, "document.timeline", "Timeline", 88.0f);
         addDocumentTab(EditorMainSurface::Project, "document.project", "Project", 78.0f);
         addDocumentTab(EditorMainSurface::Assets, "document.assets", "Assets", 76.0f);
-        addDocumentTab(EditorMainSurface::AISandbox, "document.ai_development", "AI Development", 130.0f);
+        addDocumentTab(EditorMainSurface::AISandbox, "document.ai_development", "Code / AI Development", 176.0f);
         addDocumentTab(EditorMainSurface::Systems, "document.systems", "Systems", 86.0f);
 
         gui::set_cursor({ 16.0f, tab_y });
@@ -23169,7 +23169,8 @@ namespace epochengine
                     .overflow_width = 132.0f,
                     .height = 36.0f,
                     .gap = 0.0f,
-                    .presentation = gui::TabBarPresentation::Workbench
+                    .presentation = gui::TabBarPresentation::Workbench,
+                    .keyboard_navigation = true
                 });
             documentTabResult.selected_index
             && *documentTabResult.selected_index < documentSurfaces.size())

@@ -19,7 +19,8 @@ The core module provides:
 - Splitters and progress bars
 - Loading-screen layout
 - Selectable rows, segmented controls, and responsive tab-strip planning that
-  preserves the active route behind a bounded overflow selector
+  preserves the active route behind a bounded overflow selector, plus
+  deterministic wrapped keyboard navigation that skips disabled routes
 - Popup placement and state
 - Docking, dock guides, context insertion grids, and dockable-window state
 - Panel-host state

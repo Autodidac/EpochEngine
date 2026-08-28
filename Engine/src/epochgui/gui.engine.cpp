@@ -8316,6 +8316,42 @@ namespace epochengine::gui
             widths.push_back((std::max)(1.0f, requestedWidth));
         }
 
+        const auto apply_keyboard_navigation = [&]()
+        {
+            if (!options.keyboard_navigation || result.selected_index
+                || keyboard_input_captured())
+            {
+                return;
+            }
+            std::optional<gui_lib::ResponsiveTabNavigationIntent> intent{};
+            for (const InputEvent& event : g_frame.events)
+            {
+                if (event.type == EventType::KeyDown
+                    && event.ctrl_down && event.key == 9)
+                {
+                    intent = event.shift_down
+                        ? gui_lib::ResponsiveTabNavigationIntent::previous
+                        : gui_lib::ResponsiveTabNavigationIntent::next;
+                    break;
+                }
+            }
+            if (!intent) return;
+
+            static thread_local std::vector<std::uint8_t> enabled{};
+            enabled.clear();
+            enabled.reserve(options.tabs.size());
+            for (const TabButtonSpec& tab : options.tabs)
+                enabled.push_back(tab.enabled ? 1u : 0u);
+            const auto selected = gui_lib::navigate_responsive_tab_strip({
+                .enabled = enabled,
+                .active_index = activeIndex,
+                .intent = *intent,
+                .wrap = true
+            });
+            if (selected && *selected != activeIndex)
+                result.selected_index = *selected;
+        };
+
         const gui_lib::ResponsiveTabStripLayout layout =
             gui_lib::make_responsive_tab_strip_layout({
                 .item_widths = widths,
@@ -8326,11 +8362,13 @@ namespace epochengine::gui
             });
         if (!layout.valid || !layout.overflowed)
         {
-            return tab_bar_buttons(
+            result = tab_bar_buttons(
                 options.tabs,
                 options.height,
                 options.gap,
                 options.presentation);
+            apply_keyboard_navigation();
+            return result;
         }
 
         const Vec2 rowStart = cursor_position();
@@ -8403,6 +8441,7 @@ namespace epochengine::gui
                     overflowSelectableIndices[*overflowResult.selected_index];
             }
         }
+        apply_keyboard_navigation();
         set_cursor({
             rowStart.x,
             rowStart.y + (std::max)(22.0f, options.height) + kContentPadding

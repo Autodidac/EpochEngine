@@ -40,9 +40,15 @@
   height. EpochGui now also owns responsive tab-strip planning and an engine
   adapter-backed overflow selector, so narrow workspace and reviewed-source
   strips retain the active route and keep every hidden route selectable instead
-  of clipping Assets, Systems, or later files outside the window.
+  of clipping Assets, Systems, or later files outside the window. The reusable
+  planner also owns deterministic previous/next/first/last traversal with
+  disabled-route skipping and explicit wrapping; the main strip opts into
+  Ctrl+Tab/Ctrl+Shift+Tab without changing menu, run, or dock ownership. The
+  combined Code / AI Development label remains whole either on the strip or in
+  its explicit overflow selector.
 - Direct `EpochGui.TextControl` CTest passes for full-width, constrained-active,
-  and overflow-only layouts. Fresh MSVC Debug and Release `EpochEditor` builds
+  overflow-only, and deterministic keyboard-navigation layouts. Fresh MSVC
+  Debug and Release `EpochEditor` builds
   pass their build-safe aggregate contracts without a GUI launch. The rebuilt
   executables are 30,265,344 bytes / SHA-256
   `7238606367b635289bebb404ae968fcff848500201f808b49b25bd9fcc1886a8`

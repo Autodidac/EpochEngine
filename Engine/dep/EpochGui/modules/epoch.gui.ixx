@@ -360,6 +360,72 @@ export namespace epochengine::gui_lib
         }
     };
 
+    enum class ResponsiveTabNavigationIntent : std::uint8_t
+    {
+        previous,
+        next,
+        first,
+        last
+    };
+
+    struct ResponsiveTabNavigationOptions
+    {
+        std::span<const std::uint8_t> enabled{};
+        std::size_t active_index{ (std::numeric_limits<std::size_t>::max)() };
+        ResponsiveTabNavigationIntent intent{ ResponsiveTabNavigationIntent::next };
+        bool wrap{ true };
+    };
+
+    [[nodiscard]] inline std::optional<std::size_t>
+        navigate_responsive_tab_strip(
+            const ResponsiveTabNavigationOptions& options) noexcept
+    {
+        if (options.enabled.empty())
+            return std::nullopt;
+        const auto enabled = [&](const std::size_t index) noexcept
+        {
+            return index < options.enabled.size() && options.enabled[index] != 0u;
+        };
+        if (options.intent == ResponsiveTabNavigationIntent::first)
+        {
+            for (std::size_t index = 0u; index < options.enabled.size(); ++index)
+                if (enabled(index)) return index;
+            return std::nullopt;
+        }
+        if (options.intent == ResponsiveTabNavigationIntent::last)
+        {
+            for (std::size_t index = options.enabled.size(); index > 0u; --index)
+                if (enabled(index - 1u)) return index - 1u;
+            return std::nullopt;
+        }
+
+        const bool forward =
+            options.intent == ResponsiveTabNavigationIntent::next;
+        std::size_t cursor = options.active_index < options.enabled.size()
+            ? options.active_index
+            : (forward ? options.enabled.size() - 1u : 0u);
+        for (std::size_t visited = 0u; visited < options.enabled.size(); ++visited)
+        {
+            if (forward)
+            {
+                if (cursor + 1u >= options.enabled.size())
+                {
+                    if (!options.wrap) return std::nullopt;
+                    cursor = 0u;
+                }
+                else ++cursor;
+            }
+            else if (cursor == 0u)
+            {
+                if (!options.wrap) return std::nullopt;
+                cursor = options.enabled.size() - 1u;
+            }
+            else --cursor;
+            if (enabled(cursor)) return cursor;
+        }
+        return std::nullopt;
+    }
+
     enum class ChromeDensity : std::uint8_t
     {
         full,

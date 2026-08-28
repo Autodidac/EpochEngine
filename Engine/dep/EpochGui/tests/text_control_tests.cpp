@@ -428,6 +428,36 @@ namespace
         EPOCHGUI_CHECK(responsive.visible_indices.empty());
         EPOCHGUI_CHECK(responsive.overflow_indices.size() == workspaceWidths.size());
         EPOCHGUI_CHECK(responsive.overflow_width == 80.0f);
+
+        std::array<std::uint8_t, 9> enabled{};
+        enabled.fill(1u);
+        enabled[2] = 0u;
+        EPOCHGUI_CHECK(navigate_responsive_tab_strip({
+            .enabled = enabled,
+            .active_index = 1u,
+            .intent = ResponsiveTabNavigationIntent::next
+        }) == 3u);
+        EPOCHGUI_CHECK(navigate_responsive_tab_strip({
+            .enabled = enabled,
+            .active_index = 0u,
+            .intent = ResponsiveTabNavigationIntent::previous
+        }) == 8u);
+        EPOCHGUI_CHECK(navigate_responsive_tab_strip({
+            .enabled = enabled,
+            .active_index = 4u,
+            .intent = ResponsiveTabNavigationIntent::first
+        }) == 0u);
+        EPOCHGUI_CHECK(navigate_responsive_tab_strip({
+            .enabled = enabled,
+            .active_index = 4u,
+            .intent = ResponsiveTabNavigationIntent::last
+        }) == 8u);
+        enabled.fill(0u);
+        EPOCHGUI_CHECK(!navigate_responsive_tab_strip({
+            .enabled = enabled,
+            .active_index = 4u,
+            .intent = ResponsiveTabNavigationIntent::next
+        }));
         return 0;
     }
     int responsive_chrome_layout()

@@ -43,6 +43,14 @@
   active surface so non-World surfaces cannot silently mutate World. AI
   Development cannot express approval, live-source promotion, release, Git, or
   unrestricted execution through this plane.
+- Extend EpochGui's responsive tab-strip contract with deterministic
+  previous/next/first/last navigation, explicit wrapping, and disabled-route
+  skipping. The editor's primary workspace strip opts into Ctrl+Tab and
+  Ctrl+Shift+Tab, keeps Code / AI Development readable, and retains every hidden
+  workspace behind the existing explicit overflow selector instead of silently
+  clipping Systems or other trailing routes. Menu/run chrome and dock ownership
+  remain unchanged. The focused standalone EpochGui contract, full Debug
+  EpochEditor build, and build-safe aggregate contract pass without a GUI launch.
 
 ## [v0.89.30] - Distinct source-update discovery candidate
 - Rename the legacy Visual Studio executable/static-library identities to

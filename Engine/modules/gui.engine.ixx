@@ -837,6 +837,7 @@ namespace epochengine::gui
         float height{ 30.0f };
         float gap{ 1.0f };
         TabBarPresentation presentation{ TabBarPresentation::Document };
+        bool keyboard_navigation{};
     };
 
     export struct InlineButtonSpec

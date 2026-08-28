@@ -322,10 +322,15 @@ Document and reviewed-source tab strips use EpochGui's responsive strip
 planner. The planner measures requested tab widths against the host content
 width, keeps the active route visible whenever one full tab plus the overflow
 control can fit, and moves the remaining stable routes into a bounded selectable
-overflow list. The engine adapter owns rendering and input for that layout;
-editor workspaces only map returned indices to semantic routes. No context may
-solve clipping with editor-local label truncation, magic last-item widths, or
-an unreachable off-window tab.
+overflow list. The same portable contract owns previous/next/first/last route
+navigation, skips disabled routes, and makes wrapping explicit. The engine
+adapter owns rendering and input for that layout; the primary workspace strip
+opts into Ctrl+Tab and Ctrl+Shift+Tab traversal while other strips remain
+unchanged by default. Editor workspaces only map returned indices to semantic
+routes. No context may solve clipping with editor-local label truncation, magic
+last-item widths, or an unreachable off-window tab. Reusable changes in the
+bundled tree require a linked, verified checkpoint in the standalone EpochGui
+Epoch Site dependency authority before or with the Engine dependency update.
 
 Dragging a tool to Float starts its existing context-backed native host;
 dragging that native titlebar over the primary host publishes all four logical
