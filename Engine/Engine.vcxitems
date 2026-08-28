@@ -341,6 +341,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration_session.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_controller.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.actor2d_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gameplay2d_runtime.ixx" />
@@ -606,6 +607,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration_session.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime.cpp" />
@@ -668,6 +670,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.project_profile.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_queue.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_scheduler.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx" />
@@ -689,6 +692,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host.cpp" />

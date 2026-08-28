@@ -453,7 +453,15 @@ namespace epochengine::ai::self_iteration_orchestrator
             }
             const auto decoded = project_profile::parse_profile(
                 configuration.project_profile_bytes);
-            if (!decoded || decoded.profile.provider != configuration.provider
+            const bool providerMatches = decoded
+                && (decoded.profile.provider == configuration.provider
+                    || (decoded.profile.provider
+                            == project_profile::Provider::engine_selected
+                        && (configuration.provider
+                                == project_profile::Provider::epoch_local_qwen38
+                            || configuration.provider
+                                == project_profile::Provider::external_mcp)));
+            if (!providerMatches
                 || !decoded.profile.enabled || !decoded.profile.project_source_write
                 || decoded.profile.engine_source_write
                 || !decoded.profile.operator_approval_per_iteration
@@ -465,6 +473,8 @@ namespace epochengine::ai::self_iteration_orchestrator
             }
             profile_sha256 = decoded.sha256;
             model_name = configuration.provider == project_profile::Provider::external_mcp
+                    || decoded.profile.provider
+                        == project_profile::Provider::engine_selected
                 ? configuration.operator_model_binding
                 : decoded.profile.model_binding;
             if (model_name.empty() || model_name.size() > 256u)
