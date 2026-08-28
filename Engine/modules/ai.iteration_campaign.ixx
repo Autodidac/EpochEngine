@@ -12,6 +12,7 @@ module;
 export module ai.iteration_campaign;
 
 export import ai.iteration_session;
+export import ai.iteration_campaign_queue;
 
 export namespace epochengine::ai::iteration_campaign
 {

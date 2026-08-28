@@ -379,6 +379,8 @@ set(EPOCH_SOURCES
     src/ai/ai.project_profile_contract.cpp
     src/ai/ai.iteration_campaign.cpp
     src/ai/ai.iteration_campaign_contract.cpp
+    src/ai/ai.iteration_campaign_queue.cpp
+    src/ai/ai.iteration_campaign_queue_contract.cpp
     src/ai/ai.mcp_campaign.cpp
     src/ai/ai.mcp_campaign_contract.cpp
     src/ai/ai.mcp_child_host.cpp
@@ -1934,6 +1936,28 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_render_context_frame_contract
         COMMAND epoch_render_context_frame_contract
+    )
+
+    add_executable(epoch_ai_iteration_campaign_queue_contract
+        src/ai/ai.iteration_campaign_queue.cpp
+        src/ai/ai.iteration_campaign_queue_contract.cpp
+    )
+    target_sources(epoch_ai_iteration_campaign_queue_contract PRIVATE
+        FILE_SET epoch_ai_iteration_campaign_queue_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
+    )
+    target_compile_definitions(epoch_ai_iteration_campaign_queue_contract PRIVATE
+        EPOCH_AI_ITERATION_CAMPAIGN_QUEUE_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_iteration_campaign_queue_contract)
+    epoch_apply_warnings(epoch_ai_iteration_campaign_queue_contract)
+    epoch_apply_sanitizers(epoch_ai_iteration_campaign_queue_contract)
+    add_test(
+        NAME epoch_ai_iteration_campaign_queue_contract
+        COMMAND epoch_ai_iteration_campaign_queue_contract
     )
 
     add_executable(epoch_ai_mcp_stdio_contract

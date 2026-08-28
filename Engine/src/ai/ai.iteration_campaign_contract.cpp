@@ -12,6 +12,8 @@ module;
 
 module ai.iteration_campaign;
 
+import ai.iteration_campaign_queue;
+
 namespace epochengine::ai::iteration_campaign
 {
     bool run_contract()
@@ -144,6 +146,6 @@ namespace epochengine::ai::iteration_campaign
             && project_plan.front() == ValidationStep::project_compiler
             && project_plan.back() == ValidationStep::project_contract;
         fs::remove_all(root, ec);
-        return ok;
+        return ok && iteration_campaign_queue::run_contract();
     }
 }
