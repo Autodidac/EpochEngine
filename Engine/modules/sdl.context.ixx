@@ -32,6 +32,7 @@
 module;
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -87,9 +88,7 @@ import sdl.state;
 import sdl.renderer;
 import sdl.textures;
 import context.multiplexer;   // MakeDockable(...)
-import core.commandline;
 import core.logger;
-import image.writer;
 import diagnostics.engine;
 import telemetry.engine;
 import render.arcade;
@@ -102,28 +101,6 @@ import package.registry;
 export namespace epochengine::sdlcontext
 {
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-
-    inline void capture_frame_if_requested(const int width, const int height, const std::uintptr_t windowId)
-    {
-        const auto capturePath = core::cli::reserve_capture_path("sdl", windowId);
-        if (capturePath.empty() || width <= 0 || height <= 0 || !sdl_renderer.renderer)
-            return;
-
-        SDL_Surface* surface = SDL_RenderReadPixels(sdl_renderer.renderer, nullptr);
-        if (!surface)
-        {
-            check_sdl_error("SDL_RenderReadPixels");
-            return;
-        }
-
-        const bool saved = SDL_SaveBMP(surface, capturePath.string().c_str());
-        SDL_DestroySurface(surface);
-
-        if (saved)
-            logger::info("SDL", "Captured frame to " + capturePath.string());
-        else
-            logger::warn("SDL", "Failed to write capture to " + capturePath.string());
-    }
 
     struct SDLState
     {
@@ -1017,14 +994,12 @@ export namespace epochengine::sdlcontext
             return false;
         }
 
-        capture_frame_if_requested(
+        const auto presentation = present_frame(
             sdlcontext.framebufferWidth,
             sdlcontext.framebufferHeight,
             windowId);
-
-        if (!SDL_RenderPresent(sdl_renderer.renderer))
+        if (!presentation.present_succeeded)
         {
-            check_sdl_error("SDL_RenderPresent");
             sharedState.renderFaulted = true;
             sharedState.mark_should_close(true);
             sharedState.running = false;
@@ -1032,6 +1007,13 @@ export namespace epochengine::sdlcontext
             queue.clear();
             frameTimer.finish();
             return false;
+        }
+
+        if (ctx && ctx->windowData && presentation.present_succeeded)
+        {
+            ctx->windowData->firstPresentComplete.store(
+                true,
+                std::memory_order_release);
         }
 
         frameTimer.finish();

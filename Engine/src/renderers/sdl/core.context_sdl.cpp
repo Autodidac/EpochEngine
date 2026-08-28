@@ -1596,6 +1596,11 @@ namespace
         if (!ctx || !s_running || !s_window || !s_renderer)
             return false;
 
+        std::uintptr_t windowId = static_cast<std::uintptr_t>(s_windowId);
+#if defined(_WIN32)
+        if (ctx->windowData && ctx->windowData->hwnd)
+            windowId = reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd);
+#endif
         auto& state = epochengine::sdlcontext::state::get_sdl_state();
         const bool closeRequested =
             state.renderFaulted
@@ -1678,10 +1683,19 @@ namespace
         (void)queue.drain();
         (void)epochengine::gui::render_deferred_batch(ctx.get());
         (void)epochengine::gui::render_top_layer_batch(ctx.get());
-        epochengine::sdlcontext::end_frame();
-        if (state.renderFaulted)
+        const auto presentation = epochengine::sdlcontext::present_frame(
+            s_framebufferWidth,
+            s_framebufferHeight,
+            windowId);
+        if (!presentation.present_succeeded || state.renderFaulted)
         {
             return false;
+        }
+        if (ctx->windowData && presentation.present_succeeded)
+        {
+            ctx->windowData->firstPresentComplete.store(
+                true,
+                std::memory_order_release);
         }
         return s_running;
     }

@@ -32,6 +32,7 @@ module;
 
 #include "core.format_text.hpp"
 
+#include <cstdint>
 #include <functional>
 #include <iostream>
 #include <stdexcept>
@@ -40,6 +41,13 @@ module;
 #include <SDL3/SDL.h>
 
 #include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
+
+extern "C" const char* epoch_reserve_capture_path_utf8(
+    const char* backend,
+    std::uintptr_t windowId);
+extern "C" void epoch_release_capture_path_utf8(
+    const char* backend,
+    std::uintptr_t windowId);
 
 export module sdl.renderer;
 
@@ -67,6 +75,13 @@ export namespace epochengine::sdlcontext
     };
 
     inline RendererContext sdl_renderer{};
+
+    struct FramePresentationResult final
+    {
+        bool capture_reserved{};
+        bool capture_written{};
+        bool present_succeeded{};
+    };
 
     inline void check_sdl_error(const char* location)
     {
@@ -98,6 +113,66 @@ export namespace epochengine::sdlcontext
     {
         if (!sdl_renderer.renderer || epochengine::sdlcontext::state::get_sdl_state().renderFaulted)
             return;
+    }
+
+    [[nodiscard]] FramePresentationResult present_frame(
+        const int width,
+        const int height,
+        const std::uintptr_t windowId)
+    {
+        FramePresentationResult result{};
+        if (!sdl_renderer.renderer
+            || epochengine::sdlcontext::state::get_sdl_state().renderFaulted)
+        {
+            return result;
+        }
+
+        const char* const capturePath =
+            epoch_reserve_capture_path_utf8("sdl", windowId);
+        result.capture_reserved =
+            capturePath != nullptr && capturePath[0] != '\0';
+        if (result.capture_reserved && width > 0 && height > 0)
+        {
+            SDL_Surface* surface = SDL_RenderReadPixels(
+                sdl_renderer.renderer, nullptr);
+            if (surface)
+            {
+                const bool dimensionsMatch =
+                    surface->w == width && surface->h == height;
+                result.capture_written = dimensionsMatch
+                    && SDL_SaveBMP(surface, capturePath);
+                SDL_DestroySurface(surface);
+            }
+            else
+            {
+                check_sdl_error("SDL_RenderReadPixels");
+            }
+        }
+
+        result.present_succeeded = SDL_RenderPresent(sdl_renderer.renderer);
+        if (!result.present_succeeded)
+        {
+            check_sdl_error("SDL_RenderPresent");
+            epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
+        }
+
+        if (result.capture_reserved && !result.capture_written)
+            epoch_release_capture_path_utf8("sdl", windowId);
+
+        if (result.capture_written)
+        {
+            logger::info(
+                "SDL",
+                std::string{"Captured frame to "} + capturePath);
+        }
+        else if (result.capture_reserved)
+        {
+            logger::warn(
+                "SDL",
+                std::string{"Failed to capture frame to "} + capturePath);
+        }
+
+        return result;
     }
 
     inline void end_frame()

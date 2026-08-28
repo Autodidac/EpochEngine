@@ -339,6 +339,19 @@ namespace epochengine::core::cli
         return root / filename;
     }
 
+    export inline void release_capture_path(
+        const std::string_view backend,
+        const std::uintptr_t windowId = 0)
+    {
+        const std::string stem = capture_output_stem();
+        const std::string backendToken = detail::sanitize_capture_token(backend);
+        const std::string key =
+            stem + "|" + backendToken + "|" + std::to_string(windowId);
+
+        std::lock_guard guard(detail::capture_mutex());
+        detail::captured_outputs().erase(key);
+    }
+
     // C ABI adapter for legacy/non-module renderer implementation units.
     // The returned pointer remains valid until the next call on this thread.
     extern "C" const char* epoch_reserve_capture_path_utf8(
@@ -366,15 +379,7 @@ namespace epochengine::core::cli
         if (backend == nullptr)
             return;
 
-        const std::string stem = capture_output_stem();
-        const std::string backendToken =
-            detail::sanitize_capture_token(backend);
-        const std::string key =
-            stem + "|" + backendToken + "|"
-            + std::to_string(windowId);
-
-        std::lock_guard guard(detail::capture_mutex());
-        detail::captured_outputs().erase(key);
+        release_capture_path(backend, windowId);
     }
 
     export struct ParseResult

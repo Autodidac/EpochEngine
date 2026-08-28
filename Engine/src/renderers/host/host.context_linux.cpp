@@ -1880,8 +1880,7 @@ namespace
         }
 
         const bool requiresFirstPresent =
-            ctx->type == ContextType::OpenGL
-            || ctx->type == ContextType::RayLib;
+            epochengine::core::backend_requires_first_present(ctx->type);
         const auto publishRenderReady = [&]()
         {
             win.set_backend_lifecycle(BackendLifecycleState::ready);

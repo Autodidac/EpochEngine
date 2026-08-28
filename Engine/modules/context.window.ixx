@@ -99,6 +99,14 @@ namespace epochengine::core
         stopped
     };
 
+    export [[nodiscard]] constexpr bool backend_requires_first_present(
+        const core::ContextType type) noexcept
+    {
+        return type == core::ContextType::OpenGL
+            || type == core::ContextType::SDL
+            || type == core::ContextType::RayLib;
+    }
+
     export struct WindowData final
     {
 #if defined(_WIN32)

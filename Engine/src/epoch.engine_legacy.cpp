@@ -2212,6 +2212,20 @@ namespace epochengine::core
                 -90, 1'652, 2'478) == -60
             && epochengine::sdlcontext::state::normalize_presented_coordinate(
                 900, 1'920, 1'920) == 900);
+        check(
+            "context.sdl_first_present_readiness",
+            epochengine::core::backend_requires_first_present(
+                epochengine::core::ContextType::OpenGL)
+            && epochengine::core::backend_requires_first_present(
+                epochengine::core::ContextType::SDL)
+            && epochengine::core::backend_requires_first_present(
+                epochengine::core::ContextType::RayLib)
+            && !epochengine::core::backend_requires_first_present(
+                epochengine::core::ContextType::SFML)
+            && !epochengine::core::backend_requires_first_present(
+                epochengine::core::ContextType::Vulkan)
+            && !epochengine::core::backend_requires_first_present(
+                epochengine::core::ContextType::Software));
 #endif
 
         check(
