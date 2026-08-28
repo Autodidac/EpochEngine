@@ -781,7 +781,7 @@ namespace epochengine
                 "Responsive game status, objective, and action controls."}
         };
 
-        struct ProjectCodeWorkspaceState
+        struct CodeWorkspaceUiState
         {
             editor_code_workspace::Controller controller{};
             editor_code_workspace::WorkspaceAuthority authority{
@@ -798,6 +798,7 @@ namespace epochengine
             std::uint64_t gotoGeneration{};
             std::optional<editor_code_workspace::DocumentHandle> discardClose{};
             bool discardReloadArmed{};
+            std::string evidenceDigest{};
         };
 
         struct EditorState
@@ -825,7 +826,8 @@ namespace epochengine
             std::uint64_t scriptBuildGeneration{};
             std::uint64_t scriptBuildCompletedGeneration{};
             std::string newScriptName{ "sandbox_iteration" };
-            ProjectCodeWorkspaceState projectCodeWorkspace{};
+            CodeWorkspaceUiState projectCodeWorkspace{};
+            CodeWorkspaceUiState curatedCodeWorkspace{};
             std::string scriptEditorPath{};
             std::string scriptEditorText{};
             std::string scriptEditorStatus{ "No script source loaded." };
@@ -11143,7 +11145,7 @@ namespace epochengine
         }
 
         void synchronize_project_code_draft(
-            ProjectCodeWorkspaceState& state)
+            CodeWorkspaceUiState& state)
         {
             const auto document = state.controller.active_document();
             if (!document)
@@ -11496,6 +11498,353 @@ namespace epochengine
                     "horizontal {:.0f}px, vertical {:.0f}px",
                     edited.horizontal_scroll,
                     edited.vertical_scroll),
+                82.0f);
+            gui::wrapped_label(
+                state.status + " Shift+mouse-wheel scrolls horizontally.",
+                width);
+            return result;
+        }
+
+        [[nodiscard]] bool configure_curated_code_workspace(
+            EditorState& editor)
+        {
+            auto& state = editor.curatedCodeWorkspace;
+            if (!editor.sourceWorkspaceMode
+                || editor.sourceWorkspaceRoot.empty()
+                || editor.sourceWorkspacePaths.empty()
+                || editor.sourceWorkspacePaths.size()
+                    != editor.sourceWorkspaceLabels.size())
+            {
+                state.status = "No admitted curated source scope is available.";
+                return false;
+            }
+
+            std::error_code error{};
+            const std::filesystem::path root =
+                std::filesystem::weakly_canonical(
+                    std::filesystem::path{editor.sourceWorkspaceRoot},
+                    error);
+            if (error || root.empty())
+            {
+                state.status = "The admitted curated source root is unavailable.";
+                return false;
+            }
+
+            std::vector<editor_code_workspace::PathRequest> paths{};
+            paths.reserve(editor.sourceWorkspaceLabels.size());
+            std::string key = root.generic_string();
+            for (std::size_t index = 0u;
+                 index < editor.sourceWorkspaceLabels.size();
+                 ++index)
+            {
+                const std::filesystem::path relative{
+                    editor.sourceWorkspaceLabels[index]};
+                if (relative.empty() || relative.is_absolute()
+                    || std::any_of(
+                        relative.begin(), relative.end(),
+                        [](const std::filesystem::path& component)
+                        {
+                            return component == "." || component == "..";
+                        }))
+                {
+                    state.status = "The admitted curated scope contains an unsafe relative path.";
+                    return false;
+                }
+                error.clear();
+                const auto exact = std::filesystem::canonical(
+                    root / relative, error);
+                if (error
+                    || display_project_path(exact)
+                        != editor.sourceWorkspacePaths[index])
+                {
+                    state.status = "The curated scope no longer matches its reviewed path evidence.";
+                    return false;
+                }
+                const auto containment = exact.lexically_relative(root);
+                if (containment.empty() || containment.is_absolute()
+                    || std::any_of(
+                        containment.begin(), containment.end(),
+                        [](const std::filesystem::path& component)
+                        {
+                            return component == "..";
+                        }))
+                {
+                    state.status = "The curated scope escaped its reviewed source root.";
+                    return false;
+                }
+                const std::string normalized = relative.generic_string();
+                paths.push_back(editor_code_workspace::PathRequest{
+                    .relative_path = normalized,
+                    .writable = false});
+                key += "\n" + normalized;
+            }
+
+            bool openedScope = false;
+            if (state.configurationKey != key
+                || !state.controller.snapshot().configured)
+            {
+                auto authority = state.authority;
+                authority.surface_revision = next_workspace_revision(
+                    authority.surface_revision);
+                authority.project_revision = next_workspace_revision(
+                    authority.project_revision);
+                authority.async_generation = next_workspace_revision(
+                    authority.async_generation);
+                const auto opened = state.controller.open(
+                    editor_code_workspace::OpenRequest{
+                        .kind = editor_code_workspace::WorkspaceKind::curated_engine_source,
+                        .workspace_id = "ai-curated:"
+                            + core::sha256::hex(core::sha256::hash(key)),
+                        .root = root,
+                        .authority = authority,
+                        .paths = std::move(paths),
+                        .maximum_file_bytes = 256u * 1024u,
+                        .maximum_tabs = 32u});
+                state.status = opened.reason;
+                if (!opened)
+                    return false;
+                state.authority = authority;
+                state.configurationKey = key;
+                state.draft.clear();
+                state.draftHandle.reset();
+                state.draftRevision = 0u;
+                state.gotoTarget = 1u;
+                state.gotoGeneration = 0u;
+                state.discardClose.reset();
+                openedScope = true;
+            }
+
+            if (openedScope || state.evidenceDigest.empty())
+            {
+                const auto snapshot = state.controller.snapshot();
+                core::sha256::Hasher evidence{};
+                evidence.update("epoch.ai.curated.scope.v1\n");
+                evidence.update(snapshot.canonical_root);
+                for (const auto& document : snapshot.documents)
+                {
+                    evidence.update("\npath:");
+                    evidence.update(document.relative_path);
+                    evidence.update("\nsha256:");
+                    evidence.update(core::sha256::hex(
+                        core::sha256::hash(document.text)));
+                }
+                state.evidenceDigest = core::sha256::hex(evidence.finish());
+            }
+            synchronize_project_code_draft(state);
+            return true;
+        }
+
+        struct CuratedCodeWorkspaceDrawResult
+        {
+            bool projectScripts{};
+            bool returnToScene{};
+        };
+
+        [[nodiscard]] CuratedCodeWorkspaceDrawResult
+        draw_curated_code_workspace(
+            EditorState& editor,
+            const float width,
+            const float height)
+        {
+            CuratedCodeWorkspaceDrawResult result{};
+            auto& state = editor.curatedCodeWorkspace;
+            gui::label("AI Curated Source");
+            const std::array navigation{
+                gui::InlineButtonSpec{
+                    .label = "Project Scripts",
+                    .width = 132.0f},
+                gui::InlineButtonSpec{
+                    .label = "3D Scene",
+                    .width = 104.0f}}
+            ;
+            if (const auto action = gui::inline_button_row(
+                    navigation, 30.0f, 6.0f))
+            {
+                result.projectScripts = *action == 0u;
+                result.returnToScene = *action == 1u;
+                return result;
+            }
+
+            if (!configure_curated_code_workspace(editor))
+            {
+                gui::wrapped_label(state.status, width);
+                return result;
+            }
+
+            auto snapshot = state.controller.snapshot();
+            gui::property_row("Reviewed root", snapshot.canonical_root, 112.0f);
+            gui::property_row("Scope files", std::to_string(snapshot.documents.size()), 112.0f);
+            gui::property_row("Scope digest", state.evidenceDigest, 112.0f);
+            gui::wrapped_label(
+                "Only the exact host-reviewed files in this digest are open. This workspace is read-only; AI proposals remain isolated until explicit promotion.",
+                width);
+
+            std::vector<gui::TabButtonSpec> tabs{};
+            tabs.reserve(snapshot.documents.size());
+            for (const auto& document : snapshot.documents)
+            {
+                tabs.push_back(gui::TabButtonSpec{
+                    .id = document.relative_path,
+                    .label = document.label,
+                    .width = (std::clamp)(
+                        64.0f + static_cast<float>(document.label.size()) * 6.5f,
+                        120.0f,
+                        260.0f),
+                    .active = document.active,
+                    .closable = true,
+                    .dirty = false});
+            }
+            const auto tabResult = gui::responsive_tab_bar_buttons(
+                gui::ResponsiveTabBarOptions{
+                    .overflow_id = "ai-curated-code-tabs-overflow",
+                    .overflow_label = "Reviewed files",
+                    .tabs = tabs,
+                    .available_width = width,
+                    .overflow_width = 154.0f,
+                    .height = 30.0f,
+                    .gap = 2.0f,
+                    .presentation = gui::TabBarPresentation::Document});
+            if (tabResult.closed_index
+                && *tabResult.closed_index < snapshot.documents.size())
+            {
+                const auto& closing = snapshot.documents[*tabResult.closed_index];
+                const auto closed = state.controller.close(
+                    closing.handle,
+                    state.authority,
+                    closing.revision,
+                    false);
+                state.status = closed.reason;
+                state.draftHandle.reset();
+                synchronize_project_code_draft(state);
+                snapshot = state.controller.snapshot();
+            }
+            else if (tabResult.selected_index
+                && *tabResult.selected_index < snapshot.documents.size())
+            {
+                const auto selected = state.controller.activate(
+                    snapshot.documents[*tabResult.selected_index].handle,
+                    state.authority);
+                state.status = selected.reason;
+                synchronize_project_code_draft(state);
+                snapshot = state.controller.snapshot();
+            }
+
+            const auto active = state.controller.active_document();
+            if (!active)
+            {
+                gui::wrapped_label(
+                    "All reviewed tabs are closed. Share Curated Context again to open a newly admitted scope.",
+                    width);
+                gui::wrapped_label(state.status, width);
+                return result;
+            }
+            synchronize_project_code_draft(state);
+
+            const std::array fileActions{
+                gui::InlineButtonSpec{.label = "Reload", .width = 82.0f},
+                gui::InlineButtonSpec{.label = "Copy Path", .width = 96.0f}}
+            ;
+            if (const auto action = gui::inline_button_row(
+                    fileActions, 29.0f, 5.0f))
+            {
+                if (*action == 0u)
+                {
+                    const auto reloaded = state.controller.reload(
+                        active->handle,
+                        state.authority,
+                        active->revision,
+                        false);
+                    state.status = reloaded.reason;
+                    if (reloaded)
+                        state.draftHandle.reset();
+                }
+                else
+                {
+                    const std::filesystem::path absolute =
+                        std::filesystem::path{snapshot.canonical_root}
+                        / active->relative_path;
+                    (void)gui::set_clipboard_text(
+                        display_project_path(absolute));
+                    state.status = "Copied the reviewed source path.";
+                }
+                synchronize_project_code_draft(state);
+            }
+
+            gui::property_row("Document", active->relative_path, 82.0f);
+            gui::property_row("Access", "Read-only reviewed evidence", 82.0f);
+            gui::label("Go To Line");
+            (void)gui::edit_box(
+                state.gotoLine, {(std::min)(160.0f, width), 28.0f}, 12u, false);
+            if (gui::button(
+                    "Go To Line",
+                    {(std::min)(132.0f, width), 28.0f}))
+            {
+                std::size_t target{};
+                const auto parsed = std::from_chars(
+                    state.gotoLine.data(),
+                    state.gotoLine.data() + state.gotoLine.size(),
+                    target);
+                if (parsed.ec != std::errc{}
+                    || parsed.ptr != state.gotoLine.data()
+                        + state.gotoLine.size()
+                    || target == 0u)
+                {
+                    state.status = "Go To Line requires a positive whole number.";
+                }
+                else
+                {
+                    const auto located = state.controller.goto_line(
+                        active->handle,
+                        state.authority,
+                        active->revision,
+                        target);
+                    state.status = located.reason;
+                    if (located)
+                    {
+                        state.gotoTarget = target;
+                        state.gotoGeneration = next_workspace_revision(
+                            state.gotoGeneration);
+                    }
+                }
+            }
+
+            const std::string editorId = "ai-curated-code-editor:"
+                + state.configurationKey + ":" + active->relative_path;
+            const auto viewed = gui::source_editor(
+                state.draft,
+                gui::SourceEditorOptions{
+                    .id = editorId,
+                    .size = {
+                        (std::max)(180.0f, width),
+                        (std::max)(320.0f, height - 270.0f)},
+                    .max_chars = 256u * 1024u,
+                    .show_context_menu = true,
+                    .read_only = true,
+                    .goto_line = state.gotoTarget,
+                    .goto_generation = state.gotoGeneration});
+            if (viewed.edit.changed)
+            {
+                state.draftHandle.reset();
+                synchronize_project_code_draft(state);
+                state.status = "Read-only curated source refused a mutation.";
+            }
+            else if (viewed.copied)
+            {
+                state.status = "Copied selected reviewed UTF-8 source.";
+            }
+            gui::property_row(
+                "Cursor",
+                epochengine::format_text(
+                    "line {}, column {}",
+                    viewed.cursor_line,
+                    viewed.cursor_column),
+                82.0f);
+            gui::property_row(
+                "Scroll",
+                epochengine::format_text(
+                    "horizontal {:.0f}px, vertical {:.0f}px",
+                    viewed.horizontal_scroll,
+                    viewed.vertical_scroll),
                 82.0f);
             gui::wrapped_label(
                 state.status + " Shift+mouse-wheel scrolls horizontally.",
@@ -20520,6 +20869,16 @@ namespace epochengine
                     display_project_path(sourceRoot);
                 editor.sourceWorkspacePaths = std::move(resolvedPaths);
                 editor.sourceWorkspaceLabels = std::move(labels);
+                editor.curatedCodeWorkspace.configurationKey.clear();
+                if (!configure_curated_code_workspace(editor))
+                {
+                    editor.sourceWorkspaceMode = false;
+                    push_ai_development_log(
+                        editor,
+                        "[source] Curated source workspace refused the reviewed scope: "
+                            + editor.curatedCodeWorkspace.status);
+                    return;
+                }
                 if (main_surface_is_ai_authoring(editor.mainSurface))
                     editor.aiAuthoringSurface = editor.mainSurface;
                 editor.aiAuthoringSurfaceRestoreQueued = false;
@@ -20527,7 +20886,6 @@ namespace epochengine
                 editor.workspaceTab = EditorWorkspaceTab::AI;
                 editor.showOutliner = false;
                 editor.showInspector = true;
-                editor.showConsoleDock = false;
                 editor.showAiChat = true;
                 const std::size_t aiControlsIndex =
                     tool_pane_index(EditorToolPane::AiControls);
@@ -20537,26 +20895,12 @@ namespace epochengine
                 editor.activeRightPaneRoute = "pane.ai_controls";
                 editor.surfaceSettleFrames = 1;
 
-                const std::string& firstPath =
-                    editor.sourceWorkspacePaths.front();
-                if (!editor.engineSourceEditorDirty
-                    || editor.engineSourceEditorPath == firstPath)
-                {
-                    (void)load_engine_source_editor(
-                        editor,
-                        firstPath,
-                        false);
-                }
-                else
-                {
-                    editor.engineSourceEditorStatus =
-                        "Curated files are open as tabs. Save or reload the modified reviewed source before selecting one.";
-                }
                 push_ai_development_log(
                     editor,
                     epochengine::format_text(
-                        "[source] Opened {} reviewed file(s) in the dedicated AI Development workspace.",
-                        editor.sourceWorkspacePaths.size()));
+                        "[source] Opened {} exact reviewed file(s) read-only in AI Curated. Scope digest {}.",
+                        editor.sourceWorkspacePaths.size(),
+                        editor.curatedCodeWorkspace.evidenceDigest));
             }
 
             switch (action.action)
@@ -29402,6 +29746,36 @@ namespace epochengine
                                 .wrap_lines = true
                             });
                     }
+                    break;
+                }
+
+                if (configure_curated_code_workspace(editor))
+                {
+                    const auto curated = draw_curated_code_workspace(
+                        editor,
+                        centerWidth,
+                        centerScrollHeight);
+                    if (curated.projectScripts)
+                    {
+                        apply_editor_surface(
+                            EditorMainSurface::Assets,
+                            "AI Curated Source");
+                        editor.assetWorkspaceSection = 2u;
+                    }
+                    else if (curated.returnToScene)
+                    {
+                        apply_editor_surface(
+                            EditorMainSurface::Scene,
+                            "AI Curated Source");
+                    }
+                    break;
+                }
+                if (editor.curatedCodeWorkspace.status
+                    != "The code-workspace controller is unavailable.")
+                {
+                    gui::wrapped_label(
+                        editor.curatedCodeWorkspace.status,
+                        centerWidth);
                     break;
                 }
 
