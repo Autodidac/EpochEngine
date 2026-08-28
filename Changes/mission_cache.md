@@ -1,4 +1,56 @@
 # Mission Cache
+- Make independent AI development the primary product churn mission. Epoch must
+  be able to complete a bounded engineering campaign without Codex: inspect
+  host-curated source, plan related-file changes, edit only a disposable exact
+  workspace, compile and test, consume host-owned diagnostics, repair within
+  budgets, and atomically promote only evidence-proven postimages. Preserve the
+  existing supervised one-change workflow, but add an explicit campaign policy
+  that lets the operator approve the objective, canonical source areas, allowed
+  tools, validation matrix, iteration/time/token limits, and live-promotion
+  policy once instead of reapproving every same-scope repair. Scope expansion,
+  failed/exhausted evidence, release publication, Git authority, package
+  installation, listeners, and external side effects still stop for separate
+  authority.
+- Unify MCP around one host-owned registry and evidence model. Epoch needs both
+  outbound MCP client sessions for operator-selected external tool/model
+  machines and an inbound MCP surface so an external AI can inspect and operate
+  the same bounded campaign state. Start with authenticated local stdio/process
+  transport so no listener is created; network transport remains a separate,
+  visible, disabled-by-default capability. Inbound and outbound calls must use
+  explicit capabilities, immutable arguments/results, cancellation, budgets,
+  recursion/hop limits, actor identity, and auditable evidence. Models may
+  operate the AI loop but cannot manufacture permits or test/build results.
+- Generated projects retain all three AI provider choices: disabled, shared
+  Epoch-local Qwen3.8, and operator-managed external model/MCP compute. Add an
+  independent opt-in self-iteration campaign profile to generated projects
+  without copying model weights or silently inheriting engine-development
+  authority. Project campaigns use project-owned save/build/test/run executors,
+  source roots, budgets, and promotion policy; engine and project evidence,
+  workspaces, output, and UI state never mix.
+- Finish the editor as the usable control plane for this autonomy. EpochGui owns
+  reusable responsive chrome, hierarchy/table, inspector, timeline, task,
+  diff/review, evidence, scripting, scroll/text, modal, and status primitives;
+  the editor composes real AI campaign, project, scene, build, renderer, and
+  performance state without hiding fine-grained controls. AI Authoring remains
+  scene/GUI work and AI Development remains engine/project source work, with
+  clear workspace routing and no cross-contamination of plans, output, or
+  approvals.
+- Continue context parity from shared engine truth. Every renderer/editor
+  context consumes the same scene revisions, camera/input contracts, GUI draw
+  model, selection, authoring changes, frame pacing policy, diagnostics, and
+  capture/evidence interfaces. Backend-specific implementations remain real and
+  capability-reported; OpenGL is the reference behavior, not a reason to fake
+  unsupported Vulkan/DirectX/software/raylib/SDL features.
+- Defer the Windows distribution cleanup to a later bounded release pass without
+  losing it: fresh MSBuild Debug/Release outputs must deterministically copy or
+  self-locate required assets; the packaged Release lane must use static vcpkg
+  linkage wherever each dependency safely supports it and audit the final PE
+  imports; PDBs, `.lib` files, stale target output, cache, logs, and build debris
+  never ship. The public Windows download becomes one top-level bootstrap
+  executable that verifies its embedded payload, expands a versioned runtime
+  folder containing only unavoidable runtime data/dependencies, and launches
+  the real editor. Preserve ordinary developer output as developer output and
+  never mutate the immutable v0.89.30 package to achieve this.
 - v0.89.31 is the intentionally source-only successor to the binary-first
   v0.89.30 package. Advance both source authorities and source-build Windows
   metadata to 31 while leaving all platform packaged-version authorities at 30.
