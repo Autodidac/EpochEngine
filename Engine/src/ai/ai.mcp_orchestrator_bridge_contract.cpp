@@ -15,6 +15,7 @@ module ai.mcp_orchestrator_bridge;
 
 import ai.iteration_campaign_scheduler;
 import ai.iteration_supervisor_control;
+import ai.source_patch_proposal;
 
 namespace epochengine::ai::mcp_orchestrator_bridge
 {
@@ -409,6 +410,7 @@ namespace epochengine::ai::mcp_orchestrator_bridge
                 == Code::stale_state;
         fs::remove_all(root, ec);
         return ok && iteration_campaign_scheduler::run_contract()
-            && iteration_supervisor_control::run_contract();
+            && iteration_supervisor_control::run_contract()
+            && source_patch_proposal::run_contract();
     }
 }

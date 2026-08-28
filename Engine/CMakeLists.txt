@@ -398,6 +398,8 @@ set(EPOCH_SOURCES
     src/ai/ai.mcp_orchestrator_bridge_contract.cpp
     src/ai/ai.source_patch_bundle.cpp
     src/ai/ai.source_patch_bundle_contract.cpp
+    src/ai/ai.source_patch_proposal.cpp
+    src/ai/ai.source_patch_proposal_contract.cpp
     src/ai/ai.iteration_patch_adapter.cpp
     src/ai/ai.iteration_patch_adapter_contract.cpp
     src/ai/ai.iteration_validation_adapter.cpp
@@ -2125,6 +2127,28 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_ai_curated_context_bundle_contract
         COMMAND epoch_ai_curated_context_bundle_contract
+    )
+
+    add_executable(epoch_ai_source_patch_proposal_contract
+        src/ai/ai.source_patch_proposal.cpp
+        src/ai/ai.source_patch_proposal_contract.cpp
+    )
+    target_sources(epoch_ai_source_patch_proposal_contract PRIVATE
+        FILE_SET epoch_ai_source_patch_proposal_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/ai.source_patch_proposal.ixx
+    )
+    target_compile_definitions(epoch_ai_source_patch_proposal_contract PRIVATE
+        EPOCH_AI_SOURCE_PATCH_PROPOSAL_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_source_patch_proposal_contract)
+    epoch_apply_warnings(epoch_ai_source_patch_proposal_contract)
+    epoch_apply_sanitizers(epoch_ai_source_patch_proposal_contract)
+    add_test(
+        NAME epoch_ai_source_patch_proposal_contract
+        COMMAND epoch_ai_source_patch_proposal_contract
     )
 
     add_executable(epoch_ai_voice_session_contract
