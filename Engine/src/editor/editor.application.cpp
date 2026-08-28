@@ -120,6 +120,7 @@ import systems.registry;
 import editor.task_scheduler;
 import editor.systems_panel;
 import editor.workspace_layout;
+import editor.workspace_commands;
 import voxel.field;
 import forest.factory;
 import package.registry;
@@ -4988,6 +4989,57 @@ namespace epochengine
             push_editor_log(state, "[gui] " + state.guiDocumentStatus);
             return true;
         }
+        [[nodiscard]] bool duplicate_selected_gui_widget(
+            EditorState& state,
+            authoring::gui::GuiDocument& document)
+        {
+            const auto selected = selected_gui_widget(state);
+            const auto source = selected ? document.widget(*selected) : std::nullopt;
+            if (!source)
+            {
+                state.guiDocumentStatus =
+                    "Select a GUI widget before duplicating it.";
+                return false;
+            }
+
+            auto duplicate = source->descriptor;
+            const std::string nameStem = duplicate.name + "_Copy";
+            duplicate.name = nameStem;
+            const auto widgets = document.widgets();
+            for (std::uint32_t suffix = 2u;
+                std::ranges::any_of(widgets, [&](const auto& widget)
+                    { return widget.descriptor.name == duplicate.name; });
+                ++suffix)
+            {
+                duplicate.name = nameStem + std::to_string(suffix);
+            }
+            duplicate.layout.x += 16.0f;
+            duplicate.layout.y += 16.0f;
+            const auto created = document.create_widget(
+                std::move(duplicate), source->parent);
+            if (!created)
+            {
+                state.guiDocumentStatus = epochengine::format_text(
+                    "GUI duplicate rejected: {}.",
+                    authoring::gui::result_code_name(created.code));
+                return false;
+            }
+
+            reconcile_gui_document_projections(state, document);
+            const auto projection = std::ranges::find_if(
+                state.guiDocumentWidgets,
+                [&](const auto& entry) { return entry.second == created.widget; });
+            if (projection != state.guiDocumentWidgets.end())
+            {
+                if (const auto index = editor_entity_index(state, projection->first))
+                    select_editor_entity(state, *index);
+            }
+            state.guiDocumentStatus =
+                "GUI widget duplicated in the active GUI document.";
+            push_editor_log(state, "[gui] " + state.guiDocumentStatus);
+            return true;
+        }
+
 
         [[nodiscard]] bool undo_gui_document(EditorState& state)
         {
@@ -5053,14 +5105,18 @@ namespace epochengine
 
         enum class ActiveEditDocument : std::uint8_t
         {
+            none,
             scene,
             gui,
-            tilemap
+            tilemap,
+            plant_lab
         };
 
         [[nodiscard]] ActiveEditDocument active_edit_document(
             const EditorState& state) noexcept
         {
+            if (state.mainSurface == EditorMainSurface::Scene)
+                return ActiveEditDocument::scene;
             if (state.mainSurface == EditorMainSurface::Game2D
                 && state.outlinerToolTab == OutlinerToolTab::Gui)
                 return ActiveEditDocument::gui;
@@ -5069,7 +5125,9 @@ namespace epochengine
                 && state.outlinerToolTab == OutlinerToolTab::TileMap)
                 return ActiveEditDocument::tilemap;
 #endif
-            return ActiveEditDocument::scene;
+            if (state.mainSurface == EditorMainSurface::PlantLab)
+                return ActiveEditDocument::plant_lab;
+            return ActiveEditDocument::none;
         }
 
         [[nodiscard]] bool undo_active_editor_document(EditorState& state)
@@ -5090,13 +5148,27 @@ namespace epochengine
                 return false;
 #endif
             case ActiveEditDocument::scene:
-            default:
                 if (undo_editor_scene(state))
                 {
                     push_editor_log(state, "[edit] World undo committed.");
                     return true;
                 }
                 push_editor_log(state, "[edit] Nothing to undo in the active world document.");
+                return false;
+            case ActiveEditDocument::plant_lab:
+                if (forest::undo_forest_profile_edit(state.plantLabDocument))
+                {
+                    state.plantLabCompiledRevision = 0u;
+                    state.plantLabCompiledContentHash = 0u;
+                    push_editor_log(state, "[edit] Plant Lab undo committed.");
+                    return true;
+                }
+                push_editor_log(state, "[edit] Nothing to undo in Plant Lab.");
+                return false;
+            case ActiveEditDocument::none:
+            default:
+                push_editor_log(state,
+                    "[edit] Undo is unavailable on this surface; World unchanged.");
                 return false;
             }
         }
@@ -5119,13 +5191,27 @@ namespace epochengine
                 return false;
 #endif
             case ActiveEditDocument::scene:
-            default:
                 if (redo_editor_scene(state))
                 {
                     push_editor_log(state, "[edit] World redo committed.");
                     return true;
                 }
                 push_editor_log(state, "[edit] Nothing to redo in the active world document.");
+                return false;
+            case ActiveEditDocument::plant_lab:
+                if (forest::redo_forest_profile_edit(state.plantLabDocument))
+                {
+                    state.plantLabCompiledRevision = 0u;
+                    state.plantLabCompiledContentHash = 0u;
+                    push_editor_log(state, "[edit] Plant Lab redo committed.");
+                    return true;
+                }
+                push_editor_log(state, "[edit] Nothing to redo in Plant Lab.");
+                return false;
+            case ActiveEditDocument::none:
+            default:
+                push_editor_log(state,
+                    "[edit] Redo is unavailable on this surface; World unchanged.");
                 return false;
             }
         }
@@ -7703,6 +7789,224 @@ namespace epochengine
             }
             push_editor_log(state, std::string("[entity] Deleted ") + name + ".");
         }
+
+        enum class SurfaceEditAction : std::uint8_t
+        {
+            undo,
+            redo,
+            duplicate_selection,
+            delete_selection,
+            focus_selection
+        };
+
+        struct SurfaceEditAvailability final
+        {
+            bool enabled{};
+            editor_workspace_commands::CommandId command{
+                editor_workspace_commands::CommandId::world_select_entity};
+            std::string reason{};
+        };
+
+        [[nodiscard]] constexpr std::string_view surface_edit_action_name(
+            SurfaceEditAction action) noexcept
+        {
+            switch (action)
+            {
+            case SurfaceEditAction::undo: return "Undo";
+            case SurfaceEditAction::redo: return "Redo";
+            case SurfaceEditAction::duplicate_selection: return "Duplicate";
+            case SurfaceEditAction::delete_selection: return "Delete";
+            case SurfaceEditAction::focus_selection: return "Focus";
+            }
+            return "Edit command";
+        }
+
+        [[nodiscard]] editor_workspace_commands::Surface workspace_command_surface(
+            const EditorState& state) noexcept
+        {
+            using Surface = editor_workspace_commands::Surface;
+            switch (state.mainSurface)
+            {
+            case EditorMainSurface::Scene: return Surface::world;
+            case EditorMainSurface::Game2D:
+                return state.outlinerToolTab == OutlinerToolTab::Gui
+                    ? Surface::gui_canvas
+                    : Surface::systems;
+            case EditorMainSurface::Assets: return Surface::assets;
+            case EditorMainSurface::Project: return Surface::project;
+            case EditorMainSurface::ForestFactory: return Surface::forest_factory;
+            case EditorMainSurface::Timeline: return Surface::timeline;
+            case EditorMainSurface::AISandbox: return Surface::ai_development;
+            case EditorMainSurface::Systems: return Surface::systems;
+            case EditorMainSurface::PlantLab: return Surface::plant_lab;
+            case EditorMainSurface::Count: break;
+            }
+            return Surface::systems;
+        }
+
+        [[nodiscard]] std::optional<editor_workspace_commands::CommandId>
+        command_for_surface_edit(
+            editor_workspace_commands::Surface surface,
+            SurfaceEditAction action) noexcept
+        {
+            using CommandId = editor_workspace_commands::CommandId;
+            using Surface = editor_workspace_commands::Surface;
+            if (surface == Surface::world)
+            {
+                switch (action)
+                {
+                case SurfaceEditAction::undo: return CommandId::world_undo;
+                case SurfaceEditAction::redo: return CommandId::world_redo;
+                case SurfaceEditAction::duplicate_selection: return CommandId::world_duplicate_entity;
+                case SurfaceEditAction::delete_selection: return CommandId::world_delete_entity;
+                case SurfaceEditAction::focus_selection: return CommandId::world_focus_entity;
+                }
+            }
+            if (surface == Surface::gui_canvas)
+            {
+                switch (action)
+                {
+                case SurfaceEditAction::undo: return CommandId::gui_undo;
+                case SurfaceEditAction::redo: return CommandId::gui_redo;
+                case SurfaceEditAction::duplicate_selection: return CommandId::gui_duplicate_element;
+                case SurfaceEditAction::delete_selection: return CommandId::gui_delete_element;
+                case SurfaceEditAction::focus_selection: return CommandId::gui_focus_element;
+                }
+            }
+            if (surface == Surface::plant_lab)
+            {
+                if (action == SurfaceEditAction::undo) return CommandId::plant_undo;
+                if (action == SurfaceEditAction::redo) return CommandId::plant_redo;
+                if (action == SurfaceEditAction::focus_selection)
+                    return CommandId::plant_focus_element;
+            }
+            if (surface == Surface::forest_factory
+                && action == SurfaceEditAction::focus_selection)
+                return CommandId::forest_focus_element;
+            return std::nullopt;
+        }
+
+        [[nodiscard]] SurfaceEditAvailability resolve_surface_edit(
+            EditorState& state,
+            SurfaceEditAction action)
+        {
+            using namespace editor_workspace_commands;
+            SurfaceEditAvailability result{};
+            const Surface surface = workspace_command_surface(state);
+            const auto command = command_for_surface_edit(surface, action);
+            if (!command)
+            {
+                result.reason = epochengine::format_text(
+                    "{} has no {} command; World unchanged.",
+                    surface_name(surface), surface_edit_action_name(action));
+                return result;
+            }
+            result.command = *command;
+            const auto* descriptor = find_command(*command);
+            if (!descriptor || descriptor->surface != surface)
+            {
+                result.reason =
+                    "Command is absent from the active surface catalog; World unchanged.";
+                return result;
+            }
+            if (descriptor->target == TargetKind::entity
+                && !editor_entity_index(state, state.selectedEntityId))
+            {
+                result.reason =
+                    "Select a World entity first; no document changed.";
+                return result;
+            }
+            if (descriptor->target == TargetKind::element)
+            {
+                if (surface == Surface::gui_canvas)
+                {
+                    if (!selected_gui_widget(state))
+                    {
+                        result.reason =
+                            "Select a GUI element first; World unchanged.";
+                        return result;
+                    }
+                }
+                else if (!editor_entity_index(state, state.selectedEntityId))
+                {
+                    result.reason =
+                        "Select an element on this surface first; World unchanged.";
+                    return result;
+                }
+            }
+            if (*command == CommandId::world_undo && !state.sceneDocument.can_undo())
+                result.reason = "World has no edit to undo.";
+            else if (*command == CommandId::world_redo && !state.sceneDocument.can_redo())
+                result.reason = "World has no edit to redo.";
+            else if (*command == CommandId::gui_undo
+                && (!state.guiDocument || !state.guiDocument->can_undo()))
+                result.reason = "GUI Canvas has no edit to undo.";
+            else if (*command == CommandId::gui_redo
+                && (!state.guiDocument || !state.guiDocument->can_redo()))
+                result.reason = "GUI Canvas has no edit to redo.";
+            else if (*command == CommandId::plant_undo
+                && state.plantLabDocument.historyCursor == 0u)
+                result.reason = "Plant Lab has no edit to undo.";
+            else if (*command == CommandId::plant_redo
+                && state.plantLabDocument.historyCursor
+                    >= state.plantLabDocument.journal.size())
+                result.reason = "Plant Lab has no edit to redo.";
+            else
+                result.enabled = true;
+            return result;
+        }
+
+        void handle_scene_tool(
+            EditorState& state,
+            const core::Context* ctx,
+            std::string_view toolId);
+
+        [[nodiscard]] bool execute_surface_edit(
+            EditorState& state,
+            const core::Context* ctx,
+            SurfaceEditAction action)
+        {
+            using CommandId = editor_workspace_commands::CommandId;
+            const SurfaceEditAvailability available = resolve_surface_edit(state, action);
+            if (!available.enabled)
+            {
+                push_editor_log(state, "[edit] " + available.reason);
+                return false;
+            }
+            switch (available.command)
+            {
+            case CommandId::world_undo:
+            case CommandId::gui_undo:
+            case CommandId::plant_undo:
+                return undo_active_editor_document(state);
+            case CommandId::world_redo:
+            case CommandId::gui_redo:
+            case CommandId::plant_redo:
+                return redo_active_editor_document(state);
+            case CommandId::world_duplicate_entity:
+                duplicate_selected_entity(state); return true;
+            case CommandId::world_delete_entity:
+                delete_selected_entity(state); return true;
+            case CommandId::gui_duplicate_element:
+                if (auto* document = synchronize_gui_document(state))
+                    return duplicate_selected_gui_widget(state, *document);
+                break;
+            case CommandId::gui_delete_element:
+                if (auto* document = synchronize_gui_document(state))
+                    return remove_selected_gui_widget(state, *document);
+                break;
+            case CommandId::world_focus_entity:
+            case CommandId::gui_focus_element:
+            case CommandId::forest_focus_element:
+            case CommandId::plant_focus_element:
+                handle_scene_tool(state, ctx, "focus_selection"); return true;
+            default: break;
+            }
+            push_editor_log(state,
+                "[edit] Active-surface command had no executor; World unchanged.");
+            return false;
+        }
+
 
         [[nodiscard]] std::optional<epochengine::ray::RayDesc> screen_point_to_world_ray(
             const core::Context* ctx,
@@ -19341,19 +19645,19 @@ namespace epochengine
             if (controlDown && input::is_key_down(input::Key::Z))
             {
                 if (shiftDown)
-                    (void)redo_active_editor_document(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
                 else
-                    (void)undo_active_editor_document(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
                 result.scene_input_captured = true;
             }
             else if (controlDown && input::is_key_down(input::Key::Y))
             {
-                (void)redo_active_editor_document(editor);
+                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
                 result.scene_input_captured = true;
             }
             else if (input::is_key_down(input::Key::Delete))
             {
-                delete_selected_entity(editor);
+                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
                 result.scene_input_captured = true;
             }
             else if (input::is_key_down(input::Key::Escape)
@@ -22140,8 +22444,14 @@ namespace epochengine
             return { 14.0f, toolbar_button_y + toolbar_button_h + 6.0f };
         };
 
-        auto menu_item = [&](std::string_view title, gui::Vec2 pos, float width, auto&& on_click)
+        auto menu_item = [&](std::string_view title, gui::Vec2 pos, float width, auto&& on_click, bool enabled = true)
         {
+            gui::set_cursor(pos);
+            if (!enabled)
+            {
+                gui::label(std::string(title) + " (unavailable on active surface)");
+                return;
+            }
             gui::set_cursor(pos);
             if (gui::button(title, { width, 28.0f }))
             {
@@ -22592,10 +22902,12 @@ namespace epochengine
 
         if (application.allow_entity_authoring)
         {
+            const bool worldSurfaceActive = workspace_command_surface(editor)
+                == editor_workspace_commands::Surface::world;
             const std::array outlinerWorldButtons{
-                gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f },
-                gui::InlineButtonSpec{ .label = "+ Ground", .width = 86.0f },
-                gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f }
+                gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f, .enabled = worldSurfaceActive },
+                gui::InlineButtonSpec{ .label = "+ Ground", .width = 86.0f, .enabled = worldSurfaceActive },
+                gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f, .enabled = worldSurfaceActive }
             };
             if (const auto action = gui::inline_button_row(outlinerWorldButtons, 26.0f, 5.0f))
             {
@@ -22609,8 +22921,8 @@ namespace epochengine
             }
 
             const std::array outlinerRuntimeButtons{
-                gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f },
-                gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f }
+                gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f, .enabled = worldSurfaceActive },
+                gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f, .enabled = worldSurfaceActive }
             };
             if (const auto action = gui::inline_button_row(outlinerRuntimeButtons, 26.0f, 5.0f))
             {
@@ -22623,40 +22935,40 @@ namespace epochengine
             }
 
             const std::array worldHistoryButtons{
-                gui::InlineButtonSpec{ .label = "Undo", .width = 70.0f, .enabled = editor.sceneDocument.can_undo() },
-                gui::InlineButtonSpec{ .label = "Redo", .width = 70.0f, .enabled = editor.sceneDocument.can_redo() }
+                gui::InlineButtonSpec{ .label = "Undo", .width = 70.0f, .enabled = worldSurfaceActive && editor.sceneDocument.can_undo() },
+                gui::InlineButtonSpec{ .label = "Redo", .width = 70.0f, .enabled = worldSurfaceActive && editor.sceneDocument.can_redo() }
             };
             if (const auto action = gui::inline_button_row(
                     worldHistoryButtons, 26.0f, 5.0f))
             {
                 if (*action == 0u)
-                    (void)undo_active_editor_document(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
                 else
-                    (void)redo_active_editor_document(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
             }
 
             const bool hasSelection = editor_has_selection(editor);
             const std::array outlinerMutationButtons{
-                gui::InlineButtonSpec{ .label = "Duplicate", .width = 96.0f, .enabled = hasSelection },
-                gui::InlineButtonSpec{ .label = "Delete", .width = 74.0f, .enabled = hasSelection }
+                gui::InlineButtonSpec{ .label = "Duplicate", .width = 96.0f, .enabled = worldSurfaceActive && hasSelection },
+                gui::InlineButtonSpec{ .label = "Delete", .width = 74.0f, .enabled = worldSurfaceActive && hasSelection }
             };
             if (const auto action = gui::inline_button_row(
                     outlinerMutationButtons, 26.0f, 5.0f))
             {
                 if (*action == 0u)
-                    duplicate_selected_entity(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
                 else
-                    delete_selected_entity(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
             }
             const std::array outlinerSelectionButtons{
-                gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f, .enabled = hasSelection },
+                gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f, .enabled = worldSurfaceActive && hasSelection },
                 gui::InlineButtonSpec{ .label = "Deselect", .width = 86.0f, .enabled = hasSelection }
             };
             if (const auto action = gui::inline_button_row(
                     outlinerSelectionButtons, 26.0f, 5.0f))
             {
                 if (*action == 0u)
-                    handle_scene_tool(editor, ctx.get(), "focus_selection");
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::focus_selection);
                 else
                     clear_editor_selection(editor);
             }
@@ -24301,7 +24613,7 @@ namespace epochengine
                 {
                     if (*action == 0u)
                     {
-                        duplicate_selected_entity(editor);
+                        (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
                     }
                     else if (*action == 1u
                         && guiDocument
@@ -24969,7 +25281,7 @@ namespace epochengine
                         if (*action == 0u)
                             editor.guiAuthoringSection = 1u;
                         else if (*action == 1u)
-                            duplicate_selected_entity(editor);
+                            (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
                         else if (guiDocument)
                             (void)remove_selected_gui_widget(
                                 editor, *guiDocument);
@@ -30258,22 +30570,26 @@ namespace epochengine
 
         open_dropdown("Edit", TopMenu::Edit, dropdown_window_size(192.0f, 7), [&](gui::Vec2 pos)
         {
+            const auto undo = resolve_surface_edit(editor, SurfaceEditAction::undo);
+            const auto redo = resolve_surface_edit(editor, SurfaceEditAction::redo);
+            const auto remove = resolve_surface_edit(editor, SurfaceEditAction::delete_selection);
+            const auto focus = resolve_surface_edit(editor, SurfaceEditAction::focus_selection);
             menu_item("Undo", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
-                (void)undo_active_editor_document(editor);
-            });
+                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
+            }, undo.enabled);
             menu_item("Redo", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
-                (void)redo_active_editor_document(editor);
-            });
+                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
+            }, redo.enabled);
             menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
-                delete_selected_entity(editor);
-            });
+                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
+            }, remove.enabled);
             menu_item("Deselect", { pos.x + 12.0f, pos.y + 116.0f }, 192.0f, [&]() {
                 clear_editor_selection(editor);
                 push_editor_log(editor, "[edit] Selection cleared.");
             });
             menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 150.0f }, 192.0f, [&]() {
-                handle_scene_tool(editor, ctx.get(), "focus_selection");
-            });
+                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::focus_selection);
+            }, focus.enabled);
             menu_item("Reset Camera", { pos.x + 12.0f, pos.y + 184.0f }, 192.0f, [&]() {
                 handle_scene_tool(editor, ctx.get(), "reset_camera");
                 epochengine::previewgrid::reset_camera(ctx.get());
@@ -30300,20 +30616,22 @@ namespace epochengine
             }
             if (application.allow_entity_authoring)
             {
+                const bool worldSurfaceActive = workspace_command_surface(editor)
+                    == editor_workspace_commands::Surface::world;
                 menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
                     add_entity(editor, "cube");
-                });
+                }, worldSurfaceActive);
                 menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
                     add_entity(editor, "light");
-                });
+                }, worldSurfaceActive);
                 menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
                     add_entity(editor, "spawn");
-                });
+                }, worldSurfaceActive);
                 menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
-                    duplicate_selected_entity(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
                 });
                 menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 218.0f }, 220.0f, [&]() {
-                    delete_selected_entity(editor);
+                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
                 });
             }
         });

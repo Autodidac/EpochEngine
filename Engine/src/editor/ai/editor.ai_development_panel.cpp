@@ -1781,6 +1781,14 @@ namespace epochengine::editor_ai_development_panel
 
             localOpenInput.source_snapshot_root =
                 fixture.path.generic_string();
+            localOpenInput.source_authority_kind = "explicit_checkout";
+            localOpenInput.source_authority_version = "0.89.31";
+            localOpenInput.source_authority_commit =
+                "0123456789abcdef0123456789abcdef01234567";
+            localOpenInput.source_authority_receipt_digest =
+                "0123456789abcdef0123456789abcdef"
+                "0123456789abcdef0123456789abcdef";
+            localOpenInput.source_authority_verified = true;
             localOpenInput.development_objective =
                 "inspect reviewed editor source";
             localOpenInput.architecture_evidence =

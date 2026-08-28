@@ -35,6 +35,14 @@
   `ef6e880195c7fd596685bba57642eaacd21c9bc9270ac3e79200374c9086854e`, reports
   v0.89.31, and passes the aggregate build-safe contract without a GUI launch.
   All 33 no-display Linux CTests pass.
+- Add the typed `editor.workspace_commands` command plane for every standard
+  editor surface. Command intents carry typed targets plus workspace, surface,
+  project, document, selection, and async-generation facts; stale facts and
+  unsupported surface/action pairs fail closed with explicit reasons. Route
+  global Undo/Redo/Duplicate/Delete/Focus and GUI duplicate actions through the
+  active surface so non-World surfaces cannot silently mutate World. AI
+  Development cannot express approval, live-source promotion, release, Git, or
+  unrestricted execution through this plane.
 
 ## [v0.89.30] - Distinct source-update discovery candidate
 - Rename the legacy Visual Studio executable/static-library identities to

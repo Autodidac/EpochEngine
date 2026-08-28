@@ -140,6 +140,7 @@ import asset.texture_import;
 import capability.profile;
 import editor.project_textures;
 import editor.workspace_layout;
+import editor.workspace_commands;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import editor.tilemap_workspace;
 #endif
@@ -175,8 +176,11 @@ import gui.menu;
 import editor.core;
 import ai.engine;
 import ai.development_proposal_codec;
+import ai.project_profile;
 import ai.iteration_loop;
 import ai.iteration_session;
+import ai.iteration_campaign;
+import epoch.build_validation;
 import editor.ai_development_controller;
 import editor.ai_development_panel;
 import editor.systems_workspace;
@@ -2396,6 +2400,65 @@ namespace epochengine::core
                 && !fallbackVsync.native_vsync_requested
                 && fallbackVsync.cpu_deadline_wait);
 
+        const auto nativeTargetDesired =
+            epochengine::perf::resolve_frame_pacing_with_capabilities(
+                epochengine::perf::target_hz_policy(120.0),
+                epochengine::perf::frame_activity::foreground,
+                {false, true});
+        const auto nativeTargetApplied =
+            epochengine::perf::finalize_native_frame_pacing(
+                nativeTargetDesired,
+                {
+                    true,
+                    true,
+                    epochengine::perf::frame_pacing_mode::target_hz,
+                    120.0});
+        const auto nativeTargetRejected =
+            epochengine::perf::finalize_native_frame_pacing(
+                nativeTargetDesired,
+                {});
+        check(
+            "perf.frame_pacing_native_target_no_double_throttle",
+            nativeTargetDesired.native_pacing_requested
+                && !nativeTargetDesired.cpu_deadline_wait
+                && nativeTargetApplied.native_pacing_configured
+                && nativeTargetApplied.native_pacing_active
+                && !nativeTargetApplied.cpu_deadline_wait
+                && nativeTargetApplied.effective_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && std::abs(nativeTargetApplied.effective_hz - 120.0) < 1.0e-12
+                && !nativeTargetRejected.native_pacing_configured
+                && !nativeTargetRejected.native_pacing_active
+                && nativeTargetRejected.cpu_deadline_wait
+                && std::abs(nativeTargetRejected.effective_hz - 120.0) < 1.0e-12);
+
+        const auto nativeVsyncApplied =
+            epochengine::perf::finalize_native_frame_pacing(
+                nativeVsync,
+                {
+                    true,
+                    true,
+                    epochengine::perf::frame_pacing_mode::vsync,
+                    0.0});
+        const auto forcedVsyncOnUncapped =
+            epochengine::perf::finalize_native_frame_pacing(
+                uncappedForeground,
+                {
+                    false,
+                    true,
+                    epochengine::perf::frame_pacing_mode::vsync,
+                    0.0});
+        check(
+            "perf.frame_pacing_native_vsync_and_forced_fallback",
+            nativeVsyncApplied.native_pacing_configured
+                && nativeVsyncApplied.native_pacing_active
+                && nativeVsyncApplied.native_vsync_requested
+                && !nativeVsyncApplied.cpu_deadline_wait
+                && forcedVsyncOnUncapped.native_pacing_active
+                && forcedVsyncOnUncapped.effective_mode
+                    == epochengine::perf::frame_pacing_mode::vsync
+                && !forcedVsyncOnUncapped.cpu_deadline_wait);
+
         auto forestProfile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
         const auto forestEstimate = epochengine::forest::estimate_preview_stats(forestProfile);
@@ -2421,6 +2484,10 @@ namespace epochengine::core
             "editor.workspace_layout",
             epochengine::editor_workspace::run_contract()
                 == epochengine::editor_workspace::ContractFailure::none);
+        check(
+            "editor.workspace_commands",
+            epochengine::editor_workspace_commands::run_aggregate_contract()
+                == epochengine::editor_workspace_commands::ContractFailure::none);
         check(
             "extension.catalog",
             epochengine::extension_catalog::run_contract()
@@ -2549,11 +2616,21 @@ namespace epochengine::core
             "ai.development_proposal_codec",
             epochengine::ai::development_proposal_codec::run_contract());
         check(
+            "ai.project_profile",
+            epochengine::ai::project_profile::run_contract());
+        check(
             "ai.iteration_loop",
             epochengine::ai::iteration::run_contract());
         check(
             "ai.iteration_session",
             epochengine::ai::iteration_session::run_contract());
+        check(
+            "ai.iteration_campaign",
+            epochengine::ai::iteration_campaign::run_contract());
+        check(
+            "epoch.build_validation",
+            epochengine::build_validation::run_contract()
+                == epochengine::build_validation::ContractFailure::none);
         check(
             "ai.development_guard",
             epochengine::editor_ai_development::run_contract());

@@ -540,6 +540,21 @@ contracts must not be described as a live runtime pass.
   `authoring.gui_document`. Each editor window, Inspector, and detached pane
   reads the current canonical projection instead of keeping an independent scene.
 - script source resolution should prefer the active project's local `scripts/`
+
+### Typed workspace commands
+
+`editor.workspace_commands` is the data-only command boundary for World, GUI
+Canvas, Forest Factory, Plant Lab, Timeline, Project, Assets, AI Development,
+and Systems. Each surface owns an explicit command catalog and typed target.
+Intent planning captures workspace, surface, project, document, selection, and
+async generations; any stale fact fails closed before mutation.
+
+The editor's global Undo, Redo, Duplicate, Delete, and Focus routes resolve
+against the active surface. Unsupported actions are disabled with visible
+evidence; they never fall back to the World document. AI Development can
+request bounded planning work, but its command vocabulary cannot express
+approval, live-source promotion, release publication, Git, or unrestricted
+execution.
   folder before falling back to template or engine-owned script roots, so the
   dock and editor run actions operate on the real generated project shell
 - script starter creation should append `PROJECT_NOTES.md` entries; a useful

@@ -366,11 +366,17 @@ set(EPOCH_SOURCES
     src/updater/updater.source_access.cpp
     src/updater/updater.system.cpp
     src/updater/updater.source_worker_win.cpp
+    src/epoch/epoch.build_validation.cpp
+    src/epoch/epoch.build_validation_contract.cpp
     src/ai/ai.development_executor.cpp
     src/ai/ai.iteration_loop.cpp
     src/ai/ai.iteration_loop_contract.cpp
     src/ai/ai.iteration_session.cpp
     src/ai/ai.iteration_session_contract.cpp
+    src/ai/ai.project_profile.cpp
+    src/ai/ai.project_profile_contract.cpp
+    src/ai/ai.iteration_campaign.cpp
+    src/ai/ai.iteration_campaign_contract.cpp
     src/ai/ai.development_proposal_codec.cpp
     src/ai/ai.development_proposal_codec_contract.cpp
     src/ai/ai.mcp_stdio.cpp
@@ -2080,6 +2086,42 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_editor_workspace_layout_contract
         COMMAND epoch_editor_workspace_layout_contract
+    )
+
+    add_executable(epoch_build_validation_contract
+        src/epoch/epoch.build_validation.cpp
+        src/epoch/epoch.build_validation_contract.cpp
+    )
+    target_sources(epoch_build_validation_contract PRIVATE
+        FILE_SET epoch_build_validation_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/epoch.build_validation.ixx
+    )
+    target_compile_definitions(epoch_build_validation_contract PRIVATE
+        EPOCH_BUILD_VALIDATION_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_build_validation_contract)
+    epoch_apply_warnings(epoch_build_validation_contract)
+    epoch_apply_sanitizers(epoch_build_validation_contract)
+    add_test(
+        NAME epoch_build_validation_contract
+        COMMAND epoch_build_validation_contract
+    )
+
+    add_executable(epoch_editor_workspace_commands_contract
+        src/editor/editor.workspace_commands_contract.cpp
+    )
+    target_sources(epoch_editor_workspace_commands_contract PRIVATE
+        FILE_SET epoch_editor_workspace_commands_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/editor.workspace_commands.ixx
+    )
+    epoch_apply_cxx_dialect(epoch_editor_workspace_commands_contract)
+    epoch_apply_warnings(epoch_editor_workspace_commands_contract)
+    epoch_apply_sanitizers(epoch_editor_workspace_commands_contract)
+    add_test(
+        NAME epoch_editor_workspace_commands_contract
+        COMMAND epoch_editor_workspace_commands_contract
     )
 
     add_executable(epoch_editor_task_scheduler_contract

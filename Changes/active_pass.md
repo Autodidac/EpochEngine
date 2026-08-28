@@ -254,6 +254,13 @@ before overwriting an existing manifest. Scene and GUI Delete, deselection, and
 Undo/Redo share canonical document identity; GUI Canvas Save/Reload use the one
 project GUI source; and timeline scrub/play/step controls operate on the shared
 temporal spine. Tool windows now use independent left/right/bottom-left/
+Global editor actions now resolve through the typed, data-only
+`editor.workspace_commands` surface catalog. World, GUI Canvas, and Plant Lab
+history remain document-local; unsupported surface actions are disabled with an
+explicit reason and cannot silently mutate World. Captured revisions fail
+closed, and AI Development has no command representation for approval,
+promotion, release, Git, or unrestricted execution.
+
 bottom-right tab routes,
 visible guide targets and placement ghosts, exact Window-menu recovery, and
 optional context-backed native floats that restore their remembered group from

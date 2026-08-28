@@ -392,6 +392,17 @@ focus, and presentation throttling. Non-desktop targets may omit this entire
 host layer. This section is an architectural contract and does not claim that
 multi-monitor routing or arbitrary tab-stack docking is implemented.
 
+## Workspace Command Presentation
+
+EpochGui owns the reusable enabled/disabled control presentation and input
+routing. It does not decide which editor document a global action may mutate.
+The engine-owned `editor.workspace_commands` catalog resolves that authority
+from the active surface and exposes an explicit rejection reason for unsupported
+or stale commands. This separation lets Edit menus, shortcuts, outliners, and
+future command palettes share one visual vocabulary without allowing a Project,
+Assets, AI Development, Systems, or other non-World surface to mutate World by
+fallback.
+
 ## System Workspace Projection
 
 EpochGui's `SystemWorkspace` is a portable data/controller primitive, not an
