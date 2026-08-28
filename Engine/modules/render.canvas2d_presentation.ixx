@@ -72,6 +72,56 @@ export namespace epochengine::canvas2d::presentation
         }
     };
 
+    enum class NativeSampleFilter : std::uint8_t
+    {
+        invalid,
+        nearest,
+        linear
+    };
+
+    struct NativeComposePolicy final
+    {
+        NativeSampleFilter sample_filter{NativeSampleFilter::invalid};
+        PixelOrigin source_origin{PixelOrigin::top_left};
+        SpriteColorSpace color_space{SpriteColorSpace::linear};
+        cpu::AlphaEncoding alpha_encoding{cpu::AlphaEncoding::premultiplied};
+        bool clamp_to_edge{};
+        bool premultiplied_blend{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return (sample_filter == NativeSampleFilter::nearest
+                    || sample_filter == NativeSampleFilter::linear)
+                && source_origin == PixelOrigin::top_left
+                && color_space == SpriteColorSpace::linear
+                && alpha_encoding == cpu::AlphaEncoding::premultiplied
+                && clamp_to_edge
+                && premultiplied_blend;
+        }
+    };
+
+    [[nodiscard]] constexpr NativeComposePolicy make_native_compose_policy(
+        const FinalComposePlan& compose,
+        const ImageContract& image) noexcept
+    {
+        if (!compose || !image || !compose.requires_offscreen_canvas
+            || compose.destination != ComposeTargetKind::presentation_surface)
+        {
+            return {};
+        }
+
+        NativeSampleFilter sampleFilter{NativeSampleFilter::invalid};
+        if (compose.presentation_filter == FilterMode::nearest)
+            sampleFilter = NativeSampleFilter::nearest;
+        else if (compose.presentation_filter == FilterMode::linear)
+            sampleFilter = NativeSampleFilter::linear;
+        else
+            return {};
+
+        return {sampleFilter, image.origin, image.color_space,
+            image.alpha_encoding, true, true};
+    }
+
     struct PresentationSurface final
     {
         CanvasExtent framebuffer_extent{};
@@ -805,6 +855,7 @@ export namespace epochengine::canvas2d::presentation
         lifecycle_soak,
         retirement,
         immutable_lifecycle,
+        native_compose_policy,
         metrics
     };
 
@@ -829,6 +880,7 @@ export namespace epochengine::canvas2d::presentation
         case PresentationContractFailure::lifecycle_soak: return "lifecycle_soak";
         case PresentationContractFailure::retirement: return "retirement";
         case PresentationContractFailure::immutable_lifecycle: return "immutable_lifecycle";
+        case PresentationContractFailure::native_compose_policy: return "native_compose_policy";
         case PresentationContractFailure::metrics: return "metrics";
         }
         return "unknown";
@@ -907,6 +959,34 @@ export namespace epochengine::canvas2d::presentation
         const cpu::RasterResult raster = cpu::rasterize(frame);
         if (!raster || raster.canvas_hash == 0)
             return PresentationContractFailure::cpu_raster;
+        const ImageContract nativeImage{
+            frame.compose.viewport.render_extent,
+            TextureFormat::rgba8_unorm,
+            PixelOrigin::top_left,
+            SpriteColorSpace::linear,
+            cpu::AlphaEncoding::premultiplied};
+        const NativeComposePolicy nearestPolicy =
+            make_native_compose_policy(frame.compose, nativeImage);
+        FinalComposePlan linearCompose = frame.compose;
+        linearCompose.presentation_filter = FilterMode::linear;
+        const NativeComposePolicy linearPolicy =
+            make_native_compose_policy(linearCompose, nativeImage);
+        ImageContract invalidImageContract = nativeImage;
+        invalidImageContract.extent = {0u, nativeImage.extent.height};
+        if (!nearestPolicy
+            || nearestPolicy.sample_filter != NativeSampleFilter::nearest
+            || !linearPolicy
+            || linearPolicy.sample_filter != NativeSampleFilter::linear
+            || make_native_compose_policy(frame.compose, invalidImageContract)
+            || !nearestPolicy.clamp_to_edge
+            || !nearestPolicy.premultiplied_blend
+            || nearestPolicy.source_origin != PixelOrigin::top_left
+            || nearestPolicy.color_space != SpriteColorSpace::linear
+            || nearestPolicy.alpha_encoding != cpu::AlphaEncoding::premultiplied)
+        {
+            return PresentationContractFailure::native_compose_policy;
+        }
+
 
         detail::ContractDevice device{};
         Canvas2DPresenter missingHook{device, 1, {}};

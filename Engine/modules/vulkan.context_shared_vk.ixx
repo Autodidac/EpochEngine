@@ -434,7 +434,7 @@ namespace epochengine::vulkancontext
             canvas2d::RectI destination{};
             canvas2d::RectF visibleCanvas{};
             canvas2d::LinearColor letterboxColor{};
-            FilterMode filter{ FilterMode::nearest };
+            bool linearCanvasSampling{};
             canvas2d::CanvasExtent imageExtent{};
             std::uint64_t contentHash{};
             std::uint64_t canvasHash{};

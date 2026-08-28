@@ -142,6 +142,11 @@ namespace epochengine::raylibrenderer
             const auto& viewport = compose.viewport;
             const auto& destination = viewport.clipped_destination;
             const auto& visible = viewport.visible_canvas;
+            const auto nativePolicy =
+                canvas2d::presentation::make_native_compose_policy(
+                    compose, packet.image);
+            if (!nativePolicy)
+                return false;
             constexpr std::uint32_t maximumRaylibSize =
                 static_cast<std::uint32_t>((std::numeric_limits<int>::max)());
             if (!compose.requires_offscreen_canvas)
@@ -173,14 +178,6 @@ namespace epochengine::raylibrenderer
             if (packet.image.extent != viewport.render_extent
                 || packet.image.format != TextureFormat::rgba8_unorm)
                 return false;
-            if (packet.image.origin
-                != canvas2d::presentation::PixelOrigin::top_left)
-                return false;
-            if (packet.image.color_space != canvas2d::SpriteColorSpace::linear)
-                return false;
-            if (packet.image.alpha_encoding
-                != canvas2d::cpu::AlphaEncoding::premultiplied)
-                return false;
             if (visible.x + visible.width
                 > static_cast<float>(record.desc.width) + 0.001f)
                 return false;
@@ -211,6 +208,11 @@ namespace epochengine::raylibrenderer
             const auto& compose = *packet.compose;
             const auto& surface = packet.surface;
             const auto& destination = compose.viewport.clipped_destination;
+            const auto nativePolicy =
+                canvas2d::presentation::make_native_compose_policy(
+                    compose, packet.image);
+            if (!nativePolicy)
+                return false;
             const auto& visible = compose.viewport.visible_canvas;
 
             epochengine::raylib_api::begin_scissor_mode(
@@ -234,7 +236,8 @@ namespace epochengine::raylibrenderer
                         to_channel(compose.letterbox_color.a)});
             }
 
-            const int filter = compose.presentation_filter == FilterMode::nearest
+            const int filter = nativePolicy.sample_filter
+                    == canvas2d::presentation::NativeSampleFilter::nearest
                 ? epochengine::raylib_api::texture_filter_point
                 : epochengine::raylib_api::texture_filter_bilinear;
             epochengine::raylib_api::set_texture_filter(record->texture, filter);

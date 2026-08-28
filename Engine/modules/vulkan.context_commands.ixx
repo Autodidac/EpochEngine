@@ -342,9 +342,9 @@ namespace epochengine::vulkancontext
         if (!guiState)
             return;
         const Canvas2DContextState& state = guiState->canvas2d;
-        const auto& descriptorSets = state.filter == FilterMode::nearest
-            ? state.nearestDescriptorSets
-            : state.linearDescriptorSets;
+        const auto& descriptorSets = state.linearCanvasSampling
+            ? state.linearDescriptorSets
+            : state.nearestDescriptorSets;
         if (!state.ready || !state.pipeline || !state.vertexBuffer
             || !state.indexBuffer || imageIndex >= descriptorSets.size())
         {

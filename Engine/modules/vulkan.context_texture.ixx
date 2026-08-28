@@ -58,6 +58,7 @@ import :shared_vk;
 import core.context;
 import render.canvas2d;
 import render.canvas2d_cpu;
+import render.canvas2d_presentation;
 import render.canvas2d_limits;
 import render.canvas2d_runtime;
 import render.device;
@@ -830,7 +831,7 @@ namespace epochengine::vulkancontext
         state.destination = {};
         state.visibleCanvas = {};
         state.letterboxColor = {};
-        state.filter = FilterMode::nearest;
+        state.linearCanvasSampling = false;
         state.imageExtent = {};
         state.contentHash = 0u;
         state.canvasHash = 0u;
@@ -927,6 +928,15 @@ namespace epochengine::vulkancontext
 
         const canvas2d::cpu::Image &image = prepared.raster->canvas;
         const canvas2d::FinalComposePlan &compose = prepared.frame->compose;
+        const auto nativeComposePolicy =
+            canvas2d::presentation::make_native_compose_policy(
+                compose,
+                canvas2d::presentation::ImageContract{
+                    image.extent,
+                    image.format,
+                    canvas2d::presentation::PixelOrigin::top_left,
+                    canvas2d::SpriteColorSpace::linear,
+                    canvas2d::cpu::AlphaEncoding::premultiplied});
         const std::uint64_t uploadBytes =
             static_cast<std::uint64_t>(image.pixels.size()) *
             sizeof(canvas2d::cpu::Rgba8);
@@ -938,7 +948,8 @@ namespace epochengine::vulkancontext
                 static_cast<std::uint32_t>(sceneViewport.width) ||
             compose.viewport.output_surface.height !=
                 static_cast<std::uint32_t>(sceneViewport.height) ||
-            compose.viewport.clipped_destination.empty()) {
+            compose.viewport.clipped_destination.empty() ||
+            !nativeComposePolicy) {
           if (!state.refusalLogged) {
             log_error(
                 "Canvas2D prepare refused an invalid or oversized upload.");
@@ -1069,7 +1080,16 @@ namespace epochengine::vulkancontext
             vk::UniqueImageView nextView =
                 createImageViewUnique(*nextImage, vk::Format::eR8G8B8A8Unorm,
                                       vk::ImageAspectFlagBits::eColor);
-            const auto createSampler = [&](vk::Filter filter) {
+            const auto createSampler = [&](canvas2d::presentation::NativeSampleFilter sampleFilter) {
+              if (sampleFilter != canvas2d::presentation::NativeSampleFilter::nearest
+                  && sampleFilter != canvas2d::presentation::NativeSampleFilter::linear) {
+                throw std::runtime_error(
+                    "[ Vulkan ] - Canvas2D sampler policy is invalid.");
+              }
+              const vk::Filter filter = sampleFilter
+                      == canvas2d::presentation::NativeSampleFilter::nearest
+                  ? vk::Filter::eNearest
+                  : vk::Filter::eLinear;
               vk::SamplerCreateInfo samplerInfo{};
               samplerInfo.magFilter = filter;
               samplerInfo.minFilter = filter;
@@ -1089,8 +1109,10 @@ namespace epochengine::vulkancontext
                     "[ Vulkan ] - Canvas2D sampler creation failed.");
               return std::move(result.value);
             };
-            vk::UniqueSampler nextNearest = createSampler(vk::Filter::eNearest);
-            vk::UniqueSampler nextLinear = createSampler(vk::Filter::eLinear);
+            vk::UniqueSampler nextNearest = createSampler(
+                canvas2d::presentation::NativeSampleFilter::nearest);
+            vk::UniqueSampler nextLinear = createSampler(
+                canvas2d::presentation::NativeSampleFilter::linear);
 
             const std::uint32_t descriptorCount =
                 static_cast<std::uint32_t>(swapChainImages.size());
@@ -1277,7 +1299,8 @@ namespace epochengine::vulkancontext
         state.destination = nextDestination;
         state.visibleCanvas = compose.viewport.visible_canvas;
         state.letterboxColor = compose.letterbox_color;
-        state.filter = compose.presentation_filter;
+        state.linearCanvasSampling = nativeComposePolicy.sample_filter
+            == canvas2d::presentation::NativeSampleFilter::linear;
         state.contentHash = prepared.content_hash;
         state.frameSequence = prepared.frame->frame_sequence;
         state.clearLetterbox = compose.clear_letterbox;
