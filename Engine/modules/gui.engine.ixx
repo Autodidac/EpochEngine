@@ -310,6 +310,9 @@ namespace epochengine::gui
         std::string_view id{};
         Vec2 size{};
         float content_height{ 0.0f };
+        // Negative values preserve the retained scroll position. A finite,
+        // non-negative value requests a clamped position before wheel input.
+        float requested_scroll_y{ -1.0f };
         bool draw_background{ false };
         bool show_scrollbar{ true };
         bool capture_wheel{ true };

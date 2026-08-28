@@ -1140,6 +1140,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.application.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter_contract.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine_legacy.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
@@ -1156,6 +1162,9 @@
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\image.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\hierarchy_tree.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp">
@@ -1405,6 +1414,9 @@
       <Filter>Module Files\epochengine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx">
+      <Filter>Module Files\epochengine\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx">
       <Filter>Module Files\epochengine\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp">

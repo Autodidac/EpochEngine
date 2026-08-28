@@ -81,6 +81,7 @@ module editor.core;
 
 import gui.engine;
 import epoch.gui;
+import editor.hierarchy_adapter;
 import editor.code_workspace;
 import visuals.engine;
 import epoch.version;
@@ -1005,6 +1006,13 @@ namespace epochengine
             bool sceneInteractionDirty{ true };
             std::size_t selectedEntity{ 0 };
             scene::SceneObjectId selectedEntityId{ scene::kInvalidSceneObjectId };
+            editor_hierarchy::Controller worldHierarchy{};
+            std::string worldHierarchyFilter{};
+            std::string worldHierarchyStatus{"Hierarchy ready."};
+            float worldHierarchyScrollY{};
+            float worldHierarchyRequestedScrollY{-1.0f};
+            scene::SceneObjectId worldHierarchyScrollSelection{
+                scene::kInvalidSceneObjectId};
             std::uint64_t sceneDocumentRevision{ 1u };
             std::vector<std::string> logLines{};
             bool helpersVisible{ true };
@@ -24075,6 +24083,77 @@ namespace epochengine
         gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
         gui::property_row("[outliner] Scene file", file_ready_summary(editor.projectScenePath), 104.0f);
 
+        std::vector<editor_hierarchy::EntityRecord> hierarchyEntities{};
+        hierarchyEntities.reserve(editor.entities.size());
+        for (std::size_t index = 0u; index < editor.entities.size(); ++index)
+        {
+            const EditorEntity& entity = editor.entities[index];
+            hierarchyEntities.push_back(editor_hierarchy::EntityRecord{
+                .canonical_id = entity.sceneObjectId,
+                .label = entity.name,
+                .type = entity.type,
+                .category = entity.category,
+                .order = static_cast<std::uint64_t>(index),
+                .visible = entity.visible,
+                .locked = !application.allow_entity_authoring});
+        }
+        const editor_hierarchy::Result hierarchyRefresh =
+            editor.worldHierarchy.refresh(
+                editor_scene_identity(editor),
+                hierarchyEntities,
+                editor.selectedEntityId);
+        if (!hierarchyRefresh)
+        {
+            editor.worldHierarchyStatus =
+                "Hierarchy refresh rejected: "
+                + std::string(editor_hierarchy::code_name(
+                    hierarchyRefresh.code));
+        }
+        else
+        {
+            const editor_hierarchy::Snapshot hierarchySnapshot =
+                editor.worldHierarchy.snapshot();
+            if (hierarchySnapshot.filter != editor.worldHierarchyFilter)
+            {
+                const editor_hierarchy::Result filterResult =
+                    editor.worldHierarchy.set_filter(
+                        editor.worldHierarchyFilter);
+                if (!filterResult)
+                {
+                    editor.worldHierarchyStatus =
+                        "Hierarchy filter rejected: "
+                        + std::string(editor_hierarchy::code_name(
+                            filterResult.code));
+                }
+                else
+                {
+                    editor.worldHierarchyStatus = "Hierarchy synchronized.";
+                }
+            }
+            else
+            {
+                editor.worldHierarchyStatus = "Hierarchy synchronized.";
+            }
+        }
+
+        const auto route_selected_hierarchy_action =
+            [&](editor_hierarchy::Action action) -> bool
+        {
+            const editor_hierarchy::NodeId selectedNode =
+                editor.worldHierarchy.node_for_entity(
+                    editor.selectedEntityId);
+            const editor_hierarchy::Route route =
+                editor.worldHierarchy.route(action, selectedNode);
+            if (!route)
+            {
+                editor.worldHierarchyStatus =
+                    "Hierarchy action rejected: "
+                    + std::string(editor_hierarchy::code_name(route.code));
+                return false;
+            }
+            return true;
+        };
+
         if (application.allow_entity_authoring)
         {
             const bool worldSurfaceActive = workspace_command_surface(editor)
@@ -24130,9 +24209,13 @@ namespace epochengine
             if (const auto action = gui::inline_button_row(
                     outlinerMutationButtons, 26.0f, 5.0f))
             {
-                if (*action == 0u)
+                if (*action == 0u
+                    && route_selected_hierarchy_action(
+                        editor_hierarchy::Action::duplicate_entity))
                     (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
-                else
+                else if (*action == 1u
+                    && route_selected_hierarchy_action(
+                        editor_hierarchy::Action::delete_entity))
                     (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
             }
             const std::array outlinerSelectionButtons{
@@ -24142,9 +24225,13 @@ namespace epochengine
             if (const auto action = gui::inline_button_row(
                     outlinerSelectionButtons, 26.0f, 5.0f))
             {
-                if (*action == 0u)
+                if (*action == 0u
+                    && route_selected_hierarchy_action(
+                        editor_hierarchy::Action::focus))
                     (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::focus_selection);
-                else
+                else if (*action == 1u
+                    && route_selected_hierarchy_action(
+                        editor_hierarchy::Action::deselect))
                     clear_editor_selection(editor);
             }
         }
@@ -24159,25 +24246,153 @@ namespace epochengine
             if (const auto action = gui::inline_button_row(
                     selectionActions, 26.0f, 5.0f))
             {
-                if (*action == 0u)
+                if (*action == 0u
+                    && route_selected_hierarchy_action(
+                        editor_hierarchy::Action::focus))
                     handle_scene_tool(editor, ctx.get(), "focus_selection");
-                else
+                else if (*action == 1u
+                    && route_selected_hierarchy_action(
+                        editor_hierarchy::Action::deselect))
                     clear_editor_selection(editor);
             }
         }
 
-        for (std::size_t i = 0; i < editor.entities.size(); ++i)
+        gui::label("Hierarchy filter");
+        (void)gui::edit_box(
+            editor.worldHierarchyFilter,
+            {outlinerWidth, 28.0f},
+            160u,
+            false);
+
+        const float hierarchyRowHeight = 30.0f;
+        const float hierarchyViewportHeight = (std::clamp)(
+            outlinerScrollHeight * 0.55f, 112.0f, 420.0f);
+        const editor_hierarchy::Snapshot hierarchySnapshot =
+            editor.worldHierarchy.snapshot();
+        const float hierarchyContentHeight = (std::max)(
+            hierarchyViewportHeight,
+            static_cast<float>(hierarchySnapshot.visible_rows)
+                * hierarchyRowHeight);
+
+        if (editor.selectedEntityId != editor.worldHierarchyScrollSelection)
         {
-            const auto& entity = editor.entities[i];
-            std::string label = (entity.sceneObjectId == editor.selectedEntityId ? "> " : "") + entity.name + "  |  " + entity.type + "  |  " + entity.category;
-            if (!entity.visible)
-                label += " (hidden)";
-            if (gui::button(label, { outlinerWidth, 28.0f }))
+            const editor_hierarchy::ScrollPlan scroll =
+                editor.worldHierarchy.scroll_to_entity(
+                    editor.selectedEntityId,
+                    editor_hierarchy::Viewport{
+                        .row_height = hierarchyRowHeight,
+                        .viewport_height = hierarchyViewportHeight,
+                        .scroll_y = editor.worldHierarchyScrollY,
+                        .overscan_rows = 2u});
+            if (scroll)
+                editor.worldHierarchyRequestedScrollY = scroll.scroll_y;
+            editor.worldHierarchyScrollSelection = editor.selectedEntityId;
+        }
+
+        const gui::ScrollAreaResult hierarchyScroll = gui::begin_scroll_area(
+            gui::ScrollAreaOptions{
+                .id = "world-outliner-hierarchy-tree",
+                .size = {outlinerWidth, hierarchyViewportHeight},
+                .content_height = hierarchyContentHeight,
+                .requested_scroll_y = editor.worldHierarchyRequestedScrollY,
+                .draw_background = true,
+                .show_scrollbar = true,
+                .capture_wheel = true});
+        editor.worldHierarchyRequestedScrollY = -1.0f;
+        editor.worldHierarchyScrollY = hierarchyScroll.scroll_y;
+        const editor_hierarchy::LayoutPlan hierarchyLayout =
+            editor.worldHierarchy.plan_rows(editor_hierarchy::Viewport{
+                .row_height = hierarchyRowHeight,
+                .viewport_height = hierarchyViewportHeight,
+                .scroll_y = hierarchyScroll.scroll_y,
+                .overscan_rows = 2u});
+        const gui::Vec2 hierarchyOrigin = gui::cursor_position();
+        const std::span<const editor_hierarchy::RowView> hierarchyRows =
+            editor.worldHierarchy.rows();
+        if (hierarchyLayout)
+        {
+            for (const editor_hierarchy::LayoutRow& layoutRow
+                : hierarchyLayout.rows)
             {
-                select_editor_entity(editor, i);
-                push_editor_log(editor, std::string("[select] ") + entity.name);
+                if (layoutRow.row_index >= hierarchyRows.size())
+                    continue;
+                const editor_hierarchy::RowView& row =
+                    hierarchyRows[layoutRow.row_index];
+                gui::set_cursor({
+                    hierarchyOrigin.x,
+                    hierarchyOrigin.y + layoutRow.top});
+                std::string label(row.depth * 2u, ' ');
+                if (row.group)
+                {
+                    label += row.has_children
+                        ? (row.expanded ? "[-] " : "[+] ")
+                        : "    ";
+                }
+                else
+                {
+                    label += row.selected ? "> " : "  ";
+                }
+                label += row.label;
+                if (!row.detail.empty())
+                    label += "  |  " + row.detail;
+                if (row.locked)
+                    label += "  [locked]";
+
+                if (!gui::button(
+                        label,
+                        {outlinerWidth - 12.0f, hierarchyRowHeight - 2.0f}))
+                {
+                    continue;
+                }
+
+                if (row.group)
+                {
+                    const editor_hierarchy::Result toggled =
+                        editor.worldHierarchy.toggle_expanded(row.node_id);
+                    if (!toggled)
+                    {
+                        editor.worldHierarchyStatus =
+                            "Hierarchy expansion rejected: "
+                            + std::string(editor_hierarchy::code_name(
+                                toggled.code));
+                    }
+                    continue;
+                }
+
+                const editor_hierarchy::Route routed =
+                    editor.worldHierarchy.route(
+                        editor_hierarchy::Action::select,
+                        row.node_id);
+                if (!routed || routed.targets.empty())
+                {
+                    editor.worldHierarchyStatus =
+                        "Hierarchy selection rejected: "
+                        + std::string(editor_hierarchy::code_name(
+                            routed.code));
+                    continue;
+                }
+                if (const auto index = editor_entity_index(
+                        editor, routed.targets.front()))
+                {
+                    select_editor_entity(editor, *index);
+                    (void)editor.worldHierarchy.synchronize_selection(
+                        routed.targets.front());
+                    editor.worldHierarchyScrollSelection =
+                        routed.targets.front();
+                    push_editor_log(
+                        editor,
+                        std::string("[select] ") + row.label);
+                }
             }
         }
+        gui::set_cursor({
+            hierarchyOrigin.x,
+            hierarchyOrigin.y + hierarchyContentHeight});
+        gui::end_scroll_area();
+        gui::property_row(
+            "Hierarchy",
+            editor.worldHierarchyStatus,
+            84.0f);
         }
         else if (editor.outlinerToolTab == OutlinerToolTab::Assets)
         {

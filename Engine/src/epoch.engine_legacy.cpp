@@ -142,6 +142,7 @@ import editor.project_textures;
 import editor.workspace_layout;
 import editor.workspace_commands;
 import editor.code_workspace;
+import editor.hierarchy_adapter;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import editor.tilemap_workspace;
 #endif
@@ -2568,6 +2569,10 @@ namespace epochengine::core
         check(
             "editor.code_workspace",
             epochengine::editor_code_workspace::run_contract());
+        check(
+            "editor.hierarchy_adapter",
+            epochengine::editor_hierarchy::run_contract()
+                == epochengine::editor_hierarchy::ContractFailure::none);
         check(
             "extension.catalog",
             epochengine::extension_catalog::run_contract()

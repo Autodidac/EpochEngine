@@ -427,6 +427,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.plant_lab.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.canvas2d_scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_evidence.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene_contract.cpp" />
@@ -543,6 +545,7 @@
       <AdditionalOptions>/bigobj /Zm2000 /Od /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\image.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\hierarchy_tree.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\tile_workspace.cpp" />
@@ -731,6 +734,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp" />

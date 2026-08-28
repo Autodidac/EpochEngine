@@ -9204,6 +9204,12 @@ namespace epochengine::gui
         if (!std::isfinite(state.scrollY))
             state.scrollY = 0.0f;
         state.scrollY = (std::clamp)(state.scrollY, 0.0f, maxScroll);
+        if (std::isfinite(options.requested_scroll_y)
+            && options.requested_scroll_y >= 0.0f)
+        {
+            state.scrollY = (std::clamp)(
+                options.requested_scroll_y, 0.0f, maxScroll);
+        }
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);

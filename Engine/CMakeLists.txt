@@ -314,6 +314,7 @@ if(EPOCH_CI_HEADLESS_ONLY)
 endif()
 
 add_library(epoch_gui STATIC
+    dep/EpochGui/src/epochgui/hierarchy_tree.cpp
     dep/EpochGui/src/epochgui/image.cpp
     dep/EpochGui/src/epochgui/rounded_rect.cpp
     dep/EpochGui/src/epochgui/node_graph_workspace.cpp
@@ -461,6 +462,8 @@ set(EPOCH_SOURCES
     src/editor/editor.plant_lab.cpp
     src/editor/editor.gui.cpp
     src/editor/editor.canvas2d_scene.cpp
+    src/editor/editor.hierarchy_adapter.cpp
+    src/editor/editor.hierarchy_adapter_contract.cpp
     src/editor/editor.project_textures.cpp
     src/editor/editor.project_input_settings.cpp
     src/editor/editor.project_input_settings_contract.cpp
@@ -1712,6 +1715,30 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_editor_project_input_settings_contract
         COMMAND epoch_editor_project_input_settings_contract
+    )
+
+    add_executable(epoch_editor_hierarchy_adapter_contract
+        dep/EpochGui/src/epochgui/hierarchy_tree.cpp
+        src/editor/editor.hierarchy_adapter.cpp
+        src/editor/editor.hierarchy_adapter_contract.cpp
+    )
+    target_sources(epoch_editor_hierarchy_adapter_contract PRIVATE
+        FILE_SET epoch_editor_hierarchy_adapter_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/editor.hierarchy_adapter.ixx
+    )
+    target_include_directories(epoch_editor_hierarchy_adapter_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/include
+    )
+    target_compile_definitions(epoch_editor_hierarchy_adapter_contract PRIVATE
+        EPOCH_EDITOR_HIERARCHY_ADAPTER_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_editor_hierarchy_adapter_contract)
+    epoch_apply_warnings(epoch_editor_hierarchy_adapter_contract)
+    epoch_apply_sanitizers(epoch_editor_hierarchy_adapter_contract)
+    add_test(
+        NAME epoch_editor_hierarchy_adapter_contract
+        COMMAND epoch_editor_hierarchy_adapter_contract
     )
 
     add_executable(epoch_project_actor2d_contract
