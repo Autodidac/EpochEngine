@@ -657,8 +657,12 @@ The working tree contains these current or in-progress foundations:
   shortcuts with project controls. `project.input_controller` maps one immutable,
   generation-checked process snapshot into that profile per project frame,
   preserves held/axis continuity, and consumes each physical press edge once.
-  Project Controls edits keyboard, controller button/axis/slot, and uniform dead
-  zone meaning through the same revisioned source/compile/publish path;
+  `editor.project_input_settings` now owns the Project Defaults Input Manager:
+  edits are staged, physical-binding conflicts are non-destructive and visible,
+  Apply is revision-guarded, and Discard, staged defaults, and disk reload are
+  explicit. Settings routes directly to that surface. Generated Game shells and
+  Platformer materialize the canonical profile; Tool and engine-development
+  shells remain absent by default with one explicit opt-in policy;
 - `project.actor2d_runtime` consumes evaluated action frames and authored map
   collision through `physics.solver2d`. It owns fixed-step actor movement,
   spawn, pause, reset, snapshots, bounded catch-up, stable contacts, and a

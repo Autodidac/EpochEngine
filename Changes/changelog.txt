@@ -14,6 +14,18 @@
   D3D11 and Vulkan use the bounded Canvas2D native-readback evidence contract
   without broadening ordinary frame capture. Native eye-test claims remain
   separate from build and contract evidence.
+- Add the first-class `editor.project_input_settings` controller over the
+  canonical project input profile. Keyboard/controller/dead-zone edits now stage
+  in memory, reject duplicate physical bindings non-destructively, prepare
+  revision-bound source/artifact save plans, and support explicit Apply,
+  Discard, staged defaults, and disk reload from both Project Defaults and the
+  main Settings route.
+- Provision the canonical project input source and compiled artifact for every
+  generated Game shell and the registered Platformer profile. Tool and
+  engine-development projects remain input-free by default and require the
+  explicit `EditorProjectInputProvision::explicitly_enabled` creation route.
+  Focused controller contracts, Debug EpochEditor, source naming, and the
+  build-safe aggregate engine contract pass without a GUI launch.
 
 ### Release boundary
 
