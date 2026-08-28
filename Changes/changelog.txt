@@ -18,6 +18,20 @@
   and build-safe aggregate contracts. Rebuilt Debug/Release executables are
   30,265,344 / 9,596,416 bytes with SHA-256 `72386063...886a8` /
   `ef50e483...90903`; no GUI or renderer was launched.
+- Stage the final binary-first v0.89.30 runtime set from exact commit
+  `5d6fcf982d9d8e062d0dc919502444bb5cf3458d` after the editor/engine identity
+  and responsive EpochGui passes. Windows ZIP is 29,736,248 bytes with SHA-256
+  `fb222ac7ae0ed21ce4f231c30e942db82f0a6226c8f7c569016eb985af70580a`;
+  Linux tar.gz is 31,119,632 bytes with SHA-256
+  `bc5cedb8e59614d8dc38327a1657e4fcd63f5cd0b82dccc576365f70b6e60435`.
+  Both staged packages report v0.89.30 and pass the aggregate build-safe engine
+  contract. Windows contains exactly one root `EpochEditor.exe`; neither archive
+  contains the legacy target, Git metadata, logs, or caches. Linux renderer
+  smoke remains explicitly skipped and native pixels unclaimed.
+- Record commercial asset admission as a provenance gate: professional content
+  requires an explicit compatible commercial-use license, exact origin/version,
+  attribution terms, archive digest, and installed-path record. Concept art and
+  AI-generated imagery remain reference-only rather than shippable content.
 - Rebuild the cleaned targets in MSVC Debug and Release and pass both build-safe
   aggregate contracts without launching a GUI. Debug EpochEditor/EpochEngine.lib
   are 30,246,400 / 637,881,618 bytes with SHA-256

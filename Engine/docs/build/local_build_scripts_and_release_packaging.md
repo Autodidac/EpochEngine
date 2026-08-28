@@ -261,9 +261,11 @@ asset must have a companion
 require no credential; source reads require server authorization; administrative
 writes remain protected by a hosted secret that must never enter source,
 manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
-GitHub. `v0.89.28` is the current development source authority and latest fully
-published runtime. Keep `v0.89.27` and `v0.89.06` available as release history
-rather than as the active updater default. Publish Windows ZIP and Linux tar.gz
+GitHub. `v0.89.30` is the current development source and packaged-runtime
+candidate; `v0.89.29` remains the fully published runtime authority until the
+separate binary-first Site publication completes. Keep `v0.89.28`, `v0.89.27`,
+and `v0.89.06` available as release history rather than as the active updater
+default. Publish Windows ZIP and Linux tar.gz
 runtime forms, with a checksum
 sidecar for every public object and live post-deploy digest verification.
 

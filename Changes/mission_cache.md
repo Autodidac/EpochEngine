@@ -45,6 +45,13 @@
   scene, inspector, timeline, task, output, performance, and AI workspaces; the
   engine supplies only real scene components, materials, tracks, simulation,
   build, and telemetry data. Never fake cinematic content or capability claims.
+- Do not convert the concept images into shipped AI-generated art. When a later
+  content pass needs production assets, admit only professional third-party
+  assets whose exact origin, version, commercial-use license, attribution terms,
+  archive digest, and installed project/package paths are recorded. Keep source
+  downloads outside the repo until that provenance gate passes, then stage only
+  the reviewed asset payload and required license material; remove temporary
+  downloads and extraction debris afterward.
 - Iterate through substantial bounded parity passes across every supported
   editor/renderer context. Each cycle is focused implementation, local
   headless/contract plus Debug/Release evidence, a rollbackable checkpoint,
@@ -58,6 +65,16 @@
   renamed source checkpoint for source rebuilds. A following newer source
   checkpoint then exercises the renamed updater lane without stranding the old
   client.
+- The final binary-first v0.89.30 candidate is built from exact commit
+  `5d6fcf982d9d8e062d0dc919502444bb5cf3458d`. Windows is 29,736,248 bytes /
+  SHA-256
+  `fb222ac7ae0ed21ce4f231c30e942db82f0a6226c8f7c569016eb985af70580a`;
+  Linux is 31,119,632 bytes / SHA-256
+  `bc5cedb8e59614d8dc38327a1657e4fcd63f5cd0b82dccc576365f70b6e60435`.
+  Both staged packages pass version and build-safe engine contracts. Windows has
+  one root `EpochEditor.exe`; both archives exclude legacy target names, Git
+  metadata, logs, and caches. Linux native pixels remain unclaimed because its
+  renderer smoke was explicitly skipped.
 - Preserve the temporal GUI authoring boundary: `authoring.gui_document` owns
   stable widget meaning/history plus layout, style, interaction, image, and tab
   state; EpochGui owns reusable image, tab, text, and graph controls; editor

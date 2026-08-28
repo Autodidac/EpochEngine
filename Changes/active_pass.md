@@ -23,6 +23,17 @@
   and 9,596,416 bytes / SHA-256
   `ef50e4836ccb555ad95b233d8b6c5f052248e109c1ee51b097ffec4f46f90903`.
   Exact-build eye evidence remains an operator gate.
+- The binary-first v0.89.30 release candidate is staged from exact commit
+  `5d6fcf982d9d8e062d0dc919502444bb5cf3458d`. The Windows ZIP is 29,736,248
+  bytes with SHA-256
+  `fb222ac7ae0ed21ce4f231c30e942db82f0a6226c8f7c569016eb985af70580a`;
+  it contains exactly one root `EpochEditor.exe` and no legacy target, Git,
+  log, or cache paths. The Linux tar.gz is 31,119,632 bytes with SHA-256
+  `bc5cedb8e59614d8dc38327a1657e4fcd63f5cd0b82dccc576365f70b6e60435`
+  under one package prefix with the same debris checks. Both staged packages
+  report v0.89.30 and pass the build-safe aggregate engine contract. The Linux
+  candidate is build/contract-proven only because native renderer smoke was
+  explicitly skipped. Publish this runtime before activating renamed source.
 - The identity baseline is checkpointed at exact local commit
   `2d0f3c9a1df7a7ca52eb0419b01840ece80483cc` and held by the Site task as
   not published/not active. Do not activate renamed source for the shipped
@@ -34,6 +45,10 @@
   task/evidence composition, engine-backed data, and every supported renderer
   context. Local Debug/Release/headless admission precedes each intermittent
   Site release; cinematic assets or unsupported features are never fabricated.
+  Third-party visual/audio content may enter a commercial package only from a
+  professional source with an explicit compatible commercial-use license,
+  retained origin/version/license evidence, and deterministic package admission;
+  generated concept art remains design reference only.
 - EpochEngine source distribution is now a restricted development boundary for
   `v0.89.30`; Site source discovery is `v0.89.30` while packaged runtime remains `v0.89.29`. Smart Update is
   binary-first; authorized encrypted source is its
