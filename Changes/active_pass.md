@@ -1,3 +1,10 @@
+- The local v0.89.32 source candidate advances both source-version authorities,
+  source-build Windows metadata, updater discovery fixtures, validation receipts,
+  and AI campaign evidence together while every packaged-version authority and
+  published runtime remains v0.89.30. The AI development panel now consumes the
+  real updater source authority instead of carrying a release literal. The
+  D3D11/Vulkan readback evidence checkpoint at `102bb9135ed6bf452ac227d14fa56b03d14f76b7`
+  is included in this source line; publication remains a separate human-owned pass.
 - Engine Development now binds explicitly shared source to a typed non-GUI
   self-iteration pipeline. Verified checkout/cache authority, current curated
   hashes, strict project profiles, durable campaign restoration, guarded local
@@ -247,7 +254,7 @@
 
 ## Gate
 
-Prepare the distinct v0.89.31 source-only checkpoint so a published v0.89.30
+Prepare the distinct v0.89.32 source-only checkpoint so a published v0.89.30
 editor can exercise authenticated source discovery and acquisition.
 Preserve the accepted editor work around explicit project sessions,
 launcher-owned authoring applications, semantic GUI deletion, and a
@@ -407,7 +414,7 @@ staged Windows/Linux artifacts whose checksums are published and independently
 verified; do not convert build evidence into native interaction evidence.
 ## Release Baseline
 
-`v0.89.31` is the current development source. `v0.89.30` is the published
+`v0.89.32` is the current development source. `v0.89.30` is the published
 binary-first Windows/Linux runtime from exact source commit
 `5d6fcf982d9d8e062d0dc919502444bb5cf3458d`. Its build-safe Windows and Linux
 contracts pass; no GUI or renderer was launched. The Windows ZIP is 29,736,248
@@ -1244,7 +1251,7 @@ Do not use this gate to:
 
 ## Acceptance
 
-The v0.89.30 source gate records these completed source contracts:
+The v0.89.32 source gate records these completed source contracts:
 
 - immutable proposal digest, separate review/operator approval, private permit
   issuance, one execution claim, expiry/reuse/cancellation refusal, trusted

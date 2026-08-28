@@ -57,7 +57,7 @@ namespace epochengine::ai::iteration_session
             SourceAuthority source{
                 .kind = SourceAuthorityKind::explicit_checkout,
                 .root = std::filesystem::absolute(fixture.root),
-                .source_version = "0.89.31",
+                .source_version = "0.89.32",
                 .commit = "0123456789012345678901234567890123456789",
                 .receipt_digest = std::string(64u, 'a'),
                 .verified = true};
@@ -159,7 +159,7 @@ namespace epochengine::ai::iteration_session
             SourceAuthority source{
                 .kind = SourceAuthorityKind::verified_cache,
                 .root = std::filesystem::absolute(fixture.root),
-                .source_version = "0.89.31",
+                .source_version = "0.89.32",
                 .commit = "abcdefabcdefabcdefabcdefabcdefabcdefabcd",
                 .receipt_digest = std::string(64u, 'b'),
                 .verified = true};

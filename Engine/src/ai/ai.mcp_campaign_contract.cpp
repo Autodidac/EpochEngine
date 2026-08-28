@@ -75,7 +75,7 @@ namespace epochengine::ai::mcp_campaign
                 .target_kind = IterationTargetKind::engine_source,
                 .kind = SourceAuthorityKind::explicit_checkout,
                 .root = std::move(root),
-                .source_version = "0.89.31",
+                .source_version = "0.89.32",
                 .commit = std::string(40u, 'c'),
                 .receipt_digest = std::string(64u, 'd'),
                 .verified = true};

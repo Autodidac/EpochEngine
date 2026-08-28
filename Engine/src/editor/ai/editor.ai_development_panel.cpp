@@ -28,6 +28,7 @@ import ai.self_iteration_orchestrator;
 import editor.ai_development_controller;
 import gui.engine;
 import core.sha256;
+import updater.config;
 
 namespace epochengine::editor_ai_development_panel
 {
@@ -2346,7 +2347,8 @@ namespace epochengine::editor_ai_development_panel
             localOpenInput.source_snapshot_root =
                 fixture.path.generic_string();
             localOpenInput.source_authority_kind = "explicit_checkout";
-            localOpenInput.source_authority_version = "0.89.31";
+            localOpenInput.source_authority_version =
+                epochengine::updater::PROJECT_SOURCE_VERSION;
             localOpenInput.source_authority_commit =
                 "0123456789abcdef0123456789abcdef01234567";
             localOpenInput.source_authority_receipt_digest =

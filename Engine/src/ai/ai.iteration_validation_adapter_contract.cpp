@@ -148,7 +148,7 @@ namespace epochengine::ai::iteration_validation_adapter
                 .candidate_sha256 = repeated('b', 64u),
                 .source_commit = repeated('a', 40u),
                 .source_tree_sha256 = repeated('e', 64u),
-                .source_version = {0u, 89u, 31u},
+                .source_version = {0u, 89u, 32u},
                 .packaged_version = {0u, 89u, 30u},
                 .platform = build_validation::Platform::windows_x64,
                 .compiler = build_validation::Compiler::msvc,

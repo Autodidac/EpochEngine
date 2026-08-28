@@ -1,6 +1,6 @@
 # OS AI, MCP, Harness, And Evidence Policy
 
-Epoch source `v0.89.31` does not train or silently activate a model. It can
+Epoch source `v0.89.32` does not train or silently activate a model. It can
 invoke the verified Epoch-local Qwen3.8 installation or offload inference to an
 operator-managed external model machine, and it keeps model transport, MCP
 authority, execution, and evidence as separate concerns. The published

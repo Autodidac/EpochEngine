@@ -85,9 +85,9 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- `v0.89.30` is the current development source and packaged-runtime candidate;
-  `v0.89.29` is the published runtime authority until an explicitly authorized
-  Site publication. Preserve `v0.89.28`, `v0.89.27`, and `v0.89.06` as
+- `v0.89.32` is the current development source; `v0.89.30` is the published
+  packaged-runtime authority until an explicitly authorized Site publication.
+  Preserve `v0.89.29`, `v0.89.28`, `v0.89.27`, and `v0.89.06` as
   immutable release history and preserve
   `multicontext-base-stable` at
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Do not mutate verified release

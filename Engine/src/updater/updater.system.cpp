@@ -5831,9 +5831,9 @@ namespace epochengine::updater
                 fs::create_directories(path / "Engine/modules", ec);
                 std::ofstream{path / "Engine.sln"} << "solution\n";
                 std::ofstream{path / "Engine/modules/epoch.version.ixx"}
-                    << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 31\n";
+                    << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 32\n";
                 std::ofstream{path / "Engine/modules/engine.version.ixx"}
-                    << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 31\n";
+                    << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 32\n";
                 return !ec;
             };
         const bool shaped = write_shape(checkout) && write_shape(linked_checkout)
@@ -5843,7 +5843,7 @@ namespace epochengine::updater
         std::ofstream{checkout / ".git/HEAD"}
             << "fedcbafedcbafedcbafedcbafedcbafedcbafedc\n";
         std::ofstream{cached / ".epoch-source-authority"}
-            << "schema=epoch.source.authority.v1\nsource_version=0.89.31\n"
+            << "schema=epoch.source.authority.v1\nsource_version=0.89.32\n"
                "commit=0123456789012345678901234567890123456789\narchive_format=zip\n"
                "archive_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n";
         fs::create_directories(linked_git, git_ec);
@@ -6208,6 +6208,8 @@ namespace epochengine::updater
                !system_detail::json_document_within_release_limits(too_many_fields) &&
                !system_detail::json_document_within_release_limits(too_long_string) &&
                !system_detail::json_document_within_release_limits(too_large) &&
+               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.32") == 0 &&
+               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.31") > 0 &&
                system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.30") > 0 &&
                system_detail::compare_versions(PROJECT_PACKAGED_VERSION, "0.89.29") > 0 &&
                system_detail::compare_versions(PROJECT_PACKAGED_VERSION, "0.89.30") == 0 &&

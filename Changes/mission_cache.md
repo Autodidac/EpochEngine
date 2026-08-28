@@ -1,4 +1,15 @@
 # Mission Cache
+
+- v0.89.32 is the next source-only authority after the independently preserved
+  v0.89.31 Site checkpoint. Advance source identity, source-build metadata,
+  updater fixtures, validation receipts, and AI campaign evidence together;
+  keep all Windows/Linux/macOS packaged-version authorities and public runtime
+  assets at v0.89.30 until a separately authorized binary release. The AI
+  development panel must read the real source authority, never a release
+  literal. The D3D11/Vulkan readback-evidence checkpoint at
+  `102bb9135ed6bf452ac227d14fa56b03d14f76b7` is part of this source line, but
+  source publication, runtime packaging, upload, and release remain separate
+  operator-owned transactions.
 - Make independent AI development the primary product churn mission. Epoch must
   be able to complete a bounded engineering campaign without Codex: inspect
   host-curated source, plan related-file changes, edit only a disposable exact

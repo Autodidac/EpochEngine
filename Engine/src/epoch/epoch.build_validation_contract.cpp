@@ -34,7 +34,7 @@ namespace epochengine::build_validation
         [[nodiscard]] ValidationReceipt windows_receipt()
         {
             ValidationReceipt receipt{};
-            receipt.source_version = {0u, 89u, 31u};
+            receipt.source_version = {0u, 89u, 32u};
             receipt.packaged_version = {0u, 89u, 30u};
             receipt.source_commit = commit;
             receipt.source_tree_sha256 = digest;
@@ -44,7 +44,7 @@ namespace epochengine::build_validation
             receipt.target = "EpochEditor";
             receipt.toolchain = "msvc-19.44-vcpkg-static";
             receipt.artifact = {
-                "epoch_win10_x64_v0.89.31.zip", std::string{digest}, 4096u};
+                "epoch_win10_x64_v0.89.32.zip", std::string{digest}, 4096u};
             receipt.checks = {
                 passed(CheckLane::source_names),
                 passed(CheckLane::compile),
@@ -66,7 +66,7 @@ namespace epochengine::build_validation
     {
         try
         {
-            const SemanticVersion expected{0u, 89u, 31u};
+            const SemanticVersion expected{0u, 89u, 32u};
             const ValidationReceipt valid = windows_receipt();
             if (!admit(valid, expected))
                 return ContractFailure::valid_windows;
@@ -75,7 +75,7 @@ namespace epochengine::build_validation
             linux.platform = Platform::linux_x64;
             linux.compiler = Compiler::clang;
             linux.toolchain = "clang-22-vcpkg-static";
-            linux.artifact.name = "epoch_linux_x64_v0.89.31.tar.gz";
+            linux.artifact.name = "epoch_linux_x64_v0.89.32.tar.gz";
             linux.checks.push_back(passed(CheckLane::shared_library_resolution));
             if (!admit(linux, expected))
                 return ContractFailure::valid_linux_without_pixels;

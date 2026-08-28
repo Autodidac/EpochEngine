@@ -270,7 +270,7 @@ namespace epochengine::ai::self_iteration_orchestrator
             .target_kind = IterationTargetKind::engine_source,
             .kind = SourceAuthorityKind::explicit_checkout,
             .root = fs::weakly_canonical(engine_root, ec),
-            .source_version = "0.89.31",
+            .source_version = "0.89.32",
             .commit = std::string(40u, 'd'),
             .receipt_digest = std::string(64u, 'e'),
             .verified = !ec};

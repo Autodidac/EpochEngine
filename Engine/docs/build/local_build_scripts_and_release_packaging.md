@@ -261,7 +261,7 @@ asset must have a companion
 require no credential; source reads require server authorization; administrative
 writes remain protected by a hosted secret that must never enter source,
 manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
-GitHub. `v0.89.31` is the current development source; `v0.89.30` is the fully
+GitHub. `v0.89.32` is the current development source; `v0.89.30` is the fully
 published packaged-runtime authority. Preserve v0.89.29, v0.89.28, v0.89.27,
 and immutable v0.89.06 as rollback history until an explicit cleanup pass. The
 Site remains the only EpochEngine release authority. Publish Windows ZIP and
