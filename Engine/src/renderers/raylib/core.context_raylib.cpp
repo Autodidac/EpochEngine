@@ -18,6 +18,7 @@ import core.commandline;
 import core.context;
 import core.logger;
 import image.loader;
+import perf.tier;
 import raylib.api;
 import raylib.context;
 import raylib.renderer;
