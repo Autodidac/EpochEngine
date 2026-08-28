@@ -110,6 +110,7 @@ import project.asset_registry;
 import project.forest_library;
 import project.gui_library;
 import project.input_profile;
+import editor.project_input_settings;
 import project.lifecycle;
 import platform.child_process;
 import platform.filesystem;
@@ -896,6 +897,11 @@ namespace epochengine
             std::unique_ptr<
                 editor_project_textures::ProjectTextureController>
                 projectTextures{};
+            std::unique_ptr<
+                editor_project_input_settings::Controller>
+                projectInputSettings{};
+            std::string projectInputSettingsStatus{
+                "Open Input Manager to load the active project's bindings."};
             std::string projectTextureStatus{
                 "Create an editable texture or select a BMP, TGA, PPM, or .epoch_texture source."};
             std::string assetSearch{};
@@ -3662,6 +3668,9 @@ namespace epochengine
             state.projectAudioStatus =
                 "Open Project Audio to manage decoded cues and buses.";
             state.projectTextures.reset();
+            state.projectInputSettings.reset();
+            state.projectInputSettingsStatus =
+                "Open Input Manager to load the active project's bindings.";
             state.guiDocument.reset();
             state.guiDocumentRoot = {};
             state.guiDocumentWidgets.clear();
@@ -9744,6 +9753,197 @@ namespace epochengine
             return epochengine::format_text(
                 "{}% custom (controller source)",
                 roundedPercent);
+        }
+
+        [[nodiscard]] std::string project_input_settings_evidence(
+            const editor_project_input_settings::SettingsEvidence& evidence)
+        {
+            if (!evidence.conflicts.empty())
+            {
+                const auto& conflict = evidence.conflicts.front();
+                return epochengine::format_text(
+                    "Binding conflict: {} and {} use the same physical input.",
+                    conflict.binding.value,
+                    conflict.conflicting_binding.value);
+            }
+            return epochengine::format_text(
+                "{} | validation {} | edit {}",
+                editor_project_input_settings::settings_code_name(evidence.code),
+                project_input::validation_code_name(evidence.validation),
+                project_input::profile_edit_code_name(evidence.edit));
+        }
+
+        [[nodiscard]] bool load_project_input_settings(
+            EditorState& editor,
+            bool forceReload = false)
+        {
+            if (editor.projectId.empty() || editor.projectRoot.empty())
+            {
+                editor.projectInputSettings.reset();
+                editor.projectInputSettingsStatus =
+                    "Open a project before editing project input.";
+                return false;
+            }
+            if (!forceReload && editor.projectInputSettings)
+            {
+                const auto snapshot = editor.projectInputSettings->snapshot();
+                if (snapshot.loaded && snapshot.project_id == editor.projectId)
+                    return true;
+            }
+
+            project_input::ProjectInputProfileStore store{
+                editor.projectId,
+                std::filesystem::path{editor.projectRoot}};
+            if (!store.valid())
+            {
+                editor.projectInputSettings.reset();
+                editor.projectInputSettingsStatus =
+                    "Project input store is invalid.";
+                return false;
+            }
+
+            project_input::ProfileSource source{};
+            const auto loaded = store.load_source();
+            if (loaded)
+            {
+                source = loaded.source;
+            }
+            else if (loaded.code == project_input::StoreCode::not_found)
+            {
+                const auto artifact = store.load_artifact();
+                if (artifact)
+                {
+                    source = {
+                        .id = artifact.artifact.profile_id,
+                        .display_name = artifact.artifact.display_name,
+                        .revision = artifact.artifact.source_revision,
+                        .actions = artifact.artifact.actions,
+                        .bindings = artifact.artifact.bindings};
+                }
+                else if (artifact.code == project_input::StoreCode::not_found)
+                {
+                    source = project_input::make_legacy_default_profile();
+                }
+                else
+                {
+                    editor.projectInputSettings.reset();
+                    editor.projectInputSettingsStatus = std::string{
+                        "Input artifact "}
+                        + std::string{project_input::store_code_name(artifact.code)};
+                    return false;
+                }
+            }
+            else
+            {
+                editor.projectInputSettings.reset();
+                editor.projectInputSettingsStatus = std::string{"Input source "}
+                    + std::string{project_input::store_code_name(loaded.code)};
+                return false;
+            }
+
+            auto controller = std::make_unique<
+                editor_project_input_settings::Controller>();
+            const auto evidence = controller->load(
+                editor.projectId, std::move(source));
+            editor.projectInputSettingsStatus =
+                project_input_settings_evidence(evidence);
+            if (!evidence)
+            {
+                editor.projectInputSettings.reset();
+                return false;
+            }
+            editor.projectInputSettings = std::move(controller);
+            return true;
+        }
+
+        [[nodiscard]] EditorProjectInputUpdateResult
+            apply_project_input_settings(EditorState& editor)
+        {
+            if (!editor.projectInputSettings)
+                return {false, "Project input settings are not loaded."};
+            const auto plan = editor.projectInputSettings->prepare_save();
+            if (!plan)
+            {
+                editor.projectInputSettingsStatus = epochengine::format_text(
+                    "Apply blocked: {} / validation {}.",
+                    editor_project_input_settings::settings_code_name(plan.code),
+                    project_input::validation_code_name(plan.validation));
+                return {false, editor.projectInputSettingsStatus};
+            }
+
+            project_input::ProjectInputProfileStore store{
+                editor.projectId,
+                std::filesystem::path{editor.projectRoot}};
+            if (!store.valid())
+                return {false, "Project input store is invalid."};
+
+            const auto current = store.load_source();
+            if (current)
+            {
+                if (current.source.revision != plan.expected_base_revision)
+                {
+                    editor.projectInputSettingsStatus =
+                        "Apply blocked: project input changed on disk. Discard or reload before editing again.";
+                    return {false, editor.projectInputSettingsStatus};
+                }
+            }
+            else if (current.code == project_input::StoreCode::not_found)
+            {
+                const auto artifact = store.load_artifact();
+                if (artifact
+                    && artifact.artifact.source_revision
+                        != plan.expected_base_revision)
+                {
+                    editor.projectInputSettingsStatus =
+                        "Apply blocked: compiled project input changed on disk.";
+                    return {false, editor.projectInputSettingsStatus};
+                }
+                if (!artifact
+                    && artifact.code != project_input::StoreCode::not_found)
+                {
+                    editor.projectInputSettingsStatus = std::string{
+                        "Apply blocked: input artifact "}
+                        + std::string{project_input::store_code_name(artifact.code)};
+                    return {false, editor.projectInputSettingsStatus};
+                }
+            }
+            else
+            {
+                editor.projectInputSettingsStatus = std::string{
+                    "Apply blocked: input source "}
+                    + std::string{project_input::store_code_name(current.code)};
+                return {false, editor.projectInputSettingsStatus};
+            }
+
+            const auto published = store.publish_artifact(plan.artifact);
+            if (!published)
+            {
+                editor.projectInputSettingsStatus = std::string{
+                    "Input artifact publish "}
+                    + std::string{project_input::store_code_name(published.code)}
+                    + ". No source change was committed.";
+                return {false, editor.projectInputSettingsStatus};
+            }
+            const auto saved = store.save_source(plan.source);
+            if (!saved)
+            {
+                editor.projectInputSettingsStatus = std::string{
+                    "Artifact published; source save "}
+                    + std::string{project_input::store_code_name(saved.code)}
+                    + ". Apply again after resolving the source issue.";
+                return {false, editor.projectInputSettingsStatus};
+            }
+            const auto confirmed =
+                editor.projectInputSettings->confirm_saved(plan.revision);
+            editor.projectInputSettingsStatus =
+                project_input_settings_evidence(confirmed);
+            return {
+                static_cast<bool>(confirmed),
+                confirmed
+                    ? epochengine::format_text(
+                        "Project input source and artifact saved at revision {}.",
+                        plan.revision.sequence)
+                    : editor.projectInputSettingsStatus};
         }
 
         [[nodiscard]] std::span<const FrameLimitChoice> frame_limit_choices() noexcept
@@ -27834,15 +28034,23 @@ namespace epochengine
                 {
                     gui::label("Input Manager");
                     gui::wrapped_label(
-                        "These bindings belong to the active project. Keyboard, controller source, controller slot, and dead-zone edits publish directly to the project input source and Library artifact.",
+                        "These bindings belong to the active project. Edits stay in a validated draft until Apply publishes the canonical source and compiled Library artifact.",
                         centerWidth);
-                    const auto projectInput =
-                        editor_project_input_profile_summary(editor.projectId);
+                    const bool inputLoaded = load_project_input_settings(editor);
+                    const auto projectInput = inputLoaded
+                        ? editor.projectInputSettings->snapshot()
+                        : editor_project_input_settings::SettingsSnapshot{};
                     gui::property_row(
                         "[input] Source",
-                        projectInput.source_path.empty()
+                        inputLoaded
+                            ? std::string{project_input::canonical_source_path}
+                            : std::string{"Not loaded"},
+                        132.0f);
+                    gui::property_row(
+                        "[input] Profile",
+                        projectInput.display_name.empty()
                             ? std::string{"Not declared"}
-                            : projectInput.source_path,
+                            : projectInput.display_name,
                         132.0f);
                     gui::property_row(
                         "[input] Actions",
@@ -27852,14 +28060,34 @@ namespace epochengine
                             projectInput.binding_count),
                         132.0f);
                     gui::property_row(
-                        "[input] Status",
-                        projectInput.diagnostic.empty()
-                            ? std::string{"Unavailable"}
-                            : projectInput.diagnostic,
+                        "[input] Draft",
+                        inputLoaded
+                            ? epochengine::format_text(
+                                "{} | applied r{} | working r{}",
+                                projectInput.dirty ? "Modified" : "Clean",
+                                projectInput.applied_revision.sequence,
+                                projectInput.working_revision.sequence)
+                            : std::string{"Unavailable"},
                         132.0f);
-                    if (projectInput.ready)
+                    gui::property_row(
+                        "[input] Validation",
+                        editor.projectInputSettingsStatus,
+                        132.0f);
+                    if (!projectInput.evidence.conflicts.empty())
                     {
-                        const auto controllerSnapshot =
+                        for (const auto& conflict : projectInput.evidence.conflicts)
+                        {
+                            gui::wrapped_label(
+                                epochengine::format_text(
+                                    "Conflict: binding {} and binding {} resolve to the same physical input.",
+                                    conflict.binding.value,
+                                    conflict.conflicting_binding.value),
+                                centerWidth);
+                        }
+                    }
+                    if (inputLoaded)
+                    {
+                        const auto physicalControllerSnapshot =
                             controller_input::snapshot();
                         gui::property_row(
                             "[input] Keyboard",
@@ -27867,12 +28095,12 @@ namespace epochengine
                             132.0f);
                         gui::property_row(
                             "[input] Controller",
-                            controllerSnapshot.provider_available
+                            physicalControllerSnapshot.provider_available
                                 ? epochengine::format_text(
                                     "{} | {} connected | snapshot {}",
                                     controller_input::physical_provider_name(),
                                     controller_input::connected_count(),
-                                    controllerSnapshot.revision)
+                                    physicalControllerSnapshot.revision)
                                 : epochengine::format_text(
                                     "{} unavailable",
                                     controller_input::physical_provider_name()),
@@ -27885,15 +28113,17 @@ namespace epochengine
                             132.0f);
 
                         gui::label("Project Controls");
-                        const auto logInputUpdate =
-                            [&](const EditorProjectInputUpdateResult& update)
+                        const auto recordInputEdit =
+                            [&](const editor_project_input_settings::SettingsEvidence& evidence)
                             {
+                                editor.projectInputSettingsStatus =
+                                    project_input_settings_evidence(evidence);
                                 push_editor_log(
                                     editor,
-                                    std::string{update.succeeded
-                                        ? "[input] "
-                                        : "[input][ERROR] "}
-                                        + update.summary);
+                                    std::string{evidence
+                                        ? "[input] Draft updated: "
+                                        : "[input][ERROR] Draft rejected: "}
+                                        + editor.projectInputSettingsStatus);
                             };
 
                         const auto keyChoices = project_key_choices();
@@ -27932,11 +28162,10 @@ namespace epochengine
                         const bool hasControllerAxis = std::any_of(
                             projectInput.bindings.begin(),
                             projectInput.bindings.end(),
-                            [](const EditorProjectInputBindingSummary& binding)
+                            [](const editor_project_input_settings::BindingView& binding)
                             {
-                                return binding.kind
-                                    == EditorProjectInputBindingKind::
-                                        controller_axis;
+                                return binding.device
+                                    == project_input::BindingDevice::controller_axis;
                             });
                         if (hasControllerAxis)
                         {
@@ -27970,27 +28199,31 @@ namespace epochengine
                                 && *deadZoneSelect.selected_index
                                     < deadZoneChoices.size())
                             {
-                                logInputUpdate(
-                                    editor_set_project_controller_dead_zone(
-                                        editor.projectId,
-                                        deadZoneChoices[
-                                            *deadZoneSelect.selected_index]
-                                            .value_q15));
+                                recordInputEdit(
+                                    editor.projectInputSettings
+                                        ->set_controller_dead_zone(
+                                            deadZoneChoices[
+                                                *deadZoneSelect.selected_index]
+                                                .value_q15));
                             }
                         }
 
                         for (const auto& binding : projectInput.bindings)
                         {
-                            gui::label(binding.action);
-                            switch (binding.kind)
+                            gui::label(binding.action_label);
+                            gui::property_row(
+                                "[binding] Device",
+                                binding.source_label,
+                                132.0f);
+                            switch (binding.device)
                             {
-                            case EditorProjectInputBindingKind::keyboard:
+                            case project_input::BindingDevice::keyboard:
                             {
                                 const auto bindingSelect = gui::select_box(
                                     gui::SelectBoxOptions{
                                         .id = "project-input-key-"
                                             + std::to_string(
-                                                binding.stable_id),
+                                                binding.id.value),
                                         .placeholder = "Choose project key",
                                         .selected =
                                             project_key_label(binding.code),
@@ -28008,26 +28241,24 @@ namespace epochengine
                                     && *bindingSelect.selected_index
                                         < keyChoices.size())
                                 {
-                                    logInputUpdate(
-                                        editor_rebind_project_input(
-                                            editor.projectId,
-                                            binding.stable_id,
-                                            static_cast<std::uint16_t>(
+                                    recordInputEdit(
+                                        editor.projectInputSettings
+                                            ->rebind_keyboard(
+                                                binding.id,
                                                 keyChoices[
                                                     *bindingSelect
-                                                        .selected_index])));
+                                                        .selected_index]));
                                 }
                                 break;
                             }
-                            case EditorProjectInputBindingKind::
-                                controller_button:
+                            case project_input::BindingDevice::controller_button:
                             {
                                 const auto sourceSelect = gui::select_box(
                                     gui::SelectBoxOptions{
                                         .id =
                                             "project-input-controller-button-"
                                             + std::to_string(
-                                                binding.stable_id),
+                                                binding.id.value),
                                         .placeholder =
                                             "Choose controller button",
                                         .selected =
@@ -28052,22 +28283,21 @@ namespace epochengine
                                     && *sourceSelect.selected_index
                                         < buttonChoices.size())
                                 {
-                                    logInputUpdate(
-                                        editor_rebind_project_controller_button(
-                                            editor.projectId,
-                                            binding.stable_id,
-                                            static_cast<std::uint16_t>(
+                                    recordInputEdit(
+                                        editor.projectInputSettings
+                                            ->rebind_controller_button(
+                                                binding.id,
                                                 buttonChoices[
                                                     *sourceSelect
-                                                        .selected_index]),
-                                            binding.controller_slot));
+                                                        .selected_index],
+                                                binding.controller_slot));
                                 }
                                 const auto slotSelect = gui::select_box(
                                     gui::SelectBoxOptions{
                                         .id =
                                             "project-input-controller-button-slot-"
                                             + std::to_string(
-                                                binding.stable_id),
+                                                binding.id.value),
                                         .placeholder = "Choose controller",
                                         .selected =
                                             project_controller_slot_label(
@@ -28083,26 +28313,25 @@ namespace epochengine
                                     && *slotSelect.selected_index
                                         < slotLabels.size())
                                 {
-                                    logInputUpdate(
-                                        editor_rebind_project_controller_button(
-                                            editor.projectId,
-                                            binding.stable_id,
-                                            binding.code,
-                                            static_cast<std::uint8_t>(
-                                                *slotSelect
-                                                    .selected_index)));
+                                    recordInputEdit(
+                                        editor.projectInputSettings
+                                            ->rebind_controller_button(
+                                                binding.id,
+                                                static_cast<project_input::ControllerButton>(
+                                                    binding.code),
+                                                static_cast<std::uint8_t>(
+                                                    *slotSelect.selected_index)));
                                 }
                                 break;
                             }
-                            case EditorProjectInputBindingKind::
-                                controller_axis:
+                            case project_input::BindingDevice::controller_axis:
                             {
                                 const auto sourceSelect = gui::select_box(
                                     gui::SelectBoxOptions{
                                         .id =
                                             "project-input-controller-axis-"
                                             + std::to_string(
-                                                binding.stable_id),
+                                                binding.id.value),
                                         .placeholder =
                                             "Choose controller axis",
                                         .selected =
@@ -28127,22 +28356,21 @@ namespace epochengine
                                     && *sourceSelect.selected_index
                                         < axisChoices.size())
                                 {
-                                    logInputUpdate(
-                                        editor_rebind_project_controller_axis(
-                                            editor.projectId,
-                                            binding.stable_id,
-                                            static_cast<std::uint16_t>(
+                                    recordInputEdit(
+                                        editor.projectInputSettings
+                                            ->rebind_controller_axis(
+                                                binding.id,
                                                 axisChoices[
                                                     *sourceSelect
-                                                        .selected_index]),
-                                            binding.controller_slot));
+                                                        .selected_index],
+                                                binding.controller_slot));
                                 }
                                 const auto slotSelect = gui::select_box(
                                     gui::SelectBoxOptions{
                                         .id =
                                             "project-input-controller-axis-slot-"
                                             + std::to_string(
-                                                binding.stable_id),
+                                                binding.id.value),
                                         .placeholder = "Choose controller",
                                         .selected =
                                             project_controller_slot_label(
@@ -28158,32 +28386,77 @@ namespace epochengine
                                     && *slotSelect.selected_index
                                         < slotLabels.size())
                                 {
-                                    logInputUpdate(
-                                        editor_rebind_project_controller_axis(
-                                            editor.projectId,
-                                            binding.stable_id,
-                                            binding.code,
-                                            static_cast<std::uint8_t>(
-                                                *slotSelect
-                                                    .selected_index)));
+                                    recordInputEdit(
+                                        editor.projectInputSettings
+                                            ->rebind_controller_axis(
+                                                binding.id,
+                                                static_cast<project_input::ControllerAxis>(
+                                                    binding.code),
+                                                static_cast<std::uint8_t>(
+                                                    *slotSelect.selected_index)));
                                 }
                                 break;
                             }
                             }
                         }
+
+                        const auto actionSnapshot =
+                            editor.projectInputSettings->snapshot();
+                        const std::array inputDraftActions{
+                            gui::InlineButtonSpec{
+                                .label = "Apply Changes",
+                                .width = 132.0f,
+                                .enabled = actionSnapshot.dirty
+                                    && actionSnapshot.evidence.conflicts.empty()},
+                            gui::InlineButtonSpec{
+                                .label = "Discard Draft",
+                                .width = 124.0f,
+                                .enabled = actionSnapshot.dirty},
+                            gui::InlineButtonSpec{
+                                .label = "Stage Defaults",
+                                .width = 128.0f},
+                            gui::InlineButtonSpec{
+                                .label = "Reload Disk",
+                                .width = 112.0f,
+                                .enabled = !actionSnapshot.dirty}};
+                        if (const auto action = gui::inline_button_row(
+                                inputDraftActions, 30.0f, 6.0f))
+                        {
+                            if (*action == 0u)
+                            {
+                                const auto applied =
+                                    apply_project_input_settings(editor);
+                                push_editor_log(
+                                    editor,
+                                    std::string{applied.succeeded
+                                        ? "[input] " : "[input][ERROR] "}
+                                        + applied.summary);
+                            }
+                            else if (*action == 1u)
+                            {
+                                recordInputEdit(
+                                    editor.projectInputSettings->discard());
+                            }
+                            else if (*action == 2u)
+                            {
+                                recordInputEdit(
+                                    editor.projectInputSettings
+                                        ->reset_defaults());
+                            }
+                            else
+                            {
+                                (void)load_project_input_settings(editor, true);
+                                push_editor_log(
+                                    editor,
+                                    "[input] Reloaded project input from disk.");
+                            }
+                        }
                     }
-                    if (!projectInput.source_path.empty()
-                        && gui::button(
-                            "Restore Default Project Input",
-                            {(std::min)(centerWidth, 260.0f), 30.0f}))
+                    else if (gui::button(
+                        "Retry Input Load",
+                        {(std::min)(centerWidth, 220.0f), 30.0f}))
                     {
-                        const auto reset = editor_reset_project_input_profile(
-                            editor.projectId);
-                        push_editor_log(
-                            editor,
-                            std::string{reset.succeeded
-                                ? "[input] " : "[input][ERROR] "}
-                                + reset.summary);
+                        (void)load_project_input_settings(editor, true);
                     }
                 }
 
@@ -32080,7 +32353,21 @@ namespace epochengine
             if (modalSize.x >= 620.0f)
             {
                 gui::set_cursor({ contentPos.x + 326.0f, contentY + 214.0f });
-                gui::property_row("Input", std::string(input_profile_label(editor.inputProfilePreset)), 96.0f);
+                if (gui::button(
+                        has_open_project(editor)
+                            ? "Open Project Input Manager"
+                            : "Project Input: No Project",
+                        { roundingControlWidth, 30.0f }))
+                {
+                    editor.projectWorkspaceSection = 1u;
+                    open_editor_surface(
+                        EditorMainSurface::Project,
+                        "Project input settings");
+                    editor.showSettingsModal = false;
+                    push_editor_log(
+                        editor,
+                        "[settings] Opened the active project's Input Manager.");
+                }
             }
 
             const auto settingsLimitChoices = frame_limit_choices();
