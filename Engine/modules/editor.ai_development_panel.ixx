@@ -7,10 +7,13 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 export module editor.ai_development_panel;
+
+export import ai.source_patch_proposal;
 
 export namespace epochengine::editor_ai_development_panel
 {
@@ -35,6 +38,47 @@ export namespace epochengine::editor_ai_development_panel
         test_source_full_validation_workspace,
         request_model_source_proposal,
         execute_tool_harness
+    };
+
+    struct SourcePatchReviewBinding final
+    {
+        std::string admitted_response_sha256{};
+        std::string curated_bundle_sha256{};
+        std::string campaign_id{};
+        std::string objective_id{};
+        std::string operation_id{};
+        std::uint64_t supervisor_generation{};
+        std::string supervisor_state_sha256{};
+        bool disposable_sandbox_stager_ready{};
+
+        friend bool operator==(
+            const SourcePatchReviewBinding&,
+            const SourcePatchReviewBinding&) = default;
+    };
+
+    struct SourcePatchStagingRequest final
+    {
+        ai::source_patch_proposal::SealedProposal proposal{};
+        SourcePatchReviewBinding binding{};
+        bool sandbox_only{true};
+        bool live_source_write_permitted{};
+        bool promotion_permitted{};
+        bool release_permitted{};
+
+        friend bool operator==(
+            const SourcePatchStagingRequest&,
+            const SourcePatchStagingRequest&) = default;
+    };
+
+    struct SourcePatchReviewResult final
+    {
+        bool accepted{};
+        std::string status{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return accepted;
+        }
     };
 
     struct Input final
@@ -66,6 +110,7 @@ export namespace epochengine::editor_ai_development_panel
     {
         HostAction action{HostAction::none};
         bool reveal_source_workspace{true};
+        bool reveal_source_patch_workbench{};
         std::string status{};
         std::string model_prompt{};
         std::string source_root{};
@@ -74,6 +119,10 @@ export namespace epochengine::editor_ai_development_panel
         std::vector<std::string> source_paths{};
         std::vector<std::string> excluded_components{};
         std::vector<std::string> campaign_evidence{};
+        std::string source_patch_relative_path{};
+        std::string source_patch_postimage_utf8{};
+        std::vector<std::string> source_patch_evidence{};
+        std::optional<SourcePatchStagingRequest> source_patch_staging{};
         std::uint32_t workspace_generation{};
     };
 
@@ -95,6 +144,11 @@ export namespace epochengine::editor_ai_development_panel
         [[nodiscard]] RenderResult share_requested_source_context(
             const Input& input);
         [[nodiscard]] RenderResult reject_requested_source_context();
+        [[nodiscard]] SourcePatchReviewResult admit_source_patch_review(
+            ai::source_patch_proposal::SealedProposal proposal,
+            SourcePatchReviewBinding binding);
+        [[nodiscard]] RenderResult reject_source_patch_review();
+        [[nodiscard]] bool has_source_patch_review() const;
         [[nodiscard]] RenderResult complete_source_workspace(
             std::uint32_t generation,
             bool succeeded,

@@ -23,6 +23,7 @@ module editor.ai_development_panel;
 
 import ai.development_proposal_codec;
 import ai.curated_context_bundle;
+import ai.source_patch_proposal;
 import ai.iteration_campaign_queue;
 import ai.iteration_campaign_scheduler;
 import ai.iteration_loop;
@@ -954,6 +955,13 @@ namespace epochengine::editor_ai_development_panel
         std::vector<ai::curated_context_bundle::EntryEvidence>
             campaign_reviewed_evidence{};
         std::vector<std::string> campaign_reviewed_paths{};
+        std::optional<ai::source_patch_proposal::SealedProposal>
+            source_patch_review{};
+        SourcePatchReviewBinding source_patch_review_binding{};
+        std::size_t source_patch_selected_file{};
+        std::string source_patch_selected_path{};
+        std::string source_patch_review_status{
+            "No sealed source-patch proposal is admitted for review."};
         std::uint64_t campaign_transition_generation{};
         std::uint64_t campaign_control_generation{};
         std::uint32_t generation{};
@@ -1025,6 +1033,12 @@ namespace epochengine::editor_ai_development_panel
             campaign_bundle_binding_digest.clear();
             campaign_reviewed_evidence.clear();
             campaign_reviewed_paths.clear();
+            source_patch_review.reset();
+            source_patch_review_binding = {};
+            source_patch_selected_file = 0u;
+            source_patch_selected_path.clear();
+            source_patch_review_status =
+                "No sealed source-patch proposal is admitted for review.";
             campaign_transition_generation = 0u;
             campaign_control_generation = 0u;
             promotion_controller.reset();
@@ -1840,6 +1854,290 @@ namespace epochengine::editor_ai_development_panel
             return accepted;
         }
 
+        [[nodiscard]] static std::string_view source_patch_kind_name(
+            const ai::source_patch_proposal::OperationKind kind) noexcept
+        {
+            using Kind = ai::source_patch_proposal::OperationKind;
+            switch (kind)
+            {
+            case Kind::create: return "Create";
+            case Kind::update: return "Update";
+            case Kind::remove: return "Remove";
+            }
+            return "Unknown";
+        }
+
+        [[nodiscard]] bool validate_source_patch_review(
+            std::string& evidence,
+            const bool requireDisposableStager = true) const
+        {
+            evidence.clear();
+            if (!source_patch_review)
+            {
+                evidence = "No sealed source-patch proposal is admitted.";
+                return false;
+            }
+            const auto& proposal = *source_patch_review;
+            const auto& binding = source_patch_review_binding;
+            const bool immutablePacket =
+                proposal.schema == ai::source_patch_proposal::proposal_schema
+                && proposal.canonical_proposal_sha256.size() == 64u
+                && proposal.receipt.receipt_sha256.size() == 64u
+                && proposal.receipt.proposal_sha256
+                    == proposal.canonical_proposal_sha256
+                && proposal.receipt.request_sha256 == proposal.request_sha256
+                && proposal.simulated_in_memory
+                && proposal.human_review_required
+                && !proposal.applied && !proposal.compiled && !proposal.tested
+                && !proposal.promoted && !proposal.released
+                && proposal.authority.human_review_required
+                && proposal.authority.proposal_only
+                && !proposal.authority.source_apply_permitted
+                && !proposal.authority.arbitrary_file_read_permitted
+                && !proposal.authority.compiler_invocation_permitted
+                && !proposal.authority.model_launch_permitted
+                && !proposal.authority.network_permitted
+                && !proposal.authority.server_permitted
+                && !proposal.authority.listener_permitted
+                && !proposal.authority.promotion_permitted
+                && !proposal.authority.release_permitted
+                && !proposal.files.empty();
+            if (!immutablePacket)
+            {
+                evidence = "Proposal refused: its sealed receipt, proposal-only authority, or risk flags are invalid.";
+                return false;
+            }
+            for (const auto& file : proposal.files)
+            {
+                if (file.operation_id.empty() || file.relative_path.empty()
+                    || file.relative_path.starts_with('/')
+                    || file.relative_path.starts_with('\\')
+                    || file.relative_path.find("..") != std::string::npos
+                    || file.before_sha256.size() != 64u
+                    || file.after_sha256.size() != 64u
+                    || file.file_receipt_sha256.size() != 64u)
+                {
+                    evidence = "Proposal refused: a file operation lacks an exact safe path or digest receipt.";
+                    return false;
+                }
+                for (const auto& hunk : file.hunks)
+                {
+                    if (hunk.edit_id.empty() || hunk.start_line == 0u
+                        || hunk.before_sha256.size() != 64u
+                        || hunk.after_sha256.size() != 64u
+                        || hunk.hunk_sha256.size() != 64u)
+                    {
+                        evidence = "Proposal refused: a hunk lacks an exact range or digest receipt.";
+                        return false;
+                    }
+                }
+            }
+            if (!campaign_queue || !campaign_scheduler || !campaign_supervisor)
+            {
+                evidence = "Proposal is sealed, but no live supervisor state exists for binding validation.";
+                return false;
+            }
+            const auto queried = campaign_supervisor->query(
+                campaign_queue->snapshot(), campaign_scheduler->snapshot());
+            if (!queried)
+            {
+                evidence = "Proposal binding refused: supervisor query failed: "
+                    + queried.status;
+                return false;
+            }
+            const auto& live = queried.snapshot;
+            const auto item = std::find_if(
+                live.items.begin(), live.items.end(),
+                [&](const auto& candidate)
+                {
+                    return candidate.objective_id == binding.objective_id;
+                });
+            const bool exactBinding =
+                binding.admitted_response_sha256.size() == 64u
+                && binding.curated_bundle_sha256.size() == 64u
+                && binding.supervisor_state_sha256.size() == 64u
+                && binding.curated_bundle_sha256 == campaign_scope_digest
+                && binding.campaign_id == live.campaign_id
+                && binding.objective_id == live.active_objective_id
+                && binding.operation_id == live.active_operation_id
+                && binding.supervisor_generation == live.control_generation
+                && binding.supervisor_state_sha256 == live.control_state_sha256
+                && live.scheduler_phase
+                    == ai::iteration_campaign_scheduler::Phase::awaiting_human_review
+                && !live.source_write_permitted
+                && !live.promotion_permitted && !live.release_permitted
+                && !live.server_permitted
+                && !live.network_listener_permitted
+                && item != live.items.end()
+                && item->campaign_id == binding.campaign_id
+                && item->response_sha256
+                    == binding.admitted_response_sha256
+                && item->request_sha256 == proposal.request_sha256;
+            if (!exactBinding)
+            {
+                evidence = "Proposal binding is stale or does not match the admitted response, curated bundle, campaign, operation, and supervisor state.";
+                return false;
+            }
+            if (requireDisposableStager
+                && !binding.disposable_sandbox_stager_ready)
+            {
+                evidence = "Every review binding matches, but the disposable source-patch stager is not registered; approval remains unavailable.";
+                return false;
+            }
+            evidence = "Every sealed proposal, receipt, curated-bundle, admitted-response, campaign, operation, and supervisor binding matches. Disposable sandbox staging may be requested.";
+            return true;
+        }
+
+        void render_source_patch_review(
+            const float width,
+            RenderResult& output)
+        {
+            if (!source_patch_review)
+                return;
+            auto& proposal = *source_patch_review;
+            if (source_patch_selected_file >= proposal.files.size())
+                source_patch_selected_file = 0u;
+            if (!source_patch_selected_path.empty())
+            {
+                const auto selected = std::find_if(
+                    proposal.files.begin(), proposal.files.end(),
+                    [&](const auto& file)
+                    {
+                        return file.relative_path == source_patch_selected_path;
+                    });
+                if (selected != proposal.files.end())
+                    source_patch_selected_file = static_cast<std::size_t>(
+                        selected - proposal.files.begin());
+            }
+            auto& file = proposal.files[source_patch_selected_file];
+            source_patch_selected_path = file.relative_path;
+
+            gui::label("Human Source-Patch Review");
+            gui::property_row("Proposal", proposal.proposal_id, 112.0f);
+            gui::property_row(
+                "Proposal digest", proposal.canonical_proposal_sha256, 112.0f);
+            gui::property_row("Receipt", proposal.receipt.receipt_sha256, 112.0f);
+            gui::property_row(
+                "Curated bundle",
+                source_patch_review_binding.curated_bundle_sha256,
+                112.0f);
+            gui::property_row(
+                "Admitted response",
+                source_patch_review_binding.admitted_response_sha256,
+                112.0f);
+            gui::property_row(
+                "Campaign / objective",
+                source_patch_review_binding.campaign_id + " / "
+                    + source_patch_review_binding.objective_id,
+                112.0f);
+            gui::property_row(
+                "Operation",
+                source_patch_review_binding.operation_id,
+                112.0f);
+            gui::property_row(
+                "Authority",
+                "Proposal only; live write, promotion, release, network, server, and listener denied",
+                112.0f);
+
+            std::vector<std::string_view> fileLabels{};
+            fileLabels.reserve(proposal.files.size());
+            for (const auto& candidate : proposal.files)
+                fileLabels.emplace_back(candidate.relative_path);
+            const auto selected = gui::select_box(gui::SelectBoxOptions{
+                .id = "source-patch-review-files",
+                .placeholder = "Select exact file operation",
+                .selected = file.relative_path,
+                .options = std::span<const std::string_view>{
+                    fileLabels.data(), fileLabels.size()},
+                .size = {width, 30.0f},
+                .row_height = 28.0f,
+                .max_visible_options = 10u});
+            if (selected.changed && selected.selected_index
+                && *selected.selected_index < proposal.files.size())
+            {
+                source_patch_selected_file = *selected.selected_index;
+                source_patch_selected_path =
+                    proposal.files[source_patch_selected_file].relative_path;
+            }
+            const auto& active = proposal.files[source_patch_selected_file];
+            gui::property_row(
+                "File operation",
+                std::string{source_patch_kind_name(active.kind)} + " | "
+                    + active.operation_id,
+                112.0f);
+            gui::property_row("Before", active.before_sha256, 112.0f);
+            gui::property_row("After", active.after_sha256, 112.0f);
+            gui::property_row(
+                "Bytes",
+                epochengine::format_text(
+                    "{} -> {}", active.before_byte_count,
+                    active.after_byte_count),
+                112.0f);
+            for (const auto& hunk : active.hunks)
+            {
+                gui::wrapped_label(
+                    epochengine::format_text(
+                        "{} | line {} | -{} +{} lines | -{} +{} bytes | {}",
+                        hunk.edit_id, hunk.start_line,
+                        hunk.removed_line_count, hunk.added_line_count,
+                        hunk.removed_byte_count, hunk.added_byte_count,
+                        hunk.hunk_sha256),
+                    width);
+            }
+            if (gui::button(
+                    "Open Selected File In Review Workbench",
+                    {width, 30.0f}))
+            {
+                output.reveal_source_patch_workbench = true;
+                output.source_patch_relative_path = active.relative_path;
+                output.source_patch_postimage_utf8 = active.postimage_utf8;
+                output.source_patch_evidence = {
+                    "Operation: " + std::string{source_patch_kind_name(active.kind)},
+                    "Before SHA-256: " + active.before_sha256,
+                    "After SHA-256: " + active.after_sha256,
+                    "File receipt SHA-256: " + active.file_receipt_sha256};
+            }
+
+            std::string validation{};
+            const bool mayStage = validate_source_patch_review(validation);
+            source_patch_review_status = validation;
+            gui::wrapped_label(validation, width);
+            const std::array actions{
+                gui::InlineButtonSpec{
+                    .label = "Approve For Disposable Sandbox Staging",
+                    .width = 286.0f,
+                    .enabled = mayStage},
+                gui::InlineButtonSpec{
+                    .label = "Reject", .width = 82.0f, .enabled = true}}
+            ;
+            if (const auto action = gui::inline_button_row(
+                    actions, 30.0f, 5.0f))
+            {
+                if (*action == 0u && mayStage)
+                {
+                    output.source_patch_staging = SourcePatchStagingRequest{
+                        .proposal = proposal,
+                        .binding = source_patch_review_binding,
+                        .sandbox_only = true,
+                        .live_source_write_permitted = false,
+                        .promotion_permitted = false,
+                        .release_permitted = false};
+                    status_message =
+                        "Exact source-patch packet approved for disposable sandbox staging; live source remains read-only.";
+                }
+                else if (*action == 1u)
+                {
+                    source_patch_review.reset();
+                    source_patch_review_binding = {};
+                    source_patch_selected_file = 0u;
+                    source_patch_selected_path.clear();
+                    source_patch_review_status =
+                        "Operator rejected the sealed source-patch proposal.";
+                    status_message = source_patch_review_status;
+                }
+            }
+        }
+
         void render_typed_campaign(
             const Input& input,
             const float width,
@@ -2125,7 +2423,7 @@ namespace epochengine::editor_ai_development_panel
                     CommandKind::cancel);
                 addAction(availability.retry, "Retry", 76.0f,
                     CommandKind::retry);
-                addAction(availability.approve, "Approve", 92.0f,
+                addAction(availability.approve, "Admit Response", 126.0f,
                     CommandKind::approve);
                 addAction(availability.reject, "Reject", 82.0f,
                     CommandKind::reject);
@@ -2318,95 +2616,30 @@ namespace epochengine::editor_ai_development_panel
             }
             else if (snapshot.phase == Phase::awaiting_manual_review)
             {
-                const std::array decisions{
-                    gui::InlineButtonSpec{.label = "Approve Proposal", .width = 152.0f},
-                    gui::InlineButtonSpec{.label = "Reject", .width = 82.0f}}
-                ;
-                if (const auto decision = gui::inline_button_row(
-                        decisions, 30.0f, 5.0f))
+                gui::wrapped_label(
+                    "A sealed ai.source_patch_proposal receipt must be admitted before this response can be approved for disposable staging.",
+                    width);
+                if (gui::button("Reject", {82.0f, 30.0f}))
                 {
                     capture_campaign_result(output,
                         campaign_orchestrator->review_proposal(
                             campaign_action(snapshot, "proposal-review", now),
-                            *decision == 0u,
-                            *decision == 0u
-                                ? "Operator reviewed and approved the exact proposal digest."
-                                : "Operator rejected the proposal without applying it."));
+                            false,
+                            "Operator rejected the proposal without staging or applying it."));
                 }
             }
             else if (snapshot.phase == Phase::awaiting_apply_decision)
             {
-                const std::array decisions{
-                    gui::InlineButtonSpec{.label = "Apply In Sandbox", .width = 154.0f},
-                    gui::InlineButtonSpec{.label = "Reject", .width = 82.0f}}
-                ;
-                if (const auto decision = gui::inline_button_row(
-                        decisions, 30.0f, 5.0f))
+                gui::wrapped_label(
+                    "Legacy sandbox application is disabled. Review the sealed source-patch receipt below; only its exact binding-gated disposable staging action may proceed.",
+                    width);
+                if (gui::button("Reject", {82.0f, 30.0f}))
                 {
                     auto decided = campaign_orchestrator->decide_apply(
                         campaign_action(snapshot, "sandbox-apply", now),
-                        *decision == 0u,
-                        *decision == 0u
-                            ? "Operator approved disposable-workspace application only."
-                            : "Operator rejected sandbox application.");
-                    const bool accepted = static_cast<bool>(decided);
+                        false,
+                        "Operator rejected sandbox application.");
                     capture_campaign_result(output, std::move(decided));
-                    if (accepted && *decision == 0u && controller)
-                    {
-                        auto phase = controller->snapshot().phase;
-                        if (phase == editor_ai_development::ControllerPhase::proposed)
-                        {
-                            (void)controller->review(
-                                "epoch.operator",
-                                "Operator reviewed the exact typed campaign proposal.",
-                                logical_time_now());
-                            phase = controller->snapshot().phase;
-                        }
-                        if (phase == editor_ai_development::ControllerPhase::reviewed)
-                        {
-                            (void)controller->approve(
-                                "epoch.operator",
-                                "Operator approved sandbox execution only.",
-                                logical_time_now(),
-                                {now + 10u * 60u});
-                            phase = controller->snapshot().phase;
-                        }
-                        if (phase == editor_ai_development::ControllerPhase::approved)
-                        {
-                            (void)controller->authorize(
-                                logical_time_now(),
-                                editor_ai_development::Duration{5u * 60u});
-                            phase = controller->snapshot().phase;
-                        }
-                        if (phase == editor_ai_development::ControllerPhase::authorized)
-                        {
-                            RenderResult host = execute_source_and_queue_build(
-                                logical_time_now());
-                            output.action = host.action;
-                            output.source_root = std::move(host.source_root);
-                            output.workspace_root = std::move(host.workspace_root);
-                            output.workspace_generation = host.workspace_generation;
-                            if (host.action == HostAction::compile_source_workspace
-                                && campaign_pending_operation)
-                            {
-                                auto applied = campaign_orchestrator->record_apply(
-                                    campaign_receipt(
-                                        *campaign_pending_operation, now),
-                                    last_implementation_evidence_digest,
-                                    "Disposable workspace transaction committed with host evidence.");
-                                if (applied)
-                                {
-                                    capture_campaign_result(output, std::move(applied));
-                                    (void)request_next_campaign_validation(
-                                        output, now);
-                                }
-                                else
-                                {
-                                    capture_campaign_result(output, std::move(applied));
-                                }
-                            }
-                        }
-                    }
                 }
             }
             else if (snapshot.phase == Phase::checkpoint_ready
@@ -2962,6 +3195,36 @@ namespace epochengine::editor_ai_development_panel
             || !reviewActions.pause || !reviewActions.cancel)
         {
             return false;
+        }
+
+        {
+            Panel reviewPanel{};
+            ai::source_patch_proposal::SealedProposal unsafeProposal{};
+            unsafeProposal.proposal_id = "proposal-contract";
+            const auto refused = reviewPanel.admit_source_patch_review(
+                std::move(unsafeProposal),
+                SourcePatchReviewBinding{
+                    .admitted_response_sha256 = std::string(64u, '1'),
+                    .curated_bundle_sha256 = std::string(64u, '2'),
+                    .campaign_id = "campaign-contract",
+                    .objective_id = "objective-contract",
+                    .operation_id = "operation-contract",
+                    .supervisor_generation = 1u,
+                    .supervisor_state_sha256 = std::string(64u, '3'),
+                    .disposable_sandbox_stager_ready = true});
+            if (refused || reviewPanel.has_source_patch_review()
+                || refused.status.find("refused") == std::string::npos)
+            {
+                return false;
+            }
+            const SourcePatchStagingRequest safeDefaults{};
+            if (!safeDefaults.sandbox_only
+                || safeDefaults.live_source_write_permitted
+                || safeDefaults.promotion_permitted
+                || safeDefaults.release_permitted)
+            {
+                return false;
+            }
         }
 
         Panel accepted{};
@@ -3617,6 +3880,63 @@ namespace epochengine::editor_ai_development_panel
             : std::string{"Guarded development panel is unavailable."};
     }
 
+    SourcePatchReviewResult Panel::admit_source_patch_review(
+        ai::source_patch_proposal::SealedProposal proposal,
+        SourcePatchReviewBinding binding)
+    {
+        if (!implementation_)
+            return {false, "Guarded development panel is unavailable."};
+        auto& state = *implementation_;
+        const auto previousPath = state.source_patch_selected_path;
+        state.source_patch_review = std::move(proposal);
+        state.source_patch_review_binding = std::move(binding);
+        state.source_patch_selected_file = 0u;
+        state.source_patch_selected_path = previousPath;
+        std::string evidence{};
+        if (!state.validate_source_patch_review(evidence, false))
+        {
+            state.source_patch_review.reset();
+            state.source_patch_review_binding = {};
+            state.source_patch_selected_file = 0u;
+            state.source_patch_selected_path.clear();
+            state.source_patch_review_status = std::move(evidence);
+            state.status_message = state.source_patch_review_status;
+            return {false, state.source_patch_review_status};
+        }
+        state.source_patch_review_status =
+            state.source_patch_review_binding.disposable_sandbox_stager_ready
+                ? "Sealed source-patch proposal admitted for exact human review."
+                : "Sealed source-patch proposal admitted for review; the disposable stager is not registered, so approval is unavailable.";
+        state.status_message = state.source_patch_review_status;
+        return {true, state.source_patch_review_status};
+    }
+
+    RenderResult Panel::reject_source_patch_review()
+    {
+        RenderResult output{};
+        if (!implementation_)
+        {
+            output.status = "Guarded development panel is unavailable.";
+            return output;
+        }
+        auto& state = *implementation_;
+        state.source_patch_review.reset();
+        state.source_patch_review_binding = {};
+        state.source_patch_selected_file = 0u;
+        state.source_patch_selected_path.clear();
+        state.source_patch_review_status =
+            "Operator rejected the sealed source-patch proposal; no staging request was emitted.";
+        state.status_message = state.source_patch_review_status;
+        output.status = state.status_message;
+        return output;
+    }
+
+    bool Panel::has_source_patch_review() const
+    {
+        return implementation_
+            && implementation_->source_patch_review.has_value();
+    }
+
     RenderResult Panel::render(const Input& input)
     {
         RenderResult output{};
@@ -3717,6 +4037,7 @@ namespace epochengine::editor_ai_development_panel
         if (input.domain == Domain::engine_source)
         {
             state.render_typed_campaign(input, width, output);
+            state.render_source_patch_review(width, output);
         }
         (void)gui::toggle_switch(
             "Advanced evidence details",

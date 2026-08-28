@@ -1186,6 +1186,10 @@ namespace epochengine
             std::string aiToolHarnessStatus{ "AI tool harness has not run yet." };
             std::size_t aiToolHarnessRunCount{ 0 };
             std::unique_ptr<editor_ai_development_panel::Panel> aiDevelopmentPanel{};
+            bool aiSourcePatchReviewMode{};
+            std::string aiSourcePatchReviewPath{};
+            std::string aiSourcePatchReviewPostimage{};
+            std::vector<std::string> aiSourcePatchReviewEvidence{};
             std::optional<std::future<
                 epochengine::ai::development_executor::WorkspaceResult>>
                 aiSourceWorkspacePending{};
@@ -21230,6 +21234,28 @@ namespace epochengine
         auto dispatch_ai_development_action = [&](
             const editor_ai_development_panel::RenderResult& action)
         {
+            if (action.reveal_source_patch_workbench
+                && !action.source_patch_relative_path.empty())
+            {
+                editor.aiSourcePatchReviewMode = true;
+                editor.aiSourcePatchReviewPath =
+                    action.source_patch_relative_path;
+                editor.aiSourcePatchReviewPostimage =
+                    action.source_patch_postimage_utf8;
+                editor.aiSourcePatchReviewEvidence =
+                    action.source_patch_evidence;
+                push_ai_development_log(
+                    editor,
+                    "[source-review] Opened read-only postimage for "
+                        + action.source_patch_relative_path
+                        + "; Output remains visible and live source remains read-only.");
+            }
+            if (action.source_patch_staging)
+            {
+                push_ai_development_log(
+                    editor,
+                    "[source-review] Disposable staging was approved, but no registered source-patch stager consumed the request. No files changed.");
+            }
             for (const auto& evidence : action.campaign_evidence)
             {
                 chat.append_status(evidence);
@@ -28146,7 +28172,8 @@ namespace epochengine
             }
             const bool centerHasNestedSourceEditor =
                 (editor.mainSurface == EditorMainSurface::AISandbox
-                    && editor.sourceWorkspaceMode)
+                    && (editor.sourceWorkspaceMode
+                        || editor.aiSourcePatchReviewMode))
                 || (editor.mainSurface == EditorMainSurface::Assets
                     && editor.assetWorkspaceSection == 2u);
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
@@ -30514,6 +30541,57 @@ namespace epochengine
             case EditorMainSurface::AISandbox:
             {
                 gui::label("AI Development");
+                if (editor.aiSourcePatchReviewMode)
+                {
+                    const std::array reviewNavigation{
+                        gui::InlineButtonSpec{
+                            .label = "Return To Campaign",
+                            .width = 158.0f},
+                        gui::InlineButtonSpec{
+                            .label = "Project Scripts",
+                            .width = 132.0f}}
+                    ;
+                    if (const auto action = gui::inline_button_row(
+                            reviewNavigation, 30.0f, 6.0f))
+                    {
+                        editor.aiSourcePatchReviewMode = false;
+                        if (*action == 1u)
+                        {
+                            apply_editor_surface(
+                                EditorMainSurface::Assets,
+                                "AI Source-Patch Review");
+                            editor.assetWorkspaceSection = 2u;
+                        }
+                    }
+                    gui::label("Read-Only Source-Patch Postimage");
+                    gui::property_row(
+                        "Project-relative file",
+                        editor.aiSourcePatchReviewPath,
+                        142.0f);
+                    for (const auto& evidence :
+                         editor.aiSourcePatchReviewEvidence)
+                    {
+                        gui::wrapped_label(evidence, centerWidth);
+                    }
+                    gui::wrapped_label(
+                        "This is the sealed proposed postimage for human review. It is not a live-source editor, not an Apply surface, and does not hide or replace Output evidence.",
+                        centerWidth);
+                    (void)gui::source_editor(
+                        editor.aiSourcePatchReviewPostimage,
+                        gui::SourceEditorOptions{
+                            .id = "ai-source-patch-review:"
+                                + editor.aiSourcePatchReviewPath,
+                            .size = {
+                                centerWidth,
+                                (std::clamp)(
+                                    centerScrollHeight - 168.0f,
+                                    260.0f,
+                                    760.0f)},
+                            .max_chars = 16u * 1024u * 1024u,
+                            .show_context_menu = true,
+                            .read_only = true});
+                    break;
+                }
                 if (!editor.sourceWorkspaceMode
                     || editor.sourceWorkspacePaths.empty())
                 {
