@@ -53,7 +53,7 @@ namespace
         ai_catalog_boundary
     };
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] WorkspaceSnapshot snapshot_for(
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE WorkspaceSnapshot snapshot_for(
         Surface surface)
     {
         return WorkspaceSnapshot{
@@ -84,7 +84,7 @@ namespace
                 .running = false}};
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] CommandTarget target_for(
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE CommandTarget target_for(
         TargetKind kind)
     {
         switch (kind)
@@ -126,7 +126,7 @@ namespace
             && plan.reason == plan_code_reason(expected);
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure check_aggregate_contract()
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure check_aggregate_contract()
     {
         return epochengine::editor_workspace_commands::run_aggregate_contract()
                 == ContractFailure::none
@@ -134,7 +134,7 @@ namespace
             : Failure::aggregate_contract;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure check_catalogs()
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure check_catalogs()
     {
         constexpr std::size_t surface_count =
             static_cast<std::size_t>(Surface::count);
@@ -189,7 +189,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure check_ready_surface(
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure check_ready_surface(
         Surface surface,
         std::uint64_t& request_value)
     {
@@ -228,7 +228,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure check_ready_commands()
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure check_ready_commands()
     {
         constexpr std::size_t surface_count =
             static_cast<std::size_t>(Surface::count);
@@ -245,7 +245,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure check_basic_refusals()
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure check_basic_refusals()
     {
         constexpr std::size_t command_count =
             static_cast<std::size_t>(CommandId::count);
@@ -296,7 +296,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure
     check_workspace_surface_staleness()
     {
         const WorkspaceSnapshot world = snapshot_for(Surface::world);
@@ -326,7 +326,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure
     check_project_document_staleness()
     {
         const WorkspaceSnapshot world = snapshot_for(Surface::world);
@@ -358,7 +358,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure
     check_selection_async_staleness()
     {
         const WorkspaceSnapshot world = snapshot_for(Surface::world);
@@ -379,7 +379,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure
     check_document_requirements()
     {
         const WorkspaceSnapshot world = snapshot_for(Surface::world);
@@ -423,7 +423,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure
     check_project_and_async_requirements()
     {
         WorkspaceSnapshot project = snapshot_for(Surface::project);
@@ -453,7 +453,7 @@ namespace
         return Failure::none;
     }
 
-    EPOCH_CONTRACT_NOINLINE [[nodiscard]] Failure check_ai_boundary()
+    [[nodiscard]] EPOCH_CONTRACT_NOINLINE Failure check_ai_boundary()
     {
         constexpr std::array sensitive{
             SensitiveCapability::approve_candidate,
