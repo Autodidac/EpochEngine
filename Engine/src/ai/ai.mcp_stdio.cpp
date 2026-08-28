@@ -11,6 +11,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -210,7 +211,7 @@ namespace epochengine::ai::mcp_stdio
             bool boolean{};
             std::string scalar{};
             std::vector<JsonValue> array{};
-            std::vector<std::pair<std::string, JsonValue>> object{};
+            std::vector<std::pair<std::string, std::unique_ptr<JsonValue>>> object{};
         };
 
         class JsonReader final
@@ -472,7 +473,9 @@ namespace epochengine::ai::mcp_stdio
                         JsonValue child{};
                         if (!parse_value(child, depth + 1u))
                             return false;
-                        value.object.emplace_back(std::move(name), std::move(child));
+                        value.object.emplace_back(
+                            std::move(name),
+                            std::make_unique<JsonValue>(std::move(child)));
                         skip_space();
                         if (position_ >= source_.size())
                             return fail("A JSON object is unterminated.");
@@ -556,7 +559,7 @@ namespace epochengine::ai::mcp_stdio
             const auto found = std::find_if(
                 value.object.begin(), value.object.end(),
                 [name](const auto& field) { return field.first == name; });
-            return found == value.object.end() ? nullptr : &found->second;
+            return found == value.object.end() ? nullptr : found->second.get();
         }
 
         [[nodiscard]] bool only_fields(
@@ -1022,7 +1025,7 @@ namespace epochengine::ai::mcp_stdio
         {
             if (!usable_identifier(name, 64u))
                 return {ProtocolCode::invalid_arguments, "A tool argument name is invalid."};
-            const auto scalar = scalar_argument(value);
+            const auto scalar = scalar_argument(*value);
             if (!scalar)
                 return {ProtocolCode::invalid_arguments, "Nested tool arguments are forbidden."};
             if (forbidden_argument_name(name) || path_like_abuse(*scalar))
