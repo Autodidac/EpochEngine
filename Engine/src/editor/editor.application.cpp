@@ -80,6 +80,7 @@ module;
 module editor.core;
 
 import gui.engine;
+import editor.code_workspace;
 import visuals.engine;
 import epoch.version;
 import sprite.handle;
@@ -780,6 +781,25 @@ namespace epochengine
                 "Responsive game status, objective, and action controls."}
         };
 
+        struct ProjectCodeWorkspaceState
+        {
+            editor_code_workspace::Controller controller{};
+            editor_code_workspace::WorkspaceAuthority authority{
+                .surface_revision = 1u,
+                .project_revision = 1u,
+                .async_generation = 1u};
+            std::string configurationKey{};
+            std::string draft{};
+            std::optional<editor_code_workspace::DocumentHandle> draftHandle{};
+            std::uint64_t draftRevision{};
+            std::string status{"No project script workspace is open."};
+            std::string gotoLine{"1"};
+            std::size_t gotoTarget{1u};
+            std::uint64_t gotoGeneration{};
+            std::optional<editor_code_workspace::DocumentHandle> discardClose{};
+            bool discardReloadArmed{};
+        };
+
         struct EditorState
         {
             bool initialized{ false };
@@ -805,6 +825,7 @@ namespace epochengine
             std::uint64_t scriptBuildGeneration{};
             std::uint64_t scriptBuildCompletedGeneration{};
             std::string newScriptName{ "sandbox_iteration" };
+            ProjectCodeWorkspaceState projectCodeWorkspace{};
             std::string scriptEditorPath{};
             std::string scriptEditorText{};
             std::string scriptEditorStatus{ "No script source loaded." };
@@ -11106,6 +11127,380 @@ namespace epochengine
                     ? std::string{"Modified"}
                     : editor.scriptEditorStatus,
                 74.0f);
+        }
+
+        struct ProjectCodeWorkspaceDrawResult
+        {
+            bool handled{};
+            bool returnToScene{};
+        };
+
+        [[nodiscard]] std::uint64_t next_workspace_revision(
+            const std::uint64_t value) noexcept
+        {
+            const std::uint64_t next = value + 1u;
+            return next == 0u ? 1u : next;
+        }
+
+        void synchronize_project_code_draft(
+            ProjectCodeWorkspaceState& state)
+        {
+            const auto document = state.controller.active_document();
+            if (!document)
+            {
+                state.draft.clear();
+                state.draftHandle.reset();
+                state.draftRevision = 0u;
+                return;
+            }
+            if (!state.draftHandle
+                || *state.draftHandle != document->handle
+                || state.draftRevision != document->revision)
+            {
+                state.draft = document->text;
+                state.draftHandle = document->handle;
+                state.draftRevision = document->revision;
+            }
+        }
+
+        [[nodiscard]] bool configure_project_code_workspace(
+            EditorState& editor)
+        {
+            auto& state = editor.projectCodeWorkspace;
+            if (editor.projectRoot.empty())
+            {
+                state.status = "Open a project before entering Project Scripts.";
+                return false;
+            }
+
+            const std::filesystem::path root = resolve_editor_path(
+                std::filesystem::path{editor.projectRoot});
+            const std::filesystem::path scriptsRoot = root / "scripts";
+            std::vector<editor_code_workspace::PathRequest> paths{};
+            std::error_code error{};
+            if (std::filesystem::exists(scriptsRoot, error) && !error)
+            {
+                for (const auto& entry :
+                     std::filesystem::directory_iterator(scriptsRoot, error))
+                {
+                    if (error)
+                        break;
+                    std::error_code entryError{};
+                    if (!entry.is_regular_file(entryError) || entryError)
+                        continue;
+                    const auto path = entry.path();
+                    if (!path.filename().string().ends_with(".ascript.cpp"))
+                        continue;
+                    const auto relative = path.lexically_relative(root);
+                    if (relative.empty() || relative.is_absolute())
+                        continue;
+                    paths.push_back(editor_code_workspace::PathRequest{
+                        .relative_path = relative.generic_string(),
+                        .writable = true});
+                }
+            }
+            std::sort(
+                paths.begin(), paths.end(),
+                [](const auto& left, const auto& right)
+                {
+                    return left.relative_path < right.relative_path;
+                });
+            if (paths.empty())
+            {
+                state.status = "This project has no project-local .ascript.cpp files.";
+                return false;
+            }
+
+            std::string key = editor.projectId + "\n"
+                + root.generic_string();
+            for (const auto& path : paths)
+                key += "\n" + path.relative_path;
+            if (state.configurationKey == key
+                && state.controller.snapshot().configured)
+            {
+                return true;
+            }
+
+            auto authority = state.authority;
+            authority.surface_revision = next_workspace_revision(
+                authority.surface_revision);
+            authority.project_revision = next_workspace_revision(
+                authority.project_revision);
+            authority.async_generation = next_workspace_revision(
+                authority.async_generation);
+            const auto opened = state.controller.open(
+                editor_code_workspace::OpenRequest{
+                    .kind = editor_code_workspace::WorkspaceKind::project_scripts,
+                    .workspace_id = "project-scripts:" + editor.projectId,
+                    .root = root,
+                    .authority = authority,
+                    .paths = std::move(paths),
+                    .maximum_file_bytes = 256u * 1024u,
+                    .maximum_tabs = 32u});
+            state.status = opened.reason;
+            if (!opened)
+                return false;
+            state.authority = authority;
+            state.configurationKey = std::move(key);
+            state.draft.clear();
+            state.draftHandle.reset();
+            state.draftRevision = 0u;
+            state.discardClose.reset();
+            state.discardReloadArmed = false;
+            synchronize_project_code_draft(state);
+            return true;
+        }
+
+        [[nodiscard]] ProjectCodeWorkspaceDrawResult
+        draw_project_code_workspace(
+            EditorState& editor,
+            const float width,
+            const float height)
+        {
+            ProjectCodeWorkspaceDrawResult result{
+                .handled = !editor.projectRoot.empty()};
+            auto& state = editor.projectCodeWorkspace;
+            gui::label("Project Scripts");
+            const std::array navigation{
+                gui::InlineButtonSpec{
+                    .label = "3D Scene",
+                    .width = 104.0f}}
+            ;
+            if (gui::inline_button_row(navigation, 30.0f, 6.0f))
+            {
+                result.returnToScene = true;
+                return result;
+            }
+
+            if (!configure_project_code_workspace(editor))
+            {
+                gui::wrapped_label(state.status, width);
+                return result;
+            }
+
+            auto snapshot = state.controller.snapshot();
+            gui::property_row("Root", snapshot.canonical_root, 72.0f);
+            std::vector<gui::TabButtonSpec> tabs{};
+            tabs.reserve(snapshot.documents.size());
+            for (const auto& document : snapshot.documents)
+            {
+                tabs.push_back(gui::TabButtonSpec{
+                    .id = document.relative_path,
+                    .label = document.label,
+                    .width = (std::clamp)(
+                        64.0f + static_cast<float>(document.label.size()) * 6.5f,
+                        120.0f,
+                        260.0f),
+                    .active = document.active,
+                    .closable = true,
+                    .dirty = document.dirty});
+            }
+            const auto tabResult = gui::responsive_tab_bar_buttons(
+                gui::ResponsiveTabBarOptions{
+                    .overflow_id = "project-code-tabs-overflow",
+                    .overflow_label = "Scripts",
+                    .tabs = tabs,
+                    .available_width = width,
+                    .overflow_width = 132.0f,
+                    .height = 30.0f,
+                    .gap = 2.0f,
+                    .presentation = gui::TabBarPresentation::Document});
+            if (tabResult.closed_index
+                && *tabResult.closed_index < snapshot.documents.size())
+            {
+                const auto& closing = snapshot.documents[*tabResult.closed_index];
+                const bool discard = state.discardClose
+                    && *state.discardClose == closing.handle;
+                const auto closed = state.controller.close(
+                    closing.handle,
+                    state.authority,
+                    closing.revision,
+                    discard);
+                state.status = closed.reason;
+                if (closed)
+                {
+                    state.discardClose.reset();
+                    state.draftHandle.reset();
+                }
+                else if (closed.code
+                    == editor_code_workspace::ResultCode::dirty_document)
+                {
+                    state.discardClose = closing.handle;
+                    state.status += " Close the same tab again to discard its edits.";
+                }
+                synchronize_project_code_draft(state);
+                snapshot = state.controller.snapshot();
+            }
+            else if (tabResult.selected_index
+                && *tabResult.selected_index < snapshot.documents.size())
+            {
+                const auto selected = state.controller.activate(
+                    snapshot.documents[*tabResult.selected_index].handle,
+                    state.authority);
+                state.status = selected.reason;
+                state.discardClose.reset();
+                synchronize_project_code_draft(state);
+                snapshot = state.controller.snapshot();
+            }
+
+            const auto active = state.controller.active_document();
+            if (!active)
+            {
+                gui::wrapped_label(
+                    "All script tabs are closed. Leave and reopen Project Scripts to restore the project catalog.",
+                    width);
+                gui::wrapped_label(state.status, width);
+                return result;
+            }
+            synchronize_project_code_draft(state);
+
+            const std::array fileActions{
+                gui::InlineButtonSpec{.label = "Save", .width = 72.0f},
+                gui::InlineButtonSpec{.label = "Reload", .width = 82.0f},
+                gui::InlineButtonSpec{.label = "Copy Path", .width = 96.0f}}
+            ;
+            if (const auto action = gui::inline_button_row(
+                    fileActions, 29.0f, 5.0f))
+            {
+                if (*action == 0u)
+                {
+                    const auto saved = state.controller.save(
+                        active->handle, state.authority, active->revision);
+                    state.status = saved.reason;
+                    if (saved)
+                    {
+                        state.discardReloadArmed = false;
+                        push_editor_log(
+                            editor,
+                            "[script] " + saved.reason + " "
+                                + active->relative_path);
+                    }
+                }
+                else if (*action == 1u)
+                {
+                    if (active->dirty && !state.discardReloadArmed)
+                    {
+                        state.discardReloadArmed = true;
+                        state.status = "Reload again to discard the active tab's edits.";
+                    }
+                    else
+                    {
+                        const auto reloaded = state.controller.reload(
+                            active->handle,
+                            state.authority,
+                            active->revision,
+                            true);
+                        state.status = reloaded.reason;
+                        state.discardReloadArmed = false;
+                        if (reloaded)
+                            state.draftHandle.reset();
+                    }
+                }
+                else
+                {
+                    const std::filesystem::path absolute =
+                        std::filesystem::path{snapshot.canonical_root}
+                        / active->relative_path;
+                    (void)gui::set_clipboard_text(
+                        display_project_path(absolute));
+                    state.status = "Copied the active project script path.";
+                }
+                synchronize_project_code_draft(state);
+            }
+
+            gui::property_row(
+                "Document",
+                active->relative_path + (active->dirty ? " *" : ""),
+                82.0f);
+            gui::property_row(
+                "Access",
+                active->writable ? "Writable project source" : "Read-only",
+                82.0f);
+            gui::label("Go To Line");
+            (void)gui::edit_box(
+                state.gotoLine, {(std::min)(160.0f, width), 28.0f}, 12u, false);
+            if (gui::button(
+                    "Go To Line",
+                    {(std::min)(132.0f, width), 28.0f}))
+            {
+                std::size_t target{};
+                const auto parsed = std::from_chars(
+                    state.gotoLine.data(),
+                    state.gotoLine.data() + state.gotoLine.size(),
+                    target);
+                if (parsed.ec != std::errc{}
+                    || parsed.ptr != state.gotoLine.data()
+                        + state.gotoLine.size()
+                    || target == 0u)
+                {
+                    state.status = "Go To Line requires a positive whole number.";
+                }
+                else
+                {
+                    const auto located = state.controller.goto_line(
+                        active->handle,
+                        state.authority,
+                        active->revision,
+                        target);
+                    state.status = located.reason;
+                    if (located)
+                    {
+                        state.gotoTarget = target;
+                        state.gotoGeneration = next_workspace_revision(
+                            state.gotoGeneration);
+                    }
+                }
+            }
+
+            const std::string editorId = "project-code-editor:"
+                + state.configurationKey + ":" + active->relative_path;
+            const auto edited = gui::source_editor(
+                state.draft,
+                gui::SourceEditorOptions{
+                    .id = editorId,
+                    .size = {
+                        (std::max)(180.0f, width),
+                        (std::max)(320.0f, height - 225.0f)},
+                    .max_chars = 256u * 1024u,
+                    .show_context_menu = true,
+                    .read_only = !active->writable,
+                    .goto_line = state.gotoTarget,
+                    .goto_generation = state.gotoGeneration});
+            if (edited.edit.changed)
+            {
+                const auto replaced = state.controller.replace_text(
+                    active->handle,
+                    state.authority,
+                    state.draftRevision,
+                    state.draft);
+                state.status = replaced.reason;
+                if (!replaced)
+                    state.draftHandle.reset();
+                state.discardReloadArmed = false;
+                synchronize_project_code_draft(state);
+            }
+            else if (edited.copied)
+            {
+                state.status = "Copied the selected UTF-8 project source.";
+            }
+            gui::property_row(
+                "Cursor",
+                epochengine::format_text(
+                    "line {}, column {}",
+                    edited.cursor_line,
+                    edited.cursor_column),
+                82.0f);
+            gui::property_row(
+                "Scroll",
+                epochengine::format_text(
+                    "horizontal {:.0f}px, vertical {:.0f}px",
+                    edited.horizontal_scroll,
+                    edited.vertical_scroll),
+                82.0f);
+            gui::wrapped_label(
+                state.status + " Shift+mouse-wheel scrolls horizontally.",
+                width);
+            return result;
         }
 
         bool load_engine_source_editor(
@@ -28038,6 +28433,18 @@ namespace epochengine
                 }
                 else if (editor.assetWorkspaceSection == 2u)
                 {
+                const auto codeWorkspace = draw_project_code_workspace(
+                    editor,
+                    centerWidth,
+                    centerScrollHeight);
+                if (codeWorkspace.returnToScene)
+                {
+                    apply_editor_surface(
+                        EditorMainSurface::Scene,
+                        "Project Scripts");
+                }
+                if (codeWorkspace.handled)
+                    break;
                 const std::string activeScriptSource =
                     editor_resolve_script_source_path(
                         editor.activeScript,

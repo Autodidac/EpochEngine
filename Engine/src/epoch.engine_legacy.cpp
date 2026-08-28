@@ -141,6 +141,7 @@ import capability.profile;
 import editor.project_textures;
 import editor.workspace_layout;
 import editor.workspace_commands;
+import editor.code_workspace;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import editor.tilemap_workspace;
 #endif
@@ -2557,6 +2558,9 @@ namespace epochengine::core
             "editor.workspace_commands",
             epochengine::editor_workspace_commands::run_aggregate_contract()
                 == epochengine::editor_workspace_commands::ContractFailure::none);
+        check(
+            "editor.code_workspace",
+            epochengine::editor_code_workspace::run_contract());
         check(
             "extension.catalog",
             epochengine::extension_catalog::run_contract()
