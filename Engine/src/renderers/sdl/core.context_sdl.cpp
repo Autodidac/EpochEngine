@@ -1097,6 +1097,7 @@ namespace
         int logicalWidth = (std::max)(1, s_width);
         int logicalHeight = (std::max)(1, s_height);
         bool resolvedWindowSize = false;
+        bool nativeZeroExtent = false;
         if (s_window)
         {
             int windowWidth = 0;
@@ -1122,19 +1123,21 @@ namespace
                 RECT client{};
                 if (::GetClientRect(sizeSource, &client))
                 {
-                    logicalWidth = (std::max)(
-                        1,
-                        static_cast<int>(client.right - client.left));
-                    logicalHeight = (std::max)(
-                        1,
-                        static_cast<int>(client.bottom - client.top));
+                    const int clientWidth = static_cast<int>(client.right - client.left);
+                    const int clientHeight = static_cast<int>(client.bottom - client.top);
+                    nativeZeroExtent = clientWidth <= 0 || clientHeight <= 0;
+                    if (!nativeZeroExtent)
+                    {
+                        logicalWidth = clientWidth;
+                        logicalHeight = clientHeight;
+                    }
                 }
             }
         }
 #endif
 
-        int framebufferWidth = logicalWidth;
-        int framebufferHeight = logicalHeight;
+        int framebufferWidth = 0;
+        int framebufferHeight = 0;
         if (s_renderer)
         {
             int renderWidth = 0;
@@ -1142,12 +1145,16 @@ namespace
             if (SDL_GetRenderOutputSize(
                     s_renderer,
                     &renderWidth,
-                    &renderHeight)
-                && renderWidth > 0 && renderHeight > 0)
+                    &renderHeight))
             {
                 framebufferWidth = renderWidth;
                 framebufferHeight = renderHeight;
             }
+        }
+        if (nativeZeroExtent)
+        {
+            framebufferWidth = 0;
+            framebufferHeight = 0;
         }
 
         auto dimensions =
@@ -1156,7 +1163,7 @@ namespace
                 logicalHeight,
                 framebufferWidth,
                 framebufferHeight);
-        if (s_window)
+        if (s_window && dimensions.valid())
         {
             const float displayScale = SDL_GetWindowDisplayScale(s_window);
             const auto displayScaledDimensions =
@@ -1168,13 +1175,20 @@ namespace
             if (displayScaledDimensions.valid())
                 dimensions = displayScaledDimensions;
         }
-        s_width = dimensions.logicalWidth;
-        s_height = dimensions.logicalHeight;
-        s_framebufferWidth = dimensions.framebufferWidth;
-        s_framebufferHeight = dimensions.framebufferHeight;
-
         auto& state = epochengine::sdlcontext::state::get_sdl_state();
+        state.surfaceLifecycle.observe_drawable_extent(
+            framebufferWidth,
+            framebufferHeight);
+        s_width = dimensions.valid() ? dimensions.logicalWidth : logicalWidth;
+        s_height = dimensions.valid() ? dimensions.logicalHeight : logicalHeight;
+        s_framebufferWidth = dimensions.valid()
+            ? dimensions.framebufferWidth
+            : (std::max)(1, s_framebufferWidth);
+        s_framebufferHeight = dimensions.valid()
+            ? dimensions.framebufferHeight
+            : (std::max)(1, s_framebufferHeight);
         if (s_renderer
+            && state.surfaceLifecycle.rendering_allowed()
             && SDL_GetRenderTarget(s_renderer) == nullptr
             && (s_logicalPresentationWidth != s_width
                 || s_logicalPresentationHeight != s_height))
@@ -1210,6 +1224,12 @@ namespace
             {
                 ctx->windowData->sdl_window = s_window;
                 ctx->windowData->set_size(s_width, s_height);
+                if (state.surfaceLifecycle.firstPresentRequired)
+                {
+                    ctx->windowData->firstPresentComplete.store(
+                        false,
+                        std::memory_order_release);
+                }
             }
         }
 
@@ -1244,8 +1264,22 @@ namespace
             positionFlags |= SWP_NOMOVE;
         }
 
-        const int width = (std::max)(1, static_cast<int>(client.right - client.left));
-        const int height = (std::max)(1, static_cast<int>(client.bottom - client.top));
+        const int width = static_cast<int>(client.right - client.left);
+        const int height = static_cast<int>(client.bottom - client.top);
+        if (width <= 0 || height <= 0)
+        {
+            auto& state = epochengine::sdlcontext::state::get_sdl_state();
+            state.surfaceLifecycle.observe_drawable_extent(0, 0);
+            if (ctx && ctx->windowData)
+            {
+                ctx->windowData->firstPresentComplete.store(
+                    false,
+                    std::memory_order_release);
+            }
+            s_dockWidth = 0;
+            s_dockHeight = 0;
+            return;
+        }
         const bool sizeChanged =
             width != s_dockWidth || height != s_dockHeight;
         const bool shouldShow =
@@ -1499,10 +1533,12 @@ namespace
 
 #endif
 
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
+        state.surfaceLifecycle.reset();
         epochengine::sdlcontext::init_renderer(s_renderer);
         epochengine::sdltextures::sdl_renderer = s_renderer;
         refresh_dimensions(ctx);
-        if (ctx->onResize)
+        if (ctx->onResize && state.surfaceLifecycle.rendering_allowed())
             ctx->onResize(s_framebufferWidth, s_framebufferHeight);
         if (ctx->windowData)
         {
@@ -1526,7 +1562,6 @@ namespace
             ctx->windowData->set_size(s_width, s_height);
         }
 
-        auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.window.sdl_window = s_window;
         state.set_dimensions(s_width, s_height);
         state.mark_should_close(false);
@@ -1648,22 +1683,60 @@ namespace
                     return false;
                 }
 
-                if (event.type == SDL_EVENT_WINDOW_RESIZED
+                switch (event.type)
+                {
+                case SDL_EVENT_WINDOW_MINIMIZED:
+                case SDL_EVENT_WINDOW_RESTORED:
+                case SDL_EVENT_WINDOW_MAXIMIZED:
+                case SDL_EVENT_WINDOW_OCCLUDED:
+                case SDL_EVENT_WINDOW_SHOWN:
+                case SDL_EVENT_WINDOW_EXPOSED:
+                case SDL_EVENT_WINDOW_RESIZED:
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                    if (event.window.windowID == s_windowId)
+                    {
+                        epochengine::sdlcontext::state::observe_window_event(
+                            state.surfaceLifecycle,
+                            event.type);
+                    }
+                    break;
+                default:
+                    break;
+                }
+
+                if ((event.type == SDL_EVENT_WINDOW_RESIZED
+                        || event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
                     && event.window.windowID == s_windowId)
                 {
                     refresh_dimensions(ctx);
-                    if (ctx->onResize)
+                    if (ctx->onResize
+                        && state.surfaceLifecycle.rendering_allowed())
                         ctx->onResize(ctx->framebufferWidth, ctx->framebufferHeight);
                 }
             }
         }
 
         sync_docked_child_size(ctx);
+        const SDL_WindowFlags flags = SDL_GetWindowFlags(s_window);
+        state.surfaceLifecycle.observe_window_flags(
+            (flags & SDL_WINDOW_MINIMIZED) != 0,
+            (flags & SDL_WINDOW_OCCLUDED) != 0);
         refresh_dimensions(ctx);
 
         state.window.sdl_window = s_window;
         state.set_dimensions(s_width, s_height);
         state.running = s_running;
+
+        if (!state.surfaceLifecycle.rendering_allowed())
+        {
+            if (ctx->windowData)
+            {
+                ctx->windowData->firstPresentComplete.store(
+                    false,
+                    std::memory_order_release);
+            }
+            return true;
+        }
 
         const auto clearColor = epochengine::core::clear_color_for_context(epochengine::core::ContextType::SDL);
         (void)SDL_SetRenderDrawColor(
@@ -1693,6 +1766,7 @@ namespace
         }
         if (ctx->windowData && presentation.present_succeeded)
         {
+            state.surfaceLifecycle.acknowledge_present();
             ctx->windowData->firstPresentComplete.store(
                 true,
                 std::memory_order_release);

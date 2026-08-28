@@ -162,6 +162,145 @@ export namespace epochengine::sdlcontext::state
                 : (scaled - half) / framebufferExtent);
     }
 
+    enum class SurfaceLifecycleEvent : unsigned char
+    {
+        minimized,
+        restored,
+        occluded,
+        exposed,
+        resized
+    };
+
+    struct SurfaceLifecycle
+    {
+        bool minimized{};
+        bool occluded{};
+        bool zeroDrawable{true};
+        bool dimensionsDirty{true};
+        bool firstPresentRequired{true};
+        unsigned long long transitionGeneration{};
+
+        constexpr void reset() noexcept
+        {
+            minimized = false;
+            occluded = false;
+            zeroDrawable = true;
+            dimensionsDirty = true;
+            firstPresentRequired = true;
+            ++transitionGeneration;
+        }
+
+        constexpr void observe(SurfaceLifecycleEvent event) noexcept
+        {
+            switch (event)
+            {
+            case SurfaceLifecycleEvent::minimized:
+                if (!minimized)
+                    ++transitionGeneration;
+                minimized = true;
+                firstPresentRequired = true;
+                break;
+            case SurfaceLifecycleEvent::restored:
+                if (minimized || !dimensionsDirty)
+                    ++transitionGeneration;
+                minimized = false;
+                dimensionsDirty = true;
+                firstPresentRequired = true;
+                break;
+            case SurfaceLifecycleEvent::occluded:
+                occluded = true;
+                break;
+            case SurfaceLifecycleEvent::exposed:
+                occluded = false;
+                dimensionsDirty = true;
+                firstPresentRequired = true;
+                ++transitionGeneration;
+                break;
+            case SurfaceLifecycleEvent::resized:
+                dimensionsDirty = true;
+                firstPresentRequired = true;
+                ++transitionGeneration;
+                break;
+            }
+        }
+
+        constexpr void observe_window_flags(
+            bool isMinimized,
+            bool isOccluded) noexcept
+        {
+            if (isMinimized != minimized)
+            {
+                observe(
+                    isMinimized
+                        ? SurfaceLifecycleEvent::minimized
+                        : SurfaceLifecycleEvent::restored);
+            }
+            occluded = isOccluded;
+        }
+
+        constexpr void observe_drawable_extent(int width, int height) noexcept
+        {
+            const bool nextZeroDrawable = width <= 0 || height <= 0;
+            if (nextZeroDrawable != zeroDrawable)
+            {
+                ++transitionGeneration;
+                firstPresentRequired = true;
+            }
+            zeroDrawable = nextZeroDrawable;
+            dimensionsDirty = false;
+        }
+
+        [[nodiscard]] constexpr bool rendering_allowed() const noexcept
+        {
+            return !minimized && !zeroDrawable && !dimensionsDirty;
+        }
+
+        [[nodiscard]] constexpr bool capture_allowed() const noexcept
+        {
+            return rendering_allowed();
+        }
+
+        [[nodiscard]] constexpr bool retain_queued_work() const noexcept
+        {
+            return !rendering_allowed();
+        }
+
+        constexpr void acknowledge_present() noexcept
+        {
+            if (rendering_allowed())
+                firstPresentRequired = false;
+        }
+    };
+
+    inline void observe_window_event(
+        SurfaceLifecycle& lifecycle,
+        Uint32 eventType) noexcept
+    {
+        switch (eventType)
+        {
+        case SDL_EVENT_WINDOW_MINIMIZED:
+            lifecycle.observe(SurfaceLifecycleEvent::minimized);
+            break;
+        case SDL_EVENT_WINDOW_RESTORED:
+        case SDL_EVENT_WINDOW_MAXIMIZED:
+            lifecycle.observe(SurfaceLifecycleEvent::restored);
+            break;
+        case SDL_EVENT_WINDOW_OCCLUDED:
+            lifecycle.observe(SurfaceLifecycleEvent::occluded);
+            break;
+        case SDL_EVENT_WINDOW_SHOWN:
+        case SDL_EVENT_WINDOW_EXPOSED:
+            lifecycle.observe(SurfaceLifecycleEvent::exposed);
+            break;
+        case SDL_EVENT_WINDOW_RESIZED:
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            lifecycle.observe(SurfaceLifecycleEvent::resized);
+            break;
+        default:
+            break;
+        }
+    }
+
     struct SDL3State
     {
         SDL3State()
@@ -182,6 +321,7 @@ export namespace epochengine::sdlcontext::state
         int screenHeight{ DEFAULT_WINDOW_HEIGHT };
         bool running{ false };
         bool renderFaulted{ false };
+        SurfaceLifecycle surfaceLifecycle{};
 
         std::function<void(int, int)> onResize{};
 

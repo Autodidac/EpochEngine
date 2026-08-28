@@ -160,8 +160,8 @@ export namespace epochengine::sdlcontext
         sdlcontext.virtualWidth = logicalW;
         sdlcontext.virtualHeight = logicalH;
 
-        int fbW = logicalW;
-        int fbH = logicalH;
+        int fbW = 0;
+        int fbH = 0;
 
         detail::destroy_arcade_screen_preview_target();
 
@@ -169,8 +169,7 @@ export namespace epochengine::sdlcontext
         {
             int renderW = 0;
             int renderH = 0;
-            if (SDL_GetRenderOutputSize(sdlcontext.renderer, &renderW, &renderH)
-                && renderW > 0 && renderH > 0)
+            if (SDL_GetRenderOutputSize(sdlcontext.renderer, &renderW, &renderH))
             {
                 fbW = renderW;
                 fbH = renderH;
@@ -180,9 +179,9 @@ export namespace epochengine::sdlcontext
         auto dimensions = state::make_presentation_dimensions(
             logicalW,
             logicalH,
-            (std::max)(1, fbW),
-            (std::max)(1, fbH));
-        if (sdlcontext.window)
+            fbW,
+            fbH);
+        if (sdlcontext.window && dimensions.valid())
         {
             const auto displayScaledDimensions =
                 state::make_display_scaled_presentation_dimensions(
@@ -192,14 +191,20 @@ export namespace epochengine::sdlcontext
             if (displayScaledDimensions.valid())
                 dimensions = displayScaledDimensions;
         }
-        sdlcontext.width = dimensions.logicalWidth;
-        sdlcontext.height = dimensions.logicalHeight;
-        sdlcontext.virtualWidth = dimensions.logicalWidth;
-        sdlcontext.virtualHeight = dimensions.logicalHeight;
-        sdlcontext.framebufferWidth = dimensions.framebufferWidth;
-        sdlcontext.framebufferHeight = dimensions.framebufferHeight;
         auto& sharedState = state::get_sdl_state();
+        sharedState.surfaceLifecycle.observe_drawable_extent(fbW, fbH);
+        sdlcontext.width = dimensions.valid() ? dimensions.logicalWidth : logicalW;
+        sdlcontext.height = dimensions.valid() ? dimensions.logicalHeight : logicalH;
+        sdlcontext.virtualWidth = sdlcontext.width;
+        sdlcontext.virtualHeight = sdlcontext.height;
+        sdlcontext.framebufferWidth = dimensions.valid()
+            ? dimensions.framebufferWidth
+            : (std::max)(1, sdlcontext.framebufferWidth);
+        sdlcontext.framebufferHeight = dimensions.valid()
+            ? dimensions.framebufferHeight
+            : (std::max)(1, sdlcontext.framebufferHeight);
         if (sdlcontext.renderer
+            && sharedState.surfaceLifecycle.rendering_allowed()
             && SDL_GetRenderTarget(sdlcontext.renderer) == nullptr
             && (sdlcontext.logicalPresentationWidth != sdlcontext.width
                 || sdlcontext.logicalPresentationHeight != sdlcontext.height))
@@ -237,6 +242,12 @@ export namespace epochengine::sdlcontext
                 ctx->windowData->sdl_window = sdlcontext.window;
                 ctx->windowData->width = sdlcontext.width;
                 ctx->windowData->height = sdlcontext.height;
+                if (sharedState.surfaceLifecycle.firstPresentRequired)
+                {
+                    ctx->windowData->firstPresentComplete.store(
+                        false,
+                        std::memory_order_release);
+                }
             }
         }
 
@@ -641,6 +652,7 @@ export namespace epochengine::sdlcontext
 
         auto& sharedState = state::get_sdl_state();
         sharedState.renderFaulted = false;
+        sharedState.surfaceLifecycle.reset();
 
         refresh_dimensions(ctx);
 
@@ -658,7 +670,8 @@ export namespace epochengine::sdlcontext
                 auto locked = weakCtx.lock();
                 refresh_dimensions(locked);
 
-                if (userResize)
+                if (userResize
+                    && state::get_sdl_state().surfaceLifecycle.rendering_allowed())
                     userResize(sdlcontext.framebufferWidth, sdlcontext.framebufferHeight);
             };
 
@@ -902,28 +915,41 @@ export namespace epochengine::sdlcontext
 
         diagnostics::FrameTiming frameTimer{ backendType, windowId, "SDL" };
 
+        auto& sharedState = state::get_sdl_state();
         SDL_Event sdl_event{};
         while (SDL_PollEvent(&sdl_event))
         {
             if (sdl_event.type == SDL_EVENT_QUIT)
             {
                 sdlcontext.running = false;
-                state::get_sdl_state().mark_should_close(true);
+                sharedState.mark_should_close(true);
                 return false;
             }
 
             if (sdl_event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
             {
                 sdlcontext.running = false;
-                state::get_sdl_state().mark_should_close(true);
+                sharedState.mark_should_close(true);
                 return false;
             }
 
-            if (sdl_event.type == SDL_EVENT_WINDOW_RESIZED && sdlcontext.onResize)
+            state::observe_window_event(
+                sharedState.surfaceLifecycle,
+                sdl_event.type);
+
+            if ((sdl_event.type == SDL_EVENT_WINDOW_RESIZED
+                    || sdl_event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+                && sdlcontext.onResize)
                 sdlcontext.onResize(sdl_event.window.data1, sdl_event.window.data2);
         }
 
-        auto& sharedState = state::get_sdl_state();
+        if (sdlcontext.window)
+        {
+            const SDL_WindowFlags flags = SDL_GetWindowFlags(sdlcontext.window);
+            sharedState.surfaceLifecycle.observe_window_flags(
+                (flags & SDL_WINDOW_MINIMIZED) != 0,
+                (flags & SDL_WINDOW_OCCLUDED) != 0);
+        }
         refresh_dimensions(ctx);
 
         const bool closeRequested =
@@ -969,6 +995,18 @@ export namespace epochengine::sdlcontext
             return false;
         }
 
+        if (!sharedState.surfaceLifecycle.rendering_allowed())
+        {
+            if (ctx && ctx->windowData)
+            {
+                ctx->windowData->firstPresentComplete.store(
+                    false,
+                    std::memory_order_release);
+            }
+            frameTimer.finish();
+            return true;
+        }
+
         atlasmanager::process_pending_uploads(core::ContextType::SDL);
         const bool overlayPriority =
             ctx && ctx->gui_overlay_priority();
@@ -1011,6 +1049,7 @@ export namespace epochengine::sdlcontext
 
         if (ctx && ctx->windowData && presentation.present_succeeded)
         {
+            sharedState.surfaceLifecycle.acknowledge_present();
             ctx->windowData->firstPresentComplete.store(
                 true,
                 std::memory_order_release);

@@ -2212,6 +2212,66 @@ namespace epochengine::core
                 -90, 1'652, 2'478) == -60
             && epochengine::sdlcontext::state::normalize_presented_coordinate(
                 900, 1'920, 1'920) == 900);
+        auto sdlSurfaceLifecycle =
+            epochengine::sdlcontext::state::SurfaceLifecycle{};
+        sdlSurfaceLifecycle.reset();
+        const bool sdlInitialSurfaceSuspended =
+            !sdlSurfaceLifecycle.rendering_allowed()
+            && !sdlSurfaceLifecycle.capture_allowed()
+            && sdlSurfaceLifecycle.retain_queued_work()
+            && sdlSurfaceLifecycle.firstPresentRequired;
+        sdlSurfaceLifecycle.observe_drawable_extent(1'920, 1'080);
+        const bool sdlInitialSurfaceReady =
+            sdlSurfaceLifecycle.rendering_allowed()
+            && sdlSurfaceLifecycle.capture_allowed()
+            && sdlSurfaceLifecycle.firstPresentRequired;
+        sdlSurfaceLifecycle.acknowledge_present();
+        const bool sdlInitialPresentAcknowledged =
+            !sdlSurfaceLifecycle.firstPresentRequired;
+        sdlSurfaceLifecycle.observe(
+            epochengine::sdlcontext::state::SurfaceLifecycleEvent::occluded);
+        const bool sdlOcclusionPreservesPresentation =
+            sdlSurfaceLifecycle.occluded
+            && sdlSurfaceLifecycle.rendering_allowed();
+        sdlSurfaceLifecycle.observe(
+            epochengine::sdlcontext::state::SurfaceLifecycleEvent::minimized);
+        sdlSurfaceLifecycle.observe(
+            epochengine::sdlcontext::state::SurfaceLifecycleEvent::resized);
+        const bool sdlMinimizeRetainsQueuedWork =
+            !sdlSurfaceLifecycle.rendering_allowed()
+            && !sdlSurfaceLifecycle.capture_allowed()
+            && sdlSurfaceLifecycle.retain_queued_work()
+            && sdlSurfaceLifecycle.firstPresentRequired;
+        sdlSurfaceLifecycle.observe(
+            epochengine::sdlcontext::state::SurfaceLifecycleEvent::restored);
+        const bool sdlRestoreRequiresDimensions =
+            !sdlSurfaceLifecycle.rendering_allowed()
+            && sdlSurfaceLifecycle.dimensionsDirty
+            && sdlSurfaceLifecycle.firstPresentRequired;
+        sdlSurfaceLifecycle.observe_drawable_extent(0, 0);
+        const bool sdlZeroDrawableRefusesCapture =
+            !sdlSurfaceLifecycle.rendering_allowed()
+            && !sdlSurfaceLifecycle.capture_allowed()
+            && sdlSurfaceLifecycle.retain_queued_work();
+        sdlSurfaceLifecycle.observe_drawable_extent(2'478, 1'344);
+        const bool sdlRestoredSurfaceReady =
+            sdlSurfaceLifecycle.rendering_allowed()
+            && sdlSurfaceLifecycle.capture_allowed()
+            && sdlSurfaceLifecycle.firstPresentRequired
+            && sdlHighDpiDimensions.logicalWidth == 1'652
+            && sdlHighDpiDimensions.logicalHeight == 896;
+        sdlSurfaceLifecycle.acknowledge_present();
+        check(
+            "context.sdl_surface_suspend_restore",
+            sdlInitialSurfaceSuspended
+            && sdlInitialSurfaceReady
+            && sdlInitialPresentAcknowledged
+            && sdlOcclusionPreservesPresentation
+            && sdlMinimizeRetainsQueuedWork
+            && sdlRestoreRequiresDimensions
+            && sdlZeroDrawableRefusesCapture
+            && sdlRestoredSurfaceReady
+            && !sdlSurfaceLifecycle.firstPresentRequired);
         check(
             "context.sdl_first_present_readiness",
             epochengine::core::backend_requires_first_present(
