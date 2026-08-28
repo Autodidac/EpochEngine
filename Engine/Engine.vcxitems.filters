@@ -1338,6 +1338,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_scheduler.ixx">
       <Filter>Module Files\epochengine\ai</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_supervisor_control.ixx">
+      <Filter>Module Files\epochengine\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx" />
@@ -1371,6 +1374,12 @@
       <Filter>Source Files\epochengine\core\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler_contract.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control.cpp">
+      <Filter>Source Files\epochengine\core\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control_contract.cpp">
       <Filter>Source Files\epochengine\core\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp" />

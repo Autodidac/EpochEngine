@@ -384,6 +384,8 @@ set(EPOCH_SOURCES
     src/ai/ai.iteration_campaign_queue_contract.cpp
     src/ai/ai.iteration_campaign_scheduler.cpp
     src/ai/ai.iteration_campaign_scheduler_contract.cpp
+    src/ai/ai.iteration_supervisor_control.cpp
+    src/ai/ai.iteration_supervisor_control_contract.cpp
     src/ai/ai.mcp_campaign.cpp
     src/ai/ai.mcp_campaign_contract.cpp
     src/ai/ai.mcp_child_host.cpp
@@ -2053,6 +2055,51 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_ai_iteration_campaign_scheduler_contract
         COMMAND epoch_ai_iteration_campaign_scheduler_contract
+    )
+
+    add_executable(epoch_ai_iteration_supervisor_control_contract
+        src/ai/ai.iteration_loop.cpp
+        src/ai/ai.iteration_session.cpp
+        src/ai/ai.project_profile.cpp
+        src/ai/ai.iteration_campaign.cpp
+        src/ai/ai.iteration_campaign_queue.cpp
+        src/ai/ai.mcp_stdio.cpp
+        src/ai/ai.mcp_campaign.cpp
+        src/ai/ai.self_iteration_orchestrator.cpp
+        src/ai/ai.mcp_orchestrator_bridge.cpp
+        src/ai/ai.iteration_campaign_scheduler.cpp
+        src/ai/ai.iteration_supervisor_control.cpp
+        src/ai/ai.iteration_supervisor_control_contract.cpp
+    )
+    target_sources(epoch_ai_iteration_supervisor_control_contract PRIVATE
+        FILE_SET epoch_ai_iteration_supervisor_control_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_loop.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_session.ixx
+                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_campaign.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_child_host.ixx
+                ${EPOCH_MODULE_DIR}/ai.self_iteration_orchestrator.ixx
+                ${EPOCH_MODULE_DIR}/ai.mcp_orchestrator_bridge.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_scheduler.ixx
+                ${EPOCH_MODULE_DIR}/ai.iteration_supervisor_control.ixx
+    )
+    target_compile_definitions(epoch_ai_iteration_supervisor_control_contract PRIVATE
+        EPOCH_AI_ITERATION_SUPERVISOR_CONTROL_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_iteration_supervisor_control_contract)
+    epoch_apply_warnings(epoch_ai_iteration_supervisor_control_contract)
+    epoch_apply_sanitizers(epoch_ai_iteration_supervisor_control_contract)
+    add_test(
+        NAME epoch_ai_iteration_supervisor_control_contract
+        COMMAND epoch_ai_iteration_supervisor_control_contract
     )
 
     add_executable(epoch_ai_voice_session_contract

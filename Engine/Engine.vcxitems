@@ -674,6 +674,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_queue.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_scheduler.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_supervisor_control.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx" />
@@ -697,6 +698,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host.cpp" />
