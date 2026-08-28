@@ -12,6 +12,7 @@ module;
 #include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 module epoch.build_validation;
 
