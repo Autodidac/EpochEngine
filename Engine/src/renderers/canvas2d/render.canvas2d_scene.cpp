@@ -16,6 +16,7 @@ module;
 
 module render.canvas2d_scene;
 
+import render.canvas2d_cpu;
 import render.device;
 
 namespace epochengine::canvas2d::scene_content

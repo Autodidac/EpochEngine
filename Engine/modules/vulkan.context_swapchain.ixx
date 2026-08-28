@@ -57,6 +57,7 @@ export module vulkan.context:swapchain;
 
 import :shared_vk;
 import core.logger;
+import perf.tier;
 
 
 namespace epochengine::vulkancontext

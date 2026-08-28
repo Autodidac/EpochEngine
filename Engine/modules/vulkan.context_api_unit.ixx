@@ -61,6 +61,7 @@ import diagnostics.engine;
 import telemetry.engine;
 import atlas.manager;
 import atlas.texture;
+import perf.tier;
 import sprite.handle;
 import context.commandqueue;
 

@@ -18,6 +18,7 @@ import input.engine;
 import atlas.manager;
 import core.logger;
 import directx.context;
+import perf.tier;
 
 namespace
 {

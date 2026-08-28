@@ -36,6 +36,7 @@ module core.context;
 import input.engine;
 import atlas.manager;
 import core.logger;
+import perf.tier;
 import vulkan.context;
 
 namespace

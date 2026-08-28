@@ -41,6 +41,7 @@ import core.commandline;
 import core.logger;
 import image.loader;
 import package.registry;
+import perf.tier;
 import render.arcade;
 import render.preview_grid;
 import render.canvas2d_cpu;
