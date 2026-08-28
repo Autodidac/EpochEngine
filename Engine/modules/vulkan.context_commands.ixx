@@ -63,6 +63,7 @@ import core.context;
 import context.type;
 import atlas.texture;
 import render.preview_grid;
+import render.context_frame;
 import render.arcade;
 import render.canvas2d;
 
@@ -202,29 +203,21 @@ namespace epochengine::vulkancontext
 
         cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-        int viewportX = 0;
-        int viewportY = 0;
-        int viewportWidth = static_cast<int>(swapChainExtent.width);
-        int viewportHeight = static_cast<int>(swapChainExtent.height);
-        bool hasSceneViewport = false;
-        bool editorPreview = false;
-
         const auto* ctx = bound_context();
+        rendercontext::FramePlan frame{};
         if (ctx)
         {
-            editorPreview = ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor;
-            const auto sceneViewport = ctx->scene_viewport();
-            if (sceneViewport.valid())
-            {
-                hasSceneViewport = true;
-                viewportX = (std::max)(0, (std::min)(sceneViewport.x, viewportWidth - 1));
-                viewportY = (std::max)(0, (std::min)(sceneViewport.y, viewportHeight - 1));
-                viewportWidth = (std::max)(1, (std::min)(sceneViewport.width, viewportWidth - viewportX));
-                viewportHeight = (std::max)(1, (std::min)(sceneViewport.height, viewportHeight - viewportY));
-            }
+            const auto requested = ctx->scene_viewport();
+            frame = rendercontext::resolve_frame_plan({
+                static_cast<int>(swapChainExtent.width),
+                static_cast<int>(swapChainExtent.height),
+                { requested.x, requested.y, requested.width, requested.height },
+                ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor,
+                ctx->gui_overlay_priority()
+            });
         }
 
-        const bool renderScenePreview = editorPreview && hasSceneViewport && indexCount > 0;
+        const bool renderScenePreview = frame.scene_visible && indexCount > 0;
         if (renderScenePreview && ctx)
         {
             const std::uint64_t previewRevision =
@@ -256,19 +249,19 @@ namespace epochengine::vulkancontext
             cmd.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
 
             vk::Viewport viewport{};
-            viewport.x = static_cast<float>(viewportX);
-            viewport.y = static_cast<float>(viewportY);
-            viewport.width = static_cast<float>(viewportWidth);
-            viewport.height = static_cast<float>(viewportHeight);
+            viewport.x = static_cast<float>(frame.scene.x);
+            viewport.y = static_cast<float>(frame.scene.y);
+            viewport.width = static_cast<float>(frame.scene.width);
+            viewport.height = static_cast<float>(frame.scene.height);
             viewport.minDepth = 0.0f;
             viewport.maxDepth = 1.0f;
             cmd.setViewport(0, viewport);
 
             vk::Rect2D scissor{};
-            scissor.offset = vk::Offset2D{ viewportX, viewportY };
+            scissor.offset = vk::Offset2D{ frame.scene.x, frame.scene.y };
             scissor.extent = vk::Extent2D{
-                static_cast<std::uint32_t>(viewportWidth),
-                static_cast<std::uint32_t>(viewportHeight)
+                static_cast<std::uint32_t>(frame.scene.width),
+                static_cast<std::uint32_t>(frame.scene.height)
             };
             cmd.setScissor(0, scissor);
 
@@ -279,10 +272,10 @@ namespace epochengine::vulkancontext
             sceneAttachment.clearValue.setColor(vk::ClearColorValue{ sceneClearColor });
 
             vk::ClearRect sceneRect{};
-            sceneRect.rect.offset = vk::Offset2D{ viewportX, viewportY };
+            sceneRect.rect.offset = vk::Offset2D{ frame.scene.x, frame.scene.y };
             sceneRect.rect.extent = vk::Extent2D{
-                static_cast<std::uint32_t>(viewportWidth),
-                static_cast<std::uint32_t>(viewportHeight)
+                static_cast<std::uint32_t>(frame.scene.width),
+                static_cast<std::uint32_t>(frame.scene.height)
             };
             sceneRect.baseArrayLayer = 0;
             sceneRect.layerCount = 1;

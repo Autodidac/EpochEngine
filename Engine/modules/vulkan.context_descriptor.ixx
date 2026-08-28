@@ -56,6 +56,7 @@ export module vulkan.context:descriptor;
 import :shared_context;
 import :shared_vk;
 import vulkan.camera;
+import render.context_frame;
 import render.preview_grid;
 
 namespace epochengine::vulkancontext
@@ -292,10 +293,19 @@ namespace epochengine::vulkancontext
         // No mystery member like `cubeRotation` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â just rotate at a constant rate.
         UniformBufferObject ubo{};
         const auto* ctx = bound_context();
-        const bool editorPreview =
-            ctx
-            && ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor
-            && ctx->scene_viewport().valid();
+        rendercontext::FramePlan frame{};
+        if (ctx)
+        {
+            const auto requested = ctx->scene_viewport();
+            frame = rendercontext::resolve_frame_plan({
+                static_cast<int>(swapChainExtent.width),
+                static_cast<int>(swapChainExtent.height),
+                { requested.x, requested.y, requested.width, requested.height },
+                ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor,
+                ctx->gui_overlay_priority()
+            });
+        }
+        const bool editorPreview = frame.scene_visible;
         const auto previewCamera = epochengine::previewgrid::camera_for(ctx);
 
         ubo.model = glm::mat4(1.0f);
@@ -311,21 +321,7 @@ namespace epochengine::vulkancontext
             ubo.view = vulkancamera::getViewMatrix(camera);
         }
 
-        std::uint32_t sceneWidth = swapChainExtent.width;
-        std::uint32_t sceneHeight = swapChainExtent.height;
-        if (ctx)
-        {
-            const auto sceneViewport = ctx->scene_viewport();
-            if (sceneViewport.valid())
-            {
-                sceneWidth = static_cast<std::uint32_t>((std::max)(1, sceneViewport.width));
-                sceneHeight = static_cast<std::uint32_t>((std::max)(1, sceneViewport.height));
-            }
-        }
-
-        const float aspect = sceneHeight
-            ? (sceneWidth / static_cast<float>(sceneHeight))
-            : 1.0f;
+        const float aspect = editorPreview ? frame.projection_aspect : 1.0f;
 
         if (editorPreview)
         {

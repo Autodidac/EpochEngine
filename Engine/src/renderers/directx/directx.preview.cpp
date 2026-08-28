@@ -23,6 +23,7 @@ module directx.context;
 import core.context;
 import core.logger;
 import render.arcade;
+import render.context_frame;
 import render.preview_grid;
 import atlas.texture;
 import sprite.handle;
@@ -231,10 +232,15 @@ namespace epochengine::directxcontext::detail
         state.immediate->RSSetViewports(1, &sceneViewport);
 
         const auto camera = previewgrid::camera_for(&ctx);
-        const auto sourceViewport = ctx.scene_viewport();
-        const float aspect = sourceViewport.height > 0
-            ? sourceViewport.width / static_cast<float>(sourceViewport.height)
-            : 1.0f;
+        const auto requested = ctx.scene_viewport();
+        const auto frame = rendercontext::resolve_frame_plan({
+            state.width,
+            state.height,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
+            ctx.gui_overlay_priority()
+        });
+        const float aspect = frame.projection_aspect;
         const auto projection = previewgrid::projection_for(&ctx, aspect, camera);
         const auto view = previewgrid::look_at(camera.eye, camera.target, camera.up);
         const auto mvp = previewgrid::multiply(projection, view);
@@ -359,21 +365,22 @@ namespace epochengine::directxcontext::detail
         std::vector<DirectXVertex>& solid,
         std::vector<DirectXVertex>& overlayLines)
     {
-        auto viewport = ctx.scene_viewport();
-        if (!viewport.valid())
-        {
-            viewport = core::RenderViewport{
-                0,
-                0,
-                (std::max)(1, state.width),
-                (std::max)(1, state.height)
-            };
-        }
+        const auto requested = ctx.scene_viewport();
+        const auto frame = rendercontext::resolve_frame_plan({
+            state.width,
+            state.height,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
+            ctx.gui_overlay_priority()
+        });
+        const core::RenderViewport viewport = frame.scene_visible
+            ? core::RenderViewport{
+                frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height }
+            : core::RenderViewport{
+                0, 0, (std::max)(1, state.width), (std::max)(1, state.height) };
 
         const auto camera = previewgrid::camera_for(&ctx);
-        const float aspect = viewport.height > 0
-            ? (viewport.width / static_cast<float>(viewport.height))
-            : 1.0f;
+        const float aspect = frame.scene_visible ? frame.projection_aspect : 1.0f;
         const auto proj = previewgrid::projection_for(&ctx, aspect, camera);
         const auto view = previewgrid::look_at(
             camera.eye,

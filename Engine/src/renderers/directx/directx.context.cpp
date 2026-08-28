@@ -37,6 +37,7 @@ import render.canvas2d_limits;
 import render.canvas2d_presentation;
 import render.canvas2d_runtime;
 import render.canvas2d_scene;
+import render.context_frame;
 import render.device;
 import sprite.handle;
 
@@ -581,13 +582,19 @@ namespace epochengine::directxcontext::detail
             return false;
         }
 
-        const auto viewport = ctx->scene_viewport();
-        if (!viewport.valid() || viewport.x < 0 || viewport.y < 0
-            || viewport.x + viewport.width > state.width
-            || viewport.y + viewport.height > state.height)
-        {
+        const auto requested = ctx->scene_viewport();
+        const auto frame = rendercontext::resolve_frame_plan({
+            state.width,
+            state.height,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx->scene_preview_mode() == core::ScenePreviewMode::Editor,
+            ctx->gui_overlay_priority()
+        });
+        if (!frame.scene_visible)
             return false;
-        }
+        const core::RenderViewport viewport{
+            frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
+        };
 
         try
         {
@@ -738,9 +745,16 @@ namespace epochengine::directxcontext
             (void)gui::render_deferred_batch(ctx.get());
         }
 
-        const auto sceneViewport = ctx->scene_viewport();
-        if (ctx->scene_preview_mode() == core::ScenePreviewMode::Editor
-            && sceneViewport.valid())
+        const auto requestedSceneViewport = ctx->scene_viewport();
+        const auto sceneFrame = rendercontext::resolve_frame_plan({
+            state.width,
+            state.height,
+            { requestedSceneViewport.x, requestedSceneViewport.y,
+                requestedSceneViewport.width, requestedSceneViewport.height },
+            ctx->scene_preview_mode() == core::ScenePreviewMode::Editor,
+            overlayPriority
+        });
+        if (sceneFrame.scene_visible)
         {
             if (!detail::render_canvas2d_scene(ctx, state))
             {

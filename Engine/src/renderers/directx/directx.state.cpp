@@ -22,6 +22,7 @@ module directx.context;
 
 import core.context;
 import core.logger;
+import render.context_frame;
 import atlas.texture;
 import package.registry;
 import sprite.handle;
@@ -269,20 +270,22 @@ namespace epochengine::directxcontext::detail
         const core::Context& ctx,
         const DirectXState& state) noexcept
     {
-        const auto sceneViewport = ctx.scene_viewport();
-        if (!sceneViewport.valid())
+        const auto requested = ctx.scene_viewport();
+        const auto frame = rendercontext::resolve_frame_plan({
+            state.width,
+            state.height,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
+            ctx.gui_overlay_priority()
+        });
+        if (!frame.scene_visible)
             return full_window_viewport(state);
 
-        const int x = (std::clamp)(sceneViewport.x, 0, (std::max)(1, state.width - 1));
-        const int y = (std::clamp)(sceneViewport.y, 0, (std::max)(1, state.height - 1));
-        const int maxWidth = (std::max)(1, state.width - x);
-        const int maxHeight = (std::max)(1, state.height - y);
-
         D3D11_VIEWPORT viewport{};
-        viewport.TopLeftX = static_cast<float>(x);
-        viewport.TopLeftY = static_cast<float>(y);
-        viewport.Width = static_cast<float>((std::clamp)(sceneViewport.width, 1, maxWidth));
-        viewport.Height = static_cast<float>((std::clamp)(sceneViewport.height, 1, maxHeight));
+        viewport.TopLeftX = static_cast<float>(frame.scene.x);
+        viewport.TopLeftY = static_cast<float>(frame.scene.y);
+        viewport.Width = static_cast<float>(frame.scene.width);
+        viewport.Height = static_cast<float>(frame.scene.height);
         viewport.MinDepth = 0.0f;
         viewport.MaxDepth = 1.0f;
         return viewport;
