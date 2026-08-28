@@ -1386,10 +1386,19 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx">
       <Filter>Module Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx">
+      <Filter>Module Files\epochengine\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp">
       <Filter>Source Files\epochengine\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp">
       <Filter>Source Files\epochengine\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp" />

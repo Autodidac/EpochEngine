@@ -720,8 +720,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_layout.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_panel.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller_contract.cpp" />

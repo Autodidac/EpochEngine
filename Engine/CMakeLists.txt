@@ -458,6 +458,8 @@ set(EPOCH_SOURCES
     src/editor/editor.gui.cpp
     src/editor/editor.canvas2d_scene.cpp
     src/editor/editor.project_textures.cpp
+    src/editor/editor.project_input_settings.cpp
+    src/editor/editor.project_input_settings_contract.cpp
     src/editor/editor.tilemap_workspace.cpp
     src/editor/ai/editor.ai_development_controller.cpp
     src/editor/ai/editor.ai_development_panel.cpp
@@ -1673,6 +1675,37 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_project_input_controller_contract
         COMMAND epoch_project_input_controller_contract
+    )
+
+    add_executable(epoch_editor_project_input_settings_contract
+        src/project/project.asset_registry.cpp
+        src/project/project.input_profile.cpp
+        src/editor/editor.project_input_settings.cpp
+        src/editor/editor.project_input_settings_contract.cpp
+    )
+    target_sources(epoch_editor_project_input_settings_contract PRIVATE
+        FILE_SET epoch_editor_project_input_settings_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project.input_profile.ixx
+                ${EPOCH_MODULE_DIR}/editor.project_input_settings.ixx
+    )
+    target_include_directories(epoch_editor_project_input_settings_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_editor_project_input_settings_contract PRIVATE
+        EPOCH_EDITOR_PROJECT_INPUT_SETTINGS_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_editor_project_input_settings_contract)
+    epoch_apply_warnings(epoch_editor_project_input_settings_contract)
+    epoch_apply_sanitizers(epoch_editor_project_input_settings_contract)
+    add_test(
+        NAME epoch_editor_project_input_settings_contract
+        COMMAND epoch_editor_project_input_settings_contract
     )
 
     add_executable(epoch_project_actor2d_contract
