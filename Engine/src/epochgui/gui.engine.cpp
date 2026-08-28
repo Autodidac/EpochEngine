@@ -8338,6 +8338,248 @@ namespace epochengine::gui
         return result;
     }
 
+    ChromeBarResult chrome_bar(const ChromeBarOptions& options) noexcept
+    {
+        ChromeBarResult result{};
+        if (!g_frame.insideWindow || !g_frame.ctx
+            || options.size.x <= 0.0f || options.size.y <= 0.0f)
+        {
+            return result;
+        }
+
+        const auto item_width = [&](const ChromeItemSpec& item, bool compact)
+        {
+            const float textWidth = measure_text_width(item.label, kFontScale);
+            float padding = 20.0f;
+            switch (item.role)
+            {
+            case ChromeItemRole::Label:
+                padding = 8.0f;
+                break;
+            case ChromeItemRole::Menu:
+                padding = 28.0f;
+                break;
+            case ChromeItemRole::Command:
+                padding = 32.0f;
+                break;
+            case ChromeItemRole::Status:
+                padding = 20.0f;
+                break;
+            }
+            const float preferred = item.preferred_width > 0.0f
+                ? item.preferred_width
+                : textWidth + padding;
+            const float minimum = item.compact_width > 0.0f
+                ? item.compact_width
+                : (std::max)(48.0f, textWidth * 0.72f + padding);
+            return compact
+                ? (std::min)(preferred, minimum)
+                : preferred;
+        };
+
+        static thread_local std::vector<gui_lib::ChromeBarItemOptions> leftCore{};
+        static thread_local std::vector<gui_lib::ChromeBarItemOptions> centerCore{};
+        static thread_local std::vector<gui_lib::ChromeBarItemOptions> rightCore{};
+        const auto prepare_zone = [&](std::span<const ChromeItemSpec> source,
+            std::vector<gui_lib::ChromeBarItemOptions>& target)
+        {
+            target.clear();
+            target.reserve(source.size());
+            for (const ChromeItemSpec& item : source)
+            {
+                target.push_back(gui_lib::ChromeBarItemOptions{
+                    .preferred_width = item_width(item, false),
+                    .compact_width = item_width(item, true),
+                    .priority = item.priority,
+                    .pinned = item.pinned,
+                    .overflowable = item.overflowable
+                });
+            }
+        };
+        prepare_zone(options.left_items, leftCore);
+        prepare_zone(options.center_items, centerCore);
+        prepare_zone(options.right_items, rightCore);
+
+        const gui_lib::ChromeBarLayout layout =
+            gui_lib::make_chrome_bar_layout({
+                .bounds = {
+                    { options.position.x, options.position.y },
+                    { options.size.x, options.size.y }
+                },
+                .left_items = leftCore,
+                .center_items = centerCore,
+                .right_items = rightCore,
+                .item_gap = options.item_gap,
+                .zone_gap = options.zone_gap,
+                .overflow_width = options.overflow_width,
+                .horizontal_padding = options.horizontal_padding
+            });
+        if (!layout.valid)
+            return result;
+
+        result.left_bounds.resize(layout.left.item_bounds.size());
+        result.center_bounds.resize(layout.center.item_bounds.size());
+        result.right_bounds.resize(layout.right.item_bounds.size());
+        result.left_overflow = from_lib(layout.left.overflow_button);
+        result.center_overflow = from_lib(layout.center.overflow_button);
+        result.right_overflow = from_lib(layout.right.overflow_button);
+        result.compact = layout.density != gui_lib::ChromeDensity::full;
+        result.overflowed = layout.density == gui_lib::ChromeDensity::minimal;
+        result.valid = true;
+
+        const Vec2 savedCursor = cursor_position();
+        const auto render_zone = [&](const gui_lib::ChromeBarZoneLayout& zone,
+            std::span<const ChromeItemSpec> items,
+            std::vector<WidgetBounds>& bounds,
+            std::optional<std::size_t>& hovered,
+            std::optional<std::size_t>& selected,
+            std::string_view suffix)
+        {
+            for (std::size_t index = 0; index < zone.item_bounds.size(); ++index)
+                bounds[index] = from_lib(zone.item_bounds[index]);
+
+            for (const std::uint32_t index : zone.visible_indices)
+            {
+                const ChromeItemSpec& item = items[index];
+                const WidgetBounds itemBounds = bounds[index];
+                set_cursor(itemBounds.position);
+                const bool isHovered = item.enabled
+                    && point_in_rect(
+                        g_frame.mousePos,
+                        itemBounds.position.x,
+                        itemBounds.position.y,
+                        itemBounds.size.x,
+                        itemBounds.size.y)
+                    && point_in_active_clip(g_frame.mousePos);
+                if (isHovered)
+                    hovered = index;
+
+                if (item.role == ChromeItemRole::Menu
+                    || item.role == ChromeItemRole::Command)
+                {
+                    if (button_with_state(
+                            item.label,
+                            itemBounds.size,
+                            item.selected,
+                            item.enabled))
+                    {
+                        selected = index;
+                    }
+                    continue;
+                }
+
+                if (item.role == ChromeItemRole::Status)
+                {
+                    const auto& palette = active_palette();
+                    draw_sprite(
+                        palette.titleBar,
+                        itemBounds.position.x,
+                        itemBounds.position.y,
+                        itemBounds.size.x,
+                        itemBounds.size.y);
+                }
+                const float inset = item.role == ChromeItemRole::Label
+                    ? 2.0f
+                    : kContentPadding;
+                const std::string fitted = fit_text_to_width(
+                    item.label,
+                    (std::max)(1.0f, itemBounds.size.x - inset * 2.0f),
+                    kFontScale);
+                const std::string_view display = fitted.empty()
+                    ? item.label
+                    : std::string_view{ fitted };
+                const float textY = itemBounds.position.y
+                    + (std::max)(
+                        0.0f,
+                        (itemBounds.size.y - base_line_height(kFontScale))
+                            * 0.5f)
+                    + 1.0f;
+                draw_text_line(
+                    display,
+                    itemBounds.position.x + inset,
+                    textY,
+                    kFontScale);
+            }
+
+            if (zone.overflow_button.size.x <= 0.0f
+                || zone.overflow_indices.empty())
+            {
+                return;
+            }
+
+            static thread_local std::vector<std::string_view> labels{};
+            static thread_local std::vector<std::uint32_t> mappings{};
+            labels.clear();
+            mappings.clear();
+            labels.reserve(zone.overflow_indices.size());
+            mappings.reserve(zone.overflow_indices.size());
+            for (const std::uint32_t index : zone.overflow_indices)
+            {
+                if (!items[index].enabled)
+                    continue;
+                labels.push_back(items[index].label);
+                mappings.push_back(index);
+            }
+
+            const WidgetBounds overflowBounds = from_lib(zone.overflow_button);
+            const std::string overflowLabel =
+                std::string("More (")
+                + std::to_string(zone.overflow_indices.size()) + ")";
+            set_cursor(overflowBounds.position);
+            if (mappings.empty())
+            {
+                (void)button_with_state(
+                    overflowLabel,
+                    overflowBounds.size,
+                    false,
+                    false);
+                return;
+            }
+
+            const std::string controlId =
+                std::string(options.id) + "." + std::string(suffix);
+            const SelectBoxResult overflowResult = select_box(SelectBoxOptions{
+                .id = controlId,
+                .placeholder = overflowLabel,
+                .selected = {},
+                .options = labels,
+                .size = overflowBounds.size,
+                .row_height = options.size.y,
+                .max_visible_options = 10u
+            });
+            if (overflowResult.changed && overflowResult.selected_index
+                && *overflowResult.selected_index < mappings.size())
+            {
+                selected = mappings[*overflowResult.selected_index];
+            }
+        };
+
+        render_zone(
+            layout.left,
+            options.left_items,
+            result.left_bounds,
+            result.hovered_left,
+            result.selected_left,
+            "left-overflow");
+        render_zone(
+            layout.center,
+            options.center_items,
+            result.center_bounds,
+            result.hovered_center,
+            result.selected_center,
+            "center-overflow");
+        render_zone(
+            layout.right,
+            options.right_items,
+            result.right_bounds,
+            result.hovered_right,
+            result.selected_right,
+            "right-overflow");
+        set_cursor(savedCursor);
+        return result;
+    }
+
+
     SelectBoxResult select_box(const SelectBoxOptions& options) noexcept
     {
         SelectBoxResult result{};

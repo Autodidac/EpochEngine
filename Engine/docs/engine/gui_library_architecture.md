@@ -90,6 +90,32 @@ composition. Backends that do not yet consume the explicit top-layer replay path
 keep their existing normal-batch behavior until their presenter owns a matching
 replay pass.
 
+## Adaptive Professional Chrome
+
+The primary editor command row now composes one shared three-zone chrome
+contract rather than positioning menus, run controls, update controls, and one
+unbounded status sentence independently. `gui_lib::make_chrome_bar_layout`
+owns deterministic left, centered-command, and right-status planning from
+preferred widths, compact widths, pinning, priority, and explicit overflow.
+It returns exact item and overflow-button bounds without backend or editor
+dependencies. Invalid or non-finite bounds fail closed.
+
+The `gui.engine::chrome_bar` adapter measures labels with the active EpochGui
+font, draws menu/command controls and read-only status chips, and maps overflow
+selection back to the original stable item index. The editor supplies only real
+application state: application identity, command-menu state, admitted run and
+update actions, engine version/build tag, live and hardware thread counts,
+active renderer context, and preview zoom. The chrome does not synthesize FPS,
+GPU, memory, build, or validation evidence.
+
+The standard editor uses a 32-pixel command row and a 36-pixel responsive
+document row inside the existing fixed toolbar allocation. Menus, commands, and
+status fields compact or move into explicit per-zone overflow while the primary
+run/update commands remain pinned by policy. The existing responsive workspace
+tab strip still owns document selection and overflow. This is a composition
+change only: backend frame order, queue drains, scene drawing, and top-layer
+menu replay remain unchanged.
+
 ## Intended Layers
 
 - Primitive widgets: labels, buttons, connected tabs, dropdown/select boxes,

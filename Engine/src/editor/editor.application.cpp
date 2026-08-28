@@ -21840,11 +21840,10 @@ namespace epochengine
         render_floating_gui_window();
 
         gui::begin_window("", toolbar_pos, toolbar_size);
-        const float toolbar_button_y = toolbar_pos.y + 10.0f;
-        const float toolbar_button_h = 24.0f;
+        const float toolbar_button_y = toolbar_pos.y + 8.0f;
+        const float toolbar_button_h = 32.0f;
         const float application_label_width =
             application.kind == EditorApplicationKind::Standard ? 104.0f : 158.0f;
-        float toolbar_x = toolbar_pos.x + application_label_width;
 
         struct TopMenuButton
         {
@@ -21863,96 +21862,203 @@ namespace epochengine
             { TopMenu::Help, "Help", 72.0f, 0.0f }
         }};
 
-        gui::set_cursor({ 16.0f, toolbar_pos.y + 14.0f });
-        gui::label(application.display_name);
-
-        const gui::Vec2 toolbarMouse = gui::mouse_position();
         const bool menusBlockedByModal = modal_visible_now();
-        for (auto& item : topMenus)
+        const gui::Vec2 toolbarMouse = gui::mouse_position();
+        std::vector<gui::ChromeItemSpec> chromeLeft{};
+        chromeLeft.reserve(topMenus.size() + 1u);
+        chromeLeft.push_back(gui::ChromeItemSpec{
+            .id = "chrome.application",
+            .label = application.display_name,
+            .preferred_width = application_label_width,
+            .compact_width = application_label_width - 16.0f,
+            .priority = 100u,
+            .pinned = false,
+            .overflowable = false,
+            .enabled = true,
+            .selected = false,
+            .role = gui::ChromeItemRole::Label
+        });
+        for (std::size_t index = 0; index < topMenus.size(); ++index)
         {
-            item.x = toolbar_x;
-            gui::set_cursor({ toolbar_x, toolbar_button_y });
-            if (!menusBlockedByModal
-                && editor_point_in_rect(toolbarMouse, { toolbar_x, toolbar_button_y }, { item.width, toolbar_button_h }))
-                editor.openMenu = item.menu;
-            if (!menusBlockedByModal
-                && gui::button_selected(item.label, { item.width, toolbar_button_h }, editor.openMenu == item.menu))
-                editor.openMenu = item.menu;
-            toolbar_x += item.width + 6.0f;
+            const TopMenuButton& item = topMenus[index];
+            chromeLeft.push_back(gui::ChromeItemSpec{
+                .id = item.label,
+                .label = item.label,
+                .preferred_width = item.width,
+                .compact_width = (std::max)(52.0f, item.width - 20.0f),
+                .priority = static_cast<std::uint16_t>(index),
+                .pinned = false,
+                .overflowable = true,
+                .enabled = !menusBlockedByModal,
+                .selected = editor.openMenu == item.menu,
+                .role = gui::ChromeItemRole::Menu
+            });
         }
-        const bool toolbarControlsBlockedByMenu = editor.openMenu != TopMenu::None;
+        enum class ChromeCommand : std::uint8_t
+        {
+            Run,
+            Update
+        };
+        std::vector<gui::ChromeItemSpec> chromeCenter{};
+        std::vector<ChromeCommand> chromeCommands{};
+        const bool commandsEnabled =
+            !menusBlockedByModal && editor.openMenu == TopMenu::None;
+        if (application.allow_project_run && has_open_project(editor))
+        {
+            chromeCenter.push_back(gui::ChromeItemSpec{
+                .id = "chrome.run",
+                .label = "Run",
+                .preferred_width = 108.0f,
+                .compact_width = 96.0f,
+                .priority = 0u,
+                .pinned = true,
+                .overflowable = true,
+                .enabled = commandsEnabled,
+                .selected = false,
+                .role = gui::ChromeItemRole::Command
+            });
+            chromeCommands.push_back(ChromeCommand::Run);
+        }
+        if (editor.updateState == EditorUpdateState::Available
+            || editor.updateState == EditorUpdateState::RestartReady)
+        {
+            const bool updateButtonActive = editor.showUpdateConfirmModal
+                || editor.showSourceUpdateConfirmModal
+                || editor.updateInstallPending;
+            chromeCenter.push_back(gui::ChromeItemSpec{
+                .id = "chrome.update",
+                .label = update_toolbar_button_label(editor.updateState),
+                .preferred_width = 178.0f,
+                .compact_width = 132.0f,
+                .priority = 1u,
+                .pinned = true,
+                .overflowable = true,
+                .enabled = commandsEnabled,
+                .selected = updateButtonActive,
+                .role = gui::ChromeItemRole::Command
+            });
+            chromeCommands.push_back(ChromeCommand::Update);
+        }
+
+        const std::size_t toolbarThreadCount =
+            epochengine::systems::threading::live_thread_count();
+        const std::size_t toolbarCpuThreadCount = (std::max)(
+            std::size_t{ 1 },
+            std::thread::hardware_concurrency() > 0
+                ? static_cast<std::size_t>(std::thread::hardware_concurrency())
+                : std::size_t{ 1 });
+        const std::array<std::string, 5> toolbarStatus{{
+            std::string("v") + epochengine::GetEngineVersionString(),
+            epochengine::GetEngineBuildTagString(),
+            std::string("Threads ") + std::to_string(toolbarThreadCount)
+                + "/" + std::to_string(toolbarCpuThreadCount),
+            std::string("Context ")
+                + (ctx ? renderer_name(ctx) : std::string{ "Unknown" }),
+            std::string("Zoom ") + preview_zoom_text(ctx)
+        }};
+        constexpr std::array<std::uint16_t, 5> statusPriority{{
+            2u, 4u, 1u, 0u, 3u
+        }};
+        std::vector<gui::ChromeItemSpec> chromeRight{};
+        chromeRight.reserve(toolbarStatus.size());
+        for (std::size_t index = 0; index < toolbarStatus.size(); ++index)
+        {
+            chromeRight.push_back(gui::ChromeItemSpec{
+                .id = toolbarStatus[index],
+                .label = toolbarStatus[index],
+                .preferred_width = 0.0f,
+                .compact_width = index == 3u ? 92.0f : 72.0f,
+                .priority = statusPriority[index],
+                .pinned = false,
+                .overflowable = true,
+                .enabled = true,
+                .selected = false,
+                .role = gui::ChromeItemRole::Status
+            });
+        }
+
+        const gui::ChromeBarResult chromeResult =
+            gui::chrome_bar(gui::ChromeBarOptions{
+                .id = "editor.primary-chrome",
+                .left_items = chromeLeft,
+                .center_items = chromeCenter,
+                .right_items = chromeRight,
+                .position = { toolbar_pos.x, toolbar_button_y },
+                .size = { toolbar_size.x, toolbar_button_h },
+                .item_gap = 4.0f,
+                .zone_gap = 12.0f,
+                .overflow_width = 82.0f,
+                .horizontal_padding = 12.0f
+            });
+
+        const auto open_chrome_menu = [&](std::optional<std::size_t> index)
+        {
+            if (menusBlockedByModal || !index || *index == 0u
+                || *index > topMenus.size())
+            {
+                return;
+            }
+            editor.openMenu = topMenus[*index - 1u].menu;
+        };
+        open_chrome_menu(chromeResult.hovered_left);
+        open_chrome_menu(chromeResult.selected_left);
+
+        for (std::size_t index = 0; index < topMenus.size(); ++index)
+        {
+            const std::size_t chromeIndex = index + 1u;
+            const bool visible = chromeIndex < chromeResult.left_bounds.size()
+                && chromeResult.left_bounds[chromeIndex].size.x > 0.0f;
+            topMenus[index].x = visible
+                ? chromeResult.left_bounds[chromeIndex].position.x
+                : chromeResult.left_overflow.position.x;
+        }
+
+        const bool toolbarControlsBlockedByMenu =
+            editor.openMenu != TopMenu::None;
         if (toolbarControlsBlockedByMenu)
         {
             result.scene_input_captured = true;
             gui::block_input_until_clear();
         }
 
-
-        float status_anchor_x = toolbar_x + 12.0f;
-        if (application.allow_project_run && has_open_project(editor))
+        if (chromeResult.selected_center
+            && *chromeResult.selected_center < chromeCommands.size()
+            && !toolbarControlsBlockedByMenu)
         {
-            const float run_button_w = 108.0f;
-            const float run_button_x = (std::max)(
-                toolbar_x + 12.0f,
-                viewport_pos.x + (viewport_size.x - run_button_w) * 0.5f);
-            gui::set_cursor({ run_button_x, toolbar_button_y });
-            if (gui::button("Run", { run_button_w, toolbar_button_h }) && !toolbarControlsBlockedByMenu)
+            switch (chromeCommands[*chromeResult.selected_center])
             {
+            case ChromeCommand::Run:
                 if (editor.projectKind == "Engine Development")
                     play_active_context();
                 else
                     launch_active_project_context();
-            }
-            status_anchor_x = run_button_x + run_button_w + 14.0f;
-        }
-
-        if (editor.updateState == EditorUpdateState::Available
-            || editor.updateState == EditorUpdateState::RestartReady)
-        {
-            constexpr float update_button_w = 178.0f;
-            gui::set_cursor({ status_anchor_x, toolbar_button_y });
-            const bool updateButtonActive = editor.showUpdateConfirmModal
-                || editor.showSourceUpdateConfirmModal
-                || editor.updateInstallPending;
-            if (gui::button_selected(update_toolbar_button_label(editor.updateState), { update_button_w, toolbar_button_h }, updateButtonActive)
-                && !toolbarControlsBlockedByMenu)
-            {
+                break;
+            case ChromeCommand::Update:
                 if (editor.updateState == EditorUpdateState::RestartReady)
                 {
                     editor.updateStatus = "Update handoff has already started. Restart Epoch to let the verified replacement finish.";
                     editor.showUpdateConfirmModal = true;
                     editor.showSourceUpdateConfirmModal = false;
-                    push_editor_log(editor, "[update] Restart is ready after verified update handoff.");
+                    push_editor_log(
+                        editor,
+                        "[update] Restart is ready after verified update handoff.");
                 }
                 else
                 {
                     editor.openMenu = TopMenu::None;
                     editor.showUpdateConfirmModal = true;
                     editor.showSourceUpdateConfirmModal = false;
-                    push_editor_log(editor, "[update] Update available. Awaiting confirmation.");
+                    push_editor_log(
+                        editor,
+                        "[update] Update available. Awaiting confirmation.");
                 }
+                break;
             }
-            status_anchor_x += update_button_w + 10.0f;
         }
+        if (chromeResult.selected_right && !toolbarControlsBlockedByMenu)
+            open_editor_surface(EditorMainSurface::Systems, "chrome status");
 
-        const std::size_t toolbarThreadCount = epochengine::systems::threading::live_thread_count();
-        const std::size_t toolbarCpuThreadCount = (std::max)(std::size_t{ 1 },
-            std::thread::hardware_concurrency() > 0
-            ? static_cast<std::size_t>(std::thread::hardware_concurrency())
-            : std::size_t{ 1 });
-
-        const float status_x = (std::max)(toolbar_x + 12.0f, status_anchor_x);
-        gui::set_cursor({ status_x, toolbar_button_y + 4.0f });
-        gui::wrapped_label(
-            std::string("v") + epochengine::GetEngineVersionString()
-            + "  |  " + epochengine::GetEngineBuildTagString()
-            + "  |  Threads " + std::to_string(toolbarThreadCount)
-            + "/" + std::to_string(toolbarCpuThreadCount)
-            + "  |  Context " + (ctx ? renderer_name(ctx) : std::string{ "Unknown" })
-            + "  |  Zoom " + preview_zoom_text(ctx),
-            (std::max)(180.0f, w - status_x - 12.0f));
-
-        const float tab_y = toolbar_pos.y + 48.0f;
+        const float tab_y = toolbar_pos.y + 52.0f;
         std::vector<gui::TabButtonSpec> documentTabs{};
         std::vector<EditorMainSurface> documentSurfaces{};
         const auto addDocumentTab = [&](
@@ -21993,7 +22099,7 @@ namespace epochengine
                     .tabs = documentTabs,
                     .available_width = (std::max)(120.0f, w - 32.0f),
                     .overflow_width = 132.0f,
-                    .height = 34.0f,
+                    .height = 36.0f,
                     .gap = 0.0f,
                     .presentation = gui::TabBarPresentation::Workbench
                 });

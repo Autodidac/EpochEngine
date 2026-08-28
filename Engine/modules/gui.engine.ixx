@@ -838,6 +838,61 @@ namespace epochengine::gui
         float width{};
         bool enabled{ true };
     };
+    export enum class ChromeItemRole : std::uint8_t
+    {
+        Label,
+        Menu,
+        Command,
+        Status
+    };
+
+    export struct ChromeItemSpec
+    {
+        std::string_view id{};
+        std::string_view label{};
+        float preferred_width{};
+        float compact_width{};
+        std::uint16_t priority{};
+        bool pinned{};
+        bool overflowable{ true };
+        bool enabled{ true };
+        bool selected{};
+        ChromeItemRole role{ ChromeItemRole::Command };
+    };
+
+    export struct ChromeBarOptions
+    {
+        std::string_view id{ "editor-chrome" };
+        std::span<const ChromeItemSpec> left_items{};
+        std::span<const ChromeItemSpec> center_items{};
+        std::span<const ChromeItemSpec> right_items{};
+        Vec2 position{};
+        Vec2 size{};
+        float item_gap{ 4.0f };
+        float zone_gap{ 12.0f };
+        float overflow_width{ 82.0f };
+        float horizontal_padding{ 12.0f };
+    };
+
+    export struct ChromeBarResult
+    {
+        std::optional<std::size_t> hovered_left{};
+        std::optional<std::size_t> hovered_center{};
+        std::optional<std::size_t> hovered_right{};
+        std::optional<std::size_t> selected_left{};
+        std::optional<std::size_t> selected_center{};
+        std::optional<std::size_t> selected_right{};
+        std::vector<WidgetBounds> left_bounds{};
+        std::vector<WidgetBounds> center_bounds{};
+        std::vector<WidgetBounds> right_bounds{};
+        WidgetBounds left_overflow{};
+        WidgetBounds center_overflow{};
+        WidgetBounds right_overflow{};
+        bool compact{};
+        bool overflowed{};
+        bool valid{};
+    };
+
 
     export struct SelectBoxOptions
     {
@@ -1006,6 +1061,8 @@ namespace epochengine::gui
         TabBarPresentation presentation = TabBarPresentation::Document) noexcept;
     export TabBarResult responsive_tab_bar_buttons(
         const ResponsiveTabBarOptions& options) noexcept;
+    export ChromeBarResult chrome_bar(
+        const ChromeBarOptions& options) noexcept;
     export std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height = 24.0f,
