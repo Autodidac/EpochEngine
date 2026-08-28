@@ -95,6 +95,43 @@ namespace epochengine::ai::iteration_session
                 });
         }
 
+        [[nodiscard]] bool safe_identifier(const std::string_view text)
+        {
+            return !text.empty() && text.size() <= 128u
+                && std::all_of(text.begin(), text.end(), [](const char value)
+                {
+                    return (value >= 'a' && value <= 'z')
+                        || (value >= 'A' && value <= 'Z')
+                        || (value >= '0' && value <= '9')
+                        || value == '.' || value == '_' || value == '-';
+                });
+        }
+
+        [[nodiscard]] bool valid_source_authority(const SourceAuthority& source)
+        {
+            if (!source.verified || source.kind == SourceAuthorityKind::unavailable
+                || source.root.empty() || !source.root.is_absolute())
+                return false;
+            if (source.target_kind == IterationTargetKind::engine_source)
+            {
+                return (source.kind == SourceAuthorityKind::explicit_checkout
+                        || source.kind == SourceAuthorityKind::verified_cache)
+                    && !source.source_version.empty()
+                    && source.source_version.size() <= 64u
+                    && lowercase_hex(source.commit, 40u)
+                    && lowercase_hex(source.receipt_digest, 64u)
+                    && source.project_id.empty()
+                    && source.project_manifest_digest.empty()
+                    && source.project_profile_digest.empty();
+            }
+            return source.kind == SourceAuthorityKind::verified_project
+                && source.source_version.empty() && source.commit.empty()
+                && source.receipt_digest.empty()
+                && safe_identifier(source.project_id)
+                && lowercase_hex(source.project_manifest_digest, 64u)
+                && lowercase_hex(source.project_profile_digest, 64u);
+        }
+
         [[nodiscard]] std::string escape_field(const std::string_view text)
         {
             constexpr char digits[] = "0123456789abcdef";
@@ -137,6 +174,7 @@ namespace epochengine::ai::iteration_session
             {
             case SourceAuthorityKind::explicit_checkout: return "explicit_checkout";
             case SourceAuthorityKind::verified_cache: return "verified_cache";
+            case SourceAuthorityKind::verified_project: return "verified_project";
             case SourceAuthorityKind::unavailable: return "unavailable";
             }
             return "unavailable";
@@ -218,14 +256,7 @@ namespace epochengine::ai::iteration_session
     {
         if (configuration.objective.empty() || configuration.objective.size() > 4096u
             || configuration.model_name.empty() || configuration.model_name.size() > 256u
-            || !configuration.source.verified
-            || configuration.source.kind == SourceAuthorityKind::unavailable
-            || configuration.source.root.empty()
-            || !configuration.source.root.is_absolute()
-            || configuration.source.source_version.empty()
-            || configuration.source.source_version.size() > 64u
-            || !lowercase_hex(configuration.source.commit, 40u)
-            || !lowercase_hex(configuration.source.receipt_digest, 64u)
+            || !valid_source_authority(configuration.source)
             || configuration.curated_files.empty()
             || configuration.curated_files.size() > 6u
             || configuration.maximum_repair_attempts == 0u
@@ -258,14 +289,21 @@ namespace epochengine::ai::iteration_session
             .phase = SessionPhase::awaiting_context_share,
             .policy = configuration.policy,
             .source = std::move(configuration.source),
+            .objective = configuration.objective,
             .objective_digest = digest_text(configuration.objective),
             .model_name = std::move(configuration.model_name),
             .curated_files = std::move(configuration.curated_files),
             .status = "Awaiting explicit curated-context sharing."};
 
-        std::string scope = report_.objective_digest + "\n"
+        std::string scope = std::to_string(
+            static_cast<unsigned>(report_.source.target_kind)) + "\n"
+            + report_.objective_digest + "\n"
             + report_.source.root.generic_string() + "\n"
-            + report_.source.source_version + "\n" + report_.source.commit;
+            + report_.source.source_version + "\n" + report_.source.commit
+            + "\n" + report_.source.receipt_digest + "\n"
+            + report_.source.project_id + "\n"
+            + report_.source.project_manifest_digest + "\n"
+            + report_.source.project_profile_digest;
         for (const auto& file : report_.curated_files)
             scope += "\n" + file.relative_path + "\n" + file.sha256;
         report_.scope_digest = digest_text(scope);
@@ -524,10 +562,10 @@ namespace epochengine::ai::iteration_session
         const SourceAuthority& current_source,
         std::vector<CuratedFile> current_files)
     {
-        if (!report.identity.valid() || !current_source.verified
-            || report.source.root != current_source.root
-            || report.source.source_version != current_source.source_version
-            || report.source.commit != current_source.commit
+        if (!report.identity.valid() || report.objective.empty()
+            || digest_text(report.objective) != report.objective_digest
+            || !valid_source_authority(current_source)
+            || report.source != current_source
             || report.curated_files != current_files)
         {
             report_ = report;
@@ -538,7 +576,7 @@ namespace epochengine::ai::iteration_session
             return {false, report_.status};
         }
         SessionConfiguration configuration{
-            .objective = "resumed-scope:" + report.objective_digest,
+            .objective = report.objective,
             .model_name = report.model_name,
             .source = current_source,
             .curated_files = std::move(current_files),
@@ -572,11 +610,16 @@ namespace epochengine::ai::iteration_session
             << "request_id=" << report_.identity.request_id << '\n'
             << "phase=" << static_cast<unsigned>(report_.phase) << '\n'
             << "policy=" << static_cast<unsigned>(report_.policy) << '\n'
+            << "target_kind=" << static_cast<unsigned>(report_.source.target_kind) << '\n'
             << "source_kind=" << source_kind_name(report_.source.kind) << '\n'
             << "source_root=" << escape_field(report_.source.root.generic_string()) << '\n'
             << "source_version=" << escape_field(report_.source.source_version) << '\n'
             << "source_commit=" << escape_field(report_.source.commit) << '\n'
             << "source_receipt=" << escape_field(report_.source.receipt_digest) << '\n'
+            << "project_id=" << escape_field(report_.source.project_id) << '\n'
+            << "project_manifest_sha256=" << report_.source.project_manifest_digest << '\n'
+            << "project_profile_sha256=" << report_.source.project_profile_digest << '\n'
+            << "objective=" << escape_field(report_.objective) << '\n'
             << "objective_sha256=" << report_.objective_digest << '\n'
             << "scope_sha256=" << report_.scope_digest << '\n'
             << "proposal_sha256=" << report_.proposal_digest << '\n'

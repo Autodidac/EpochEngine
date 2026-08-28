@@ -5644,6 +5644,23 @@ namespace epochengine::updater
                 || fs::is_symlink(git_dir, ec))
                 return std::nullopt;
 
+            std::vector<fs::path> ref_roots{git_dir};
+            const std::string common_marker = system_detail::trim_ascii(
+                system_detail::read_text_file(git_dir / "commondir"));
+            if (!common_marker.empty())
+            {
+                fs::path common_dir{common_marker};
+                if (common_dir.is_relative())
+                    common_dir = git_dir / common_dir;
+                ec.clear();
+                common_dir = fs::weakly_canonical(common_dir, ec);
+                if (ec || !fs::is_directory(common_dir, ec)
+                    || fs::is_symlink(common_dir, ec))
+                    return std::nullopt;
+                if (common_dir != git_dir)
+                    ref_roots.push_back(std::move(common_dir));
+            }
+
             const std::string head = system_detail::trim_ascii(
                 system_detail::read_text_file(git_dir / "HEAD"));
             if (lowercase_hex_commit(head))
@@ -5655,30 +5672,33 @@ namespace epochengine::updater
                 head.substr(ref_prefix.size()));
             if (ref.empty() || ref.starts_with('/') || ref.find("..") != std::string::npos)
                 return std::nullopt;
-            const std::string loose = system_detail::trim_ascii(
-                system_detail::read_text_file(git_dir / fs::path{ref}));
-            if (lowercase_hex_commit(loose))
-                return loose;
-
-            const std::string packed = system_detail::read_text_file(
-                git_dir / "packed-refs");
-            std::size_t offset{};
-            while (offset <= packed.size())
+            for (const auto& ref_root : ref_roots)
             {
-                const std::size_t end = packed.find('\n', offset);
-                const std::string_view line = std::string_view{packed}.substr(
-                    offset, end == std::string::npos
-                        ? packed.size() - offset : end - offset);
-                const std::size_t separator = line.find(' ');
-                if (separator == 40u && line.substr(separator + 1u) == ref)
+                const std::string loose = system_detail::trim_ascii(
+                    system_detail::read_text_file(ref_root / fs::path{ref}));
+                if (lowercase_hex_commit(loose))
+                    return loose;
+
+                const std::string packed = system_detail::read_text_file(
+                    ref_root / "packed-refs");
+                std::size_t offset{};
+                while (offset <= packed.size())
                 {
-                    const std::string commit{line.substr(0u, separator)};
-                    if (lowercase_hex_commit(commit))
-                        return commit;
+                    const std::size_t end = packed.find('\n', offset);
+                    const std::string_view line = std::string_view{packed}.substr(
+                        offset, end == std::string::npos
+                            ? packed.size() - offset : end - offset);
+                    const std::size_t separator = line.find(' ');
+                    if (separator == 40u && line.substr(separator + 1u) == ref)
+                    {
+                        const std::string commit{line.substr(0u, separator)};
+                        if (lowercase_hex_commit(commit))
+                            return commit;
+                    }
+                    if (end == std::string::npos)
+                        break;
+                    offset = end + 1u;
                 }
-                if (end == std::string::npos)
-                    break;
-                offset = end + 1u;
             }
             return std::nullopt;
         }
@@ -5801,6 +5821,9 @@ namespace epochengine::updater
         const auto root = fs::temp_directory_path()
             / ("epoch_source_authority_" + system_detail::make_source_update_run_token());
         const auto checkout = root / "checkout";
+        const auto linked_checkout = root / "linked-checkout";
+        const auto common_git = root / "common.git";
+        const auto linked_git = common_git / "worktrees" / "linked";
         const auto cached = root / "cached";
         const auto write_shape = [](const fs::path& path)
             {
@@ -5813,7 +5836,8 @@ namespace epochengine::updater
                     << "#define EPOCH_VERSION_MAJOR_VALUE 0\n#define EPOCH_VERSION_MINOR_VALUE 89\n#define EPOCH_VERSION_REVISION_VALUE 31\n";
                 return !ec;
             };
-        const bool shaped = write_shape(checkout) && write_shape(cached);
+        const bool shaped = write_shape(checkout) && write_shape(linked_checkout)
+            && write_shape(cached);
         std::error_code git_ec{};
         fs::create_directories(checkout / ".git", git_ec);
         std::ofstream{checkout / ".git/HEAD"}
@@ -5822,8 +5846,20 @@ namespace epochengine::updater
             << "schema=epoch.source.authority.v1\nsource_version=0.89.31\n"
                "commit=0123456789012345678901234567890123456789\narchive_format=zip\n"
                "archive_sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n";
+        fs::create_directories(linked_git, git_ec);
+        fs::create_directories(common_git / "refs/heads", git_ec);
+        std::ofstream{linked_checkout / ".git"}
+            << "gitdir: " << linked_git.generic_string() << "\n";
+        std::ofstream{linked_git / "HEAD"}
+            << "ref: refs/heads/linked-authority\n";
+        std::ofstream{linked_git / "commondir"} << "../..\n";
+        std::ofstream{common_git / "refs/heads/linked-authority"}
+            << "abcdefabcdefabcdefabcdefabcdefabcdefabcd\n";
         const auto explicit_result = shaped
             ? resolve_source_authority_at(checkout, cached)
+            : VerifiedSourceAuthority{};
+        const auto linked_result = shaped && !git_ec
+            ? resolve_source_authority_at(linked_checkout, cached)
             : VerifiedSourceAuthority{};
         const auto cached_result = resolve_source_authority_at({}, cached);
         std::error_code cleanup_ec{};
@@ -5831,6 +5867,9 @@ namespace epochengine::updater
         return explicit_result.verified
             && explicit_result.kind == SourceAuthorityKind::explicit_checkout
             && explicit_result.commit == "fedcbafedcbafedcbafedcbafedcbafedcbafedc"
+            && linked_result.verified
+            && linked_result.kind == SourceAuthorityKind::explicit_checkout
+            && linked_result.commit == "abcdefabcdefabcdefabcdefabcdefabcdefabcd"
             && cached_result.verified
             && cached_result.kind == SourceAuthorityKind::verified_cache
             && cached_result.commit == "0123456789012345678901234567890123456789";

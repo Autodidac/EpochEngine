@@ -21,7 +21,14 @@ export namespace epochengine::ai::iteration_session
     {
         unavailable,
         explicit_checkout,
-        verified_cache
+        verified_cache,
+        verified_project
+    };
+
+    enum class IterationTargetKind : std::uint8_t
+    {
+        engine_source,
+        project_source
     };
 
     enum class CandidatePolicy : std::uint8_t
@@ -73,12 +80,18 @@ export namespace epochengine::ai::iteration_session
 
     struct SourceAuthority final
     {
+        IterationTargetKind target_kind{IterationTargetKind::engine_source};
         SourceAuthorityKind kind{SourceAuthorityKind::unavailable};
         std::filesystem::path root{};
         std::string source_version{};
         std::string commit{};
         std::string receipt_digest{};
+        std::string project_id{};
+        std::string project_manifest_digest{};
+        std::string project_profile_digest{};
         bool verified{};
+
+        friend bool operator==(const SourceAuthority&, const SourceAuthority&) = default;
     };
 
     struct CuratedFile final
@@ -115,6 +128,7 @@ export namespace epochengine::ai::iteration_session
         SessionPhase phase{SessionPhase::idle};
         CandidatePolicy policy{CandidatePolicy::manual_each_candidate};
         SourceAuthority source{};
+        std::string objective{};
         std::string objective_digest{};
         std::string scope_digest{};
         std::string proposal_digest{};

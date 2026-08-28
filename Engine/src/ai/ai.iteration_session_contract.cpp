@@ -8,6 +8,7 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 module ai.iteration_session;
@@ -19,10 +20,19 @@ namespace epochengine::ai::iteration_session
         struct Fixture final
         {
             std::filesystem::path root{};
+            Fixture() = default;
+            explicit Fixture(std::filesystem::path path)
+                : root{std::move(path)} {}
+            Fixture(const Fixture&) = delete;
+            Fixture& operator=(const Fixture&) = delete;
+            Fixture(Fixture&& other) noexcept
+                : root{std::exchange(other.root, {})} {}
+            Fixture& operator=(Fixture&&) = delete;
             ~Fixture()
             {
                 std::error_code ec{};
-                std::filesystem::remove_all(root, ec);
+                if (!root.empty())
+                    std::filesystem::remove_all(root, ec);
             }
         };
 
@@ -196,6 +206,15 @@ namespace epochengine::ai::iteration_session
             }
 
             CandidateReport report = session.report();
+            IterationSession sameScope{};
+            if (!sameScope.resume_scope_fail_closed(
+                    report, source, inspected.files)
+                || sameScope.identity() == report.identity
+                || sameScope.report().objective != "Repair one bounded AI defect."
+                || sameScope.report().objective_digest != report.objective_digest
+                || sameScope.report().candidate_approved
+                || !sameScope.report().validation.empty())
+                return false;
             SourceAuthority changed = source;
             changed.commit = "ffffffffffffffffffffffffffffffffffffffff";
             IterationSession resumed{};
