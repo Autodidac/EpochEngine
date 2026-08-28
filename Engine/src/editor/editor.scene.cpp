@@ -123,6 +123,7 @@ module editor.core;
 
 import core.logger;
 import core.path;
+import ai.project_profile;
 import authoring.tilemap;
 import authoring.texture;
 import authoring.gui_document;
@@ -3741,19 +3742,12 @@ namespace
             + "debug_output=" + generated_project_output_path(root).generic_string() + "\n";
 
         const std::string worldText = make_project_world_scene_text(spec, kindText, includeEngineArcadePackage);
-        const std::string defaultAiProfileText =
-            "{\n"
-            "  \"schema\": \"epoch.project.ai.v1\",\n"
-            "  \"provider\": \"disabled\",\n"
-            "  \"inference_transport\": \"none\",\n"
-            "  \"tool_protocol\": \"epoch_mcp_v1\",\n"
-            "  \"self_iteration_scope\": \"project_source_only\",\n"
-            "  \"engine_source_write\": false,\n"
-            "  \"operator_approval_per_iteration\": true,\n"
-            "  \"auto_start\": false,\n"
-            "  \"server_or_listener\": false,\n"
-            "  \"weights_bundled\": false\n"
-            "}\n";
+        const auto defaultAiProfile =
+            epochengine::ai::project_profile::serialize_profile(
+                epochengine::ai::project_profile::make_profile(
+                    epochengine::ai::project_profile::Provider::disabled));
+        const std::string defaultAiProfileText = defaultAiProfile
+            ? defaultAiProfile.canonical_bytes : std::string{};
 
 
         const auto defaultInputProfile =
@@ -4281,8 +4275,8 @@ namespace
             "if [[ ! -x \"$runtime_path\" ]]; then echo \"[ERROR] Build completed without executable: $runtime_path\" >&2; exit 6; fi\n"
             "if [[ -d \"$build_dir/epoch-engine/assets\" ]]; then \"$cmake_bin\" -E copy_directory \"$build_dir/epoch-engine/assets\" \"$output_dir/assets\"; fi\n"
             "echo \"[INFO] Output: $runtime_path\"\n";
-        bool ok =
-            write_text_file_if_allowed(manifest, manifestText, spec.overwrite_existing)
+        bool ok = defaultAiProfile
+            && write_text_file_if_allowed(manifest, manifestText, spec.overwrite_existing)
             && write_text_file_if_allowed(readme, readmeText, spec.overwrite_existing)
             && write_text_file_if_allowed(pathsFile, pathsText, spec.overwrite_existing)
             && write_text_file_if_allowed(worldFile, worldText, spec.overwrite_existing)

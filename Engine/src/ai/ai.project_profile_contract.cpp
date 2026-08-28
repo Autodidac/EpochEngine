@@ -62,11 +62,38 @@ namespace epochengine::ai::project_profile
         std::string unknown = serialize_profile(
             make_profile(Provider::disabled)).canonical_bytes;
         unknown.insert(unknown.find("\n}"), ",\n  \"network\": true");
+        std::string auto_start = serialize_profile(
+            make_profile(Provider::epoch_local_qwen38)).canonical_bytes;
+        auto_start.replace(
+            auto_start.find("\"auto_start\": false"),
+            std::string{"\"auto_start\": false"}.size(),
+            "\"auto_start\": true");
+        std::string no_approval = serialize_profile(
+            make_profile(Provider::external_mcp)).canonical_bytes;
+        no_approval.replace(
+            no_approval.find("\"operator_approval_per_iteration\": true"),
+            std::string{"\"operator_approval_per_iteration\": true"}.size(),
+            "\"operator_approval_per_iteration\": false");
+        std::string no_project_write = serialize_profile(
+            make_profile(Provider::external_mcp)).canonical_bytes;
+        no_project_write.replace(
+            no_project_write.find("\"project_source_write\": true"),
+            std::string{"\"project_source_write\": true"}.size(),
+            "\"project_source_write\": false");
+        std::string enabled_legacy = legacy;
+        enabled_legacy.replace(
+            enabled_legacy.find("\"provider\": \"disabled\""),
+            std::string{"\"provider\": \"disabled\""}.size(),
+            "\"provider\": \"external_mcp\"");
 
         return !parse_profile(engine_write)
             && !parse_profile(duplicate)
             && !parse_profile(listener)
             && !parse_profile(unknown)
+            && !parse_profile(auto_start)
+            && !parse_profile(no_approval)
+            && !parse_profile(no_project_write)
+            && !parse_profile(enabled_legacy)
             && !serialize_profile(Profile{
                 .provider = Provider::disabled,
                 .enabled = true});

@@ -79,6 +79,7 @@ import ai.runtime;
 import ai.session;
 import ai.mcp;
 import ai.eval;
+import ai.project_profile;
 import core.log;
 import core.path;
 
@@ -700,41 +701,6 @@ namespace epochengine::ai
                     });
         }
 
-        [[nodiscard]] static bool json_key_occurs_once(
-            std::string_view text,
-            std::string_view key)
-        {
-            const std::string token = "\"" + std::string{key} + "\"";
-            const std::size_t first = text.find(token);
-            return first != std::string_view::npos
-                && text.find(token, first + token.size())
-                    == std::string_view::npos;
-        }
-
-        [[nodiscard]] static bool canonical_project_ai_safety_fields(
-            std::string_view text)
-        {
-            return json_key_occurs_once(text, "schema")
-                && text.find(
-                    "\"schema\": \"epoch.project.ai.v1\"")
-                    != std::string_view::npos
-                && json_key_occurs_once(text, "provider")
-                && json_key_occurs_once(text, "auto_start")
-                && text.find("\"auto_start\": false")
-                    != std::string_view::npos
-                && json_key_occurs_once(text, "server_or_listener")
-                && text.find("\"server_or_listener\": false")
-                    != std::string_view::npos
-                && json_key_occurs_once(text, "engine_source_write")
-                && text.find("\"engine_source_write\": false")
-                    != std::string_view::npos
-                && json_key_occurs_once(
-                    text, "operator_approval_per_iteration")
-                && text.find(
-                    "\"operator_approval_per_iteration\": true")
-                    != std::string_view::npos;
-        }
-
         static void apply_project_ai_profile_if_present()
         {
             const std::string configured =
@@ -747,32 +713,36 @@ namespace epochengine::ai
             const std::string profile =
                 read_small_text_file(profilePath, 64u * 1024u);
             if (profile.empty())
-                return;
-
-            g_loadedProjectAiProfile =
-                std::filesystem::absolute(profilePath).generic_string();
-            if (!canonical_project_ai_safety_fields(profile))
             {
                 g_engineAi.reset();
                 g_modelUseConfirmedForSession = false;
                 g_modelDetectionStatus =
-                    "Project AI profile rejected: required safety fields are missing or malformed.";
+                    "Project AI profile rejected: the configured profile could not be read within its bounded size.";
                 return;
             }
 
-            if (profile.find("\"provider\": \"disabled\"")
-                != std::string_view::npos)
+            g_loadedProjectAiProfile =
+                std::filesystem::absolute(profilePath).generic_string();
+            const project_profile::CodecResult decoded =
+                project_profile::parse_profile(profile);
+            if (!decoded)
             {
+                g_engineAi.reset();
+                g_modelUseConfirmedForSession = false;
+                g_modelDetectionStatus =
+                    "Project AI profile rejected: " + decoded.status;
+                return;
+            }
+
+            switch (decoded.profile.provider)
+            {
+            case project_profile::Provider::disabled:
                 g_engineAi.reset();
                 g_modelUseConfirmedForSession = false;
                 g_modelDetectionStatus =
                     "Project AI is disabled by its explicit project profile.";
                 return;
-            }
-
-            if (profile.find(
-                    "\"provider\": \"epoch_local_qwen38\"")
-                != std::string_view::npos)
+            case project_profile::Provider::epoch_local_qwen38:
             {
                 const EpochLocalAiInstallStatus installed =
                     epoch_local_ai_install_status();
@@ -794,10 +764,7 @@ namespace epochengine::ai
                     "Project selected the installed Epoch-local Qwen3.8 provider.";
                 return;
             }
-
-            if (profile.find("\"provider\": \"external_mcp\"")
-                != std::string_view::npos)
-            {
+            case project_profile::Provider::external_mcp:
                 g_localTransport =
                     LocalInferenceTransport::OpenAiCompatible;
                 g_modelUseConfirmedForSession =
@@ -807,11 +774,6 @@ namespace epochengine::ai
                     : "Project selected the existing external MCP/OpenAI-compatible provider.";
                 return;
             }
-
-            g_engineAi.reset();
-            g_modelUseConfirmedForSession = false;
-            g_modelDetectionStatus =
-                "Project AI profile rejected: provider must be disabled, epoch_local_qwen38, or external_mcp.";
         }
         [[nodiscard]] static std::filesystem::path find_path_executable(std::string_view name)
         {
