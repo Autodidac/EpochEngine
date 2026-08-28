@@ -104,7 +104,7 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
   identity in updater-facing `Engine/modules/engine.version.ixx`
 - use a descriptive commit title without baking the version number into the
   commit message
-- rebuild `ConsoleApplication1` in both `Debug|x64` and `Release|x64`
+- rebuild `EpochEditor` in both `Debug|x64` and `Release|x64`
 - launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not
   from a source folder
 - close live windows after validation
@@ -301,7 +301,7 @@ Before publishing a Windows packaged runtime zip:
   regeneration
 - do not include source-shaped `Engine/` folders, duplicated `x64/Debug` or
   `x64/Release` folders, headless smoke executables, or
-  `ConsoleApplication1.exe` aliases in the public runtime package
+  legacy executable aliases in the public runtime package
 - copy the required backend DLLs beside `EpochEditor.exe`
 - copy the full VC143 CRT payload from
   `C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC\<version>\x64\Microsoft.VC143.CRT\`

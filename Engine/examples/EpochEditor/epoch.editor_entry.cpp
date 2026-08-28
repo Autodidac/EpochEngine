@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-//epoch.main.cpp - the console demonstration of Epoch engine / Epoch engine
+// EpochEditor desktop entry point.
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -93,7 +93,7 @@ inline auto sanity() {
     // Lets Begin
     //TaskScheduler scheduler;
 
-    constexpr std::string_view kLogSystem = "Example.ConsoleApp";
+    constexpr std::string_view kLogSystem = "Epoch.Editor";
     auto& log = epochengine::logger::get(kLogSystem);
 
     log.log(epochengine::logger::LogLevel::INFO,

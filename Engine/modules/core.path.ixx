@@ -51,7 +51,7 @@ export namespace epochengine::core::path
     // Returns an empty path when no repo root can be confirmed.
     path find_epoch_repo_root(const path& start);
 
-    // Canonical example runtime workspace used by the repo-local ConsoleApplication1 build.
+    // Canonical editor runtime workspace used by the repo-local EpochEditor build.
     // Falls back to a sibling executable workspace for packaged/runtime installs.
     path example_console_workspace_dir();
 
@@ -63,7 +63,7 @@ export namespace epochengine::core::path
     // Shared engine asset root.
     path engine_asset_dir();
 
-    // Example/runtime asset root used by the ConsoleApplication1 shell.
+    // Editor/runtime asset root used by the EpochEditor shell.
     path example_asset_dir();
 
     // Preferred log root derived from the executable/runtime location.

@@ -4189,10 +4189,9 @@ namespace epochengine::updater
             const std::filesystem::path& target_binary)
         {
 #if defined(_WIN32)
-            const std::array<std::filesystem::path, 4> names{
+            const std::array<std::filesystem::path, 3> names{
                 target_binary.filename(),
                 "EpochEditor.exe",
-                "ConsoleApplication1.exe",
                 "epoch.exe",
             };
 #else

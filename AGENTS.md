@@ -99,11 +99,11 @@
 - Visual Studio / MSBuild editor target:
 
   ```powershell
-  & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:ConsoleApplication1 /p:Configuration=Debug /p:Platform=x64 /m:1
+  & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:EpochEditor /p:Configuration=Debug /p:Platform=x64 /m:1
   ```
 
-- Useful MSBuild targets in `Engine.sln`: `ConsoleApplication1`,
-  `StaticLib1`, and `HeadlessCI`.
+- Useful MSBuild targets in `Engine.sln`: `EpochEditor`, `EpochEngine`, and
+  `HeadlessCI`.
 - Build-safe pure engine contract check after rebuilding the editor target:
 
   ```powershell

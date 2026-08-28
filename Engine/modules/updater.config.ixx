@@ -130,7 +130,7 @@ namespace epochengine::updater
 
     export inline std::string SOURCE_BUILD_TARGET()
     {
-        return "ConsoleApplication1";
+        return "EpochEditor";
     }
 
     export inline std::string SOURCE_BUILD_CONFIGURATION()

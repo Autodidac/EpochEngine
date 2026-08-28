@@ -18,8 +18,8 @@ you are deliberately testing a broken-path scenario.
 
 For runtime/editor/backend changes:
 
-1. Build `ConsoleApplication1 | Debug | x64`
-2. Build `ConsoleApplication1 | Release | x64`
+1. Build `EpochEditor | Debug | x64`
+2. Build `EpochEditor | Release | x64`
 3. Launch the real binary from `x64/Debug/`
 4. Verify the intended contexts appear, render, and respond to input
 5. Capture proof through the engine where possible
@@ -198,9 +198,9 @@ Expected smoke behavior:
 - if the selected model rejects explicit reasoning configuration, the
   request path should retry without the reasoning field instead of surfacing an
   empty reply
-- explicitly retained model exchange lands in `Engine/examples/ConsoleApplication1/workspace/model_exchange.jsonl`
-- MCP tool traces can land in `Engine/examples/ConsoleApplication1/workspace/tool_trace.jsonl`
-- no `Engine/examples/ConsoleApplication1/workspace/ai/*` checkpoints, compiled models, or caches show up as
+- explicitly retained model exchange lands in `Engine/examples/EpochEditor/workspace/model_exchange.jsonl`
+- MCP tool traces can land in `Engine/examples/EpochEditor/workspace/tool_trace.jsonl`
+- no `Engine/examples/EpochEditor/workspace/ai/*` checkpoints, compiled models, or caches show up as
   staged Git changes
 - if the local helper set changes, re-probe `/v1/models` and require an
   explicit editor/operator selection before runtime chat/tooling resumes
@@ -261,7 +261,7 @@ Expected smoke behavior:
 - when validating SFML redock, trust the actual release position more than the
   last remembered drag point; the Win32 path now redocks from the release-point
   test specifically to avoid stale drag-state failures in loaded full-grid runs
-- if a serial harness run leaves a non-responding `ConsoleApplication1`, kill it
+- if a serial harness run leaves a non-responding `EpochEditor`, kill it
   and discard that run instead of treating the JSON as evidence
 
 ## Release asset checks
@@ -271,10 +271,10 @@ Expected smoke behavior:
 - smoke the staged packaged folder with `--version` before uploading
 - smoke the no-args packaged entry path once before uploading
 - generated ProjectLauncher/Sandbox child builds share checked-in engine
-  `StaticLib1` outputs today; editor Run and emitted Windows build scripts now
+  `EpochEngine` outputs today; editor Run and emitted Windows build scripts now
   serialize through the generated-project build lock until their
   engine-object/module/PDB outputs are isolated. If a hand-run child build skips
-  that lock, failures on `StaticLib1` clean logs, module IFC/BMI files, or PDB
+  that lock, failures on `EpochEngine` clean logs, module IFC/BMI files, or PDB
   locks should be treated as a build-lane collision first.
 - Linux/WSL2 packaged assets must report the same version as the tagged source
   commit they were built from

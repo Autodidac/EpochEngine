@@ -261,7 +261,7 @@ Typical configurations:
 Example app only:
 
 ```powershell
-& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:ConsoleApplication1 /p:Configuration=Debug /p:Platform=x64 /m:1
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" Engine.sln /t:EpochEditor /p:Configuration=Debug /p:Platform=x64 /m:1
 ```
 
 Generated shell self-test:

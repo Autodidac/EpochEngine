@@ -1253,7 +1253,7 @@ namespace
         std::error_code ec;
         return fs::exists(candidate / "Engine" / "include" / "epoch.engine.hpp", ec)
             && !ec
-            && fs::exists(candidate / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj", ec)
+            && fs::exists(candidate / "Engine" / "examples" / "EpochEngine" / "EpochEngine.vcxproj", ec)
             && !ec;
     }
 
@@ -2092,7 +2092,6 @@ namespace
         add_candidate("EpochEngine");
 #if defined(_WIN32)
         add_candidate("EpochEditor");
-        add_candidate("ConsoleApplication1");
 #else
         add_candidate("epoch");
 #endif
@@ -2926,7 +2925,7 @@ namespace
 
     [[nodiscard]] static constexpr std::string_view generated_child_project_link_dependencies() noexcept
     {
-        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)";
+        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)";
     }
 
     [[nodiscard]] static bool repair_generated_project_gui_acceptance(
@@ -2988,14 +2987,14 @@ namespace
         epochengine::logger::info("Editor.Scene",
             "Generated child-project repair root: "
             + repoRoot.generic_string());
-        const fs::path staticLibProject =
-            repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj";
+        const fs::path engineProject =
+            repoRoot / "Engine" / "examples" / "EpochEngine" / "EpochEngine.vcxproj";
         const fs::path epochGuiProject =
             repoRoot / "Engine" / "dep" / "EpochGui" / "EpochGui.vcxproj";
         const std::string repoRootWindows = to_windows_path(repoRoot.string());
         const std::string repoRootXml = xml_escape(repoRootWindows);
-        const std::string staticLibProjectXml =
-            xml_escape(to_windows_path(staticLibProject.string()));
+        const std::string engineProjectXml =
+            xml_escape(to_windows_path(engineProject.string()));
         const std::string epochGuiProjectXml =
             xml_escape(to_windows_path(epochGuiProject.string()));
         const std::string repoRootPowerShell =
@@ -3025,7 +3024,7 @@ namespace
                     projectText,
                     "<ProjectReference Include=\"",
                     "\">",
-                    staticLibProjectXml)
+                    engineProjectXml)
                 && replace_delimited_value(
                     projectText,
                     "<AdditionalProperties>",
@@ -3047,10 +3046,11 @@ namespace
                     return false;
                 projectText.insert(groupEndPosition, epochGuiProjectReference);
             }
+            replace_all(projectText, "StaticLib1.lib", "EpochEngine.lib");
             replace_all(
                 projectText,
-                "StaticLib1.lib;%(AdditionalDependencies)",
-                "StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)");
+                "EpochEngine.lib;%(AdditionalDependencies)",
+                "EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)");
             replace_all(projectText, "<PlatformToolset>v142</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<PlatformToolset>v145</PlatformToolset>", "<PlatformToolset>v143</PlatformToolset>");
             replace_all(projectText, "<LanguageStandard>stdcpplatest</LanguageStandard>", "<LanguageStandard>stdcpp23</LanguageStandard>");
@@ -3078,11 +3078,11 @@ namespace
                 std::string("<PreprocessorDefinitions>") + std::string(generated_child_project_release_defines()) + "</PreprocessorDefinitions>");
             replace_all(
                 projectText,
-                "sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)",
+                "sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;EpochEngine.lib;%(AdditionalDependencies)",
                 generated_child_project_link_dependencies());
             replace_all(
                 projectText,
-                "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;StaticLib1.lib;%(AdditionalDependencies)",
+                "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;EpochEngine.lib;%(AdditionalDependencies)",
                 generated_child_project_link_dependencies());
             replace_all(
                 projectText,
@@ -3487,7 +3487,7 @@ namespace
         const std::string artifactStem = generated_project_artifact_stem(root);
         const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
         const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
-        const fs::path repoStaticLibProject = (repoRoot / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj").lexically_normal();
+        const fs::path repoEngineProject = (repoRoot / "Engine" / "examples" / "EpochEngine" / "EpochEngine.vcxproj").lexically_normal();
         const fs::path repoEpochGuiProject = (repoRoot / "Engine" / "dep" / "EpochGui" / "EpochGui.vcxproj").lexically_normal();
         const bool isEngineDevelopmentSandbox = spec.project_id == "sandbox";
         const bool includeEngineArcadePackage = spec.include_engine_arcade_package && !isEngineDevelopmentSandbox;
@@ -3516,7 +3516,7 @@ namespace
         const std::string repoRootPowerShell = powershell_escape_single_quoted(to_windows_path(repoRoot.string()));
         const std::string vcpkgManifestRootPowerShell = powershell_escape_single_quoted(
             to_windows_path((repoRoot / "Engine").string()));
-        const std::string repoStaticLibProjectWin = xml_escape(to_windows_path(repoStaticLibProject.string()));
+        const std::string repoEngineProjectWin = xml_escape(to_windows_path(repoEngineProject.string()));
         const std::string repoEpochGuiProjectWin = xml_escape(to_windows_path(repoEpochGuiProject.string()));
         const std::string manifestAbsoluteText = manifestAbsolute.generic_string();
         const std::string rootAbsoluteText = rootAbsolute.generic_string();
@@ -3976,7 +3976,7 @@ namespace
             "    <ClCompile Include=\"source\\epoch.main.cpp\" />\n"
             "  </ItemGroup>\n"
             "  <ItemGroup>\n"
-            "    <ProjectReference Include=\"" + repoStaticLibProjectWin + "\">\n"
+            "    <ProjectReference Include=\"" + repoEngineProjectWin + "\">\n"
             "      <Project>{BBA639B7-2B54-4E38-90AC-667FC3303475}</Project>\n"
             "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
             "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
@@ -4062,7 +4062,7 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "  </ItemDefinitionGroup>\n"
@@ -4085,7 +4085,7 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "  </ItemDefinitionGroup>\n"

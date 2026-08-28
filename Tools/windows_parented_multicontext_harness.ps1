@@ -821,12 +821,7 @@ $root = (Resolve-Path '.').Path
 $runtimeDir = Join-Path $root ("x64\{0}" -f $Configuration)
 $exe = Join-Path $runtimeDir 'EpochEditor.exe'
 if (-not (Test-Path $exe)) {
-    $legacyExe = Join-Path $runtimeDir 'ConsoleApplication1.exe'
-    if (Test-Path $legacyExe) {
-        $exe = $legacyExe
-    } else {
-        throw "Missing runtime at $exe"
-    }
+    throw "Missing runtime at $exe"
 }
 if ($AssetsInteractionProof) {
     if ($ProjectProfile -notmatch '^[A-Za-z0-9_-]+$') {

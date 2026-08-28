@@ -1,4 +1,54 @@
 # Mission Cache
+- The local v0.89.30 editor-identity baseline now names the executable project
+  `EpochEditor` and the static engine project/library `EpochEngine` everywhere
+  active: solution/project paths, project references, updater source-build
+  target, generated-project links and migration, runtime/source discovery,
+  tooling, ignores, and current documentation. The only retained
+  `StaticLib1.lib` text is a deliberate one-way migration input for existing
+  generated child projects.
+- Template-only debris is gone: the repo-local `.codex/.gitkeep`, tracked
+  `.vcxproj.user` files, the dead `fake()` library anchor, and its empty
+  framework/PCH chain were removed. EpochEngine disables that unused PCH lane
+  instead of keeping Visual Studio wizard scaffolding as production source.
+- Exact local proof after cleanup: source naming passes all 495 first-party
+  files; the stale-name audit and whitespace check pass; Debug EpochEditor is
+  30,246,400 bytes (`8e78777eca9bbe6d62dd7c8e0ca5e5f92c40feb2a543292b22ca08523f8a8f2f`)
+  and Debug EpochEngine.lib is 637,881,618 bytes
+  (`31cc46ebc9d565357f6797ed02b3598a3c8ae51cc36f936a113c2ececd7d7dd3`);
+  Release EpochEditor is 9,585,664 bytes
+  (`8770aaecac4accf07cfcd9f029b0ecb2f8a0ae2effcec2b1b43a04f85f8c9f13`)
+  and Release EpochEngine.lib is 255,133,070 bytes
+  (`7c2dce995e87af7b4d6a896fccf9648d807aba0c03a88df8c4222b198fbdc471`).
+  Both Debug and Release `--engine-contract-self-test` lanes pass with exit 0;
+  no GUI or renderer was launched.
+- Current v0.89.30 Release eye evidence shows the canonical World surface, World
+  Outliner, Properties, Output, and AI Chat layout. The earlier bad start was
+  the older v0.89.29 package, not a missing release config; standard layout
+  preferences remain user-local under
+  `%LOCALAPPDATA%/EpochEngine/config/standard_editor.layout`. The workspace
+  strip now uses explicit full-label widths and a 34-pixel height so Assets and
+  Systems do not truncate; new-build eye proof remains separate.
+- The operator's professional-editor concept art is a design target, not runtime
+  evidence. Close its gaps through shared ownership: EpochGui provides compact
+  icon toolbars, responsive non-truncating strips/overflow, hierarchy/table
+  controls, inspector sections, timeline/task/evidence/status primitives, and
+  DPI/minimum-size behavior; the editor composes those controls into navigator,
+  scene, inspector, timeline, task, output, performance, and AI workspaces; the
+  engine supplies only real scene components, materials, tracks, simulation,
+  build, and telemetry data. Never fake cinematic content or capability claims.
+- Iterate through substantial bounded parity passes across every supported
+  editor/renderer context. Each cycle is focused implementation, local
+  headless/contract plus Debug/Release evidence, a rollbackable checkpoint,
+  Site-agent ingestion, and an intermittent release after a meaningful
+  known-good batch. Keep several releases visible on the Site until the
+  operator finishes rollback testing; removal is a later explicit cleanup.
+- GitHub is not an Epoch repository, updater, release, or publication authority.
+  The Epoch Site task owns protected ingestion and release history. Compatibility
+  sequencing matters: shipped v0.89.29 embeds the old source-build target, so
+  publish a tested packaged runtime carrying `EpochEditor` before activating a
+  renamed source checkpoint for source rebuilds. A following newer source
+  checkpoint then exercises the renamed updater lane without stranding the old
+  client.
 - Preserve the temporal GUI authoring boundary: `authoring.gui_document` owns
   stable widget meaning/history plus layout, style, interaction, image, and tab
   state; EpochGui owns reusable image, tab, text, and graph controls; editor
@@ -766,19 +816,34 @@ release history belong in the changelog/archive, not architecture docs.
 
 ## Build, Source, And Release Boundaries
 
-- Source and packaged runtime `v0.89.28` are the current development and
-  publication authority. Its corrected post-rotation packages and persisted-key
-  signature are live and independently verified. EpochEngine source is
-  restricted: public update clients
-  receive runtime archives, build evidence, and checksums only; approved source
-  access must be server-authorized and never depend on a shipped static secret.
-  `v0.89.27` and `v0.89.06` remain release history, while
-  `multicontext-base-stable` remains fixed at
+- Require release-candidate builds and tests on admitted local Windows MSVC and
+  managed Linux Clang systems. Each runner reports one exact committed tree,
+  platform, repository-owned command set, result, log digest, contract/test
+  evidence, and artifact hashes to the Epoch Site over authenticated HTTPS.
+  The Site does not compile Epoch; it stores and exposes immutable accepted
+  reports through its Actions-shaped `runs`/`jobs` API and owner CMS, and binds
+  the exact commit, required platform matrix, evidence digest, and admission
+  state (`pending`, `passed`, or `failed`) into the signed version record as
+  another versioning field. Keep the legacy plain source-version sentinel for
+  shipped-client compatibility, but newer updaters must require `passed`
+  admission matching the candidate version and commit. Source/runtime discovery
+  remains on the prior accepted revision until every required local-platform
+  report is complete and successful; missing, stale, mismatched, or failed
+  evidence blocks activation. The reporting path must remain automatable
+  without public EpochEngine Git/source, a long-lived inbound listener, or a
+  static updater credential.
+- Development/private source discovery is `v0.89.30`; packaged runtime/latest
+  remains the signed `v0.89.29` authority until an explicitly admitted Site
+  publication. Public update clients receive runtime archives, build evidence,
+  and checksums only; approved EpochEngine source access is server-authorized
+  and never depends on a shipped static secret. Preserve `v0.89.28`,
+  `v0.89.27`, and immutable `v0.89.06` as release history, and keep
+  `multicontext-base-stable` fixed at
   `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development
   history. Standalone EpochGui remains public and must exactly match the bundled
-  `Engine/dep/EpochGui` tree.
-  Any later release mutation requires a fresh bounded validation and checksum
-  publication pass.
+  `Engine/dep/EpochGui` tree. Every later release mutation requires a fresh
+  bounded validation, package, checksum, signed-admission, and Site publication
+  pass; retain interim test releases until explicit operator cleanup.
 - Linux and Windows normal builds use vcpkg according to their documented lanes;
   headless diagnostics may intentionally differ.
 - Linux/WSL runtime proof defaults to single-context OpenGL. Vulkan is explicit

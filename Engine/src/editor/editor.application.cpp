@@ -9692,7 +9692,6 @@ namespace epochengine
             add_candidate(root.filename().string());
             add_candidate("EpochEngine");
             add_candidate("EpochEditor");
-            add_candidate("ConsoleApplication1");
             return candidates;
         }
 
@@ -9974,7 +9973,7 @@ namespace epochengine
                 ? "headless_ci"
                 : (release ? "release" : "debug");
             const std::string targetName =
-                headless ? "HeadlessCI" : "ConsoleApplication1";
+                headless ? "HeadlessCI" : "EpochEditor";
             const std::string outputName =
                 headless ? "HeadlessCI.exe" : "EpochEditor.exe";
             const std::string targetLabel = headless
@@ -15382,7 +15381,7 @@ namespace epochengine
             const std::array roots{
                 projectRoot / "Assets",
                 resolve_editor_path(std::filesystem::path{ "Engine/assets" }),
-                resolve_editor_path(std::filesystem::path{ "Engine/examples/ConsoleApplication1/assets" })
+                resolve_editor_path(std::filesystem::path{ "Engine/examples/EpochEditor/assets" })
             };
 
             for (const auto& root : roots)
@@ -16541,11 +16540,11 @@ namespace epochengine
                 }
             }
 
-            // StaticLib1.lib is both a linked dependency and an output of the
+            // EpochEngine.lib is both a linked dependency and an output of the
             // generated child build. Keep it in timestamp freshness without
             // putting that self-updated product in the immutable input generation.
             const std::filesystem::path linkedEngineLibrary = resolve_editor_path(
-                std::filesystem::path{ "x64" } / "Debug" / "StaticLib1.lib");
+                std::filesystem::path{ "x64" } / "Debug" / "EpochEngine.lib");
             std::string changedEngineLibrary;
             if (file_is_newer_than(
                     linkedEngineLibrary,
@@ -21976,21 +21975,21 @@ namespace epochengine
             documentSurfaces.push_back(surface);
         };
 
-        addDocumentTab(EditorMainSurface::Scene, "document.world", "World", 0.0f);
-        addDocumentTab(EditorMainSurface::Game2D, "document.gui", "GUI Canvas", 0.0f);
-        addDocumentTab(EditorMainSurface::ForestFactory, "document.forest", "Forest Factory", 0.0f);
-        addDocumentTab(EditorMainSurface::PlantLab, "document.plant", "Plant Lab", 0.0f);
-        addDocumentTab(EditorMainSurface::Timeline, "document.timeline", "Timeline", 0.0f);
-        addDocumentTab(EditorMainSurface::Project, "document.project", "Project", 0.0f);
-        addDocumentTab(EditorMainSurface::Assets, "document.assets", "Assets", 0.0f);
-        addDocumentTab(EditorMainSurface::AISandbox, "document.ai_development", "AI Development", 0.0f);
-        addDocumentTab(EditorMainSurface::Systems, "document.systems", "Systems", 0.0f);
+        addDocumentTab(EditorMainSurface::Scene, "document.world", "World", 72.0f);
+        addDocumentTab(EditorMainSurface::Game2D, "document.gui", "GUI Canvas", 104.0f);
+        addDocumentTab(EditorMainSurface::ForestFactory, "document.forest", "Forest Factory", 126.0f);
+        addDocumentTab(EditorMainSurface::PlantLab, "document.plant", "Plant Lab", 92.0f);
+        addDocumentTab(EditorMainSurface::Timeline, "document.timeline", "Timeline", 88.0f);
+        addDocumentTab(EditorMainSurface::Project, "document.project", "Project", 78.0f);
+        addDocumentTab(EditorMainSurface::Assets, "document.assets", "Assets", 76.0f);
+        addDocumentTab(EditorMainSurface::AISandbox, "document.ai_development", "AI Development", 130.0f);
+        addDocumentTab(EditorMainSurface::Systems, "document.systems", "Systems", 86.0f);
 
         gui::set_cursor({ 16.0f, tab_y });
         if (const auto documentTabResult =
                 gui::tab_bar_buttons(
                     documentTabs,
-                    28.0f,
+                    34.0f,
                     0.0f,
                     gui::TabBarPresentation::Workbench);
             documentTabResult.selected_index

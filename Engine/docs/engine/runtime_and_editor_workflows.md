@@ -8,7 +8,7 @@ the same engine-owned path.
 
 - enter through the normal engine bootstrap so scripting, AI, backend setup,
   logging, capture, and project/runtime selection share one path
-- desktop example wiring still lives under `Engine/examples/ConsoleApplication1/`
+- desktop editor wiring lives under `Engine/examples/EpochEditor/`
 - multicontext behavior depends on the active runtime/config macros documented
   in `../build/build_configuration_flags.md`
 - the Windows parented multicontext host should fit the active desktop work area
@@ -763,7 +763,7 @@ contracts must not be described as a live runtime pass.
   Windows `build_project.ps1` scripts also take a repo-level build lock. Until
   ProjectLauncher/Sandbox child builds have isolated engine-object/module/PDB
   output directories, every generated child build must either hold that lock or
-  fail visibly instead of racing over shared `StaticLib1` outputs.
+  fail visibly instead of racing over shared `EpochEngine` outputs.
 - the Project workspace should also surface simple existence checks for the
   manifest, entry source, build script, `project.paths.txt`, expected output,
   build log, and active script source so the user can tell whether the shell is

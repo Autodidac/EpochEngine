@@ -161,7 +161,7 @@ $sourceHash = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToL
 
 $repoRoot = Get-RepoRoot
 $resolvedStageRoot = if ([string]::IsNullOrWhiteSpace($StageRoot)) {
-    Join-Path $repoRoot "Engine/examples/ConsoleApplication1/workspace/research/staged"
+    Join-Path $repoRoot "Engine/examples/EpochEditor/workspace/research/staged"
 } elseif ([System.IO.Path]::IsPathRooted($StageRoot)) {
     $StageRoot
 } else {

@@ -65,8 +65,8 @@ Engine/CMakeUserPresets.json
 *.tlog
 Tools/epoch_install.log
 Tools/epoch_install.log
-Engine/examples/ConsoleApplication1/atlas_dump/
-Engine/examples/ConsoleApplication1/atlas_dump_backup/
+Engine/examples/EpochEditor/atlas_dump/
+Engine/examples/EpochEditor/atlas_dump_backup/
 cache/updates/
 cache/packages/
 cache/atlases/
@@ -92,6 +92,6 @@ addons/
 Addons/
 Engine/addons/
 Engine/Addons/
-Engine/examples/ConsoleApplication1/workspace/ai/checkpoints/
-Engine/examples/ConsoleApplication1/workspace/ai/models/
-Engine/examples/ConsoleApplication1/workspace/ai/cache/
+Engine/examples/EpochEditor/workspace/ai/checkpoints/
+Engine/examples/EpochEditor/workspace/ai/models/
+Engine/examples/EpochEditor/workspace/ai/cache/

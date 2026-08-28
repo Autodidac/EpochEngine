@@ -1,4 +1,22 @@
 ## [v0.89.30] - Distinct source-update discovery candidate
+- Rename the legacy Visual Studio executable/static-library identities to
+  `EpochEditor` and `EpochEngine`. Align solution/project paths, project
+  references, updater source-build target, generated-project links and migration,
+  runtime paths, tools, ignores, and documentation. Remove tracked per-user
+  project files and dead Visual Studio wizard scaffolding (`fake()` anchor plus
+  unused framework/PCH chain); keep no compatibility executable alias.
+- Give the top document/workspace strip explicit full-label widths and a
+  34-pixel height so its controls are easier to target and Assets/Systems do not
+  clip. This changes only editor composition; protected backend frame, queue,
+  replay, and present order remain untouched.
+- Rebuild the cleaned targets in MSVC Debug and Release and pass both build-safe
+  aggregate contracts without launching a GUI. Debug EpochEditor/EpochEngine.lib
+  are 30,246,400 / 637,881,618 bytes with SHA-256
+  `8e78777eca9bbe6d62dd7c8e0ca5e5f92c40feb2a543292b22ca08523f8a8f2f` /
+  `31cc46ebc9d565357f6797ed02b3598a3c8ae51cc36f936a113c2ececd7d7dd3`;
+  Release are 9,585,664 / 255,133,070 bytes with SHA-256
+  `8770aaecac4accf07cfcd9f029b0ecb2f8a0ae2effcec2b1b43a04f85f8c9f13` /
+  `7c2dce995e87af7b4d6a896fccf9648d807aba0c03a88df8c4222b198fbdc471`.
 - Advance development source and both packaged-runtime identities to `v0.89.30`
   so a published `v0.89.29` editor can observe and exercise a genuinely newer
   source update instead of comparing equal versions. Keep Smart Update

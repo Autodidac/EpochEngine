@@ -43,7 +43,7 @@ Great renaming conversions
 - `aimage.loader` / `epoch.image.writer` / `aimage.writer` -> `image.loader` / `image.writer`
 
 Examples and tooling
-- `Engine/examples/ConsoleApplication1/`
+- `Engine/examples/EpochEditor/`
 - `Engine/build.sh`, `Engine/run.sh`, `Engine/install.sh`, `Engine/clean.sh`
 - `Engine/ai/` external-model policy, reviewed eval fixtures, schemas, manifests, and prompts
 

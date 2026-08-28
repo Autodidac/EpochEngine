@@ -144,7 +144,7 @@ namespace epochengine::core::path
         return exists_noerr(root / "Engine" / "CMakeLists.txt")
             && exists_noerr(root / "Engine" / "include" / "epoch.engine.hpp")
             && exists_noerr(root / "Engine" / "src" / "epoch.main.cpp")
-            && exists_noerr(root / "Engine" / "examples" / "StaticLib1" / "StaticLib1.vcxproj");
+            && exists_noerr(root / "Engine" / "examples" / "EpochEngine" / "EpochEngine.vcxproj");
     }
 
     path find_epoch_repo_root(const path& start)
@@ -177,7 +177,7 @@ namespace epochengine::core::path
     path example_console_workspace_dir()
     {
         if (const path repoRoot = find_epoch_repo_root(executable_path()); !repoRoot.empty())
-            return normalize(repoRoot / "Engine" / "examples" / "ConsoleApplication1" / "workspace");
+            return normalize(repoRoot / "Engine" / "examples" / "EpochEditor" / "workspace");
 
         if (const path exeDir = executable_dir(); !exeDir.empty())
             return normalize(exeDir / "workspace");
@@ -232,10 +232,10 @@ namespace epochengine::core::path
 
         if (const path assetOverride = env_override_path("EPOCH_ASSET_ROOT"); !assetOverride.empty())
         {
-            if (exists_noerr(assetOverride / "Engine" / "examples" / "ConsoleApplication1" / "assets"))
-                return normalize(assetOverride / "Engine" / "examples" / "ConsoleApplication1" / "assets");
-            if (exists_noerr(assetOverride / "examples" / "ConsoleApplication1" / "assets"))
-                return normalize(assetOverride / "examples" / "ConsoleApplication1" / "assets");
+            if (exists_noerr(assetOverride / "Engine" / "examples" / "EpochEditor" / "assets"))
+                return normalize(assetOverride / "Engine" / "examples" / "EpochEditor" / "assets");
+            if (exists_noerr(assetOverride / "examples" / "EpochEditor" / "assets"))
+                return normalize(assetOverride / "examples" / "EpochEditor" / "assets");
             if (exists_noerr(assetOverride / "assets"))
                 return normalize(assetOverride / "assets");
             if (exists_noerr(assetOverride))
@@ -243,7 +243,7 @@ namespace epochengine::core::path
         }
 
         if (const path repoRoot = runtime_root_dir(); is_epoch_repo_root(repoRoot))
-            return normalize(repoRoot / "Engine" / "examples" / "ConsoleApplication1" / "assets");
+            return normalize(repoRoot / "Engine" / "examples" / "EpochEditor" / "assets");
 
         if (const path runtimeRoot = runtime_root_dir(); !runtimeRoot.empty())
             return normalize(runtimeRoot / "assets");

@@ -29,7 +29,7 @@ powershell -NoProfile -ExecutionPolicy Bypass ^
   "  'vcpkg_installed/','bin/','Bin/','backup/','app1/'," ^
   "  'updater/Cpp20_Ultimate_Project_Updater/'," ^
   "  'Engine/bin/','Engine/Bin/','Engine/docs/api/'," ^
-  "  'Engine/examples/ConsoleApplication1/atlas_dump/'" ^
+  "  'Engine/examples/EpochEditor/atlas_dump/'" ^
   ");" ^
   "" ^
   "$skipFiles = @(" ^

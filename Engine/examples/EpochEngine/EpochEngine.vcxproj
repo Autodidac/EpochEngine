@@ -18,49 +18,35 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="main.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="..\..\resource\WinResource.rc" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\StaticLib1\StaticLib1.vcxproj">
-      <Project>{bba639b7-2b54-4e38-90ac-667fc3303475}</Project>
-    </ProjectReference>
-    <ProjectReference Include="..\..\dep\EpochGui\EpochGui.vcxproj">
-      <Project>{7b41a9b2-4b7e-4b5d-9b39-68d2408bca90}</Project>
-    </ProjectReference>
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{a27860ec-f347-4945-aca3-e0e8ce35f8f2}</ProjectGuid>
-    <RootNamespace>EpochEditor</RootNamespace>
+    <ProjectGuid>{bba639b7-2b54-4e38-90ac-667fc3303475}</ProjectGuid>
+    <RootNamespace>EpochEngine</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>false</WholeProgramOptimization>
@@ -69,7 +55,9 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
-  <ImportGroup Label="Shared" />
+  <ImportGroup Label="Shared">
+    <Import Project="..\..\Engine.vcxitems" Label="Shared" />
+  </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
@@ -84,7 +72,6 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <TargetName>EpochEditor</TargetName>
     <EpochExtraDefines>
     </EpochExtraDefines>
   </PropertyGroup>
@@ -119,11 +106,18 @@
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
     <VcpkgManifestRoot>$(SolutionDir)Engine\</VcpkgManifestRoot>
     <VcpkgInstalledDir>$(SolutionDir)Engine\vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgEnabled>true</VcpkgEnabled>
     <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>
+    <VcpkgAutoLink>false</VcpkgAutoLink>
+    <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
-    <VcpkgApplocalDeps>false</VcpkgApplocalDeps>
     <EpochRaylibDllDefine Condition="'$(VcpkgUseStatic)'!='true'">RAYLIB_DLL;</EpochRaylibDllDefine>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or '$(Configuration)|$(Platform)'=='Release|x64'">
+    <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
+    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\</EpochVcpkgNestedInstallRoot>
+    <EpochVcpkgInstallRoot Condition="!Exists('$(EpochVcpkgInstallRoot)include\') And Exists('$(EpochVcpkgNestedInstallRoot)include\')">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
@@ -131,31 +125,20 @@
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
-  </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or '$(Configuration)|$(Platform)'=='Release|x64'">
-    <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
-    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\</EpochVcpkgNestedInstallRoot>
-    <EpochVcpkgInstallRoot Condition="!Exists('$(EpochVcpkgInstallRoot)include\') And Exists('$(EpochVcpkgNestedInstallRoot)include\')">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>
-  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN64;WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp23</LanguageStandard>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(SolutionDir)Engine\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;%(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>
+      </SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -164,45 +147,47 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN64;WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp23</LanguageStandard>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(SolutionDir)Engine\modules;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;%(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>
+      </SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_LIB;$(EpochExtraDefines);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
-      <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
-      <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalModuleDependencies>
+      </AdditionalModuleDependencies>
+      <ProgramDataBaseFileName>$(IntDir)$(TargetName).pdb</ProgramDataBaseFileName>
+      <AdditionalOptions>/FS /bigobj %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <CallingConvention>Cdecl</CallingConvention>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>
+      </SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;$(EpochVcpkgInstallRoot)debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;raylib.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
-      <NoEntryPoint>false</NoEntryPoint>
     </Link>
+    <Lib>
+      <SubSystem>
+      </SubSystem>
+    </Lib>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -210,44 +195,163 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_WIN32;ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_LIB;$(EpochExtraDefines);%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
-      <AdditionalModuleDependencies>%(AdditionalModuleDependencies)</AdditionalModuleDependencies>
-      <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalModuleDependencies>
+      </AdditionalModuleDependencies>
+      <ProgramDataBaseFileName>$(IntDir)$(TargetName).pdb</ProgramDataBaseFileName>
+      <AdditionalOptions>/FS /bigobj %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4251;4275;4834;%(DisableSpecificWarnings)</DisableSpecificWarnings>
-      <CallingConvention>StdCall</CallingConvention>
       <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
+      <SubSystem>
+      </SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;raylib.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;StaticLib1.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
-      <NoEntryPoint>false</NoEntryPoint>
     </Link>
+    <Lib>
+      <SubSystem>
+      </SubSystem>
+    </Lib>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Update="$(ProjectDir)..\..\modules\2048like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.a2048_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\application.registry.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\simulation.cellular.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\ecs.core.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\editor.core.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\application.end_user.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\scripting.engine_bindings.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\epoch.cli.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\diagnostics.engine.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\events.input.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\gui.engine.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\core.handles.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\input.engine.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\platform.engine.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\systems.task.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\telemetry.engine.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine.updater.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\epoch.version.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\ecs.entity.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\platform.framework.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.frogger_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.core.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\image.atlas_writer.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.match3_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.minesweeper_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\atlas.mipmap.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\core.mpmc_bounded_queue.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.pacman_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\platform.pump.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\simulation.sand.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene.core.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene.serializer.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene.snapshot.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\scripting.system.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.sliding_puzzle_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.snake_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.sokoban_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\sprite.handle.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\sprite.registry.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\game.tetris_like.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+    <ClCompile Update="$(ProjectDir)..\..\modules\texture.core.ixx">
+      <FileType>Document</FileType>
+    </ClCompile>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'">
-    <ItemGroup>
-      <EpochDebugVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)debug\bin\*.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(EpochDebugVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochDebugVcpkgRuntimeDlls)'!=''" />
-  </Target>
-  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'">
-    <ItemGroup>
-      <EpochReleaseVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)bin\*.dll" />
-    </ItemGroup>
-    <Copy SourceFiles="@(EpochReleaseVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochReleaseVcpkgRuntimeDlls)'!=''" />
-  </Target>
+  <Target Name="EpochRestoreVcpkgBeforeModuleScan" BeforeTargets="SetModuleDependencies" DependsOnTargets="VcpkgInstallManifestDependencies" Condition="'$(VcpkgEnabled)'=='true' And '$(VcpkgEnableManifest)'=='true' And '$(VcpkgManifestInstall)'=='true'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

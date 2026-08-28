@@ -1,5 +1,31 @@
+- The local v0.89.30 editor/library identity baseline is source- and build-proven.
+  `ConsoleApplication1` is now `EpochEditor`; `StaticLib1` is now `EpochEngine`.
+  Solution/project paths, updater source target, generated-project links,
+  runtime paths, tools, ignores, and docs are aligned. The sole old library
+  string is an intentional generated-child migration input. Template-only
+  `.vcxproj.user`, `fake()` anchor, framework/PCH files, and `.codex/.gitkeep`
+  are removed.
+- Source naming (495 files), stale-name audit, and whitespace checks pass.
+  Debug and Release `EpochEditor` builds pass and both build-safe
+  `--engine-contract-self-test` lanes exit 0 without launching a GUI. Exact
+  artifact sizes and SHA-256 evidence are preserved in `Changes/mission_cache.md`
+  and the v0.89.30 changelog.
+- The main workspace strip now uses explicit full-label widths and a 34-pixel
+  height, closing the observed small buttons and clipped Assets/Systems text.
+  Current Release eye evidence already restores the canonical World/Outliner
+  shell; fresh pixels for this exact build remain an operator eye-test gate.
+- Next, checkpoint this focused baseline locally. Do not activate its renamed
+  source for the shipped v0.89.29 updater: first publish a packaged runtime that
+  carries the `EpochEditor` source target, then publish a later source checkpoint
+  to test source rebuild. Keep each Site release/checkpoint visible for rollback
+  until the operator explicitly removes old test records.
+- After that compatibility gate, run substantial concept-guided parity cycles
+  across shared EpochGui shell primitives, editor hierarchy/inspector/timeline/
+  task/evidence composition, engine-backed data, and every supported renderer
+  context. Local Debug/Release/headless admission precedes each intermittent
+  Site release; cinematic assets or unsupported features are never fabricated.
 - EpochEngine source distribution is now a restricted development boundary for
-  `v0.89.30`; the Site currently publishes `v0.89.29`. Smart Update is
+  `v0.89.30`; Site source discovery is `v0.89.30` while packaged runtime remains `v0.89.29`. Smart Update is
   binary-first; authorized encrypted source is its
   missing/failed-package fallback and remains available explicitly for a local
   rebuild or project-cache extraction. First native enrollment uses explicit
@@ -11,6 +37,26 @@
   unavailable, no static source credential ships in Epoch or browser code, and
   a binary-only compile policy can remove all source lanes. EpochGui remains
   independently public.
+- Current Site presentation is v41; its EpochEngine distribution state remains
+  the v34 artifact/device deployment from exact Site commit
+  `6c7bb8145445a456ae97914adb475aa13410fb4a` at environment revision 7.
+  `/admin` remains owner-only through direct Sign in
+  with ChatGPT. Remembered devices authorize until explicitly revoked; per-update
+  browser approval remains disabled and unavailable to the shipped v0.89.29
+  client. Current source checkpoint
+  `3b874ad87e3525703b870ca22134b5004dfb5b67` has two active same-commit
+  platform siblings. Windows artifact
+  `epoch-engine-v0.89.30-windows-x64-3b874ad87e35` is an exact 899-file ZIP:
+  plaintext is 60,240,968 bytes with SHA-256
+  `2cf6d0d937a52e14639f35ad5ffcf4669031959283cbd60706c797020b48ca19`;
+  ciphertext is 60,240,984 bytes with SHA-256
+  `a40d3969a6ad8da798cf78a9480cbd4ed1924449e288991e5917384888bce751`.
+  Linux retains the exact same-commit tar.gz sibling. Signed manifests use
+  platform-correct formats, lowercase hexadecimal SHA-256 fields, and the legacy
+  literal-backslash-n AAD descriptor required by v0.89.29. Packaged runtime
+  v0.89.29 and signed integrity remain unchanged; five older source artifacts
+  remain inactive for rollback. No bearer, private key, DEK, identity, device
+  code, or private response is recorded here.
 - Site v31 is live from exact Site commit `46be28d97a76d51c6b35d44fa7cd4a63f6b2c51e`
   at environment revision 7. `/admin` is an owner-only CMS using direct Sign in
   with ChatGPT;
@@ -36,10 +82,12 @@
   private key, DEK, identity, device code, or private response is recorded here.
 - `updater.system` and `updater.source_access` now expose lean declarations-only module interfaces. Crypto/network work, updater orchestration, and the generated Windows worker live in separate implementation units. Full Windows Debug and Release editor targets build; their build-safe contracts pass, including `updater.private_source_crypto_policy`; the opt-in binary-only Debug build and contract also pass before restoring the normal source-enabled Debug output. No GUI was launched.
 - The editor main-surface row now uses an isolated compact workbench
-  presentation: measured label widths, one connected inactive strip, bounded
-  hover/press feedback, and a two-pixel active indicator at 28 px height. Other
-  document/tool tabs retain their existing presentation. Windows Release builds
-  this source without launching the GUI; operator eye evidence remains open.
+  presentation with explicit full-label widths, one connected inactive strip,
+  bounded hover/press feedback, a two-pixel active indicator, and a 34-pixel
+  row height. Assets and Systems no longer depend on an exact-fit measurement
+  that clipped their final characters. Other document/tool tabs retain their
+  existing presentation. Windows Debug/Release builds and build-safe contracts
+  pass without launching the GUI; exact-build eye evidence remains open.
 
 - Hosted SDL creation now matches the renderer thread''s DPI-awareness context
   to the selected dock parent before SDL creates its native child, applies child
@@ -1154,7 +1202,7 @@ The source gate does not claim GUI eye proof, Release responsiveness, model-driv
 multi-step dispatch, or complete OS filesystem transaction semantics.
 
 1. CMake and MSVC metadata contain each new module/source exactly once.
-2. Debug and Release `ConsoleApplication1` build.
+2. Debug and Release `EpochEditor` build.
 3. Debug and Release `--engine-contract-self-test` pass.
 4. Capability selection proves CPU-only, GLES baseline, OpenGL compute,
    equivalent explicit tiers, deterministic fallback, project matching, and
