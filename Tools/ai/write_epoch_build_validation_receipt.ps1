@@ -122,8 +122,11 @@ function Resolve-VersionAuthorities {
         default { throw "Unsupported platform authority: $RequestedPlatform" }
     }
 
-    $packagedMajor = Read-VersionMacro -Source $source -Name "${prefix}_MAJOR_VALUE"
-    $packagedMinor = Read-VersionMacro -Source $source -Name "${prefix}_MINOR_VALUE"
+    # Tracked packaged major/minor defaults intentionally alias the source
+    # macros; only build-time overrides replace them. A source admission receipt
+    # describes tracked authorities, so resolve those aliases explicitly.
+    $packagedMajor = $major
+    $packagedMinor = $minor
     $packagedRevision = Read-VersionMacro -Source $source -Name "${prefix}_REVISION_VALUE"
 
     return [pscustomobject]@{
@@ -279,6 +282,14 @@ function ConvertTo-CanonicalReceipt {
 }
 
 function Invoke-SelfTest {
+    $selfTestRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+    $selfTestVersionModule = Join-Path $selfTestRepoRoot 'Engine\modules\epoch.version.ixx'
+    foreach ($selfTestPlatform in @('windows-x64', 'linux-x64', 'macos-arm64')) {
+        $selfTestAuthorities = Resolve-VersionAuthorities -VersionModule $selfTestVersionModule -RequestedPlatform $selfTestPlatform
+        Assert-SemanticVersion -Name 'self-test source authority' -Value $selfTestAuthorities.Source
+        Assert-SemanticVersion -Name 'self-test packaged authority' -Value $selfTestAuthorities.Packaged
+    }
+
     $checks = @(
         [pscustomobject]@{ lane='source_names'; status='passed'; duration_ms=[uint64]1; evidence_sha256=('1' * 64); diagnostic='names' },
         [pscustomobject]@{ lane='compile'; status='passed'; duration_ms=[uint64]2; evidence_sha256=('2' * 64); diagnostic='compile' },

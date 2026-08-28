@@ -293,6 +293,39 @@ Do not reintroduce standalone packaged version text assets as the primary
 contract. The packaged version identity should be clear from the tagged source
 and the packaged asset filename itself.
 
+### Local build-admission receipts
+
+The Site does not compile Epoch on demand. A local or controlled build machine
+must prove the exact committed source, artifact, and required validation lanes,
+then materialize the canonical evidence with
+`Tools/ai/write_epoch_build_validation_receipt.ps1`. The writer reads the
+tracked source and platform-packaged version authorities, refuses a mismatched
+version, requires one exact 40-character commit and committed-tree SHA-256,
+hashes the built artifact itself, and admits only a bounded, duplicate-free
+Release check set. Windows receipts require source-name, compile, engine
+contract, headless, package-inventory, and dependency evidence. Linux and macOS
+also require shared-library resolution. A failed required lane cannot be
+reported as a release candidate; renderer smoke may be explicitly skipped only
+when the publication truthfully leaves native pixels unclaimed.
+
+The output is deterministic `epoch.build-validation/v1` JSON plus a SHA-256
+sidecar. It is evidence for Site admission, not publication authority: it does
+not upload, deploy, alter a release, create a listener, or grant an AI model
+release control. The Site may expose the admitted receipt and status beside
+source/runtime version metadata after independently checking the committed
+tree and uploaded bytes. Run the tool's pure contract before changing its wire
+format:
+
+```powershell
+.\Tools\ai\write_epoch_build_validation_receipt.ps1 -SelfTest
+```
+
+For a real candidate, pass the platform/compiler/configuration, target and
+toolchain identifiers, staged artifact, exact source commit and tree digest,
+the JSON array of check evidence, and an output path. The receipt writer derives
+source and packaged versions from `epoch.version`; callers cannot substitute a
+different authority.
+
 Before publishing a Windows packaged runtime zip:
 
 - stage a production package root, not a stripped CMake folder and not a
