@@ -356,6 +356,22 @@ the same engine-owned path.
 
 ## Project Save, Build, And External Run
 
+### Project input and creation defaults
+
+Generated game/platformer shells receive the canonical project input profile
+and controller through checkpoint `38d541b2`; Tool/sandbox remains explicit
+opt-in. The project-owned settings controller at `408c496f` stages keyboard,
+controller, and dead-zone edits with validation, discard, reset, and canonical
+save semantics. The editor workflow landed at `bbda8b7b` and its recorded
+contract at `de937045`. Project Defaults stores only the future-creation choice
+until project creation; it never silently rewrites an existing project.
+
+The same defaults surface keeps optional self-iteration provisioning off by
+default. Local Qwen, engine-selected, and external MCP remain distinct choices,
+and provisioning does not start a model, connect to an endpoint, or create a
+listener. Build-safe contracts prove mapping and persistence; no live GUI
+eye-test is claimed for this churn checkpoint.
+
 The project workflow has one ownership path:
 
 1. Materialize or open one validated project root and manifest.
@@ -1308,6 +1324,22 @@ features over forcing every integration on every machine.
   bindings over this same contract
 
 ## AI Runtime, MCP, And Guarded Development
+
+The current source workbench and campaign UI are real editor adapters over
+guarded engine contracts, not alternate authority. `73c86889` restores
+project-owned file selection, UTF-8 editing, scrolling, save/reload, and bounded
+screen use. `94c7357c` projects the durable queue/scheduler/supervisor state into
+an operational campaign surface, while `60ce0032` exposes sealed patch review
+and exact approval/refusal evidence. World Outliner hierarchy is owned by
+`6deaf036`; responsive workspace routing is owned by `4cedf62b`.
+
+The host-callable MCP supervisor adapter is implemented locally but its two
+modules and three implementation/contract files are not registered, built, or
+published because shared build-metadata approval is still pending. It opens no
+transport and grants no filesystem, model, apply, promotion, or release
+authority. The source-iteration worker is blocked on missing prerequisites and
+has no committed checkpoint; the `disposable_sandbox` design is still pending.
+Neither lane is presented as working editor behavior.
 
 Epoch runs an operator-selected external model through a local
 OpenAI-compatible endpoint or a directly selected `llama-cli`/GGUF pair. It

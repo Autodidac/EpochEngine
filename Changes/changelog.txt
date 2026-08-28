@@ -1,5 +1,44 @@
 ## [v0.89.32] - Source authority and backend readback evidence
 
+### August 28 guarded churn checkpoint
+
+- Preserve canonical generated-game input, project input settings, staging, and
+  workflow evidence at `38d541b2`, `408c496f`, `bbda8b7b`, and `de937045`.
+  Deterministic local-build admission receipts are `148fffa0` and their
+  documented host contract is `eadfea94`.
+- Add rollbackable AI campaign checkpoints for the durable queue (`445bc3f0`),
+  MCP scheduler (`9ea6deaa`), project session/restore (`8ab6cc5c`,
+  `7711648d`), supervisor (`c101507d`), curated context (`c8e1fdb8`),
+  deterministic source proposal (`2daec382`), and guarded source stager
+  (`a39ea309`). The operational campaign UI (`94c7357c`) and sealed patch
+  review (`60ce0032`) retain explicit approval and never grant publication.
+- Integrate the World Outliner hierarchy (`6deaf036`), responsive non-clipping
+  tabs (`4cedf62b`), and project source workbench repair (`73c86889`). These
+  carry build-safe source/contract evidence; no GUI eye-test is claimed.
+- Centralize registered renderer pacing at the 120-Hz-capable policy
+  (`1417a8e4`). SDL capture/loading/first-present is committed at `c937fa2f`;
+  the separate minimize/restore tranche remains in progress and uncommitted.
+- Publish standalone EpochGui v0.89.29 through Site v49 from Engine authority
+  `66f65544d577bd0173d6a6586aee233fc0cc3600`, tree
+  `d0d5ea7f25b5852a2db1d9d02fa6dbc48116b625`, and hosted commit
+  `8882503ac579add67456459986983ad7fd7c96db`. The clean 53-file Release
+  clone passes 11/11; v0.89.28 remains retained. Site commit/deployment are
+  `0e9a15bf01d74112fbcc83a67c8ce529f972e47d` and
+  `appgdep_6a917b8a5f148191b3604d1e46552df5`.
+- Record ParticleEngine PR-009 only as the local package checkpoint
+  `98d10d41c3e2d534e7023014a79333ba121b362b` / tree
+  `4658b09c3c633017ddf68c435b4e737043a3311d`. Its 415,520-byte
+  `EpochParticleEngine-v1.0.0-source.zip` has SHA-256
+  `180950e3a8f0b2d29d4902ed014f8de1332874c46f85a295dcd0733fef07b502`;
+  it has no push, tag, upload, Site publication, Linux/macOS native proof, or
+  human eye test. EpochEngine adoption remains package-gated.
+- Hold `ai.mcp_supervisor_adapter` as implemented in five local files but
+  unregistered, unbuilt, and unpublished pending fresh approval. Hold the
+  source-iteration worker as audit/in-progress with no commit and blocked on
+  missing prerequisites; `disposable_sandbox` design is still pending.
+  Public EpochEngine source remains v0.89.32 and packaged runtime remains
+  v0.89.30.
+
 ### Changed
 
 - Advance the development-source authority, updater-parsed compatibility

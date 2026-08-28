@@ -1,3 +1,48 @@
+- The August 28 v0.89.32 churn checkpoint is source/contract evidence, not a
+  runtime release or GUI eye-test claim. Canonical generated-game input and
+  project editing landed at `38d541b2`, `408c496f`, `bbda8b7b`, and
+  `de937045`; deterministic local-build admission receipts landed at
+  `148fffa0` with the documented host contract at `eadfea94`.
+- The guarded project/self-iteration control plane now has committed checkpoints
+  for the durable campaign queue (`445bc3f0`), MCP scheduler
+  (`9ea6deaa`), project session admission (`8ab6cc5c`), canonical restore
+  (`7711648d`), supervisor control (`c101507d`), curated context bundles
+  (`c8e1fdb8`), deterministic source proposals (`2daec382`), and the guarded
+  source patch stager (`a39ea309`). The operational editor campaign surface is
+  `94c7357c`; sealed patch review is `60ce0032`. These contracts preserve
+  explicit operator authority, replay/stale refusal, and project/source
+  boundaries; they do not grant Git, upload, promotion, or release authority.
+- Editor-shell source checkpoints in the same line are the World Outliner
+  hierarchy (`6deaf036`), responsive non-clipping workspace tabs
+  (`4cedf62b`), and repaired project source workbench (`73c86889`). Debug and
+  Release build-safe contract evidence exists for the admitted churn, but no
+  exact-build GUI eye-test is claimed here.
+- Renderer frame-pacing authority is centralized at `1417a8e4`: all registered
+  contexts consume the same capability/policy contract and the desktop target
+  is 120 Hz where supported. SDL capture/loading/first-present alignment is
+  committed at `c937fa2f`; a distinct minimize/restore slice is still in
+  progress and remains uncommitted and unclaimed.
+- Standalone EpochGui `v0.89.29` is preserved by Engine commit
+  `66f65544d577bd0173d6a6586aee233fc0cc3600` (tree
+  `d0d5ea7f25b5852a2db1d9d02fa6dbc48116b625`) and is public on Epoch Site
+  v49 from hosted commit `8882503ac579add67456459986983ad7fd7c96db`
+  (Site commit `0e9a15bf01d74112fbcc83a67c8ce529f972e47d`, deployment
+  `appgdep_6a917b8a5f148191b3604d1e46552df5`). A clean 53-file clone and
+  Release 11/11 tests passed; v0.89.28 remains available.
+- ParticleEngine PR-009 is a separate local-only package checkpoint at
+  `98d10d41c3e2d534e7023014a79333ba121b362b` (tree
+  `4658b09c3c633017ddf68c435b4e737043a3311d`). Its
+  `EpochParticleEngine-v1.0.0-source.zip` is 415,520 bytes with SHA-256
+  `180950e3a8f0b2d29d4902ed014f8de1332874c46f85a295dcd0733fef07b502`.
+  It has no remote push, tag, upload, or Site publication; Linux/macOS native
+  proof and human eye testing remain absent. EpochEngine adoption is package
+  gated.
+- `ai.mcp_supervisor_adapter` is implemented in five local files but remains
+  unregistered, unbuilt, and unpublished pending fresh approval for shared
+  build metadata. `source_iteration_worker` remains an audit/in-progress lane
+  with no commit and is blocked on missing prerequisites; the
+  `disposable_sandbox` design is still pending. Public EpochEngine source
+  authority remains v0.89.32 and packaged runtime authority remains v0.89.30.
 - The local v0.89.32 source candidate advances both source-version authorities,
   source-build Windows metadata, updater discovery fixtures, validation receipts,
   and AI campaign evidence together while every packaged-version authority and

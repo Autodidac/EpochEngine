@@ -136,6 +136,33 @@ candidate can promote itself to live source.
 
 The durable orchestration pipeline is now source- and contract-complete:
 
+- `ai.iteration_campaign_queue` (`445bc3f0`) owns bounded durable
+  admission, ordering, cancellation, replay refusal, and checkpoint state.
+- `ai.iteration_campaign_scheduler` (`9ea6deaa`) binds that queue to the
+  existing MCP/orchestrator boundary without moving execution authority into
+  transport.
+- project session admission and deterministic restoration are checkpointed at
+  `8ab6cc5c` and `7711648d`; cross-project, stale-generation, tampered, or
+  authority-broadened restoration fails closed.
+- `ai.iteration_supervisor_control` (`c101507d`) owns explicit query,
+  pause/resume/cancel/retry/approve/reject transitions and their receipts.
+- `ai.curated_context_bundle` (`c8e1fdb8`) accepts only host-supplied
+  reviewed bytes, emits bounded evidence metadata/chunks, and never scans or
+  reads paths.
+- deterministic source proposal and staging are owned by `2daec382` and
+  `a39ea309`; the editor's exact sealed-review surface is `60ce0032`.
+- deterministic local-build admission receipts are emitted by `148fffa0` and
+  documented at `eadfea94`. They are Site-readable evidence with upload and
+  release authority false.
+
+`ai.mcp_supervisor_adapter` is not part of the registered pipeline yet. Its
+five local files implement a caller-fed canonical JSON-RPC allowlist and replay
+checkpoint, but registration, build proof, and publication are pending fresh
+approval. It must not be described as available MCP transport or editor
+behavior. The source-iteration worker is blocked on missing prerequisites and
+has no commit; `disposable_sandbox` remains a pending design rather than an
+implemented authority boundary.
+
 - `ai.project_profile` strictly decodes generated-project choices for disabled,
   Epoch-local, shared, or external MCP operation. It preserves
   `engine_source_write=false` and rejects autostart, listener, server, network,

@@ -44,6 +44,26 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
 
 Source v0.89.32 contains these completed or intentionally partial contracts:
 
+- rollbackable August 28 checkpoints now cover canonical generated-game input
+  and Project Defaults editing (`38d541b2` through `de937045`), local build
+  admission receipts (`148fffa0`, `eadfea94`), durable AI queue/scheduler/
+  session restore/supervision/curated context/proposal/staging (`445bc3f0`,
+  `9ea6deaa`, `7711648d`, `c101507d`, `c8e1fdb8`, `2daec382`,
+  `a39ea309`), and their operational editor review surfaces (`94c7357c`,
+  `60ce0032`). World Outliner hierarchy, responsive tabs, and project source
+  workbench are source-complete at `6deaf036`, `4cedf62b`, and `73c86889`;
+  no GUI eye-test is inferred from build-safe proof;
+- renderer pacing uses the centralized 120-Hz-capable policy from `1417a8e4`.
+  SDL capture/loading/first-present is committed at `c937fa2f`; minimize/restore
+  remains a separate pending tranche;
+- the MCP supervisor adapter is implemented but deliberately unregistered,
+  unbuilt, and unpublished pending approval. The source-iteration worker is
+  still in audit/in-progress, is blocked on missing prerequisites, and has no
+  checkpoint; the `disposable_sandbox` design remains pending;
+- ParticleEngine PR-009 is a local-only, package-gated dependency candidate at
+  `98d10d41c3e2d534e7023014a79333ba121b362b`; it is not an EpochEngine
+  mainline or public-release claim.
+
 - a stable renderer-neutral camera/view contract now carries logical view,
   scene, purpose, projection, orientation, clip, and revision state through
   renderer passes. The editor owns perspective, free orthographic, six locked

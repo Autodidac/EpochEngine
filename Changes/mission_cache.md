@@ -1,5 +1,44 @@
 # Mission Cache
 
+- Preserve the August 28 churn as a sequence of rollbackable source checkpoints,
+  not one unverifiable leap: project input/settings (`38d541b2`, `408c496f`,
+  `bbda8b7b`, `de937045`); deterministic local-build receipts (`148fffa0`,
+  `eadfea94`); queue/scheduler/session/restore/supervisor/curated/proposal/stager
+  (`445bc3f0`, `9ea6deaa`, `8ab6cc5c`, `7711648d`, `c101507d`,
+  `c8e1fdb8`, `2daec382`, `a39ea309`); and the operational editor/review
+  surfaces (`94c7357c`, `60ce0032`, `73c86889`, `6deaf036`, `4cedf62b`).
+  These are local source/build-safe contract claims only; do not convert them
+  into a GUI eye-test, public source publication, or packaged-runtime claim.
+- Keep the current renderer truth exact: `1417a8e4` centralizes one 120-Hz
+  pacing policy across registered contexts. `c937fa2f` commits only the SDL
+  capture/loading/first-present slice. SDL minimize/restore is a separate
+  uncommitted tranche until it lands and passes its own evidence.
+- EpochGui remains an independently versioned dependency. Public v0.89.29 on
+  Site v49 maps Engine authority
+  `66f65544d577bd0173d6a6586aee233fc0cc3600` / tree
+  `d0d5ea7f25b5852a2db1d9d02fa6dbc48116b625` to hosted commit
+  `8882503ac579add67456459986983ad7fd7c96db`; the clean 53-file Release
+  clone passes 11/11 and v0.89.28 stays retained. Site publication provenance
+  is `0e9a15bf01d74112fbcc83a67c8ce529f972e47d` /
+  `appgdep_6a917b8a5f148191b3604d1e46552df5`.
+- ParticleEngine PR-009 is local-only at
+  `98d10d41c3e2d534e7023014a79333ba121b362b` / tree
+  `4658b09c3c633017ddf68c435b4e737043a3311d`. The 415,520-byte source
+  package hashes to
+  `180950e3a8f0b2d29d4902ed014f8de1332874c46f85a295dcd0733fef07b502`.
+  Retain its proven 16-byte indirect ABI, direct/indirect resident batches,
+  compute/transfer-write barriers, four fixed-tick 196,608-capacity showcases,
+  strict Windows Vulkan Release variants/tests, EpochGui 11/11, RTX 5080
+  gates/eight equivalence scenes, installed consumers, four 600-frame smokes,
+  and no-fetch replay as package evidence. Do not claim a push, tag, upload,
+  Site publication, Linux/macOS native run, or human eye test. Engine adoption
+  remains package-gated.
+- `ai.mcp_supervisor_adapter` currently exists only as five local implementation
+  files: registration/build/publication is pending fresh approval. The source
+  iteration worker is still audit/in-progress with no commit and is blocked on
+  missing prerequisites; the `disposable_sandbox` design remains pending.
+  Preserve public Engine source v0.89.32 and runtime v0.89.30 while those lanes
+  remain open.
 - v0.89.32 is the next source-only authority after the independently preserved
   v0.89.31 Site checkpoint. Advance source identity, source-build metadata,
   updater fixtures, validation receipts, and AI campaign evidence together;
