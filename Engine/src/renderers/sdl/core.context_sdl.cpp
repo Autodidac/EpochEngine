@@ -48,6 +48,7 @@ import render.canvas2d_presentation;
 import render.canvas2d_runtime;
 import render.device;
 import render.device_sdl;
+import render.context_frame;
 import package.registry;
 import sdl.renderer;
 import sdl.state;
@@ -764,9 +765,19 @@ namespace
         if (!ctx || !s_renderer)
             return;
 
-        const auto viewport = ctx->scene_viewport();
-        if (!viewport.valid() || ctx->scene_preview_mode() != epochengine::core::ScenePreviewMode::Editor)
+        const auto requested = ctx->scene_viewport();
+        const auto frame = epochengine::rendercontext::resolve_frame_plan({
+            s_framebufferWidth,
+            s_framebufferHeight,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor,
+            ctx->gui_overlay_priority()
+        });
+        if (!frame.scene_visible)
             return;
+        const epochengine::core::RenderViewport viewport{
+            frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
+        };
 
         SDL_Rect clipRect{ viewport.x, viewport.y, viewport.width, viewport.height };
         (void)SDL_SetRenderClipRect(s_renderer, &clipRect);

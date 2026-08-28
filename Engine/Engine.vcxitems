@@ -377,6 +377,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture_artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture_residency.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.context_frame.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx" />

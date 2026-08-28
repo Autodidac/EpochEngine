@@ -84,6 +84,7 @@ import atlas.manager;
 import image.writer;
 import package.registry;
 import render.arcade;
+import render.context_frame;
 import render.preview_grid;
 
 import raylib.state;
@@ -618,14 +619,23 @@ namespace epochengine::raylibcontext
             if (!ctx)
                 return;
 
-            const auto viewport = ctx->scene_viewport();
-            if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
-                return;
-
             const int framebufferWidth =
                 (std::max)(1, epochengine::raylib_api::get_render_width());
             const int framebufferHeight =
                 (std::max)(1, epochengine::raylib_api::get_render_height());
+            const auto requested = ctx->scene_viewport();
+            const auto frame = epochengine::rendercontext::resolve_frame_plan({
+                framebufferWidth,
+                framebufferHeight,
+                { requested.x, requested.y, requested.width, requested.height },
+                ctx->scene_preview_mode() == core::ScenePreviewMode::Editor,
+                ctx->gui_overlay_priority()
+            });
+            if (!frame.scene_visible)
+                return;
+            const core::RenderViewport viewport{
+                frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
+            };
             if (epochengine::raylibrenderer::render_canvas2d_scene_content(
                     ctx,
                     viewport,

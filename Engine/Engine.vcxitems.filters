@@ -1278,6 +1278,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.ray.ixx">
       <Filter>Module Files\epochengine\render</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.context_frame.ixx">
+      <Filter>Module Files\epochengine\render</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx">
       <Filter>Module Files\epochengine\render</Filter>
     </ClCompile>

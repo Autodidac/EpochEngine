@@ -7,6 +7,7 @@
 import core.context;
 import opengl.preview;
 import opengl.textures;
+import render.context_frame;
 
 namespace epochengine::openglscene
 {
@@ -18,9 +19,19 @@ namespace epochengine::openglscene
         if (!ctx)
             return;
 
-        const auto viewport = ctx->scene_viewport();
-        if (!viewport.valid() || ctx->scene_preview_mode() != core::ScenePreviewMode::Editor)
+        const auto requested = ctx->scene_viewport();
+        const auto frame = rendercontext::resolve_frame_plan({
+            framebufferWidth,
+            framebufferHeight,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx->scene_preview_mode() == core::ScenePreviewMode::Editor,
+            ctx->gui_overlay_priority()
+        });
+        if (!frame.scene_visible)
             return;
+        const core::RenderViewport viewport{
+            frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
+        };
 
         if (openglcanvas2d::render_canvas2d_scene_content(
                 ctx,

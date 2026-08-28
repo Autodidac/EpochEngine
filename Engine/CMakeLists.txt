@@ -1864,6 +1864,22 @@ if(BUILD_TESTING)
         )
     endif()
 
+    add_executable(epoch_render_context_frame_contract
+        src/renderers/core/render.context_frame_contract.cpp
+    )
+    target_sources(epoch_render_context_frame_contract PRIVATE
+        FILE_SET epoch_render_context_frame_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/render.context_frame.ixx
+    )
+    epoch_apply_cxx_dialect(epoch_render_context_frame_contract)
+    epoch_apply_warnings(epoch_render_context_frame_contract)
+    epoch_apply_sanitizers(epoch_render_context_frame_contract)
+    add_test(
+        NAME epoch_render_context_frame_contract
+        COMMAND epoch_render_context_frame_contract
+    )
+
     add_executable(epoch_ai_mcp_stdio_contract
         src/ai/ai.mcp_stdio.cpp
         src/ai/ai.mcp_stdio_contract.cpp

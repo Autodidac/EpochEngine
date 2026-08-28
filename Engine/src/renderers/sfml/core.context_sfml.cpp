@@ -46,6 +46,7 @@ import render.canvas2d_presentation;
 import render.canvas2d_runtime;
 import render.device;
 import render.device_sfml;
+import render.context_frame;
 import sfml.state;
 import sfml.textures;
 
@@ -555,11 +556,19 @@ namespace
         if (!ctx || !s_window)
             return;
 
-        const auto viewport = ctx->scene_viewport();
-        if (!viewport.valid() || ctx->scene_preview_mode() != epochengine::core::ScenePreviewMode::Editor)
+        const auto requested = ctx->scene_viewport();
+        const auto frame = epochengine::rendercontext::resolve_frame_plan({
+            s_width,
+            s_height,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx->scene_preview_mode() == epochengine::core::ScenePreviewMode::Editor,
+            ctx->gui_overlay_priority()
+        });
+        if (!frame.scene_visible)
             return;
-
-
+        const epochengine::core::RenderViewport viewport{
+            frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
+        };
         const CanvasSceneStatus canvasStatus = render_canvas2d_scene(ctx, viewport);
         if (canvasStatus != CanvasSceneStatus::missing_scene)
             return;
@@ -567,12 +576,8 @@ namespace
         if (windowSize.x == 0u || windowSize.y == 0u)
             return;
 
-        const float invWidth = 1.0f / static_cast<float>(windowSize.x);
-        const float invHeight = 1.0f / static_cast<float>(windowSize.y);
-        const float viewportLeft = (std::clamp)(viewport.x * invWidth, 0.0f, 1.0f);
-        const float viewportTop = (std::clamp)(viewport.y * invHeight, 0.0f, 1.0f);
-        const float viewportWidth = (std::clamp)(viewport.width * invWidth, 0.0f, 1.0f - viewportLeft);
-        const float viewportHeight = (std::clamp)(viewport.height * invHeight, 0.0f, 1.0f - viewportTop);
+        const auto currentFrame = epochengine::rendercontext::resolve_frame_plan({
+            static_cast<int>(windowSize.x), static_cast<int>(windowSize.y), frame.scene, true, ctx->gui_overlay_priority() });
 
         const auto previousView = s_window->getView();
         sf::View previewView{ epochengine::sfml_compat::float_rect(
@@ -581,10 +586,10 @@ namespace
             static_cast<float>(viewport.width),
             static_cast<float>(viewport.height)) };
         previewView.setViewport(epochengine::sfml_compat::float_rect(
-            viewportLeft,
-            viewportTop,
-            viewportWidth,
-            viewportHeight));
+            currentFrame.normalized_left,
+            currentFrame.normalized_top,
+            currentFrame.normalized_width,
+            currentFrame.normalized_height));
         s_window->setView(previewView);
 
         const auto clearColor = epochengine::previewgrid::kClearColor;

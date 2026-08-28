@@ -18,6 +18,7 @@ import render.arcade;
 import render.canvas2d_cpu;
 import render.canvas2d_limits;
 import render.canvas2d_runtime;
+import render.context_frame;
 import render.device;
 import render.preview_grid;
 
@@ -732,12 +733,22 @@ namespace epochengine::anativecontext::detail
 
     void render_scene_preview(const core::Context& ctx) noexcept
     {
-        const auto viewport = ctx.scene_viewport();
-        if (!viewport.valid() || ctx.scene_preview_mode() != core::ScenePreviewMode::Editor)
+        const auto requested = ctx.scene_viewport();
+        const auto frame = rendercontext::resolve_frame_plan({
+            ctx.framebufferWidth,
+            ctx.framebufferHeight,
+            { requested.x, requested.y, requested.width, requested.height },
+            ctx.scene_preview_mode() == core::ScenePreviewMode::Editor,
+            ctx.gui_overlay_priority()
+        });
+        if (!frame.scene_visible)
         {
             reset_canvas2d_scene_renderer();
             return;
         }
+        const core::RenderViewport viewport{
+            frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
+        };
 
         if (render_canvas2d_scene(ctx, viewport))
             return;
