@@ -4546,20 +4546,42 @@ namespace epochengine::core
 
         const ScopedWindowsTimerResolution coreFrameTimerResolution{};
         epochengine::perf::frame_limiter coreFrameLimiter{};
-        double activeCoreFrameLimit = -1.0;
-        const auto resolveCoreFrameLimit = []() noexcept -> double
+        epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
+        bool hasActiveCoreFramePlan = false;
+        const auto resolveCoreFramePolicy = []() noexcept
         {
-            if (epochengine::core::cli::frame_limit_explicit)
-                return epochengine::core::cli::frame_limit_fps;
-
             const bool standaloneProject =
                 !epochengine::core::cli::parented_mode
                 && !epochengine::core::cli::editor_requested
                 && !epochengine::core::cli::run_menu_loop;
+            const double requestedHz = epochengine::core::cli::frame_limit_fps;
+            const auto requestedMode = requestedHz > 0.0
+                ? epochengine::perf::frame_pacing_mode::target_hz
+                : epochengine::perf::frame_pacing_mode::uncapped;
+            return epochengine::perf::select_frame_pacing_policy(
+                requestedMode,
+                requestedHz,
+                epochengine::core::cli::frame_limit_explicit,
+                standaloneProject);
+        };
+        const auto resolveFrameActivity = [&win]() noexcept
+        {
+            HWND observedWindow = win.host_hwnd ? win.host_hwnd : win.hwnd;
+            HWND rootWindow = observedWindow
+                ? ::GetAncestor(observedWindow, GA_ROOT)
+                : nullptr;
+            if (!rootWindow)
+                rootWindow = observedWindow;
+            if (rootWindow && ::IsIconic(rootWindow) != FALSE)
+                return epochengine::perf::frame_activity::minimized;
 
-            return epochengine::perf::target_fps_for(standaloneProject
-                ? epochengine::perf::frame_limit_preset::fps_60
-                : epochengine::perf::frame_limit_preset::fps_120);
+            const HWND foreground = ::GetForegroundWindow();
+            if (rootWindow && foreground && foreground != rootWindow
+                && ::IsChild(rootWindow, foreground) == FALSE)
+            {
+                return epochengine::perf::frame_activity::background;
+            }
+            return epochengine::perf::frame_activity::foreground;
         };
 
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())
@@ -4626,11 +4648,27 @@ namespace epochengine::core
 
             record_native_title_frame(this, win);
 
-            const double requestedFrameLimit = resolveCoreFrameLimit();
-            if (requestedFrameLimit != activeCoreFrameLimit)
+            const auto framePlan = epochengine::perf::resolve_frame_pacing(
+                resolveCoreFramePolicy(),
+                resolveFrameActivity(),
+                false);
+            if (!hasActiveCoreFramePlan || framePlan != activeCoreFramePlan)
             {
-                coreFrameLimiter.set_target_fps(requestedFrameLimit);
-                activeCoreFrameLimit = requestedFrameLimit;
+                coreFrameLimiter.set_plan(framePlan);
+                activeCoreFramePlan = framePlan;
+                hasActiveCoreFramePlan = true;
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Backend {} pacing requested={} configured_hz={} effective={} effective_hz={} activity={} native_vsync={} cpu_wait={}.",
+                    ctx->backendName,
+                    epochengine::perf::to_string(framePlan.requested_mode),
+                    framePlan.configured_hz,
+                    epochengine::perf::to_string(framePlan.effective_mode),
+                    framePlan.effective_hz,
+                    epochengine::perf::to_string(framePlan.activity),
+                    framePlan.native_vsync_requested,
+                    framePlan.cpu_deadline_wait);
             }
             coreFrameLimiter.wait_for_next_frame();
         }

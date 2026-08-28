@@ -56,12 +56,157 @@ export namespace epochengine::perf
         unlimited
     };
 
+    enum class frame_pacing_mode : std::uint8_t
+    {
+        target_hz,
+        vsync,
+        uncapped
+    };
+
+    enum class frame_activity : std::uint8_t
+    {
+        foreground,
+        background,
+        minimized
+    };
+
+    struct frame_pacing_policy final
+    {
+        frame_pacing_mode mode = frame_pacing_mode::target_hz;
+        double target_hz = 120.0;
+        double background_hz = 30.0;
+        double minimized_hz = 10.0;
+    };
+
+    struct frame_pacing_plan final
+    {
+        frame_pacing_mode requested_mode = frame_pacing_mode::target_hz;
+        frame_pacing_mode effective_mode = frame_pacing_mode::target_hz;
+        frame_activity activity = frame_activity::foreground;
+        double configured_hz = 120.0;
+        double effective_hz = 120.0;
+        bool native_vsync_requested = false;
+        bool cpu_deadline_wait = true;
+
+        [[nodiscard]] constexpr bool operator==(const frame_pacing_plan&) const noexcept = default;
+    };
+
+    [[nodiscard]] constexpr double sanitize_frame_hz(
+        double requested,
+        double fallback) noexcept
+    {
+        if (!(requested > 0.0) || requested > 1000.0)
+            return fallback;
+        return requested;
+    }
+
+    [[nodiscard]] constexpr frame_pacing_policy target_hz_policy(
+        double target_hz,
+        double background_hz = 30.0,
+        double minimized_hz = 10.0) noexcept
+    {
+        if (!(target_hz > 0.0))
+        {
+            return {
+                frame_pacing_mode::uncapped,
+                0.0,
+                sanitize_frame_hz(background_hz, 30.0),
+                sanitize_frame_hz(minimized_hz, 10.0)};
+        }
+        return {
+            frame_pacing_mode::target_hz,
+            sanitize_frame_hz(target_hz, 120.0),
+            sanitize_frame_hz(background_hz, 30.0),
+            sanitize_frame_hz(minimized_hz, 10.0)};
+    }
+
+    [[nodiscard]] constexpr frame_pacing_plan resolve_frame_pacing(
+        frame_pacing_policy policy,
+        frame_activity activity,
+        bool native_vsync_available) noexcept
+    {
+        policy.target_hz = policy.mode == frame_pacing_mode::uncapped
+            ? 0.0
+            : sanitize_frame_hz(policy.target_hz, 120.0);
+        policy.background_hz = sanitize_frame_hz(policy.background_hz, 30.0);
+        policy.minimized_hz = sanitize_frame_hz(policy.minimized_hz, 10.0);
+
+        frame_pacing_plan plan{
+            policy.mode,
+            policy.mode,
+            activity,
+            policy.target_hz,
+            policy.target_hz,
+            false,
+            policy.mode == frame_pacing_mode::target_hz};
+
+        if (activity == frame_activity::background)
+        {
+            plan.effective_mode = frame_pacing_mode::target_hz;
+            plan.effective_hz = policy.background_hz;
+            plan.cpu_deadline_wait = true;
+            return plan;
+        }
+        if (activity == frame_activity::minimized)
+        {
+            plan.effective_mode = frame_pacing_mode::target_hz;
+            plan.effective_hz = policy.minimized_hz;
+            plan.cpu_deadline_wait = true;
+            return plan;
+        }
+
+        if (policy.mode == frame_pacing_mode::uncapped)
+        {
+            plan.effective_hz = 0.0;
+            plan.cpu_deadline_wait = false;
+            return plan;
+        }
+        if (policy.mode == frame_pacing_mode::vsync)
+        {
+            if (native_vsync_available)
+            {
+                plan.effective_hz = 0.0;
+                plan.native_vsync_requested = true;
+                plan.cpu_deadline_wait = false;
+            }
+            else
+            {
+                plan.effective_mode = frame_pacing_mode::target_hz;
+                plan.effective_hz = policy.target_hz;
+                plan.cpu_deadline_wait = true;
+            }
+        }
+        return plan;
+    }
+
+    [[nodiscard]] constexpr frame_pacing_policy select_frame_pacing_policy(
+        frame_pacing_mode explicit_mode,
+        double explicit_target_hz,
+        bool explicit_selection,
+        bool standalone_project) noexcept
+    {
+        if (!explicit_selection)
+            return target_hz_policy(standalone_project ? 60.0 : 120.0);
+        if (explicit_mode == frame_pacing_mode::uncapped)
+            return target_hz_policy(0.0);
+        if (explicit_mode == frame_pacing_mode::vsync)
+        {
+            return {
+                frame_pacing_mode::vsync,
+                sanitize_frame_hz(explicit_target_hz, 60.0),
+                30.0,
+                10.0};
+        }
+        return target_hz_policy(explicit_target_hz);
+    }
     [[nodiscard]] tier tier_from_env() noexcept;
     [[nodiscard]] double target_fps_for(tier t) noexcept;
     [[nodiscard]] double target_fps_for(frame_limit_preset preset) noexcept;
     [[nodiscard]] const char* to_string(tier t) noexcept;
     [[nodiscard]] const char* to_string(frame_limit_preset preset) noexcept;
     [[nodiscard]] const char* label_for_frame_limit(double fps) noexcept;
+    [[nodiscard]] const char* to_string(frame_pacing_mode mode) noexcept;
+    [[nodiscard]] const char* to_string(frame_activity activity) noexcept;
 
     [[nodiscard]] constexpr double next_frame_deadline(
         double previous_deadline,
@@ -81,6 +226,7 @@ export namespace epochengine::perf
         double target_dt = 0.0;
         double next_time = 0.0;
         bool started = false;
+        frame_pacing_plan active_plan{};
 
         void set_target_fps(double fps) noexcept
         {
@@ -96,6 +242,17 @@ export namespace epochengine::perf
         }
 
         void wait_for_next_frame() noexcept;
+
+        void set_plan(frame_pacing_plan plan) noexcept
+        {
+            active_plan = plan;
+            set_target_fps(plan.cpu_deadline_wait ? plan.effective_hz : 0.0);
+        }
+
+        [[nodiscard]] const frame_pacing_plan& plan() const noexcept
+        {
+            return active_plan;
+        }
     };
 }
 
@@ -182,6 +339,29 @@ namespace epochengine::perf
         if (fps >= 59.5 && fps <= 60.5)
             return "60 FPS";
         return "Custom";
+    }
+
+
+    const char* to_string(frame_pacing_mode mode) noexcept
+    {
+        switch (mode)
+        {
+        case frame_pacing_mode::target_hz: return "target_hz";
+        case frame_pacing_mode::vsync: return "vsync";
+        case frame_pacing_mode::uncapped: return "uncapped";
+        }
+        return "target_hz";
+    }
+
+    const char* to_string(frame_activity activity) noexcept
+    {
+        switch (activity)
+        {
+        case frame_activity::foreground: return "foreground";
+        case frame_activity::background: return "background";
+        case frame_activity::minimized: return "minimized";
+        }
+        return "foreground";
     }
 
     void frame_limiter::wait_for_next_frame() noexcept

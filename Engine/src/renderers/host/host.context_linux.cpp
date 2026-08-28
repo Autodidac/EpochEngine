@@ -1893,20 +1893,29 @@ namespace
         };
 
         epochengine::perf::frame_limiter coreFrameLimiter{};
-        double activeCoreFrameLimit = -1.0;
-        const auto resolveCoreFrameLimit = []() noexcept -> double
+        epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
+        bool hasActiveCoreFramePlan = false;
+        const auto resolveCoreFramePolicy = []() noexcept
         {
-            if (cli::frame_limit_explicit)
-                return cli::frame_limit_fps;
-
             const bool standaloneProject =
                 !cli::parented_mode
                 && !cli::editor_requested
                 && !cli::run_menu_loop;
-
-            return epochengine::perf::target_fps_for(standaloneProject
-                ? epochengine::perf::frame_limit_preset::fps_60
-                : epochengine::perf::frame_limit_preset::fps_120);
+            const double requestedHz = cli::frame_limit_fps;
+            const auto requestedMode = requestedHz > 0.0
+                ? epochengine::perf::frame_pacing_mode::target_hz
+                : epochengine::perf::frame_pacing_mode::uncapped;
+            return epochengine::perf::select_frame_pacing_policy(
+                requestedMode,
+                requestedHz,
+                cli::frame_limit_explicit,
+                standaloneProject);
+        };
+        const auto resolveFrameActivity = [&win]() noexcept
+        {
+            if (win.width <= 0 || win.height <= 0)
+                return epochengine::perf::frame_activity::minimized;
+            return epochengine::perf::frame_activity::foreground;
         };
 
         while (running.load(std::memory_order_acquire) && win.running)
@@ -1957,11 +1966,27 @@ namespace
 
             record_native_title_frame(localDisplay, xwin, win);
 
-            const double requestedFrameLimit = resolveCoreFrameLimit();
-            if (requestedFrameLimit != activeCoreFrameLimit)
+            const auto framePlan = epochengine::perf::resolve_frame_pacing(
+                resolveCoreFramePolicy(),
+                resolveFrameActivity(),
+                false);
+            if (!hasActiveCoreFramePlan || framePlan != activeCoreFramePlan)
             {
-                coreFrameLimiter.set_target_fps(requestedFrameLimit);
-                activeCoreFrameLimit = requestedFrameLimit;
+                coreFrameLimiter.set_plan(framePlan);
+                activeCoreFramePlan = framePlan;
+                hasActiveCoreFramePlan = true;
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Backend {} pacing requested={} configured_hz={} effective={} effective_hz={} activity={} native_vsync={} cpu_wait={}.",
+                    ctx->backendName,
+                    epochengine::perf::to_string(framePlan.requested_mode),
+                    framePlan.configured_hz,
+                    epochengine::perf::to_string(framePlan.effective_mode),
+                    framePlan.effective_hz,
+                    epochengine::perf::to_string(framePlan.activity),
+                    framePlan.native_vsync_requested,
+                    framePlan.cpu_deadline_wait);
             }
             coreFrameLimiter.wait_for_next_frame();
         }

@@ -2306,6 +2306,96 @@ namespace epochengine::core
             && std::abs(currentFrameDeadline
                     - (100.0 + editorFrameDt * 1.25)) < 1.0e-12);
 
+        const auto editorPacingPolicy =
+            epochengine::perf::select_frame_pacing_policy(
+                epochengine::perf::frame_pacing_mode::target_hz,
+                0.0,
+                false,
+                false);
+        const auto editorPacing = epochengine::perf::resolve_frame_pacing(
+            editorPacingPolicy,
+            epochengine::perf::frame_activity::foreground,
+            false);
+        const auto standalonePacing = epochengine::perf::resolve_frame_pacing(
+            epochengine::perf::select_frame_pacing_policy(
+                epochengine::perf::frame_pacing_mode::target_hz,
+                0.0,
+                false,
+                true),
+            epochengine::perf::frame_activity::foreground,
+            false);
+        check(
+            "perf.frame_pacing_default_60_120",
+            editorPacing.requested_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && editorPacing.effective_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && std::abs(editorPacing.effective_hz - 120.0) < 1.0e-12
+                && editorPacing.cpu_deadline_wait
+                && std::abs(standalonePacing.effective_hz - 60.0) < 1.0e-12
+                && standalonePacing.cpu_deadline_wait);
+
+        const auto uncappedPolicy =
+            epochengine::perf::select_frame_pacing_policy(
+                epochengine::perf::frame_pacing_mode::uncapped,
+                0.0,
+                true,
+                false);
+        const auto uncappedForeground =
+            epochengine::perf::resolve_frame_pacing(
+                uncappedPolicy,
+                epochengine::perf::frame_activity::foreground,
+                false);
+        const auto uncappedBackground =
+            epochengine::perf::resolve_frame_pacing(
+                uncappedPolicy,
+                epochengine::perf::frame_activity::background,
+                false);
+        const auto uncappedMinimized =
+            epochengine::perf::resolve_frame_pacing(
+                uncappedPolicy,
+                epochengine::perf::frame_activity::minimized,
+                false);
+        check(
+            "perf.frame_pacing_uncapped_background_minimized",
+            uncappedForeground.effective_mode
+                    == epochengine::perf::frame_pacing_mode::uncapped
+                && uncappedForeground.effective_hz == 0.0
+                && !uncappedForeground.cpu_deadline_wait
+                && uncappedBackground.effective_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && std::abs(uncappedBackground.effective_hz - 30.0) < 1.0e-12
+                && uncappedBackground.cpu_deadline_wait
+                && uncappedMinimized.effective_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && std::abs(uncappedMinimized.effective_hz - 10.0) < 1.0e-12
+                && uncappedMinimized.cpu_deadline_wait);
+
+        const auto vsyncPolicy = epochengine::perf::frame_pacing_policy{
+            epochengine::perf::frame_pacing_mode::vsync,
+            60.0,
+            30.0,
+            10.0};
+        const auto nativeVsync = epochengine::perf::resolve_frame_pacing(
+            vsyncPolicy,
+            epochengine::perf::frame_activity::foreground,
+            true);
+        const auto fallbackVsync = epochengine::perf::resolve_frame_pacing(
+            vsyncPolicy,
+            epochengine::perf::frame_activity::foreground,
+            false);
+        check(
+            "perf.frame_pacing_vsync_fallback",
+            nativeVsync.effective_mode
+                    == epochengine::perf::frame_pacing_mode::vsync
+                && nativeVsync.native_vsync_requested
+                && !nativeVsync.cpu_deadline_wait
+                && fallbackVsync.effective_mode
+                    == epochengine::perf::frame_pacing_mode::target_hz
+                && std::abs(fallbackVsync.effective_hz - 60.0) < 1.0e-12
+                && !fallbackVsync.native_vsync_requested
+                && fallbackVsync.cpu_deadline_wait);
+
         auto forestProfile = epochengine::forest::default_profile(epochengine::forest::ForestPreset::Tree);
         forestProfile.temporal.timeSeconds = forestProfile.temporal.durationSeconds;
         const auto forestEstimate = epochengine::forest::estimate_preview_stats(forestProfile);
