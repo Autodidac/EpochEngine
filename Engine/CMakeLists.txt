@@ -368,6 +368,8 @@ set(EPOCH_SOURCES
     src/updater/updater.source_worker_win.cpp
     src/epoch/epoch.build_validation.cpp
     src/epoch/epoch.build_validation_contract.cpp
+    src/editor/editor.code_workspace.cpp
+    src/editor/editor.code_workspace_contract.cpp
     src/ai/ai.development_executor.cpp
     src/ai/ai.iteration_loop.cpp
     src/ai/ai.iteration_loop_contract.cpp
@@ -2106,6 +2108,28 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_build_validation_contract
         COMMAND epoch_build_validation_contract
+    )
+
+    add_executable(epoch_editor_code_workspace_contract
+        src/editor/editor.code_workspace.cpp
+        src/editor/editor.code_workspace_contract.cpp
+    )
+    target_sources(epoch_editor_code_workspace_contract PRIVATE
+        FILE_SET epoch_editor_code_workspace_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/editor.code_workspace.ixx
+    )
+    target_compile_definitions(epoch_editor_code_workspace_contract PRIVATE
+        EPOCH_EDITOR_CODE_WORKSPACE_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_editor_code_workspace_contract)
+    epoch_apply_warnings(epoch_editor_code_workspace_contract)
+    epoch_apply_sanitizers(epoch_editor_code_workspace_contract)
+    add_test(
+        NAME epoch_editor_code_workspace_contract
+        COMMAND epoch_editor_code_workspace_contract
     )
 
     add_executable(epoch_editor_workspace_commands_contract
