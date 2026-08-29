@@ -338,6 +338,15 @@ namespace epochengine
             return result;
         }
 
+        [[nodiscard]] constexpr std::array<std::uint32_t, kEditorToolPaneCount>
+            default_tool_pane_tab_order() noexcept
+        {
+            std::array<std::uint32_t, kEditorToolPaneCount> result{};
+            for (std::uint32_t index = 0u; index < result.size(); ++index)
+                result[index] = index;
+            return result;
+        }
+
         [[nodiscard]] constexpr std::optional<EditorToolPane>
             editor_tool_pane_from_route(std::string_view route) noexcept
         {
@@ -1083,6 +1092,8 @@ namespace epochengine
                 default_tool_pane_open_state() };
             std::array<EditorToolDockRegion, kEditorToolPaneCount>
                 toolPaneDockRegions{ default_tool_pane_regions() };
+            std::array<std::uint32_t, kEditorToolPaneCount> toolPaneTabOrder{
+                default_tool_pane_tab_order() };
             std::string activeLeftPaneRoute{ "pane.world_outliner" };
             std::string activeRightPaneRoute{ "pane.properties" };
             std::string activeBottomLeftPaneRoute{ "pane.output" };
@@ -1625,6 +1636,7 @@ namespace epochengine
             editor.showAiChat = application.panes.ai_chat;
             editor.toolPaneOpen = default_tool_pane_open_state();
             editor.toolPaneDockRegions = default_tool_pane_regions();
+            editor.toolPaneTabOrder = default_tool_pane_tab_order();
             editor.activeLeftPaneRoute = "pane.world_outliner";
             editor.activeRightPaneRoute = "pane.properties";
             editor.activeBottomLeftPaneRoute = "pane.output";
@@ -2578,7 +2590,7 @@ namespace epochengine
             const EditorState& state)
         {
             std::ostringstream output{};
-            output << "EPOCH_EDITOR_LAYOUT 3\n";
+            output << "EPOCH_EDITOR_LAYOUT 4\n";
             output << "application "
                 << static_cast<unsigned int>(state.applicationKind) << '\n';
             output << "splits "
@@ -2615,7 +2627,8 @@ namespace epochengine
             {
                 output << "pane " << index << ' '
                     << static_cast<unsigned int>(state.toolPaneOpen[index]) << ' '
-                    << static_cast<unsigned int>(state.toolPaneDockRegions[index])
+                    << static_cast<unsigned int>(state.toolPaneDockRegions[index]) << ' '
+                    << state.toolPaneTabOrder[index]
                     << '\n';
             }
             output << "active "
@@ -2656,14 +2669,20 @@ namespace epochengine
             std::string_view fallback)
         {
             constexpr auto routes = editor_tool_pane_routes();
+            std::optional<std::size_t> first{};
             for (std::size_t index = 0; index < routes.size(); ++index)
             {
                 if (state.toolPaneOpen[index]
                     && state.toolPaneDockRegions[index] == region)
                 {
-                    return std::string{routes[index]};
+                    if (!first
+                        || state.toolPaneTabOrder[index]
+                            < state.toolPaneTabOrder[*first])
+                        first = index;
                 }
             }
+            if (first)
+                return std::string{routes[*first]};
             return std::string{fallback};
         }
 
@@ -2675,7 +2694,7 @@ namespace epochengine
             std::string token{};
             unsigned int schema{};
             if (!(input >> token >> schema)
-                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 3u)
+                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 4u)
             {
                 return false;
             }
@@ -2707,7 +2726,7 @@ namespace epochengine
             auto workspaceDockSplits = state.workspaceDockSplits;
             auto workspaceOutputFollow = state.workspaceOutputFollow;
             auto workspaceAiChatFollow = state.workspaceAiChatFollow;
-            if (schema == 3u)
+            if (schema >= 3u)
             {
                 std::size_t count{};
                 if (!(input >> token >> count)
@@ -2768,11 +2787,13 @@ namespace epochengine
 
             auto paneOpen = state.toolPaneOpen;
             auto paneRegions = state.toolPaneDockRegions;
+            auto paneTabOrder = default_tool_pane_tab_order();
             for (std::size_t expected = 0; expected < kEditorToolPaneCount; ++expected)
             {
                 std::size_t index{};
                 unsigned int open{};
                 unsigned int region{};
+                std::uint32_t tabOrder = static_cast<std::uint32_t>(expected);
                 if (!(input >> token >> index >> open >> region)
                     || token != "pane"
                     || index != expected
@@ -2784,8 +2805,12 @@ namespace epochengine
                 {
                     return false;
                 }
+                if (schema >= 4u
+                    && (!(input >> tabOrder) || tabOrder >= kEditorToolPaneCount))
+                    return false;
                 paneOpen[index] = open != 0u;
                 paneRegions[index] = static_cast<EditorToolDockRegion>(region);
+                paneTabOrder[index] = tabOrder;
                 if (schema == 1u
                     && expected == tool_pane_index(EditorToolPane::AiChat)
                     && paneRegions[index] == EditorToolDockRegion::BottomLeft)
@@ -2803,7 +2828,7 @@ namespace epochengine
             {
                 return false;
             }
-            if (schema == 2u && !(input >> activeBottomRight))
+            if (schema >= 2u && !(input >> activeBottomRight))
                 return false;
 
             unsigned int theme{};
@@ -2853,6 +2878,7 @@ namespace epochengine
             state.showAiChat = showAiChat != 0u;
             state.toolPaneOpen = paneOpen;
             state.toolPaneDockRegions = paneRegions;
+            state.toolPaneTabOrder = paneTabOrder;
             state.activeLeftPaneRoute = std::move(activeLeft);
             state.activeRightPaneRoute = std::move(activeRight);
             state.activeBottomLeftPaneRoute = std::move(activeBottomLeft);
@@ -20608,7 +20634,8 @@ namespace epochengine
                 .route = std::string(toolPaneRoutes[index]),
                 .open = editor.toolPaneOpen[index],
                 .dock_region = static_cast<std::uint8_t>(
-                    editor.toolPaneDockRegions[index])
+                    editor.toolPaneDockRegions[index]),
+                .tab_order = editor.toolPaneTabOrder[index]
             });
         }
         snapshot.active_left_pane_route = editor.activeLeftPaneRoute;
@@ -20802,6 +20829,7 @@ namespace epochengine
         editor.showAiChat = snapshot.show_ai_chat && application.panes.ai_chat;
         editor.toolPaneOpen = default_tool_pane_open_state();
         editor.toolPaneDockRegions = default_tool_pane_regions();
+        editor.toolPaneTabOrder = default_tool_pane_tab_order();
         for (const auto& pane : snapshot.tool_panes)
         {
             const bool legacyOutputFilterRoute =
@@ -20821,6 +20849,9 @@ namespace epochengine
                 (std::min)(pane.dock_region, std::uint8_t{3u});
             editor.toolPaneDockRegions[index] =
                 static_cast<EditorToolDockRegion>(boundedRegion);
+            editor.toolPaneTabOrder[index] = pane.tab_order < kEditorToolPaneCount
+                ? pane.tab_order
+                : static_cast<std::uint32_t>(index);
             if (*id == EditorToolPane::AiChat && boundedRegion == 2u)
             {
                 editor.toolPaneDockRegions[index] =
@@ -21782,14 +21813,31 @@ namespace epochengine
         {
             return pane_is_shown(route) && !pane_route_is_detached(route);
         };
+        auto ordered_pane_indices_for_region = [&](EditorToolDockRegion region)
+        {
+            std::vector<std::size_t> indices{};
+            indices.reserve(kEditorToolPaneCount);
+            for (std::size_t index = 0; index < toolPaneRoutes.size(); ++index)
+            {
+                if (pane_available(toolPaneRoutes[index])
+                    && editor.toolPaneDockRegions[index] == region)
+                    indices.push_back(index);
+            }
+            std::sort(indices.begin(), indices.end(), [&](std::size_t left, std::size_t right)
+            {
+                const std::uint32_t leftOrder = editor.toolPaneTabOrder[left];
+                const std::uint32_t rightOrder = editor.toolPaneTabOrder[right];
+                return leftOrder != rightOrder ? leftOrder < rightOrder : left < right;
+            });
+            return indices;
+        };
         auto active_pane_for_region = [&](EditorToolDockRegion region) -> std::string_view
         {
             const std::string& configured = active_pane_storage(region);
             if (pane_available(configured) && pane_dock_region(configured) == region)
                 return configured;
-            for (const std::string_view route : toolPaneRoutes)
-                if (pane_available(route) && pane_dock_region(route) == region)
-                    return route;
+            for (const std::size_t index : ordered_pane_indices_for_region(region))
+                return toolPaneRoutes[index];
             return {};
         };
         auto region_has_visible_pane = [&](EditorToolDockRegion region) noexcept
@@ -23969,6 +24017,18 @@ namespace epochengine
             if (pane_route_is_detached(route))
                 request_detached_pane_redock(route);
             set_pane_shown(route, true);
+            if (previousRegion != region)
+            {
+                std::uint32_t appendOrder{};
+                for (std::size_t index = 0u; index < kEditorToolPaneCount; ++index)
+                {
+                    if (editor.toolPaneDockRegions[index] == region)
+                        appendOrder = (std::max)(appendOrder,
+                            editor.toolPaneTabOrder[index] + 1u);
+                }
+                if (const auto pane = editor_tool_pane_from_route(route))
+                    editor.toolPaneTabOrder[tool_pane_index(*pane)] = appendOrder;
+            }
             set_pane_dock_region(route, region);
             set_active_pane(region, route);
             if (previousRegion != region)
@@ -24643,12 +24703,128 @@ namespace epochengine
             Floating
         };
 
+        constexpr std::size_t toolDockRegionCount = 4u;
+        const auto tool_dock_region_index = [](EditorToolDockRegion region) noexcept
+        {
+            return static_cast<std::size_t>(region);
+        };
+        std::array<gui_lib::Rect, toolDockRegionCount> directTabStripBounds{};
+        std::array<std::vector<gui_lib::Rect>, toolDockRegionCount>
+            directTabBounds{};
+        std::array<std::vector<std::string_view>, toolDockRegionCount>
+            directTabRoutes{};
+
         auto reset_pane_title_drag = [&]() noexcept
         {
             editor.paneTitleDragActive = false;
             editor.paneTitleDragRoute.clear();
             editor.paneTitleDragLabel.clear();
             editor.paneTitleDragStart = {};
+        };
+
+        auto direct_tab_group = [&](EditorToolDockRegion region)
+        {
+            gui_lib::DockTabGroup group{};
+            group.id = tool_dock_region_index(region) + 1u;
+            const std::string_view active = active_pane_for_region(region);
+            for (const std::size_t paneIndex : ordered_pane_indices_for_region(region))
+            {
+                if (group.count >= gui_lib::maximum_dock_tabs)
+                    break;
+                group.tabs[group.count] = {
+                    .id = paneIndex + 1u,
+                    .remembered_group_id = group.id,
+                    .keyboard_order = group.count,
+                    .active = active == toolPaneRoutes[paneIndex],
+                    .closable = true
+                };
+                ++group.count;
+            }
+            return group;
+        };
+        auto apply_direct_tab_group = [&](const gui_lib::DockTabGroup& group,
+            EditorToolDockRegion region)
+        {
+            std::array<bool, kEditorToolPaneCount> assigned{};
+            std::string_view active{};
+            std::uint32_t nextOrder{};
+            for (std::uint32_t slot = 0u; slot < group.count; ++slot)
+            {
+                const std::uint64_t id = group.tabs[slot].id;
+                if (id == 0u || id > kEditorToolPaneCount)
+                    continue;
+                const std::size_t paneIndex = static_cast<std::size_t>(id - 1u);
+                assigned[paneIndex] = true;
+                editor.toolPaneDockRegions[paneIndex] = region;
+                editor.toolPaneTabOrder[paneIndex] = nextOrder++;
+                if (group.tabs[slot].active)
+                    active = toolPaneRoutes[paneIndex];
+            }
+
+            std::vector<std::size_t> hiddenOrDetached{};
+            for (std::size_t paneIndex = 0u; paneIndex < kEditorToolPaneCount;
+                ++paneIndex)
+            {
+                if (!assigned[paneIndex]
+                    && editor.toolPaneDockRegions[paneIndex] == region)
+                    hiddenOrDetached.push_back(paneIndex);
+            }
+            std::sort(hiddenOrDetached.begin(), hiddenOrDetached.end(),
+                [&](std::size_t left, std::size_t right)
+                {
+                    const std::uint32_t leftOrder = editor.toolPaneTabOrder[left];
+                    const std::uint32_t rightOrder = editor.toolPaneTabOrder[right];
+                    return leftOrder != rightOrder ? leftOrder < rightOrder : left < right;
+                });
+            for (const std::size_t paneIndex : hiddenOrDetached)
+                editor.toolPaneTabOrder[paneIndex] = nextOrder++;
+
+            if (!active.empty())
+                set_active_pane(region, active);
+            else if (group.count == 0u)
+                active_pane_storage(region).clear();
+        };
+        auto move_pane_to_direct_tab_slot = [&](std::string_view route,
+            EditorToolDockRegion targetRegion,
+            std::uint32_t insertionIndex)
+        {
+            const auto pane = editor_tool_pane_from_route(route);
+            if (!pane)
+                return false;
+            const std::size_t paneIndex = tool_pane_index(*pane);
+            const EditorToolDockRegion sourceRegion =
+                editor.toolPaneDockRegions[paneIndex];
+            gui_lib::DockTabGroup source = direct_tab_group(sourceRegion);
+            std::uint32_t sourceIndex = gui_lib::invalid_dock_tab_index;
+            for (std::uint32_t index = 0u; index < source.count; ++index)
+            {
+                if (source.tabs[index].id == paneIndex + 1u)
+                {
+                    sourceIndex = index;
+                    break;
+                }
+            }
+            if (sourceIndex == gui_lib::invalid_dock_tab_index)
+                return false;
+
+            if (sourceRegion == targetRegion)
+            {
+                const auto moved = gui_lib::move_dock_tab(
+                    source, source, sourceIndex, insertionIndex);
+                if (!moved)
+                    return false;
+                apply_direct_tab_group(source, sourceRegion);
+                return true;
+            }
+
+            gui_lib::DockTabGroup target = direct_tab_group(targetRegion);
+            const auto moved = gui_lib::move_dock_tab(
+                source, target, sourceIndex, insertionIndex);
+            if (!moved)
+                return false;
+            apply_direct_tab_group(source, sourceRegion);
+            apply_direct_tab_group(target, targetRegion);
+            return true;
         };
 
         auto handle_pane_title_drag_to_tab = [&](
@@ -24711,6 +24887,106 @@ namespace epochengine
                 if (gui::was_mouse_released() || !gui::is_mouse_down())
                     reset_pane_title_drag();
                 return;
+            }
+
+            const auto sourcePane = editor_tool_pane_from_route(
+                editor.paneTitleDragRoute);
+            if (sourcePane)
+            {
+                const EditorToolDockRegion sourceRegion =
+                    editor.toolPaneDockRegions[tool_pane_index(*sourcePane)];
+                const std::size_t sourceRegionIndex =
+                    tool_dock_region_index(sourceRegion);
+                std::uint32_t sourceTabIndex = gui_lib::invalid_dock_tab_index;
+                gui_lib::Vec2 draggedTabSize{120.0f, 28.0f};
+                for (std::size_t index = 0u;
+                    index < directTabRoutes[sourceRegionIndex].size(); ++index)
+                {
+                    if (directTabRoutes[sourceRegionIndex][index]
+                        != editor.paneTitleDragRoute)
+                        continue;
+                    sourceTabIndex = static_cast<std::uint32_t>(index);
+                    if (index < directTabBounds[sourceRegionIndex].size())
+                        draggedTabSize = directTabBounds[sourceRegionIndex][index].size;
+                    break;
+                }
+
+                std::optional<EditorToolDockRegion> directTargetRegion{};
+                gui_lib::DockTabStripLayout directLayout{};
+                if (sourceTabIndex != gui_lib::invalid_dock_tab_index)
+                {
+                    for (std::size_t regionIndex = 0u;
+                        regionIndex < toolDockRegionCount; ++regionIndex)
+                    {
+                        const auto region = static_cast<EditorToolDockRegion>(
+                            regionIndex);
+                        const auto& tabBounds = directTabBounds[regionIndex];
+                        const auto candidate = gui_lib::make_dock_tab_strip_layout({
+                            .strip_bounds = directTabStripBounds[regionIndex],
+                            .tab_bounds = tabBounds.empty() ? nullptr : tabBounds.data(),
+                            .tab_count = static_cast<std::uint32_t>(tabBounds.size()),
+                            .pointer = {mouse.x, mouse.y},
+                            .dragged_tab_size = draggedTabSize,
+                            .source_group_id = sourceRegionIndex + 1u,
+                            .target_group_id = regionIndex + 1u,
+                            .source_index = sourceTabIndex,
+                            .marker_extent = 3.0f,
+                            .drag_active = true,
+                            .target_compatible = true,
+                            .cancelled = false
+                        });
+                        if (!candidate.target_hovered)
+                            continue;
+                        directTargetRegion = region;
+                        directLayout = candidate;
+                        break;
+                    }
+                }
+
+                if (directTargetRegion && directLayout.direct_drop_available)
+                {
+                    gui::render_dock_tab_insertion_overlay({
+                        .insertion_marker = {
+                            {directLayout.insertion_marker.position.x,
+                                directLayout.insertion_marker.position.y},
+                            {directLayout.insertion_marker.size.x,
+                                directLayout.insertion_marker.size.y}},
+                        .insertion_ghost = {
+                            {directLayout.insertion_ghost.position.x,
+                                directLayout.insertion_ghost.position.y},
+                            {directLayout.insertion_ghost.size.x,
+                                directLayout.insertion_ghost.size.y}},
+                        .moving_label = editor.paneTitleDragLabel,
+                        .no_op = directLayout.no_op
+                    });
+                    if (gui::was_mouse_released())
+                    {
+                        const bool accepted = directLayout.no_op
+                            || move_pane_to_direct_tab_slot(
+                                editor.paneTitleDragRoute,
+                                *directTargetRegion,
+                                directLayout.insertion_index);
+                        if (accepted)
+                        {
+                            editor.detachedPanelHostStatus = directLayout.no_op
+                                ? "Tab kept its current direct slot."
+                                : "Tab moved through the direct insertion slot; outer docking guides remain available.";
+                            push_editor_log(editor,
+                                "[window] " + editor.paneTitleDragLabel
+                                + (directLayout.no_op
+                                    ? " kept its tab position."
+                                    : " moved to a direct tab slot."));
+                        }
+                        else
+                        {
+                            push_editor_log(editor,
+                                "[window] Direct tab move was rejected without changing the layout.");
+                        }
+                        reset_pane_title_drag();
+                    }
+                    result.scene_input_captured = true;
+                    return;
+                }
             }
 
             const float leftPreviewWidth = (std::max)(left_w, w * 0.24f);
@@ -31879,11 +32155,9 @@ namespace epochengine
             std::vector<gui::TabButtonSpec> tabs{};
             std::vector<std::string_view> routes{};
             const std::string_view active = active_pane_for_region(region);
-            for (std::size_t i = 0; i < toolPaneRoutes.size(); ++i)
+            for (const std::size_t i : ordered_pane_indices_for_region(region))
             {
                 const std::string_view route = toolPaneRoutes[i];
-                if (!pane_available(route) || pane_dock_region(route) != region)
-                    continue;
                 routes.push_back(route);
                 tabs.push_back(gui::TabButtonSpec{
                     .id = route,
@@ -31907,6 +32181,21 @@ namespace epochengine
             gui::set_cursor({ position.x + 3.0f, position.y + 2.0f });
             const auto tabResult =
                 gui::tab_bar_buttons(tabs, toolGroupTabHeight - 3.0f, 1.0f);
+            const std::size_t regionIndex = tool_dock_region_index(region);
+            directTabRoutes[regionIndex] = routes;
+            directTabBounds[regionIndex].clear();
+            directTabBounds[regionIndex].reserve(tabResult.items.size());
+            for (const auto& item : tabResult.items)
+            {
+                directTabBounds[regionIndex].push_back({
+                    {item.position.x, item.position.y},
+                    {item.size.x, item.size.y}
+                });
+            }
+            directTabStripBounds[regionIndex] = {
+                {position.x + 3.0f, position.y + 2.0f},
+                {(std::max)(1.0f, size.x - 6.0f), toolGroupTabHeight - 3.0f}
+            };
             const std::optional<std::size_t> activationIndex =
                 tabResult.pressed_index
                     ? tabResult.pressed_index

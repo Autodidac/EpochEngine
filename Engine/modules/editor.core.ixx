@@ -434,6 +434,7 @@ namespace epochengine
         std::string route{};
         bool open{true};
         std::uint8_t dock_region{};
+        std::uint32_t tab_order{};
     };
 
     export struct EditorContextSnapshot

@@ -1,5 +1,20 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Add exact direct tab-slot insertion ahead of the existing docking fallback.
+  Variable-width tab geometry produces an insertion marker and dragged-tab
+  ghost; same-group reorder and cross-group transfer preserve active/fallback
+  selection, close metadata, keyboard order, snapshots, and saved layout. Outer
+  guides, native popout/redock, detached windows, and no-guide float behavior
+  remain unchanged.
+- Make failed Dark Factory validation repairable instead of terminally
+  unreachable. Exact failed checks become bounded digest-bound evidence after
+  retry exhaustion, survive journal resume without replay, and route once into
+  the existing fresh-proposal repair phase with `passed=false`. Malformed or
+  forged receipts remain fail-closed and no external authority is granted.
+- Expand the source workspace with stable document handles and tab reordering,
+  bounded UTF-8 find/replace, memory revert, revision-bound diagnostics, and a
+  deterministic UI-state codec that never persists unsaved source or performs
+  implicit filesystem writes.
 - Advance local source and Windows/Linux packaged-version authorities to
   `v0.89.35` without changing macOS `v0.89.30` authority. Public runtime and
   source remain immutable v0.89.34 until a fresh bounded release completes.

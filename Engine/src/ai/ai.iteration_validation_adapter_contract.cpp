@@ -102,16 +102,25 @@ namespace epochengine::ai::iteration_validation_adapter
                     Actor::headless_contract, Actor::full_validation};
                 if (index >= std::size(order) || actor != order[index]
                     || !build_validation::valid_lower_hex(evidence_sha256, 32u)
-                    || summary.empty() || !passed
+                    || summary.empty()
                     || action.expected_generation != current.generation
                     || action.expected_state_sha256 != current.state_sha256
                     || action.transition_id.empty() || action.now_unix_seconds == 0u)
                     return {.snapshot = current, .status = "forged fake-host evidence"};
-                ++index;
                 ++current.generation;
                 current.previous_state_sha256 = current.state_sha256;
                 current.state_sha256 = digest("orchestrator.validation."
                     + std::to_string(current.generation));
+                if (!passed)
+                {
+                    ++failures;
+                    current.validation_index = 0u;
+                    current.candidate_sha256.clear();
+                    current.phase = self_iteration_orchestrator::Phase::awaiting_proposal_request;
+                    return {.accepted = true, .snapshot = current,
+                        .status = "fake host routed exact failure to repair"};
+                }
+                ++index;
                 current.validation_index = static_cast<std::uint32_t>(index);
                 current.phase = index == std::size(order)
                     ? self_iteration_orchestrator::Phase::checkpoint_ready
@@ -122,6 +131,7 @@ namespace epochengine::ai::iteration_validation_adapter
 
             OrchestratorSnapshot current{};
             std::size_t index{};
+            std::size_t failures{};
         };
 
         [[nodiscard]] OrchestratorSnapshot orchestrator_snapshot()
@@ -219,6 +229,25 @@ namespace epochengine::ai::iteration_validation_adapter
                 .host_completed = true};
             result.receipt_sha256 = digest(
                 build_validation::canonical_json(result.receipt));
+            return result;
+        }
+
+        [[nodiscard]] TaskResult failed_result_for(const Task& task)
+        {
+            TaskResult result = result_for(task);
+            for (auto& check : result.receipt.checks)
+            {
+                if (check.lane == task.required_lane)
+                {
+                    check.status = build_validation::CheckStatus::failed;
+                    check.diagnostic =
+                        "compiler diagnostic: exact candidate did not build";
+                    break;
+                }
+            }
+            result.receipt_sha256 = digest(
+                build_validation::canonical_json(result.receipt));
+            result.diagnostic = "host completed the failed validation task";
             return result;
         }
 
@@ -352,10 +381,60 @@ namespace epochengine::ai::iteration_validation_adapter
             return static_cast<bool>(adapter.record_result(
                 result_for(issued.tasks[0]), journal));
         }
+
+        [[nodiscard]] bool repair_routing()
+        {
+            auto current = orchestrator_snapshot();
+            const Authority bound_authority = authority();
+            Policy no_retries{};
+            no_retries.maximum_retries_per_stage = 0u;
+            FakeJournal journal{};
+            FakeHost host{};
+            Adapter adapter{};
+            if (!adapter.begin(current, bound_authority, no_retries, journal))
+                return false;
+            const auto issued = adapter.dispatch(host, journal);
+            if (!issued || issued.tasks.size() != 1u)
+                return false;
+            const auto failed = adapter.record_result(
+                failed_result_for(issued.tasks.front()), journal);
+            if (!failed || failed.code != Code::repair_ready
+                || failed.snapshot.stages.front().state != TaskState::repair_ready
+                || failed.snapshot.stages.front().failure_kind
+                    != FailureKind::required_check
+                || !failed.snapshot.stages.front().receipt
+                || failed.snapshot.stages.front().evidence_sha256.size() != 64u
+                || failed.snapshot.stages.front().diagnostic
+                    != "compiler diagnostic: exact candidate did not build")
+                return false;
+
+            Adapter resumed{};
+            const auto recovered = resumed.resume(
+                current, bound_authority, no_retries, journal);
+            if (!recovered || recovered.code != Code::repair_ready)
+                return false;
+            FakeOrchestrator orchestrator{current};
+            const auto routed = resumed.advance_orchestrator(current,
+                action_for(current, 91u), orchestrator, journal);
+            if (!routed || routed.code != Code::repair_required
+                || routed.snapshot.stages.front().state
+                    != TaskState::repair_evidence_recorded
+                || orchestrator.failures != 1u
+                || orchestrator.current.phase
+                    != self_iteration_orchestrator::Phase::awaiting_proposal_request
+                || !orchestrator.current.candidate_sha256.empty()
+                || routed.snapshot.upload_permitted
+                || routed.snapshot.release_permitted)
+                return false;
+            return resumed.advance_orchestrator(orchestrator.current,
+                action_for(orchestrator.current, 92u), orchestrator, journal).code
+                == Code::out_of_order;
+        }
     }
 
     bool run_contract()
     {
-        return happy_path() && resume_cancel_and_retry() && parallel_policy();
+        return happy_path() && resume_cancel_and_retry() && parallel_policy()
+            && repair_routing();
     }
 }

@@ -444,6 +444,295 @@ namespace epochengine::editor_code_workspace
             return true;
         }
 
+        [[nodiscard]] bool stable_tabs_and_session_contract(
+            const Fixture& fixture)
+        {
+            if (!fixture.write("Scripts/alpha.ascript.cpp", "alpha\n")
+                || !fixture.write("Scripts/beta.ascript.cpp", "beta\n"))
+            {
+                return false;
+            }
+            Controller source{};
+            const OpenRequest request = project_request(fixture);
+            if (!source.open(request))
+                return false;
+            const WorkspaceSnapshot initial = source.snapshot();
+            const DocumentHandle alpha = initial.documents[0].handle;
+            const DocumentHandle beta = initial.documents[1].handle;
+            if (!source.activate(beta, request.authority)
+                || !source.find(
+                    beta,
+                    request.authority,
+                    initial.documents[1].revision,
+                    "et",
+                    FindOptions{},
+                    FindDirection::forward)
+                || !source.move_tab(beta, request.authority, 0u))
+            {
+                return false;
+            }
+            const WorkspaceSnapshot moved = source.snapshot();
+            if (moved.documents[0].handle != beta
+                || moved.documents[0].relative_path
+                    != "Scripts/beta.ascript.cpp"
+                || moved.documents[1].handle != alpha
+                || !moved.active_document
+                || *moved.active_document != beta)
+            {
+                return false;
+            }
+            if (!source.open(request)
+                || source.snapshot().documents[0].handle != beta)
+            {
+                return false;
+            }
+
+            const std::string persisted = source.serialize_session();
+            if (persisted.empty() || persisted != source.serialize_session())
+                return false;
+            Controller restored{};
+            if (!restored.open(request)
+                || !restored.restore_session(request.authority, persisted))
+            {
+                return false;
+            }
+            const WorkspaceSnapshot reopened = restored.snapshot();
+            if (reopened.documents.size() != 2u
+                || reopened.documents[0].relative_path
+                    != "Scripts/beta.ascript.cpp"
+                || reopened.documents[1].relative_path
+                    != "Scripts/alpha.ascript.cpp"
+                || !reopened.active_document
+                || !reopened.documents[0].active
+                || reopened.documents[0].find.query != "et"
+                || reopened.documents[0].find.match_count != 1u
+                || reopened.documents[0].find.current_match
+                || reopened.documents[0].selection
+                    != TextRange{
+                        .anchor = {.line = 0u, .column = 1u},
+                        .caret = {.line = 0u, .column = 3u}}
+                || restored.serialize_session() != persisted)
+            {
+                return false;
+            }
+            const WorkspaceSnapshot before_refusal = restored.snapshot();
+            if (restored.restore_session(
+                    request.authority,
+                    persisted + "x").code != ResultCode::invalid_request
+                || restored.snapshot().revision != before_refusal.revision
+                || restored.snapshot().documents[0].relative_path
+                    != before_refusal.documents[0].relative_path)
+            {
+                return false;
+            }
+
+            const DocumentSnapshot alpha_document = *source.document(alpha);
+            if (!source.close(
+                    alpha,
+                    request.authority,
+                    alpha_document.revision,
+                    false)
+                || !source.document(beta)
+                || !source.active_document()
+                || source.active_document()->handle != beta)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool find_replace_and_revert_contract(
+            const Fixture& fixture)
+        {
+            if (!fixture.write("Scripts/alpha.ascript.cpp", "alpha\n"))
+                return false;
+            Controller controller{};
+            const OpenRequest request = project_request(fixture);
+            if (!controller.open(request))
+                return false;
+            const DocumentSnapshot opened = controller.snapshot().documents[0];
+            if (!controller.replace_text(
+                    opened.handle,
+                    request.authority,
+                    opened.revision,
+                    "alpha alpha1 Alpha\n\xe7\x95\x8c alpha\n"))
+            {
+                return false;
+            }
+            DocumentSnapshot document = *controller.document(opened.handle);
+            const FindOptions identifier_search{
+                .case_sensitive = false,
+                .whole_identifier = true,
+                .wrap = true};
+            const OperationResult first = controller.find(
+                document.handle,
+                request.authority,
+                document.revision,
+                "alpha",
+                identifier_search,
+                FindDirection::forward);
+            const OperationResult second = controller.find(
+                document.handle,
+                request.authority,
+                document.revision,
+                "alpha",
+                identifier_search,
+                FindDirection::forward);
+            const OperationResult previous = controller.find(
+                document.handle,
+                request.authority,
+                document.revision,
+                "alpha",
+                identifier_search,
+                FindDirection::backward);
+            const OperationResult wrapped = controller.find(
+                document.handle,
+                request.authority,
+                document.revision,
+                "alpha",
+                identifier_search,
+                FindDirection::backward);
+            if (!first || first.match_count != 3u || first.match_index != 1u
+                || !second || second.match_index != 2u
+                || !previous || previous.match_index != 1u
+                || !wrapped || wrapped.match_index != 3u || !wrapped.wrapped)
+            {
+                return false;
+            }
+
+            const OperationResult replaced = controller.replace_current(
+                document.handle,
+                request.authority,
+                document.revision,
+                "omega");
+            if (!replaced || replaced.affected_count != 1u)
+                return false;
+            document = *controller.document(document.handle);
+            const OperationResult all = controller.replace_all(
+                document.handle,
+                request.authority,
+                document.revision,
+                "alpha",
+                identifier_search,
+                "A");
+            if (!all || all.affected_count != 2u)
+                return false;
+            document = *controller.document(document.handle);
+            if (document.text != "A alpha1 A\n\xe7\x95\x8c omega\n"
+                || !document.dirty)
+            {
+                return false;
+            }
+            const OperationResult range_edit = controller.replace_range(
+                document.handle,
+                request.authority,
+                document.revision,
+                TextRange{
+                    .anchor = {.line = 0u, .column = 0u},
+                    .caret = {.line = 0u, .column = 1u}},
+                "\xce\xa9");
+            if (!range_edit || range_edit.affected_count != 1u)
+                return false;
+            document = *controller.document(document.handle);
+            if (!document.text.starts_with("\xce\xa9 alpha1")
+                || document.selection.caret
+                    != TextPosition{.line = 0u, .column = 1u}
+                || !controller.revert(
+                    document.handle,
+                    request.authority,
+                    document.revision))
+            {
+                return false;
+            }
+            const DocumentSnapshot reverted = *controller.document(
+                document.handle);
+            return reverted.text == "alpha\n"
+                && !reverted.dirty
+                && reverted.persisted_revision == opened.persisted_revision;
+        }
+
+        [[nodiscard]] bool diagnostics_contract(
+            const Fixture& fixture)
+        {
+            if (!fixture.write("Scripts/alpha.ascript.cpp", "alpha\n"))
+                return false;
+            Controller controller{};
+            const OpenRequest request = project_request(fixture);
+            if (!controller.open(request))
+                return false;
+            DocumentSnapshot document = controller.snapshot().documents[0];
+            std::vector<Diagnostic> diagnostics{
+                Diagnostic{
+                    .severity = DiagnosticSeverity::warning,
+                    .source = "compiler",
+                    .code = "W2",
+                    .message = "Trailing token.",
+                    .range = {
+                        .anchor = {.line = 0u, .column = 4u},
+                        .caret = {.line = 0u, .column = 5u}}},
+                Diagnostic{
+                    .severity = DiagnosticSeverity::error,
+                    .source = "compiler",
+                    .code = "E1",
+                    .message = "Leading token.",
+                    .range = {
+                        .anchor = {.line = 0u, .column = 0u},
+                        .caret = {.line = 0u, .column = 1u}}}};
+            const OperationResult published = controller.publish_diagnostics(
+                document.handle,
+                request.authority,
+                document.revision,
+                diagnostics);
+            document = *controller.document(document.handle);
+            if (!published || published.affected_count != 2u
+                || !document.diagnostics_current
+                || document.diagnostics.size() != 2u
+                || document.diagnostics[0].code != "E1"
+                || !controller.navigate_diagnostic(
+                    document.handle,
+                    request.authority,
+                    document.revision,
+                    0u))
+            {
+                return false;
+            }
+            document = *controller.document(document.handle);
+            if (document.selection != diagnostics[1].range
+                || !controller.replace_range(
+                    document.handle,
+                    request.authority,
+                    document.revision,
+                    document.selection,
+                    "A"))
+            {
+                return false;
+            }
+            document = *controller.document(document.handle);
+            if (document.diagnostics_current
+                || controller.navigate_diagnostic(
+                    document.handle,
+                    request.authority,
+                    document.revision,
+                    0u).code != ResultCode::stale_diagnostics)
+            {
+                return false;
+            }
+            const std::vector<Diagnostic> invalid{
+                Diagnostic{
+                    .severity = DiagnosticSeverity::error,
+                    .source = "compiler",
+                    .code = "E9",
+                    .message = "Outside.",
+                    .range = {
+                        .anchor = {.line = 99u, .column = 0u},
+                        .caret = {.line = 99u, .column = 1u}}}};
+            return controller.publish_diagnostics(
+                document.handle,
+                request.authority,
+                document.revision,
+                invalid).code == ResultCode::invalid_request;
+        }
+
         [[nodiscard]] bool path_refusal_contract(const Fixture& fixture)
         {
             Controller controller{};
@@ -513,6 +802,9 @@ namespace epochengine::editor_code_workspace
             && bom_roundtrip_contract(fixture)
             && stale_and_atomic_save_contract(fixture)
             && reload_and_isolation_contract(fixture)
+            && stable_tabs_and_session_contract(fixture)
+            && find_replace_and_revert_contract(fixture)
+            && diagnostics_contract(fixture)
             && path_refusal_contract(fixture);
     }
 }

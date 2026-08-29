@@ -4344,6 +4344,49 @@ namespace epochengine::gui
         end_top_layer();
     }
 
+    void render_dock_tab_insertion_overlay(
+        const DockTabInsertionOverlayOptions& options) noexcept
+    {
+        if (!g_frame.ctx
+            || options.insertion_marker.size.x <= 0.0f
+            || options.insertion_marker.size.y <= 0.0f
+            || options.insertion_ghost.size.x <= 0.0f
+            || options.insertion_ghost.size.y <= 0.0f)
+            return;
+
+        ensure_resources();
+        begin_top_layer();
+        ContentClipClearScope clearClip;
+        draw_sprite(
+            g_resources.dockGuidePreview,
+            options.insertion_ghost.position.x,
+            options.insertion_ghost.position.y,
+            options.insertion_ghost.size.x,
+            options.insertion_ghost.size.y);
+        draw_sprite(
+            options.no_op ? g_resources.dockGuide : g_resources.dockGuideHover,
+            options.insertion_marker.position.x,
+            options.insertion_marker.position.y,
+            options.insertion_marker.size.x,
+            options.insertion_marker.size.y);
+        if (!options.moving_label.empty())
+        {
+            const std::string fitted = fit_text_to_width(
+                options.moving_label,
+                (std::max)(1.0f, options.insertion_ghost.size.x - 16.0f),
+                0.80f);
+            draw_text_line(
+                fitted.empty() ? options.moving_label : std::string_view{fitted},
+                options.insertion_ghost.position.x + 8.0f,
+                options.insertion_ghost.position.y
+                    + (std::max)(3.0f,
+                        (options.insertion_ghost.size.y - line_advance_amount(0.80f))
+                            * 0.5f),
+                0.80f);
+        }
+        end_top_layer();
+    }
+
     DockableWindowResult update_dockable_window(
         DockableWindowHostState& host,
         DockableWindowState& state,
@@ -8266,6 +8309,7 @@ namespace epochengine::gui
         TabBarResult result{};
         if (!g_frame.insideWindow || !g_frame.ctx || tabs.empty())
             return result;
+        result.items.resize(tabs.size());
 
         const Vec2 rowStart = g_frame.cursor;
         const auto& palette = active_palette();
@@ -8333,6 +8377,11 @@ namespace epochengine::gui
                     tab.closable);
             if (!layout.valid)
                 continue;
+
+            result.items[index] = {
+                .position = from_lib(layout.button.position),
+                .size = from_lib(layout.button.size)
+            };
 
             const Vec2 buttonPosition = from_lib(layout.button.position);
             const Vec2 buttonSize = from_lib(layout.button.size);

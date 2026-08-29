@@ -2188,6 +2188,88 @@ export namespace epochengine::gui_lib
         Rect hovered_preview{};
     };
 
+    inline constexpr std::uint32_t maximum_dock_tabs{ 64U };
+    inline constexpr std::uint32_t invalid_dock_tab_index{
+        (std::numeric_limits<std::uint32_t>::max)()
+    };
+
+    struct DockTabItem
+    {
+        std::uint64_t id{};
+        std::uint64_t remembered_group_id{};
+        std::uint32_t keyboard_order{};
+        bool active{};
+        bool closable{ true };
+    };
+
+    struct DockTabGroup
+    {
+        std::uint64_t id{};
+        DockTabItem tabs[maximum_dock_tabs]{};
+        std::uint32_t count{};
+    };
+
+    struct DockTabStripOptions
+    {
+        Rect strip_bounds{};
+        const Rect* tab_bounds{};
+        std::uint32_t tab_count{};
+        Vec2 pointer{};
+        Vec2 dragged_tab_size{ 120.0f, 28.0f };
+        std::uint64_t source_group_id{};
+        std::uint64_t target_group_id{};
+        std::uint32_t source_index{ invalid_dock_tab_index };
+        float marker_extent{ 3.0f };
+        bool drag_active{};
+        bool target_compatible{ true };
+        bool cancelled{};
+    };
+
+    struct DockTabStripLayout
+    {
+        Rect insertion_marker{};
+        Rect insertion_ghost{};
+        std::uint32_t insertion_index{ invalid_dock_tab_index };
+        bool target_hovered{};
+        bool direct_drop_available{};
+        bool suppress_outer_guides{};
+        bool no_op{};
+        bool cancelled{};
+    };
+
+    enum class DockTabMoveCode : std::uint8_t
+    {
+        moved,
+        unchanged,
+        invalid_group,
+        invalid_source,
+        invalid_insertion,
+        duplicate_tab,
+        target_full
+    };
+
+    struct DockTabMoveResult
+    {
+        DockTabMoveCode code{ DockTabMoveCode::invalid_source };
+        std::uint32_t source_index{ invalid_dock_tab_index };
+        std::uint32_t target_index{ invalid_dock_tab_index };
+        std::uint64_t active_tab_id{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return code == DockTabMoveCode::moved
+                || code == DockTabMoveCode::unchanged;
+        }
+    };
+
+    [[nodiscard]] DockTabStripLayout make_dock_tab_strip_layout(
+        const DockTabStripOptions& options) noexcept;
+    [[nodiscard]] DockTabMoveResult move_dock_tab(
+        DockTabGroup& source,
+        DockTabGroup& target,
+        std::uint32_t source_index,
+        std::uint32_t insertion_index) noexcept;
+
     struct DockPaneState
     {
         std::uint32_t id{};

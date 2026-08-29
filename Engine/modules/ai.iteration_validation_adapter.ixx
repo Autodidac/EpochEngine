@@ -21,6 +21,8 @@ export namespace epochengine::ai::iteration_validation_adapter
 {
     inline constexpr std::uint32_t schema_version = 1u;
     inline constexpr std::size_t engine_stage_count = 7u;
+    inline constexpr std::size_t maximum_failure_diagnostic_bytes =
+        16u * 1024u;
 
     struct Policy final
     {
@@ -61,6 +63,8 @@ export namespace epochengine::ai::iteration_validation_adapter
         result_ready,
         evidence_recorded,
         retry_ready,
+        repair_ready,
+        repair_evidence_recorded,
         failed,
         cancelled
     };
@@ -118,6 +122,13 @@ export namespace epochengine::ai::iteration_validation_adapter
         virtual void cancel(std::string_view task_id) noexcept = 0;
     };
 
+    enum class FailureKind : std::uint8_t
+    {
+        none,
+        required_check,
+        admission_policy
+    };
+
     struct StageRecord final
     {
         Task task{};
@@ -126,6 +137,7 @@ export namespace epochengine::ai::iteration_validation_adapter
         std::string evidence_sha256{};
         std::string diagnostic{};
         std::optional<build_validation::ValidationReceipt> receipt{};
+        FailureKind failure_kind{FailureKind::none};
     };
 
     struct AdmissionEvidence final
@@ -222,6 +234,8 @@ export namespace epochengine::ai::iteration_validation_adapter
         retry_scheduled,
         evidence_recorded,
         admitted,
+        repair_ready,
+        repair_required,
         cancelled,
         invalid_policy,
         stale_state,
@@ -247,7 +261,8 @@ export namespace epochengine::ai::iteration_validation_adapter
                 || code == Code::result_accepted
                 || code == Code::retry_scheduled
                 || code == Code::evidence_recorded
-                || code == Code::admitted || code == Code::cancelled;
+                || code == Code::admitted || code == Code::repair_ready
+                || code == Code::repair_required || code == Code::cancelled;
         }
     };
 

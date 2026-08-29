@@ -1,5 +1,22 @@
 # Mission Cache
 
+- Preserve direct tab insertion as the first docking decision only while a
+  compatible tab strip owns pointer hover. EpochGui owns slot resolution,
+  marker/ghost geometry, metadata-preserving move semantics, cancellation, and
+  no-op refusal. The editor owns persisted tab order and exact tab geometry.
+  Outer guides, popout, native redock, detached windows, and remembered layout
+  remain available and must not be replaced by this path.
+- Preserve the Dark Factory repair boundary: a correctly bound failed receipt
+  is evidence, not a forged result and not success. After bounded retries it is
+  journaled with a bounded diagnostic digest and routed once to the existing
+  fresh-proposal repair phase with `passed=false`. Malformed receipts remain
+  fail-closed; promotion, Git, upload, release, server, and listener authority
+  remain false.
+- Preserve code-workspace session truth: stable document identity/order,
+  selection/view/find preferences, and exact revision may persist; unsaved
+  source bytes and diagnostics may not. Replace operations and diagnostics must
+  reject stale revisions before mutation, and all source writes remain explicit
+  verified save operations.
 - The v0.89.35 Package Manager/model candidate restores full-width measured
   list/detail/footer composition and truthful download/verification states.
   Qwen3.8 27B and Nemotron 3 Nano 4B BF16 are the only currently admitted model

@@ -1,3 +1,20 @@
+- Direct Visual Studio-style tab insertion is now additive to the existing
+  docking system. Exact tab rectangles feed EpochGui's variable-width slot
+  planner; same-group reorder and compatible cross-group moves preserve active
+  tabs, close behavior, keyboard order, remembered groups, snapshots, and
+  layout preferences. A tab-strip hover owns the marker/ghost first; otherwise
+  the existing outer guides, native popout, redock, and no-guide float path run
+  unchanged.
+- Dark Factory validation failures now enter the real bounded repair cycle.
+  Exact failed build/test receipts are distinguished from malformed or forged
+  receipts, bounded diagnostics are digest-bound into durable evidence, resume
+  preserves repair readiness without replay, and the orchestrator receives one
+  `passed=false` transition requiring a fresh proposal. No Git, upload, release,
+  listener, or hidden mutation authority is added.
+- The code workspace now owns stable document handles and tab order, bounded
+  UTF-8 find/replace, memory revert, revision-bound diagnostics, deterministic
+  session state, and stale-evidence refusal. Session persistence never embeds
+  unsaved source or diagnostics and never writes source implicitly.
 - The local v0.89.35 hotfix repairs the exact Package Manager layout failure
   captured after v0.89.34. It restores the content-column origin after the
   right-aligned Refresh action, measures list/detail/footer regions from one

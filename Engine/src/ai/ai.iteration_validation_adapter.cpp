@@ -24,6 +24,13 @@ namespace epochengine::ai::iteration_validation_adapter
         using Lane = build_validation::CheckLane;
         using Configuration = build_validation::Configuration;
 
+        enum class ReceiptDisposition : std::uint8_t
+        {
+            accepted,
+            failed_check,
+            invalid
+        };
+
         constexpr std::array<Actor, engine_stage_count> actors{
             Actor::debug_compiler, Actor::debug_contract,
             Actor::release_compiler, Actor::release_contract,
@@ -140,10 +147,15 @@ namespace epochengine::ai::iteration_validation_adapter
                 + "\n" + std::to_string(value.next_evidence_index)
                 + "\n" + (value.cancelled ? "1" : "0");
             for (const StageRecord& stage : value.stages)
+            {
                 material += "\n" + stage.task.task_sha256 + "\n"
                     + std::to_string(static_cast<std::uint8_t>(stage.state))
                     + "\n" + stage.receipt_sha256 + "\n"
-                    + stage.evidence_sha256;
+                    + stage.evidence_sha256 + "\n"
+                    + std::to_string(static_cast<std::uint8_t>(
+                        stage.failure_kind))
+                    + "\n" + hash(stage.diagnostic);
+            }
             if (value.admission) material += "\n" + value.admission->evidence_sha256;
             return material;
         }
@@ -187,7 +199,7 @@ namespace epochengine::ai::iteration_validation_adapter
                 && hash(task_material(task)) == task.task_sha256;
         }
 
-        [[nodiscard]] bool receipt_matches(
+        [[nodiscard]] ReceiptDisposition inspect_receipt(
             const Task& task,
             const TaskResult& result,
             std::string& diagnostic)
@@ -210,7 +222,7 @@ namespace epochengine::ai::iteration_validation_adapter
                 || !result.host_completed)
             {
                 diagnostic = "Validation result binding is stale or forged.";
-                return false;
+                return ReceiptDisposition::invalid;
             }
             const auto& receipt = result.receipt;
             const std::string canonical = build_validation::canonical_json(receipt);
@@ -228,17 +240,29 @@ namespace epochengine::ai::iteration_validation_adapter
                 || receipt.artifact.size_bytes == 0u)
             {
                 diagnostic = "Build-validation receipt does not match the exact task authority.";
-                return false;
+                return ReceiptDisposition::invalid;
             }
             const auto* check = build_validation::find_check(
                 receipt, task.required_lane);
-            if (check == nullptr || check->status != build_validation::CheckStatus::passed
-                || !lower_hex(check->evidence_sha256, 32u))
+            if (check == nullptr || !lower_hex(check->evidence_sha256, 32u)
+                || check->status == build_validation::CheckStatus::invalid)
             {
-                diagnostic = "Required validation check did not pass.";
-                return false;
+                diagnostic = "Required validation check is missing or malformed.";
+                return ReceiptDisposition::invalid;
             }
-            return true;
+            if (check->status != build_validation::CheckStatus::passed)
+            {
+                diagnostic = check->diagnostic.empty()
+                    ? "Required validation check did not pass."
+                    : check->diagnostic;
+                if (diagnostic.size() > maximum_failure_diagnostic_bytes)
+                {
+                    diagnostic = "Required validation diagnostic exceeded its bound.";
+                    return ReceiptDisposition::invalid;
+                }
+                return ReceiptDisposition::failed_check;
+            }
+            return ReceiptDisposition::accepted;
         }
 
         [[nodiscard]] bool result_binding_matches(
@@ -261,6 +285,55 @@ namespace epochengine::ai::iteration_validation_adapter
                 && result.configuration_sha256
                     == task.authority.configuration_sha256
                 && result.host_completed;
+        }
+
+        [[nodiscard]] std::string failure_evidence(
+            const StageRecord& stage)
+        {
+            return hash("EPOCH_ITERATION_VALIDATION_FAILURE_V1\n"
+                + stage.task.task_sha256 + "\n" + stage.receipt_sha256
+                + "\n" + std::to_string(static_cast<std::uint8_t>(
+                    stage.failure_kind))
+                + "\n" + hash(stage.diagnostic));
+        }
+
+        void bind_trusted_failure(
+            StageRecord& stage,
+            TaskResult result,
+            const FailureKind kind,
+            std::string diagnostic)
+        {
+            stage.state = TaskState::repair_ready;
+            stage.receipt_sha256 = std::move(result.receipt_sha256);
+            stage.diagnostic = std::move(diagnostic);
+            stage.receipt = std::move(result.receipt);
+            stage.failure_kind = kind;
+            stage.evidence_sha256 = failure_evidence(stage);
+        }
+
+        [[nodiscard]] bool trusted_failure_valid(
+            const Snapshot& snapshot,
+            const StageRecord& stage)
+        {
+            if (stage.state != TaskState::repair_ready || !stage.receipt
+                || stage.diagnostic.empty()
+                || stage.diagnostic.size() > maximum_failure_diagnostic_bytes
+                || hash(build_validation::canonical_json(*stage.receipt))
+                    != stage.receipt_sha256
+                || stage.evidence_sha256 != failure_evidence(stage))
+                return false;
+            const auto* required = build_validation::find_check(
+                *stage.receipt, stage.task.required_lane);
+            if (stage.failure_kind == FailureKind::required_check)
+                return required != nullptr
+                    && required->status != build_validation::CheckStatus::invalid
+                    && required->status != build_validation::CheckStatus::passed
+                    && lower_hex(required->evidence_sha256, 32u);
+            return stage.failure_kind == FailureKind::admission_policy
+                && stage.task.actor == Actor::full_validation
+                && !build_validation::admit(*stage.receipt,
+                    snapshot.authority.source_version,
+                    snapshot.policy.admission);
         }
 
         [[nodiscard]] AdmissionEvidence aggregate(const Snapshot& snapshot)
@@ -435,10 +508,18 @@ namespace epochengine::ai::iteration_validation_adapter
             || snapshot_.stages.size() != engine_stage_count)
             return rejected(Code::stale_state, snapshot_, "Validation resume binding is stale or corrupt.");
         bool changed = false;
+        bool repair_ready = false;
         for (StageRecord& stage : snapshot_.stages)
         {
             if (!task_valid(stage.task))
                 return rejected(Code::forged_result, snapshot_, "Stored validation task digest is invalid.");
+            if (stage.state == TaskState::repair_ready)
+            {
+                if (!trusted_failure_valid(snapshot_, stage))
+                    return rejected(Code::forged_result, snapshot_,
+                        "Stored failed validation evidence is invalid.");
+                repair_ready = true;
+            }
             if (stage.state == TaskState::dispatched)
             {
                 if (stage.task.attempt > policy.maximum_retries_per_stage)
@@ -454,6 +535,9 @@ namespace epochengine::ai::iteration_validation_adapter
         }
         return changed ? persist(Code::ready,
             "Interrupted host tasks were invalidated and rebound for explicit retry.", journal)
+            : repair_ready ? Result{.code = Code::repair_ready,
+                .snapshot = snapshot_,
+                .status = "Trusted failed validation evidence resumed for repair routing without replay."}
             : Result{.code = Code::ready, .snapshot = snapshot_,
                 .status = "Validation state resumed without replay."};
     }
@@ -495,6 +579,9 @@ namespace epochengine::ai::iteration_validation_adapter
         StageRecord& stage = snapshot_.stages[result.stage_index];
         if (stage.state != TaskState::dispatched)
             return rejected(Code::replay_rejected, snapshot_, "Validation task is not awaiting a result.");
+        if (result.diagnostic.size() > maximum_failure_diagnostic_bytes)
+            return rejected(Code::forged_result, snapshot_,
+                "Validation host diagnostic exceeded its bound.");
         if (!snapshot_.policy.accept_parallel_results)
         {
             for (std::size_t index = 0u; index < result.stage_index; ++index)
@@ -505,7 +592,9 @@ namespace epochengine::ai::iteration_validation_adapter
         if (!result_binding_matches(stage.task, result))
             return rejected(Code::forged_result, snapshot_,
                 "Validation result binding is stale or forged.");
-        if (!receipt_matches(stage.task, result, diagnostic))
+        const ReceiptDisposition disposition = inspect_receipt(
+            stage.task, result, diagnostic);
+        if (disposition == ReceiptDisposition::invalid)
         {
             if (stage.task.attempt <= snapshot_.policy.maximum_retries_per_stage)
             {
@@ -513,6 +602,10 @@ namespace epochengine::ai::iteration_validation_adapter
                     stage.task.attempt + 1u);
                 stage.state = TaskState::retry_ready;
                 stage.diagnostic = diagnostic;
+                stage.receipt_sha256.clear();
+                stage.evidence_sha256.clear();
+                stage.receipt.reset();
+                stage.failure_kind = FailureKind::none;
                 return persist(Code::retry_scheduled,
                     "Invalid validation result was rejected and one bounded retry scheduled.", journal);
             }
@@ -520,15 +613,40 @@ namespace epochengine::ai::iteration_validation_adapter
             stage.diagnostic = diagnostic;
             return persist(Code::failed_validation, diagnostic, journal);
         }
+        if (disposition == ReceiptDisposition::failed_check)
+        {
+            if (stage.task.attempt <= snapshot_.policy.maximum_retries_per_stage)
+            {
+                stage.task = make_task(snapshot_, stage.task.stage_index,
+                    stage.task.attempt + 1u);
+                stage.state = TaskState::retry_ready;
+                stage.diagnostic = diagnostic;
+                stage.receipt_sha256.clear();
+                stage.evidence_sha256.clear();
+                stage.receipt.reset();
+                stage.failure_kind = FailureKind::none;
+                return persist(Code::retry_scheduled,
+                    "Exact failed validation was retained and one bounded retry scheduled.", journal);
+            }
+            bind_trusted_failure(stage, std::move(result),
+                FailureKind::required_check, std::move(diagnostic));
+            return persist(Code::repair_ready,
+                "Exact failed validation evidence is durable and ready for the bounded repair cycle.",
+                journal);
+        }
         if (stage.task.actor == Actor::full_validation
             && !build_validation::admit(result.receipt,
                 snapshot_.authority.source_version, snapshot_.policy.admission))
         {
-            stage.state = TaskState::failed;
-            return persist(Code::failed_validation,
-                "Full build-validation receipt did not satisfy admission policy.", journal);
+            bind_trusted_failure(stage, std::move(result),
+                FailureKind::admission_policy,
+                "Full build-validation receipt did not satisfy admission policy.");
+            return persist(Code::repair_ready,
+                "Exact admission failure is durable and ready for the bounded repair cycle.",
+                journal);
         }
         stage.state = TaskState::result_ready;
+        stage.failure_kind = FailureKind::none;
         stage.receipt_sha256 = result.receipt_sha256;
         stage.evidence_sha256 = hash("EPOCH_ITERATION_VALIDATION_RESULT_V1\n"
             + stage.task.task_sha256 + "\n" + result.receipt_sha256);
@@ -548,8 +666,12 @@ namespace epochengine::ai::iteration_validation_adapter
             || snapshot_.next_evidence_index >= snapshot_.stages.size())
             return rejected(Code::stale_state, snapshot_, "No validation evidence is advanceable.");
         StageRecord& stage = snapshot_.stages[snapshot_.next_evidence_index];
-        if (stage.state != TaskState::result_ready)
+        const bool repair = stage.state == TaskState::repair_ready;
+        if (stage.state != TaskState::result_ready && !repair)
             return rejected(Code::out_of_order, snapshot_, "Next validation result is not ready.");
+        if (repair && !trusted_failure_valid(snapshot_, stage))
+            return rejected(Code::forged_result, snapshot_,
+                "Failed validation evidence is not repair-routable.");
         if (orchestrator.phase
                 != self_iteration_orchestrator::Phase::awaiting_validation_request
             || orchestrator.orchestrator_id != snapshot_.orchestrator_id
@@ -560,10 +682,20 @@ namespace epochengine::ai::iteration_validation_adapter
             || action.expected_state_sha256 != orchestrator.state_sha256)
             return rejected(Code::stale_state, snapshot_, "Orchestrator evidence action is stale.");
         const auto host = port.record_validation(stage.task.actor,
-            stage.evidence_sha256, "Trusted host validated exact candidate and build authority.",
-            true, std::move(action));
+            stage.evidence_sha256,
+            repair
+                ? "Trusted host recorded exact failed validation evidence; a fresh digest-bound repair proposal is required."
+                : "Trusted host validated exact candidate and build authority.",
+            !repair, std::move(action));
         if (!host.accepted)
             return rejected(Code::host_failure, snapshot_, host.status);
+        if (repair)
+        {
+            stage.state = TaskState::repair_evidence_recorded;
+            return persist(Code::repair_required,
+                "Failed validation entered the bounded repair cycle; source mutation still requires a fresh proposal and approval.",
+                journal);
+        }
         stage.state = TaskState::evidence_recorded;
         ++snapshot_.next_evidence_index;
         if (snapshot_.next_evidence_index == snapshot_.stages.size())

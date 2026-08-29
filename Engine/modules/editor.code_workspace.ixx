@@ -44,6 +44,8 @@ export namespace epochengine::editor_code_workspace
         stale_disk,
         dirty_workspace,
         dirty_document,
+        not_found,
+        stale_diagnostics,
         read_only,
         write_failed,
         verification_failed
@@ -115,6 +117,52 @@ export namespace epochengine::editor_code_workspace
         bool writable{};
     };
 
+    enum class FindDirection : std::uint8_t
+    {
+        forward = 0,
+        backward
+    };
+
+    struct FindOptions final
+    {
+        bool case_sensitive{true};
+        bool whole_identifier{};
+        bool wrap{true};
+
+        friend bool operator==(
+            const FindOptions&,
+            const FindOptions&) = default;
+    };
+
+    struct FindSnapshot final
+    {
+        std::string query{};
+        FindOptions options{};
+        std::optional<TextRange> current_match{};
+        std::size_t current_index{};
+        std::size_t match_count{};
+    };
+
+    enum class DiagnosticSeverity : std::uint8_t
+    {
+        information = 0,
+        warning,
+        error
+    };
+
+    struct Diagnostic final
+    {
+        DiagnosticSeverity severity{DiagnosticSeverity::information};
+        std::string source{};
+        std::string code{};
+        std::string message{};
+        TextRange range{};
+
+        friend bool operator==(
+            const Diagnostic&,
+            const Diagnostic&) = default;
+    };
+
     struct OpenRequest final
     {
         WorkspaceKind kind{WorkspaceKind::project_scripts};
@@ -139,8 +187,12 @@ export namespace epochengine::editor_code_workspace
         std::size_t maximum_line_columns{};
         TextRange selection{};
         Viewport viewport{};
+        FindSnapshot find{};
+        std::vector<Diagnostic> diagnostics{};
+        std::uint64_t diagnostics_revision{};
         bool active{};
         bool dirty{};
+        bool diagnostics_current{};
         bool writable{};
         bool utf8_bom{};
     };
@@ -164,6 +216,11 @@ export namespace epochengine::editor_code_workspace
         std::string reason{};
         std::optional<DocumentHandle> document{};
         std::string text{};
+        std::optional<TextRange> range{};
+        std::size_t affected_count{};
+        std::size_t match_index{};
+        std::size_t match_count{};
+        bool wrapped{};
 
         [[nodiscard]] explicit operator bool() const noexcept
         {
@@ -187,6 +244,10 @@ export namespace epochengine::editor_code_workspace
         [[nodiscard]] OperationResult activate(
             DocumentHandle document,
             const WorkspaceAuthority& expected);
+        [[nodiscard]] OperationResult move_tab(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::size_t destination_index);
         [[nodiscard]] OperationResult close(
             DocumentHandle document,
             const WorkspaceAuthority& expected,
@@ -197,6 +258,12 @@ export namespace epochengine::editor_code_workspace
             const WorkspaceAuthority& expected,
             std::uint64_t expected_document_revision,
             std::string text);
+        [[nodiscard]] OperationResult replace_range(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            TextRange range,
+            std::string replacement);
         [[nodiscard]] OperationResult set_selection(
             DocumentHandle document,
             const WorkspaceAuthority& expected,
@@ -216,6 +283,29 @@ export namespace epochengine::editor_code_workspace
             const WorkspaceAuthority& expected,
             std::uint64_t expected_document_revision,
             std::size_t one_based_line);
+        [[nodiscard]] OperationResult find(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            std::string query,
+            FindOptions options,
+            FindDirection direction);
+        [[nodiscard]] OperationResult replace_current(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            std::string replacement);
+        [[nodiscard]] OperationResult replace_all(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            std::string query,
+            FindOptions options,
+            std::string replacement);
+        [[nodiscard]] OperationResult revert(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision);
         [[nodiscard]] OperationResult reload(
             DocumentHandle document,
             const WorkspaceAuthority& expected,
@@ -225,6 +315,21 @@ export namespace epochengine::editor_code_workspace
             DocumentHandle document,
             const WorkspaceAuthority& expected,
             std::uint64_t expected_document_revision);
+        [[nodiscard]] OperationResult publish_diagnostics(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            std::vector<Diagnostic> diagnostics);
+        [[nodiscard]] OperationResult navigate_diagnostic(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision,
+            std::size_t diagnostic_index);
+
+        [[nodiscard]] std::string serialize_session() const;
+        [[nodiscard]] OperationResult restore_session(
+            const WorkspaceAuthority& expected,
+            std::string_view encoded_session);
 
         [[nodiscard]] WorkspaceSnapshot snapshot() const;
         [[nodiscard]] std::optional<DocumentSnapshot> document(

@@ -456,6 +456,14 @@ namespace epochengine::gui
         bool show_floating_preview{};
     };
 
+    export struct DockTabInsertionOverlayOptions
+    {
+        WidgetBounds insertion_marker{};
+        WidgetBounds insertion_ghost{};
+        std::string_view moving_label{};
+        bool no_op{};
+    };
+
     export enum class DockableWindowMode : std::uint8_t
     {
         docked,
@@ -838,9 +846,16 @@ namespace epochengine::gui
 
     export struct TabBarResult
     {
+        struct ItemGeometry
+        {
+            Vec2 position{};
+            Vec2 size{};
+        };
+
         std::optional<std::size_t> pressed_index{};
         std::optional<std::size_t> selected_index{};
         std::optional<std::size_t> closed_index{};
+        std::vector<ItemGeometry> items{};
     };
 
     export struct ResponsiveTabBarOptions
@@ -1021,6 +1036,8 @@ namespace epochengine::gui
     export void render_dock_guide_overlay(
         const DockGuideLayout& layout,
         const DockGuideOverlayOptions& options = {}) noexcept;
+    export void render_dock_tab_insertion_overlay(
+        const DockTabInsertionOverlayOptions& options) noexcept;
     export DockableWindowResult update_dockable_window(
         DockableWindowHostState& host,
         DockableWindowState& state,
