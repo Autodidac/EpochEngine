@@ -1,6 +1,6 @@
 {
   "schema": "epoch-model-package-descriptor/v1",
-  "package_id": "os_model_qwen3_8_27b_gguf",
+  "package_id": "os_model_qwen_3_8_27b",
   "display_name": "Qwen3.8 27B",
   "category": "llm",
   "upstream_model": "Qwen/Qwen3.8-27B",

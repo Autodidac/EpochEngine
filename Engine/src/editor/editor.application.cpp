@@ -119,6 +119,7 @@ import platform.filesystem;
 import scripting.system;
 import scripting.compiler;
 import ai.engine;
+import ai.model_install;
 import ai.development_executor;
 import editor.ai_development_panel;
 import systems.registry;
@@ -826,6 +827,20 @@ namespace epochengine
             std::string evidenceDigest{};
         };
 
+        struct EditorModelInstallState
+        {
+            ai::model_install::InstallPlan plan{};
+            std::filesystem::path cacheRoot{};
+            std::filesystem::path stagingRoot{};
+            std::filesystem::path outputLog{};
+            std::size_t artifactIndex{};
+            std::uint64_t totalBytes{};
+            std::uint64_t completedBytes{};
+            platform::child_process::ProcessHandle process{};
+            std::optional<std::future<ai::model_install::PublishResult>>
+                publishPending{};
+        };
+
         struct EditorState
         {
             bool initialized{ false };
@@ -1114,6 +1129,7 @@ namespace epochengine
             std::string packageCatalogStatus{ "Catalog not requested." };
             std::optional<std::future<package_catalog::Snapshot>>
                 packageCatalogPending{};
+            std::optional<EditorModelInstallState> packageModelInstall{};
             bool packageCatalogRequested{};
             EditorUpdateState updateState{ EditorUpdateState::Idle };
             std::string updateStatus{ "Updates have not been checked." };
@@ -17508,6 +17524,450 @@ namespace epochengine
             return safe.empty() ? std::string{ "package" } : safe;
         }
 
+        [[nodiscard]] std::string read_bounded_package_file(
+            const std::filesystem::path& path,
+            const std::size_t maximumBytes)
+        {
+            std::error_code error{};
+            if (!std::filesystem::is_regular_file(path, error) || error
+                || std::filesystem::is_symlink(path, error) || error)
+                return {};
+            const std::uintmax_t bytes = std::filesystem::file_size(path, error);
+            if (error || bytes == 0u || bytes > maximumBytes)
+                return {};
+            std::ifstream input(path, std::ios::binary);
+            if (!input)
+                return {};
+            std::string value(static_cast<std::size_t>(bytes), '\0');
+            input.read(value.data(), static_cast<std::streamsize>(value.size()));
+            return input && input.peek() == std::char_traits<char>::eof()
+                ? value : std::string{};
+        }
+
+        [[nodiscard]] std::filesystem::path model_cache_root_path()
+        {
+            return resolve_editor_path(std::filesystem::path{
+                epochengine::ai::local_model_root()});
+        }
+
+        [[nodiscard]] bool model_snapshot_installed(
+            const ai::model_install::InstallPlan& plan)
+        {
+            const std::filesystem::path root =
+                ai::model_install::version_root(model_cache_root_path(), plan);
+            if (root.empty()
+                || !ai::model_install::receipt_matches(
+                    plan,
+                    read_bounded_package_file(
+                        root / ai::model_install::receipt_filename,
+                        128u * 1024u)))
+                return false;
+
+            std::error_code error{};
+            for (const ai::model_install::ArtifactSpec& artifact : plan.artifacts)
+            {
+                const std::filesystem::path path = root / artifact.file;
+                if (!std::filesystem::is_regular_file(path, error) || error
+                    || std::filesystem::is_symlink(path, error) || error
+                    || std::filesystem::file_size(path, error) != artifact.bytes
+                    || error)
+                    return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::optional<std::filesystem::path>
+            find_model_transfer_executable()
+        {
+#if defined(_WIN32)
+            constexpr std::string_view executableName = "curl.exe";
+            constexpr char separator = ';';
+#else
+            constexpr std::string_view executableName = "curl";
+            constexpr char separator = ':';
+#endif
+            const auto pathValue = core::env::get("PATH");
+            if (!pathValue)
+                return std::nullopt;
+            const std::string pathsStorage{
+                pathValue->data(), pathValue->size()};
+            const std::string_view paths{pathsStorage};
+            std::size_t first = 0u;
+            while (first <= paths.size())
+            {
+                const std::size_t end = paths.find(separator, first);
+                std::string_view item = paths.substr(
+                    first,
+                    end == std::string_view::npos
+                        ? std::string_view::npos : end - first);
+                if (item.size() >= 2u && item.front() == '"'
+                    && item.back() == '"')
+                {
+                    item.remove_prefix(1u);
+                    item.remove_suffix(1u);
+                }
+                if (!item.empty())
+                {
+                    const std::filesystem::path candidate =
+                        std::filesystem::path{std::string{item}}
+                        / std::string{executableName};
+                    std::error_code error{};
+                    if (std::filesystem::is_regular_file(candidate, error)
+                        && !error)
+                        return std::filesystem::absolute(candidate, error);
+                }
+                if (end == std::string_view::npos)
+                    break;
+                first = end + 1u;
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::uint64_t model_plan_bytes(
+            const ai::model_install::InstallPlan& plan) noexcept
+        {
+            std::uint64_t total{};
+            for (const auto& artifact : plan.artifacts)
+            {
+                if (artifact.bytes > (std::numeric_limits<std::uint64_t>::max)()
+                    - total)
+                    return 0u;
+                total += artifact.bytes;
+            }
+            return total;
+        }
+
+        [[nodiscard]] bool launch_next_model_artifact(EditorState& editor)
+        {
+            if (!editor.packageModelInstall)
+                return false;
+            EditorModelInstallState& install = *editor.packageModelInstall;
+            std::error_code error{};
+            if (install.artifactIndex < install.plan.artifacts.size())
+            {
+                std::filesystem::create_directories(
+                    install.stagingRoot, error);
+                if (error)
+                {
+                    editor.packageInstallStatus =
+                        "Model install failed: the owned staging directory could not be created.";
+                    editor.packageInstallProgress = 0.0f;
+                    editor.packageModelInstall.reset();
+                    return false;
+                }
+            }
+
+            while (install.artifactIndex < install.plan.artifacts.size())
+            {
+                const auto& artifact =
+                    install.plan.artifacts[install.artifactIndex];
+                const std::filesystem::path finalPath =
+                    install.stagingRoot / artifact.file;
+                error.clear();
+                if (std::filesystem::is_regular_file(finalPath, error)
+                    && !error
+                    && !std::filesystem::is_symlink(finalPath, error)
+                    && !error
+                    && std::filesystem::file_size(finalPath, error)
+                        == artifact.bytes
+                    && !error)
+                {
+                    install.completedBytes += artifact.bytes;
+                    ++install.artifactIndex;
+                    continue;
+                }
+                if (std::filesystem::exists(finalPath, error) && !error)
+                {
+                    std::filesystem::remove(finalPath, error);
+                    if (error)
+                    {
+                        editor.packageInstallStatus =
+                            "Model install stopped: an invalid staged artifact could not be replaced.";
+                        editor.packageModelInstall.reset();
+                        return false;
+                    }
+                }
+
+                const auto transferTool = find_model_transfer_executable();
+                if (!transferTool)
+                {
+                    editor.packageInstallStatus =
+                        "Model install requires the operating system HTTPS transfer tool (curl).";
+                    editor.packageInstallProgress = 0.0f;
+                    editor.packageModelInstall.reset();
+                    return false;
+                }
+                const std::filesystem::path partialPath =
+                    finalPath.string() + ".partial";
+                std::filesystem::create_directories(
+                    install.outputLog.parent_path(), error);
+                if (error)
+                {
+                    editor.packageInstallStatus =
+                        "Model install failed: the transfer evidence directory could not be created.";
+                    editor.packageModelInstall.reset();
+                    return false;
+                }
+
+                platform::child_process::LaunchRequest request{};
+                request.executable = *transferTool;
+                request.working_directory = install.stagingRoot;
+                request.merged_output_path = install.outputLog;
+                request.arguments = {
+                    "--proto", "=https",
+                    "--proto-redir", "=https",
+                    "--tlsv1.2",
+                    "--fail",
+                    "--location",
+                    "--retry", "4",
+                    "--retry-all-errors",
+                    "--continue-at", "-",
+                    "--output", partialPath.string(),
+                    artifact.source_url};
+                request.correlation_key = "epoch.model.install."
+                    + install.plan.package_id + "."
+                    + std::to_string(install.artifactIndex);
+                request.exclusive_group = "epoch.model.install";
+                request.display_name = "Epoch model artifact transfer";
+                request.window_mode =
+                    platform::child_process::WindowMode::hidden;
+                request.append_output = true;
+                const auto launched =
+                    platform::child_process::launch_or_focus(request);
+                if (launched.code
+                    != platform::child_process::LaunchCode::started)
+                {
+                    editor.packageInstallStatus =
+                        "Model transfer did not start: " + launched.message;
+                    editor.packageInstallProgress = install.totalBytes == 0u
+                        ? 0.0f
+                        : static_cast<float>(install.completedBytes)
+                            / static_cast<float>(install.totalBytes);
+                    editor.packageModelInstall.reset();
+                    return false;
+                }
+                install.process = launched.handle;
+                editor.packageInstallStatus = epochengine::format_text(
+                    "Downloading verified model artifact {} of {}: {}",
+                    install.artifactIndex + 1u,
+                    install.plan.artifacts.size(),
+                    artifact.file);
+                return true;
+            }
+
+            if (!install.publishPending)
+            {
+                ai::model_install::PublishRequest request{
+                    .plan = install.plan,
+                    .models_cache_root = install.cacheRoot,
+                    .staging_root = install.stagingRoot};
+                install.publishPending.emplace(schedule_editor_task(
+                    editor,
+                    "Verify and publish model add-on",
+                    [request = std::move(request)]
+                    {
+                        return ai::model_install::publish_verified_snapshot(
+                            request);
+                    }));
+                editor.packageInstallStatus =
+                    "Verifying exact model bytes and publishing the immutable cache snapshot...";
+                editor.packageInstallProgress = 0.99f;
+            }
+            return true;
+        }
+
+        void poll_model_package_install(EditorState& editor)
+        {
+            if (!editor.packageModelInstall)
+                return;
+            if (editor.packageModelInstall->publishPending)
+            {
+                auto& pending =
+                    *editor.packageModelInstall->publishPending;
+                if (pending.wait_for(std::chrono::milliseconds{0})
+                    != std::future_status::ready)
+                    return;
+                ai::model_install::PublishResult published{};
+                try
+                {
+                    published = pending.get();
+                }
+                catch (const std::exception& error)
+                {
+                    published.diagnostic = error.what();
+                }
+                catch (...)
+                {
+                    published.diagnostic =
+                        "unknown background verification failure";
+                }
+                if (!published.accepted() && !published.artifact.empty())
+                {
+                    std::error_code removeError{};
+                    std::filesystem::remove(
+                        editor.packageModelInstall->stagingRoot
+                            / published.artifact,
+                        removeError);
+                }
+                editor.packageInstallStatus = published.accepted()
+                    ? "Model add-on installed and verified. Activation remains a separate explicit action."
+                    : "Model install failed during verified publication: "
+                        + published.diagnostic;
+                editor.packageInstallProgress =
+                    published.accepted() ? 1.0f : 0.0f;
+                push_editor_log(
+                    editor,
+                    std::string{"[package] "}
+                        + editor.packageInstallStatus);
+                editor.packageModelInstall.reset();
+                return;
+            }
+            if (!editor.packageModelInstall->process.valid())
+                return;
+            platform::child_process::poll();
+            EditorModelInstallState& install = *editor.packageModelInstall;
+            const auto observed =
+                platform::child_process::snapshot(install.process);
+            if (!observed)
+            {
+                editor.packageInstallStatus =
+                    "Model transfer evidence disappeared; the partial cache remains resumable.";
+                editor.packageModelInstall.reset();
+                return;
+            }
+
+            const auto& artifact = install.plan.artifacts[install.artifactIndex];
+            const std::filesystem::path finalPath =
+                install.stagingRoot / artifact.file;
+            const std::filesystem::path partialPath =
+                finalPath.string() + ".partial";
+            if (observed->active())
+            {
+                std::error_code error{};
+                const std::uint64_t partialBytes =
+                    std::filesystem::is_regular_file(partialPath, error) && !error
+                    ? static_cast<std::uint64_t>(
+                        std::filesystem::file_size(partialPath, error))
+                    : 0u;
+                const std::uint64_t current = install.completedBytes
+                    + (std::min)(partialBytes, artifact.bytes);
+                editor.packageInstallProgress = install.totalBytes == 0u
+                    ? 0.0f
+                    : static_cast<float>(current)
+                        / static_cast<float>(install.totalBytes);
+                editor.packageInstallStatus = epochengine::format_text(
+                    "Downloading artifact {} of {}: {} ({} / {} bytes)",
+                    install.artifactIndex + 1u,
+                    install.plan.artifacts.size(),
+                    artifact.file,
+                    partialBytes,
+                    artifact.bytes);
+                return;
+            }
+
+            const bool exitedCleanly = observed->exit_code_valid
+                && observed->exit_code == 0;
+            (void)platform::child_process::release(observed->handle);
+            install.process = {};
+            if (!exitedCleanly)
+            {
+                editor.packageInstallStatus =
+                    "Model transfer stopped before verification; Install resumes the retained partial file.";
+                editor.packageModelInstall.reset();
+                return;
+            }
+
+            std::error_code error{};
+            const bool completeDownload =
+                std::filesystem::is_regular_file(partialPath, error)
+                && !error
+                && !std::filesystem::is_symlink(partialPath, error)
+                && !error
+                && std::filesystem::file_size(partialPath, error)
+                    == artifact.bytes
+                && !error;
+            if (!completeDownload)
+            {
+                std::filesystem::remove(partialPath, error);
+                editor.packageInstallStatus =
+                    "Downloaded model artifact had the wrong type or size; its partial file was rejected.";
+                editor.packageInstallProgress = 0.0f;
+                editor.packageModelInstall.reset();
+                return;
+            }
+            error.clear();
+            if (!platform::filesystem::atomic_replace_same_filesystem(
+                    partialPath, finalPath, error))
+            {
+                editor.packageInstallStatus =
+                    "Verified model artifact could not be published into owned staging.";
+                editor.packageModelInstall.reset();
+                return;
+            }
+            install.completedBytes += artifact.bytes;
+            ++install.artifactIndex;
+            (void)launch_next_model_artifact(editor);
+        }
+
+        [[nodiscard]] bool start_model_package_install(
+            EditorState& editor,
+            const package_registry::PackageDescriptor& package)
+        {
+            if (editor.packageModelInstall)
+            {
+                editor.packageInstallStatus =
+                    "A model add-on transfer is already active.";
+                return false;
+            }
+            const auto plan = ai::model_install::plan_for(package.id);
+            if (!plan)
+            {
+                editor.packageInstallStatus =
+                    "This build has no compiled install plan for the selected model.";
+                return false;
+            }
+            const std::filesystem::path cache = model_cache_root_path();
+            const std::filesystem::path installed =
+                ai::model_install::version_root(cache, *plan);
+            std::error_code error{};
+            if (std::filesystem::exists(installed, error) && !error)
+            {
+                if (model_snapshot_installed(*plan))
+                {
+                    editor.packageInstallStatus =
+                        "The exact model add-on is already installed and verified.";
+                    editor.packageInstallProgress = 1.0f;
+                    return true;
+                }
+                editor.packageModelInstall.emplace(EditorModelInstallState{
+                    .plan = *plan,
+                    .cacheRoot = cache,
+                    .artifactIndex = plan->artifacts.size(),
+                    .totalBytes = model_plan_bytes(*plan),
+                    .completedBytes = model_plan_bytes(*plan)});
+                editor.packageInstallStatus =
+                    "Verifying the existing versioned model snapshot...";
+                return launch_next_model_artifact(editor);
+            }
+            const std::filesystem::path staging =
+                ai::model_install::staging_root(cache, *plan, "package-manager");
+            if (staging.empty())
+            {
+                editor.packageInstallStatus =
+                    "The model add-on staging path failed local safety validation.";
+                return false;
+            }
+            editor.packageModelInstall.emplace(EditorModelInstallState{
+                .plan = *plan,
+                .cacheRoot = cache,
+                .stagingRoot = staging,
+                .outputLog = cache / ".install-logs"
+                    / (plan->package_id + ".download.log"),
+                .totalBytes = model_plan_bytes(*plan)});
+            editor.packageInstallProgress = 0.0f;
+            return launch_next_model_artifact(editor);
+        }
+
         void request_site_package_catalog(EditorState& editor, bool force)
         {
             if (editor.packageCatalogPending
@@ -17541,11 +18001,13 @@ namespace epochengine
                 return;
             }
 
-            // Engine Arcade ships in the engine and is activated only from an
-            // explicit game project. It is never an engine package install.
+            // Repository/library authorities and kernel-owned Arcade are not
+            // user-installable package rows. The Site publishes actual project
+            // add-ons and model artifacts beneath those authorities.
             std::erase_if(snapshot.entries, [](const package_catalog::Entry& entry)
             {
-                return entry.id == package_registry::kEngineArcadePackageId;
+                return entry.id == package_registry::kEngineArcadePackageId
+                    || package_registry::is_catalog_authority(entry.id);
             });
             editor.packageCatalogEntries = std::move(snapshot.entries);
             editor.packageCatalogRevision = std::move(snapshot.revision);
@@ -17731,6 +18193,14 @@ namespace epochengine
             }
 
             const std::string safeId = safe_package_artifact_id(package.id);
+            const auto installPlan = ai::model_install::plan_for(package.id);
+            if (!installPlan)
+            {
+                editor.packageInstallStatus =
+                    "This build has no pinned model artifact plan for that package.";
+                editor.packageInstallProgress = 0.0f;
+                return false;
+            }
             const std::filesystem::path projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
             const std::filesystem::path packageDir = projectRoot / "assets" / "packages";
             const std::filesystem::path manifestPath = packageDir / (safeId + ".model.package.json");
@@ -17778,6 +18248,7 @@ namespace epochengine
                     << "  \"display_name\": \"" << displayName << "\",\n"
                     << "  \"type\": \"os_model_asset\",\n"
                     << "  \"source_repo\": \"" << repo << "\",\n"
+                    << "  \"revision\": \"" << installPlan->revision << "\",\n"
                     << "  \"cache_root\": \"" << cacheRoot << "\",\n"
                     << "  \"download_policy\": \"operator_demand_only\",\n"
                     << "  \"include_in_project\": true,\n"
@@ -17801,56 +18272,34 @@ namespace epochengine
                     << "  \"package_id\": \"" << packageId << "\",\n"
                     << "  \"source_repo\": \"" << repo << "\",\n"
                     << "  \"target_dir\": \"" << cacheDir << "\",\n";
-                if (package.id
-                    == epochengine::package_registry::kQwenCoderPackageId)
+                out << "  \"artifacts\": [\n";
+                for (std::size_t index = 0u;
+                    index < installPlan->artifacts.size(); ++index)
                 {
+                    const auto& artifact = installPlan->artifacts[index];
                     out
-                        << "  \"artifact_source\": \""
-                        << editor_json_escape(
-                            epochengine::ai::kEpochLocalQwen38ModelUrl)
-                        << "\",\n"
-                        << "  \"revision\": \""
-                        << epochengine::ai::kEpochLocalQwen38ModelRevision
-                        << "\",\n"
-                        << "  \"file\": \""
-                        << epochengine::ai::kEpochLocalQwen38ModelFile
-                        << "\",\n"
-                        << "  \"bytes\": "
-                        << epochengine::ai::kEpochLocalQwen38ModelBytes
-                        << ",\n"
-                        << "  \"sha256\": \""
-                        << epochengine::ai::kEpochLocalQwen38ModelSha256
-                        << "\",\n";
+                        << "    {\"file\": \""
+                        << editor_json_escape(artifact.file)
+                        << "\", \"source_url\": \""
+                        << editor_json_escape(artifact.source_url)
+                        << "\", \"bytes\": " << artifact.bytes
+                        << ", \"sha256\": \"" << artifact.sha256 << "\"}"
+                        << (index + 1u == installPlan->artifacts.size()
+                            ? "\n" : ",\n");
                 }
                 out
-                    << "  \"transfer\": \"not_started\",\n"
+                    << "  ],\n"
+                    << "  \"transfer\": \"operator_requested\",\n"
                     << "  \"human_approval_required\": true,\n"
                     << "  \"engine_iteration_clone\": false,\n"
                     << "  \"weights_bundled_with_project\": false,\n"
-                    << "  \"notes\": \"Run the tracked Epoch installer only after operator approval; projects reference the shared Epoch-local install or the external provider.\"\n"
+                    << "  \"notes\": \"The Package Manager transfers only this compiled pinned plan, verifies exact bytes, and never activates or runs the model.\"\n"
                     << "}\n";
             }
 
-            if (package.id
-                == epochengine::package_registry::kQwenCoderPackageId)
-            {
-                if (!write_project_ai_profile(
-                        editor, ProjectAiProviderMode::epoch_local))
-                    return false;
-                const auto installed =
-                    epochengine::ai::epoch_local_ai_install_status();
-                editor.packageInstallStatus = installed.ready()
-                    ? "Project uses the installed Epoch-local Qwen3.8 provider."
-                    : "Project selected Epoch-local Qwen3.8; the pinned install request awaits operator-approved transfer.";
-                editor.packageInstallProgress =
-                    installed.ready() ? 1.0f : 0.05f;
-            }
-            else
-            {
-                editor.packageInstallStatus =
-                    "Model install request staged; weight transfer has not started.";
-                editor.packageInstallProgress = 0.05f;
-            }
+            editor.packageInstallStatus =
+                "Model add-on plan staged; verified transfer is starting.";
+            editor.packageInstallProgress = 0.0f;
             append_project_note(
                 editor,
                 "Stage OS Model Package",
@@ -21106,7 +21555,8 @@ namespace epochengine
             editor.sourceUpdateConfirmModalStableViewport,
             measuredSourceUpdateConfirmModalSize,
             editor.showSourceUpdateConfirmModal);
-        const gui::Vec2 packageManagerModalSize = fit_modal_size({ 820.0f, 560.0f }, { 640.0f, 500.0f });
+        const gui::Vec2 packageManagerModalSize = fit_modal_size(
+            {820.0f, 680.0f}, {640.0f, 560.0f});
         const gui::Vec2 aiModelConsentModalSize = fit_modal_size({ 660.0f, 430.0f }, { 520.0f, 380.0f });
         const gui::Vec2 voiceConsentModalSize = fit_modal_size({ 580.0f, 300.0f }, { 500.0f, 280.0f });
         auto modal_visible_now = [&editor]() noexcept -> bool
@@ -23338,6 +23788,7 @@ namespace epochengine
         poll_project_build();
         pump_ai_tool_test();
         reconcile_project_runtime(editor);
+        poll_model_package_install(editor);
 
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
@@ -33305,8 +33756,6 @@ namespace epochengine
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
             };
             const float contentWidth = (std::max)(1.0f, modalSize.x - 56.0f);
-            const float packageListHeight = (std::max)(128.0f, (std::min)(178.0f, modalSize.y * 0.34f));
-            const float packageDetailHeight = (std::max)(132.0f, (std::min)(168.0f, modalSize.y * 0.30f));
             const auto projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
             const auto forestFactoryPackage = projectRoot / "assets" / "packages" / "engine_forest_factory.package.json";
             const auto forestFactoryProfile = projectRoot / "assets" / "packages" / "engine_forest_factory" / "default.forest.json";
@@ -33349,6 +33798,13 @@ namespace epochengine
             {
                 if (package.id == epochengine::package_registry::kEngineForestFactoryPackageId)
                     return forestFactoryStaged;
+                if (package.kind
+                    == epochengine::package_registry::PackageKind::ModelAsset)
+                {
+                    const auto plan = ai::model_install::plan_for(package.id);
+                    if (plan && model_snapshot_installed(*plan))
+                        return true;
+                }
                 if (package.id == epochengine::package_registry::kQwenCoderPackageId)
                     return epochLocalAi.model_receipt_ready
                         && epochLocalAi.model_file_ready;
@@ -33359,6 +33815,9 @@ namespace epochengine
             };
             auto package_requested = [&](const epochengine::package_registry::PackageDescriptor& package)
             {
+                if (editor.packageModelInstall
+                    && editor.packageModelInstall->plan.package_id == package.id)
+                    return true;
                 if (package.kind == epochengine::package_registry::PackageKind::ModelAsset)
                     return path_exists(model_install_request_path(package));
                 if (package.id == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId)
@@ -33419,7 +33878,8 @@ namespace epochengine
 
                 if (package.kind == epochengine::package_registry::PackageKind::ModelAsset)
                 {
-                    (void)stage_model_package_opt_in(editor, package);
+                    if (stage_model_package_opt_in(editor, package))
+                        (void)start_model_package_install(editor, package);
                     return;
                 }
 
@@ -33477,8 +33937,12 @@ namespace epochengine
                 .viewport_size = { w, h },
                 .dim_background = true
             });
+            const float packageContentTop = gui::cursor_position().y;
+            const float packageContentBottom = packageContentTop + (std::max)(
+                0.0f,
+                modalSize.y - gui::titled_window_total_height(0.0f));
             gui::wrapped_label(
-                "Discovery comes from the Epoch Site. This build's local admission policy still controls every install, and packages never auto-run.",
+                "Project add-ons and model artifacts come from the Epoch Site. EpochGui and engine systems are already part of non-CLI builds; installs never auto-run.",
                 contentWidth);
 
             const gui::Vec2 catalogRow = gui::cursor_position();
@@ -33499,6 +33963,13 @@ namespace epochengine
             });
 
             gui::label("Available Packages");
+            const auto packageBodyLayout =
+                editor_update_modal::measure_package_manager_body(
+                    gui::cursor_position().y,
+                    packageContentBottom,
+                    gui::line_height());
+            const float packageListHeight = packageBodyLayout.listHeight;
+            const float packageDetailHeight = packageBodyLayout.detailHeight;
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-package-list",
                 .size = { contentWidth, packageListHeight },
@@ -33511,9 +33982,11 @@ namespace epochengine
                 const auto* localPolicy = package_registry::find(entry.id);
                 const bool isSelected = selectedCatalog && entry.id == selectedCatalog->id;
                 const bool isInstalled = localPolicy && package_installed(*localPolicy);
-                const bool isSharedAiPayload =
-                    entry.id == package_registry::kQwenCoderPackageId
-                    || entry.id == package_registry::kLocalAiLlamaCppRuntimePackageId;
+                const bool isSharedAiPayload = localPolicy
+                    && (localPolicy->kind
+                            == package_registry::PackageKind::ModelAsset
+                        || entry.id
+                            == package_registry::kLocalAiLlamaCppRuntimePackageId);
                 const bool isDescriptor = entry.availability
                     == package_catalog::Availability::descriptor_only;
                 const bool isBlocked = !localPolicy || isDescriptor
@@ -33530,8 +34003,8 @@ namespace epochengine
                 if (gui::button(
                         isInstalled
                             ? (isSharedAiPayload ? "Installed" : "Remove")
-                            : (!localPolicy ? "Not in build"
-                                : (isDescriptor ? "Planned"
+                            : (isDescriptor ? "Planned"
+                                : (!localPolicy ? "Not in build"
                                     : (localPolicy->requiresExplicitNetworkApproval
                                         ? "Review Gate" : "Install"))),
                         { 114.0f, 28.0f }))
@@ -33540,17 +34013,17 @@ namespace epochengine
                         select_catalog_entry(entry);
                     else if (isInstalled)
                         remove_package(*localPolicy);
-                    else if (!localPolicy)
-                    {
-                        select_catalog_entry(entry);
-                        editor.packageInstallStatus =
-                            "This Site package is not admitted by the current engine build.";
-                    }
                     else if (isDescriptor)
                     {
                         select_catalog_entry(entry);
                         editor.packageInstallStatus =
                             "This is a truthful descriptor only; no installable payload is published.";
+                    }
+                    else if (!localPolicy)
+                    {
+                        select_catalog_entry(entry);
+                        editor.packageInstallStatus =
+                            "This Site package is not admitted by the current engine build.";
                     }
                     else
                         install_package(*localPolicy);
@@ -33570,8 +34043,10 @@ namespace epochengine
                 ? selectedCatalog->display_name
                 : std::string("(none)");
 
-            gui::label("Selected Package");
-            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+            if (packageBodyLayout.showDetails)
+            {
+                gui::label("Selected Package");
+                (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-detail-scroll",
                 .size = { contentWidth, packageDetailHeight },
                 .content_height = 248.0f,
@@ -33590,8 +34065,17 @@ namespace epochengine
             gui::property_row("Availability", selectedCatalog
                 ? std::string(package_catalog::availability_name(selectedCatalog->availability))
                 : std::string("(none)"), 104.0f);
-            gui::property_row("Local admission", selectedPackage
-                ? "allowed by this build" : "not admitted by this build", 104.0f);
+            const bool selectedDescriptor = selectedCatalog
+                && selectedCatalog->availability
+                    == package_catalog::Availability::descriptor_only;
+            const std::string localAdmission = selectedDescriptor
+                ? "not applicable - descriptor only"
+                : (!selectedPackage
+                    ? "not admitted by this build"
+                    : (selectedPackage->requiresExplicitNetworkApproval
+                        ? "human review required"
+                        : "allowed by this build"));
+            gui::property_row("Local admission", localAdmission, 104.0f);
             gui::property_row("Status", selectedPackage
                 ? package_status(*selectedPackage) : std::string("metadata only"), 104.0f);
             gui::property_row("Source", selectedCatalog
@@ -33636,11 +34120,27 @@ namespace epochengine
                         "Project compute is explicit: Epoch-local Qwen3.8, an operator-managed external model endpoint using Epoch's MCP guards, or Off. Shared model weights are never copied into a project build.",
                         contentWidth - 20.0f);
                     const gui::Vec2 providerRow = gui::cursor_position();
-                    if (gui::button("Use Epoch-local", { 148.0f, 28.0f }))
-                        (void)write_project_ai_profile(
-                            editor, ProjectAiProviderMode::epoch_local);
-                    gui::set_cursor(
-                        {providerRow.x + 158.0f, providerRow.y});
+                    const bool epochLocalReady = epochLocalAi.ready();
+                    if (gui::button(
+                            epochLocalReady
+                                ? "Use Epoch-local"
+                                : "Install Runtime First",
+                            {148.0f, 28.0f}))
+                    {
+                        if (epochLocalReady)
+                        {
+                            (void)write_project_ai_profile(
+                                editor, ProjectAiProviderMode::epoch_local);
+                        }
+                        else
+                        {
+                            editor.packageInstallStatus =
+                                package_installed(*selectedPackage)
+                                    ? "Qwen is installed; install the pinned Epoch-local llama.cpp runtime before activation."
+                                    : "Install and verify Qwen before selecting the Epoch-local provider.";
+                        }
+                    }
+                    gui::set_cursor({providerRow.x + 158.0f, providerRow.y});
                     if (gui::button("Use External + MCP", { 158.0f, 28.0f }))
                         (void)write_project_ai_profile(
                             editor, ProjectAiProviderMode::external_mcp);
@@ -33657,7 +34157,8 @@ namespace epochengine
                         contentWidth - 20.0f);
                 }
             }
-            gui::end_scroll_area();
+                gui::end_scroll_area();
+            }
 
             const float packageProgress = (std::max)(
                 editor.packageInstallProgress,
@@ -33665,6 +34166,7 @@ namespace epochengine
                     && editor.selectedPackageId
                         == epochengine::package_registry::kEngineForestFactoryPackageId
                     ? 0.65f : 0.0f);
+            gui::set_cursor({ catalogRow.x, packageBodyLayout.footerTop });
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = "Install",
                 .status = editor.packageInstallStatus,
@@ -33676,8 +34178,10 @@ namespace epochengine
             const gui::Vec2 buttonRow = gui::cursor_position();
             const bool selectedInstalled = selectedPackage && package_installed(*selectedPackage);
             const bool selectedSharedAiPayload = selectedPackage
-                && (selectedPackage->id == epochengine::package_registry::kQwenCoderPackageId
-                    || selectedPackage->id == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId);
+                && (selectedPackage->kind
+                        == epochengine::package_registry::PackageKind::ModelAsset
+                    || selectedPackage->id
+                        == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId);
             const bool selectedAvailable = selectedCatalog
                 && selectedCatalog->availability
                     == package_catalog::Availability::available;
@@ -33690,7 +34194,9 @@ namespace epochengine
                             : (!selectedAvailable ? "Descriptor Only"
                                 : (!selectedPackage
                                     ? "Not Admitted By Build"
-                                    : "Install Selected Package"))),
+                                    : (selectedPackage->requiresExplicitNetworkApproval
+                                        ? "Review Required"
+                                        : "Install Selected Package")))),
                     { 220.0f, 30.0f }))
             {
                 if (!selectedCatalog)
@@ -33712,6 +34218,29 @@ namespace epochengine
                     install_package(*selectedPackage);
             }
             gui::set_cursor({ buttonRow.x + 236.0f, buttonRow.y });
+            if (editor.packageModelInstall)
+            {
+                if (editor.packageModelInstall->publishPending)
+                {
+                    if (gui::button("Verifying...", { 132.0f, 30.0f }))
+                    {
+                        editor.packageInstallStatus =
+                            "Exact model verification is running in the background; publication remains atomic.";
+                    }
+                }
+                else if (gui::button("Cancel Download", { 132.0f, 30.0f }))
+                {
+                    if (editor.packageModelInstall->process.valid())
+                    {
+                        (void)platform::child_process::stop(
+                            editor.packageModelInstall->process,
+                            platform::child_process::StopMode::graceful);
+                        editor.packageInstallStatus =
+                            "Cancelling model transfer; verified installed files are unchanged.";
+                    }
+                }
+                gui::set_cursor({ buttonRow.x + 384.0f, buttonRow.y });
+            }
             if (gui::button("Close", { 120.0f, 30.0f }))
                 editor.showPackageManagerModal = false;
             gui::end_modal_window();

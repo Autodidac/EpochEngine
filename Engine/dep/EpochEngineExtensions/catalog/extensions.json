@@ -50,7 +50,8 @@
       "platforms": ["windows", "linux", "macos", "headless"],
       "capabilities": ["terrain", "procedural_generation", "headless_tools"],
       "availability": "source_available_local",
-      "installable_payload": true,
+      "installable_payload": false,
+      "buildable_source": true,
       "automatic_execution": false
     },
     {
@@ -96,7 +97,7 @@
       "summary": "Operator-approved local inference and guarded development tooling; no listener, hidden service, model download, or installation is implied.",
       "source_key": "tooling/local_ai",
       "platforms": ["windows", "linux", "macos", "headless"],
-      "capabilities": ["native_plugin", "local_ai_inference", "guarded_ai_development", "headless_tools", "editor_workspace"],
+      "capabilities": ["local_ai_inference", "guarded_ai_development", "headless_tools", "editor_workspace"],
       "availability": "descriptor_only",
       "installable_payload": false,
       "automatic_execution": false

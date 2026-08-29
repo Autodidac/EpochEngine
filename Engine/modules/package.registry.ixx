@@ -157,6 +157,9 @@ export namespace epochengine::package_registry
 
     inline constexpr std::string_view kEpochEngineExtensionsRepo =
         "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git";
+    inline constexpr std::string_view kEpochGuiCatalogAuthorityId = "epoch-gui";
+    inline constexpr std::string_view kEpochEngineExtensionsCatalogAuthorityId =
+        "epoch-engine-extensions";
     inline constexpr std::string_view kForestFactoryReferenceRepo = epochengine::forest::kForestFactoryReferenceRepo;
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
@@ -375,6 +378,12 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         }
 
         return nullptr;
+    }
+
+    [[nodiscard]] constexpr bool is_catalog_authority(std::string_view id) noexcept
+    {
+        return id == kEpochGuiCatalogAuthorityId
+            || id == kEpochEngineExtensionsCatalogAuthorityId;
     }
 
     [[nodiscard]] constexpr bool is_network_sensitive(const PackageDescriptor& package) noexcept

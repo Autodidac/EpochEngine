@@ -28,7 +28,6 @@ option(EPOCH_ENABLE_AUTHORING_COLLABORATION "Gate branch sharing, review, and co
 option(EPOCH_ENABLE_AUTHORING_METRICS "Gate document, history, cache, GPU, and evaluation metrics implementation units." ON)
 option(EPOCH_ENABLE_PHYSICAL_AUDIO "Compile the renderer-independent physical audio adapter." ON)
 option(EPOCH_ENABLE_PHYSICAL_INPUT "Compile the renderer-independent physical controller adapter." ON)
-option(EPOCH_ENABLE_NATIVE_EXTENSIONS "Compile the explicit, verified native extension loader." ON)
 option(EPOCH_BINARY_ONLY_DISTRIBUTION "Compile Epoch without authorized source download or source-rebuild lanes." OFF)
 option(EPOCH_ALLOW_GCC_MODULE_ENGINE "Opt into the experimental full-engine GCC modules build on Linux." OFF)
 set(EPOCH_GLAD_PROVIDER "auto" CACHE STRING "Select the OpenGL loader provider: auto, vcpkg, or bundled.")
@@ -182,7 +181,7 @@ function(epoch_print_build_summary)
     message(STATUS "  Authoring metrics: ${EPOCH_ENABLE_AUTHORING_METRICS}")
     message(STATUS "  Physical audio: ${EPOCH_PHYSICAL_AUDIO_ACTIVE}")
     message(STATUS "  Physical input: ${EPOCH_PHYSICAL_INPUT_ACTIVE}")
-    message(STATUS "  Native extensions: ${EPOCH_ENABLE_NATIVE_EXTENSIONS}")
+    message(STATUS "  Native extensions: OFF (project add-ons compile into projects)")
     message(STATUS "  GCC full-engine module opt-in: ${EPOCH_ALLOW_GCC_MODULE_ENGINE}")
     message(STATUS "  GLAD provider requested: ${EPOCH_GLAD_PROVIDER}")
     if(DEFINED EPOCH_GLAD_RESOLVED_PROVIDER)
@@ -380,6 +379,8 @@ set(EPOCH_SOURCES
     src/ai/ai.iteration_session_contract.cpp
     src/ai/ai.project_profile.cpp
     src/ai/ai.project_profile_contract.cpp
+    src/ai/ai.model_install.cpp
+    src/ai/ai.model_install_contract.cpp
     src/ai/ai.curated_context_bundle.cpp
     src/ai/ai.curated_context_bundle_contract.cpp
     src/ai/ai.iteration_campaign.cpp
@@ -552,12 +553,6 @@ set(EPOCH_SOURCES
     src/epoch.main.cpp
     src/epoch.runtime.cpp
 )
-
-if(EPOCH_ENABLE_NATIVE_EXTENSIONS)
-    list(APPEND EPOCH_SOURCES
-        src/extensions/extension.plugin_loader.cpp
-    )
-endif()
 
 if(WIN32)
     list(APPEND EPOCH_SOURCES
@@ -1296,9 +1291,7 @@ if(NOT EPOCH_DIRECTX_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])directx\.]])
 endif()
 
-if(NOT EPOCH_ENABLE_NATIVE_EXTENSIONS)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])extension\.plugin\.ixx$]])
-endif()
+epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])extension\.plugin\.ixx$]])
 
 if(NOT EPOCH_ENABLE_AUTHORING_PLATFORM OR NOT EPOCH_ENABLE_TILEMAP_EDITOR)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])authoring\.tilemap\.ixx$]])
@@ -1610,6 +1603,29 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_forest_preview_mesh_contract
         COMMAND epoch_forest_preview_mesh_contract
+    )
+
+    add_executable(epoch_ai_model_install_contract
+        src/ai/ai.model_install.cpp
+        src/ai/ai.model_install_contract.cpp
+    )
+    target_sources(epoch_ai_model_install_contract PRIVATE
+        FILE_SET epoch_ai_model_install_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/ai.model_install.ixx
+    )
+    target_compile_definitions(epoch_ai_model_install_contract PRIVATE
+        EPOCH_AI_MODEL_INSTALL_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_model_install_contract)
+    epoch_apply_warnings(epoch_ai_model_install_contract)
+    epoch_apply_sanitizers(epoch_ai_model_install_contract)
+    add_test(
+        NAME epoch_ai_model_install_contract
+        COMMAND epoch_ai_model_install_contract
     )
 
     add_executable(epoch_physics_manager_contract
@@ -2584,7 +2600,6 @@ target_compile_definitions(epoch PRIVATE
     EPOCH_ENABLE_AUTHORING_METRICS=$<BOOL:${EPOCH_ENABLE_AUTHORING_METRICS}>
     EPOCH_ENABLE_PHYSICAL_AUDIO=$<BOOL:${EPOCH_PHYSICAL_AUDIO_ACTIVE}>
     EPOCH_ENABLE_PHYSICAL_INPUT=$<BOOL:${EPOCH_PHYSICAL_INPUT_ACTIVE}>
-    EPOCH_ENABLE_NATIVE_EXTENSIONS=$<BOOL:${EPOCH_ENABLE_NATIVE_EXTENSIONS}>
     $<$<BOOL:${EPOCH_RAYLIB_ACTIVE}>:EPOCH_FORCE_ENABLE_RAYLIB>
     $<$<NOT:$<BOOL:${EPOCH_RAYLIB_ACTIVE}>>:EPOCH_FORCE_DISABLE_RAYLIB>
     $<$<BOOL:${EPOCH_SDL_ACTIVE}>:EPOCH_FORCE_ENABLE_SDL>

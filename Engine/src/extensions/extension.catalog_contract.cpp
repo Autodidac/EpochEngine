@@ -13,7 +13,6 @@ namespace {
   const ValidationReport first = validate_catalog();
   const ValidationReport second = validate_catalog();
   if (!first.ok || first.entry_count != kEntries.size() ||
-      first.native_entry_count != 1u || first.restart_entry_count != 1u ||
       first.registry_mapped_count != 3u) {
     return ContractFailure::canonical_catalog_rejected;
   }
@@ -56,17 +55,6 @@ namespace {
       (duplicatePackageReport.issues &
        issue_bit(ValidationIssue::duplicate_package_id)) == 0u) {
     return ContractFailure::duplicate_package_id_not_rejected;
-  }
-
-  Entry unsafeNative = *localAi;
-  unsafeNative.integrity = IntegrityRequirement::manifest_sha256;
-  unsafeNative.editor_restart_required = false;
-  const ValidationIssues unsafeNativeIssues = validate_entry(unsafeNative);
-  if ((unsafeNativeIssues &
-       issue_bit(ValidationIssue::unsafe_integrity_policy)) == 0u ||
-      (unsafeNativeIssues &
-       issue_bit(ValidationIssue::native_activation_without_restart)) == 0u) {
-    return ContractFailure::unsafe_native_entry_not_rejected;
   }
 
   Entry missingIntegrity = *portal;

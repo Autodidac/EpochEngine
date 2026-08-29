@@ -74,6 +74,7 @@ module;
 
 module ai.engine;
 
+import ai.model_install;
 import ai.runtime;
 
 import ai.session;
@@ -573,6 +574,28 @@ namespace epochengine::ai
             return trim(contents);
         }
 
+        static std::string read_exact_text_file(
+            const std::filesystem::path& file,
+            const std::uintmax_t maxBytes)
+        {
+            std::error_code error{};
+            if (!std::filesystem::is_regular_file(file, error) || error
+                || std::filesystem::is_symlink(file, error) || error)
+                return {};
+            const auto size = std::filesystem::file_size(file, error);
+            if (error || size == 0u || size > maxBytes)
+                return {};
+            std::ifstream input(file, std::ios::binary);
+            if (!input)
+                return {};
+            std::string contents(static_cast<std::size_t>(size), '\0');
+            input.read(
+                contents.data(),
+                static_cast<std::streamsize>(contents.size()));
+            return input && input.peek() == std::char_traits<char>::eof()
+                ? contents : std::string{};
+        }
+
         static void restore_selected_model_preference_if_needed()
         {
             if (g_selectedModelPreferenceLoaded)
@@ -675,10 +698,26 @@ namespace epochengine::ai
         }
 
         [[nodiscard]] static std::filesystem::path
-            epoch_local_qwen38_root_path()
+            epoch_local_qwen38_legacy_root_path()
         {
             return std::filesystem::path{executable_cache_bucket("models")}
                 / std::string{kEpochLocalQwen38ModelPackageId};
+        }
+
+        [[nodiscard]] static std::filesystem::path
+            epoch_local_qwen38_root_path()
+        {
+            const auto plan = model_install::plan_for(
+                kEpochLocalQwen38ModelPackageId);
+            if (!plan || !model_install::valid_plan(*plan))
+                return {};
+            const std::filesystem::path modelsRoot{
+                executable_cache_bucket("models")};
+            const std::filesystem::path versioned =
+                model_install::version_root(modelsRoot, *plan);
+            return versioned.empty()
+                ? modelsRoot / plan->package_id / "versions" / plan->revision
+                : versioned;
         }
 
         [[nodiscard]] static std::filesystem::path
@@ -2728,26 +2767,58 @@ namespace epochengine::ai
         EpochLocalAiInstallStatus status{};
         const auto runtimeRoot = epoch_local_llama_cpp_root_path();
         const auto runtimeExecutable = epoch_local_llama_cpp_executable_path();
-        const auto modelRoot = epoch_local_qwen38_root_path();
-        const auto modelFile = epoch_local_qwen38_model_path();
+        const auto canonicalModelRoot = epoch_local_qwen38_root_path();
+        const auto canonicalModelFile = epoch_local_qwen38_model_path();
+        const auto legacyModelRoot = epoch_local_qwen38_legacy_root_path();
+        const auto legacyModelFile = legacyModelRoot
+            / std::string{kEpochLocalQwen38ModelFile};
+        const auto modelPlan = model_install::plan_for(
+            kEpochLocalQwen38ModelPackageId);
         status.runtime_root = runtimeRoot.generic_string();
         status.runtime_executable = runtimeExecutable.generic_string();
-        status.model_root = modelRoot.generic_string();
-        status.model_file = modelFile.generic_string();
+        status.model_root = canonicalModelRoot.generic_string();
+        status.model_file = canonicalModelFile.generic_string();
         status.runtime_executable_ready = regular_file(runtimeExecutable);
-        status.model_file_ready = regular_file_with_size(
-            modelFile, kEpochLocalQwen38ModelBytes);
         status.runtime_receipt_ready = receipt_contains(
             runtimeRoot / "installed.runtime.json",
             {kEpochLocalLlamaCppRelease,
              kEpochLocalLlamaCppRevision,
              kEpochLocalLlamaCppArtifact,
              kEpochLocalLlamaCppArtifactSha256});
-        status.model_receipt_ready = receipt_contains(
-            modelRoot / "installed.model.json",
-            {kEpochLocalQwen38ModelRevision,
-             kEpochLocalQwen38ModelFile,
-             kEpochLocalQwen38ModelSha256});
+
+        if (modelPlan && model_install::valid_plan(*modelPlan)
+            && modelPlan->artifacts.size() == 1u)
+        {
+            const auto& artifact = modelPlan->artifacts.front();
+            status.model_file_ready = regular_file_with_size(
+                canonicalModelFile, artifact.bytes);
+            status.model_receipt_ready = model_install::receipt_matches(
+                *modelPlan,
+                read_exact_text_file(
+                    canonicalModelRoot
+                        / std::string{model_install::receipt_filename},
+                    128u * 1024u));
+
+            if (!status.model_file_ready || !status.model_receipt_ready)
+            {
+                const bool legacyFileReady = regular_file_with_size(
+                    legacyModelFile, artifact.bytes);
+                const bool legacyReceiptReady = receipt_contains(
+                    legacyModelRoot / "installed.model.json",
+                    {"epoch.local_ai.model.install.v1",
+                     kEpochLocalQwen38ModelPackageId,
+                     kEpochLocalQwen38ModelRevision,
+                     kEpochLocalQwen38ModelFile,
+                     kEpochLocalQwen38ModelSha256});
+                if (legacyFileReady && legacyReceiptReady)
+                {
+                    status.model_root = legacyModelRoot.generic_string();
+                    status.model_file = legacyModelFile.generic_string();
+                    status.model_file_ready = true;
+                    status.model_receipt_ready = true;
+                }
+            }
+        }
 
         if (status.ready())
         {
@@ -2770,29 +2841,63 @@ namespace epochengine::ai
 
     bool epoch_local_ai_install_contract() noexcept
     {
-        const std::filesystem::path executableRoot =
-            epochengine::core::path::executable_dir();
-        const bool executableLocalCache = executableRoot.empty()
-            || (epoch_local_llama_cpp_root_path()
-                    == executableRoot / "cache" / "packages"
-                        / std::string{kEpochLocalLlamaCppRuntimePackageId}
-                && epoch_local_qwen38_root_path()
-                    == executableRoot / "cache" / "models"
-                        / std::string{kEpochLocalQwen38ModelPackageId});
+        try
+        {
+            const auto plan = model_install::plan_for(
+                kEpochLocalQwen38ModelPackageId);
+            if (!plan || !model_install::valid_plan(*plan)
+                || plan->artifacts.size() != 1u)
+                return false;
 
-        return executableLocalCache
-            && kEpochLocalQwen38ModelPackageId
-                == std::string_view{"os_model_qwen_3_8_27b"}
-            && kEpochLocalLlamaCppRuntimePackageId
-                == std::string_view{"local_ai_llama_cpp_runtime"}
-            && kEpochLocalLlamaCppRevision.size() == 40u
-            && kEpochLocalQwen38ModelRevision.size() == 40u
-            && kEpochLocalLlamaCppArtifactSha256.size() == 64u
-            && kEpochLocalQwen38ModelSha256.size() == 64u
-            && kEpochLocalQwen38ModelBytes > 16'000'000'000ull
-            && kEpochLocalQwen38ModelUrl.starts_with("https://")
-            && kEpochLocalLlamaCppArtifact.find(
-                kEpochLocalLlamaCppRelease) != std::string_view::npos;
+            const auto& artifact = plan->artifacts.front();
+            const std::filesystem::path executableRoot =
+                epochengine::core::path::executable_dir();
+            const std::filesystem::path modelsRoot{
+                executable_cache_bucket("models")};
+            const std::filesystem::path expectedLegacy = modelsRoot
+                / std::string{kEpochLocalQwen38ModelPackageId};
+            const std::filesystem::path expectedVersion = expectedLegacy
+                / "versions" / std::string{kEpochLocalQwen38ModelRevision};
+            const bool executableLocalCache = executableRoot.empty()
+                || (epoch_local_llama_cpp_root_path()
+                        == executableRoot / "cache" / "packages"
+                            / std::string{kEpochLocalLlamaCppRuntimePackageId}
+                    && modelsRoot == executableRoot / "cache" / "models");
+            const std::string receipt =
+                model_install::deterministic_receipt(*plan);
+            std::string mutatedReceipt = receipt;
+            mutatedReceipt.push_back(' ');
+
+            return executableLocalCache
+                && epoch_local_qwen38_legacy_root_path() == expectedLegacy
+                && epoch_local_qwen38_root_path() == expectedVersion
+                && epoch_local_qwen38_model_path()
+                    == expectedVersion
+                        / std::string{kEpochLocalQwen38ModelFile}
+                && plan->package_id == kEpochLocalQwen38ModelPackageId
+                && plan->revision == kEpochLocalQwen38ModelRevision
+                && plan->official_source
+                    == "https://huggingface.co/Qwen/Qwen3.8-27B"
+                && plan->artifact_source
+                    == "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF"
+                && artifact.file == kEpochLocalQwen38ModelFile
+                && artifact.bytes == kEpochLocalQwen38ModelBytes
+                && artifact.sha256 == kEpochLocalQwen38ModelSha256
+                && artifact.source_url == kEpochLocalQwen38ModelUrl
+                && !receipt.empty()
+                && model_install::receipt_matches(*plan, receipt)
+                && !model_install::receipt_matches(*plan, mutatedReceipt)
+                && kEpochLocalLlamaCppRuntimePackageId
+                    == std::string_view{"local_ai_llama_cpp_runtime"}
+                && kEpochLocalLlamaCppRevision.size() == 40u
+                && kEpochLocalLlamaCppArtifactSha256.size() == 64u
+                && kEpochLocalLlamaCppArtifact.find(
+                    kEpochLocalLlamaCppRelease) != std::string_view::npos;
+        }
+        catch (...)
+        {
+            return false;
+        }
     }
     ProviderMode current_provider_mode() noexcept
     {

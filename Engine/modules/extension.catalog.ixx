@@ -24,8 +24,7 @@ inline constexpr std::size_t kInvalidCatalogIndex =
 
 enum class ActivationMode : std::uint8_t {
   script,
-  package,
-  native_trusted_install
+  package
 };
 
 enum class SourceProvenance : std::uint8_t {
@@ -38,8 +37,7 @@ enum class SourceProvenance : std::uint8_t {
 enum class IntegrityRequirement : std::uint8_t {
   core_source_tree,
   manifest_sha256,
-  immutable_revision_sha256_license,
-  trusted_native_binary_sha256_license
+  immutable_revision_sha256_license
 };
 
 enum class Availability : std::uint8_t { descriptor_only };
@@ -57,7 +55,6 @@ enum class Platform : std::uint8_t {
 enum class Capability : std::uint8_t {
   scripting,
   package_assets,
-  native_plugin,
   temporal_authoring,
   render_to_texture,
   portal_views,
@@ -122,7 +119,6 @@ struct Entry final {
   IntegrityRequirement integrity{
       IntegrityRequirement::immutable_revision_sha256_license};
   Availability availability{Availability::descriptor_only};
-  bool editor_restart_required{};
   bool existing_package_registry_entry_required{};
 };
 
@@ -140,13 +136,10 @@ enum class ValidationIssue : std::uint64_t {
   missing_reconstruction_key = 1ull << 9u,
   missing_license_evidence = 1ull << 10u,
   unsafe_integrity_policy = 1ull << 11u,
-  native_activation_without_native_capability = 1ull << 12u,
-  native_capability_without_trusted_activation = 1ull << 13u,
-  native_activation_without_restart = 1ull << 14u,
-  mapped_package_missing = 1ull << 15u,
-  duplicate_stable_id = 1ull << 16u,
-  duplicate_package_id = 1ull << 17u,
-  availability_claimed = 1ull << 18u
+  mapped_package_missing = 1ull << 12u,
+  duplicate_stable_id = 1ull << 13u,
+  duplicate_package_id = 1ull << 14u,
+  availability_claimed = 1ull << 15u
 };
 
 using ValidationIssues = std::uint64_t;
@@ -159,8 +152,6 @@ issue_bit(const ValidationIssue issue) noexcept {
 struct ValidationReport final {
   bool ok{};
   std::size_t entry_count{};
-  std::size_t native_entry_count{};
-  std::size_t restart_entry_count{};
   std::size_t registry_mapped_count{};
   std::size_t first_invalid_index{kInvalidCatalogIndex};
   ValidationIssues issues{};
@@ -175,7 +166,6 @@ enum class ContractFailure : std::uint8_t {
   package_registry_mapping_failed,
   duplicate_stable_id_not_rejected,
   duplicate_package_id_not_rejected,
-  unsafe_native_entry_not_rejected,
   missing_integrity_not_rejected,
   installation_state_exposed
 };
@@ -371,22 +361,21 @@ inline constexpr std::array<Entry, 8> kEntries{{
                    "tooling; no listener, hidden service, model download, or "
                    "installation is implied.",
         .required_capabilities = capability_mask(
-            Capability::native_plugin, Capability::local_ai_inference,
+            Capability::local_ai_inference,
             Capability::guarded_ai_development),
         .optional_capabilities = capability_mask(Capability::headless_tools,
                                                  Capability::editor_workspace),
         .supported_platforms =
             kDesktopPlatforms | platform_bit(Platform::headless),
         .minimum_tier = capability::Tier::headless,
-        .activation = ActivationMode::native_trusted_install,
+        .activation = ActivationMode::package,
         .source = {.provenance = SourceProvenance::third_party_pinned_source,
                    .owner = kOperatorOwner,
                    .repository = kExtensionsRepositoryIdentity,
                    .local_reconstruction_key = "tooling/local_ai",
                    .license_evidence = kRepositoryLicenseEvidence},
-        .integrity = IntegrityRequirement::trusted_native_binary_sha256_license,
+        .integrity = IntegrityRequirement::immutable_revision_sha256_license,
         .availability = Availability::descriptor_only,
-        .editor_restart_required = true,
         .existing_package_registry_entry_required = true,
     },
 }};
@@ -489,21 +478,6 @@ validate_entry(const Entry &entry) noexcept {
   if (entry.source.license_evidence.empty())
     add(ValidationIssue::missing_license_evidence);
 
-  const bool nativeCapability =
-      has_capability(entry, Capability::native_plugin);
-  const bool nativeActivation =
-      entry.activation == ActivationMode::native_trusted_install;
-  if (nativeActivation && !nativeCapability)
-    add(ValidationIssue::native_activation_without_native_capability);
-  if (nativeCapability && !nativeActivation)
-    add(ValidationIssue::native_capability_without_trusted_activation);
-  if (nativeActivation && !entry.editor_restart_required)
-    add(ValidationIssue::native_activation_without_restart);
-  if (nativeActivation &&
-      entry.integrity !=
-          IntegrityRequirement::trusted_native_binary_sha256_license) {
-    add(ValidationIssue::unsafe_integrity_policy);
-  }
   if (entry.source.provenance != SourceProvenance::epoch_core &&
       entry.integrity == IntegrityRequirement::core_source_tree) {
     add(ValidationIssue::unsafe_integrity_policy);
@@ -532,10 +506,6 @@ validate(const std::span<const Entry> catalog) noexcept {
         report.first_invalid_index = index;
     }
 
-    if (entry.activation == ActivationMode::native_trusted_install)
-      ++report.native_entry_count;
-    if (entry.editor_restart_required)
-      ++report.restart_entry_count;
     if (entry.existing_package_registry_entry_required)
       ++report.registry_mapped_count;
 
@@ -562,9 +532,6 @@ validate(const std::span<const Entry> catalog) noexcept {
     report.deterministic_digest =
         detail::digest_integer(report.deterministic_digest,
                                static_cast<std::uint8_t>(entry.integrity));
-    report.deterministic_digest = detail::digest_integer(
-        report.deterministic_digest, entry.editor_restart_required ? 1u : 0u);
-
     for (std::size_t previous = 0; previous < index; ++previous) {
       if (catalog[previous].stable_id == entry.stable_id)
         detail::add_issue(report, index, ValidationIssue::duplicate_stable_id);

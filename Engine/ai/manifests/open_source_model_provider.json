@@ -16,17 +16,17 @@
     {
       "id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
       "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
-      "license": "nvidia-open-model-license",
+      "license": "nvidia-nemotron-open-model-license",
       "role": "fast local coding/review helper",
       "download_target": "cache/models/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
       "project_bundle_default": false
     },
     {
-      "id": "Qwen/Qwen3.6-27B",
-      "url": "https://huggingface.co/Qwen/Qwen3.6-27B",
+      "id": "Qwen/Qwen3.8-27B",
+      "url": "https://huggingface.co/Qwen/Qwen3.8-27B",
       "license": "apache-2.0",
       "role": "heavy local coding/planning helper",
-      "download_target": "cache/models/Qwen/Qwen3.6-27B",
+      "download_target": "cache/models/os_model_qwen_3_8_27b",
       "project_bundle_default": false
     }
   ],

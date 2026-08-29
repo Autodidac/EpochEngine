@@ -40,7 +40,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.popup_layout.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.version.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.stl_types.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch\extension\extension.plugin_api.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.format_text.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)modules\sfml.compat.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
@@ -314,6 +313,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_stdio.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.eval.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.engine.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.model_install.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.world.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.engine.ixx" />
@@ -330,7 +330,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.catalog.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\extension.catalog.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\extension.plugin.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx" />
@@ -572,7 +571,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\platform.context_epoch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.plugin_loader.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp" />
@@ -701,6 +699,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign.cpp" />

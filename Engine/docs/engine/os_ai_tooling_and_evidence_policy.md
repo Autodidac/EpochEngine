@@ -23,11 +23,15 @@ Epoch also exposes a disabled-by-default, executable-local provider named
 `b10516` at revision `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9` and the
 community `Qwen3.8-27B-UD-Q4_K_M.gguf` quantization at revision
 `4ca720788d1e01f1bff70c033e0d0028fd02e502`, with exact artifact SHA-256 and
-model byte count. `Tools/ai/install_epoch_qwen38.ps1` performs an explicit
-operator-invoked transfer into the selected Epoch executable directory's
-`cache/packages` and `cache/models` buckets. It writes readiness receipts
-only after artifact verification. External model compute plus Epoch MCP remains
-a peer choice; local installation never replaces it.
+model byte count. `ai.model_install` now owns the same compiled authority for
+Package Manager plus an exact ten-file Nemotron 3 Nano 4B BF16 plan. Explicit
+transfers resume into sibling staging, reject symlinks and unexpected files,
+verify every size and SHA-256 off the GUI thread, and atomically publish exact
+receipts under `cache/models/<package>/versions/<revision>/`. The tracked
+`Tools/ai/install_epoch_qwen38.ps1` lane shares that immutable Qwen layout and
+can migrate an already verified legacy file without redownloading. External
+model compute plus Epoch MCP remains a peer choice; install never activates a
+provider, inference process, server, or listener.
 
 Generated projects carry `Assets/AI/project_ai.epochai` with AI disabled by
 default. The explicit project choices are `disabled`, `epoch_local_qwen38`,
@@ -598,7 +602,8 @@ Runtime exchanges and traces are evidence, not training data:
 
 - `workspace/model_exchange.jsonl` records explicitly retained exchanges;
 - `workspace/tool_trace.jsonl` records structured tool calls and results;
-- `cache/models/` stores operator-managed model assets;
+- `cache/models/<package>/versions/<revision>/` stores exact receipt-bound,
+  operator-managed model snapshots; sibling staging remains disposable;
 - `cache/ai/` stores disposable runtime cache;
 - `Engine/ai/evals/` stores deterministic behavior/evidence cases;
 - `Engine/ai/evals/fixtures/` stores explicitly reviewed non-training fixtures
@@ -631,8 +636,10 @@ endpoint while Epoch retains MCP validation and execution authority.
 
 Generated games, tools, apps, and server source may be proposed and authored
 after operator approval. Listener start, port binding, server processes,
-downloaded native extensions, model-accessible control surfaces, release work,
-and other external side effects remain inert behind their own human-owned gates.
+downloaded project add-ons, model-accessible control surfaces, release work,
+and other external side effects remain inert behind their own human-owned
+gates. Epoch has no native engine plugin lane; optional compiled source belongs
+to the selected generated project.
 
 > The model proposes immutable work. The operator approves exact authority.
 > The guard issues and records one execution claim. Verified evidence closes the

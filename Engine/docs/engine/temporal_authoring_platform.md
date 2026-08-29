@@ -383,11 +383,12 @@ Preferred extension order:
 1. declarative schemas/nodes;
 2. sandboxed scripts;
 3. constrained WebAssembly-like modules;
-4. explicitly installed trusted native plugins.
+4. explicitly admitted source add-ons compiled into generated projects, or
+   separately launched child tools.
 
-Extensions declare inputs, outputs, determinism, side effects, memory estimates,
+Add-ons declare inputs, outputs, determinism, side effects, memory estimates,
 execution targets, version, and migration. Downloaded projects never silently
-execute native editor extensions.
+compile source or launch tools, and Epoch exposes no native editor-plugin lane.
 
 Collaborative clients submit semantic commands. A server validates commands and
 records authoritative document revisions. It rebuilds its own shaders, atlas

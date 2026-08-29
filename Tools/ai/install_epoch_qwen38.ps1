@@ -21,7 +21,10 @@ $modelRevision = '4ca720788d1e01f1bff70c033e0d0028fd02e502'
 $modelFileName = 'Qwen3.8-27B-UD-Q4_K_M.gguf'
 $modelBytes = [int64]16464440224
 $modelSha256 = '322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482'
-$modelUrl = 'https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/4ca720788d1e01f1bff70c033e0d0028fd02e502/Qwen3.8-27B-UD-Q4_K_M.gguf?download=true'
+$modelReceiptSchema = 'epoch.local_ai.model.snapshot.v1'
+$modelOfficialSource = 'https://huggingface.co/Qwen/Qwen3.8-27B'
+$modelArtifactSource = 'https://huggingface.co/unsloth/Qwen3.8-27B-GGUF'
+$modelUrl = "$modelArtifactSource/resolve/$modelRevision/$modelFileName`?download=true"
 
 $runtimeRoot = [System.IO.Path]::GetFullPath($EpochRuntimeRoot)
 $volumeRoot = [System.IO.Path]::GetPathRoot($runtimeRoot)
@@ -36,9 +39,15 @@ $runtimeBinRoot = Join-Path $runtimeVersionRoot 'bin'
 $runtimeExecutable = Join-Path $runtimeBinRoot 'llama-cli.exe'
 $runtimeReceipt = Join-Path $packageRoot 'installed.runtime.json'
 $runtimeArchive = Join-Path (Join-Path $packageRoot 'downloads') $llamaArtifact
-$modelRoot = Join-Path (Join-Path $runtimeRoot 'cache\models') $modelPackageId
+$modelsCacheRoot = Join-Path $runtimeRoot 'cache\models'
+$modelPackageRoot = Join-Path $modelsCacheRoot $modelPackageId
+$modelVersionsRoot = Join-Path $modelPackageRoot 'versions'
+$modelRoot = Join-Path $modelVersionsRoot $modelRevision
 $modelPath = Join-Path $modelRoot $modelFileName
 $modelReceipt = Join-Path $modelRoot 'installed.model.json'
+$legacyModelRoot = $modelPackageRoot
+$legacyModelPath = Join-Path $legacyModelRoot $modelFileName
+$legacyModelReceipt = Join-Path $legacyModelRoot 'installed.model.json'
 
 function Get-LowerSha256 {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -58,6 +67,68 @@ function Test-VerifiedFile {
         return $false
     }
     return (Get-LowerSha256 -Path $Path) -eq $Sha256
+}
+
+function Get-ModelSnapshotReceipt {
+    $bytesText = $modelBytes.ToString(
+        [System.Globalization.CultureInfo]::InvariantCulture)
+    $lines = @(
+        '{'
+        "  `"schema`": `"$modelReceiptSchema`","
+        "  `"package_id`": `"$modelPackageId`","
+        "  `"revision`": `"$modelRevision`","
+        "  `"official_source`": `"$modelOfficialSource`","
+        "  `"artifact_source`": `"$modelArtifactSource`","
+        '  "automatic_execution": false,'
+        '  "server_or_listener": false,'
+        '  "artifacts": ['
+        "    {`"file`": `"$modelFileName`", `"source_url`": `"$modelUrl`", `"bytes`": $bytesText, `"sha256`": `"$modelSha256`"}"
+        '  ]'
+        '}'
+    )
+    return ($lines -join "`n") + "`n"
+}
+
+function Write-ExactUtf8 {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Contents
+    )
+    $temporary = "$Path.tmp-$([guid]::NewGuid().ToString('N'))"
+    try {
+        [System.IO.File]::WriteAllText(
+            $temporary,
+            $Contents,
+            [System.Text.UTF8Encoding]::new($false, $true))
+        Move-Item -LiteralPath $temporary -Destination $Path -Force
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
+}
+
+function Test-ExactUtf8File {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Expected
+    )
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return $false
+    }
+    $encoding = [System.Text.UTF8Encoding]::new($false, $true)
+    $expectedBytes = $encoding.GetBytes($Expected)
+    $observedBytes = [System.IO.File]::ReadAllBytes($Path)
+    if ($observedBytes.Length -ne $expectedBytes.Length) {
+        return $false
+    }
+    for ($index = 0; $index -lt $expectedBytes.Length; ++$index) {
+        if ($observedBytes[$index] -ne $expectedBytes[$index]) {
+            return $false
+        }
+    }
+    return $true
 }
 
 function Save-VerifiedDownload {
@@ -120,11 +191,18 @@ function Test-RuntimeInstall {
 }
 
 function Test-ModelInstall {
-    if (-not (Test-Path -LiteralPath $modelReceipt -PathType Leaf) -or
-        -not (Test-VerifiedFile -Path $modelPath -Sha256 $modelSha256 -Bytes $modelBytes)) {
+    if (-not (Test-VerifiedFile -Path $modelPath -Sha256 $modelSha256 -Bytes $modelBytes)) {
         return $false
     }
-    $receipt = Get-Content -LiteralPath $modelReceipt -Raw | ConvertFrom-Json
+    return Test-ExactUtf8File -Path $modelReceipt -Expected (Get-ModelSnapshotReceipt)
+}
+
+function Test-LegacyModelInstall {
+    if (-not (Test-Path -LiteralPath $legacyModelReceipt -PathType Leaf) -or
+        -not (Test-VerifiedFile -Path $legacyModelPath -Sha256 $modelSha256 -Bytes $modelBytes)) {
+        return $false
+    }
+    $receipt = Get-Content -LiteralPath $legacyModelReceipt -Raw | ConvertFrom-Json
     return $receipt.schema -eq 'epoch.local_ai.model.install.v1' -and
         $receipt.package_id -eq $modelPackageId -and
         $receipt.revision -eq $modelRevision -and
@@ -134,7 +212,11 @@ function Test-ModelInstall {
 
 if ($VerifyOnly) {
     if ((Test-RuntimeInstall) -and (Test-ModelInstall)) {
-        Write-Host '[PASS] Epoch-local Qwen3.8 installation is complete and pinned.'
+        Write-Host '[PASS] Epoch-local Qwen3.8 installation is complete, pinned, and not activated.'
+        exit 0
+    }
+    if ((Test-RuntimeInstall) -and (Test-LegacyModelInstall)) {
+        Write-Host '[COMPAT] Legacy Qwen3.8 layout is valid; rerun without -VerifyOnly to publish the canonical versioned snapshot.'
         exit 0
     }
     throw 'Epoch-local Qwen3.8 installation is missing or does not match the pinned receipts.'
@@ -190,21 +272,32 @@ if (-not $SkipRuntime -and -not (Test-RuntimeInstall)) {
 }
 
 if (-not $SkipModel -and -not (Test-ModelInstall)) {
-    New-Item -ItemType Directory -Force -Path $modelRoot | Out-Null
-    Save-VerifiedDownload -Url $modelUrl -Destination $modelPath -Sha256 $modelSha256 -Bytes $modelBytes
-    Write-JsonReceipt -Path $modelReceipt -Value @{
-        schema = 'epoch.local_ai.model.install.v1'
-        package_id = $modelPackageId
-        official_model_source = 'https://github.com/QwenLM/Qwen3.8'
-        quantized_artifact_source = 'https://huggingface.co/unsloth/Qwen3.8-27B-GGUF'
-        revision = $modelRevision
-        file = $modelFileName
-        bytes = $modelBytes
-        sha256 = $modelSha256
-        format = 'GGUF'
-        quantization = 'UD-Q4_K_M'
-        license_notice_review_required = $true
-        bundled_with_projects = $false
+    if (Test-Path -LiteralPath $modelRoot) {
+        throw "Canonical Qwen3.8 version root exists but failed verification: $modelRoot"
+    }
+    New-Item -ItemType Directory -Force -Path $modelVersionsRoot | Out-Null
+    $staging = Join-Path $modelVersionsRoot ('.stage-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $staging | Out-Null
+        $stagedModel = Join-Path $staging $modelFileName
+        $stagedReceipt = Join-Path $staging 'installed.model.json'
+        if (Test-LegacyModelInstall) {
+            Copy-Item -LiteralPath $legacyModelPath -Destination $stagedModel
+        }
+        else {
+            Save-VerifiedDownload -Url $modelUrl -Destination $stagedModel -Sha256 $modelSha256 -Bytes $modelBytes
+        }
+        Write-ExactUtf8 -Path $stagedReceipt -Contents (Get-ModelSnapshotReceipt)
+        if (-not (Test-VerifiedFile -Path $stagedModel -Sha256 $modelSha256 -Bytes $modelBytes) -or
+            -not (Test-ExactUtf8File -Path $stagedReceipt -Expected (Get-ModelSnapshotReceipt))) {
+            throw 'The staged Qwen3.8 snapshot failed exact artifact or receipt verification.'
+        }
+        Move-Item -LiteralPath $staging -Destination $modelRoot
+    }
+    finally {
+        if (Test-Path -LiteralPath $staging) {
+            Remove-Item -LiteralPath $staging -Recurse -Force
+        }
     }
 }
 
@@ -212,7 +305,7 @@ if (-not (Test-RuntimeInstall) -or -not (Test-ModelInstall)) {
     throw 'Epoch-local Qwen3.8 installation did not pass final receipt and integrity validation.'
 }
 
-Write-Host '[PASS] Epoch-local Qwen3.8 is installed for direct Epoch-owned child inference.'
+Write-Host '[PASS] Epoch-local Qwen3.8 is installed and pinned; provider activation remains explicit.'
 Write-Host "[INFO] Runtime: $runtimeExecutable"
 Write-Host "[INFO] Model: $modelPath"
 Write-Host '[INFO] External MCP/OpenAI-compatible inference remains available as a separate provider.'

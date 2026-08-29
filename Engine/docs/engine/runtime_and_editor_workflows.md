@@ -633,38 +633,30 @@ execution.
   command remains operator-gated in this worktree because project self-tests can
   create child processes and touch
   renderer/runtime state.
-- generated game project shells can carry the `engine_arcade` local
-  runtime-mini package. The package is a project asset/script option that
-  invokes engine-owned mini-runtime scenes such as Snake/Tetris/Pacman through
-  the script host; it must not copy those implementations out of the kernel
-  engine. The package also records the shared `engine_arcade.screen` 512x512
+- generated game project shells can reference the built-in `engine_arcade`
+  mini-runtime scenes such as Snake/Tetris/Pacman through the script host; they
+  never copy those implementations out of the kernel engine or install them as
+  a Package Manager payload. The runtime also records the shared
+  `engine_arcade.screen` 512x512
   sampled render target. One deterministic attract-pattern contract is rendered
   into backend-owned scene surfaces by OpenGL, SDL3, SFML3, Raylib3, Vulkan,
   DirectX, and Software, then sampled by the cabinet screen instead of relying
   on project-local ad hoc textures. This source path remains `Partial` pending
-  visual and repeated-switch proof. Installing or reinstalling Engine Arcade
-  activates visible editor state immediately: the default arcade scene is
-  selected, the `3D Scene` workspace receives the cabinet/screen proof, and the
-  Run target honors recognized arcade scene ids before falling back to
-  `project:<id>`.
-  Removing the package clears the arcade preview entities and active arcade
-  runtime scene so other package workspaces can take over cleanly.
+  visual and repeated-switch proof. Editor selection and runtime scene state
+  remain engine-owned and never imply an add-on install/remove transaction.
 - Plant Lab is the dedicated launcher application for scene-backed procedural
   vegetation authoring and deterministic temporal-graph preview.
-- Forest Factory is the standard-editor placement portal. It consumes
-  Plant Lab and package outputs for browsing, object/asset import, placement,
-  and visible main-scene use. Package Manager activation stages
-  `assets/packages/engine_forest_factory.package.json` and
-  `assets/packages/engine_forest_factory/default.forest.json` in the active
-  project. Package payload/source routing points at
-  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git`; the external Plant Lab repository remains
-  provenance/reference material, and generated project payloads are emitted
-  only after visible package activation or main-scene use.
-- the command-menu Package Manager is the intended modal surface for local
-  runtime-mini packages first, then explicit downloadable source packages later.
-  Downloadable source packages must compile through an updater-style human-gated
-  path and must not auto-run servers, listeners, hidden model channels, or any
-  service that bypasses operator approval.
+- Forest Factory is the standard-editor placement portal and a core editor
+  feature. Optional heavy vegetation libraries may be described by the Site,
+  but no project payload is installable until EpochEngineExtensions provides an
+  immutable, licensed, hash-bound source artifact admitted as an individual
+  add-on. The Extensions repository is authority, not itself a package.
+- the command-menu Package Manager discovers individual project add-ons, tools,
+  and model assets from the bounded Epoch Site catalog. EpochGui is already
+  linked into every non-CLI application, core engine systems are already in the
+  engine, and catalog/repository containers are filtered rather than displayed
+  as installs. Downloadable source packages must compile through a human-gated
+  project path and must not auto-run servers, listeners, inference, or services.
 - Package Manager install attempts must show visible per-package state in the
   modal using the shared GUI progress bar. Package selection should use a
   scrollable list with per-package Install/Remove/Review Gate actions instead of
@@ -696,17 +688,15 @@ execution.
 - map source and semantic history remain canonical, Library output is
   reproducible, and Canvas2D scene/resource residency is disposable. Context
   exit or replacement retires only the physical scene publication.
-- OS model package lanes are on-demand model assets. Qwen, Nemotron, Bonsai,
-  FLUX, Wan, and TRELLIS weights are staged to executable-local `cache/models/`
-  only after operator action, are not cloned for guarded engine development, and are
-  included in generated projects only by explicit package opt-in with
-  license/notice review. The current gate writes a project-local
-  `*.model.package.json` opt-in manifest and a cache-local `download.plan.json`
-  before any future downloader is allowed to transfer weights. AI now
-  exposes direct model-package entry buttons for Nemotron 3 Nano 4B BF16, Qwen
-  3.6 27B, and the image lanes. Bonsai Ternary 4B is the recommended local
-  image default, Bonsai Binary 4B is the low-memory lane, and FLUX.2 Klein 4B is
-  retained as the optional higher-memory fallback.
+- OS model rows are on-demand user assets. The current admitted payloads are
+  Qwen3.8 27B and NVIDIA Nemotron 3 Nano 4B BF16. An explicit Install action
+  downloads pinned Hugging Face files with resume/retry into a sibling staging
+  directory, verifies exact paths, file types, sizes, and SHA-256 values in a
+  background task, and atomically publishes a deterministic receipt under
+  `cache/models/<package>/versions/<revision>/`. A failed digest removes only
+  the bad staged file so retry is bounded. Generated projects reference the
+  shared cache only after explicit selection; weights are never copied into
+  project source/build output and installation never activates inference.
 - Project Run is project-owned, not editor-clone-owned. The Project workspace
   must expose the target backend/context and child project launches should use
   standalone single-context flags such as
@@ -748,12 +738,15 @@ execution.
   client-predicted paths remain separate opt-in packages. Software projects,
   single-player games, and minimal generated engine clones must not receive
   server/listener code by default.
-- heavy optional package source should live outside the engine repository. The
-  canonical package-source home is
-  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git`; EpochEngine should keep
-  package descriptors, security gates, updater/cache paths, and minimal inert
-  runtime hooks only. Downloaded or generated package payloads resolve under
-  executable-local `cache/packages/`.
+- Heavy optional add-on source lives outside the engine repository. The
+  canonical source/catalog authority is
+  `https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git`.
+  Each admitted row describes one generated-project dependency or explicit
+  child tool; the repository itself is never installed. EpochEngine has no
+  native plugin ABI/loader: reusable core systems remain linked into the engine,
+  while admitted add-on source compiles into the project that selected it.
+  Downloaded/generated package payloads resolve under executable-local
+  `cache/packages/` and never execute automatically.
 - research prototypes such as voxel terrain, planetary rendering, procedural
   vegetation, and tool harnesses should enter Package Manager as local
   research-package candidates first. A package candidate needs provenance,

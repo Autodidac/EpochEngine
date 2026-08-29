@@ -1,13 +1,30 @@
-- The active local v0.89.35 hotfix gate owns the exact Package Manager layout
-  failure captured after the v0.89.34 release. Drawing the right-aligned
-  Refresh action left the immediate-mode cursor at the action X coordinate, so
-  the package list, detail scroll, progress bar, and buttons were clamped into
-  a narrow right-edge sliver. The repair must restore the content-column
-  origin and advance past the taller header member before any stacked content.
+- The local v0.89.35 hotfix repairs the exact Package Manager layout failure
+  captured after v0.89.34. It restores the content-column origin after the
+  right-aligned Refresh action, measures list/detail/footer regions from one
+  modal body budget, anchors the progress/actions footer, and keeps model
+  verification visible without presenting a fake cancellable state.
+- Package discovery now matches the repository's original ownership model.
+  EpochGui is linked into every non-CLI Epoch application and is never an
+  installable row. EpochEngineExtensions is the public add-on catalog/source
+  authority, not an engine plugin or a package itself. Engine Arcade remains
+  built in. Project add-ons enter only as individually admitted rows; Site v72
+  publishes nine such descriptors/model entries and no container-library row.
+- Qwen3.8 27B and Nemotron 3 Nano 4B BF16 now have real explicit, resumable,
+  exact-hash Package Manager transfers into immutable executable-local
+  `cache/models/<package>/versions/<revision>` snapshots. Publication is
+  receipt-bound and atomic, corrupt staging is recoverable, and selection does
+  not activate inference, start a listener, or write model bytes into projects.
+- The obsolete native engine-plugin loader, ABI header, module, source,
+  configuration switch, generated-project switch, and aggregate test hook are
+  removed. Optional add-ons compile into generated projects or run as explicit
+  child tools; EpochEngine itself remains a complete linked engine.
 - Public source discovery and Windows/Linux packaged runtime are v0.89.34 from
   exact Engine commit `5a5c5f26af8e96317efd92f8a104187606db39e4`.
-  Local v0.89.35 remains an unpublished candidate until fresh Windows/Linux
-  build, receipt, package, and Site gates complete. macOS remains v0.89.30.
+  Local v0.89.35 remains unpublished. Fresh Windows Debug/Release editor builds
+  and both build-safe aggregate contracts pass, as do standalone EpochGui
+  10/10 and EpochEngineExtensions 2/2. Operator eye testing, final immutable
+  Windows/Linux packages/receipts, and explicit Site activation remain open.
+  macOS remains v0.89.30.
 - The published v0.89.34 visual-authoring repairs remain the product baseline:
   nested dock clipping, exact legacy root-only GUI migration, truthful
   no-source Timeline presentation, shared surface-relative placement, and

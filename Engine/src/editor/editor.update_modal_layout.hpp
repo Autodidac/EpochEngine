@@ -42,6 +42,14 @@ namespace epochengine::editor_update_modal
         ActionStrip actions{};
     };
 
+    struct PackageManagerBodyLayout
+    {
+        float listHeight = 0.0f;
+        float detailHeight = 0.0f;
+        float footerTop = 0.0f;
+        bool showDetails = false;
+    };
+
     constexpr float kUpdateContentInset = 28.0f;
     constexpr float kSourceContentInset = 24.0f;
     constexpr float kButtonHeight = 30.0f;
@@ -61,6 +69,74 @@ namespace epochengine::editor_update_modal
             std::clamp(desired.y, minHeight, maxHeight)
         };
     }
+
+    [[nodiscard]] constexpr PackageManagerBodyLayout measure_package_manager_body(
+        const float bodyTop,
+        const float contentBottom,
+        const float lineHeight) noexcept
+    {
+        constexpr float kFooterHeight = 76.0f;
+        constexpr float kMinimumPanelHeight = 48.0f;
+        constexpr float kMaximumListHeight = 178.0f;
+        constexpr float kMaximumDetailHeight = 168.0f;
+        constexpr float kSectionSpacing = 12.0f;
+
+        PackageManagerBodyLayout layout{};
+        layout.footerTop = (std::max)(bodyTop, contentBottom - kFooterHeight);
+        const float panelBudget = (std::max)(
+            0.0f,
+            layout.footerTop - bodyTop - (std::max)(0.0f, lineHeight)
+                - kSectionSpacing);
+
+        if (panelBudget < 2.0f * kMinimumPanelHeight)
+        {
+            layout.listHeight = panelBudget;
+            return layout;
+        }
+
+        layout.listHeight = std::clamp(
+            panelBudget * 0.52f,
+            kMinimumPanelHeight,
+            kMaximumListHeight);
+        layout.detailHeight = std::clamp(
+            panelBudget - layout.listHeight,
+            kMinimumPanelHeight,
+            kMaximumDetailHeight);
+
+        const float unused = panelBudget - layout.listHeight - layout.detailHeight;
+        if (unused > 0.0f)
+        {
+            const float listRoom = kMaximumListHeight - layout.listHeight;
+            const float listGrowth = (std::min)(unused, listRoom);
+            layout.listHeight += listGrowth;
+            const float detailRoom = kMaximumDetailHeight - layout.detailHeight;
+            layout.detailHeight += (std::min)(unused - listGrowth, detailRoom);
+        }
+        layout.showDetails = true;
+        return layout;
+    }
+
+    [[nodiscard]] constexpr bool package_manager_layout_contract() noexcept
+    {
+        const auto normal = measure_package_manager_body(180.0f, 580.0f, 20.0f);
+        const auto compact = measure_package_manager_body(180.0f, 380.0f, 20.0f);
+        const auto tiny = measure_package_manager_body(180.0f, 310.0f, 20.0f);
+        return normal.showDetails
+            && normal.listHeight >= 48.0f
+            && normal.detailHeight >= 48.0f
+            && normal.listHeight <= 178.0f
+            && normal.detailHeight <= 168.0f
+            && normal.footerTop == 504.0f
+            && !compact.showDetails
+            && compact.footerTop == 304.0f
+            && compact.listHeight <= 92.0f
+            && compact.detailHeight == 0.0f
+            && !tiny.showDetails
+            && tiny.detailHeight == 0.0f
+            && tiny.listHeight >= 0.0f;
+    }
+
+    static_assert(package_manager_layout_contract());
 
     [[nodiscard]] inline std::string format_status_markers(std::string_view text)
     {

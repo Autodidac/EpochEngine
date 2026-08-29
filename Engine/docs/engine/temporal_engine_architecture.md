@@ -346,9 +346,10 @@ Joining proceeds in bounded stages:
 4. hash/license/provenance verification in quarantine;
 5. bounded capability grant.
 
-Shaders, scripts, models, assets, and native extensions have different risk
-classes. Native extensions never auto-download or execute. Network listeners and
-server activation remain explicit human-approved capabilities.
+Shaders, scripts, models, assets, generated-project add-ons, and explicit child
+tools have different risk classes. Add-ons never auto-download, compile, or
+execute. Epoch has no native engine plugin loader; network listeners, child-tool
+launch, and server activation remain separate human-approved capabilities.
 
 ## Side-Effect Boundary
 

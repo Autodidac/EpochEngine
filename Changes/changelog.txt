@@ -7,6 +7,29 @@
   header row and advance to the larger text/action end Y. This prevents every
   subsequent list, detail, progress, and action control from being clamped into
   the right-edge sliver captured by the operator on published v0.89.34.
+- Measure the package list, selected detail, and fixed progress/action footer
+  from one modal body budget. Long catalog content now scrolls inside its owned
+  regions while the footer remains reachable; background digest verification
+  is labeled as verification instead of offering a nonfunctional cancel action.
+- Filter catalog-authority containers and built-in systems from Package Manager.
+  EpochGui remains linked into non-CLI applications, EpochEngineExtensions
+  remains the source/catalog authority for individual generated-project add-ons,
+  and Engine Arcade remains built in rather than masquerading as an install.
+- Add exact compiled Qwen3.8 27B and Nemotron 3 Nano 4B BF16 install plans.
+  Explicit, resumable Hugging Face transfers stage beside immutable versioned
+  model snapshots, validate path/type/size/SHA-256, write deterministic exact
+  receipts, and publish atomically. Failed verification removes only the bad
+  staged artifact; model selection never starts inference or a listener.
+- Remove the obsolete native engine-plugin lane: delete its ABI header, module,
+  loader implementation, build registrations, configuration switches,
+  generated-project switches, and contract hook. Optional source compiles into
+  projects or runs as an explicit child tool; EpochEngine remains complete.
+- Correct the embedded EpochGui numeric v0.89.30 identity and the Extensions
+  contract. Tiered Terrain is proven buildable local source but does not claim
+  an installable payload before immutable Site admission.
+- Validation: source naming 579/579; Debug and Release EpochEditor builds and
+  aggregate build-safe contracts pass; standalone EpochGui passes 10/10 and
+  EpochEngineExtensions passes 2/2. No GUI/GPU launch or publication is claimed.
 
 ## [0.89.34] - 2026-08-29
 

@@ -1,5 +1,26 @@
 # Mission Cache
 
+- The v0.89.35 Package Manager/model candidate restores full-width measured
+  list/detail/footer composition and truthful download/verification states.
+  Qwen3.8 27B and Nemotron 3 Nano 4B BF16 are the only currently admitted model
+  payloads; explicit installs resume into sibling staging, verify every pinned
+  Hugging Face artifact by exact size/SHA-256, then atomically publish an exact
+  receipt under `cache/models/<package>/versions/<revision>`. No selection,
+  install, or verification action starts inference, a server, or a listener.
+- Preserve package ownership: EpochGui is an independently versioned linked
+  application library; EpochEngineExtensions is a repository/catalog authority
+  for individual generated-project add-ons; Engine Arcade is built in; none is
+  a Package Manager row. EpochEngine has no native plugin lane. The obsolete
+  loader/API/module and every build/config/generated-project hook were removed.
+  Site v72 is the live corrected nine-row catalog while Engine source/runtime
+  remain v0.89.34 until the exact v0.89.35 release gate is authorized.
+- Current v0.89.35 safe evidence: source naming 579/579, whitespace clean,
+  Windows Debug and Release `EpochEditor` builds pass, both build-safe aggregate
+  contracts exit 0, standalone EpochGui Release passes 10/10, and standalone
+  EpochEngineExtensions passes 2/2. No GUI/GPU launch or eye-test claim was
+  made. Stage a fresh Windows test folder and obtain operator eye evidence
+  before runtime publication; Linux release proof remains separately required.
+
 - Public EpochEngine source discovery and Windows/Linux packaged runtime are
   v0.89.34 from exact commit `5a5c5f26af8e96317efd92f8a104187606db39e4`.
   Treat local v0.89.35 as an unpublished hotfix candidate until exact build

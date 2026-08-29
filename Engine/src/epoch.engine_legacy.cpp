@@ -152,9 +152,6 @@ import project.forest_library;
 import package.registry;
 import package.catalog;
 import extension.catalog;
-#if EPOCH_ENABLE_NATIVE_EXTENSIONS
-import extension.plugin;
-#endif
 import physics.manager;
 import render.camera;
 import render.lighting;
@@ -181,6 +178,7 @@ import gui.engine;
 import gui.menu;
 import editor.core;
 import ai.engine;
+import ai.model_install;
 import ai.development_proposal_codec;
 import ai.project_profile;
 import ai.curated_context_bundle;
@@ -2723,12 +2721,6 @@ namespace epochengine::core
             epochengine::extension_catalog::run_contract()
                 == epochengine::extension_catalog::ContractFailure::none);
 
-#if EPOCH_ENABLE_NATIVE_EXTENSIONS
-        check(
-            "extension.plugin.admission",
-            epochengine::extensions::run_contract()
-                == epochengine::extensions::ContractFailure::none);
-#endif
         check(
             "gui.runtime_surface_atlas",
             epochengine::gui::run_runtime_surface_contract());
@@ -2842,6 +2834,9 @@ namespace epochengine::core
         check(
             "ai.epoch_local_install",
             epochengine::ai::epoch_local_ai_install_contract());
+        check(
+            "ai.model_install",
+            epochengine::ai::model_install::run_contract());
         check(
             "ai.development_proposal_codec",
             epochengine::ai::development_proposal_codec::run_contract());
@@ -4332,9 +4327,6 @@ namespace epochengine::core
                 != std::string::npos
             && generatedCmakeFragment.find(
                 "set(EPOCH_BUILD_STATIC_RUNTIME ON")
-                != std::string::npos
-            && generatedCmakeFragment.find(
-                "set(EPOCH_ENABLE_NATIVE_EXTENSIONS OFF")
                 != std::string::npos
             && generatedCmakeLists.find(
                 "epoch_configure_embedded_project(epoch_project_runtime)")

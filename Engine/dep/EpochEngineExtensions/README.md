@@ -19,8 +19,11 @@ an installable published package.
 `catalog/extensions.json` is the canonical machine-readable surface. It mirrors
 the stable identities owned by EpochEngine's `extension.catalog` module while
 distinguishing the one local source package from seven planned descriptors.
-EpochEngine's embedded catalog remains the publication/admission boundary; this
-source checkpoint alone does not make the package available through the Site.
+EpochEngine's embedded catalog owns descriptor identity and capability policy;
+this companion repository owns optional project source, the Epoch Site owns
+publication/discovery, and the engine package registry plus immutable evidence
+own local admission. This source checkpoint alone does not make the package
+available through the Site.
 
 ## Validate
 
