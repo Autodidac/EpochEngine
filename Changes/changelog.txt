@@ -1,3 +1,15 @@
+## [Unreleased] - Exact build-validation receipt sidecars
+
+- Bind each build-validation `.sha256` sidecar to the exact UTF-8 bytes written
+  to the receipt file, including its one final LF. The writer now owns one byte
+  sequence for both output and hashing instead of hashing canonical JSON and
+  then writing different bytes.
+- Extend the receipt-writer self-test to write a real temporary receipt and
+  sidecar, independently hash the file, verify the exact sidecar text and final
+  LF, and clean up both files. Windows PowerShell 5.1 and modern PowerShell pass.
+- This is a post-release tooling repair. It does not alter the published
+  v0.89.33 source commit, runtime archives, receipts, or checksums.
+
 ## [v0.89.33] - Editor interaction and Site package hard gate
 
 ### August 28 repair checkpoint
@@ -27,8 +39,9 @@
   This does not claim that any optional payload has been implemented.
 - Advance the tracked Windows and Linux packaged-runtime authorities to
   v0.89.33 for the explicitly authorized paired release pass. macOS remains
-  v0.89.30 and is not claimed; public Site runtime stays v0.89.30 until the
-  rebuilt packages, receipts, checksums, and signed envelope are admitted.
+  v0.89.30 and is not claimed. Site v55 publishes the exact admitted Windows
+  and Linux v0.89.33 packages, corrected exact-file receipt sidecars, checksums,
+  and signed envelope while preserving every earlier runtime for rollback.
 - Synchronize the updater discovery contract with the v0.89.33 source and
   Windows/Linux packaged authorities. The aggregate build-safe self-test now
   proves exact equality for the paired runtime instead of retaining the older

@@ -289,6 +289,42 @@ function ConvertTo-CanonicalReceipt {
     return $output.ToString()
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][byte[]]$Bytes)
+
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $hasher.ComputeHash($Bytes)
+        return -join ($hash | ForEach-Object { $_.ToString('x2') })
+    }
+    finally {
+        $hasher.Dispose()
+    }
+}
+
+function Write-ReceiptDocument {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Canonical
+    )
+
+    $resolvedPath = [System.IO.Path]::GetFullPath($Path)
+    $outputDirectory = Split-Path -Parent $resolvedPath
+    if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) {
+        [System.IO.Directory]::CreateDirectory($outputDirectory) | Out-Null
+    }
+
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    $receiptBytes = $utf8NoBom.GetBytes($Canonical + "`n")
+    $receiptSha256 = Get-Sha256Hex -Bytes $receiptBytes
+    $sidecarBytes = $utf8NoBom.GetBytes(
+        "$receiptSha256  $([System.IO.Path]::GetFileName($resolvedPath))`n")
+
+    [System.IO.File]::WriteAllBytes($resolvedPath, $receiptBytes)
+    [System.IO.File]::WriteAllBytes("$resolvedPath.sha256", $sidecarBytes)
+    return $receiptSha256
+}
+
 function Invoke-SelfTest {
     $selfTestRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
     $selfTestVersionModule = Join-Path $selfTestRepoRoot 'Engine\modules\epoch.version.ixx'
@@ -352,6 +388,27 @@ function Invoke-SelfTest {
     $roundtrip = $first | ConvertFrom-Json
     if ($roundtrip.target -cne 'EpochEditor' -or $roundtrip.checks.Count -ne 7) {
         throw 'Canonical validation receipt did not survive JSON roundtrip.'
+    }
+
+    $selfTestReceiptPath = Join-Path (
+        [System.IO.Path]::GetTempPath()) (
+        'epoch-build-validation-receipt-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $writtenSha256 = Write-ReceiptDocument -Path $selfTestReceiptPath -Canonical $first
+        $fileSha256 = (Get-FileHash -LiteralPath $selfTestReceiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $receiptBytes = [System.IO.File]::ReadAllBytes($selfTestReceiptPath)
+        $sidecar = [System.IO.File]::ReadAllText("$selfTestReceiptPath.sha256")
+        $expectedSidecar = "$fileSha256  $([System.IO.Path]::GetFileName($selfTestReceiptPath))`n"
+        if ($writtenSha256 -cne $fileSha256 -or
+            $sidecar -cne $expectedSidecar -or
+            $receiptBytes.Length -ne ([System.Text.Encoding]::UTF8.GetByteCount($first) + 1) -or
+            $receiptBytes[-1] -ne 10) {
+            throw 'Validation receipt sidecar did not bind the exact canonical UTF-8 file bytes.'
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $selfTestReceiptPath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath "$selfTestReceiptPath.sha256" -Force -ErrorAction SilentlyContinue
     }
     Write-Output 'Epoch build-validation receipt self-test passed.'
 }
@@ -442,21 +499,8 @@ $receipt = [pscustomobject]@{
 }
 
 $canonical = ConvertTo-CanonicalReceipt $receipt
-$canonicalBytes = [System.Text.Encoding]::UTF8.GetBytes($canonical)
-$receiptHashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash($canonicalBytes)
-$receiptSha256 = -join ($receiptHashBytes | ForEach-Object { $_.ToString('x2') })
-
 $resolvedOutput = [System.IO.Path]::GetFullPath($OutputPath)
-$outputDirectory = Split-Path -Parent $resolvedOutput
-if (-not [string]::IsNullOrWhiteSpace($outputDirectory)) {
-    [System.IO.Directory]::CreateDirectory($outputDirectory) | Out-Null
-}
-$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-[System.IO.File]::WriteAllText($resolvedOutput, $canonical + "`n", $utf8NoBom)
-[System.IO.File]::WriteAllText(
-    "$resolvedOutput.sha256",
-    "$receiptSha256  $([System.IO.Path]::GetFileName($resolvedOutput))`n",
-    $utf8NoBom)
+$receiptSha256 = Write-ReceiptDocument -Path $resolvedOutput -Canonical $canonical
 
 Write-Output "Epoch build-validation receipt: $resolvedOutput"
 Write-Output "SHA-256: $receiptSha256"

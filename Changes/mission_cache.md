@@ -13,14 +13,11 @@
   pacing policy across registered contexts. `c937fa2f` commits only the SDL
   capture/loading/first-present slice. SDL minimize/restore is a separate
   uncommitted tranche until it lands and passes its own evidence.
-- EpochGui remains an independently versioned dependency. Public v0.89.29 on
-  Site v49 maps Engine authority
-  `66f65544d577bd0173d6a6586aee233fc0cc3600` / tree
-  `d0d5ea7f25b5852a2db1d9d02fa6dbc48116b625` to hosted commit
-  `8882503ac579add67456459986983ad7fd7c96db`; the clean 53-file Release
-  clone passes 11/11 and v0.89.28 stays retained. Site publication provenance
-  is `0e9a15bf01d74112fbcc83a67c8ce529f972e47d` /
-  `appgdep_6a917b8a5f148191b3604d1e46552df5`.
+- EpochGui remains an independently versioned dependency. Public v0.89.30 on
+  Site v55 maps to hosted commit
+  `b97167423373b9a7af3f821dcf91d8a71613dbf2` / tree
+  `07c90cea87d8b2942175b62ef93444b38f040803`; an independent live clone,
+  Release build, and 11/11 tests pass. v0.89.29 and v0.89.28 stay retained.
 - ParticleEngine PR-009 is local-only at
   `98d10d41c3e2d534e7023014a79333ba121b362b` / tree
   `4658b09c3c633017ddf68c435b4e737043a3311d`. The 415,520-byte source
@@ -37,18 +34,17 @@
   files: registration/build/publication is pending fresh approval. The source
   iteration worker is still audit/in-progress with no commit and is blocked on
   missing prerequisites; the `disposable_sandbox` design remains pending.
-  Preserve public Engine source v0.89.32 and runtime v0.89.30 while those lanes
-  remain open.
-- v0.89.32 is the next source-only authority after the independently preserved
-  v0.89.31 Site checkpoint. Advance source identity, source-build metadata,
-  updater fixtures, validation receipts, and AI campaign evidence together;
-  keep all Windows/Linux/macOS packaged-version authorities and public runtime
-  assets at v0.89.30 until a separately authorized binary release. The AI
-  development panel must read the real source authority, never a release
-  literal. The D3D11/Vulkan readback-evidence checkpoint at
-  `102bb9135ed6bf452ac227d14fa56b03d14f76b7` is part of this source line, but
-  source publication, runtime packaging, upload, and release remain separate
-  operator-owned transactions.
+  The five untracked MCP files are excluded from the published Engine commit.
+  Preserve public Engine source discovery and runtime v0.89.33 while those
+  lanes remain open.
+- v0.89.33 is the current source and published Windows/Linux runtime authority
+  on Site v55 from exact Engine commit
+  `a392fd03a2ba5e6a5ce4742ff62e719f1a0c3f16`. Source identity, source-build
+  metadata, updater fixtures, validation receipts, package catalog evidence,
+  and signed release authority advance together. macOS remains v0.89.30. The
+  AI development panel must read the real source authority, never a release
+  literal. Source publication, runtime packaging, upload, and release remain
+  separate operator-owned transactions for every later version.
 - Make independent AI development the primary product churn mission. Epoch must
   be able to complete a bounded engineering campaign without Codex: inspect
   host-curated source, plan related-file changes, edit only a disposable exact
@@ -976,11 +972,11 @@ release history belong in the changelog/archive, not architecture docs.
   evidence blocks activation. The reporting path must remain automatable
   without public EpochEngine Git/source, a long-lived inbound listener, or a
   static updater credential.
-- Development/private source discovery is `v0.89.30`; packaged runtime/latest
-  is now the signed `v0.89.30` authority from Site v43. Public update clients
+- Development/private source discovery and packaged runtime/latest are the
+  signed `v0.89.33` authority from Site v55. Public update clients
   receive runtime archives, build evidence,
   and checksums only; approved EpochEngine source access is server-authorized
-  and never depends on a shipped static secret. Preserve `v0.89.29`, `v0.89.28`,
+  and never depends on a shipped static secret. Preserve `v0.89.30`, `v0.89.29`, `v0.89.28`,
   `v0.89.27`, and immutable `v0.89.06` as release history, and keep
   `multicontext-base-stable` fixed at
   `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development
