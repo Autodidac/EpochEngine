@@ -18,6 +18,10 @@
 - Point the admitted Qwen3.8 27B metadata at the official Qwen model authority.
   The visible Site catalog is curated separately and keeps only Qwen and
   Nemotron in the LLM category.
+- Add pinned Qwen3.8 27B and NVIDIA Nemotron 3 Nano 4B BF16 descriptor
+  packages. They host no weights, perform no automatic download or execution,
+  and require local admission plus explicit operator approval; their standalone
+  safety contract passes 1/1.
 - Add a standalone EpochEngineExtensions descriptor repository subtree with
   eight exact non-installable entries, a license, and a 1/1 CTest contract.
   This does not claim that any optional payload has been implemented.

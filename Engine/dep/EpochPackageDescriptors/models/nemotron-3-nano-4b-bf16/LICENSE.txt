@@ -1,0 +1,10 @@
+This Epoch package contains descriptor metadata only. It does not redistribute
+NVIDIA model weights.
+
+The descriptor metadata is distributed under the Epoch repository's
+LicenseRef-MIT-NoSell license. The upstream NVIDIA Nemotron model is subject to
+the NVIDIA Nemotron Open Model License. Review the exact pinned upstream
+revision and the publisher's current license before approving any model
+transfer:
+
+https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/

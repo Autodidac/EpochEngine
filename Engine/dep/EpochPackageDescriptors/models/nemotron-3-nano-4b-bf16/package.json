@@ -1,0 +1,15 @@
+{
+  "schema": "epoch-model-package-descriptor/v1",
+  "package_id": "os_model_nemotron_3_nano_4b_bf16",
+  "display_name": "NVIDIA Nemotron 3 Nano 4B BF16",
+  "category": "llm",
+  "upstream_model": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+  "upstream_url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+  "upstream_revision": "dfaf35de3e30f1867dd8dbc38a7fc9fb52d3914f",
+  "upstream_license": "nvidia-nemotron-open-model-license",
+  "weights_hosted": false,
+  "automatic_download": false,
+  "automatic_execution": false,
+  "local_admission_required": true,
+  "operator_approval_required": true
+}

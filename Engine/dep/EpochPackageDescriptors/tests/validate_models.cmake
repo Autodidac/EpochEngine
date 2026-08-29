@@ -1,0 +1,36 @@
+set(qwen "${ROOT}/models/qwen3.8-27b/package.json")
+set(nemotron "${ROOT}/models/nemotron-3-nano-4b-bf16/package.json")
+foreach(descriptor IN ITEMS "${qwen}" "${nemotron}")
+    if(NOT EXISTS "${descriptor}")
+        message(FATAL_ERROR "Missing model descriptor: ${descriptor}")
+    endif()
+    file(READ "${descriptor}" json)
+    string(JSON schema GET "${json}" schema)
+    string(JSON category GET "${json}" category)
+    string(JSON revision GET "${json}" upstream_revision)
+    string(JSON weights_hosted GET "${json}" weights_hosted)
+    string(JSON automatic_download GET "${json}" automatic_download)
+    string(JSON automatic_execution GET "${json}" automatic_execution)
+    string(JSON local_admission GET "${json}" local_admission_required)
+    string(JSON operator_approval GET "${json}" operator_approval_required)
+    string(LENGTH "${revision}" revision_length)
+    if(NOT schema STREQUAL "epoch-model-package-descriptor/v1"
+        OR NOT category STREQUAL "llm"
+        OR NOT revision_length EQUAL 40
+        OR NOT revision MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "Invalid model identity in ${descriptor}")
+    endif()
+    if(weights_hosted OR automatic_download OR automatic_execution
+        OR NOT local_admission OR NOT operator_approval)
+        message(FATAL_ERROR "Unsafe model transfer policy in ${descriptor}")
+    endif()
+endforeach()
+
+file(READ "${qwen}" qwen_json)
+file(READ "${nemotron}" nemotron_json)
+string(JSON qwen_id GET "${qwen_json}" package_id)
+string(JSON nemotron_id GET "${nemotron_json}" package_id)
+if(NOT qwen_id STREQUAL "os_model_qwen3_8_27b_gguf"
+    OR NOT nemotron_id STREQUAL "os_model_nemotron_3_nano_4b_bf16")
+    message(FATAL_ERROR "The curated LLM package IDs changed")
+endif()

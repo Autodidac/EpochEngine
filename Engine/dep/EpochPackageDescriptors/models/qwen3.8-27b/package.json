@@ -1,0 +1,15 @@
+{
+  "schema": "epoch-model-package-descriptor/v1",
+  "package_id": "os_model_qwen3_8_27b_gguf",
+  "display_name": "Qwen3.8 27B",
+  "category": "llm",
+  "upstream_model": "Qwen/Qwen3.8-27B",
+  "upstream_url": "https://huggingface.co/Qwen/Qwen3.8-27B",
+  "upstream_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+  "upstream_license": "apache-2.0",
+  "weights_hosted": false,
+  "automatic_download": false,
+  "automatic_execution": false,
+  "local_admission_required": true,
+  "operator_approval_required": true
+}

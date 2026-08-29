@@ -1,0 +1,9 @@
+This Epoch package contains descriptor metadata only. It does not redistribute
+Qwen model weights.
+
+The descriptor metadata is distributed under the Epoch repository's
+LicenseRef-MIT-NoSell license. The upstream Qwen3.8-27B model is identified by
+the publisher as Apache-2.0 licensed. Review the exact pinned upstream revision
+and its license before approving any model transfer:
+
+https://huggingface.co/Qwen/Qwen3.8-27B/blob/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0/LICENSE
