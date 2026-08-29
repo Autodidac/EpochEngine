@@ -918,6 +918,9 @@ export namespace epochengine::project_input
 
     struct StoreMetrics final
     {
+        std::uint64_t paired_save_requests{};
+        std::uint64_t paired_saves{};
+        std::uint64_t paired_partial_saves{};
         std::uint64_t source_save_requests{};
         std::uint64_t source_saves{};
         std::uint64_t source_load_requests{};
@@ -989,6 +992,20 @@ export namespace epochengine::project_input
         }
     };
 
+    struct StoredProfilePair final
+    {
+        StoreCode code{StoreCode::invalid_store};
+        StoredProfile source{};
+        StoredArtifact artifact{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return (code == StoreCode::ready
+                    || code == StoreCode::unchanged)
+                && source && artifact;
+        }
+    };
+
     class ProjectInputProfileStore final
     {
     public:
@@ -1006,6 +1023,9 @@ export namespace epochengine::project_input
         [[nodiscard]] const StoreLimits& limits() const noexcept;
         [[nodiscard]] StoreMetrics metrics() const noexcept;
 
+        [[nodiscard]] StoredProfilePair publish_source_and_artifact(
+            const ProfileSource& source,
+            const CompiledInputProfile& artifact) noexcept;
         [[nodiscard]] StoredProfile save_source(
             const ProfileSource& source) noexcept;
         [[nodiscard]] LoadedProfile load_source() noexcept;
@@ -1014,6 +1034,7 @@ export namespace epochengine::project_input
         [[nodiscard]] LoadedArtifact load_artifact() noexcept;
 
     private:
+        [[nodiscard]] StoredProfilePair reject_pair(StoreCode code) noexcept;
         [[nodiscard]] StoredProfile reject_source(StoreCode code) noexcept;
         [[nodiscard]] LoadedProfile reject_source_load(StoreCode code) noexcept;
         [[nodiscard]] StoredArtifact reject_artifact(StoreCode code) noexcept;
@@ -1046,6 +1067,14 @@ export namespace epochengine::project_input
         temporary_root,
         source_save_reopen,
         artifact_save_reopen,
+        paired_save_reopen,
+        paired_mismatch_rejection,
+        paired_stage_failure,
+        paired_stale_conflict,
+        paired_disposable_artifact_repair,
+        paired_partial_save_reopen,
+        paired_artifact_ahead_repair,
+        paired_metrics,
         stale_revision,
         malformed_store,
         metrics
@@ -1079,6 +1108,21 @@ export namespace epochengine::project_input
             return "source_save_reopen";
         case ContractFailure::artifact_save_reopen:
             return "artifact_save_reopen";
+        case ContractFailure::paired_save_reopen:
+            return "paired_save_reopen";
+        case ContractFailure::paired_mismatch_rejection:
+            return "paired_mismatch_rejection";
+        case ContractFailure::paired_stage_failure:
+            return "paired_stage_failure";
+        case ContractFailure::paired_stale_conflict:
+            return "paired_stale_conflict";
+        case ContractFailure::paired_disposable_artifact_repair:
+            return "paired_disposable_artifact_repair";
+        case ContractFailure::paired_partial_save_reopen:
+            return "paired_partial_save_reopen";
+        case ContractFailure::paired_artifact_ahead_repair:
+            return "paired_artifact_ahead_repair";
+        case ContractFailure::paired_metrics: return "paired_metrics";
         case ContractFailure::stale_revision: return "stale_revision";
         case ContractFailure::malformed_store: return "malformed_store";
         case ContractFailure::metrics: return "metrics";

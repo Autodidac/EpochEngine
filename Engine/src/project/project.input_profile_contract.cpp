@@ -561,6 +561,241 @@ namespace epochengine::project_input
         if (!loadedArtifact || loadedArtifact.artifact != compiled.artifact)
             return ContractFailure::artifact_save_reopen;
 
+        ContractRoot pairedRoot{};
+        if (!pairedRoot.valid())
+            return ContractFailure::temporary_root;
+        ProjectInputProfileStore pairedStore{
+            "input-profile-contract", pairedRoot.path};
+        const StoredProfilePair savedPair =
+            pairedStore.publish_source_and_artifact(
+                source, compiled.artifact);
+        const StoredProfilePair unchangedPair =
+            pairedStore.publish_source_and_artifact(
+                source, compiled.artifact);
+        ProjectInputProfileStore reopenedPairStore{
+            "input-profile-contract", pairedRoot.path};
+        const LoadedProfile pairedSource =
+            reopenedPairStore.load_source();
+        const LoadedArtifact pairedArtifact =
+            reopenedPairStore.load_artifact();
+        if (!savedPair || savedPair.code != StoreCode::ready
+            || savedPair.source.code != StoreCode::ready
+            || savedPair.artifact.code != StoreCode::ready
+            || !unchangedPair
+            || unchangedPair.code != StoreCode::unchanged
+            || unchangedPair.source.code != StoreCode::unchanged
+            || unchangedPair.artifact.code != StoreCode::unchanged
+            || !pairedSource || pairedSource.source != source
+            || !pairedArtifact
+            || pairedArtifact.artifact != compiled.artifact)
+        {
+            return ContractFailure::paired_save_reopen;
+        }
+        const StoreMetrics pairedMetrics = pairedStore.metrics();
+        if (pairedMetrics.paired_save_requests != 2u
+            || pairedMetrics.paired_saves != 2u
+            || pairedMetrics.paired_partial_saves != 0u
+            || pairedMetrics.source_save_requests != 2u
+            || pairedMetrics.source_saves != 1u
+            || pairedMetrics.artifact_save_requests != 2u
+            || pairedMetrics.artifact_saves != 1u
+            || pairedMetrics.unchanged_writes != 2u
+            || pairedMetrics.rejected_operations != 0u
+            || pairedMetrics.bytes_read == 0u
+            || pairedMetrics.bytes_written == 0u)
+        {
+            return ContractFailure::paired_metrics;
+        }
+
+        ContractRoot mismatchedRoot{};
+        if (!mismatchedRoot.valid())
+            return ContractFailure::temporary_root;
+        ProjectInputProfileStore mismatchedStore{
+            "input-profile-contract", mismatchedRoot.path};
+        if (mismatchedStore.publish_source_and_artifact(
+                source, modifiedArtifact.artifact).code
+                != StoreCode::invalid_value
+            || fs::exists(mismatchedStore.source_path())
+            || fs::exists(mismatchedStore.artifact_path()))
+        {
+            return ContractFailure::paired_mismatch_rejection;
+        }
+
+        ProfileSource stalePairSource = make_legacy_default_profile(1u);
+        const CompiledProfileResult stalePairArtifact = compile_profile(
+            "input-profile-contract", stalePairSource, limits);
+        ProfileSource conflictPairSource = modified;
+        conflictPairSource.revision.sequence = source.revision.sequence;
+        if (seal_profile_source(conflictPairSource, limits)
+                != ValidationCode::ready)
+        {
+            return ContractFailure::paired_stale_conflict;
+        }
+        const CompiledProfileResult conflictPairArtifact = compile_profile(
+            "input-profile-contract", conflictPairSource, limits);
+        if (!stalePairArtifact || !conflictPairArtifact
+            || pairedStore.publish_source_and_artifact(
+                stalePairSource, stalePairArtifact.artifact).code
+                != StoreCode::stale_revision
+            || pairedStore.publish_source_and_artifact(
+                conflictPairSource, conflictPairArtifact.artifact).code
+                != StoreCode::revision_conflict)
+        {
+            return ContractFailure::paired_stale_conflict;
+        }
+
+        ContractRoot blockedRoot{};
+        if (!blockedRoot.valid())
+            return ContractFailure::temporary_root;
+        {
+            std::ofstream blocker{
+                blockedRoot.path / "Library",
+                std::ios::binary | std::ios::trunc};
+            blocker << "blocked";
+            if (!blocker)
+                return ContractFailure::paired_stage_failure;
+        }
+        ProjectInputProfileStore blockedStore{
+            "input-profile-contract", blockedRoot.path};
+        const auto blockedPair =
+            blockedStore.publish_source_and_artifact(
+                source, compiled.artifact);
+        const StoreMetrics blockedMetrics = blockedStore.metrics();
+        if (blockedPair.code != StoreCode::directory_failure
+            || fs::exists(blockedStore.source_path())
+            || fs::exists(blockedStore.artifact_path())
+            || blockedMetrics.paired_save_requests != 1u
+            || blockedMetrics.paired_saves != 0u
+            || blockedMetrics.source_saves != 0u
+            || blockedMetrics.artifact_saves != 0u)
+        {
+            return ContractFailure::paired_stage_failure;
+        }
+
+        ContractRoot corruptArtifactRoot{};
+        if (!corruptArtifactRoot.valid())
+            return ContractFailure::temporary_root;
+        ProjectInputProfileStore corruptArtifactStore{
+            "input-profile-contract", corruptArtifactRoot.path};
+        if (!corruptArtifactStore.publish_source_and_artifact(
+                source, compiled.artifact)
+            || !write_malformed_file(corruptArtifactStore.artifact_path()))
+        {
+            return ContractFailure::paired_disposable_artifact_repair;
+        }
+        const auto corruptArtifactRepair =
+            corruptArtifactStore.publish_source_and_artifact(
+                modified, modifiedArtifact.artifact);
+        ProjectInputProfileStore reopenedCorruptArtifactStore{
+            "input-profile-contract", corruptArtifactRoot.path};
+        const auto repairedCorruptSource =
+            reopenedCorruptArtifactStore.load_source();
+        const auto repairedCorruptArtifact =
+            reopenedCorruptArtifactStore.load_artifact();
+        if (!corruptArtifactRepair
+            || corruptArtifactRepair.source.code != StoreCode::ready
+            || corruptArtifactRepair.artifact.code != StoreCode::ready
+            || !repairedCorruptSource
+            || repairedCorruptSource.source != modified
+            || !repairedCorruptArtifact
+            || repairedCorruptArtifact.artifact != modifiedArtifact.artifact)
+        {
+            return ContractFailure::paired_disposable_artifact_repair;
+        }
+
+        ContractRoot artifactAheadRoot{};
+        if (!artifactAheadRoot.valid())
+            return ContractFailure::temporary_root;
+        ProjectInputProfileStore artifactAheadStore{
+            "input-profile-contract", artifactAheadRoot.path};
+        ProfileSource artifactAheadSource = modified;
+        artifactAheadSource.revision.sequence = 4u;
+        if (seal_profile_source(artifactAheadSource, limits)
+                != ValidationCode::ready)
+        {
+            return ContractFailure::paired_artifact_ahead_repair;
+        }
+        const CompiledProfileResult artifactAheadCompiled = compile_profile(
+            "input-profile-contract", artifactAheadSource, limits);
+        if (!artifactAheadCompiled
+            || !artifactAheadStore.save_source(source)
+            || !artifactAheadStore.publish_artifact(
+                artifactAheadCompiled.artifact))
+        {
+            return ContractFailure::paired_artifact_ahead_repair;
+        }
+        const auto repairedPair =
+            artifactAheadStore.publish_source_and_artifact(
+                modified, modifiedArtifact.artifact);
+        ProjectInputProfileStore repairedStore{
+            "input-profile-contract", artifactAheadRoot.path};
+        const auto repairedSource = repairedStore.load_source();
+        const auto repairedArtifact = repairedStore.load_artifact();
+        if (!repairedPair
+            || repairedPair.source.code != StoreCode::ready
+            || repairedPair.artifact.code != StoreCode::ready
+            || !repairedSource || repairedSource.source != modified
+            || !repairedArtifact
+            || repairedArtifact.artifact != modifiedArtifact.artifact)
+        {
+            return ContractFailure::paired_artifact_ahead_repair;
+        }
+
+        ContractRoot partialRoot{};
+        if (!partialRoot.valid())
+            return ContractFailure::temporary_root;
+        ProjectInputProfileStore partialStore{
+            "input-profile-contract", partialRoot.path};
+        if (!partialStore.save_source(source))
+            return ContractFailure::paired_partial_save_reopen;
+        std::error_code partialError{};
+        fs::create_directories(partialStore.artifact_path(), partialError);
+        if (partialError)
+            return ContractFailure::paired_partial_save_reopen;
+        {
+            std::ofstream blocker{
+                partialStore.artifact_path() / "keep",
+                std::ios::binary | std::ios::trunc};
+            blocker << "block replacement";
+            if (!blocker)
+                return ContractFailure::paired_partial_save_reopen;
+        }
+        const StoreMetrics beforePartial = partialStore.metrics();
+        const StoredProfilePair partialPair =
+            partialStore.publish_source_and_artifact(
+                modified, modifiedArtifact.artifact);
+        const StoreMetrics afterPartial = partialStore.metrics();
+        ProjectInputProfileStore reopenedPartialStore{
+            "input-profile-contract", partialRoot.path};
+        const LoadedProfile reopenedPartialSource =
+            reopenedPartialStore.load_source();
+        if (partialPair.code != StoreCode::atomic_replace_failure
+            || partialPair.source.code != StoreCode::ready
+            || partialPair.artifact.code
+                != StoreCode::atomic_replace_failure
+            || !reopenedPartialSource
+            || reopenedPartialSource.source != modified
+            || reopenedPartialStore.load_artifact().code == StoreCode::ready
+            || afterPartial.paired_save_requests
+                != beforePartial.paired_save_requests + 1u
+            || afterPartial.paired_saves != beforePartial.paired_saves
+            || afterPartial.paired_partial_saves
+                != beforePartial.paired_partial_saves + 1u
+            || afterPartial.source_save_requests
+                != beforePartial.source_save_requests + 1u
+            || afterPartial.source_saves != beforePartial.source_saves + 1u
+            || afterPartial.artifact_save_requests
+                != beforePartial.artifact_save_requests + 1u
+            || afterPartial.artifact_saves != beforePartial.artifact_saves
+            || afterPartial.rejected_operations
+                != beforePartial.rejected_operations + 1u
+            || afterPartial.bytes_written
+                != beforePartial.bytes_written
+                    + partialPair.source.serialized_bytes)
+        {
+            return ContractFailure::paired_partial_save_reopen;
+        }
+
         const ProfileSource stale = make_legacy_default_profile(1u);
         if (store.save_source(stale).code != StoreCode::stale_revision)
             return ContractFailure::stale_revision;

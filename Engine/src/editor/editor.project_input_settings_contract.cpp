@@ -5,21 +5,90 @@
 module;
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 module editor.project_input_settings;
 
+import input.controller;
+import project.input_controller;
 import project.input_profile;
 
 namespace epochengine::editor_project_input_settings
 {
     namespace
     {
+        namespace fs = std::filesystem;
+
+        [[nodiscard]] std::uint64_t next_contract_id() noexcept
+        {
+            static std::atomic<std::uint64_t> next{1u};
+            std::uint64_t value = next.fetch_add(
+                1u, std::memory_order_relaxed);
+            if (value == 0u)
+                value = next.fetch_add(1u, std::memory_order_relaxed);
+            return value;
+        }
+
+        struct ContractRoot final
+        {
+            fs::path path{};
+
+            ContractRoot()
+            {
+                std::error_code error{};
+                path = fs::temp_directory_path(error);
+                if (error)
+                {
+                    path.clear();
+                    return;
+                }
+                path /= "epoch_editor_project_input_settings_contract_"
+                    + std::to_string(next_contract_id());
+                fs::remove_all(path, error);
+                error.clear();
+                fs::create_directories(path, error);
+                if (error)
+                    path.clear();
+            }
+
+            ~ContractRoot()
+            {
+                if (path.empty())
+                    return;
+                std::error_code error{};
+                fs::remove_all(path, error);
+            }
+
+            [[nodiscard]] bool valid() const noexcept
+            {
+                return !path.empty();
+            }
+        };
+
+        [[nodiscard]] controller_input::Snapshot controller_snapshot(
+            std::uint64_t revision,
+            std::int32_t leftX) noexcept
+        {
+            controller_input::Snapshot snapshot{};
+            snapshot.revision = revision;
+            snapshot.provider_available = true;
+            auto& device = snapshot.devices[0];
+            device.handle = {0u, 1u};
+            device.connected = true;
+            device.provider_id = 41u;
+            device.axes[static_cast<std::size_t>(
+                controller_input::Axis::left_x)] = leftX;
+            return snapshot;
+        }
+
         [[nodiscard]] project_input::BindingId keyboard_binding(
             const project_input::ProfileSource& source,
             project_input::ActionSemantic semantic,
@@ -136,6 +205,43 @@ namespace epochengine::editor_project_input_settings
             return ContractFailure::save_round_trip;
         }
 
+        ContractRoot root{};
+        if (!root.valid())
+            return ContractFailure::paired_persistence;
+        project_input::ProjectInputProfileStore store{
+            plan.project_id, root.path};
+        if (!store.publish_source_and_artifact(
+                plan.source, plan.artifact))
+        {
+            return ContractFailure::paired_persistence;
+        }
+        project_input::ProjectInputProfileStore reopenedStore{
+            plan.project_id, root.path};
+        const auto persistedSource = reopenedStore.load_source();
+        const auto persistedArtifact = reopenedStore.load_artifact();
+        if (!persistedSource || persistedSource.source != plan.source
+            || !persistedArtifact
+            || persistedArtifact.artifact != plan.artifact)
+        {
+            return ContractFailure::paired_persistence;
+        }
+
+        project_input::InputSnapshot keyboardInput{.frame_index = 1u};
+        keyboardInput.keyboard.push_back({
+            project_input::KeyCode::enter, true, true});
+        const auto keyboardFrame = project_input::evaluate_action_frame(
+            persistedArtifact.artifact, keyboardInput);
+        const auto* persistedJump = project_input::find_action(
+            keyboardFrame,
+            project_input::ActionSemantic::jump,
+            persistedArtifact.artifact);
+        if (!keyboardFrame || !persistedJump || !persistedJump->pressed
+            || persistedJump->value_q15
+                != project_input::normalized_unit)
+        {
+            return ContractFailure::persisted_keyboard;
+        }
+
         if (controller.confirm_saved(defaults.revision).code
             != SettingsCode::stale_revision
             || !controller.dirty())
@@ -167,11 +273,74 @@ namespace epochengine::editor_project_input_settings
             return ContractFailure::discard;
         }
 
+        if (!controller.set_controller_dead_zone(deadZone))
+            return ContractFailure::dead_zone;
+        const SavePlan deadZonePlan = controller.prepare_save();
+        if (!deadZonePlan
+            || !store.publish_source_and_artifact(
+                deadZonePlan.source, deadZonePlan.artifact)
+            || !controller.confirm_saved(deadZonePlan.revision))
+        {
+            return ContractFailure::paired_persistence;
+        }
+        project_input::ProjectInputProfileStore deadZoneStore{
+            deadZonePlan.project_id, root.path};
+        const auto deadZoneArtifact = deadZoneStore.load_artifact();
+        if (!deadZoneArtifact)
+            return ContractFailure::paired_persistence;
+
+        project_input_controller::SnapshotSampler sampler{};
+        project_input::InputSnapshot belowDeadZone{.frame_index = 2u};
+        const auto belowSample = sampler.sample(
+            deadZoneArtifact.artifact,
+            controller_snapshot(1u, 6'000),
+            belowDeadZone);
+        const auto belowFrame = project_input::evaluate_action_frame(
+            deadZoneArtifact.artifact, belowDeadZone);
+        const auto* belowMove = project_input::find_action(
+            belowFrame,
+            project_input::ActionSemantic::move_x,
+            deadZoneArtifact.artifact);
+        project_input::InputSnapshot aboveDeadZone{.frame_index = 3u};
+        const auto aboveSample = sampler.sample(
+            deadZoneArtifact.artifact,
+            controller_snapshot(2u, 16'384),
+            aboveDeadZone);
+        const auto aboveFrame = project_input::evaluate_action_frame(
+            deadZoneArtifact.artifact, aboveDeadZone);
+        const auto* aboveMove = project_input::find_action(
+            aboveFrame,
+            project_input::ActionSemantic::move_x,
+            deadZoneArtifact.artifact);
+        if (!belowSample || !belowFrame || !belowMove
+            || belowMove->value_q15 != 0
+            || !aboveSample || !aboveFrame || !aboveMove
+            || aboveMove->value_q15 <= 0)
+        {
+            return ContractFailure::persisted_controller_dead_zone;
+        }
+
         if (!controller.reset_defaults() || !controller.dirty())
             return ContractFailure::reset;
         const SavePlan resetPlan = controller.prepare_save();
-        if (!resetPlan || resetPlan.revision.sequence != 3u)
+        if (!resetPlan || resetPlan.revision.sequence != 4u
+            || !store.publish_source_and_artifact(
+                resetPlan.source, resetPlan.artifact)
+            || !controller.confirm_saved(resetPlan.revision))
+        {
             return ContractFailure::reset;
+        }
+
+        project_input::ProjectInputProfileStore resetStore{
+            resetPlan.project_id, root.path};
+        const auto resetSource = resetStore.load_source();
+        const auto resetArtifact = resetStore.load_artifact();
+        if (!resetSource || resetSource.source != resetPlan.source
+            || !resetArtifact
+            || resetArtifact.artifact != resetPlan.artifact)
+        {
+            return ContractFailure::persisted_default_restore;
+        }
 
         Controller restored{};
         if (!restored.load_serialized(

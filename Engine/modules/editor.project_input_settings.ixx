@@ -240,7 +240,11 @@ export namespace epochengine::editor_project_input_settings
         dead_zone,
         discard,
         reset,
-        serialized_load
+        serialized_load,
+        paired_persistence,
+        persisted_keyboard,
+        persisted_controller_dead_zone,
+        persisted_default_restore
     };
 
     [[nodiscard]] constexpr std::string_view contract_failure_name(
@@ -265,6 +269,14 @@ export namespace epochengine::editor_project_input_settings
         case ContractFailure::discard: return "discard";
         case ContractFailure::reset: return "reset";
         case ContractFailure::serialized_load: return "serialized_load";
+        case ContractFailure::paired_persistence:
+            return "paired_persistence";
+        case ContractFailure::persisted_keyboard:
+            return "persisted_keyboard";
+        case ContractFailure::persisted_controller_dead_zone:
+            return "persisted_controller_dead_zone";
+        case ContractFailure::persisted_default_restore:
+            return "persisted_default_restore";
         }
         return "unknown";
     }

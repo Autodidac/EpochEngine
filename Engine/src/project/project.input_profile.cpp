@@ -1992,6 +1992,275 @@ namespace epochengine::project_input
         return metrics_;
     }
 
+    StoredProfilePair
+        ProjectInputProfileStore::publish_source_and_artifact(
+            const ProfileSource& source,
+            const CompiledInputProfile& artifact) noexcept
+    {
+        ++metrics_.paired_save_requests;
+        ++metrics_.source_save_requests;
+        ++metrics_.artifact_save_requests;
+        if (!valid())
+            return reject_pair(StoreCode::invalid_store);
+
+        const CompiledProfileResult expected = compile_profile(
+            project_id_, source, limits_.profile, limits_.registry);
+        if (!expected || expected.artifact != artifact)
+            return reject_pair(StoreCode::invalid_value);
+
+        const SerializedProfile serializedSource =
+            serialize_profile_source(source, limits_.profile);
+        const SerializedProfile serializedArtifact =
+            serialize_compiled_profile(artifact, limits_.profile);
+        if (!serializedSource || !serializedArtifact)
+            return reject_pair(StoreCode::invalid_value);
+
+        try
+        {
+            const fs::path sourceDestination = source_path();
+            const fs::path artifactDestination = artifact_path();
+            std::error_code error{};
+            const auto ensureDirectory =
+                [&error](const fs::path& directory) noexcept
+                {
+                    error.clear();
+                    fs::create_directories(directory, error);
+                    if (error)
+                        return false;
+                    return fs::is_directory(directory, error) && !error;
+                };
+            if (!ensureDirectory(sourceDestination.parent_path())
+                || !ensureDirectory(artifactDestination.parent_path()))
+            {
+                return reject_pair(StoreCode::directory_failure);
+            }
+
+            bool sourceUnchanged = false;
+            const ReadFileResult existingSource = read_file(
+                sourceDestination,
+                limits_.profile.maximum_serialized_bytes);
+            if (existingSource.code == StoreCode::ready)
+            {
+                metrics_.bytes_read += existingSource.bytes.size();
+                const DeserializedProfile decoded =
+                    deserialize_profile_source(
+                        existingSource.bytes, limits_.profile);
+                if (!decoded)
+                    return reject_pair(StoreCode::integrity_failure);
+                sourceUnchanged = existingSource.bytes
+                        == serializedSource.bytes
+                    && decoded.source == source;
+                if (!sourceUnchanged
+                    && decoded.source.revision.sequence
+                        > source.revision.sequence)
+                {
+                    return reject_pair(StoreCode::stale_revision);
+                }
+                if (!sourceUnchanged
+                    && decoded.source.revision.sequence
+                        == source.revision.sequence)
+                {
+                    return reject_pair(StoreCode::revision_conflict);
+                }
+            }
+            else if (existingSource.code != StoreCode::not_found)
+            {
+                return reject_pair(existingSource.code);
+            }
+
+            const bool sourceAuthorityPresent =
+                existingSource.code == StoreCode::ready;
+            bool artifactUnchanged = false;
+            const ReadFileResult existingArtifact = read_file(
+                artifactDestination,
+                limits_.profile.maximum_serialized_bytes);
+            if (existingArtifact.code == StoreCode::ready)
+            {
+                metrics_.bytes_read += existingArtifact.bytes.size();
+                const DeserializedCompiledProfile decoded =
+                    deserialize_compiled_profile(
+                        existingArtifact.bytes, limits_.profile);
+                if (!decoded
+                    || decoded.artifact.project_key != project_key_)
+                {
+                    if (!sourceAuthorityPresent)
+                        return reject_pair(StoreCode::integrity_failure);
+                }
+                else
+                {
+                    artifactUnchanged = existingArtifact.bytes
+                            == serializedArtifact.bytes
+                        && decoded.artifact == artifact;
+                    if (!sourceAuthorityPresent && !artifactUnchanged
+                        && decoded.artifact.source_revision.sequence
+                            > artifact.source_revision.sequence)
+                    {
+                        return reject_pair(StoreCode::stale_revision);
+                    }
+                    if (!sourceAuthorityPresent && !artifactUnchanged
+                        && decoded.artifact.source_revision.sequence
+                            == artifact.source_revision.sequence)
+                    {
+                        return reject_pair(StoreCode::revision_conflict);
+                    }
+                }
+            }
+            else if (existingArtifact.code != StoreCode::not_found
+                && !sourceAuthorityPresent)
+            {
+                return reject_pair(existingArtifact.code);
+            }
+
+            fs::path sourceTemporary{};
+            fs::path artifactTemporary{};
+            const auto cleanupTemporary = [&]() noexcept
+                {
+                    std::error_code cleanupError{};
+                    if (!sourceTemporary.empty())
+                        fs::remove(sourceTemporary, cleanupError);
+                    cleanupError.clear();
+                    if (!artifactTemporary.empty())
+                        fs::remove(artifactTemporary, cleanupError);
+                };
+
+            if (!sourceUnchanged)
+            {
+                sourceTemporary = temporary_path(sourceDestination);
+                const StoreCode written = write_file(
+                    sourceTemporary, serializedSource.bytes);
+                if (written != StoreCode::ready)
+                {
+                    cleanupTemporary();
+                    return reject_pair(written);
+                }
+                const ReadFileResult verified = read_file(
+                    sourceTemporary,
+                    limits_.profile.maximum_serialized_bytes);
+                metrics_.bytes_read += verified.bytes.size();
+                const DeserializedProfile decoded =
+                    verified.code == StoreCode::ready
+                    ? deserialize_profile_source(
+                        verified.bytes, limits_.profile)
+                    : DeserializedProfile{};
+                if (verified.code != StoreCode::ready
+                    || verified.bytes != serializedSource.bytes
+                    || !decoded || decoded.source != source)
+                {
+                    cleanupTemporary();
+                    return reject_pair(StoreCode::integrity_failure);
+                }
+            }
+
+            if (!artifactUnchanged)
+            {
+                artifactTemporary = temporary_path(artifactDestination);
+                const StoreCode written = write_file(
+                    artifactTemporary, serializedArtifact.bytes);
+                if (written != StoreCode::ready)
+                {
+                    cleanupTemporary();
+                    return reject_pair(written);
+                }
+                const ReadFileResult verified = read_file(
+                    artifactTemporary,
+                    limits_.profile.maximum_serialized_bytes);
+                metrics_.bytes_read += verified.bytes.size();
+                const DeserializedCompiledProfile decoded =
+                    verified.code == StoreCode::ready
+                    ? deserialize_compiled_profile(
+                        verified.bytes, limits_.profile)
+                    : DeserializedCompiledProfile{};
+                if (verified.code != StoreCode::ready
+                    || verified.bytes != serializedArtifact.bytes
+                    || !decoded || decoded.artifact != artifact)
+                {
+                    cleanupTemporary();
+                    return reject_pair(StoreCode::integrity_failure);
+                }
+            }
+
+            const ReadFileResult currentSource = read_file(
+                sourceDestination,
+                limits_.profile.maximum_serialized_bytes);
+            if (currentSource.code == StoreCode::ready)
+                metrics_.bytes_read += currentSource.bytes.size();
+            const bool sourcePreimageMatches =
+                existingSource.code == StoreCode::not_found
+                    ? currentSource.code == StoreCode::not_found
+                    : currentSource.code == StoreCode::ready
+                        && currentSource.bytes == existingSource.bytes;
+            if (!sourcePreimageMatches)
+            {
+                cleanupTemporary();
+                return reject_pair(StoreCode::revision_conflict);
+            }
+
+            StoredProfile storedSource{
+                sourceUnchanged ? StoreCode::unchanged : StoreCode::ready,
+                sourceDestination,
+                source.revision,
+                serializedSource.bytes.size()};
+            if (sourceUnchanged)
+            {
+                ++metrics_.unchanged_writes;
+            }
+            else
+            {
+                error.clear();
+                if (!platform::filesystem::atomic_replace_same_filesystem(
+                        sourceTemporary, sourceDestination, error))
+                {
+                    cleanupTemporary();
+                    return reject_pair(StoreCode::atomic_replace_failure);
+                }
+                sourceTemporary.clear();
+                ++metrics_.source_saves;
+                metrics_.bytes_written += serializedSource.bytes.size();
+            }
+
+            StoredArtifact storedArtifact{
+                artifactUnchanged ? StoreCode::unchanged : StoreCode::ready,
+                artifactDestination,
+                artifact.artifact_hash,
+                artifact.source_revision,
+                serializedArtifact.bytes.size()};
+            if (artifactUnchanged)
+            {
+                ++metrics_.unchanged_writes;
+            }
+            else
+            {
+                error.clear();
+                if (!platform::filesystem::atomic_replace_same_filesystem(
+                        artifactTemporary, artifactDestination, error))
+                {
+                    cleanupTemporary();
+                    ++metrics_.paired_partial_saves;
+                    ++metrics_.rejected_operations;
+                    return {
+                        StoreCode::atomic_replace_failure,
+                        std::move(storedSource),
+                        StoredArtifact{
+                            StoreCode::atomic_replace_failure}};
+                }
+                artifactTemporary.clear();
+                ++metrics_.artifact_saves;
+                metrics_.bytes_written += serializedArtifact.bytes.size();
+            }
+
+            ++metrics_.paired_saves;
+            return {
+                sourceUnchanged && artifactUnchanged
+                    ? StoreCode::unchanged : StoreCode::ready,
+                std::move(storedSource),
+                std::move(storedArtifact)};
+        }
+        catch (...)
+        {
+            return reject_pair(StoreCode::allocation_failure);
+        }
+    }
+
     StoredProfile ProjectInputProfileStore::save_source(
         const ProfileSource& source) noexcept
     {
@@ -2244,6 +2513,13 @@ namespace epochengine::project_input
         {
             return reject_artifact_load(StoreCode::allocation_failure);
         }
+    }
+
+    StoredProfilePair ProjectInputProfileStore::reject_pair(
+        StoreCode code) noexcept
+    {
+        ++metrics_.rejected_operations;
+        return {code};
     }
 
     StoredProfile ProjectInputProfileStore::reject_source(

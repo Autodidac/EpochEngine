@@ -1,4 +1,4 @@
-## [Unreleased] - Exact build-validation receipt sidecars
+## [Unreleased] - Post-release source and tooling repairs
 
 - Bind each build-validation `.sha256` sidecar to the exact UTF-8 bytes written
   to the receipt file, including its one final LF. The writer now owns one byte
@@ -9,6 +9,15 @@
   LF, and clean up both files. Windows PowerShell 5.1 and modern PowerShell pass.
 - This is a post-release tooling repair. It does not alter the published
   v0.89.33 source commit, runtime archives, receipts, or checksums.
+- Repair Project Controls Apply, direct edits, and default restoration to
+  publish canonical input source and compiled artifact through one matched-pair
+  boundary. Mismatched pairs fail before writes; both files are staged and
+  verified; the canonical source preimage is rechecked; and authored source
+  commits before the disposable artifact. Corrupt or conflicting Library state
+  cannot outrank valid source, while any source-ahead partial publication is
+  explicit and recoverable by regeneration. Focused no-GUI contracts prove
+  fresh-store keyboard evaluation, controller-axis dead-zone filtering,
+  artifact-ahead repair, and exact Restore Defaults source/artifact reopen.
 
 ## [v0.89.33] - Editor interaction and Site package hard gate
 

@@ -391,10 +391,15 @@ release history belong in the changelog/archive, not architecture docs.
   process-owned SDL3 provider publishes generation-checked controller snapshots
   once per engine frame. A renderer-neutral per-scene adapter now maps authored
   button/axis sources into project actions, consumes press edges once, and
-  preserves held/axis continuity. Project Controls persists controller source,
-  slot, and dead-zone edits through the canonical source/artifact path. Eye-test
-  physical-device behavior and reopen, then retain the editor camera profile as
-  a separate input domain.
+  preserves held/axis continuity. Project Controls publishes keyboard,
+  controller source/slot, dead-zone, and default-restoration edits through one
+  matched source/artifact boundary. The boundary rejects mismatched pairs,
+  stages and verifies both files, rechecks source authority, commits authored
+  source before the disposable artifact, exposes source-ahead partial evidence,
+  and repairs corrupt or conflicting artifact state. Fresh-store contracts prove
+  persisted keyboard evaluation, controller-axis dead-zone behavior, and exact
+  default source/artifact reopen. Eye-test Project Controls and physical-device
+  behavior while retaining the editor camera profile as a separate input domain.
 - Add sensor/trigger dispatch and richer collision diagnostics only after the
   actor event contract owns them; sensors remain rejected by the play runtime.
 - Retain the proven fresh generated-child materialize/save-reopen/Build

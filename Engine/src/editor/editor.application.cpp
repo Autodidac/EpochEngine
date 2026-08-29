@@ -10102,22 +10102,29 @@ namespace epochengine
                 return {false, editor.projectInputSettingsStatus};
             }
 
-            const auto published = store.publish_artifact(plan.artifact);
+            const auto published = store.publish_source_and_artifact(
+                plan.source, plan.artifact);
             if (!published)
             {
+                if (published.source)
+                {
+                    const auto confirmed =
+                        editor.projectInputSettings->confirm_saved(
+                            plan.revision);
+                    editor.projectInputSettingsStatus =
+                        epochengine::format_text(
+                            "Project input source saved at revision {}; "
+                            "artifact publish {}. Build or Run will regenerate it.",
+                            plan.revision.sequence,
+                            project_input::store_code_name(published.code));
+                    return {
+                        static_cast<bool>(confirmed),
+                        editor.projectInputSettingsStatus};
+                }
                 editor.projectInputSettingsStatus = std::string{
-                    "Input artifact publish "}
+                    "Input source/artifact publish "}
                     + std::string{project_input::store_code_name(published.code)}
                     + ". No source change was committed.";
-                return {false, editor.projectInputSettingsStatus};
-            }
-            const auto saved = store.save_source(plan.source);
-            if (!saved)
-            {
-                editor.projectInputSettingsStatus = std::string{
-                    "Artifact published; source save "}
-                    + std::string{project_input::store_code_name(saved.code)}
-                    + ". Apply again after resolving the source issue.";
                 return {false, editor.projectInputSettingsStatus};
             }
             const auto confirmed =

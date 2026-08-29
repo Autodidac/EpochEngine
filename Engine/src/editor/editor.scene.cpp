@@ -5682,27 +5682,27 @@ namespace epochengine
                         epochengine::project_input::validation_code_name(
                             compiled.code)}};
         }
-        const auto saved = store.save_source(source);
-        if (!saved)
+        const auto published = store.publish_source_and_artifact(
+            source, compiled.artifact);
+        if (!published)
         {
+            if (published.source)
+            {
+                return {
+                    true,
+                    std::string{
+                        "Default input source restored; artifact publish "}
+                        + std::string{
+                            epochengine::project_input::store_code_name(
+                                published.code)}
+                        + ". Build or Run will regenerate it."};
+            }
             return {
                 false,
                 std::string{"Project input reset "}
                     + std::string{
                         epochengine::project_input::store_code_name(
-                            saved.code)}};
-        }
-        const auto published = store.publish_artifact(compiled.artifact);
-        if (!published)
-        {
-            return {
-                false,
-                std::string{
-                    "Default input source saved, but artifact publish "}
-                    + std::string{
-                        epochengine::project_input::store_code_name(
-                            published.code)}
-                    + ". Build or Run will regenerate it."};
+                            published.code)}};
         }
         return {true, "Default project input source and artifact restored."};
     }
@@ -5796,27 +5796,27 @@ namespace epochengine
                         epochengine::project_input::validation_code_name(
                             compiled.code)}};
         }
-        const auto saved = store.save_source(edited.source);
-        if (!saved)
-        {
-            return {
-                false,
-                std::string{"Project input source save "}
-                    + std::string{
-                        epochengine::project_input::store_code_name(
-                            saved.code)}};
-        }
-        const auto published = store.publish_artifact(compiled.artifact);
+        const auto published = store.publish_source_and_artifact(
+            edited.source, compiled.artifact);
         if (!published)
         {
+            if (published.source)
+            {
+                return {
+                    true,
+                    std::string{
+                        "Project input source saved; artifact publish "}
+                        + std::string{
+                            epochengine::project_input::store_code_name(
+                                published.code)}
+                        + ". Build or Run will regenerate it."};
+            }
             return {
                 false,
-                std::string{
-                    "Project input source saved, but artifact publish "}
+                std::string{"Project input publication "}
                     + std::string{
                         epochengine::project_input::store_code_name(
-                            published.code)}
-                    + ". Build or Run will regenerate it."};
+                            published.code)}};
         }
         return {
             true,

@@ -467,7 +467,12 @@ snapshots, and Canvas2D publication are build-safe proven. Palette collision
 properties preserve exact bounds and filters through source, Library, preview,
 and actor-runtime preparation. The Project workspace exposes stable keyboard,
 controller button/axis/slot, and dead-zone selectors. Semantic edits and reset
-publish matching source and runtime artifact revisions and remain separate from
+use one matched source/artifact publication boundary that stages and verifies
+both members, rechecks the canonical source preimage, commits authored source
+before the disposable artifact, and reports source-ahead regeneration evidence.
+Corrupt or conflicting derived artifacts cannot outrank valid authored source.
+Fresh-store contracts prove persisted keyboard evaluation, controller-axis
+dead-zone behavior, and exact default restoration without crossing into
 editor-camera controls. A monotonic renderer-neutral adapter maps the
 process-owned generation-checked controller snapshot into project actions,
 preserves held/axis continuity, and prevents repeated revisions from replaying
@@ -476,7 +481,7 @@ press edges. The composed generated-child runtime deterministically accepts
 
 Remaining delivery:
 
-- eye-test physical-device input and persisted Project Controls behavior;
+- eye-test Project Controls interaction and physical-device input;
 - complete approved Play/Stop and repeated runtime proof without leaking or
   duplicating bodies.
 

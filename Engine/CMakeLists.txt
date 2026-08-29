@@ -1698,8 +1698,10 @@ if(BUILD_TESTING)
     )
 
     add_executable(epoch_editor_project_input_settings_contract
+        src/input/input.controller.cpp
         src/project/project.asset_registry.cpp
         src/project/project.input_profile.cpp
+        src/project/project.input_controller.cpp
         src/editor/editor.project_input_settings.cpp
         src/editor/editor.project_input_settings_contract.cpp
     )
@@ -1707,9 +1709,11 @@ if(BUILD_TESTING)
         FILE_SET epoch_editor_project_input_settings_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
+                ${EPOCH_MODULE_DIR}/input.controller.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
                 ${EPOCH_MODULE_DIR}/project.input_profile.ixx
+                ${EPOCH_MODULE_DIR}/project.input_controller.ixx
                 ${EPOCH_MODULE_DIR}/editor.project_input_settings.ixx
     )
     target_include_directories(epoch_editor_project_input_settings_contract PRIVATE

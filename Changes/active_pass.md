@@ -16,6 +16,14 @@
   it writes, including the final LF, and derives the sidecar from that same byte
   sequence. Windows PowerShell 5.1 and modern PowerShell self-tests pass. This
   repair is unreleased and does not mutate the published v0.89.33 artifacts.
+- The unreleased Project/Input repair now publishes canonical input source and
+  compiled artifact through one matched-pair boundary. It validates and stages
+  both members, rechecks the source preimage, commits authored source ahead of
+  the disposable artifact, and reports the permitted source-ahead partial state
+  for regeneration. Corrupt or conflicting Library artifacts cannot outrank a
+  valid authored source. Focused build-safe contracts prove fresh-store keyboard
+  evaluation, persisted controller-axis dead-zone behavior, artifact-ahead
+  repair, and exact Restore Defaults reopen. No GUI or physical device launched.
 - The August 28 v0.89.32 churn checkpoint is source/contract evidence, not a
   runtime release or GUI eye-test claim. Canonical generated-game input and
   project editing landed at `38d541b2`, `408c496f`, `bbda8b7b`, and
@@ -1224,8 +1232,9 @@ non-axis-aligned extents. GUI and native pixel eye testing remain separate.
 ## Remaining Implementation Order
 
 1. Eye-test keyboard/controller Project Controls, duplicate refusal, dead-zone
-   edits, Restore Default, and reopen while preserving accepted collision, GUI,
-   Assets, Scripts, Systems, camera, and workspace behavior.
+   edits, Restore Default, and physical-device behavior while preserving
+   accepted collision, GUI, Assets, Scripts, Systems, camera, and workspace
+   behavior.
 2. Eye-test the composed live editor `ProjectPlayScene`, then prove repeated
    Play/Stop, interactive external Run, disposable-cache
    regeneration, native presentation, and resource teardown. Build and the
@@ -1439,8 +1448,8 @@ multi-step dispatch, or complete OS filesystem transaction semantics.
 Eye-test v0.89.33 monitor-aware launcher/editor geometry, project
 open/switch/close, launcher-owned Plant Lab, dedicated GUI template Open/Save,
 embedded GUI placement/Delete/Undo/Redo, scene deselection/history, shared timeline controls,
-pane tab/window routing and recovery tabs, live controller-provider evidence, persisted
-controller binding/dead-zone edits, and gameplay input from a physical device.
+pane tab/window routing and recovery tabs, Project Controls interaction,
+live controller-provider evidence, and gameplay input from a physical device.
 Build, fresh generated-child gameplay acceptance, and live-editor composition
 are build-safe proven. Next prove repeated Play/Stop, interactive external Run,
 cache regeneration, native
