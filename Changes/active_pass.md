@@ -7,6 +7,11 @@
   installable or automatically executable payload claim. The curated Site LLM
   lane has exact no-weights descriptors for Qwen3.8 27B and Nemotron 3 Nano 4B
   BF16 only; both retain local admission and explicit operator approval.
+- The explicitly authorized v0.89.33 release pass advances the tracked Windows
+  and Linux packaged authorities to the same v0.89.33 source identity before
+  rebuilding and restaging either platform. macOS remains v0.89.30 and no
+  macOS runtime claim is made. Public Site runtime remains v0.89.30 until the
+  exact staged pair, validation receipts, and signed release envelope complete.
 - The August 28 v0.89.32 churn checkpoint is source/contract evidence, not a
   runtime release or GUI eye-test claim. Canonical generated-game input and
   project editing landed at `38d541b2`, `408c496f`, `bbda8b7b`, and

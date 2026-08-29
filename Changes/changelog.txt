@@ -25,6 +25,14 @@
 - Add a standalone EpochEngineExtensions descriptor repository subtree with
   eight exact non-installable entries, a license, and a 1/1 CTest contract.
   This does not claim that any optional payload has been implemented.
+- Advance the tracked Windows and Linux packaged-runtime authorities to
+  v0.89.33 for the explicitly authorized paired release pass. macOS remains
+  v0.89.30 and is not claimed; public Site runtime stays v0.89.30 until the
+  rebuilt packages, receipts, checksums, and signed envelope are admitted.
+- Synchronize the updater discovery contract with the v0.89.33 source and
+  Windows/Linux packaged authorities. The aggregate build-safe self-test now
+  proves exact equality for the paired runtime instead of retaining the older
+  source-newer-than-package experiment.
 
 ## [v0.89.32] - Source authority and backend readback evidence
 

@@ -33,8 +33,10 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
   mobile specialization, and effects cannot consume the playable-2D schedule.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
-- `v0.89.33` is the current development source authority; `v0.89.30` is the
-  latest fully published binary-first packaged runtime. Preserve `v0.89.29`,
+- `v0.89.33` is the current development source authority and locally admitted
+  Windows/Linux packaged-runtime candidate; `v0.89.30` is the latest fully
+  published binary-first packaged runtime until Site publication completes.
+  macOS packaged authority remains `v0.89.30`. Preserve `v0.89.29`,
   `v0.89.28`, `v0.89.27`, and immutable `v0.89.06` as release history, and preserve
   `multicontext-base-stable` at exact commit
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Future release changes require a
