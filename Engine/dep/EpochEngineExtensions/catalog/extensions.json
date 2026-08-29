@@ -1,0 +1,105 @@
+{
+  "schema": "epoch-engine-extension-catalog/v1",
+  "catalog_revision": "descriptor-v0.1.0",
+  "repository": "EpochEngineExtensions",
+  "availability": "descriptor_only",
+  "automatic_execution": false,
+  "entries": [
+    {
+      "stable_id": "4558540000000001",
+      "package_id": "engine_arcade",
+      "display_name": "Engine Arcade",
+      "summary": "Optional mini-runtime scenes and cabinet assets for render-to-texture arcade demonstrations.",
+      "source_key": "packages/arcade",
+      "platforms": ["windows", "linux", "macos", "mobile", "console"],
+      "capabilities": ["scripting", "package_assets", "render_to_texture", "audio", "editor_workspace"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000002",
+      "package_id": "engine_forest_factory",
+      "display_name": "Forest Factory Heavy Assets",
+      "summary": "Optional high-detail vegetation assets, voxel LOD payloads, and placement libraries above the core Forest Factory descriptor lane.",
+      "source_key": "packages/forest_factory_heavy_assets",
+      "platforms": ["windows", "linux", "macos", "mobile", "console"],
+      "capabilities": ["package_assets", "procedural_generation", "voxel_fields", "temporal_authoring", "editor_workspace"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000003",
+      "package_id": "engine_plant_lab_libraries",
+      "display_name": "Plant Lab Libraries",
+      "summary": "Reusable temporal L-system, node-graph, foliage, vascular-form, and vegetation-authoring libraries for the standalone Plant Lab editor.",
+      "source_key": "packages/plant_lab_libraries",
+      "platforms": ["windows", "linux", "macos"],
+      "capabilities": ["package_assets", "temporal_authoring", "procedural_generation", "editor_workspace", "voxel_fields"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000004",
+      "package_id": "demo_tiered_terrain",
+      "display_name": "Tiered Terrain Demonstration",
+      "summary": "Capability-gated terrain demonstration with headless preparation and portable through advanced renderer presentation paths.",
+      "source_key": "demonstrations/tiered_terrain",
+      "platforms": ["windows", "linux", "macos", "mobile", "console", "headless"],
+      "capabilities": ["package_assets", "terrain", "voxel_fields", "procedural_generation"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000005",
+      "package_id": "demo_temporal_voxel",
+      "display_name": "Temporal Voxel Demonstration",
+      "summary": "Request-driven voxel field, chunk, ray, and reversible residency demonstration for CPU and renderer capability tiers.",
+      "source_key": "demonstrations/temporal_voxel",
+      "platforms": ["windows", "linux", "macos", "mobile", "console", "headless"],
+      "capabilities": ["package_assets", "voxel_fields", "temporal_authoring", "procedural_generation"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000006",
+      "package_id": "demo_fft_ocean",
+      "display_name": "FFT Ocean Demonstration",
+      "summary": "Optional ocean simulation and renderer comparison scene with a deterministic fallback contract.",
+      "source_key": "demonstrations/fft_ocean",
+      "platforms": ["windows", "linux", "macos", "mobile", "console"],
+      "capabilities": ["package_assets", "ocean_simulation", "temporal_authoring"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000007",
+      "package_id": "demo_portal_rtt",
+      "display_name": "Portal and RTT Demonstration",
+      "summary": "Bounded recursive portal-view and render-to-texture demonstration consuming renderer-owned logical view requests.",
+      "source_key": "demonstrations/portal_rtt",
+      "platforms": ["windows", "linux", "macos", "mobile", "console"],
+      "capabilities": ["package_assets", "render_to_texture", "portal_views", "temporal_authoring"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    },
+    {
+      "stable_id": "4558540000000008",
+      "package_id": "local_ai_llama_cpp_runtime",
+      "display_name": "Local AI Tooling",
+      "summary": "Operator-approved local inference and guarded development tooling; no listener, hidden service, model download, or installation is implied.",
+      "source_key": "tooling/local_ai",
+      "platforms": ["windows", "linux", "macos", "headless"],
+      "capabilities": ["native_plugin", "local_ai_inference", "guarded_ai_development", "headless_tools", "editor_workspace"],
+      "availability": "descriptor_only",
+      "installable_payload": false,
+      "automatic_execution": false
+    }
+  ]
+}

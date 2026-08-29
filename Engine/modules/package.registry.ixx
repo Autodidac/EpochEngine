@@ -247,7 +247,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
             .kind = PackageKind::ModelAsset,
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
-            .externalSourceRepo = "https://github.com/QwenLM/Qwen3.8",
+            .externalSourceRepo = "https://huggingface.co/Qwen/Qwen3.8-27B",
         },
         {
             .id = kBonsaiImageTernaryPackageId,

@@ -94,6 +94,32 @@ export namespace epochengine::gui_lib::input
         InputFrame frame_{};
     };
 
+    enum class ModalInputMode : std::uint8_t
+    {
+        inactive,
+        bounded,
+        blocked_until_clear
+    };
+
+    class ModalInputArbiter final
+    {
+    public:
+        void begin(Rect bounds) noexcept;
+        void block_until_clear() noexcept;
+        void clear() noexcept;
+
+        [[nodiscard]] ModalInputMode mode() const noexcept;
+        [[nodiscard]] Rect bounds() const noexcept;
+        [[nodiscard]] bool active() const noexcept;
+        [[nodiscard]] bool keyboard_captured() const noexcept;
+        [[nodiscard]] bool pointer_allowed(Vec2 position) const noexcept;
+        [[nodiscard]] bool background_input_allowed() const noexcept;
+
+    private:
+        Rect bounds_{};
+        ModalInputMode mode_{ ModalInputMode::inactive };
+    };
+
     struct ContextMenuRequest
     {
         Vec2 position{};

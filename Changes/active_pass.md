@@ -1,3 +1,10 @@
+- The v0.89.33 hard-gate checkpoint restores saved GUI projections, blocks
+  background editor input while any modal is active, routes global editor
+  commands to their owning document, replaces the hardcoded Package Manager
+  list with the bounded Epoch Site catalog, and removes Engine Arcade from the
+  engine-package workflow. EpochGui v0.89.30 owns the reusable modal arbiter;
+  EpochEngineExtensions has an exact descriptor-only companion subtree with no
+  installable or automatically executable payload claim.
 - The August 28 v0.89.32 churn checkpoint is source/contract evidence, not a
   runtime release or GUI eye-test claim. Canonical generated-game input and
   project editing landed at `38d541b2`, `408c496f`, `bbda8b7b`, and

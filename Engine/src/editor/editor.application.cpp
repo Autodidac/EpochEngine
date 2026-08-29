@@ -128,6 +128,7 @@ import editor.workspace_layout;
 import editor.workspace_commands;
 import voxel.field;
 import forest.factory;
+import package.catalog;
 import package.registry;
 import perf.tier;
 import render.arcade;
@@ -1101,9 +1102,15 @@ namespace epochengine
             bool showPackageManagerModal{ false };
             bool showAiModelConsentModal{ false };
             bool showVoiceConsentModal{ false };
-            std::string selectedPackageId{ "engine_arcade" };
-            std::string packageInstallStatus{ "Select a package and press Install." };
+            std::string selectedPackageId{};
+            std::string packageInstallStatus{ "The Site package catalog has not loaded." };
             float packageInstallProgress{ 0.0f };
+            std::vector<package_catalog::Entry> packageCatalogEntries{};
+            std::string packageCatalogRevision{};
+            std::string packageCatalogStatus{ "Catalog not requested." };
+            std::optional<std::future<package_catalog::Snapshot>>
+                packageCatalogPending{};
+            bool packageCatalogRequested{};
             EditorUpdateState updateState{ EditorUpdateState::Idle };
             std::string updateStatus{ "Updates have not been checked." };
             std::optional<std::future<updater::UpdateCommandResult>> updateCheckPending{};
@@ -4096,6 +4103,13 @@ namespace epochengine
             }
         }
 
+        [[nodiscard]] std::string_view gui_entity_type_for_widget(
+            authoring::gui::WidgetKind kind) noexcept;
+
+        [[nodiscard]] EditorEntity gui_projection_entity(
+            const authoring::gui::WidgetView& widget,
+            std::size_t order);
+
         [[nodiscard]] bool load_project_gui_document(EditorState& state)
         {
             using namespace authoring::gui;
@@ -4184,6 +4198,8 @@ namespace epochengine
                 return (static_cast<std::uint64_t>(handle.index) << 32u)
                     | handle.generation;
             };
+            const scene::SceneObjectId previousSelection =
+                state.selectedEntityId;
 
             for (const EditorEntity& entity : state.entities)
             {
@@ -4199,8 +4215,7 @@ namespace epochengine
                     widgets.end(),
                     [&](const WidgetView& widget)
                     {
-                        return widget.parent == root
-                            && widget.descriptor.kind == expected
+                        return widget.descriptor.kind == expected
                             && widget.descriptor.name == entity.name
                             && !assigned.contains(widgetKey(widget.handle));
                     });
@@ -4212,6 +4227,49 @@ namespace epochengine
                 assigned.insert(widgetKey(match->handle));
             }
 
+            // A saved GUI document is authoritative even when its disposable
+            // scene projections were not present in the scene snapshot. Build
+            // any missing projections now; otherwise synchronize_gui_document
+            // interprets every unprojected saved widget as deleted and removes
+            // the complete document on first display.
+            std::size_t projectionOrder = 0u;
+            for (const WidgetView& widget : widgets)
+            {
+                if (widget.handle == root
+                    || assigned.contains(widgetKey(widget.handle))
+                    || gui_entity_type_for_widget(
+                        widget.descriptor.kind).empty())
+                {
+                    continue;
+                }
+
+                EditorEntity entity =
+                    gui_projection_entity(widget, projectionOrder++);
+                if (!create_editor_scene_entity(
+                        state,
+                        std::move(entity),
+                        "Restore saved GUI widget projection"))
+                {
+                    state.guiDocumentStatus =
+                        "GUI source loaded, but one saved widget projection could not be restored.";
+                    continue;
+                }
+                state.guiDocumentWidgets.insert_or_assign(
+                    state.selectedEntityId,
+                    widget.handle);
+                assigned.insert(widgetKey(widget.handle));
+            }
+
+            if (previousSelection != scene::kInvalidSceneObjectId
+                && editor_entity_index(state, previousSelection))
+            {
+                state.selectedEntityId = previousSelection;
+                synchronize_editor_selection(state);
+            }
+            else
+            {
+                clear_editor_selection(state);
+            }
 
             state.guiDocumentSavedRevision =
                 state.guiDocument->revision().sequence;
@@ -8063,18 +8121,55 @@ namespace epochengine
             return std::nullopt;
         }
 
+        [[nodiscard]] std::optional<editor_workspace_commands::Surface>
+        selected_edit_surface(const EditorState& state) noexcept
+        {
+            using Surface = editor_workspace_commands::Surface;
+            if (!editor_entity_index(state, state.selectedEntityId))
+                return std::nullopt;
+            if (state.guiDocumentWidgets.contains(state.selectedEntityId))
+                return Surface::gui_canvas;
+            return Surface::world;
+        }
+
+        [[nodiscard]] editor_workspace_commands::Surface
+        edit_surface_for_action(
+            const EditorState& state,
+            SurfaceEditAction action) noexcept
+        {
+            using Surface = editor_workspace_commands::Surface;
+            if (action == SurfaceEditAction::duplicate_selection
+                || action == SurfaceEditAction::delete_selection
+                || action == SurfaceEditAction::focus_selection)
+            {
+                if (const auto selected = selected_edit_surface(state))
+                    return *selected;
+            }
+
+            const Surface visible = workspace_command_surface(state);
+            if (command_for_surface_edit(visible, action))
+                return visible;
+
+            // Global Edit/Asset commands remain useful while inspecting
+            // Project, Assets, Systems, Timeline, or AI workspaces. Those
+            // workspaces do not become accidental edit documents; commands
+            // route to the canonical World document unless a selected GUI
+            // element identifies the GUI document explicitly.
+            return Surface::world;
+        }
+
         [[nodiscard]] SurfaceEditAvailability resolve_surface_edit(
             EditorState& state,
             SurfaceEditAction action)
         {
             using namespace editor_workspace_commands;
             SurfaceEditAvailability result{};
-            const Surface surface = workspace_command_surface(state);
+            const Surface surface = edit_surface_for_action(state, action);
             const auto command = command_for_surface_edit(surface, action);
             if (!command)
             {
                 result.reason = epochengine::format_text(
-                    "{} has no {} command; World unchanged.",
+                    "{} has no {} command.",
                     surface_name(surface), surface_edit_action_name(action));
                 return result;
             }
@@ -8083,7 +8178,7 @@ namespace epochengine
             if (!descriptor || descriptor->surface != surface)
             {
                 result.reason =
-                    "Command is absent from the active surface catalog; World unchanged.";
+                    "Command is absent from the editor command catalog.";
                 return result;
             }
             if (descriptor->target == TargetKind::entity
@@ -8100,14 +8195,14 @@ namespace epochengine
                     if (!selected_gui_widget(state))
                     {
                         result.reason =
-                            "Select a GUI element first; World unchanged.";
+                            "Select a GUI element first.";
                         return result;
                     }
                 }
                 else if (!editor_entity_index(state, state.selectedEntityId))
                 {
                     result.reason =
-                        "Select an element on this surface first; World unchanged.";
+                        "Select an element first.";
                     return result;
                 }
             }
@@ -8153,13 +8248,41 @@ namespace epochengine
             switch (available.command)
             {
             case CommandId::world_undo:
+                if (undo_editor_scene(state))
+                {
+                    push_editor_log(state, "[edit] World undo committed.");
+                    return true;
+                }
+                return false;
             case CommandId::gui_undo:
+                return undo_gui_document(state);
             case CommandId::plant_undo:
-                return undo_active_editor_document(state);
+                if (forest::undo_forest_profile_edit(state.plantLabDocument))
+                {
+                    state.plantLabCompiledRevision = 0u;
+                    state.plantLabCompiledContentHash = 0u;
+                    push_editor_log(state, "[edit] Plant Lab undo committed.");
+                    return true;
+                }
+                return false;
             case CommandId::world_redo:
+                if (redo_editor_scene(state))
+                {
+                    push_editor_log(state, "[edit] World redo committed.");
+                    return true;
+                }
+                return false;
             case CommandId::gui_redo:
+                return redo_gui_document(state);
             case CommandId::plant_redo:
-                return redo_active_editor_document(state);
+                if (forest::redo_forest_profile_edit(state.plantLabDocument))
+                {
+                    state.plantLabCompiledRevision = 0u;
+                    state.plantLabCompiledContentHash = 0u;
+                    push_editor_log(state, "[edit] Plant Lab redo committed.");
+                    return true;
+                }
+                return false;
             case CommandId::world_duplicate_entity:
                 duplicate_selected_entity(state); return true;
             case CommandId::world_delete_entity:
@@ -8180,7 +8303,7 @@ namespace epochengine
             default: break;
             }
             push_editor_log(state,
-                "[edit] Active-surface command had no executor; World unchanged.");
+                "[edit] Routed editor command had no executor.");
             return false;
         }
 
@@ -17236,6 +17359,64 @@ namespace epochengine
             }
             return safe.empty() ? std::string{ "package" } : safe;
         }
+
+        void request_site_package_catalog(EditorState& editor, bool force)
+        {
+            if (editor.packageCatalogPending
+                || (!force && editor.packageCatalogRequested))
+                return;
+            editor.packageCatalogRequested = true;
+            editor.packageCatalogStatus = "Loading package catalog from the Epoch Site...";
+            editor.packageCatalogPending.emplace(std::async(
+                std::launch::async,
+                [] { return package_catalog::fetch(); }));
+        }
+
+        void poll_site_package_catalog(EditorState& editor)
+        {
+            if (!editor.packageCatalogPending
+                || editor.packageCatalogPending->wait_for(0ms)
+                    != std::future_status::ready)
+                return;
+            package_catalog::Snapshot snapshot =
+                editor.packageCatalogPending->get();
+            editor.packageCatalogPending.reset();
+            if (!snapshot.ok)
+            {
+                editor.packageCatalogEntries.clear();
+                editor.packageCatalogRevision.clear();
+                editor.selectedPackageId.clear();
+                editor.packageCatalogStatus = snapshot.message;
+                editor.packageInstallStatus =
+                    "Catalog unavailable. Retry after the Site publishes a valid catalog.";
+                editor.packageInstallProgress = 0.0f;
+                return;
+            }
+
+            // Engine Arcade ships in the engine and is activated only from an
+            // explicit game project. It is never an engine package install.
+            std::erase_if(snapshot.entries, [](const package_catalog::Entry& entry)
+            {
+                return entry.id == package_registry::kEngineArcadePackageId;
+            });
+            editor.packageCatalogEntries = std::move(snapshot.entries);
+            editor.packageCatalogRevision = std::move(snapshot.revision);
+            editor.packageCatalogStatus = epochengine::format_text(
+                "Site catalog {} loaded ({} package{}).",
+                editor.packageCatalogRevision,
+                editor.packageCatalogEntries.size(),
+                editor.packageCatalogEntries.size() == 1u ? "" : "s");
+            if (editor.packageCatalogEntries.empty())
+                editor.selectedPackageId.clear();
+            else if (std::none_of(
+                editor.packageCatalogEntries.begin(),
+                editor.packageCatalogEntries.end(),
+                [&](const package_catalog::Entry& entry)
+                {
+                    return entry.id == editor.selectedPackageId;
+                }))
+                editor.selectedPackageId = editor.packageCatalogEntries.front().id;
+        }
         enum class ProjectAiProviderMode : std::uint8_t
         {
             disabled,
@@ -20793,7 +20974,13 @@ namespace epochengine
 
         const bool modalVisible = modal_visible_now();
         if (modalVisible)
+        {
             editor.openMenu = TopMenu::None;
+            // Modal windows own all editor interaction until dismissed. The
+            // EpochGui hit region protects widgets, while this flag also stops
+            // scene picking, dragging, camera navigation, and document tools.
+            result.scene_input_captured = true;
+        }
 
         auto floating_gui_visible = [&editor]() noexcept -> bool
         {
@@ -23673,7 +23860,7 @@ namespace epochengine
             gui::set_cursor(pos);
             if (!enabled)
             {
-                gui::label(std::string(title) + " (unavailable on active surface)");
+                gui::label(std::string(title) + " (unavailable)");
                 return;
             }
             gui::set_cursor(pos);
@@ -32330,17 +32517,18 @@ namespace epochengine
             }
             if (application.allow_entity_authoring)
             {
-                const bool worldSurfaceActive = workspace_command_surface(editor)
-                    == editor_workspace_commands::Surface::world;
                 menu_item("Add Static Mesh", { pos.x + 12.0f, pos.y + 82.0f }, 220.0f, [&]() {
+                    open_editor_surface(EditorMainSurface::Scene, "Add Static Mesh");
                     add_entity(editor, "cube");
-                }, worldSurfaceActive);
+                });
                 menu_item("Add Light", { pos.x + 12.0f, pos.y + 116.0f }, 220.0f, [&]() {
+                    open_editor_surface(EditorMainSurface::Scene, "Add Light");
                     add_entity(editor, "light");
-                }, worldSurfaceActive);
+                });
                 menu_item("Add Spawn", { pos.x + 12.0f, pos.y + 150.0f }, 220.0f, [&]() {
+                    open_editor_surface(EditorMainSurface::Scene, "Add Spawn");
                     add_entity(editor, "spawn");
-                }, worldSurfaceActive);
+                });
                 menu_item("Duplicate Selected", { pos.x + 12.0f, pos.y + 184.0f }, 220.0f, [&]() {
                     (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
                 });
@@ -32908,6 +33096,8 @@ namespace epochengine
         if (editor.showPackageManagerModal)
         {
             editor.openMenu = TopMenu::None;
+            request_site_package_catalog(editor, false);
+            poll_site_package_catalog(editor);
             const gui::Vec2 modalSize = packageManagerModalSize;
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
@@ -32916,34 +33106,29 @@ namespace epochengine
             const float contentWidth = (std::max)(1.0f, modalSize.x - 56.0f);
             const float packageListHeight = (std::max)(128.0f, (std::min)(178.0f, modalSize.y * 0.34f));
             const float packageDetailHeight = (std::max)(132.0f, (std::min)(168.0f, modalSize.y * 0.30f));
-            const auto* activeProfile = editor_find_project_profile(editor.projectId);
-            const bool engineArcadeEligible =
-                activeProfile
-                && activeProfile->kind == EditorProjectKind::Game
-                && activeProfile->id != "sandbox";
             const auto projectRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot });
-            const auto engineArcadePackage = projectRoot / "assets" / "packages" / "engine_arcade.package.json";
-            const auto engineArcadeScript = projectRoot / "scripts" / "script.engine_arcade_scene.cpp";
             const auto forestFactoryPackage = projectRoot / "assets" / "packages" / "engine_forest_factory.package.json";
             const auto forestFactoryProfile = projectRoot / "assets" / "packages" / "engine_forest_factory" / "default.forest.json";
-            const auto knownPackages = epochengine::package_registry::known_packages();
+            const auto& catalogEntries = editor.packageCatalogEntries;
+            const epochengine::package_catalog::Entry* selectedCatalog = nullptr;
             const epochengine::package_registry::PackageDescriptor* selectedPackage = nullptr;
-            if (editor.selectedPackageId.empty() && !knownPackages.empty())
+            if (editor.selectedPackageId.empty() && !catalogEntries.empty())
             {
-                selectedPackage = &knownPackages.front();
-                editor.selectedPackageId = std::string(selectedPackage->id);
+                editor.selectedPackageId = catalogEntries.front().id;
             }
-            for (const auto& package : knownPackages)
+            for (const auto& entry : catalogEntries)
             {
-                if (package.id == editor.selectedPackageId)
-                    selectedPackage = &package;
+                if (entry.id == editor.selectedPackageId)
+                    selectedCatalog = &entry;
             }
-            if (!selectedPackage && !knownPackages.empty())
+            if (!selectedCatalog && !catalogEntries.empty())
             {
-                selectedPackage = &knownPackages.front();
-                editor.selectedPackageId = std::string(selectedPackage->id);
+                selectedCatalog = &catalogEntries.front();
+                editor.selectedPackageId = selectedCatalog->id;
             }
-            const bool engineArcadeInstalled = path_exists(engineArcadePackage) && path_exists(engineArcadeScript);
+            if (selectedCatalog)
+                selectedPackage = epochengine::package_registry::find(
+                    selectedCatalog->id);
             const bool forestFactoryStaged = path_exists(forestFactoryPackage) && path_exists(forestFactoryProfile);
             const auto epochLocalAi =
                 epochengine::ai::epoch_local_ai_install_status();
@@ -32961,8 +33146,6 @@ namespace epochengine
 
             auto package_installed = [&](const epochengine::package_registry::PackageDescriptor& package)
             {
-                if (package.id == epochengine::package_registry::kEngineArcadePackageId)
-                    return engineArcadeInstalled;
                 if (package.id == epochengine::package_registry::kEngineForestFactoryPackageId)
                     return forestFactoryStaged;
                 if (package.id == epochengine::package_registry::kQwenCoderPackageId)
@@ -33006,54 +33189,19 @@ namespace epochengine
                 editor.packageInstallProgress = package_installed(package) ? 1.0f : 0.0f;
             };
 
+            auto select_catalog_entry = [&](const package_catalog::Entry& entry)
+            {
+                selectedCatalog = &entry;
+                selectedPackage = package_registry::find(entry.id);
+                editor.selectedPackageId = entry.id;
+                editor.packageInstallStatus = "Selected " + entry.display_name + ".";
+                editor.packageInstallProgress = selectedPackage
+                    && package_installed(*selectedPackage) ? 1.0f : 0.0f;
+            };
+
             auto install_package = [&](const epochengine::package_registry::PackageDescriptor& package)
             {
                 select_package(package);
-                if (package.id == epochengine::package_registry::kEngineArcadePackageId)
-                {
-                    if (engineArcadeEligible)
-                    {
-                        repair_active_project_evidence(editor);
-                        activate_engine_arcade_preview(editor);
-                        editor.packageInstallStatus = engineArcadeInstalled
-                            ? "Engine Arcade already installed; preview activated in 3D Scene."
-                            : "Engine Arcade staged and activated in 3D Scene.";
-                        editor.packageInstallProgress = 1.0f;
-                        editor.showPackageManagerModal = false;
-                        push_editor_log(editor, "[package] Requested engine_arcade local runtime-mini package materialization.");
-                    }
-                    else
-                    {
-                        const auto created = editor_create_project_shell(
-                            EditorProjectKind::Game,
-                            EditorProjectInputProvision::project_default,
-                            editor.projectSelfIterationDefault);
-                        if (created.succeeded)
-                        {
-                            set_project(editor, created.project_id, true);
-                            editor.selectedPackageId = std::string(epochengine::package_registry::kEngineArcadePackageId);
-                            activate_engine_arcade_preview(editor);
-                            editor.packageInstallStatus =
-                                "Created game project with Engine Arcade staged and visible in 3D Scene.";
-                            editor.packageInstallProgress = 1.0f;
-                            editor.showPackageManagerModal = false;
-                            push_editor_log(
-                                editor,
-                                "[package] Created game project shell with engine_arcade runtime-mini package staged.");
-                        }
-                        else
-                        {
-                            editor.packageInstallStatus =
-                                "Engine Arcade needs a game project shell; auto-create failed. Inspect project status.";
-                            editor.packageInstallProgress = 0.0f;
-                            push_editor_log(
-                                editor,
-                                "[package] engine_arcade game-shell creation failed: " + created.summary);
-                        }
-                    }
-                    return;
-                }
-
                 if (package.id == epochengine::package_registry::kEngineForestFactoryPackageId)
                 {
                     (void)stage_forest_factory_package_opt_in(editor, package);
@@ -33098,17 +33246,6 @@ namespace epochengine
             {
                 select_package(package);
                 std::error_code ec{};
-                if (package.id == epochengine::package_registry::kEngineArcadePackageId)
-                {
-                    (void)std::filesystem::remove(engineArcadePackage, ec);
-                    ec.clear();
-                    (void)std::filesystem::remove(engineArcadeScript, ec);
-                    deactivate_engine_arcade_preview(editor);
-                    editor.packageInstallStatus = "Engine Arcade project-local manifest/script and preview state removed.";
-                    editor.packageInstallProgress = 0.0f;
-                    push_editor_log(editor, "[package] Removed engine_arcade project-local package files.");
-                    return;
-                }
                 if (package.id == epochengine::package_registry::kEngineForestFactoryPackageId)
                 {
                     (void)std::filesystem::remove(forestFactoryPackage, ec);
@@ -33140,59 +33277,90 @@ namespace epochengine
                 .dim_background = true
             });
             gui::wrapped_label(
-                "Local packages are reviewable engine/project assets. Downloadable source packages use a human-approved source/build gate and must never auto-run services.",
+                "Discovery comes from the Epoch Site. This build's local admission policy still controls every install, and packages never auto-run.",
                 contentWidth);
+
+            const gui::Vec2 catalogRow = gui::cursor_position();
+            gui::wrapped_label(editor.packageCatalogStatus, contentWidth - 132.0f);
+            gui::set_cursor({ catalogRow.x + contentWidth - 120.0f, catalogRow.y });
+            if (gui::button(
+                    editor.packageCatalogPending ? "Loading..." : "Refresh",
+                    { 112.0f, 28.0f })
+                && !editor.packageCatalogPending)
+            {
+                request_site_package_catalog(editor, true);
+            }
 
             gui::label("Available Packages");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "package-manager-package-list",
                 .size = { contentWidth, packageListHeight },
-                .content_height = (std::max)(packageListHeight, static_cast<float>(knownPackages.size()) * 62.0f + 12.0f),
+                .content_height = (std::max)(packageListHeight, static_cast<float>(catalogEntries.size()) * 62.0f + 12.0f),
                 .draw_background = true,
                 .show_scrollbar = true
             });
-            for (const auto& package : knownPackages)
+            for (const package_catalog::Entry& entry : catalogEntries)
             {
-                const bool isSelected = selectedPackage && package.id == selectedPackage->id;
-                const bool isInstalled = package_installed(package);
+                const auto* localPolicy = package_registry::find(entry.id);
+                const bool isSelected = selectedCatalog && entry.id == selectedCatalog->id;
+                const bool isInstalled = localPolicy && package_installed(*localPolicy);
                 const bool isSharedAiPayload =
-                    package.id == epochengine::package_registry::kQwenCoderPackageId
-                    || package.id == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId;
-                const bool isBlocked = package.requiresExplicitNetworkApproval;
-                const std::string rowLabel = std::string(isInstalled ? "[x] " : (isBlocked ? "[!] " : "[ ] "))
-                    + std::string(package.displayName);
+                    entry.id == package_registry::kQwenCoderPackageId
+                    || entry.id == package_registry::kLocalAiLlamaCppRuntimePackageId;
+                const bool isDescriptor = entry.availability
+                    == package_catalog::Availability::descriptor_only;
+                const bool isBlocked = !localPolicy || isDescriptor
+                    || localPolicy->requiresExplicitNetworkApproval;
+                const std::string rowLabel = std::string(isInstalled
+                    ? "[x] " : (isBlocked ? "[!] " : "[ ] ")) + entry.display_name;
                 const gui::Vec2 rowPos = gui::cursor_position();
                 constexpr float kPackageActionWidth = 122.0f;
                 constexpr float kPackageRowHeight = 58.0f;
                 const float packageLinkWidth = (std::max)(160.0f, contentWidth - kPackageActionWidth - 24.0f);
                 if (gui::text_link(rowLabel, { packageLinkWidth, 28.0f }, isSelected))
-                    select_package(package);
+                    select_catalog_entry(entry);
                 gui::set_cursor({ rowPos.x + contentWidth - kPackageActionWidth - 8.0f, rowPos.y });
                 if (gui::button(
                         isInstalled
                             ? (isSharedAiPayload ? "Installed" : "Remove")
-                            : (isBlocked ? "Review Gate" : "Install"),
+                            : (!localPolicy ? "Not in build"
+                                : (isDescriptor ? "Planned"
+                                    : (localPolicy->requiresExplicitNetworkApproval
+                                        ? "Review Gate" : "Install"))),
                         { 114.0f, 28.0f }))
                 {
                     if (isInstalled && isSharedAiPayload)
-                        select_package(package);
+                        select_catalog_entry(entry);
                     else if (isInstalled)
-                        remove_package(package);
+                        remove_package(*localPolicy);
+                    else if (!localPolicy)
+                    {
+                        select_catalog_entry(entry);
+                        editor.packageInstallStatus =
+                            "This Site package is not admitted by the current engine build.";
+                    }
+                    else if (isDescriptor)
+                    {
+                        select_catalog_entry(entry);
+                        editor.packageInstallStatus =
+                            "This is a truthful descriptor only; no installable payload is published.";
+                    }
                     else
-                        install_package(package);
+                        install_package(*localPolicy);
                 }
                 gui::set_cursor({ rowPos.x + 18.0f, rowPos.y + 31.0f });
                 gui::wrapped_label(
-                    std::string(epochengine::package_registry::package_kind_name(package.kind))
-                        + " | " + package_status(package),
+                    entry.kind + " | " + (localPolicy
+                        ? package_status(*localPolicy)
+                        : std::string(package_catalog::availability_name(entry.availability))),
                     (std::max)(120.0f, packageLinkWidth - 18.0f));
                 gui::set_cursor(rowPos);
                 gui::advance_cursor({ 0.0f, kPackageRowHeight });
             }
             gui::end_scroll_area();
 
-            const std::string activePackageLabel = selectedPackage
-                ? std::string(selectedPackage->displayName)
+            const std::string activePackageLabel = selectedCatalog
+                ? selectedCatalog->display_name
                 : std::string("(none)");
 
             gui::label("Selected Package");
@@ -33205,33 +33373,29 @@ namespace epochengine
             });
             gui::property_row("Project", editor.projectName, 104.0f);
             gui::property_row("Package", activePackageLabel, 104.0f);
-            gui::property_row("Type", selectedPackage ? std::string(epochengine::package_registry::package_kind_name(selectedPackage->kind)) : std::string("(none)"), 104.0f);
-            gui::property_row("Activation", selectedPackage ? std::string(epochengine::package_registry::activation_mode_name(selectedPackage->activation)) : std::string("(none)"), 104.0f);
-            gui::property_row("Status", selectedPackage ? package_status(*selectedPackage) : std::string("(none)"), 104.0f);
-            gui::property_row("Source", selectedPackage && !selectedPackage->externalSourceRepo.empty()
-                ? std::string(selectedPackage->externalSourceRepo)
-                : std::string("engine builtin"), 104.0f);
+            gui::property_row("Type", selectedCatalog
+                ? selectedCatalog->kind : std::string("(none)"), 104.0f);
+            gui::property_row("Activation", selectedCatalog
+                ? selectedCatalog->activation : std::string("(none)"), 104.0f);
+            gui::property_row("Scope", selectedCatalog
+                ? std::string(package_catalog::scope_name(selectedCatalog->scope))
+                : std::string("(none)"), 104.0f);
+            gui::property_row("Availability", selectedCatalog
+                ? std::string(package_catalog::availability_name(selectedCatalog->availability))
+                : std::string("(none)"), 104.0f);
+            gui::property_row("Local admission", selectedPackage
+                ? "allowed by this build" : "not admitted by this build", 104.0f);
+            gui::property_row("Status", selectedPackage
+                ? package_status(*selectedPackage) : std::string("metadata only"), 104.0f);
+            gui::property_row("Source", selectedCatalog
+                ? selectedCatalog->source_url : std::string("(none)"), 104.0f);
+            gui::property_row("Revision", selectedCatalog
+                ? selectedCatalog->immutable_revision : std::string("(none)"), 104.0f);
 
-            if (selectedPackage && !selectedPackage->summary.empty())
-                gui::wrapped_label(std::string(selectedPackage->summary), contentWidth - 20.0f);
+            if (selectedCatalog && !selectedCatalog->summary.empty())
+                gui::wrapped_label(selectedCatalog->summary, contentWidth - 20.0f);
 
-            if (selectedPackage && selectedPackage->id == epochengine::package_registry::kEngineArcadePackageId)
-            {
-                gui::property_row("Availability", engineArcadeEligible ? "available for this project" : "install creates a game shell", 104.0f);
-                gui::property_row("Manifest", path_exists(engineArcadePackage) ? "installed" : "missing", 104.0f);
-                gui::property_row("Script asset", path_exists(engineArcadeScript) ? "installed" : "missing", 104.0f);
-                gui::property_row("Default scene", std::string(epochengine::package_registry::engine_arcade_default_scene_id()), 104.0f);
-                gui::property_row("Runtime scenes", std::string(epochengine::package_registry::engine_arcade_scene_ids()), 104.0f);
-                gui::property_row("Render asset", std::string(epochengine::package_registry::engine_arcade_render_asset_role()), 104.0f);
-                gui::property_row("Renderer gate", std::string(epochengine::package_registry::engine_arcade_renderer_requirements()), 104.0f);
-                gui::property_row("Target", std::string(epochengine::package_registry::engine_arcade_render_texture_name()), 104.0f);
-                gui::property_row(
-                    "RT size",
-                    std::to_string(epochengine::package_registry::engine_arcade_render_texture_width()) + " x " +
-                        std::to_string(epochengine::package_registry::engine_arcade_render_texture_height()),
-                    104.0f);
-            }
-            else if (selectedPackage && selectedPackage->id == epochengine::package_registry::kEngineForestFactoryPackageId)
+            if (selectedPackage && selectedPackage->id == epochengine::package_registry::kEngineForestFactoryPackageId)
             {
                 gui::property_row("Workspace", "Forest Factory", 104.0f);
                 gui::property_row("Manifest", path_exists(forestFactoryPackage) ? "staged" : "missing", 104.0f);
@@ -33290,9 +33454,10 @@ namespace epochengine
 
             const float packageProgress = (std::max)(
                 editor.packageInstallProgress,
-                engineArcadeInstalled && editor.selectedPackageId == "engine_arcade"
-                    ? 1.0f
-                    : (forestFactoryStaged && editor.selectedPackageId == epochengine::package_registry::kEngineForestFactoryPackageId ? 0.65f : 0.0f));
+                forestFactoryStaged
+                    && editor.selectedPackageId
+                        == epochengine::package_registry::kEngineForestFactoryPackageId
+                    ? 0.65f : 0.0f);
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = "Install",
                 .status = editor.packageInstallStatus,
@@ -33306,19 +33471,32 @@ namespace epochengine
             const bool selectedSharedAiPayload = selectedPackage
                 && (selectedPackage->id == epochengine::package_registry::kQwenCoderPackageId
                     || selectedPackage->id == epochengine::package_registry::kLocalAiLlamaCppRuntimePackageId);
+            const bool selectedAvailable = selectedCatalog
+                && selectedCatalog->availability
+                    == package_catalog::Availability::available;
             if (gui::button(
                     selectedInstalled
                         ? (selectedSharedAiPayload
                             ? "Installed / Configure"
                             : "Remove Selected Package")
-                        : "Install Selected Package",
+                        : (!selectedCatalog ? "No Package Selected"
+                            : (!selectedAvailable ? "Descriptor Only"
+                                : (!selectedPackage
+                                    ? "Not Admitted By Build"
+                                    : "Install Selected Package"))),
                     { 220.0f, 30.0f }))
             {
-                if (!selectedPackage)
+                if (!selectedCatalog)
                 {
                     editor.packageInstallStatus = "No package selected.";
                     editor.packageInstallProgress = 0.0f;
                 }
+                else if (!selectedAvailable)
+                    editor.packageInstallStatus =
+                        "This Site entry is descriptor-only; no payload will be installed.";
+                else if (!selectedPackage)
+                    editor.packageInstallStatus =
+                        "This Site package is not admitted by the current engine build.";
                 else if (selectedInstalled && selectedSharedAiPayload)
                     select_package(*selectedPackage);
                 else if (selectedInstalled)

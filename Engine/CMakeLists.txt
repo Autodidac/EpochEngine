@@ -315,6 +315,7 @@ endif()
 
 add_library(epoch_gui STATIC
     dep/EpochGui/src/epochgui/hierarchy_tree.cpp
+    dep/EpochGui/src/epochgui/input.cpp
     dep/EpochGui/src/epochgui/image.cpp
     dep/EpochGui/src/epochgui/rounded_rect.cpp
     dep/EpochGui/src/epochgui/node_graph_workspace.cpp
@@ -334,6 +335,7 @@ target_sources(epoch_gui PUBLIC
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
         FILES
             ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx
+            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.input.ixx
             ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.image.ixx
             ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.tile_workspace.ixx
             ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.rounded_rect.ixx
@@ -411,6 +413,7 @@ set(EPOCH_SOURCES
     src/ai/ai.mcp_stdio.cpp
     src/ai/ai.mcp_stdio_contract.cpp
     src/extensions/extension.catalog_contract.cpp
+    src/packages/package.catalog.cpp
     src/audio/audio.device.cpp
     src/audio/audio.device_contract.cpp
     src/audio/audio.manager.cpp

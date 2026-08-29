@@ -2,7 +2,7 @@
 
 EpochGui is a portable C++23 GUI layout, input-adapter, raster-data, and geometry library used by EpochEngine and standalone applications.
 
-The current bundled and standalone source release is `v0.89.29`. EpochEngine
+The current bundled and standalone source release is `v0.89.30`. EpochEngine
 mirrors this tree under `Engine/dep/EpochGui`; hosted publication verifies that
 the standalone repository and bundled tree remain identical.
 
@@ -165,17 +165,11 @@ const rounded::RoundedRectMesh mesh = rounded::make_rounded_rect_mesh({
 });
 ```
 
-### `epoch.gui.input` — optional fallback, disabled by default
+### `epoch.gui.input`
 
-Most applications should continue using their existing engine, platform, or window-system input layer. `epoch.gui.input` exists for small tools, standalone demos, tests, and integrations that do not already provide normalized per-frame input.
+Most applications should continue using their existing engine, platform, or window-system input layer. `epoch.gui.input` provides backend-neutral per-frame normalization and modal arbitration for small tools, standalone demos, tests, and integrations. It is part of the core library so every host can enforce the same modal-input boundary.
 
-Enable it explicitly:
-
-```text
--DEPOCHGUI_ENABLE_INPUT=ON
-```
-
-Then import it:
+Import it directly:
 
 ```cpp
 import epoch.gui.input;
@@ -197,6 +191,7 @@ The fallback module provides:
 - Borderless replacement-title-bar layout and hit testing
 - Resize-edge/corner, caption, minimize, maximize, and close regions
 - Window-command detection for custom chrome
+- Modal keyboard capture plus bounded or fully blocked pointer arbitration
 
 It contains no Win32, X11, Cocoa, SDL, GLFW, rendering, or operating-system calls. Native hosts remain responsible for feeding events and performing requested native window actions.
 
@@ -209,12 +204,11 @@ cmake -S . -B build
 cmake --build build --target EpochGui --config Release
 ```
 
-Build every optional feature and test:
+Build the optional rounded-geometry feature and every test:
 
 ```powershell
 cmake -S . -B build \
   -DEPOCHGUI_ENABLE_ROUNDED_RECT=ON \
-  -DEPOCHGUI_ENABLE_INPUT=ON \
   -DBUILD_TESTING=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
@@ -235,8 +229,7 @@ Enable optional features explicitly:
 msbuild EpochGui.vcxproj \
   /p:Configuration=Release \
   /p:Platform=x64 \
-  /p:EpochGuiEnableRoundedRect=true \
-  /p:EpochGuiEnableInput=true
+  /p:EpochGuiEnableRoundedRect=true
 ```
 
 ## Repository layout
@@ -246,7 +239,7 @@ modules/epoch.gui.ixx                  Core public C++23 module
 modules/epoch.gui.font.ixx             Embedded fallback bitmap font
 modules/epoch.gui.image.ixx            Raster image API and layout
 modules/epoch.gui.rounded_rect.ixx     Optional rounded-geometry module
-modules/epoch.gui.input.ixx            Optional fallback input module
+modules/epoch.gui.input.ixx            Core input and modal-arbitration module
 include/gui/                           Compatibility headers
 src/epochgui/                          Backend-neutral implementations
 tests/font_tests.cpp                   Embedded-font tests
@@ -257,7 +250,7 @@ tests/system_workspace_tests.cpp       Systems workspace tests
 tests/asset_grid_tests.cpp             Virtualized asset-grid tests
 tests/text_control_tests.cpp           Core text-control tests
 tests/rounded_rect_tests.cpp           Optional rounded-geometry tests
-tests/input_tests.cpp                  Optional fallback-input tests
+tests/input_tests.cpp                  Input and modal-arbitration tests
 ```
 
 ## Boundaries

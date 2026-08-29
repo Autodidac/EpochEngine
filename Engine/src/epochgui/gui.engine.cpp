@@ -62,6 +62,7 @@ module;
 module gui.engine;
 
 import epoch.gui;
+import epoch.gui.input;
 import epoch.gui.image;
 import epoch.gui.rounded_rect;
 
@@ -535,10 +536,7 @@ namespace epochengine::gui
             bool rightPressConsumed = false;
             bool rightReleaseConsumed = false;
             int mouseWheelDelta = 0;
-            bool modalInputCapture = false;
-            bool inputBlockedUntilClear = false;
-            Vec2 modalInputMin{};
-            Vec2 modalInputMax{};
+            gui_lib::input::ModalInputArbiter modalInput{};
 
             std::optional<WidgetBounds> lastButtonBounds{};
 
@@ -2069,17 +2067,7 @@ namespace epochengine::gui
 
         [[nodiscard]] static bool point_in_modal_input_capture(Vec2 p) noexcept
         {
-            if (g_frame.inputBlockedUntilClear)
-                return false;
-            if (!g_frame.modalInputCapture)
-                return true;
-
-            return point_in_rect(
-                p,
-                g_frame.modalInputMin.x,
-                g_frame.modalInputMin.y,
-                (std::max)(0.0f, g_frame.modalInputMax.x - g_frame.modalInputMin.x),
-                (std::max)(0.0f, g_frame.modalInputMax.y - g_frame.modalInputMin.y));
+            return g_frame.modalInput.pointer_allowed({ p.x, p.y });
         }
 
         [[nodiscard]] static bool point_in_active_clip(Vec2 p) noexcept
@@ -3151,10 +3139,7 @@ namespace epochengine::gui
             g_frame.widgetSerial = 0;
             g_frame.insideWindow = false;
             g_frame.lastButtonBounds.reset();
-            g_frame.modalInputCapture = false;
-            g_frame.inputBlockedUntilClear = false;
-            g_frame.modalInputMin = {};
-            g_frame.modalInputMax = {};
+            g_frame.modalInput.clear();
             g_frame.mousePressConsumed = false;
             g_frame.mouseReleaseConsumed = false;
             g_frame.rightPressConsumed = false;
@@ -3618,7 +3603,7 @@ namespace epochengine::gui
         g_frame.mouseReleaseConsumed = false;
         g_frame.rightPressConsumed = false;
         g_frame.rightReleaseConsumed = false;
-        g_frame.inputBlockedUntilClear = false;
+        g_frame.modalInput.clear();
         g_frame.mouseWheelDelta = 0;
         g_frame.pendingSelectPopups.clear();
         g_frame.topLayerDepth = 0;
@@ -3732,6 +3717,11 @@ namespace epochengine::gui
     }
     bool keyboard_input_captured() noexcept
     {
+        // A modal owns the complete interaction channel, not only pointer
+        // coordinates inside its panel. Editor camera/navigation shortcuts
+        // must not leak through while a modal text field is idle.
+        if (g_frame.modalInput.keyboard_captured())
+            return true;
         if (!g_frame.ctx)
             return any_select_box_open();
         const void* contextKey = static_cast<const void*>(g_frame.ctx);
@@ -3742,29 +3732,20 @@ namespace epochengine::gui
 
     void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept
     {
-        g_frame.inputBlockedUntilClear = false;
-        g_frame.modalInputCapture = size.x > 0.0f && size.y > 0.0f;
-        g_frame.modalInputMin = position;
-        g_frame.modalInputMax = {
-            position.x + (std::max)(0.0f, size.x),
-            position.y + (std::max)(0.0f, size.y)
-        };
+        g_frame.modalInput.begin({
+            { position.x, position.y },
+            { size.x, size.y }
+        });
     }
 
     void block_input_until_clear() noexcept
     {
-        g_frame.inputBlockedUntilClear = true;
-        g_frame.modalInputCapture = false;
-        g_frame.modalInputMin = {};
-        g_frame.modalInputMax = {};
+        g_frame.modalInput.block_until_clear();
     }
 
     void clear_modal_input_capture() noexcept
     {
-        g_frame.modalInputCapture = false;
-        g_frame.inputBlockedUntilClear = false;
-        g_frame.modalInputMin = {};
-        g_frame.modalInputMax = {};
+        g_frame.modalInput.clear();
     }
 
     std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept
@@ -4185,7 +4166,7 @@ namespace epochengine::gui
         if (layout.close_requested || !state.open)
             return result;
 
-        if (options.capture_input && !g_frame.modalInputCapture)
+        if (options.capture_input && !g_frame.modalInput.active())
             begin_modal_input_capture(state.position, state.size);
 
         if (options.top_layer)

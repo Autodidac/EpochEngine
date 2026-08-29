@@ -1035,6 +1035,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx">
       <Filter>Module Files\epochengine\gui</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.input.ixx">
+      <Filter>Module Files\epochengine\gui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx">
       <Filter>Module Files\epochengine\debug</Filter>
     </ClCompile>
@@ -1203,6 +1206,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp">
+      <Filter>Source Files\epochengine\packages</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
@@ -1216,6 +1222,9 @@
       <Filter>Module Files\epochengine\packages</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx">
+      <Filter>Module Files\epochengine\packages</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.catalog.ixx">
       <Filter>Module Files\epochengine\packages</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\extension.catalog.ixx">

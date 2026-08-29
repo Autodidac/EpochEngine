@@ -162,6 +162,65 @@ namespace epochengine::gui_lib::input
         return frame_;
     }
 
+    void ModalInputArbiter::begin(Rect bounds) noexcept
+    {
+        bounds_ = sanitize_rect(bounds);
+        mode_ = bounds_.size.x > 0.0f && bounds_.size.y > 0.0f
+            ? ModalInputMode::bounded
+            : ModalInputMode::inactive;
+    }
+
+    void ModalInputArbiter::block_until_clear() noexcept
+    {
+        bounds_ = {};
+        mode_ = ModalInputMode::blocked_until_clear;
+    }
+
+    void ModalInputArbiter::clear() noexcept
+    {
+        bounds_ = {};
+        mode_ = ModalInputMode::inactive;
+    }
+
+    ModalInputMode ModalInputArbiter::mode() const noexcept
+    {
+        return mode_;
+    }
+
+    Rect ModalInputArbiter::bounds() const noexcept
+    {
+        return bounds_;
+    }
+
+    bool ModalInputArbiter::active() const noexcept
+    {
+        return mode_ != ModalInputMode::inactive;
+    }
+
+    bool ModalInputArbiter::keyboard_captured() const noexcept
+    {
+        return active();
+    }
+
+    bool ModalInputArbiter::pointer_allowed(Vec2 position) const noexcept
+    {
+        switch (mode_)
+        {
+        case ModalInputMode::inactive:
+            return true;
+        case ModalInputMode::bounded:
+            return contains(bounds_, position);
+        case ModalInputMode::blocked_until_clear:
+            return false;
+        }
+        return false;
+    }
+
+    bool ModalInputArbiter::background_input_allowed() const noexcept
+    {
+        return mode_ == ModalInputMode::inactive;
+    }
+
     ContextMenuRequest context_menu_request(
         const InputFrame& frame,
         Rect region,

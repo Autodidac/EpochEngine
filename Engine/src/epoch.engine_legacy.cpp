@@ -149,6 +149,7 @@ import editor.tilemap_workspace;
 import forest.factory;
 import project.forest_library;
 import package.registry;
+import package.catalog;
 import extension.catalog;
 #if EPOCH_ENABLE_NATIVE_EXTENSIONS
 import extension.plugin;
@@ -3032,6 +3033,9 @@ namespace epochengine::core
             && packageValidation.duplicateIdCount == 0u
             && packageValidation.modelAssetCount >= 5u
             && packageValidation.networkSensitiveCount >= 2u);
+        check(
+            "package.catalog",
+            epochengine::package_catalog::contract_self_test());
         check(
             "package.forest_factory",
             forestPackage != nullptr

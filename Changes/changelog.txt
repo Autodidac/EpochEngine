@@ -1,3 +1,27 @@
+## [v0.89.33] - Editor interaction and Site package hard gate
+
+### August 28 repair checkpoint
+
+- Make every editor modal capture keyboard, pointer, camera, scene, and document
+  interaction until dismissal. EpochGui v0.89.30 now owns the backend-neutral
+  modal arbiter as a core module with standalone Release tests.
+- Restore every saved `.epochgui` widget into the disposable editor projection
+  when its scene proxy is absent, preserving the saved document instead of
+  deleting unprojected widgets during first synchronization.
+- Route global Edit and Asset commands to the selected GUI document or the
+  canonical World document from every workspace; remove the misleading active-
+  surface restrictions from menu actions.
+- Replace Package Manager discovery through `known_packages()` with the exact,
+  bounded `/api/epoch/packages/catalog` Site contract. Keep local build
+  admission and explicit network gates, reject unadmitted/descriptor-only rows,
+  and remove Engine Arcade's dormant install/remove workflow.
+- Point the admitted Qwen3.8 27B metadata at the official Qwen model authority.
+  The visible Site catalog is curated separately and keeps only Qwen and
+  Nemotron in the LLM category.
+- Add a standalone EpochEngineExtensions descriptor repository subtree with
+  eight exact non-installable entries, a license, and a 1/1 CTest contract.
+  This does not claim that any optional payload has been implemented.
+
 ## [v0.89.32] - Source authority and backend readback evidence
 
 ### August 28 guarded churn checkpoint
