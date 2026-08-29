@@ -156,7 +156,15 @@ function Read-Checks {
         throw "Validation checks were not found: $Path"
     }
 
-    $decoded = @(Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json)
+    # Windows PowerShell 5.1 can preserve a top-level JSON array as one nested
+    # pipeline value when ConvertFrom-Json is wrapped directly in @(...).
+    # Capture first, then enumerate explicitly so both Windows PowerShell and
+    # modern PowerShell normalize the document to the same row sequence.
+    $decodedDocument = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    $decoded = @()
+    foreach ($decodedEntry in $decodedDocument) {
+        $decoded += $decodedEntry
+    }
     if ($decoded.Count -eq 0 -or $decoded.Count -gt $script:MaximumChecks) {
         throw "Validation checks must contain 1-$($script:MaximumChecks) entries."
     }
@@ -299,6 +307,25 @@ function Invoke-SelfTest {
         [pscustomobject]@{ lane='dependency_resolution'; status='passed'; duration_ms=[uint64]6; evidence_sha256=('6' * 64); diagnostic='deps' },
         [pscustomobject]@{ lane='renderer_smoke'; status='skipped'; duration_ms=[uint64]0; evidence_sha256=''; diagnostic='pixels explicitly unclaimed' }
     )
+    $selfTestChecksPath = Join-Path (
+        [System.IO.Path]::GetTempPath()) (
+        'epoch-build-validation-checks-' + [guid]::NewGuid().ToString('N') + '.json')
+    try {
+        $checksJson = ConvertTo-Json -InputObject $checks -Depth 4
+        [System.IO.File]::WriteAllText(
+            $selfTestChecksPath,
+            $checksJson + "`n",
+            [System.Text.UTF8Encoding]::new($false))
+        $fileChecks = @(Read-Checks -Path $selfTestChecksPath -RequestedPlatform 'windows-x64')
+        if ($fileChecks.Count -ne $checks.Count -or
+            $fileChecks[0].lane -cne 'source_names' -or
+            $fileChecks[-1].lane -cne 'renderer_smoke') {
+            throw 'File-backed validation checks did not normalize to the canonical lane sequence.'
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $selfTestChecksPath -Force -ErrorAction SilentlyContinue
+    }
     $receipt = [pscustomobject]@{
         schema = $script:Schema
         source_version = '0.89.32'

@@ -33,6 +33,9 @@
   Windows/Linux packaged authorities. The aggregate build-safe self-test now
   proves exact equality for the paired runtime instead of retaining the older
   source-newer-than-package experiment.
+- Normalize file-backed validation-check arrays across Windows PowerShell 5.1
+  and modern PowerShell before receipt admission. The receipt writer self-test
+  now exercises the real JSON file reader instead of only canonical output.
 
 ## [v0.89.32] - Source authority and backend readback evidence
 
