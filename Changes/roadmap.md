@@ -38,10 +38,10 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
   workflow composition, but they are not implementation evidence and their
   scene content or controls must not be fabricated. Defect captures remain
   diagnostic evidence, not an accepted GUI eye test.
-- `v0.89.34` is the local development candidate. Public source discovery and
-  the fully published binary-first Windows/Linux packaged runtime remain
-  `v0.89.33` until a new bounded publication pass completes. macOS packaged
-  authority remains `v0.89.30`. Preserve `v0.89.33`, `v0.89.30`, `v0.89.29`,
+- `v0.89.35` is the local Package Manager layout hotfix candidate. Public
+  source discovery and the fully published binary-first Windows/Linux
+  packaged runtime are `v0.89.34`. macOS packaged authority remains
+  `v0.89.30`. Preserve `v0.89.34`, `v0.89.33`, `v0.89.30`, `v0.89.29`,
   `v0.89.28`, `v0.89.27`, and immutable `v0.89.06` as release history, and preserve
   `multicontext-base-stable` at exact commit
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Future release changes require a
@@ -49,8 +49,8 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
 
 ## Current Foundation
 
-Local source candidate v0.89.34 contains these completed or intentionally
-partial contracts; public source/runtime authority remains v0.89.33:
+Local source candidate v0.89.35 contains the focused Package Manager row-origin
+repair over the published v0.89.34 foundation:
 
 - rollbackable August 28 checkpoints now cover canonical generated-game input
   and Project Defaults editing (`38d541b2` through `de937045`), local build

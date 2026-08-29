@@ -1,10 +1,20 @@
-## [Unreleased] - Post-release source and tooling repairs
+## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
-- Advance the local source and Windows/Linux packaged-version authorities to
-  the bounded `v0.89.34` candidate after the visual-authoring repair. Public
-  source discovery and packaged runtime remain `v0.89.33` until exact Windows
-  and Linux builds, receipts, packages, and the separate Site publication gate
-  complete. macOS remains `v0.89.30` and is not claimed by this pass.
+- Advance local source and Windows/Linux packaged-version authorities to
+  `v0.89.35` without changing macOS `v0.89.30` authority. Public runtime and
+  source remain immutable v0.89.34 until a fresh bounded release completes.
+- Restore the Package Manager content-column cursor after its status/Refresh
+  header row and advance to the larger text/action end Y. This prevents every
+  subsequent list, detail, progress, and action control from being clamped into
+  the right-edge sliver captured by the operator on published v0.89.34.
+
+## [0.89.34] - 2026-08-29
+
+- Publish exact Engine commit
+  `5a5c5f26af8e96317efd92f8a104187606db39e4` as Windows/Linux
+  source and packaged runtime v0.89.34 after exact builds, receipts, packages,
+  live-object verification, and signed Site activation. macOS remains
+  `v0.89.30` and is not claimed by this pass.
 
 - Bind each build-validation `.sha256` sidecar to the exact UTF-8 bytes written
   to the receipt file, including its one final LF. The writer now owns one byte

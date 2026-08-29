@@ -1,10 +1,17 @@
 # Mission Cache
 
-- Treat local v0.89.34 as a candidate, not a published release. Public
-  EpochEngine source discovery and Windows/Linux packaged runtime remain
-  v0.89.33 until exact build receipts, immutable packages, live-object checks,
-  signed integrity, and explicit Site activation complete. macOS remains
-  v0.89.30.
+- Public EpochEngine source discovery and Windows/Linux packaged runtime are
+  v0.89.34 from exact commit `5a5c5f26af8e96317efd92f8a104187606db39e4`.
+  Treat local v0.89.35 as an unpublished hotfix candidate until exact build
+  receipts, immutable packages, live-object checks, signed integrity, and
+  explicit Site activation complete. macOS remains v0.89.30.
+
+- Preserve the August 29 v0.89.34 Package Manager screenshot as failed eye
+  evidence. The live Site catalog loaded correctly, but the Refresh action
+  moved the immediate-mode cursor to the right edge and the caller failed to
+  restore the content-column X origin. All subsequent stacked controls were
+  therefore width-clamped into a narrow sliver. Restore the row origin after
+  the text/action header and retain the larger end Y before the next control.
 
 - Preserve the August 29 operator screenshots as defect/evidence inputs, not as
   a replacement art direction. The latest real editor shell owns default GUI

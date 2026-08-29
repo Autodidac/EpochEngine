@@ -33483,6 +33483,7 @@ namespace epochengine
 
             const gui::Vec2 catalogRow = gui::cursor_position();
             gui::wrapped_label(editor.packageCatalogStatus, contentWidth - 132.0f);
+            const float catalogStatusEndY = gui::cursor_position().y;
             gui::set_cursor({ catalogRow.x + contentWidth - 120.0f, catalogRow.y });
             if (gui::button(
                     editor.packageCatalogPending ? "Loading..." : "Refresh",
@@ -33491,6 +33492,11 @@ namespace epochengine
             {
                 request_site_package_catalog(editor, true);
             }
+            const float catalogActionEndY = gui::cursor_position().y;
+            gui::set_cursor({
+                catalogRow.x,
+                (std::max)(catalogStatusEndY, catalogActionEndY)
+            });
 
             gui::label("Available Packages");
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{

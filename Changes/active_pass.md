@@ -1,14 +1,18 @@
-- The active local v0.89.34 candidate visual-repair gate follows the latest real Epoch
-  Editor screenshots as the default layout authority. Earlier concept art is
-  density and workflow inspiration only; it is not runtime evidence and its
-  specific scene or controls must not be fabricated. The gate owns five exact
-  failures: nested dock text clipping, blank root-only GUI starter documents,
-  Timeline scene-preview leakage when no media is admitted, inconsistent
-  surface-relative placement, and box-collapsed Forest morphology. Each repair
-  requires its owning renderer-neutral contract before new eye evidence.
-- Public source discovery and Windows/Linux packaged runtime remain v0.89.33
-  until the candidate passes exact Windows/Linux build, receipt, package, and
-  Site publication gates. macOS remains v0.89.30.
+- The active local v0.89.35 hotfix gate owns the exact Package Manager layout
+  failure captured after the v0.89.34 release. Drawing the right-aligned
+  Refresh action left the immediate-mode cursor at the action X coordinate, so
+  the package list, detail scroll, progress bar, and buttons were clamped into
+  a narrow right-edge sliver. The repair must restore the content-column
+  origin and advance past the taller header member before any stacked content.
+- Public source discovery and Windows/Linux packaged runtime are v0.89.34 from
+  exact Engine commit `5a5c5f26af8e96317efd92f8a104187606db39e4`.
+  Local v0.89.35 remains an unpublished candidate until fresh Windows/Linux
+  build, receipt, package, and Site gates complete. macOS remains v0.89.30.
+- The published v0.89.34 visual-authoring repairs remain the product baseline:
+  nested dock clipping, exact legacy root-only GUI migration, truthful
+  no-source Timeline presentation, shared surface-relative placement, and
+  tapered Forest morphology. The latest real Epoch Editor screenshots remain
+  default-layout authority; earlier concepts remain density inspiration only.
 - EpochEngineExtensions terrain remains a separate package boundary. The first
   truthful terrain payload is a deterministic bounded local-heightfield
   generator over `terrain.foundation`; planetary terrain, native rendering,
