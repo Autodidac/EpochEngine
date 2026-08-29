@@ -2398,6 +2398,12 @@ export namespace epochengine::authoring::gui
 
     [[nodiscard]] std::optional<GuiDocument> make_template_document(
         TemplatePreset preset) noexcept;
+    [[nodiscard]] bool is_legacy_generated_root_only_document(
+        const GuiDocumentSnapshot& snapshot) noexcept;
+    [[nodiscard]] std::optional<GuiDocument>
+        migrate_legacy_generated_root_only_document(
+            const GuiDocumentSnapshot& snapshot,
+            TemplatePreset replacement) noexcept;
 
     enum class ContractFailure : std::uint8_t
     {
@@ -2415,6 +2421,8 @@ export namespace epochengine::authoring::gui
         snapshot_codec,
         operation_journal,
         template_factory,
+        starter_roundtrip,
+        starter_migration,
         result_names
     };
 

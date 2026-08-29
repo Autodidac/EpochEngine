@@ -1552,6 +1552,66 @@ if(BUILD_TESTING)
         NAME epoch_audio_device_contract
         COMMAND epoch_audio_device_contract
     )
+    add_executable(epoch_scene_surface_alignment_contract
+        src/scene/scene.surface_alignment_contract.cpp
+    )
+    target_sources(epoch_scene_surface_alignment_contract PRIVATE
+        FILE_SET epoch_scene_surface_alignment_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/scene.surface_alignment.ixx
+    )
+    target_compile_definitions(epoch_scene_surface_alignment_contract PRIVATE
+        EPOCH_SCENE_SURFACE_ALIGNMENT_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_scene_surface_alignment_contract)
+    epoch_apply_warnings(epoch_scene_surface_alignment_contract)
+    epoch_apply_sanitizers(epoch_scene_surface_alignment_contract)
+    add_test(
+        NAME epoch_scene_surface_alignment_contract
+        COMMAND epoch_scene_surface_alignment_contract
+    )
+
+   add_executable(epoch_media_timeline_preview_contract
+       src/media/media.timeline_preview_contract.cpp
+   )
+    target_sources(epoch_media_timeline_preview_contract PRIVATE
+        FILE_SET epoch_media_timeline_preview_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/media.timeline_preview.ixx
+    )
+    target_compile_definitions(epoch_media_timeline_preview_contract PRIVATE
+        EPOCH_MEDIA_TIMELINE_PREVIEW_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_media_timeline_preview_contract)
+    epoch_apply_warnings(epoch_media_timeline_preview_contract)
+    epoch_apply_sanitizers(epoch_media_timeline_preview_contract)
+   add_test(
+       NAME epoch_media_timeline_preview_contract
+       COMMAND epoch_media_timeline_preview_contract
+   )
+    add_executable(epoch_forest_preview_mesh_contract
+        src/forest/forest.preview_mesh_contract.cpp
+    )
+    target_sources(epoch_forest_preview_mesh_contract PRIVATE
+        FILE_SET epoch_forest_preview_mesh_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/authoring.document.ixx
+                ${EPOCH_MODULE_DIR}/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/authoring.morphology.ixx
+                ${EPOCH_MODULE_DIR}/forest.preview_mesh.ixx
+    )
+    target_compile_definitions(epoch_forest_preview_mesh_contract PRIVATE
+        EPOCH_FOREST_PREVIEW_MESH_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_forest_preview_mesh_contract)
+    epoch_apply_warnings(epoch_forest_preview_mesh_contract)
+    epoch_apply_sanitizers(epoch_forest_preview_mesh_contract)
+    add_test(
+        NAME epoch_forest_preview_mesh_contract
+        COMMAND epoch_forest_preview_mesh_contract
+    )
+
     add_executable(epoch_physics_manager_contract
         src/physics/physics.manager.cpp
         src/physics/physics.manager_contract.cpp

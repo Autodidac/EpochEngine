@@ -205,6 +205,9 @@
     <Filter Include="Module Files\epochengine\audio">
       <UniqueIdentifier>{3f5ffbf2-ae2f-4bd4-99fd-6cbe36b88e1e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Module Files\epochengine\media">
+      <UniqueIdentifier>{88f4e0ae-e9ac-4f31-93e8-4961bc9d3952}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Module Files\epochengine\physics">
       <UniqueIdentifier>{a8f7644e-8168-49b8-8370-96e121131cef}</UniqueIdentifier>
     </Filter>
@@ -617,6 +620,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.snapshot.ixx">
       <Filter>Module Files\epochengine\scene</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.surface_alignment.ixx">
+      <Filter>Module Files\epochengine\scene</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.string_converter.ixx">
       <Filter>Module Files\epochengine\utilities</Filter>
     </ClCompile>
@@ -757,6 +763,9 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\timeline.system.ixx">
       <Filter>Module Files\epochengine\events</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\media.timeline_preview.ixx">
+      <Filter>Module Files\epochengine\media</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
       <Filter>Module Files\epochengine\events</Filter>
@@ -1219,6 +1228,9 @@
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx">
+      <Filter>Module Files\epochengine\packages</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.preview_mesh.ixx">
       <Filter>Module Files\epochengine\packages</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx">
@@ -1876,6 +1888,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)src\media\media.timeline_preview_contract.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </None>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager_contract.cpp">
       <Filter>Source Files\epochengine\physics</Filter>
     </None>

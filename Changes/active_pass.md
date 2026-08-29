@@ -1,3 +1,19 @@
+- The active local v0.89.34 candidate visual-repair gate follows the latest real Epoch
+  Editor screenshots as the default layout authority. Earlier concept art is
+  density and workflow inspiration only; it is not runtime evidence and its
+  specific scene or controls must not be fabricated. The gate owns five exact
+  failures: nested dock text clipping, blank root-only GUI starter documents,
+  Timeline scene-preview leakage when no media is admitted, inconsistent
+  surface-relative placement, and box-collapsed Forest morphology. Each repair
+  requires its owning renderer-neutral contract before new eye evidence.
+- Public source discovery and Windows/Linux packaged runtime remain v0.89.33
+  until the candidate passes exact Windows/Linux build, receipt, package, and
+  Site publication gates. macOS remains v0.89.30.
+- EpochEngineExtensions terrain remains a separate package boundary. The first
+  truthful terrain payload is a deterministic bounded local-heightfield
+  generator over `terrain.foundation`; planetary terrain, native rendering,
+  streaming LOD, and automatic execution remain unclaimed until implemented
+  and separately admitted.
 - The v0.89.33 hard-gate checkpoint restores saved GUI projections, blocks
   background editor input while any modal is active, routes global editor
   commands to their owning document, replaces the hardcoded Package Manager

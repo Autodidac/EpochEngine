@@ -4,6 +4,7 @@
  ************************************************/
 module;
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <optional>
@@ -88,6 +89,30 @@ namespace epochengine::authoring::gui
             case TemplatePreset::blank_canvas:
             default:
                 return {};
+            }
+        }
+
+        [[nodiscard]] std::optional<GuiDocument>
+            make_legacy_generated_root_only_document() noexcept
+        {
+            try
+            {
+                GuiDocument document{
+                    DocumentHandle{0u, 1u},
+                    BranchIdentity{1u, 1u}};
+                WidgetDescriptor canvas{};
+                canvas.kind = WidgetKind::canvas;
+                canvas.name = "MainCanvas";
+                canvas.layout.width = 1'280.0f;
+                canvas.layout.height = 720.0f;
+                canvas.content = CanvasContent{1'280.0f, 720.0f, true};
+                if (!document.create_widget(std::move(canvas)))
+                    return std::nullopt;
+                return document;
+            }
+            catch (...)
+            {
+                return std::nullopt;
             }
         }
     }
@@ -200,5 +225,34 @@ namespace epochengine::authoring::gui
         {
             return std::nullopt;
         }
+    }
+
+    bool is_legacy_generated_root_only_document(
+        const GuiDocumentSnapshot& snapshot) noexcept
+    {
+        const auto legacy = make_legacy_generated_root_only_document();
+        if (!legacy)
+            return false;
+        const SerializedGuiDocument encodedCandidate =
+            serialize_gui_document(snapshot);
+        const SerializedGuiDocument encodedLegacy =
+            serialize_gui_document(legacy->snapshot());
+        return encodedCandidate
+            && encodedLegacy
+            && encodedCandidate.bytes.size() == encodedLegacy.bytes.size()
+            && std::equal(
+                encodedCandidate.bytes.begin(),
+                encodedCandidate.bytes.end(),
+                encodedLegacy.bytes.begin());
+    }
+
+    std::optional<GuiDocument>
+        migrate_legacy_generated_root_only_document(
+            const GuiDocumentSnapshot& snapshot,
+            TemplatePreset replacement) noexcept
+    {
+        if (!is_legacy_generated_root_only_document(snapshot))
+            return std::nullopt;
+        return make_template_document(replacement);
     }
 }

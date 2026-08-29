@@ -5,6 +5,7 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -15,6 +16,44 @@ import forest.factory;
 
 namespace epochengine
 {
+    namespace
+    {
+        constexpr float kPlantLabPreviewScale = 0.58f;
+
+        [[nodiscard]] std::array<float, 3> plant_lab_scaled_position(
+            float x,
+            float y,
+            float z) noexcept
+        {
+            return {
+                x * kPlantLabPreviewScale,
+                y * kPlantLabPreviewScale,
+                z * kPlantLabPreviewScale};
+        }
+
+        [[nodiscard]] std::array<float, 3> plant_lab_segment_rotation(
+            float startX,
+            float startY,
+            float startZ,
+            float endX,
+            float endY,
+            float endZ) noexcept
+        {
+            constexpr float radiansToDegrees = 57.295779513082320876f;
+            const float dx = endX - startX;
+            const float dy = endY - startY;
+            const float dz = endZ - startZ;
+            const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+            if (!(length > 0.000001f))
+                return {};
+            return {
+                std::atan2(dz / length, dy / length) * radiansToDegrees,
+                0.0f,
+                std::asin((std::clamp)(-dx / length, -1.0f, 1.0f))
+                    * radiansToDegrees};
+        }
+    }
+
     const EditorApplicationProfile& plant_lab_editor_application() noexcept
     {
         static constexpr EditorApplicationProfile profile{
@@ -61,65 +100,62 @@ namespace epochengine
 
         auto document = forest::make_default_plant_lab_document();
         const auto compiledAsset = forest::compile_forest_asset(document);
+        const auto& segments = compiledAsset.sample.segments;
         const auto& geometry = compiledAsset.preview;
 
-        constexpr float preview_scale = 0.58f;
-        const auto scaled_position = [](const auto value) noexcept
+        const std::size_t segment_budget = (std::min)(
+            segments.size(), std::size_t{ 48u });
+        const std::size_t segment_step = segment_budget > 0u
+            ? (std::max)(std::size_t{ 1u }, segments.size() / segment_budget)
+            : 1u;
+        std::size_t segment_ordinal = 0u;
+        for (std::size_t i = 0u;
+            i < segments.size() && segment_ordinal < segment_budget;
+            i += segment_step, ++segment_ordinal)
         {
-            return std::array<float, 3>{
-                value.x * preview_scale,
-                value.y * preview_scale,
-                value.z * preview_scale
-            };
-        };
-
-        if (geometry.segmentCount > 0u)
-        {
-            const auto& trunk = geometry.segments[0];
-            const float height = (std::max)(0.32f, (trunk.end.y - trunk.start.y) * preview_scale);
-            const float width = (std::max)(0.12f, trunk.radius * 2.8f * preview_scale);
+            const auto& segment = segments[i];
+            const float dx = segment.end.x - segment.start.x;
+            const float dy = segment.end.y - segment.start.y;
+            const float dz = segment.end.z - segment.start.z;
+            const float length = (std::max)(
+                0.04f,
+                std::sqrt(dx * dx + dy * dy + dz * dz)
+                    * kPlantLabPreviewScale);
+            const float startDiameter = (std::clamp)(
+                segment.radius_start_meters * 2.0f * kPlantLabPreviewScale,
+                0.025f,
+                0.24f);
+            const float endDiameter = (std::clamp)(
+                segment.radius_end_meters * 2.0f * kPlantLabPreviewScale,
+                0.012f,
+                startDiameter);
             scene.entities.push_back({
-                "PlantLabTrunk",
-                "ForestTrunk",
+                i == 0u
+                    ? std::string{"PlantLabTrunk"}
+                    : epochengine::format_text("PlantLabBranch_{:02}", segment_ordinal),
+                i == 0u ? "ForestTrunk" : "ForestBranchSegment",
                 "PlantLabPreview",
                 {
-                    (trunk.start.x + trunk.end.x) * 0.5f * preview_scale,
-                    (trunk.start.y + trunk.end.y) * 0.5f * preview_scale,
-                    (trunk.start.z + trunk.end.z) * 0.5f * preview_scale
+                    (segment.start.x + segment.end.x) * 0.5f * kPlantLabPreviewScale,
+                    (segment.start.y + segment.end.y) * 0.5f * kPlantLabPreviewScale,
+                    (segment.start.z + segment.end.z) * 0.5f * kPlantLabPreviewScale
                 },
-                {},
-                { width, height, width },
+                plant_lab_segment_rotation(
+                    segment.start.x,
+                    segment.start.y,
+                    segment.start.z,
+                    segment.end.x,
+                    segment.end.y,
+                    segment.end.z),
+                { startDiameter, length, endDiameter },
                 true,
                 true
             });
         }
 
-        const std::size_t branch_budget = (std::min)(
-            geometry.segmentCount > 0u ? geometry.segmentCount - 1u : 0u,
-            std::size_t{ 32u });
-        const std::size_t branch_step = branch_budget > 0u
-            ? (std::max)(std::size_t{ 1u }, (geometry.segmentCount - 1u) / branch_budget)
-            : 1u;
-        std::size_t branch_ordinal = 0u;
-        for (std::size_t i = 1u;
-            i < geometry.segmentCount && branch_ordinal < branch_budget;
-            i += branch_step, ++branch_ordinal)
-        {
-            const auto& segment = geometry.segments[i];
-            const float size = (std::clamp)(segment.radius * 2.1f * preview_scale, 0.055f, 0.16f);
-            scene.entities.push_back({
-                epochengine::format_text("PlantLabBranch_{:02}", branch_ordinal),
-                "ForestBranchJoint",
-                "PlantLabPreview",
-                scaled_position(segment.end),
-                {},
-                { size, size, size },
-                true,
-                true
-            });
-        }
-
-        const std::size_t canopy_budget = (std::min)(geometry.leafCount, std::size_t{ 28u });
+        const std::size_t canopy_budget = (std::min)(
+            geometry.leafCount,
+            std::size_t{ 28u });
         const std::size_t leaf_step = canopy_budget > 0u
             ? (std::max)(std::size_t{ 1u }, geometry.leafCount / canopy_budget)
             : 1u;
@@ -129,12 +165,18 @@ namespace epochengine
             i += leaf_step, ++canopy_ordinal)
         {
             const auto& leaf = geometry.leaves[i];
-            const float size = (std::clamp)(leaf.size * 1.15f * preview_scale, 0.10f, 0.24f);
+            const float size = (std::clamp)(
+                leaf.size * 1.15f * kPlantLabPreviewScale,
+                0.10f,
+                0.24f);
             scene.entities.push_back({
                 epochengine::format_text("PlantLabCanopy_{:02}", canopy_ordinal),
                 "ForestFoliageCluster",
                 "PlantLabPreview",
-                scaled_position(leaf.position),
+                plant_lab_scaled_position(
+                    leaf.position.x,
+                    leaf.position.y,
+                    leaf.position.z),
                 {},
                 { size, size * 0.62f, size },
                 true,

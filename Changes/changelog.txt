@@ -1,5 +1,11 @@
 ## [Unreleased] - Post-release source and tooling repairs
 
+- Advance the local source and Windows/Linux packaged-version authorities to
+  the bounded `v0.89.34` candidate after the visual-authoring repair. Public
+  source discovery and packaged runtime remain `v0.89.33` until exact Windows
+  and Linux builds, receipts, packages, and the separate Site publication gate
+  complete. macOS remains `v0.89.30` and is not claimed by this pass.
+
 - Bind each build-validation `.sha256` sidecar to the exact UTF-8 bytes written
   to the receipt file, including its one final LF. The writer now owns one byte
   sequence for both output and hashing instead of hashing canonical JSON and
@@ -18,6 +24,44 @@
   explicit and recoverable by regeneration. Focused no-GUI contracts prove
   fresh-store keyboard evaluation, controller-axis dead-zone filtering,
   artifact-ahead repair, and exact Restore Defaults source/artifact reopen.
+- Keep nested GUI content clipping active even when a child clip is disjoint
+  from its parent. The empty intersection no longer disables clipping and lets
+  text bleed into a neighboring dock; leaving the child scope restores the
+  exact parent clip. The latest real editor layout remains the product-layout
+  authority, while earlier polished concepts are feature-density inspiration
+  rather than runtime or eye-test evidence.
+- Replace newly generated root-only project GUI documents with the shared Game
+  HUD or Desktop App starter as appropriate. Existing files migrate only when
+  their complete canonical snapshot exactly matches Epoch's legacy generated
+  `MainCanvas`-only document; authored blank canvases and every other valid
+  document remain untouched, and migrated state remains unsaved until an
+  explicit GUI or Project save.
+- Add `scene.surface_alignment` as the renderer-neutral vertical-bounds owner
+  for centered objects, base-anchored plant projections, negative scale,
+  support-surface elevation, group placement, and idempotent bottom alignment.
+  Editor creation, supported transforms, duplication, Plant Lab projection,
+  and Forest Factory placement now use the shared contract instead of separate
+  center-Y guesses.
+- Add the metadata-only `media.timeline_preview` contract. Video refuses stale
+  or malformed source metadata, computes contain-fit geometry with rotation and
+  pixel aspect, and disables transport when no source is admitted. The editor
+  now shows a truthful no-source state instead of scene geometry or placeholder
+  frames; admitted metadata still produces no pixels until a separately
+  verified decoder-frame provider exists.
+- Preserve authored Forest morphology in the production preview instead of
+  collapsing every segment into a capped box. Branch count and node spacing now
+  affect compilation; trunks and branches render as admitted oriented tapered
+  eight-sided segments with root-only trunk caps and terminal-only branch caps.
+  The indexed renderer-neutral mesh contract proves topology, taper, cap
+  orientation, bounds, materials, leaf cards, determinism, budgets, and invalid
+  segment refusal, while native pixels and an exact-build GUI eye test remain
+  separate acceptance gates.
+- Advance the local EpochEngineExtensions subtree to a bounded mixed-source
+  state with one `demo_tiered_terrain` source package over the authoritative
+  `terrain.foundation` module. It generates deterministic, capacity-limited
+  local heightfields with discrete terraces and has no public package payload,
+  native renderer, planetary terrain, listener, download, or automatic-start
+  claim. The other seven catalog entries remain descriptor-only.
 
 ## [v0.89.33] - Editor interaction and Site package hard gate
 

@@ -128,6 +128,7 @@ import editor.workspace_layout;
 import editor.workspace_commands;
 import voxel.field;
 import forest.factory;
+import media.timeline_preview;
 import package.catalog;
 import package.registry;
 import perf.tier;
@@ -148,6 +149,7 @@ import saveload.system;
 import scene.document;
 import scene.interaction;
 import scene.persistence;
+import scene.surface_alignment;
 import scene.tier0;
 import scene.snapshot;
 import timeline.system;
@@ -1033,6 +1035,8 @@ namespace epochengine
             epochengine::timeline::TimelineState timelineState{};
             std::vector<epochengine::timeline::TimelineTrack> timelineTracks{};
             std::vector<epochengine::timeline::TimelineEvent> timelineEvents{};
+            epochengine::media::timeline_preview::PreviewState
+                mediaTimelinePreview{};
             EditorApplicationKind applicationKind{ EditorApplicationKind::Standard };
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
@@ -1555,8 +1559,7 @@ namespace epochengine
         {
             return surface == EditorMainSurface::Scene
                 || surface == EditorMainSurface::Game2D
-                || surface == EditorMainSurface::PlantLab
-                || surface == EditorMainSurface::Timeline;
+                || surface == EditorMainSurface::PlantLab;
         }
 
         [[nodiscard]] static bool main_surface_is_ai_authoring(
@@ -3902,11 +3905,77 @@ namespace epochengine
                     && !is_screen_space_gui_entity(entity)
                     && entity.type == "Ground")
                 {
-                    return entity.position[1]
-                        + std::abs(entity.scale[1]) * 0.5f;
+                    const auto elevation =
+                        scene::surface_alignment::support_surface_elevation(
+                            scene::surface_alignment::centered_unit_bounds,
+                            entity.position[1],
+                            entity.scale[1]);
+                    if (elevation)
+                        return *elevation;
                 }
             }
             return 0.0f;
+        }
+
+        [[nodiscard]] bool align_editor_entity_bottom_to_surface(
+            EditorEntity& entity,
+            float surfaceElevation,
+            scene::surface_alignment::VerticalBounds localBounds =
+                scene::surface_alignment::centered_unit_bounds) noexcept
+        {
+            const auto aligned =
+                scene::surface_alignment::align_bottom_to_surface(
+                    localBounds,
+                    entity.position[1],
+                    entity.scale[1],
+                    surfaceElevation);
+            if (!aligned)
+                return false;
+            entity.position[1] = aligned->origin_y;
+            return true;
+        }
+
+        [[nodiscard]] bool align_editor_entity_group_to_surface(
+            std::vector<EditorEntity>& entities,
+            float surfaceElevation) noexcept
+        {
+            if (entities.empty())
+                return true;
+
+            std::optional<scene::surface_alignment::VerticalBounds> groupBounds{};
+            for (const EditorEntity& entity : entities)
+            {
+                const auto world =
+                    scene::surface_alignment::transform_vertical_bounds(
+                        scene::surface_alignment::centered_unit_bounds,
+                        entity.position[1],
+                        entity.scale[1]);
+                if (!world)
+                    return false;
+                if (!groupBounds)
+                    groupBounds = *world;
+                else
+                    groupBounds =
+                        scene::surface_alignment::merge_vertical_bounds(
+                            *groupBounds,
+                            *world);
+                if (!groupBounds)
+                    return false;
+            }
+            if (!groupBounds)
+                return false;
+
+            const auto aligned =
+                scene::surface_alignment::align_bottom_to_surface(
+                    *groupBounds,
+                    0.0f,
+                    1.0f,
+                    surfaceElevation);
+            if (!aligned)
+                return false;
+            for (EditorEntity& entity : entities)
+                entity.position[1] += aligned->translation_y;
+            return true;
         }
 
         [[nodiscard]] authoring::gui::WidgetDescriptor
@@ -4110,6 +4179,21 @@ namespace epochengine
             const authoring::gui::WidgetView& widget,
             std::size_t order);
 
+        [[nodiscard]] authoring::gui::TemplatePreset
+            project_gui_starter_template(const EditorState& state) noexcept
+        {
+            const auto* projectProfile =
+                editor_find_project_profile(state.projectId);
+            const bool gameProject =
+                (projectProfile
+                    && projectProfile->kind == EditorProjectKind::Game)
+                || state.projectKind
+                    == editor_project_kind_name(EditorProjectKind::Game);
+            return gameProject
+                ? authoring::gui::TemplatePreset::game_hud
+                : authoring::gui::TemplatePreset::desktop_app;
+        }
+
         [[nodiscard]] bool load_project_gui_document(EditorState& state)
         {
             using namespace authoring::gui;
@@ -4154,11 +4238,28 @@ namespace epochengine
                 return false;
             }
 
+            const bool legacyGenerated =
+                is_legacy_generated_root_only_document(*decoded.snapshot);
+            std::optional<GuiDocument> migrated{};
+            if (legacyGenerated)
+            {
+                migrated = migrate_legacy_generated_root_only_document(
+                    *decoded.snapshot,
+                    project_gui_starter_template(state));
+                if (!migrated)
+                {
+                    state.guiDocumentStatus =
+                        "Legacy generated GUI source migration failed.";
+                    return false;
+                }
+            }
+
             std::unique_ptr<GuiDocument> document{};
             try
             {
-                document = std::make_unique<GuiDocument>(
-                    *decoded.snapshot);
+                document = legacyGenerated
+                    ? std::make_unique<GuiDocument>(std::move(*migrated))
+                    : std::make_unique<GuiDocument>(*decoded.snapshot);
             }
             catch (...)
             {
@@ -4271,13 +4372,18 @@ namespace epochengine
                 clear_editor_selection(state);
             }
 
-            state.guiDocumentSavedRevision =
-                state.guiDocument->revision().sequence;
+            state.guiDocumentSavedRevision = legacyGenerated
+                ? 0u
+                : state.guiDocument->revision().sequence;
             (void)project_gui_document_layout(state);
-            state.guiDocumentStatus = epochengine::format_text(
-                "Loaded GUI source revision {} from {}.",
-                state.guiDocumentSavedRevision,
-                state.guiDocumentSourcePath);
+            state.guiDocumentStatus = legacyGenerated
+                ? epochengine::format_text(
+                    "Migrated legacy generated root-only GUI from {} to the project starter; save GUI or Project to commit it.",
+                    state.guiDocumentSourcePath)
+                : epochengine::format_text(
+                    "Loaded GUI source revision {} from {}.",
+                    state.guiDocumentSavedRevision,
+                    state.guiDocumentSourcePath);
             return true;
         }
 
@@ -4294,28 +4400,21 @@ namespace epochengine
 
             if (!state.guiDocument || !state.guiDocument->valid())
             {
-                state.guiDocument = std::make_unique<GuiDocument>(
-                    DocumentHandle{0u, 1u},
-                    BranchIdentity{1u, 1u});
-                WidgetDescriptor canvas{};
-                canvas.kind = WidgetKind::canvas;
-                canvas.name = "MainCanvas";
-                canvas.layout.width = 1'280.0f;
-                canvas.layout.height = 720.0f;
-                canvas.content = CanvasContent{1'280.0f, 720.0f, true};
-                const MutationResult created =
-                    state.guiDocument->create_widget(std::move(canvas));
-                if (!created)
+                auto starter = make_template_document(
+                    project_gui_starter_template(state));
+                if (!starter)
                 {
                     state.guiDocumentStatus =
-                        "GUI document initialization failed: "
-                        + std::string(result_code_name(created.code));
+                        "GUI starter document initialization failed.";
                     state.guiDocument.reset();
                     state.guiDocumentRoot = {};
                     state.guiDocumentWidgets.clear();
                     return nullptr;
                 }
-                state.guiDocumentRoot = created.widget;
+                state.guiDocument = std::make_unique<GuiDocument>(
+                    std::move(*starter));
+                state.guiDocumentRoot =
+                    state.guiDocument->roots().front();
                 state.guiDocumentWidgets.clear();
                 state.guiDocumentLoadAttempted = true;
                 state.guiDocumentSavedRevision = 0u;
@@ -5753,7 +5852,15 @@ namespace epochengine
                 entity.category = "Gameplay";
                 entity.position = next_entity_position(
                     state,
-                    primary_ground_top_y(state) + 0.5f);
+                    primary_ground_top_y(state));
+                if (!align_editor_entity_bottom_to_surface(
+                        entity,
+                        primary_ground_top_y(state)))
+                {
+                    state.projectStatus =
+                        "Static mesh creation rejected invalid surface bounds.";
+                    return false;
+                }
             }
             else if (archetype == "ground")
             {
@@ -6407,8 +6514,14 @@ namespace epochengine
             if (current.type == "StaticMesh" && supportPlacement
                 && (positionRequested || scaleRequested))
             {
-                transformed.position[1] = primary_ground_top_y(editor)
-                    + std::abs(transformed.scale[1]) * 0.5f;
+                if (!align_editor_entity_bottom_to_surface(
+                        transformed,
+                        primary_ground_top_y(editor)))
+                {
+                    error =
+                        "scene.transform could not align invalid object bounds to the support surface.";
+                    return false;
+                }
             }
             if (transformed.position == current.position
                 && transformed.rotation == current.rotation
@@ -7311,6 +7424,15 @@ namespace epochengine
                 "PlantLab",
                 "PlantLabPreview",
                 true);
+            if (!align_editor_entity_group_to_surface(
+                    desired,
+                    primary_ground_top_y(state)))
+            {
+                push_editor_log(
+                    state,
+                    "[plant] Preview projection rejected invalid surface bounds.");
+                return;
+            }
             const std::size_t generatedCount = desired.size();
             if (synchronize_editor_scene_category(
                     state,
@@ -7367,6 +7489,15 @@ namespace epochengine
                 false,
                 placementX,
                 placementZ);
+            if (!align_editor_entity_group_to_surface(
+                    placed,
+                    primary_ground_top_y(state)))
+            {
+                push_editor_log(
+                    state,
+                    "[forest] Placement failed: projected surface bounds are invalid.");
+                return 0u;
+            }
             const std::size_t placedCount = placed.size();
             if (placedCount == 0u)
             {
@@ -7983,6 +8114,16 @@ namespace epochengine
             duplicate.name = make_entity_name(state, duplicate.name + "_Copy");
             duplicate.position[0] += 0.85f;
             duplicate.position[2] -= 0.55f;
+            if (duplicate.type == "StaticMesh"
+                && !align_editor_entity_bottom_to_surface(
+                    duplicate,
+                    primary_ground_top_y(state)))
+            {
+                push_editor_log(
+                    state,
+                    "[entity] Duplicate rejected invalid surface bounds.");
+                return;
+            }
             duplicate.sceneObjectId = scene::kInvalidSceneObjectId;
             const std::string sourceName = state.entities[selectedIndex].name;
             if (!create_editor_scene_entity(
@@ -23315,7 +23456,9 @@ namespace epochengine
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Output;
                 epochengine::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
-                push_editor_log(editor, "[timeline] Video opened on the shared 4D time spine.");
+                push_editor_log(
+                    editor,
+                    "[timeline] Timeline opened; media transport remains disabled until the project admits a source.");
                 break;
             case EditorMainSurface::AISandbox:
                 editor.surfaceSettleFrames = 1;
@@ -30512,9 +30655,60 @@ namespace epochengine
                     push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
                 }
 
-                gui::label("Video");
+                gui::label("Media Preview");
+                const auto mediaAvailability =
+                    epochengine::media::timeline_preview::
+                        presentation_availability(editor.mediaTimelinePreview);
+                if (mediaAvailability
+                    == epochengine::media::timeline_preview::
+                        PresentationAvailability::no_source)
+                {
+                    gui::wrapped_label(
+                        "No admitted media source. Add a verified project media asset to enable metadata and transport. The Video workspace never substitutes scene geometry or placeholder frames.",
+                        centerWidth);
+                    gui::property_row(
+                        "[media] Source",
+                        "(none admitted)",
+                        132.0f);
+                    gui::property_row(
+                        "[media] Presentation",
+                        "No pixels available",
+                        132.0f);
+                    gui::property_row(
+                        "[media] Transport",
+                        "Disabled until source admission",
+                        132.0f);
+                }
+                else if (const auto& source =
+                    editor.mediaTimelinePreview.source)
+                {
+                    gui::wrapped_label(
+                        "Source metadata is admitted. Pixel presentation remains unavailable until a separately verified decoder frame provider is connected.",
+                        centerWidth);
+                    gui::property_row(
+                        "[media] Source",
+                        source->logical_path,
+                        132.0f);
+                    gui::property_row(
+                        "[media] Provider",
+                        source->provider_revision,
+                        132.0f);
+                    gui::property_row(
+                        "[media] Presentation",
+                        "Metadata only; no decoded frame",
+                        132.0f);
+                    gui::property_row(
+                        "[media] Transport",
+                        epochengine::media::timeline_preview::transport_enabled(
+                                editor.mediaTimelinePreview)
+                            ? "Metadata transport ready"
+                            : "Disabled",
+                        132.0f);
+                }
+
+                gui::label("Simulation Timeline");
                 gui::wrapped_label(
-                    "Epoch treats time as a first-class 4D authoring spine. This surface owns the shared simulation clock controls, timeline graph, video-editing path, checkpoint gates, and configurable streaming-save contract without pretending scene serialization is finished.",
+                    "Epoch treats time as a first-class 4D authoring spine. These controls own the shared simulation clock, event tracks, checkpoint gates, and configurable streaming-save contract.",
                     centerWidth);
                 render_timeline_time_controls(centerWidth, false);
                 gui::label("Timeline Data");

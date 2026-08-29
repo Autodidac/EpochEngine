@@ -33,9 +33,15 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
   mobile specialization, and effects cannot consume the playable-2D schedule.
 - Hosted CI confirms faithful local proof; it is not the first place to discover
   ordinary compiler or contract failures.
-- `v0.89.33` is the current development source authority and the fully
-  published binary-first Windows/Linux packaged runtime on Site v55. macOS
-  packaged authority remains `v0.89.30`. Preserve `v0.89.30`, `v0.89.29`,
+- The latest real Epoch Editor screenshots are the default shell and layout
+  authority. Earlier polished concept images may guide feature density and
+  workflow composition, but they are not implementation evidence and their
+  scene content or controls must not be fabricated. Defect captures remain
+  diagnostic evidence, not an accepted GUI eye test.
+- `v0.89.34` is the local development candidate. Public source discovery and
+  the fully published binary-first Windows/Linux packaged runtime remain
+  `v0.89.33` until a new bounded publication pass completes. macOS packaged
+  authority remains `v0.89.30`. Preserve `v0.89.33`, `v0.89.30`, `v0.89.29`,
   `v0.89.28`, `v0.89.27`, and immutable `v0.89.06` as release history, and preserve
   `multicontext-base-stable` at exact commit
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Future release changes require a
@@ -43,7 +49,8 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
 
 ## Current Foundation
 
-Source v0.89.33 contains these completed or intentionally partial contracts:
+Local source candidate v0.89.34 contains these completed or intentionally
+partial contracts; public source/runtime authority remains v0.89.33:
 
 - rollbackable August 28 checkpoints now cover canonical generated-game input
   and Project Defaults editing (`38d541b2` through `de937045`), local build
@@ -72,6 +79,17 @@ Source v0.89.33 contains these completed or intentionally partial contracts:
   Reset; splitters and GUI layers capture input before navigation. Oriented
   axis grids, authored project-camera persistence, and live all-context proof
   remain delivery;
+- `scene.surface_alignment` now centralizes vertical local/world bounds,
+  support-surface elevation, signed and negative-scale handling, merged group
+  bounds, bottom alignment, and idempotence. Editor add/transform/duplicate,
+  Plant Lab projection, and Forest Factory placement consume it; terrain
+  collision, arbitrary mesh-bound extraction, and live visual proof remain
+  separate delivery;
+- `media.timeline_preview` now owns bounded admitted source metadata, monotonic
+  revisions, rotation/pixel-aspect-aware contain fit, playhead/loop transport,
+  and the strict no-source state. Video no longer borrows scene preview geometry
+  or fabricates frames. Admitted metadata remains metadata-only until a
+  separately verified decoder frame provider is implemented;
 - the Windows parent host resolves one centered client geometry from the active
   monitor work area and capability tier before launcher/editor composition.
   4K, 2K, 1080p, and compact displays receive distinct defaults; mobile/deck
@@ -91,14 +109,24 @@ Source v0.89.33 contains these completed or intentionally partial contracts:
   disposable cache state, metrics, and render-pass bindings. Native
   stencil/oblique clipping, traversal, and live portal presentation are not
   claimed;
-- the local extension catalog records descriptor-only provenance, capability,
-  platform, tier, integrity, activation, and restart requirements for the
-  known optional systems without claiming unavailable payloads were installed;
+- the local extension catalog records provenance, capability, platform, tier,
+  integrity, activation, and restart requirements for known optional systems.
+  Exactly one bounded source package, `demo_tiered_terrain`, now generates
+  deterministic local terrace heightfields through the authoritative
+  `terrain.foundation` contract; its source remains local and separately
+  admitted. The other seven entries remain descriptor-only, and no public
+  package, native renderer, planetary terrain, server, listener, download, or
+  automatic execution is claimed;
 - a typed temporal GUI document owns stable widget identity, validated hierarchy,
   typed image/image-button/tab/input/slider/scroll meaning, semantic content,
   layout, style and interaction operations, deterministic revisions, bounded
   history, snapshots, and metrics. Its integrity-checked bounded codec restores
   and atomically publishes canonical `<project>/Assets/Gui/main.epochgui` source;
+- project GUI startup now selects the shared Game HUD starter for game projects
+  and Desktop App starter otherwise. An existing source migrates only when its
+  entire canonical snapshot exactly equals the historical Epoch-generated
+  root-only `MainCanvas`; authored blank documents and all other valid sources
+  are preserved. Migration stays visibly dirty until explicit publication;
 - projectless GUI Editor opens real projects without changing application role,
   creates five built-in document templates, and reads/writes standalone
   `.epochgui` templates through the same bounded integrity codec and atomic

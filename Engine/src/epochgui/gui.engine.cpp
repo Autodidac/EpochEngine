@@ -625,9 +625,7 @@ namespace epochengine::gui
 
         [[nodiscard]] static bool has_content_clip() noexcept
         {
-            return g_frame.insideWindow
-                && g_frame.contentMax.x > g_frame.contentMin.x
-                && g_frame.contentMax.y > g_frame.contentMin.y;
+            return g_frame.insideWindow;
         }
 
         struct ContentClipScope
@@ -6398,11 +6396,50 @@ namespace epochengine::gui
         }
     }
 
+    [[nodiscard]] static bool nested_content_clip_contract() noexcept
+    {
+        const bool previousInsideWindow = g_frame.insideWindow;
+        const Vec2 previousMin = g_frame.contentMin;
+        const Vec2 previousMax = g_frame.contentMax;
+
+        g_frame.insideWindow = true;
+        g_frame.contentMin = {10.0f, 20.0f};
+        g_frame.contentMax = {110.0f, 120.0f};
+
+        bool emptyIntersectionRemainsClipped = false;
+        {
+            ContentClipScope disjoint{
+                {130.0f, 140.0f},
+                {150.0f, 160.0f}};
+            emptyIntersectionRemainsClipped =
+                has_content_clip()
+                && g_frame.contentMin.x == 130.0f
+                && g_frame.contentMin.y == 140.0f
+                && g_frame.contentMax.x == 110.0f
+                && g_frame.contentMax.y == 120.0f
+                && content_right() == 110.0f
+                && content_bottom() == 120.0f;
+        }
+
+        const bool parentRestored =
+            has_content_clip()
+            && g_frame.contentMin.x == 10.0f
+            && g_frame.contentMin.y == 20.0f
+            && g_frame.contentMax.x == 110.0f
+            && g_frame.contentMax.y == 120.0f;
+
+        g_frame.insideWindow = previousInsideWindow;
+        g_frame.contentMin = previousMin;
+        g_frame.contentMax = previousMax;
+        return emptyIntersectionRemainsClipped && parentRestored;
+    }
+
     [[nodiscard]] static bool source_editor_navigation_contract() noexcept;
 
     bool run_runtime_surface_contract() noexcept
     {
-        if (!source_editor_navigation_contract())
+        if (!nested_content_clip_contract()
+            || !source_editor_navigation_contract())
             return false;
         constexpr std::string_view utf8Sample{
             "A\xE2\x96\x88\xF0\x9F\x9A\x80"};

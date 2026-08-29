@@ -94,6 +94,46 @@ The existing `forest.factory` profile/preview path is a compatibility and
 default-asset adapter while the authored asset pipeline is completed. Shared
 morphology use beneath that adapter does not merge editor ownership.
 
+Placed preview solids now keep their internal authored offsets while one merged
+vertical bound is aligned to the primary Ground support surface through
+`scene.surface_alignment`. Plant Lab preview projection uses the same group
+rule. This removes independent per-path center-Y guesses without claiming
+physical settling, terrain collision, arbitrary imported-mesh bounds, or a GUI
+eye test.
+
+The production preview no longer reduces every authored segment to a capped
+box. Trunks and branches use their real endpoints and sampled radii to form
+oriented tapered eight-sided solids. Trunks close only at the root; branches
+close only at their terminal end, preventing stacked internal caps at connected
+nodes. Invalid zero-length or zero-radius projections are refused. The
+renderer-neutral indexed mesh compiler separately proves deterministic
+topology, logical materials, leaf-card orientation, bounds, budgets, and cap
+evidence; production indexed-mesh consumption and native pixel acceptance
+remain later gates.
+
+## Tiered Terrain Extension Boundary
+
+The first non-descriptor-only source in the local EpochEngineExtensions subtree
+is `demonstrations/tiered_terrain`. It imports the authoritative
+`terrain.foundation` and `render.math` modules and emits one deterministic,
+bounded local `Heightfield`; it does not replace Engine terrain identity,
+surface queries, mesh plans, limits, or validation.
+
+The generator accepts 5..129 samples per axis, at most 16,641 total samples,
+2..32 terraces, bounded spacing/height/world span, an explicit seed, origin,
+material slot, and collision-query intent. It preserves a zero-height border,
+an exact peak sample, discrete terrace levels, stable bounds, repeatability,
+changed-seed divergence, and core-validator rejection. These are data and
+contract properties only.
+
+`source_available_local` does not mean public or automatically active. There is
+no Site payload, native renderer, project-scene adoption, forest integration,
+planetary terrain, streaming LOD, collision solver, generated asset bundle,
+server/listener, download, or automatic execution claim. Publication requires
+an immutable revision, archive checksum, license evidence, independent build
+evidence, and explicit local admission. The other seven Extensions entries
+remain descriptor-only.
+
 ## Ownership
 
 - Plant Lab owns generation and forest-configuration authoring.

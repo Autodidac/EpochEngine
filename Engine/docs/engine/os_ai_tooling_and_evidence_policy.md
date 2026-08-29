@@ -1,10 +1,12 @@
 # OS AI, MCP, Harness, And Evidence Policy
 
-Epoch source `v0.89.33` does not train or silently activate a model. It can
+Epoch local source candidate `v0.89.34` does not train or silently activate a
+model. Public Windows/Linux source and packaged-runtime authority remains
+`v0.89.33`, while macOS remains `v0.89.30`. The candidate can
 invoke the verified Epoch-local Qwen3.8 installation or offload inference to an
 operator-managed external model machine, and it keeps model transport, MCP
 authority, execution, and evidence as separate concerns. The published
-`v0.89.06` packaged runtime and updater remain sealed.
+historical packaged runtimes and their updater evidence remain sealed.
 
 ## Model Boundary
 

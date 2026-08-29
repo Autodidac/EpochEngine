@@ -1,8 +1,8 @@
 {
   "schema": "epoch-engine-extension-catalog/v1",
-  "catalog_revision": "descriptor-v0.1.0",
+  "catalog_revision": "source-v0.2.0-local",
   "repository": "EpochEngineExtensions",
-  "availability": "descriptor_only",
+  "availability": "mixed_local_source",
   "automatic_execution": false,
   "entries": [
     {
@@ -45,12 +45,12 @@
       "stable_id": "4558540000000004",
       "package_id": "demo_tiered_terrain",
       "display_name": "Tiered Terrain Demonstration",
-      "summary": "Capability-gated terrain demonstration with headless preparation and portable through advanced renderer presentation paths.",
+      "summary": "Deterministic bounded tiered local-heightfield source package built on EpochEngine terrain.foundation.",
       "source_key": "demonstrations/tiered_terrain",
-      "platforms": ["windows", "linux", "macos", "mobile", "console", "headless"],
-      "capabilities": ["package_assets", "terrain", "voxel_fields", "procedural_generation"],
-      "availability": "descriptor_only",
-      "installable_payload": false,
+      "platforms": ["windows", "linux", "macos", "headless"],
+      "capabilities": ["terrain", "procedural_generation", "headless_tools"],
+      "availability": "source_available_local",
+      "installable_payload": true,
       "automatic_execution": false
     },
     {

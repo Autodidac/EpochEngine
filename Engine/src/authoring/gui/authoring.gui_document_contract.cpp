@@ -523,6 +523,106 @@ namespace epochengine::authoring::gui
                 return ContractFailure::template_factory;
             }
         }
+        const auto starter =
+            make_template_document(TemplatePreset::game_hud);
+        if (!starter || starter->widgets().size() <= 1u)
+            return ContractFailure::starter_roundtrip;
+        const SerializedGuiDocument encodedStarter =
+            serialize_gui_document(starter->snapshot());
+        const DeserializedGuiDocument decodedStarter =
+            encodedStarter
+                ? deserialize_gui_document(encodedStarter.bytes)
+                : DeserializedGuiDocument{};
+        if (!decodedStarter)
+            return ContractFailure::starter_roundtrip;
+
+        GuiDocument reopenedStarter{*decodedStarter.snapshot};
+        const auto starterRoots = reopenedStarter.roots();
+        const auto starterWidgets = reopenedStarter.widgets();
+        if (!reopenedStarter.valid() || reopenedStarter.validate()
+            || starterRoots.size() != 1u
+            || starterWidgets.size() != starter->widgets().size())
+        {
+            return ContractFailure::starter_roundtrip;
+        }
+        const WidgetHandle starterCanvas = starterRoots.front();
+        const auto selected = std::find_if(
+            starterWidgets.begin(),
+            starterWidgets.end(),
+            [](const WidgetView& widget) noexcept
+            {
+                return widget.descriptor.name == "Pause";
+            });
+        if (selected == starterWidgets.end()
+            || selected->parent != starterCanvas
+            || selected->descriptor.kind != WidgetKind::button)
+        {
+            return ContractFailure::starter_roundtrip;
+        }
+        for (const WidgetView& widget : starterWidgets)
+        {
+            if (widget.handle != starterCanvas
+                && widget.parent != starterCanvas)
+            {
+                return ContractFailure::starter_roundtrip;
+            }
+        }
+        const auto reopenedSelection =
+            reopenedStarter.widget(selected->handle);
+        const auto* pauseContent = reopenedSelection
+            ? std::get_if<ButtonContent>(
+                &reopenedSelection->descriptor.content)
+            : nullptr;
+        if (!reopenedSelection || !pauseContent
+            || pauseContent->label != "Pause"
+            || reopenedSelection->descriptor.interaction.action != "pause")
+        {
+            return ContractFailure::starter_roundtrip;
+        }
+
+        GuiDocument legacyGenerated{
+            DocumentHandle{0u, 1u},
+            BranchIdentity{1u, 1u}};
+        WidgetDescriptor legacyCanvas{};
+        legacyCanvas.kind = WidgetKind::canvas;
+        legacyCanvas.name = "MainCanvas";
+        legacyCanvas.layout.width = 1'280.0f;
+        legacyCanvas.layout.height = 720.0f;
+        legacyCanvas.content = CanvasContent{1'280.0f, 720.0f, true};
+        if (!legacyGenerated.create_widget(std::move(legacyCanvas)))
+            return ContractFailure::starter_migration;
+
+        const GuiDocumentSnapshot legacySnapshot =
+            legacyGenerated.snapshot();
+        const auto migrated = migrate_legacy_generated_root_only_document(
+            legacySnapshot,
+            TemplatePreset::game_hud);
+        if (legacySnapshot.revision.sequence != 2u
+            || legacySnapshot.slots.size() != 1u
+            || legacySnapshot.roots.size() != 1u
+            || !is_legacy_generated_root_only_document(legacySnapshot)
+            || !migrated
+            || !migrated->valid()
+            || migrated->validate()
+            || migrated->widgets().size() <= 1u
+            || is_legacy_generated_root_only_document(migrated->snapshot()))
+        {
+            return ContractFailure::starter_migration;
+        }
+
+        const auto authoredBlank =
+            make_template_document(TemplatePreset::blank_canvas);
+        if (!authoredBlank
+            || !authoredBlank->valid()
+            || authoredBlank->validate()
+            || is_legacy_generated_root_only_document(
+                authoredBlank->snapshot())
+            || migrate_legacy_generated_root_only_document(
+                authoredBlank->snapshot(),
+                TemplatePreset::game_hud))
+        {
+            return ContractFailure::starter_migration;
+        }
         if (widget_kind_name(WidgetKind::image_button) != "image_button"
             || result_code_name(ResultCode::cycle_detected)
                 != "cycle_detected"

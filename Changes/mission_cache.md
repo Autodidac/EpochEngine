@@ -1,5 +1,27 @@
 # Mission Cache
 
+- Treat local v0.89.34 as a candidate, not a published release. Public
+  EpochEngine source discovery and Windows/Linux packaged runtime remain
+  v0.89.33 until exact build receipts, immutable packages, live-object checks,
+  signed integrity, and explicit Site activation complete. macOS remains
+  v0.89.30.
+
+- Preserve the August 29 operator screenshots as defect/evidence inputs, not as
+  a replacement art direction. The latest real editor shell owns default GUI
+  composition. Repair: nested disjoint clips must remain active; a missing GUI
+  document must serialize a useful selectable starter instead of a root-only
+  canvas; Timeline must never reuse scene preview when no media is admitted;
+  every add/AI/duplicate/Plant/Forest placement must share one bounds-based
+  surface alignment contract; Forest preview must retain authored taper,
+  topology, terminal orientation, and logical material slots instead of
+  reducing vegetation to capped boxes. New screenshots become Site candidates
+  only after the corresponding exact-build eye test passes.
+- Keep terrain ownership exact. Core `terrain.foundation` remains the canonical
+  local-heightfield/surface-query/mesh-plan type owner. EpochEngineExtensions
+  may add a deterministic tiered local-heightfield generator that imports those
+  types, remains opt-in and non-executing, and publishes no Site catalog row
+  until an immutable source package, license, hash, size, build, and contract
+  receipt exist. Do not reuse the broader planetary-terrain identity.
 - Preserve the August 28 churn as a sequence of rollbackable source checkpoints,
   not one unverifiable leap: project input/settings (`38d541b2`, `408c496f`,
   `bbda8b7b`, `de937045`); deterministic local-build receipts (`148fffa0`,

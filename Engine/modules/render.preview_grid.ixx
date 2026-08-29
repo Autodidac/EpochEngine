@@ -2268,6 +2268,93 @@ namespace epochengine::previewgrid
             push_face(c000, c010, c011, c001, rotate_euler_degrees({ -1.0f, 0.0f, 0.0f }, rotation), color);
             push_face(c101, c111, c110, c100, rotate_euler_degrees({ 0.0f, 0.0f, -1.0f }, rotation), color);
         };
+        auto push_tapered_segment = [&](
+            Vec3 center,
+            float length,
+            float radiusStart,
+            float radiusEnd,
+            Vec3 rotation,
+            Vec3 color,
+            bool capStart,
+            bool capEnd)
+        {
+            constexpr std::uint32_t radialSides = 8u;
+            constexpr float tau = 6.28318530717958647692f;
+            const float halfLength = length * 0.5f;
+            const float taperSlope = (radiusStart - radiusEnd)
+                / (std::max)(length, 0.0001f);
+            const auto point = [&](float y, float radius, float angle) noexcept
+            {
+                return add(center, rotate_euler_degrees({
+                    std::cos(angle) * radius,
+                    y,
+                    std::sin(angle) * radius}, rotation));
+            };
+            const auto side_normal = [&](float angle) noexcept
+            {
+                return normalize(rotate_euler_degrees({
+                    std::cos(angle), taperSlope, std::sin(angle)}, rotation));
+            };
+            for (std::uint32_t side = 0u; side < radialSides; ++side)
+            {
+                const float angle0 = tau * static_cast<float>(side)
+                    / static_cast<float>(radialSides);
+                const float angle1 = tau * static_cast<float>(side + 1u)
+                    / static_cast<float>(radialSides);
+                const Vec3 s0 = point(-halfLength, radiusStart, angle0);
+                const Vec3 s1 = point(-halfLength, radiusStart, angle1);
+                const Vec3 e0 = point(halfLength, radiusEnd, angle0);
+                const Vec3 e1 = point(halfLength, radiusEnd, angle1);
+                const Vec3 normal = normalize(add(
+                    side_normal(angle0), side_normal(angle1)));
+                const Vec3 surfaceCenter = scale(
+                    add(add(s0, s1), add(e0, e1)), 0.25f);
+                const Vec3 shaded = shade_surface(surfaceCenter, normal, color);
+                push_tri(s0, e1, e0, shaded);
+                push_tri(s0, s1, e1, shaded);
+            }
+            const Vec3 bottomNormal = rotate_euler_degrees(
+                {0.0f, -1.0f, 0.0f}, rotation);
+            const Vec3 topNormal = rotate_euler_degrees(
+                {0.0f, 1.0f, 0.0f}, rotation);
+            const Vec3 bottomCenter = add(center, rotate_euler_degrees(
+                {0.0f, -halfLength, 0.0f}, rotation));
+            const Vec3 topCenter = add(center, rotate_euler_degrees(
+                {0.0f, halfLength, 0.0f}, rotation));
+            const Vec3 bottomColor = shade_surface(
+                bottomCenter, bottomNormal, color);
+            const Vec3 topColor = shade_surface(topCenter, topNormal, color);
+            if (capStart)
+            {
+                for (std::uint32_t side = 0u; side < radialSides; ++side)
+                {
+                    const float angle0 = tau * static_cast<float>(side)
+                        / static_cast<float>(radialSides);
+                    const float angle1 = tau * static_cast<float>(side + 1u)
+                        / static_cast<float>(radialSides);
+                    push_tri(
+                        bottomCenter,
+                        point(-halfLength, radiusStart, angle1),
+                        point(-halfLength, radiusStart, angle0),
+                        bottomColor);
+                }
+            }
+            if (capEnd)
+            {
+                for (std::uint32_t side = 0u; side < radialSides; ++side)
+                {
+                    const float angle0 = tau * static_cast<float>(side)
+                        / static_cast<float>(radialSides);
+                    const float angle1 = tau * static_cast<float>(side + 1u)
+                        / static_cast<float>(radialSides);
+                    push_tri(
+                        topCenter,
+                        point(halfLength, radiusEnd, angle0),
+                        point(halfLength, radiusEnd, angle1),
+                        topColor);
+                }
+            }
+        };
         auto push_leaf_cluster = [&](Vec3 center, Vec3 half, Vec3 rotation, Vec3 color)
         {
             const Vec3 mainHalf{
@@ -2362,28 +2449,28 @@ namespace epochengine::previewgrid
             }
             case ObjectPreviewPrimitive::ForestTrunk:
             {
-                const Vec3 baseHalf{
-                    (std::max)(0.035f, half.x * 0.48f),
-                    (std::max)(0.10f, half.y * 0.52f),
-                    (std::max)(0.035f, half.z * 0.48f)
-                };
-                const Vec3 upperHalf{
-                    (std::max)(0.025f, baseHalf.x * 0.68f),
-                    (std::max)(0.08f, half.y * 0.48f),
-                    (std::max)(0.025f, baseHalf.z * 0.68f)
-                };
-                push_oriented_box(add(center, rotate_euler_degrees({ 0.0f, -baseHalf.y * 0.38f, 0.0f }, marker.rotationDegrees)), baseHalf, marker.rotationDegrees, color);
-                push_oriented_box(add(center, rotate_euler_degrees({ 0.0f, upperHalf.y * 0.52f, 0.0f }, marker.rotationDegrees)), upperHalf, marker.rotationDegrees, lit(color, 1.04f));
+                push_tapered_segment(
+                    center,
+                    (std::max)(0.10f, std::abs(marker.scale.y)),
+                    (std::max)(0.02f, std::abs(marker.scale.x) * 0.5f),
+                    (std::max)(0.012f, std::abs(marker.scale.z) * 0.5f),
+                    marker.rotationDegrees,
+                    color,
+                    true,
+                    false);
                 break;
             }
             case ObjectPreviewPrimitive::ForestBranch:
             {
-                const Vec3 segmentHalf{
-                    (std::max)(0.025f, half.x),
-                    (std::max)(0.04f, half.y),
-                    (std::max)(0.025f, half.z)
-                };
-                push_oriented_box(center, segmentHalf, marker.rotationDegrees, color);
+                push_tapered_segment(
+                    center,
+                    (std::max)(0.06f, std::abs(marker.scale.y)),
+                    (std::max)(0.012f, std::abs(marker.scale.x) * 0.5f),
+                    (std::max)(0.006f, std::abs(marker.scale.z) * 0.5f),
+                    marker.rotationDegrees,
+                    color,
+                    false,
+                    true);
                 break;
             }
             case ObjectPreviewPrimitive::ForestLeafCluster:

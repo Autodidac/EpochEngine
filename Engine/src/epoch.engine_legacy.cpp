@@ -147,6 +147,7 @@ import editor.hierarchy_adapter;
 import editor.tilemap_workspace;
 #endif
 import forest.factory;
+import forest.preview_mesh;
 import project.forest_library;
 import package.registry;
 import package.catalog;
@@ -163,6 +164,7 @@ import scene.document;
 import scene.interaction;
 import scene.persistence;
 import scene.runtime;
+import scene.surface_alignment;
 import scene.tier0;
 import terrain.foundation;
 import voxel.field;
@@ -173,6 +175,7 @@ import scene.snapshot;
 import scene.serializer;
 import temporal.request;
 import timeline.system;
+import media.timeline_preview;
 
 import gui.engine;
 import gui.menu;
@@ -3310,6 +3313,12 @@ namespace epochengine::core
             && epochengine::scene::validate_scene_document(
                 sceneDocumentProjection.snapshot,
                 epochengine::scene::SceneDocumentRequirement::runnable));
+        check(
+            "scene.surface_alignment.bounds_and_idempotence",
+            epochengine::scene::surface_alignment::run_contract().passed());
+        check(
+            "media.timeline_preview.admission_fit_transport",
+            epochengine::media::timeline_preview::run_contract().passed());
         check("scene.persistence.validation_and_atomic_plan",
             epochengine::scene::persistence::scene_persistence_contract_checks().all_passed());
         check("scene.runtime.compiled_projection",
@@ -3695,7 +3704,7 @@ namespace epochengine::core
             epochengine::previewgrid::ObjectMarker{
                 .position{ 0.0f, 1.0f, 0.0f },
                 .color{ 0.42f, 0.70f, 0.32f },
-                .scale{ 0.16f, 1.40f, 0.16f },
+                .scale{ 0.16f, 1.40f, 0.08f },
                 .rotationDegrees{ 35.0f, 0.0f, -42.0f },
                 .radius = 0.20f,
                 .primitive = epochengine::previewgrid::ObjectPreviewPrimitive::ForestBranch,
@@ -3707,6 +3716,39 @@ namespace epochengine::core
         const std::vector<epochengine::previewgrid::Vertex> forestProjectionWire =
             epochengine::previewgrid::object_marker_vertices_for(&forestProjectionContext);
         epochengine::previewgrid::clear_object_markers(&forestProjectionContext);
+        int forestCapPolicyContext{};
+        const std::array<epochengine::previewgrid::ObjectMarker, 2>
+            forestCapPolicyMarkers{{
+                epochengine::previewgrid::ObjectMarker{
+                    .position{-2.0f, 1.0f, 0.0f},
+                    .color{0.58f, 0.36f, 0.20f},
+                    .scale{0.16f, 1.40f, 0.08f},
+                    .primitive = epochengine::previewgrid::ObjectPreviewPrimitive::ForestTrunk},
+                epochengine::previewgrid::ObjectMarker{
+                    .position{2.0f, 1.0f, 0.0f},
+                    .color{0.42f, 0.70f, 0.32f},
+                    .scale{0.16f, 1.40f, 0.08f},
+                    .primitive = epochengine::previewgrid::ObjectPreviewPrimitive::ForestBranch}}};
+        epochengine::previewgrid::set_object_markers(
+            &forestCapPolicyContext,
+            std::span<const epochengine::previewgrid::ObjectMarker>{
+                forestCapPolicyMarkers});
+        const std::vector<epochengine::previewgrid::Vertex> forestCapPolicySolid =
+            epochengine::previewgrid::object_solid_vertices_for(
+                &forestCapPolicyContext);
+        epochengine::previewgrid::clear_object_markers(&forestCapPolicyContext);
+        const auto count_cap_center = [&](float x, float y) noexcept
+        {
+            return static_cast<std::size_t>(std::count_if(
+                forestCapPolicySolid.begin(),
+                forestCapPolicySolid.end(),
+                [=](const epochengine::previewgrid::Vertex& vertex) noexcept
+                {
+                    return std::abs(vertex.position.x - x) < 0.0001f
+                        && std::abs(vertex.position.y - y) < 0.0001f
+                        && std::abs(vertex.position.z) < 0.0001f;
+                }));
+        };
 
         float forestProjectionExtentX{};
         float forestProjectionExtentZ{};
@@ -3730,12 +3772,22 @@ namespace epochengine::core
             epochengine::previewgrid::rotate_euler_degrees({ 0.0f, 1.0f, 0.0f }, { 35.0f, 0.0f, -42.0f });
         check(
             "render.forest_preview_projection",
-            forestProjectionSolid.size() == 36u
+            forestProjectionSolid.size() == 72u
             && forestProjectionWire.size() == 24u
             && forestProjectionExtentX > 0.45f
             && forestProjectionExtentZ > 0.35f
             && std::abs(forestProjectedAxis.x) > 0.45f
             && std::abs(forestProjectedAxis.z) > 0.35f);
+        check(
+            "render.forest_preview_cap_policy",
+            forestCapPolicySolid.size() == 144u
+            && count_cap_center(-2.0f, 0.30f) == 8u
+            && count_cap_center(-2.0f, 1.70f) == 0u
+            && count_cap_center(2.0f, 0.30f) == 0u
+            && count_cap_center(2.0f, 1.70f) == 8u);
+        check(
+            "render.forest_preview_indexed_mesh",
+            epochengine::forest::preview_mesh::run_contract().passed());
         check("render.canvas2d.core", epochengine::canvas2d::canvas2d_runtime_contract());
         const auto cpuCanvasContract =
             epochengine::canvas2d::cpu::canvas2d_cpu_runtime_contract_failure();
@@ -6771,6 +6823,28 @@ namespace epochengine::core
             return epochengine::previewgrid::ObjectPreviewPrimitive::Cube;
         }
 
+        [[nodiscard]] bool runtime_entity_is_forest_preview(
+            const ProjectRuntimeEntity& entity) noexcept
+        {
+            return entity.type == "ForestTrunk"
+                || entity.type == "ForestBranchSegment"
+                || entity.type == "ForestBranchJoint"
+                || entity.type == "ForestFoliageCluster";
+        }
+
+        [[nodiscard]] bool runtime_forest_projection_admitted(
+            const ProjectRuntimeEntity& entity)
+        {
+            if (entity.type == "ForestFoliageCluster")
+                return true;
+            if (!runtime_entity_is_forest_preview(entity))
+                return true;
+            return forest::preview_mesh::segment_projection_admitted(
+                std::abs(entity.transform.scale[1]),
+                std::abs(entity.transform.scale[0]) * 0.5f,
+                std::abs(entity.transform.scale[2]) * 0.5f);
+        }
+
         [[nodiscard]] std::size_t visible_runtime_entity_count(std::span<const ProjectRuntimeEntity> entities) noexcept
         {
             std::size_t count = 0;
@@ -6846,6 +6920,11 @@ namespace epochengine::core
                     || entity.type == "Light"
                     || entity.type == "Spawn")
                     continue;
+                if (runtime_entity_is_forest_preview(entity)
+                    && !runtime_forest_projection_admitted(entity))
+                {
+                    continue;
+                }
 
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
                     .position{ entity.transform.position[0], entity.transform.position[1], entity.transform.position[2] },

@@ -522,6 +522,13 @@ contracts must not be described as a live runtime pass.
   Save writes and verifies a same-directory temporary before atomic replacement.
   Save Project, Build, and external Run require both GUI and scene publication
   evidence. The scene/canvas view is a preview projection, not GUI authority.
+
+  The editor also recognizes one exact historical generated source: the
+  canonical snapshot containing only Epoch's default `MainCanvas` root. That
+  complete serialized shape, and no broader “single root” heuristic, may
+  migrate to the current Game HUD or Desktop App starter. An authored Blank
+  Canvas is therefore preserved. Migration is an in-memory, visibly unsaved
+  edit until GUI Canvas Save or Project Save publishes it.
   Save compiles the accepted document into a validated immutable artifact under
   `Library/Gui`; ProjectPlayScene restores the matching logical source through
   the project GUI runtime and EpochGui adapter. `move_x`, `move_y`, `jump`,
@@ -833,6 +840,23 @@ execution.
 - future 2D work should add tile/layer/canvas tools on top of this same
   entity/project spine
 
+## Surface-relative placement
+
+- `scene.surface_alignment` is the renderer-neutral authority for vertical
+  local bounds, world-bound transforms, support-surface elevation, group-bound
+  merging, and bottom-to-surface placement.
+- Centered box geometry, base-anchored plant geometry, negative scale, and
+  signed ground elevation use explicit bounds rather than unrelated half-height
+  arithmetic. Applying the same alignment twice is idempotent.
+- Static-mesh creation, supported AI transforms, duplication, Plant Lab preview
+  projection, and Forest Factory placement route through this contract. Plant
+  and forest groups translate as one set from their merged lowest bound, so the
+  generated form retains its internal offsets while contacting the primary
+  Ground surface.
+- This is source/contract placement truth. Arbitrary imported-mesh bound
+  extraction, terrain collision, physical settling, and exact-build visual
+  acceptance remain separate gates.
+
 ## Systems And Task Graph Workspace
 
 The Systems workspace has two data authorities and one portable projection:
@@ -1132,7 +1156,15 @@ the write ranges are explicitly isolated.
 - `Video` is the dedicated 4D/time-based workspace. It reads the
   shared `core.time` stats, exposes manual/interval/frame/timeline-key
   checkpoint modes, owns pacing/playhead controls, and presents configurable
-  streaming-save status beside the editor scene flow.
+  streaming-save status beside the editor scene flow. When no media source is
+  admitted, it shows an explicit no-source/no-pixels state and disables media
+  transport; it never substitutes scene geometry or placeholder frames.
+- `media.timeline_preview` owns project-relative source identity, lowercase
+  SHA-256, provider revision, dimensions, pixel aspect, rotation, frame timing,
+  monotonic revision admission, contain-fit geometry, seek/play/pause/stop, and
+  loop behavior. Its current presentation levels are `no_source` and
+  `metadata_only`. Even valid admitted metadata cannot produce pixels until a
+  separately verified decoder-frame provider supplies them.
 - scene-backed editor workspaces reserve a bottom Video Timeline strip when
   there is enough room. That strip shrinks the scene viewport instead of
   letting 3D/2D rendering draw behind timeline controls or timeline graph

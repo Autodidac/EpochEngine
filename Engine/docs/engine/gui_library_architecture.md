@@ -20,6 +20,12 @@ published `v0.89.06` packaged runtime and updater remain sealed. Source and
 contract integration below does not claim GUI screenshots, responsiveness, or
 operator eye proof.
 
+The latest real Epoch Editor screenshots are the default shell/layout
+authority. Earlier polished concepts are broad feature-density and workflow
+inspiration only; they are not implementation evidence, and neither their scene
+content nor unimplemented controls may be copied into product claims. Defect
+captures identify repair gates and are not accepted eye-test evidence.
+
 The current implementation is still physically compact, but the ownership rule
 is already library-like: reusable controls are added to `gui.engine` first, then
 editor domains consume them. Editor workspaces should not reimplement generic
@@ -136,6 +142,12 @@ menu replay remain unchanged.
   through hover/default colors on the same frame that an action fires.
 - Layout and docking: windows, splitters, resize handles, scroll extents,
   focus routing, z-order, modal scrims, context menus, and future popout hosts.
+- Nested clipping is intersection-preserving. Entering a child content scope
+  keeps clipping active even when the child and parent are disjoint; an empty
+  intersection is still a clip, never a signal to fall back to the host/window
+  extent. Leaving the child scope restores the exact parent bounds. The
+  build-safe nested-clip contract covers the disjoint intersection and parent
+  restoration that prevent wrapped AI/status text from bleeding across docks.
 - Theme and rendering: palette ownership, font/glyph metrics, clipping,
   runtime-surface atlas use, deferred GUI replay, and backend-safe present
   ordering. Theme preference labels, option data, preference resolution, and
@@ -212,6 +224,16 @@ project materialization call the same factory. Generated 2D projects declare
 and create the shared Game HUD only when canonical source is absent. Source is
 compiled and persisted through `project.gui_library`, then restored through
 `project.gui_runtime` before generated child acceptance may continue.
+
+Editor startup follows that same factory instead of generating an empty root
+as a product default: game projects select Game HUD and other project kinds
+select Desktop App. The migration path is deliberately narrower than “one root
+widget.” It serializes and compares the complete snapshot to Epoch's exact
+historical generated `MainCanvas`-only document, replaces only that byte-
+equivalent legacy shape, and leaves the replacement dirty until an explicit
+GUI/Project save. Authored Blank Canvas documents and every other valid source
+are not migration candidates. Starter round-trip and exact legacy-refusal/
+replacement behavior belong to `authoring.gui_document` contract evidence.
 
 The reusable GUI boundary also requires:
 - global editor Delete, Escape, and history shortcuts query

@@ -322,6 +322,7 @@ export namespace epochengine::forest
         case ForestPreset::Bush:
             profile.branch.levels = 3;
             profile.branch.childrenPerNode = 3;
+            profile.branch.branchesPerNode = 3.0f;
             profile.branch.angleDegrees = 34.0F;
             profile.branch.spreadDegrees = 270.0F;
             profile.branch.outwardBias = 0.82F;
@@ -330,6 +331,7 @@ export namespace epochengine::forest
         case ForestPreset::Fern:
             profile.branch.levels = 2;
             profile.branch.childrenPerNode = 5;
+            profile.branch.branchesPerNode = 5.0f;
             profile.branch.angleDegrees = 22.0F;
             profile.branch.spreadDegrees = 180.0F;
             profile.branch.sag = 0.12F;
@@ -607,7 +609,10 @@ export namespace epochengine::forest
         recipe.growth.seed = profile.seed.value;
         recipe.growth.generations = (std::max)(1u,
             (std::min)(profile.branch.levels, profile.config.maxBranchDepth));
-        recipe.growth.children_per_node = (std::max)(1u, profile.branch.childrenPerNode);
+        const std::uint32_t targetBranchesPerNode = static_cast<std::uint32_t>(
+            (std::clamp)(std::round(profile.branch.branchesPerNode), 1.0f, 8.0f));
+        recipe.growth.children_per_node = (std::max)(1u,
+            (std::min)(profile.branch.childrenPerNode, targetBranchesPerNode));
         recipe.growth.length_decay = (std::clamp)(
             0.58f + profile.branch.curve * 0.24f,
             0.45f,
@@ -621,18 +626,20 @@ export namespace epochengine::forest
             branchLengthScale += generationScale;
             generationScale *= recipe.growth.length_decay;
         }
+        const float authoredNodeStep = (std::max)(0.01f,
+            (std::min)(
+                profile.branch.nodeStepMeters,
+                profile.branch.branchLengthMeters));
         const float authoredAxialHeight = (std::max)(
             0.01f,
             profile.branch.startHeightMeters +
-                profile.branch.branchLengthMeters * branchLengthScale);
+                authoredNodeStep * branchLengthScale);
         const float targetScale = profile.config.targetHeightMeters /
             authoredAxialHeight;
         recipe.growth.root_length_meters = (std::max)(
             0.01f,
             profile.branch.startHeightMeters * targetScale);
-        recipe.growth.segment_length_meters = (std::max)(
-            0.01f,
-            profile.branch.branchLengthMeters * targetScale);
+        recipe.growth.segment_length_meters = authoredNodeStep * targetScale;
         recipe.growth.root_radius_meters = profile.config.trunkRadiusMeters;
         recipe.growth.radius_decay = 0.72f;
         recipe.growth.branch_angle_degrees = profile.branch.angleDegrees;
@@ -746,7 +753,11 @@ export namespace epochengine::forest
         const auto levels = profile.branch.levels > profile.config.maxBranchDepth
             ? profile.config.maxBranchDepth
             : profile.branch.levels;
-        const auto children = profile.branch.childrenPerNode == 0u ? 1u : profile.branch.childrenPerNode;
+        const auto density = static_cast<std::uint32_t>((std::clamp)(
+            std::round(profile.branch.branchesPerNode), 1.0f, 8.0f));
+        const auto children = profile.branch.childrenPerNode == 0u
+            ? 1u
+            : (std::min)(profile.branch.childrenPerNode, density);
 
         for (std::uint32_t level = 0; level < levels; ++level)
         {
@@ -805,17 +816,16 @@ export namespace epochengine::forest
                 const float offset =
                     (static_cast<float>(copy) -
                         static_cast<float>(leafCopies - 1u) * 0.5f) * 0.08f;
-                const std::uint32_t sourceSegment = geometry.segmentCount == 0u
-                    ? 0u
-                    : (std::min)(terminal.source.index,
-                        static_cast<std::uint32_t>(geometry.segmentCount - 1u));
                 geometry.leaves[geometry.leafCount++] = ForestPreviewLeaf{
                     .position = add(terminal.position, {
                         offset,
                         0.02f * static_cast<float>(copy),
                         -offset}),
                     .size = (std::max)(presetLeafScale, terminal.scale_meters),
-                    .sourceSegment = sourceSegment};
+                    .sourceSegment = geometry.segmentCount == 0u
+                        ? 0u
+                        : (std::min)(terminal.source.index,
+                            static_cast<std::uint32_t>(geometry.segmentCount - 1u))};
             }
         }
 
