@@ -38,10 +38,13 @@
 - Public source discovery and Windows/Linux packaged runtime are v0.89.34 from
   exact Engine commit `5a5c5f26af8e96317efd92f8a104187606db39e4`.
   Local v0.89.35 remains unpublished. Fresh Windows Debug/Release editor builds
-  and both build-safe aggregate contracts pass, as do standalone EpochGui
-  10/10 and EpochEngineExtensions 2/2. Operator eye testing, final immutable
-  Windows/Linux packages/receipts, and explicit Site activation remain open.
-  macOS remains v0.89.30.
+  and both build-safe aggregate contracts pass. Managed Clang 22.1.8 now links
+  the full Linux Release engine after the embedded CMake target registers the
+  EpochGui docking implementation; the module-owned direct-tab CTest and Linux
+  aggregate engine contract pass. Standalone EpochGui and
+  EpochEngineExtensions also pass their focused suites. Operator eye testing,
+  final immutable Windows/Linux packages/receipts, and explicit Site activation
+  remain open. macOS remains v0.89.30.
 - The published v0.89.34 visual-authoring repairs remain the product baseline:
   nested dock clipping, exact legacy root-only GUI migration, truthful
   no-source Timeline presentation, shared surface-relative placement, and

@@ -1,7 +1,11 @@
-#include <gui/dock_layout.hpp>
-
 #include <cmath>
 #include <cstdint>
+
+#if defined(EPOCHGUI_TEST_MODULE_IMPORT)
+import epoch.gui;
+#else
+#include <gui/dock_layout.hpp>
+#endif
 
 namespace
 {
@@ -10,6 +14,7 @@ namespace
         return std::abs(lhs - rhs) < 0.001f;
     }
 
+#if !defined(EPOCHGUI_TEST_MODULE_IMPORT)
     [[nodiscard]] int check_three_by_two_grid()
     {
         using namespace epochengine::gui_lib;
@@ -163,6 +168,7 @@ namespace
 
         return 0;
     }
+#endif
 
     [[nodiscard]] int check_direct_tab_strip_slots()
     {
@@ -309,12 +315,14 @@ namespace
 
 int main()
 {
+#if !defined(EPOCHGUI_TEST_MODULE_IMPORT)
     if (const int result = check_three_by_two_grid(); result != 0)
         return result;
     if (const int result = check_general_item_count(); result != 0)
         return result;
     if (const int result = check_overlapping_targets_choose_nearest_edge(); result != 0)
         return result;
+#endif
     if (const int result = check_direct_tab_strip_slots(); result != 0)
         return result;
     if (const int result = check_same_group_reorder(); result != 0)

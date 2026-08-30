@@ -44,7 +44,10 @@
   an installable payload before immutable Site admission.
 - Validation: source naming 579/579; Debug and Release EpochEditor builds and
   aggregate build-safe contracts pass; standalone EpochGui passes 10/10 and
-  EpochEngineExtensions passes 2/2. No GUI/GPU launch or publication is claimed.
+  EpochEngineExtensions passes 2/2. Managed Clang 22.1.8 also links the full
+  Linux Release engine after registering the EpochGui docking implementation
+  in the embedded CMake target; its direct-tab module CTest and aggregate
+  engine contract pass. No GUI/GPU launch or publication is claimed.
 
 ## [0.89.34] - 2026-08-29
 

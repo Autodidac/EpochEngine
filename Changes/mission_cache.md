@@ -33,10 +33,17 @@
   remain v0.89.34 until the exact v0.89.35 release gate is authorized.
 - Current v0.89.35 safe evidence: source naming 579/579, whitespace clean,
   Windows Debug and Release `EpochEditor` builds pass, both build-safe aggregate
-  contracts exit 0, standalone EpochGui Release passes 10/10, and standalone
-  EpochEngineExtensions passes 2/2. No GUI/GPU launch or eye-test claim was
-  made. Stage a fresh Windows test folder and obtain operator eye evidence
-  before runtime publication; Linux release proof remains separately required.
+  contracts exit 0, and managed Clang 22.1.8 links the full Linux Release
+  engine. The embedded module-owned direct-tab CTest and Linux aggregate engine
+  contract pass; standalone EpochGui and EpochEngineExtensions focused suites
+  also pass. No GUI/GPU launch or eye-test claim was made. Use the fresh staged
+  Windows folder for operator evidence before runtime publication; final
+  immutable Linux staging and canonical receipts remain separately required.
+- EpochGui's public dock_layout.hpp still exposes older context-grid helpers
+  that are not all exported by epoch.gui. Keep standalone header contracts and
+  embedded module contracts distinct until a dedicated parity pass reconciles
+  that pre-existing surface; do not claim full header/module parity from the
+  direct-tab contract alone.
 
 - Public EpochEngine source discovery and Windows/Linux packaged runtime are
   v0.89.34 from exact commit `5a5c5f26af8e96317efd92f8a104187606db39e4`.

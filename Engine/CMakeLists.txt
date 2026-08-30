@@ -313,6 +313,7 @@ if(EPOCH_CI_HEADLESS_ONLY)
 endif()
 
 add_library(epoch_gui STATIC
+    dep/EpochGui/src/epochgui/dock_layout.cpp
     dep/EpochGui/src/epochgui/hierarchy_tree.cpp
     dep/EpochGui/src/epochgui/input.cpp
     dep/EpochGui/src/epochgui/image.cpp
@@ -2429,6 +2430,21 @@ if(BUILD_TESTING)
     add_test(
         NAME epoch_gui_node_graph_workspace_contract
         COMMAND epoch_gui_node_graph_workspace_contract
+    )
+
+    add_executable(epoch_gui_dock_layout_contract
+        dep/EpochGui/tests/dock_layout_tests.cpp
+    )
+    target_link_libraries(epoch_gui_dock_layout_contract PRIVATE epoch_gui)
+    target_compile_definitions(epoch_gui_dock_layout_contract PRIVATE
+        EPOCHGUI_TEST_MODULE_IMPORT=1
+    )
+    epoch_apply_cxx_dialect(epoch_gui_dock_layout_contract)
+    epoch_apply_warnings(epoch_gui_dock_layout_contract)
+    epoch_apply_sanitizers(epoch_gui_dock_layout_contract)
+    add_test(
+        NAME epoch_gui_dock_layout_contract
+        COMMAND epoch_gui_dock_layout_contract
     )
 
     add_executable(epoch_gui_system_workspace_contract
