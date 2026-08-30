@@ -41,6 +41,9 @@ namespace epochengine::editor_code_workspace
         constexpr std::size_t kMaximumDiagnosticSourceBytes = 128u;
         constexpr std::size_t kMaximumDiagnosticCodeBytes = 64u;
         constexpr std::size_t kMaximumDiagnosticMessageBytes = 2'048u;
+        constexpr std::size_t kMaximumHistoryEntries = 4'096u;
+        constexpr std::size_t kMinimumHistoryBytes = 1u * 1'024u * 1'024u;
+        constexpr std::size_t kMaximumHistoryBytes = 8u * 1'024u * 1'024u;
         constexpr std::size_t kMaximumSessionBytes = 64u * 1'024u;
         constexpr std::string_view kSessionHeader{
             "epoch-code-workspace-state-v1"};
@@ -556,6 +559,22 @@ namespace epochengine::editor_code_workspace
 
     struct Controller::Implementation final
     {
+        struct TextHistoryEntry final
+        {
+            std::size_t begin{};
+            std::string removed{};
+            std::string inserted{};
+            TextRange before_selection{};
+            TextRange after_selection{};
+            std::string label{};
+
+            [[nodiscard]] std::size_t retained_bytes() const noexcept
+            {
+                return sizeof(TextHistoryEntry) + removed.size()
+                    + inserted.size() + label.size();
+            }
+        };
+
         struct Document final
         {
             DocumentHandle handle{};
@@ -572,6 +591,9 @@ namespace epochengine::editor_code_workspace
             FindSnapshot find{};
             std::vector<Diagnostic> diagnostics{};
             std::uint64_t diagnostics_revision{};
+            std::vector<TextHistoryEntry> history{};
+            std::size_t history_cursor{};
+            std::size_t retained_history_bytes{};
             std::size_t maximum_bytes{256u * 1024u};
             bool writable{};
             bool utf8_bom{};
@@ -666,6 +688,10 @@ namespace epochengine::editor_code_workspace
             const Controller::Implementation::Document& document,
             const std::optional<DocumentHandle> active)
         {
+            const bool can_undo = document.writable
+                && document.history_cursor != 0u;
+            const bool can_redo = document.writable
+                && document.history_cursor < document.history.size();
             return DocumentSnapshot{
                 .handle = document.handle,
                 .relative_path = document.relative_path,
@@ -682,12 +708,228 @@ namespace epochengine::editor_code_workspace
                 .find = document.find,
                 .diagnostics = document.diagnostics,
                 .diagnostics_revision = document.diagnostics_revision,
+                .history_cursor = document.history_cursor,
+                .history_entries = document.history.size(),
+                .retained_history_bytes = document.retained_history_bytes,
+                .undo_label = can_undo
+                    ? document.history[document.history_cursor - 1u].label
+                    : std::string{},
+                .redo_label = can_redo
+                    ? document.history[document.history_cursor].label
+                    : std::string{},
                 .active = active && *active == document.handle,
                 .dirty = document.text != document.persisted_text,
                 .diagnostics_current = document.diagnostics_revision != 0u
                     && document.diagnostics_revision == document.revision,
+                .can_undo = can_undo,
+                .can_redo = can_redo,
                 .writable = document.writable,
                 .utf8_bom = document.utf8_bom};
+        }
+
+        enum class TextCommitCode : std::uint8_t
+        {
+            unchanged,
+            committed,
+            budget_exceeded
+        };
+
+        enum class TextHistoryDirection : std::uint8_t
+        {
+            undo,
+            redo
+        };
+
+        [[nodiscard]] std::size_t history_budget(
+            const Controller::Implementation::Document& document) noexcept
+        {
+            const std::size_t scaled = document.maximum_bytes
+                > kMaximumHistoryBytes / 8u
+                ? kMaximumHistoryBytes
+                : document.maximum_bytes * 8u;
+            return (std::clamp)(
+                scaled,
+                kMinimumHistoryBytes,
+                kMaximumHistoryBytes);
+        }
+
+        [[nodiscard]] Controller::Implementation::TextHistoryEntry
+            make_text_history_entry(
+                const Controller::Implementation::Document& document,
+                const std::string_view updated,
+                const TextRange after_selection,
+                std::string label)
+        {
+            std::size_t prefix{};
+            while (prefix < document.text.size() && prefix < updated.size()
+                && document.text[prefix] == updated[prefix])
+            {
+                ++prefix;
+            }
+            std::size_t suffix{};
+            while (suffix < document.text.size() - prefix
+                && suffix < updated.size() - prefix
+                && document.text[document.text.size() - suffix - 1u]
+                    == updated[updated.size() - suffix - 1u])
+            {
+                ++suffix;
+            }
+            if (label.empty())
+                label = "Edit text";
+            return Controller::Implementation::TextHistoryEntry{
+                .begin = prefix,
+                .removed = document.text.substr(
+                    prefix,
+                    document.text.size() - prefix - suffix),
+                .inserted = std::string{updated.substr(
+                    prefix,
+                    updated.size() - prefix - suffix)},
+                .before_selection = document.selection,
+                .after_selection = after_selection,
+                .label = std::move(label)};
+        }
+
+        [[nodiscard]] bool reserve_history(
+            Controller::Implementation::Document& document,
+            const std::size_t incoming_bytes)
+        {
+            const std::size_t budget = history_budget(document);
+            if (incoming_bytes > budget)
+                return false;
+
+            while (document.history.size() > document.history_cursor)
+            {
+                document.retained_history_bytes -=
+                    document.history.back().retained_bytes();
+                document.history.pop_back();
+            }
+            while (!document.history.empty()
+                && (document.history.size() >= kMaximumHistoryEntries
+                    || incoming_bytes > budget
+                        - (std::min)(
+                            budget,
+                            document.retained_history_bytes)))
+            {
+                document.retained_history_bytes -=
+                    document.history.front().retained_bytes();
+                document.history.erase(document.history.begin());
+                if (document.history_cursor != 0u)
+                    --document.history_cursor;
+            }
+            return incoming_bytes <= budget
+                - (std::min)(budget, document.retained_history_bytes);
+        }
+
+        [[nodiscard]] TextCommitCode commit_text_change(
+            Controller::Implementation::Document& document,
+            std::string updated,
+            const TextRange after_selection,
+            std::string label,
+            const bool reset_viewport = false)
+        {
+            if (updated == document.text)
+                return TextCommitCode::unchanged;
+            auto entry = make_text_history_entry(
+                document, updated, after_selection, std::move(label));
+            const std::size_t entry_bytes = entry.retained_bytes();
+            if (!reserve_history(document, entry_bytes))
+                return TextCommitCode::budget_exceeded;
+
+            document.text = std::move(updated);
+            document.line_starts = line_starts(document.text);
+            ++document.revision;
+            if (document.revision == 0u)
+                document.revision = 1u;
+            document.selection = after_selection;
+            if (reset_viewport)
+                document.viewport = {};
+            else
+                reveal_range(
+                    document.viewport,
+                    document.selection,
+                    document.line_starts.size(),
+                    maximum_columns(document.text, document.line_starts));
+            document.find.current_match.reset();
+            document.find.current_index = 0u;
+            document.find.match_count = document.find.query.empty()
+                ? 0u
+                : find_matches(
+                    document.text,
+                    document.find.query,
+                    document.find.options).size();
+            document.history.push_back(std::move(entry));
+            document.history_cursor = document.history.size();
+            document.retained_history_bytes += entry_bytes;
+            return TextCommitCode::committed;
+        }
+
+        [[nodiscard]] bool replay_text_history(
+            Controller::Implementation::Document& document,
+            const TextHistoryDirection direction)
+        {
+            const bool forward = direction == TextHistoryDirection::redo;
+            if (forward
+                ? document.history_cursor >= document.history.size()
+                : document.history_cursor == 0u)
+            {
+                return false;
+            }
+            const std::size_t index = forward
+                ? document.history_cursor
+                : document.history_cursor - 1u;
+            const auto& entry = document.history[index];
+            const std::string& expected = forward
+                ? entry.removed
+                : entry.inserted;
+            const std::string& replacement = forward
+                ? entry.inserted
+                : entry.removed;
+            if (entry.begin > document.text.size()
+                || expected.size() > document.text.size() - entry.begin
+                || document.text.compare(
+                    entry.begin, expected.size(), expected) != 0)
+            {
+                return false;
+            }
+
+            std::string updated{};
+            updated.reserve(
+                document.text.size() - expected.size() + replacement.size());
+            updated.append(document.text, 0u, entry.begin);
+            updated.append(replacement);
+            updated.append(
+                document.text,
+                entry.begin + expected.size(),
+                std::string::npos);
+            if (!valid_utf8(updated))
+                return false;
+
+            document.text = std::move(updated);
+            document.line_starts = line_starts(document.text);
+            ++document.revision;
+            if (document.revision == 0u)
+                document.revision = 1u;
+            document.selection = forward
+                ? entry.after_selection
+                : entry.before_selection;
+            if (forward)
+                ++document.history_cursor;
+            else
+                --document.history_cursor;
+            document.find.current_match.reset();
+            document.find.current_index = 0u;
+            document.find.match_count = document.find.query.empty()
+                ? 0u
+                : find_matches(
+                    document.text,
+                    document.find.query,
+                    document.find.options).size();
+            reveal_range(
+                document.viewport,
+                document.selection,
+                document.line_starts.size(),
+                maximum_columns(document.text, document.line_starts));
+            return true;
         }
     }
 
@@ -715,6 +957,11 @@ namespace epochengine::editor_code_workspace
         case ResultCode::not_found: return "not_found";
         case ResultCode::stale_diagnostics: return "stale_diagnostics";
         case ResultCode::read_only: return "read_only";
+        case ResultCode::nothing_to_undo: return "nothing_to_undo";
+        case ResultCode::nothing_to_redo: return "nothing_to_redo";
+        case ResultCode::history_corrupt: return "history_corrupt";
+        case ResultCode::history_budget_exceeded:
+            return "history_budget_exceeded";
         case ResultCode::write_failed: return "write_failed";
         case ResultCode::verification_failed: return "verification_failed";
         }
@@ -1093,19 +1340,20 @@ namespace epochengine::editor_code_workspace
             return result(ResultCode::invalid_utf8, "The edited code is not valid UTF-8 text.", handle);
 
         Implementation::Document& document = *implementation_->find(handle);
-        if (text == document.text)
+        const TextCommitCode committed = commit_text_change(
+            document,
+            std::move(text),
+            {},
+            "Edit text");
+        if (committed == TextCommitCode::unchanged)
             return result(ResultCode::success, "The code document is unchanged.", handle);
-        document.text = std::move(text);
-        document.line_starts = line_starts(document.text);
-        ++document.revision;
-        document.selection = {};
-        document.find.current_match.reset();
-        document.find.current_index = 0u;
-        document.find.match_count = 0u;
-        document.viewport = clamp_viewport(
-            document.viewport,
-            document.line_starts.size(),
-            maximum_columns(document.text, document.line_starts));
+        if (committed == TextCommitCode::budget_exceeded)
+        {
+            return result(
+                ResultCode::history_budget_exceeded,
+                "The bounded text history cannot retain this edit; no code changed.",
+                handle);
+        }
         ++implementation_->revision;
         return result(ResultCode::success, "Updated the in-memory code document.", handle);
     }
@@ -1155,23 +1403,104 @@ namespace epochengine::editor_code_workspace
         if (updated == document.text)
             return result(ResultCode::success, "The UTF-8 code range is unchanged.", handle);
         const std::size_t caret_byte = begin + replacement.size();
-        document.text = std::move(updated);
-        document.line_starts = line_starts(document.text);
-        ++document.revision;
-        const TextPosition position = text_position(document.text, caret_byte);
-        document.selection = TextRange{.anchor = position, .caret = position};
-        document.find.current_match.reset();
-        document.find.current_index = 0u;
-        document.find.match_count = 0u;
-        reveal_range(
-            document.viewport,
-            document.selection,
-            document.line_starts.size(),
-            maximum_columns(document.text, document.line_starts));
+        const TextPosition position = text_position(updated, caret_byte);
+        const TextRange after_selection{
+            .anchor = position,
+            .caret = position};
+        const TextCommitCode committed = commit_text_change(
+            document,
+            std::move(updated),
+            after_selection,
+            "Replace text");
+        if (committed == TextCommitCode::budget_exceeded)
+        {
+            return result(
+                ResultCode::history_budget_exceeded,
+                "The bounded text history cannot retain this replacement; no code changed.",
+                handle);
+        }
         ++implementation_->revision;
         OperationResult output = result(
             ResultCode::success,
             "Replaced the selected UTF-8 code range.",
+            handle);
+        output.range = after_selection;
+        output.affected_count = 1u;
+        return output;
+    }
+
+    OperationResult Controller::undo(
+        const DocumentHandle handle,
+        const WorkspaceAuthority& expected,
+        const std::uint64_t expected_revision)
+    {
+        if (!implementation_)
+            return result(ResultCode::unavailable, "The code-workspace controller is unavailable.");
+        const Implementation::Document* checked{};
+        if (const OperationResult validation = validate_document_operation(
+                *implementation_, handle, expected, expected_revision, checked);
+            !validation)
+        {
+            return validation;
+        }
+        if (!checked->writable)
+            return result(ResultCode::read_only, "The reviewed code document is read-only.", handle);
+        if (checked->history_cursor == 0u)
+            return result(ResultCode::nothing_to_undo, "The code document has no edit to undo.", handle);
+
+        Implementation::Document& document = *implementation_->find(handle);
+        const std::string label =
+            document.history[document.history_cursor - 1u].label;
+        if (!replay_text_history(document, TextHistoryDirection::undo))
+        {
+            return result(
+                ResultCode::history_corrupt,
+                "The code document no longer matches its exact undo preimage; no text changed.",
+                handle);
+        }
+        ++implementation_->revision;
+        OperationResult output = result(
+            ResultCode::success,
+            "Undid " + label + ".",
+            handle);
+        output.range = document.selection;
+        output.affected_count = 1u;
+        return output;
+    }
+
+    OperationResult Controller::redo(
+        const DocumentHandle handle,
+        const WorkspaceAuthority& expected,
+        const std::uint64_t expected_revision)
+    {
+        if (!implementation_)
+            return result(ResultCode::unavailable, "The code-workspace controller is unavailable.");
+        const Implementation::Document* checked{};
+        if (const OperationResult validation = validate_document_operation(
+                *implementation_, handle, expected, expected_revision, checked);
+            !validation)
+        {
+            return validation;
+        }
+        if (!checked->writable)
+            return result(ResultCode::read_only, "The reviewed code document is read-only.", handle);
+        if (checked->history_cursor >= checked->history.size())
+            return result(ResultCode::nothing_to_redo, "The code document has no edit to redo.", handle);
+
+        Implementation::Document& document = *implementation_->find(handle);
+        const std::string label =
+            document.history[document.history_cursor].label;
+        if (!replay_text_history(document, TextHistoryDirection::redo))
+        {
+            return result(
+                ResultCode::history_corrupt,
+                "The code document no longer matches its exact redo preimage; no text changed.",
+                handle);
+        }
+        ++implementation_->revision;
+        OperationResult output = result(
+            ResultCode::success,
+            "Redid " + label + ".",
             handle);
         output.range = document.selection;
         output.affected_count = 1u;
@@ -1471,29 +1800,37 @@ namespace epochengine::editor_code_workspace
         updated.append(replacement);
         updated.append(document.text, end, std::string::npos);
         const std::size_t caret_byte = begin + replacement.size();
-        document.text = std::move(updated);
-        document.line_starts = line_starts(document.text);
-        ++document.revision;
-        const TextPosition position = text_position(document.text, caret_byte);
-        document.selection = TextRange{.anchor = position, .caret = position};
-        document.find = FindSnapshot{
-            .query = query,
-            .options = find_options,
-            .current_match = std::nullopt,
-            .current_index = 0u,
-            .match_count = find_matches(
-                document.text, query, find_options).size()};
-        reveal_range(
-            document.viewport,
-            document.selection,
-            document.line_starts.size(),
-            maximum_columns(document.text, document.line_starts));
+        const TextPosition position = text_position(updated, caret_byte);
+        const TextRange after_selection{
+            .anchor = position,
+            .caret = position};
+        document.find.query = query;
+        document.find.options = find_options;
+        const TextCommitCode committed = commit_text_change(
+            document,
+            std::move(updated),
+            after_selection,
+            "Replace current match");
+        if (committed == TextCommitCode::unchanged)
+        {
+            return result(
+                ResultCode::success,
+                "The active verified find match is unchanged.",
+                handle);
+        }
+        if (committed == TextCommitCode::budget_exceeded)
+        {
+            return result(
+                ResultCode::history_budget_exceeded,
+                "The bounded text history cannot retain this replacement; no code changed.",
+                handle);
+        }
         ++implementation_->revision;
         OperationResult output = result(
             ResultCode::success,
             "Replaced the active verified find match.",
             handle);
-        output.range = document.selection;
+        output.range = after_selection;
         output.affected_count = 1u;
         output.match_count = document.find.match_count;
         return output;
@@ -1565,30 +1902,42 @@ namespace epochengine::editor_code_workspace
         updated.append(checked->text, copied, std::string::npos);
 
         Implementation::Document& document = *implementation_->find(handle);
-        document.text = std::move(updated);
-        document.line_starts = line_starts(document.text);
-        ++document.revision;
-        const TextPosition position = text_position(document.text, final_caret);
-        document.selection = TextRange{.anchor = position, .caret = position};
-        document.find = FindSnapshot{
-            .query = std::move(query),
-            .options = options,
-            .current_match = std::nullopt,
-            .current_index = 0u,
-            .match_count = 0u};
-        document.find.match_count = find_matches(
-            document.text, document.find.query, options).size();
-        reveal_range(
-            document.viewport,
-            document.selection,
-            document.line_starts.size(),
-            maximum_columns(document.text, document.line_starts));
+        const TextPosition position = text_position(updated, final_caret);
+        const TextRange after_selection{
+            .anchor = position,
+            .caret = position};
+        const FindSnapshot previous_find = document.find;
+        document.find.query = std::move(query);
+        document.find.options = options;
+        const TextCommitCode committed = commit_text_change(
+            document,
+            std::move(updated),
+            after_selection,
+            "Replace all matches");
+        if (committed == TextCommitCode::unchanged)
+        {
+            document.find.current_match.reset();
+            document.find.current_index = 0u;
+            document.find.match_count = matches.size();
+            return result(
+                ResultCode::success,
+                "Every bounded verified match already has the requested text.",
+                handle);
+        }
+        if (committed == TextCommitCode::budget_exceeded)
+        {
+            document.find = previous_find;
+            return result(
+                ResultCode::history_budget_exceeded,
+                "The bounded text history cannot retain Replace All; no code changed.",
+                handle);
+        }
         ++implementation_->revision;
         OperationResult output = result(
             ResultCode::success,
             "Replaced every bounded verified UTF-8 match.",
             handle);
-        output.range = document.selection;
+        output.range = after_selection;
         output.affected_count = matches.size();
         output.match_count = document.find.match_count;
         return output;
@@ -1611,19 +1960,19 @@ namespace epochengine::editor_code_workspace
         if (checked->text == checked->persisted_text)
             return result(ResultCode::success, "The code document has no in-memory edits to revert.", handle);
         Implementation::Document& document = *implementation_->find(handle);
-        document.text = document.persisted_text;
-        document.line_starts = line_starts(document.text);
-        ++document.revision;
-        document.selection = {};
-        document.viewport = {};
-        document.find.current_match.reset();
-        document.find.current_index = 0u;
-        document.find.match_count = document.find.query.empty()
-            ? 0u
-            : find_matches(
-                document.text,
-                document.find.query,
-                document.find.options).size();
+        const TextCommitCode committed = commit_text_change(
+            document,
+            document.persisted_text,
+            {},
+            "Revert to saved text",
+            true);
+        if (committed == TextCommitCode::budget_exceeded)
+        {
+            return result(
+                ResultCode::history_budget_exceeded,
+                "The bounded text history cannot retain this revert; no code changed.",
+                handle);
+        }
         ++implementation_->revision;
         return result(ResultCode::success, "Reverted the in-memory code document to its last verified saved bytes.", handle);
     }
@@ -1660,22 +2009,22 @@ namespace epochengine::editor_code_workspace
         Implementation::Document& document = *implementation_->find(handle);
         if (loaded.canonical_path != document.canonical_path)
             return result(ResultCode::stale_disk, "The code file identity changed before reload.", handle);
-        document.text = std::move(loaded.text);
+        const TextCommitCode committed = commit_text_change(
+            document,
+            std::move(loaded.text),
+            {},
+            "Reload verified disk text",
+            true);
+        if (committed == TextCommitCode::budget_exceeded)
+        {
+            return result(
+                ResultCode::history_budget_exceeded,
+                "The bounded text history cannot retain this reload; no code changed.",
+                handle);
+        }
         document.persisted_text = document.text;
         document.utf8_bom = loaded.utf8_bom;
-        document.line_starts = line_starts(document.text);
-        ++document.revision;
         document.persisted_revision = document.revision;
-        document.selection = {};
-        document.viewport = {};
-        document.find.current_match.reset();
-        document.find.current_index = 0u;
-        document.find.match_count = document.find.query.empty()
-            ? 0u
-            : find_matches(
-                document.text,
-                document.find.query,
-                document.find.options).size();
         ++implementation_->revision;
         return result(ResultCode::success, "Reloaded the verified code document.", handle);
     }

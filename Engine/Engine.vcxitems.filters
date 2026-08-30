@@ -1467,6 +1467,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx">
       <Filter>Module Files\epochengine</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.authoring_history.ixx">
+      <Filter>Module Files\epochengine\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx">
       <Filter>Module Files\epochengine</Filter>
     </ClCompile>
@@ -1907,6 +1910,9 @@
       <Filter>Source Files\epochengine</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp">
+      <Filter>Source Files\epochengine\editor</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp">
       <Filter>Source Files\epochengine\editor</Filter>
     </None>
   </ItemGroup>

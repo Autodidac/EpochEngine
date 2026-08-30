@@ -2533,6 +2533,22 @@ if(BUILD_TESTING)
         COMMAND epoch_editor_workspace_commands_contract
     )
 
+    add_executable(epoch_editor_authoring_history_contract
+        src/editor/editor.authoring_history_contract.cpp
+    )
+    target_sources(epoch_editor_authoring_history_contract PRIVATE
+        FILE_SET epoch_editor_authoring_history_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/editor.authoring_history.ixx
+    )
+    epoch_apply_cxx_dialect(epoch_editor_authoring_history_contract)
+    epoch_apply_warnings(epoch_editor_authoring_history_contract)
+    epoch_apply_sanitizers(epoch_editor_authoring_history_contract)
+    add_test(
+        NAME epoch_editor_authoring_history_contract
+        COMMAND epoch_editor_authoring_history_contract
+    )
+
     add_executable(epoch_editor_task_scheduler_contract
         src/core.log.cpp
         src/core.time.cpp

@@ -1,5 +1,20 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Extend direct tab-slot insertion to native routed-pane movement. Floating
+  panes stay top-level until button release, publish an exact target tab index,
+  and redock only on a compatible deliberate drop instead of merging during
+  transfer. Held native windows use 50% opacity and drag/resize/splitter grabs
+  capture editor input before scene or camera controls.
+- Replace surface-local Edit menu guesses with one typed authoring-history
+  coordinator over the real World, project-GUI, Plant Lab, and per-document
+  code journals. Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, menu labels, and enabled state
+  follow the active compatible branch with latest-changed fallback and reject
+  stale generation/revision/cursor plans. EpochGui text controls expose native
+  Undo/Redo keyboard and context-menu intents without bypassing document state.
+- Make Package Manager viewport-responsive and grow both catalog/detail scroll
+  regions before the anchored footer. Advance editor layout preferences to
+  schema 5 and migrate only untouched legacy 68/32 columns and 24% bottom dock
+  defaults to 55/45 and 28%, leaving customized layouts intact.
 - Add exact direct tab-slot insertion ahead of the existing docking fallback.
   Variable-width tab geometry produces an insertion marker and dragged-tab
   ghost; same-group reorder and cross-group transfer preserve active/fallback
@@ -42,7 +57,7 @@
 - Correct the embedded EpochGui numeric v0.89.30 identity and the Extensions
   contract. Tiered Terrain is proven buildable local source but does not claim
   an installable payload before immutable Site admission.
-- Validation: source naming 579/579; Debug and Release EpochEditor builds and
+- Validation: source naming 581/581; Debug and Release EpochEditor builds and
   aggregate build-safe contracts pass; standalone EpochGui passes 10/10 and
   EpochEngineExtensions passes 2/2. Managed Clang 22.1.8 also links the full
   Linux Release engine after registering the EpochGui docking implementation

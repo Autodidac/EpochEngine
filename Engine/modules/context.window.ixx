@@ -163,6 +163,7 @@ namespace epochengine::core
         std::atomic_uint8_t dockTargetPreference = 0u;
         std::atomic_bool routedRedockRequested = false;
         std::atomic_uint8_t routedDockTarget = 0u;
+        std::atomic_uint32_t routedDockTabInsertion = 0xffffffffu;
         std::atomic_bool retirementQueued = false;
         std::atomic_bool firstPresentComplete = false;
         std::atomic_uint64_t successfulFrameGeneration{ 0 };

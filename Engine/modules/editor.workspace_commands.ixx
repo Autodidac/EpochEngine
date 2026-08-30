@@ -70,6 +70,7 @@ export namespace epochengine::editor_workspace_commands
         timeline,
         project,
         assets,
+        code_editor,
         ai_development,
         systems,
         count
@@ -87,6 +88,7 @@ export namespace epochengine::editor_workspace_commands
         case Surface::timeline: return "timeline";
         case Surface::project: return "project";
         case Surface::assets: return "assets";
+        case Surface::code_editor: return "code_editor";
         case Surface::ai_development: return "ai_development";
         case Surface::systems: return "systems";
         case Surface::count: break;
@@ -165,6 +167,9 @@ export namespace epochengine::editor_workspace_commands
         assets_rename,
         assets_delete,
         assets_reimport,
+
+        code_undo,
+        code_redo,
 
         ai_new_goal,
         ai_pause_goal,
@@ -492,6 +497,12 @@ export namespace epochengine::editor_workspace_commands
             EPOCH_WORKSPACE_COMMAND(assets_reimport, assets, asset,
                 bounded_async_request, "Reimport asset", project_write_async)};
 
+        inline constexpr std::array code_commands{
+            EPOCH_WORKSPACE_COMMAND(code_undo, code_editor, document,
+                bounded_mutation, "Undo code edit", document_write),
+            EPOCH_WORKSPACE_COMMAND(code_redo, code_editor, document,
+                bounded_mutation, "Redo code edit", document_write)};
+
         inline constexpr std::array ai_commands{
             EPOCH_WORKSPACE_COMMAND(ai_new_goal, ai_development, workspace,
                 bounded_mutation, "Create bounded AI goal", {}),
@@ -540,6 +551,7 @@ export namespace epochengine::editor_workspace_commands
         case Surface::timeline: return detail::timeline_commands;
         case Surface::project: return detail::project_commands;
         case Surface::assets: return detail::asset_commands;
+        case Surface::code_editor: return detail::code_commands;
         case Surface::ai_development: return detail::ai_commands;
         case Surface::systems: return detail::systems_commands;
         case Surface::count: break;
@@ -939,9 +951,11 @@ export namespace epochengine::editor_workspace_commands
     {
         const CommandDescriptor* world = find_command(CommandId::world_delete_entity);
         const CommandDescriptor* gui = find_command(CommandId::gui_delete_element);
+        const CommandDescriptor* code = find_command(CommandId::code_undo);
         const CommandDescriptor* ai = find_command(CommandId::ai_request_plan);
         if (!world || world->surface != Surface::world
             || !gui || gui->surface != Surface::gui_canvas
+            || !code || code->surface != Surface::code_editor
             || !ai || ai->surface != Surface::ai_development)
         {
             return ContractFailure::command_catalog;

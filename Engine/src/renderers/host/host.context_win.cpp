@@ -265,6 +265,15 @@ namespace
     std::mutex g_threadStateMutex;
     epochengine::core::DragState       g_drag;
     epochengine::core::MultiContextManager* g_activeManager = nullptr;
+    struct RoutedPanelTabDropState
+    {
+        std::mutex mutex{};
+        std::string route{};
+        epochengine::core::RoutedPanelDockTarget target{
+            epochengine::core::RoutedPanelDockTarget::none};
+        std::uint32_t insertionIndex{0xffffffffu};
+    };
+    RoutedPanelTabDropState g_routedPanelTabDrop{};
     struct PendingWindowCleanup
     {
         HWND hwnd{};
@@ -310,6 +319,95 @@ namespace
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
         ::RedrawWindow(hwnd, nullptr, nullptr, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+    }
+
+    inline void apply_native_drag_opacity(
+        epochengine::core::DragState& drag,
+        HWND hwnd) noexcept
+    {
+        drag.opacityWindow = nullptr;
+        drag.opacityApplied = false;
+        drag.opacityWasLayered = false;
+        if (!hwnd || ::IsWindow(hwnd) == FALSE || ::GetParent(hwnd) != nullptr)
+            return;
+
+        const LONG_PTR extendedStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        drag.opacityWasLayered = (extendedStyle & WS_EX_LAYERED) != 0;
+        if (drag.opacityWasLayered)
+            return;
+
+        ::SetLastError(ERROR_SUCCESS);
+        if (::SetWindowLongPtrW(
+                hwnd,
+                GWL_EXSTYLE,
+                extendedStyle | WS_EX_LAYERED) == 0
+            && ::GetLastError() != ERROR_SUCCESS)
+        {
+            return;
+        }
+        if (::SetLayeredWindowAttributes(hwnd, 0, 128, LWA_ALPHA) == FALSE)
+        {
+            ::SetWindowLongPtrW(hwnd, GWL_EXSTYLE, extendedStyle);
+            return;
+        }
+
+        drag.opacityWindow = hwnd;
+        drag.opacityApplied = true;
+    }
+
+    inline void restore_native_drag_opacity(
+        epochengine::core::DragState& drag) noexcept
+    {
+        const HWND hwnd = drag.opacityWindow;
+        if (drag.opacityApplied && hwnd && ::IsWindow(hwnd) != FALSE)
+        {
+            static_cast<void>(::SetLayeredWindowAttributes(
+                hwnd, 0, 255, LWA_ALPHA));
+            if (!drag.opacityWasLayered)
+            {
+                const LONG_PTR extendedStyle =
+                    ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+                ::SetWindowLongPtrW(
+                    hwnd,
+                    GWL_EXSTYLE,
+                    extendedStyle & ~WS_EX_LAYERED);
+            }
+            ::RedrawWindow(
+                hwnd,
+                nullptr,
+                nullptr,
+                RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+        }
+        drag.opacityWindow = nullptr;
+        drag.opacityApplied = false;
+        drag.opacityWasLayered = false;
+    }
+
+    inline void clear_routed_panel_tab_drop() noexcept
+    {
+        std::scoped_lock lock(g_routedPanelTabDrop.mutex);
+        g_routedPanelTabDrop.route.clear();
+        g_routedPanelTabDrop.target =
+            epochengine::core::RoutedPanelDockTarget::none;
+        g_routedPanelTabDrop.insertionIndex = 0xffffffffu;
+    }
+
+    [[nodiscard]] inline bool routed_panel_tab_drop_for(
+        std::string_view route,
+        epochengine::core::RoutedPanelDockTarget& target,
+        std::uint32_t& insertionIndex) noexcept
+    {
+        std::scoped_lock lock(g_routedPanelTabDrop.mutex);
+        if (route.empty()
+            || route != g_routedPanelTabDrop.route
+            || g_routedPanelTabDrop.target
+                == epochengine::core::RoutedPanelDockTarget::none)
+        {
+            return false;
+        }
+        target = g_routedPanelTabDrop.target;
+        insertionIndex = g_routedPanelTabDrop.insertionIndex;
+        return true;
     }
 
     [[nodiscard]] inline bool should_draw_opengl_startup_placeholder(
@@ -2238,6 +2336,24 @@ namespace epochengine::core
     // ------------------------------------------------------------
     std::unordered_map<HWND, std::thread>& Threads() noexcept { return g_threads; }
     DragState& Drag() noexcept { return g_drag; }
+
+    void publish_routed_panel_tab_drop_target(
+        std::string_view route,
+        RoutedPanelDockTarget target,
+        std::uint32_t insertion_index) noexcept
+    {
+        std::scoped_lock lock(g_routedPanelTabDrop.mutex);
+        if (route.empty() || target == RoutedPanelDockTarget::none)
+        {
+            g_routedPanelTabDrop.route.clear();
+            g_routedPanelTabDrop.target = RoutedPanelDockTarget::none;
+            g_routedPanelTabDrop.insertionIndex = 0xffffffffu;
+            return;
+        }
+        g_routedPanelTabDrop.route.assign(route);
+        g_routedPanelTabDrop.target = target;
+        g_routedPanelTabDrop.insertionIndex = insertion_index;
+    }
 
     RoutedPanelDockDragProjection routed_panel_dock_drag_projection() noexcept
     {
@@ -5058,6 +5174,9 @@ namespace epochengine::core
             drag.dragWindowOffset.y = drag.lastMousePos.y - dragFrameRect.top;
             drag.proxyUndockPending = false;
             drag.proxyRedockPending = false;
+            clear_routed_panel_tab_drop();
+            if (window && window->isFloating)
+                apply_native_drag_opacity(drag, dragFrame);
 #if defined(_DEBUG)
             if (window && is_sfml_proxy_candidate(window))
             {
@@ -5137,6 +5256,26 @@ namespace epochengine::core
             ::GetClientRect(sizeFrame, &clientRect);
             const int clientW = clamp_positive(static_cast<int>(clientRect.right - clientRect.left));
             const int clientH = clamp_positive(static_cast<int>(clientRect.bottom - clientRect.top));
+
+            // A routed editor pane stays a distinct native window while held.
+            // Admission to a tab group occurs only on the release transaction,
+            // so moving across the host cannot prematurely merge the pane.
+            if (drag.originalParent
+                && window
+                && !window->guiRoute.empty()
+                && window->isFloating)
+            {
+                ::SetWindowPos(
+                    hwnd,
+                    nullptr,
+                    newX,
+                    newY,
+                    0,
+                    0,
+                    SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+                ::InvalidateRect(drag.originalParent, nullptr, FALSE);
+                return 0;
+            }
 
             if (drag.originalParent)
             {
@@ -5622,6 +5761,7 @@ namespace epochengine::core
                 RECT wndRect{};
                 const HWND releaseFrame = proxy_drag_frame(window, originalParent, hwnd);
                 ::GetWindowRect(releaseFrame, &wndRect);
+                restore_native_drag_opacity(drag);
                 ::ReleaseCapture();
                 const POINT dragWindowOffset = drag.dragWindowOffset;
                 drag.dragging = false;
@@ -5650,16 +5790,32 @@ namespace epochengine::core
                     const bool centerInsideParent = point_in_rect(parentRect, windowCenter);
                     const bool releaseOutsideParent = !should_redock_to_parent(originalParent, releasePoint, wndRect);
                     const bool detachedProxy = window && is_sfml_proxy_detached(window);
-                    const RoutedPanelDockTarget dockTarget =
+                    RoutedPanelDockTarget dockTarget =
                         routed_panel_target_for_parent(
                             originalParent,
                             releasePoint,
                             window && !window->guiRoute.empty());
+                    std::uint32_t tabInsertionIndex = 0xffffffffu;
+                    if (window && !window->guiRoute.empty())
+                    {
+                        RoutedPanelDockTarget directTarget{
+                            RoutedPanelDockTarget::none};
+                        if (routed_panel_tab_drop_for(
+                                window->guiRoute,
+                                directTarget,
+                                tabInsertionIndex))
+                        {
+                            dockTarget = directTarget;
+                        }
+                    }
                     const bool hasDockTarget = dockTarget != RoutedPanelDockTarget::none;
-                    const bool wantsRedock = hasDockTarget && (detachedProxy
+                    const bool routedPane = window && !window->guiRoute.empty();
+                    const bool wantsRedock = hasDockTarget && (routedPane
                         ? releaseInsideParent
-                        : (((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent)
-                            && should_redock_to_parent(originalParent, releasePoint, wndRect)));
+                        : (detachedProxy
+                            ? releaseInsideParent
+                            : (((!window || !is_sfml_proxy_candidate(window)) && ::GetParent(hwnd) != originalParent)
+                                && should_redock_to_parent(originalParent, releasePoint, wndRect))));
 #if defined(_DEBUG)
                     if (window && is_sfml_proxy_candidate(window))
                     {
@@ -5697,6 +5853,9 @@ namespace epochengine::core
                         {
                             window->routedDockTarget.store(
                                 static_cast<std::uint8_t>(dockTarget),
+                                std::memory_order_release);
+                            window->routedDockTabInsertion.store(
+                                tabInsertionIndex,
                                 std::memory_order_release);
                             request_routed_panel_redock_close(window);
                         }
@@ -5795,6 +5954,7 @@ namespace epochengine::core
                 }
 
                 drag.dragWindowOffset = POINT{};
+                clear_routed_panel_tab_drop();
 
                 if (!(window && is_sfml_proxy_candidate(window)))
                 {

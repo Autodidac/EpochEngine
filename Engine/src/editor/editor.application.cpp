@@ -127,6 +127,7 @@ import editor.task_scheduler;
 import editor.systems_panel;
 import editor.workspace_layout;
 import editor.workspace_commands;
+import editor.authoring_history;
 import voxel.field;
 import forest.factory;
 import media.timeline_preview;
@@ -877,6 +878,7 @@ namespace epochengine
             std::string newScriptName{ "sandbox_iteration" };
             CodeWorkspaceUiState projectCodeWorkspace{};
             CodeWorkspaceUiState curatedCodeWorkspace{};
+            editor_authoring_history::Controller authoringHistory{};
             std::string scriptEditorPath{};
             std::string scriptEditorText{};
             std::string scriptEditorStatus{ "No script source loaded." };
@@ -1066,14 +1068,14 @@ namespace epochengine
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
             EditorMainSurface mainSurface{ initial_editor_main_surface(workspaceTab) };
-            float bottomGridSplit{ 0.68f };
+            float bottomGridSplit{ 0.55f };
             float outlinerSplit{ 0.20f };
             float inspectorSplit{ 0.22f };
-            float dockSplit{ 0.24f };
+            float dockSplit{ 0.28f };
             std::array<float, kEditorMainSurfaceCount> workspaceBottomGridSplits{
-                filled_workspace_values(0.68f) };
+                filled_workspace_values(0.55f) };
             std::array<float, kEditorMainSurfaceCount> workspaceDockSplits{
-                filled_workspace_values(0.24f) };
+                filled_workspace_values(0.28f) };
             std::array<bool, kEditorMainSurfaceCount> workspaceOutputFollow{
                 filled_workspace_values(true) };
             std::array<bool, kEditorMainSurfaceCount> workspaceAiChatFollow{
@@ -1628,8 +1630,8 @@ namespace epochengine
             const auto& application = editor_application_profile(editor.applicationKind);
             editor.outlinerSplit = 0.20f;
             editor.inspectorSplit = 0.22f;
-            editor.dockSplit = 0.24f;
-            editor.bottomGridSplit = 0.68f;
+            editor.dockSplit = 0.28f;
+            editor.bottomGridSplit = 0.55f;
             editor.showOutliner = application.panes.outliner;
             editor.showInspector = application.panes.inspector;
             editor.showConsoleDock = application.panes.console;
@@ -2590,7 +2592,7 @@ namespace epochengine
             const EditorState& state)
         {
             std::ostringstream output{};
-            output << "EPOCH_EDITOR_LAYOUT 4\n";
+            output << "EPOCH_EDITOR_LAYOUT 5\n";
             output << "application "
                 << static_cast<unsigned int>(state.applicationKind) << '\n';
             output << "splits "
@@ -2694,7 +2696,7 @@ namespace epochengine
             std::string token{};
             unsigned int schema{};
             if (!(input >> token >> schema)
-                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 4u)
+                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 5u)
             {
                 return false;
             }
@@ -2855,6 +2857,25 @@ namespace epochengine
                 }
                 projectSelfIterationDefault =
                     static_cast<project_ai_iteration::Provision>(provision);
+            }
+
+            if (schema <= 4u)
+            {
+                constexpr float epsilon = 0.0005f;
+                if (std::abs(bottomGridSplit - 0.68f) <= epsilon)
+                    bottomGridSplit = 0.55f;
+                if (std::abs(dockSplit - 0.24f) <= epsilon)
+                    dockSplit = 0.28f;
+                for (float& value : workspaceBottomGridSplits)
+                {
+                    if (std::abs(value - 0.68f) <= epsilon)
+                        value = 0.55f;
+                }
+                for (float& value : workspaceDockSplits)
+                {
+                    if (std::abs(value - 0.24f) <= epsilon)
+                        value = 0.28f;
+                }
             }
 
             state.bottomGridSplit = std::clamp(bottomGridSplit, 0.25f, 0.75f);
@@ -8223,6 +8244,8 @@ namespace epochengine
             editor_workspace_commands::CommandId command{
                 editor_workspace_commands::CommandId::world_select_entity};
             std::string reason{};
+            std::string operation_label{};
+            std::optional<editor_authoring_history::HistoryPlan> history{};
         };
 
         [[nodiscard]] constexpr std::string_view surface_edit_action_name(
@@ -8243,6 +8266,12 @@ namespace epochengine
             const EditorState& state) noexcept
         {
             using Surface = editor_workspace_commands::Surface;
+            if (state.mainSurface == EditorMainSurface::Assets
+                && state.assetWorkspaceSection == 2u
+                && state.projectCodeWorkspace.controller.snapshot().configured)
+            {
+                return Surface::code_editor;
+            }
             switch (state.mainSurface)
             {
             case EditorMainSurface::Scene: return Surface::world;
@@ -8298,6 +8327,13 @@ namespace epochengine
                 if (action == SurfaceEditAction::focus_selection)
                     return CommandId::plant_focus_element;
             }
+            if (surface == Surface::code_editor)
+            {
+                if (action == SurfaceEditAction::undo)
+                    return CommandId::code_undo;
+                if (action == SurfaceEditAction::redo)
+                    return CommandId::code_redo;
+            }
             if (surface == Surface::forest_factory
                 && action == SurfaceEditAction::focus_selection)
                 return CommandId::forest_focus_element;
@@ -8341,12 +8377,299 @@ namespace epochengine
             return Surface::world;
         }
 
+        inline constexpr editor_authoring_history::BranchId
+            kWorldHistoryBranch{1u};
+        inline constexpr editor_authoring_history::BranchId
+            kGuiHistoryBranch{2u};
+        inline constexpr editor_authoring_history::BranchId
+            kPlantHistoryBranch{3u};
+        inline constexpr std::uint64_t kCodeHistoryBranchMask =
+            0x8000000000000000ull;
+
+        [[nodiscard]] editor_authoring_history::BranchId code_history_branch(
+            const editor_code_workspace::DocumentHandle handle) noexcept
+        {
+            return editor_authoring_history::BranchId{
+                kCodeHistoryBranchMask
+                    | (static_cast<std::uint64_t>(handle.generation) << 32u)
+                    | (static_cast<std::uint64_t>(handle.index) + 1u)};
+        }
+
+        [[nodiscard]] std::string plant_history_label(
+            const forest::ForestProfileProperty property)
+        {
+            using Property = forest::ForestProfileProperty;
+            switch (property)
+            {
+            case Property::TargetHeightMeters: return "Change plant height";
+            case Property::TrunkRadiusMeters: return "Change trunk radius";
+            case Property::BranchLevels: return "Change branch levels";
+            case Property::ChildrenPerNode: return "Change child branches";
+            case Property::BranchStartHeightMeters: return "Change branch start";
+            case Property::BranchLengthMeters: return "Change branch length";
+            case Property::BranchAngleDegrees: return "Change branch angle";
+            case Property::BranchSpreadDegrees: return "Change branch spread";
+            case Property::GrowthDurationSeconds: return "Change growth duration";
+            case Property::GrowthTimeSeconds: return "Change growth time";
+            }
+            return "Change plant property";
+        }
+
+        [[nodiscard]] std::vector<editor_authoring_history::BranchSnapshot>
+        authoring_history_branches(const EditorState& state)
+        {
+            using BranchKind = editor_authoring_history::BranchKind;
+            using BranchSnapshot = editor_authoring_history::BranchSnapshot;
+            std::vector<BranchSnapshot> branches{};
+
+            if (state.sceneDocument.initialized())
+            {
+                const auto history = state.sceneDocument.history();
+                const std::size_t cursor = static_cast<std::size_t>(
+                    std::count_if(
+                        history.begin(), history.end(),
+                        [](const auto& entry)
+                        {
+                            return entry.currently_applied;
+                        }));
+                branches.push_back(BranchSnapshot{
+                    .id = kWorldHistoryBranch,
+                    .kind = BranchKind::world_document,
+                    .generation = (std::max)(
+                        std::uint64_t{1u},
+                        state.sceneDocument.identity().scene.value),
+                    .revision = (std::max)(
+                        std::uint64_t{1u},
+                        state.sceneDocument.revision().sequence),
+                    .cursor = cursor,
+                    .retained_entries = history.size(),
+                    .label = "World",
+                    .undo_label = cursor == 0u
+                        ? std::string{}
+                        : history[cursor - 1u].label,
+                    .redo_label = cursor >= history.size()
+                        ? std::string{}
+                        : history[cursor].label,
+                    .available = true,
+                    .writable = true});
+            }
+
+            if (state.guiDocument && state.guiDocument->valid())
+            {
+                const auto journal = state.guiDocument->journal();
+                const std::size_t cursor = static_cast<std::size_t>(
+                    std::count_if(
+                        journal.begin(), journal.end(),
+                        [](const auto& entry)
+                        {
+                            return entry.applied;
+                        }));
+                const auto label_at = [&journal](const std::size_t index)
+                {
+                    return index < journal.size()
+                        ? epochengine::format_text(
+                            "GUI {}",
+                            authoring::gui::operation_kind_name(
+                                journal[index].kind()))
+                        : std::string{};
+                };
+                const auto identity = state.guiDocument->branch();
+                branches.push_back(BranchSnapshot{
+                    .id = kGuiHistoryBranch,
+                    .kind = BranchKind::gui_document,
+                    .generation = (std::max)(
+                        std::uint64_t{1u},
+                        identity.timeline ^ identity.branch),
+                    .revision = (std::max)(
+                        std::uint64_t{1u},
+                        state.guiDocument->revision().sequence),
+                    .cursor = cursor,
+                    .retained_entries = journal.size(),
+                    .label = "GUI Canvas",
+                    .undo_label = cursor == 0u
+                        ? std::string{}
+                        : label_at(cursor - 1u),
+                    .redo_label = label_at(cursor),
+                    .available = true,
+                    .writable = true});
+            }
+
+            if (state.plantLabDocumentInitialized)
+            {
+                const auto& document = state.plantLabDocument;
+                branches.push_back(BranchSnapshot{
+                    .id = kPlantHistoryBranch,
+                    .kind = BranchKind::plant_document,
+                    .generation = (std::max)(
+                        std::uint64_t{1u},
+                        document.genome.stableHash),
+                    .revision = (std::max)(
+                        std::uint64_t{1u},
+                        document.revision),
+                    .cursor = document.historyCursor,
+                    .retained_entries = document.journal.size(),
+                    .label = "Plant Lab",
+                    .undo_label = document.historyCursor == 0u
+                        ? std::string{}
+                        : plant_history_label(
+                            document.journal[
+                                document.historyCursor - 1u].property),
+                    .redo_label =
+                        document.historyCursor >= document.journal.size()
+                        ? std::string{}
+                        : plant_history_label(
+                            document.journal[
+                                document.historyCursor].property),
+                    .available = true,
+                    .writable = true});
+            }
+
+            const auto code =
+                state.projectCodeWorkspace.controller.snapshot();
+            if (code.configured)
+            {
+                for (const auto& document : code.documents)
+                {
+                    branches.push_back(BranchSnapshot{
+                        .id = code_history_branch(document.handle),
+                        .kind = BranchKind::code_document,
+                        .generation = document.handle.generation,
+                        .revision = (std::max)(
+                            std::uint64_t{1u},
+                            document.revision),
+                        .cursor = document.history_cursor,
+                        .retained_entries = document.history_entries,
+                        .label = document.label.empty()
+                            ? document.relative_path
+                            : document.label,
+                        .undo_label = document.undo_label,
+                        .redo_label = document.redo_label,
+                        .available = true,
+                        .writable = document.writable});
+                }
+            }
+            return branches;
+        }
+
+        [[nodiscard]] std::optional<editor_authoring_history::BranchId>
+        visible_authoring_history_branch(const EditorState& state)
+        {
+            if (state.mainSurface == EditorMainSurface::Scene)
+                return kWorldHistoryBranch;
+            if (state.mainSurface == EditorMainSurface::Game2D
+                && state.outlinerToolTab == OutlinerToolTab::Gui)
+            {
+                return kGuiHistoryBranch;
+            }
+            if (state.mainSurface == EditorMainSurface::PlantLab)
+                return kPlantHistoryBranch;
+            if (state.mainSurface == EditorMainSurface::Assets
+                && state.assetWorkspaceSection == 2u)
+            {
+                const auto active =
+                    state.projectCodeWorkspace.controller.active_document();
+                if (active)
+                    return code_history_branch(active->handle);
+            }
+            return std::nullopt;
+        }
+
+        void synchronize_authoring_history(EditorState& state)
+        {
+            const auto branches = authoring_history_branches(state);
+            (void)state.authoringHistory.synchronize(branches);
+            if (const auto visible = visible_authoring_history_branch(state))
+                (void)state.authoringHistory.activate(*visible);
+        }
+
+        [[nodiscard]] std::optional<editor_code_workspace::DocumentSnapshot>
+        code_document_for_history(
+            const EditorState& state,
+            const editor_authoring_history::BranchId branch)
+        {
+            const auto workspace =
+                state.projectCodeWorkspace.controller.snapshot();
+            const auto found = std::find_if(
+                workspace.documents.begin(),
+                workspace.documents.end(),
+                [branch](const auto& document)
+                {
+                    return code_history_branch(document.handle) == branch;
+                });
+            return found == workspace.documents.end()
+                ? std::nullopt
+                : std::optional{*found};
+        }
+
+        void finish_authoring_history_transition(
+            EditorState& state,
+            const editor_authoring_history::HistoryPlan& plan)
+        {
+            const auto branches = authoring_history_branches(state);
+            const auto found = std::find_if(
+                branches.begin(),
+                branches.end(),
+                [&plan](const auto& branch)
+                {
+                    return branch.id == plan.branch;
+                });
+            if (found == branches.end()
+                || state.authoringHistory.accept(plan, *found)
+                    != editor_authoring_history::PlanCode::ready)
+            {
+                (void)state.authoringHistory.synchronize(branches);
+            }
+        }
+
         [[nodiscard]] SurfaceEditAvailability resolve_surface_edit(
             EditorState& state,
             SurfaceEditAction action)
         {
             using namespace editor_workspace_commands;
             SurfaceEditAvailability result{};
+            if (action == SurfaceEditAction::undo
+                || action == SurfaceEditAction::redo)
+            {
+                synchronize_authoring_history(state);
+                const auto direction = action == SurfaceEditAction::undo
+                    ? editor_authoring_history::Direction::undo
+                    : editor_authoring_history::Direction::redo;
+                const auto plan = state.authoringHistory.plan(direction);
+                if (!plan)
+                {
+                    result.reason = action == SurfaceEditAction::undo
+                        ? "No editor document has an edit to undo."
+                        : "No editor document has an edit to redo.";
+                    return result;
+                }
+                result.history = plan;
+                result.operation_label = plan.operation_label;
+                switch (plan.kind)
+                {
+                case editor_authoring_history::BranchKind::world_document:
+                    result.command = action == SurfaceEditAction::undo
+                        ? CommandId::world_undo : CommandId::world_redo;
+                    break;
+                case editor_authoring_history::BranchKind::gui_document:
+                    result.command = action == SurfaceEditAction::undo
+                        ? CommandId::gui_undo : CommandId::gui_redo;
+                    break;
+                case editor_authoring_history::BranchKind::plant_document:
+                    result.command = action == SurfaceEditAction::undo
+                        ? CommandId::plant_undo : CommandId::plant_redo;
+                    break;
+                case editor_authoring_history::BranchKind::code_document:
+                    result.command = action == SurfaceEditAction::undo
+                        ? CommandId::code_undo : CommandId::code_redo;
+                    break;
+                default:
+                    result.reason =
+                        "The editor history branch has no executor yet.";
+                    return result;
+                }
+                result.enabled = true;
+                return result;
+            }
             const Surface surface = edit_surface_for_action(state, action);
             const auto command = command_for_surface_edit(surface, action);
             if (!command)
@@ -8433,17 +8756,30 @@ namespace epochengine
             case CommandId::world_undo:
                 if (undo_editor_scene(state))
                 {
+                    if (available.history)
+                        finish_authoring_history_transition(
+                            state, *available.history);
                     push_editor_log(state, "[edit] World undo committed.");
                     return true;
                 }
                 return false;
             case CommandId::gui_undo:
-                return undo_gui_document(state);
+                if (undo_gui_document(state))
+                {
+                    if (available.history)
+                        finish_authoring_history_transition(
+                            state, *available.history);
+                    return true;
+                }
+                return false;
             case CommandId::plant_undo:
                 if (forest::undo_forest_profile_edit(state.plantLabDocument))
                 {
                     state.plantLabCompiledRevision = 0u;
                     state.plantLabCompiledContentHash = 0u;
+                    if (available.history)
+                        finish_authoring_history_transition(
+                            state, *available.history);
                     push_editor_log(state, "[edit] Plant Lab undo committed.");
                     return true;
                 }
@@ -8451,18 +8787,62 @@ namespace epochengine
             case CommandId::world_redo:
                 if (redo_editor_scene(state))
                 {
+                    if (available.history)
+                        finish_authoring_history_transition(
+                            state, *available.history);
                     push_editor_log(state, "[edit] World redo committed.");
                     return true;
                 }
                 return false;
             case CommandId::gui_redo:
-                return redo_gui_document(state);
+                if (redo_gui_document(state))
+                {
+                    if (available.history)
+                        finish_authoring_history_transition(
+                            state, *available.history);
+                    return true;
+                }
+                return false;
             case CommandId::plant_redo:
                 if (forest::redo_forest_profile_edit(state.plantLabDocument))
                 {
                     state.plantLabCompiledRevision = 0u;
                     state.plantLabCompiledContentHash = 0u;
+                    if (available.history)
+                        finish_authoring_history_transition(
+                            state, *available.history);
                     push_editor_log(state, "[edit] Plant Lab redo committed.");
+                    return true;
+                }
+                return false;
+            case CommandId::code_undo:
+            case CommandId::code_redo:
+                if (available.history)
+                {
+                    const auto document = code_document_for_history(
+                        state, available.history->branch);
+                    if (!document)
+                        break;
+                    auto& workspace = state.projectCodeWorkspace;
+                    const auto changed =
+                        available.command == CommandId::code_undo
+                        ? workspace.controller.undo(
+                            document->handle,
+                            workspace.authority,
+                            document->revision)
+                        : workspace.controller.redo(
+                            document->handle,
+                            workspace.authority,
+                            document->revision);
+                    workspace.status = changed.reason;
+                    if (!changed)
+                        return false;
+                    workspace.draftHandle.reset();
+                    finish_authoring_history_transition(
+                        state, *available.history);
+                    push_editor_log(
+                        state,
+                        "[edit] " + changed.reason);
                     return true;
                 }
                 return false;
@@ -12168,9 +12548,28 @@ namespace epochengine
                     .max_chars = 256u * 1024u,
                     .show_context_menu = true,
                     .read_only = !active->writable,
+                    .can_undo = active->can_undo,
+                    .can_redo = active->can_redo,
                     .goto_line = state.gotoTarget,
                     .goto_generation = state.gotoGeneration});
-            if (edited.edit.changed)
+            if (edited.undo_requested || edited.redo_requested)
+            {
+                const auto changed = edited.undo_requested
+                    ? state.controller.undo(
+                        active->handle,
+                        state.authority,
+                        state.draftRevision)
+                    : state.controller.redo(
+                        active->handle,
+                        state.authority,
+                        state.draftRevision);
+                state.status = changed.reason;
+                if (changed)
+                    state.draftHandle.reset();
+                state.discardReloadArmed = false;
+                synchronize_project_code_draft(state);
+            }
+            else if (edited.edit.changed)
             {
                 const auto replaced = state.controller.replace_text(
                     active->handle,
@@ -20290,7 +20689,8 @@ namespace epochengine
 
     void editor_redock_context_panel(
         std::string_view route_id,
-        std::uint8_t dock_target)
+        std::uint8_t dock_target,
+        std::uint32_t tab_insertion_index)
     {
         set_detached_pane_route(route_id, false);
         if (dock_target < 1u || dock_target > 4u)
@@ -20314,6 +20714,43 @@ namespace epochengine
             const std::size_t index = tool_pane_index(*pane);
             editor.toolPaneOpen[index] = true;
             editor.toolPaneDockRegions[index] = region;
+            if (tab_insertion_index != 0xffffffffu)
+            {
+                std::vector<std::size_t> ordered{};
+                ordered.reserve(kEditorToolPaneCount);
+                for (std::size_t candidate = 0u;
+                    candidate < kEditorToolPaneCount; ++candidate)
+                {
+                    if (candidate != index
+                        && editor.toolPaneOpen[candidate]
+                        && editor.toolPaneDockRegions[candidate] == region)
+                    {
+                        ordered.push_back(candidate);
+                    }
+                }
+                std::stable_sort(
+                    ordered.begin(),
+                    ordered.end(),
+                    [&](std::size_t left, std::size_t right)
+                    {
+                        const auto leftOrder = editor.toolPaneTabOrder[left];
+                        const auto rightOrder = editor.toolPaneTabOrder[right];
+                        return leftOrder != rightOrder
+                            ? leftOrder < rightOrder
+                            : left < right;
+                    });
+                const std::size_t insertion = (std::min)(
+                    static_cast<std::size_t>(tab_insertion_index),
+                    ordered.size());
+                ordered.insert(
+                    ordered.begin() + static_cast<std::ptrdiff_t>(insertion),
+                    index);
+                for (std::size_t order = 0u; order < ordered.size(); ++order)
+                {
+                    editor.toolPaneTabOrder[ordered[order]] =
+                        static_cast<std::uint32_t>(order);
+                }
+            }
             if (is_outliner_tool_pane(*pane))
                 editor.showOutliner = true;
             else if (is_inspector_tool_pane(*pane))
@@ -20334,7 +20771,9 @@ namespace epochengine
             active.assign(route_id);
             editor.detachedPanelHostStatus =
                 std::string(route_id)
-                + " redocked from its native window.";
+                + (tab_insertion_index == 0xffffffffu
+                    ? " redocked from its native window."
+                    : " inserted into an exact native-window tab slot.");
             editor.surfaceSettleFrames =
                 (std::max)(editor.surfaceSettleFrames, 1);
         }
@@ -20605,10 +21044,10 @@ namespace epochengine
         snapshot.workspace_tab = snapshot_workspace_tab(editor.workspaceTab);
         snapshot.dock_status_tab = snapshot_workspace_tab(editor.dockStatusTab);
         snapshot.main_surface = static_cast<std::uint8_t>(editor.mainSurface);
-        snapshot.bottom_grid_split = snapshot_layout_split(editor.bottomGridSplit, 0.68f);
+        snapshot.bottom_grid_split = snapshot_layout_split(editor.bottomGridSplit, 0.55f);
         snapshot.outliner_split = snapshot_layout_split(editor.outlinerSplit, 0.20f);
         snapshot.inspector_split = snapshot_layout_split(editor.inspectorSplit, 0.22f);
-        snapshot.dock_split = snapshot_layout_split(editor.dockSplit, 0.24f);
+        snapshot.dock_split = snapshot_layout_split(editor.dockSplit, 0.28f);
         snapshot.workspace_bottom_grid_splits = editor.workspaceBottomGridSplits;
         snapshot.workspace_dock_splits = editor.workspaceDockSplits;
         snapshot.workspace_output_follow = editor.workspaceOutputFollow;
@@ -20801,16 +21240,16 @@ namespace epochengine
         editor.mainSurface = snapshot_main_surface(snapshot.main_surface);
         if (!editor_application_supports_surface(application, editor.mainSurface))
             editor.mainSurface = application.default_surface;
-        editor.bottomGridSplit = snapshot_layout_split(snapshot.bottom_grid_split, 0.68f);
+        editor.bottomGridSplit = snapshot_layout_split(snapshot.bottom_grid_split, 0.55f);
         editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
         editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.22f);
-        editor.dockSplit = snapshot_layout_split(snapshot.dock_split, 0.24f);
+        editor.dockSplit = snapshot_layout_split(snapshot.dock_split, 0.28f);
         for (std::size_t index = 0u; index < kEditorMainSurfaceCount; ++index)
         {
             editor.workspaceBottomGridSplits[index] = snapshot_layout_split(
-                snapshot.workspace_bottom_grid_splits[index], 0.68f);
+                snapshot.workspace_bottom_grid_splits[index], 0.55f);
             editor.workspaceDockSplits[index] = snapshot_layout_split(
-                snapshot.workspace_dock_splits[index], 0.24f);
+                snapshot.workspace_dock_splits[index], 0.28f);
             editor.workspaceOutputFollow[index] =
                 snapshot.workspace_output_follow[index];
             editor.workspaceAiChatFollow[index] =
@@ -21587,9 +22026,20 @@ namespace epochengine
             measuredSourceUpdateConfirmModalSize,
             editor.showSourceUpdateConfirmModal);
         const gui::Vec2 packageManagerModalSize = fit_modal_size(
-            {820.0f, 680.0f}, {640.0f, 560.0f});
+            {
+                std::clamp(w * 0.72f, 960.0f, 1680.0f),
+                std::clamp(h * 0.76f, 720.0f, 1320.0f)
+            },
+            {720.0f, 640.0f});
         const gui::Vec2 aiModelConsentModalSize = fit_modal_size({ 660.0f, 430.0f }, { 520.0f, 380.0f });
         const gui::Vec2 voiceConsentModalSize = fit_modal_size({ 580.0f, 300.0f }, { 500.0f, 280.0f });
+        const core::RoutedPanelDockDragProjection nativeDockProjection =
+            core::routed_panel_dock_drag_projection();
+        const bool pointerGrabActive = nativeDockProjection.active
+            || editor.paneTitleDragActive
+            || editor.layoutDrag != EditorLayoutDrag::None
+            || editor.floatingGuiWindow.floating.dragging
+            || editor.floatingGuiWindow.floating.resizing;
         auto modal_visible_now = [&editor]() noexcept -> bool
         {
             return editor.showAboutModal
@@ -21602,7 +22052,7 @@ namespace epochengine
         };
 
         const bool modalVisible = modal_visible_now();
-        if (modalVisible)
+        if (modalVisible || pointerGrabActive)
         {
             editor.openMenu = TopMenu::None;
             // Modal windows own all editor interaction until dismissed. The
@@ -21618,6 +22068,7 @@ namespace epochengine
 
         const bool shortcutInputAvailable =
             !modalVisible
+            && !pointerGrabActive
             && editor.openMenu == TopMenu::None
             && !floating_gui_visible()
             && !gui::keyboard_input_captured();
@@ -21659,7 +22110,8 @@ namespace epochengine
         const bool overlayPriorityActive =
             editor.openMenu != TopMenu::None
             || modalVisible
-            || floating_gui_visible();
+            || floating_gui_visible()
+            || pointerGrabActive;
         ctx->set_gui_overlay_priority(overlayPriorityActive);
 
         gui::clear_modal_input_capture();
@@ -24853,6 +25305,7 @@ namespace epochengine
                 editor.paneTitleDragLabel.assign(label);
                 editor.paneTitleDragStart = mouse;
                 result.scene_input_captured = true;
+                ctx->set_gui_overlay_priority(true);
             }
         };
 
@@ -24878,6 +25331,7 @@ namespace epochengine
                 return;
 
             result.scene_input_captured = true;
+            ctx->set_gui_overlay_priority(true);
             const float dx = mouse.x - editor.paneTitleDragStart.x;
             const float dy = mouse.y - editor.paneTitleDragStart.y;
             constexpr float kDockDragThresholdSq = 12.0f * 12.0f;
@@ -25086,11 +25540,80 @@ namespace epochengine
         {
             if (projection.host_overlay)
             {
+                core::publish_routed_panel_tab_drop_target(
+                    {}, core::RoutedPanelDockTarget::none, 0xffffffffu);
                 result.scene_input_captured = true;
+                ctx->set_gui_overlay_priority(true);
                 return;
             }
 
             const bool routedPane = projection.routed_panel;
+
+            std::optional<EditorToolDockRegion> directTargetRegion{};
+            gui_lib::DockTabStripLayout directLayout{};
+            if (routedPane)
+            {
+                for (std::size_t regionIndex = 0u;
+                    regionIndex < toolDockRegionCount; ++regionIndex)
+                {
+                    const auto& tabBounds = directTabBounds[regionIndex];
+                    const auto candidate = gui_lib::make_dock_tab_strip_layout({
+                        .strip_bounds = directTabStripBounds[regionIndex],
+                        .tab_bounds = tabBounds.empty() ? nullptr : tabBounds.data(),
+                        .tab_count = static_cast<std::uint32_t>(tabBounds.size()),
+                        .pointer = {projection.cursor_x, projection.cursor_y},
+                        .dragged_tab_size = {160.0f, 28.0f},
+                        .source_group_id = toolDockRegionCount + 1u,
+                        .target_group_id = regionIndex + 1u,
+                        .source_index = gui_lib::invalid_dock_tab_index,
+                        .marker_extent = 4.0f,
+                        .drag_active = true,
+                        .target_compatible = true,
+                        .cancelled = false
+                    });
+                    if (!candidate.target_hovered)
+                        continue;
+                    directTargetRegion = static_cast<EditorToolDockRegion>(
+                        regionIndex);
+                    directLayout = candidate;
+                    break;
+                }
+            }
+
+            if (directTargetRegion && directLayout.direct_drop_available)
+            {
+                gui::render_dock_tab_insertion_overlay({
+                    .insertion_marker = {
+                        {directLayout.insertion_marker.position.x,
+                            directLayout.insertion_marker.position.y},
+                        {directLayout.insertion_marker.size.x,
+                            directLayout.insertion_marker.size.y}},
+                    .insertion_ghost = {
+                        {directLayout.insertion_ghost.position.x,
+                            directLayout.insertion_ghost.position.y},
+                        {directLayout.insertion_ghost.size.x,
+                            directLayout.insertion_ghost.size.y}},
+                    .moving_label = projection.route,
+                    .no_op = false
+                });
+                const core::RoutedPanelDockTarget target =
+                    *directTargetRegion == EditorToolDockRegion::Left
+                    ? core::RoutedPanelDockTarget::left_tabs
+                    : *directTargetRegion == EditorToolDockRegion::Right
+                        ? core::RoutedPanelDockTarget::right_tabs
+                        : *directTargetRegion == EditorToolDockRegion::BottomLeft
+                            ? core::RoutedPanelDockTarget::bottom_left_tabs
+                            : core::RoutedPanelDockTarget::bottom_right_tabs;
+                core::publish_routed_panel_tab_drop_target(
+                    projection.route,
+                    target,
+                    directLayout.insertion_index);
+                result.scene_input_captured = true;
+                ctx->set_gui_overlay_priority(true);
+                return;
+            }
+            core::publish_routed_panel_tab_drop_target(
+                {}, core::RoutedPanelDockTarget::none, 0xffffffffu);
 
             const float leftPreviewWidth = (std::max)(left_w, w * 0.24f);
             const float rightPreviewWidth = (std::max)(right_w, w * 0.24f);
@@ -25153,6 +25676,7 @@ namespace epochengine
                 .right_context_label = "Right Context"
             });
             result.scene_input_captured = true;
+            ctx->set_gui_overlay_priority(true);
         };
         auto render_outliner_window = [&](
             gui::Vec2 pane_pos,
@@ -33365,8 +33889,6 @@ namespace epochengine
         render_ai_chat_tool_pane(EditorToolDockRegion::BottomLeft);
         render_ai_chat_tool_pane(EditorToolDockRegion::BottomRight);
 
-        const core::RoutedPanelDockDragProjection nativeDockProjection =
-            core::routed_panel_dock_drag_projection();
         if (nativeDockProjection.active)
         {
             reset_pane_title_drag();
@@ -33374,6 +33896,8 @@ namespace epochengine
         }
         else
         {
+            core::publish_routed_panel_tab_drop_target(
+                {}, core::RoutedPanelDockTarget::none, 0xffffffffu);
             update_pane_dock_drag();
         }
 
@@ -33410,33 +33934,39 @@ namespace epochengine
             });
         });
 
-        open_dropdown("Edit", TopMenu::Edit, dropdown_window_size(192.0f, 7), [&](gui::Vec2 pos)
+        open_dropdown("Edit", TopMenu::Edit, dropdown_window_size(260.0f, 7), [&](gui::Vec2 pos)
         {
             const auto undo = resolve_surface_edit(editor, SurfaceEditAction::undo);
             const auto redo = resolve_surface_edit(editor, SurfaceEditAction::redo);
             const auto remove = resolve_surface_edit(editor, SurfaceEditAction::delete_selection);
             const auto focus = resolve_surface_edit(editor, SurfaceEditAction::focus_selection);
-            menu_item("Undo", { pos.x + 12.0f, pos.y + 14.0f }, 192.0f, [&]() {
+            const std::string undoLabel = undo.enabled
+                ? "Undo " + undo.operation_label
+                : "Undo";
+            const std::string redoLabel = redo.enabled
+                ? "Redo " + redo.operation_label
+                : "Redo";
+            menu_item(undoLabel, { pos.x + 12.0f, pos.y + 14.0f }, 260.0f, [&]() {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
             }, undo.enabled);
-            menu_item("Redo", { pos.x + 12.0f, pos.y + 48.0f }, 192.0f, [&]() {
+            menu_item(redoLabel, { pos.x + 12.0f, pos.y + 48.0f }, 260.0f, [&]() {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
             }, redo.enabled);
-            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 82.0f }, 192.0f, [&]() {
+            menu_item("Delete Selected", { pos.x + 12.0f, pos.y + 82.0f }, 260.0f, [&]() {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
             }, remove.enabled);
-            menu_item("Deselect", { pos.x + 12.0f, pos.y + 116.0f }, 192.0f, [&]() {
+            menu_item("Deselect", { pos.x + 12.0f, pos.y + 116.0f }, 260.0f, [&]() {
                 clear_editor_selection(editor);
                 push_editor_log(editor, "[edit] Selection cleared.");
             });
-            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 150.0f }, 192.0f, [&]() {
+            menu_item("Focus Selection", { pos.x + 12.0f, pos.y + 150.0f }, 260.0f, [&]() {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::focus_selection);
             }, focus.enabled);
-            menu_item("Reset Camera", { pos.x + 12.0f, pos.y + 184.0f }, 192.0f, [&]() {
+            menu_item("Reset Camera", { pos.x + 12.0f, pos.y + 184.0f }, 260.0f, [&]() {
                 handle_scene_tool(editor, ctx.get(), "reset_camera");
                 epochengine::previewgrid::reset_camera(ctx.get());
             });
-            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 218.0f }, 192.0f, [&]() {
+            menu_item("Toggle Helpers", { pos.x + 12.0f, pos.y + 218.0f }, 260.0f, [&]() {
                 handle_scene_tool(editor, ctx.get(), "toggle_helpers");
             });
         });

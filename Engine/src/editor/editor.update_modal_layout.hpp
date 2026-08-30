@@ -77,8 +77,8 @@ namespace epochengine::editor_update_modal
     {
         constexpr float kFooterHeight = 76.0f;
         constexpr float kMinimumPanelHeight = 48.0f;
-        constexpr float kMaximumListHeight = 178.0f;
-        constexpr float kMaximumDetailHeight = 168.0f;
+        constexpr float kMaximumListHeight = 620.0f;
+        constexpr float kMaximumDetailHeight = 360.0f;
         constexpr float kSectionSpacing = 12.0f;
 
         PackageManagerBodyLayout layout{};
@@ -121,11 +121,12 @@ namespace epochengine::editor_update_modal
         const auto normal = measure_package_manager_body(180.0f, 580.0f, 20.0f);
         const auto compact = measure_package_manager_body(180.0f, 380.0f, 20.0f);
         const auto tiny = measure_package_manager_body(180.0f, 310.0f, 20.0f);
+        const auto expanded = measure_package_manager_body(180.0f, 1180.0f, 20.0f);
         return normal.showDetails
             && normal.listHeight >= 48.0f
             && normal.detailHeight >= 48.0f
-            && normal.listHeight <= 178.0f
-            && normal.detailHeight <= 168.0f
+            && normal.listHeight <= 620.0f
+            && normal.detailHeight <= 360.0f
             && normal.footerTop == 504.0f
             && !compact.showDetails
             && compact.footerTop == 304.0f
@@ -133,7 +134,11 @@ namespace epochengine::editor_update_modal
             && compact.detailHeight == 0.0f
             && !tiny.showDetails
             && tiny.detailHeight == 0.0f
-            && tiny.listHeight >= 0.0f;
+            && tiny.listHeight >= 0.0f
+            && expanded.showDetails
+            && expanded.listHeight > normal.listHeight
+            && expanded.detailHeight > normal.detailHeight
+            && expanded.footerTop == 1104.0f;
     }
 
     static_assert(package_manager_layout_contract());

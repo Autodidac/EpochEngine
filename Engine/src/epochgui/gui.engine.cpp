@@ -7700,7 +7700,21 @@ namespace epochengine::gui
                     break;
 
                 case EventType::KeyDown:
-                    if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
+                    if (evt.ctrl_down && (evt.key == 'Z' || evt.key == 'z'))
+                    {
+                        if (!options.read_only)
+                        {
+                            result.undo_requested = !evt.shift_down;
+                            result.redo_requested = evt.shift_down;
+                        }
+                    }
+                    else if (evt.ctrl_down
+                        && (evt.key == 'Y' || evt.key == 'y'))
+                    {
+                        if (!options.read_only)
+                            result.redo_requested = true;
+                    }
+                    else if (evt.ctrl_down && (evt.key == 'C' || evt.key == 'c'))
                     {
                         result.copied = clipboard_write_text(source_editor_selected_text(text, state));
                     }
@@ -8070,7 +8084,7 @@ namespace epochengine::gui
             const float rowHeight = 28.0f;
             const float menuPadding = 4.0f;
             const float menuWidth = 172.0f;
-            const float menuHeight = menuPadding * 2.0f + rowHeight * 4.0f + kContentPadding * 3.0f;
+            const float menuHeight = menuPadding * 2.0f + rowHeight * 6.0f + kContentPadding * 5.0f;
             Vec2 menuPos = state.contextMenuPos;
             menuPos.x = (std::min)(menuPos.x, (std::max)(0.0f, g_frame.origin.x + g_frame.windowSize.x - menuWidth - kContentPadding));
             menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
@@ -8107,6 +8121,24 @@ namespace epochengine::gui
                 g_frame.contentMax = { menuPos.x + menuWidth - menuPadding, menuPos.y + menuHeight - menuPadding };
                 set_cursor(g_frame.contentMin);
 
+                if (button_with_state(
+                        "Undo",
+                        { menuWidth - 2.0f * menuPadding, rowHeight },
+                        false,
+                        options.can_undo))
+                {
+                    result.undo_requested = true;
+                    state.contextMenuOpen = false;
+                }
+                if (button_with_state(
+                        "Redo",
+                        { menuWidth - 2.0f * menuPadding, rowHeight },
+                        false,
+                        options.can_redo))
+                {
+                    result.redo_requested = true;
+                    state.contextMenuOpen = false;
+                }
                 if (button("Select All", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
                     state.selectionAnchor = 0u;

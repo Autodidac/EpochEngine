@@ -197,6 +197,8 @@ namespace epochengine::gui
         std::size_t max_chars{ 256u * 1024u };
         bool show_context_menu{ true };
         bool read_only{};
+        bool can_undo{};
+        bool can_redo{};
         std::size_t goto_line{ 1u };
         std::uint64_t goto_generation{};
     };
@@ -208,6 +210,8 @@ namespace epochengine::gui
         bool cut{};
         bool pasted{};
         bool selected_all{};
+        bool undo_requested{};
+        bool redo_requested{};
         std::size_t invalid_utf8_replacements{};
         std::size_t cursor_line{ 1u };
         std::size_t cursor_column{ 1u };

@@ -1,3 +1,41 @@
+- The v0.89.35 acceptance repair extends direct tab insertion through native
+  routed-pane drags. A floating pane remains a distinct top-level window until
+  deliberate button release, renders exact target-strip insertion slots in the
+  parent editor, publishes the selected route/region/index to the Win32 host,
+  and redocks at that exact tab position. The held native window uses 50%
+  opacity while moving, and native/title/splitter/floating-resize grabs capture
+  editor input so scene selection and camera navigation cannot leak through.
+- Global Undo/Redo now resolves one typed authoring-history controller over
+  actual World, project-GUI, Plant Lab, and code-document journals. The visible
+  document wins when it can perform the transition; otherwise the most recently
+  changed compatible branch is selected. Plans bind generation, revision,
+  cursor, and controller revision before the owning journal executes, so stale
+  or cross-document transitions fail rather than mutating another surface.
+- Package Manager sizing now follows the editor viewport instead of remaining
+  a fixed small dialog. Its list and detail regions consume the available body
+  budget while the progress/actions footer stays reachable. Layout preference
+  schema 5 migrates only untouched legacy 68/32 bottom columns and 24% bottom
+  dock defaults to the current 55/45 columns and 28% dock, preserving operator-
+  customized divider positions.
+- The v0.89.35 acceptance repair extends direct tab insertion through native
+  routed-pane drags. A floating pane remains a distinct top-level window until
+  deliberate button release, renders exact target-strip insertion slots in the
+  parent editor, publishes the selected route/region/index to the Win32 host,
+  and redocks at that exact tab position. The held native window uses 50%
+  opacity while moving, and native/title/splitter/floating-resize grabs capture
+  editor input so scene selection and camera navigation cannot leak through.
+- Global Undo/Redo now resolves one typed authoring-history controller over
+  actual World, project-GUI, Plant Lab, and code-document journals. The visible
+  document wins when it can perform the transition; otherwise the most recently
+  changed compatible branch is selected. Plans bind generation, revision,
+  cursor, and controller revision before the owning journal executes, so stale
+  or cross-document transitions fail rather than mutating another surface.
+- Package Manager sizing now follows the editor viewport instead of remaining
+  a fixed small dialog. Its list and detail regions consume the available body
+  budget while the progress/actions footer stays reachable. Layout preference
+  schema 5 migrates only untouched legacy 68/32 bottom columns and 24% bottom
+  dock defaults to the current 55/45 columns and 28% dock, preserving operator-
+  customized divider positions.
 - Direct Visual Studio-style tab insertion is now additive to the existing
   docking system. Exact tab rectangles feed EpochGui's variable-width slot
   planner; same-group reorder and compatible cross-group moves preserve active

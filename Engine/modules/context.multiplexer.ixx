@@ -38,6 +38,7 @@ module;
 #include <mutex>
 #include <queue>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -140,12 +141,19 @@ namespace epochengine::core
         HWND originalParent = nullptr;
         bool proxyUndockPending = false;
         bool proxyRedockPending = false;
+        HWND opacityWindow = nullptr;
+        bool opacityApplied = false;
+        bool opacityWasLayered = false;
     };
 
     export std::unordered_map<HWND, std::thread>& Threads() noexcept;
     export DragState& Drag() noexcept;
     export [[nodiscard]] RoutedPanelDockDragProjection
         routed_panel_dock_drag_projection() noexcept;
+    export void publish_routed_panel_tab_drop_target(
+        std::string_view route,
+        RoutedPanelDockTarget target,
+        std::uint32_t insertion_index) noexcept;
 
     export void MakeDockable(HWND hwnd, HWND parent);
     export class MultiContextManager;
@@ -332,7 +340,14 @@ namespace epochengine::core
         routed_panel_dock_drag_projection() noexcept
     {
         return {};
-    }    export void HandleX11Configure(::Window window, int width, int height);
+    }
+    export inline void publish_routed_panel_tab_drop_target(
+        std::string_view,
+        RoutedPanelDockTarget,
+        std::uint32_t) noexcept
+    {
+    }
+    export void HandleX11Configure(::Window window, int width, int height);
     export void RequestActiveParentLayout() noexcept;
 
 #else
@@ -393,7 +408,14 @@ namespace epochengine::core
         routed_panel_dock_drag_projection() noexcept
     {
         return {};
-    }    export inline void RequestActiveParentLayout() noexcept {}
+    }
+    export inline void publish_routed_panel_tab_drop_target(
+        std::string_view,
+        RoutedPanelDockTarget,
+        std::uint32_t) noexcept
+    {
+    }
+    export inline void RequestActiveParentLayout() noexcept {}
 
 #endif
 } // namespace epochengine::core

@@ -141,6 +141,7 @@ import capability.profile;
 import editor.project_textures;
 import editor.workspace_layout;
 import editor.workspace_commands;
+import editor.authoring_history;
 import editor.code_workspace;
 import editor.hierarchy_adapter;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
@@ -2709,6 +2710,10 @@ namespace epochengine::core
             "editor.workspace_commands",
             epochengine::editor_workspace_commands::run_aggregate_contract()
                 == epochengine::editor_workspace_commands::ContractFailure::none);
+        check(
+            "editor.authoring_history",
+            epochengine::editor_authoring_history::run_contract()
+                == epochengine::editor_authoring_history::ContractFailure::none);
         check(
             "editor.code_workspace",
             epochengine::editor_code_workspace::run_contract());
@@ -9288,9 +9293,14 @@ namespace epochengine::core
                                     win->routedDockTarget.exchange(
                                         0u,
                                         std::memory_order_acq_rel);
+                                const std::uint32_t tabInsertionIndex =
+                                    win->routedDockTabInsertion.exchange(
+                                        0xffffffffu,
+                                        std::memory_order_acq_rel);
                                 epochengine::editor_redock_context_panel(
                                     win->guiRoute,
-                                    dockTarget);
+                                    dockTarget,
+                                    tabInsertionIndex);
                             }
                             win->running = false;
                             win->set_should_close(true);

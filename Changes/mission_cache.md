@@ -1,5 +1,21 @@
 # Mission Cache
 
+- Preserve the native direct-tab handoff: routed floating panes remain separate
+  during movement, use 50% held-window opacity, capture background editor input,
+  and reparent only on deliberate release over a compatible target. The editor
+  publishes an exact route/region/tab index from real tab-strip geometry; the
+  Win32 host consumes that one release-bound value and clears it afterward.
+  Outer guides and no-guide floating remain fallbacks, not substitutes.
+- Preserve typed global authoring history. World, project GUI, Plant Lab, and
+  each open code document keep independent journals; Edit/keyboard routing
+  prefers the active visible document and otherwise the latest changed
+  compatible branch. Every transition is generation/revision/cursor bound and
+  must execute through its owning journal. Do not synthesize one shared stack or
+  persist unsaved code bytes merely to make menu state appear enabled.
+- Preserve the responsive modal/default-layout repair. Package Manager derives
+  its width and height from the live viewport, allocates bounded scroll regions,
+  and keeps its footer reachable. Layout schema 5 changes only untouched legacy
+  defaults from 68/32 and 24% to 55/45 and 28%; customized splits survive.
 - Preserve direct tab insertion as the first docking decision only while a
   compatible tab strip owns pointer hover. EpochGui owns slot resolution,
   marker/ghost geometry, metadata-preserving move semantics, cancellation, and
@@ -31,7 +47,7 @@
   loader/API/module and every build/config/generated-project hook were removed.
   Site v72 is the live corrected nine-row catalog while Engine source/runtime
   remain v0.89.34 until the exact v0.89.35 release gate is authorized.
-- Current v0.89.35 safe evidence: source naming 579/579, whitespace clean,
+- Current v0.89.35 safe evidence: source naming 581/581, whitespace clean,
   Windows Debug and Release `EpochEditor` builds pass, both build-safe aggregate
   contracts exit 0, and managed Clang 22.1.8 links the full Linux Release
   engine. The embedded module-owned direct-tab CTest and Linux aggregate engine

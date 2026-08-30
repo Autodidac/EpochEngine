@@ -47,6 +47,10 @@ export namespace epochengine::editor_code_workspace
         not_found,
         stale_diagnostics,
         read_only,
+        nothing_to_undo,
+        nothing_to_redo,
+        history_corrupt,
+        history_budget_exceeded,
         write_failed,
         verification_failed
     };
@@ -190,9 +194,16 @@ export namespace epochengine::editor_code_workspace
         FindSnapshot find{};
         std::vector<Diagnostic> diagnostics{};
         std::uint64_t diagnostics_revision{};
+        std::size_t history_cursor{};
+        std::size_t history_entries{};
+        std::size_t retained_history_bytes{};
+        std::string undo_label{};
+        std::string redo_label{};
         bool active{};
         bool dirty{};
         bool diagnostics_current{};
+        bool can_undo{};
+        bool can_redo{};
         bool writable{};
         bool utf8_bom{};
     };
@@ -264,6 +275,14 @@ export namespace epochengine::editor_code_workspace
             std::uint64_t expected_document_revision,
             TextRange range,
             std::string replacement);
+        [[nodiscard]] OperationResult undo(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision);
+        [[nodiscard]] OperationResult redo(
+            DocumentHandle document,
+            const WorkspaceAuthority& expected,
+            std::uint64_t expected_document_revision);
         [[nodiscard]] OperationResult set_selection(
             DocumentHandle document,
             const WorkspaceAuthority& expected,

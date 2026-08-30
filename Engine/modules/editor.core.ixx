@@ -488,17 +488,17 @@ namespace epochengine
         EditorWorkspaceTab workspace_tab{ EditorWorkspaceTab::Output };
         EditorWorkspaceTab dock_status_tab{ EditorWorkspaceTab::Output };
         std::uint8_t main_surface{ 0 };
-        float bottom_grid_split{ 0.68f };
+        float bottom_grid_split{ 0.55f };
         float outliner_split{ 0.20f };
         float inspector_split{ 0.22f };
-        float dock_split{ 0.24f };
+        float dock_split{ 0.28f };
         std::array<float, 9> workspace_bottom_grid_splits{
-            0.68f, 0.68f, 0.68f, 0.68f, 0.68f,
-            0.68f, 0.68f, 0.68f, 0.68f
+            0.55f, 0.55f, 0.55f, 0.55f, 0.55f,
+            0.55f, 0.55f, 0.55f, 0.55f
         };
         std::array<float, 9> workspace_dock_splits{
-            0.24f, 0.24f, 0.24f, 0.24f, 0.24f,
-            0.24f, 0.24f, 0.24f, 0.24f
+            0.28f, 0.28f, 0.28f, 0.28f, 0.28f,
+            0.28f, 0.28f, 0.28f, 0.28f
         };
         std::array<bool, 9> workspace_output_follow{
             true, true, true, true, true,
@@ -634,7 +634,8 @@ namespace epochengine
     export void editor_notify_context_panel_closed(std::string_view route_id);
     export void editor_redock_context_panel(
         std::string_view route_id,
-        std::uint8_t dock_target);
+        std::uint8_t dock_target,
+        std::uint32_t tab_insertion_index = 0xffffffffu);
     export [[nodiscard]] EditorTimeControl editor_time_control(const core::Context* ctx);
     export void editor_consume_time_step_request(const core::Context* ctx);
     export [[nodiscard]] EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx);

@@ -8,6 +8,15 @@ the same engine-owned path.
 
 - enter through the normal engine bootstrap so scripting, AI, backend setup,
   logging, capture, and project/runtime selection share one path
+- editor layout preference schema 5 uses 55/45 bottom columns and a 28% bottom
+  dock for untouched defaults. Loading schema 1-4 migrates only exact legacy
+  68/32 and 24% default values; user-adjusted divider positions remain
+  authoritative. Package Manager sizes from the live editor viewport and keeps
+  its action footer inside the visible dialog.
+- routed native tool panes remain independent top-level windows while dragged.
+  The parent editor renders and publishes exact compatible tab-strip insertion
+  slots; the host reparents only after deliberate release, with 50% held-window
+  feedback and background editor input captured for the complete grab.
 - desktop editor wiring lives under `Engine/examples/EpochEditor/`
 - multicontext behavior depends on the active runtime/config macros documented
   in `../build/build_configuration_flags.md`

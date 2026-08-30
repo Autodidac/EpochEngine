@@ -14,6 +14,25 @@ persistence, simulation fidelity, side effects, and server authority.
 The complete temporal world is a target architecture. Current modules implement
 bounded portions and must not be described as the full system.
 
+## Editor Authoring History
+
+`editor.authoring_history` is the current bounded cross-surface coordinator. It
+does not replace the authoring documents' journals. Instead, each real World,
+project-GUI, Plant Lab, and open code document exposes a branch snapshot with a
+stable identity, generation, revision, cursor, retained-entry count, and exact
+Undo/Redo labels. The coordinator selects the visible compatible branch first
+and otherwise the most recently changed compatible branch.
+
+An Undo/Redo request produces a plan bound to the controller revision and the
+branch generation/revision/cursor. The owning document journal performs the
+transition; the coordinator accepts only the expected one-step result. Stale,
+cross-document, malformed, or unexpected transitions fail closed. This gives
+the editor one predictable command surface without collapsing independent
+document timelines into one ambiguous global stack. Texture, tilemap, timeline,
+audio, project-settings, and workspace-layout journals must join through the
+same typed snapshot/executor boundary as their concrete journal support matures;
+their names alone are not completion evidence.
+
 ## Mission
 
 Epoch treats time as a world coordinate rather than a frame counter. A world can

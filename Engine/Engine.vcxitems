@@ -750,6 +750,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_panel.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_layout.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.authoring_history.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx" />
@@ -772,6 +773,7 @@
     <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_layout_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc" />

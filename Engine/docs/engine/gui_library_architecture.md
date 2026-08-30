@@ -32,6 +32,26 @@ editor domains consume them. Editor workspaces should not reimplement generic
 buttons, tabs, dropdowns, scroll areas, text inputs, modal chrome, or clipping
 logic.
 
+Direct tab insertion applies to internal and native routed-pane drags. EpochGui
+owns variable-width strip geometry, insertion slots, markers, and ghosts. The
+editor translates the hovered slot into an exact pane route, logical dock
+region, and tab index; the Win32 host consumes that handoff only on button
+release. A native pane remains a separate top-level window while moving, becomes
+50% opaque for held-window feedback, and never reparents merely because its
+cursor crossed the parent. If no compatible strip owns the cursor, existing
+outer guides and ordinary floating behavior remain available.
+
+Any active native-pane move, internal title drag, splitter drag, or floating GUI
+move/resize is an input-capture boundary. Scene selection, entity dragging,
+camera navigation, and global shortcuts behind that grab must not receive the
+same input. This is the same ownership rule used by modal layers; visual
+top-layer order alone is not sufficient.
+
+Large workflow dialogs such as Package Manager derive their bounded size from
+the current viewport. Their content regions grow and scroll within one measured
+body budget, while progress and action controls remain anchored and reachable.
+Fixed proof-of-concept dialog dimensions are not the product layout contract.
+
 Application workspaces use real tab ownership rather than toolbar mode buttons.
 The shared workspace-layout contract assigns document, structure, inspector,
 and operation-dock providers separately for Standard Editor, Plant Lab, and GUI

@@ -651,6 +651,113 @@ namespace epochengine::editor_code_workspace
                 && reverted.persisted_revision == opened.persisted_revision;
         }
 
+        [[nodiscard]] bool bounded_undo_redo_contract(
+            const Fixture& fixture)
+        {
+            if (!fixture.write(
+                    "Scripts/alpha.ascript.cpp",
+                    "alpha\nbeta\n"))
+            {
+                return false;
+            }
+            Controller controller{};
+            const OpenRequest request = project_request(fixture);
+            if (!controller.open(request))
+                return false;
+            const DocumentSnapshot opened =
+                controller.snapshot().documents[0];
+            if (opened.can_undo || opened.can_redo
+                || opened.history_cursor != 0u
+                || opened.history_entries != 0u)
+            {
+                return false;
+            }
+
+            if (!controller.replace_text(
+                    opened.handle,
+                    request.authority,
+                    opened.revision,
+                    "alpha\nchanged\n"))
+            {
+                return false;
+            }
+            DocumentSnapshot changed =
+                *controller.document(opened.handle);
+            if (!changed.can_undo || changed.can_redo
+                || changed.history_cursor != 1u
+                || changed.history_entries != 1u
+                || changed.undo_label != "Edit text"
+                || changed.retained_history_bytes == 0u
+                || controller.undo(
+                    changed.handle,
+                    request.authority,
+                    opened.revision).code
+                    != ResultCode::stale_document)
+            {
+                return false;
+            }
+
+            if (!controller.undo(
+                    changed.handle,
+                    request.authority,
+                    changed.revision))
+            {
+                return false;
+            }
+            DocumentSnapshot undone =
+                *controller.document(opened.handle);
+            if (undone.text != opened.text
+                || undone.can_undo || !undone.can_redo
+                || undone.history_cursor != 0u
+                || undone.redo_label != "Edit text"
+                || undone.revision == changed.revision)
+            {
+                return false;
+            }
+
+            if (!controller.redo(
+                    undone.handle,
+                    request.authority,
+                    undone.revision))
+            {
+                return false;
+            }
+            DocumentSnapshot redone =
+                *controller.document(opened.handle);
+            if (redone.text != changed.text
+                || !redone.can_undo || redone.can_redo
+                || redone.history_cursor != 1u)
+            {
+                return false;
+            }
+
+            if (!controller.undo(
+                    redone.handle,
+                    request.authority,
+                    redone.revision))
+            {
+                return false;
+            }
+            undone = *controller.document(opened.handle);
+            const OperationResult branch = controller.replace_range(
+                undone.handle,
+                request.authority,
+                undone.revision,
+                TextRange{
+                    .anchor = {.line = 0u, .column = 0u},
+                    .caret = {.line = 0u, .column = 5u}},
+                "omega");
+            if (!branch)
+                return false;
+            const DocumentSnapshot diverged =
+                *controller.document(opened.handle);
+            return diverged.text == "omega\nbeta\n"
+                && diverged.can_undo && !diverged.can_redo
+                && diverged.history_cursor == 1u
+                && diverged.history_entries == 1u
+                && diverged.undo_label == "Replace text";
+        }
+
         [[nodiscard]] bool diagnostics_contract(
             const Fixture& fixture)
         {
@@ -804,6 +911,7 @@ namespace epochengine::editor_code_workspace
             && reload_and_isolation_contract(fixture)
             && stable_tabs_and_session_contract(fixture)
             && find_replace_and_revert_contract(fixture)
+            && bounded_undo_redo_contract(fixture)
             && diagnostics_contract(fixture)
             && path_refusal_contract(fixture);
     }
