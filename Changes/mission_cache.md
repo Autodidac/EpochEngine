@@ -1,5 +1,16 @@
 # Mission Cache
 
+- Preserve the guided self-iteration handoff. Starting a bounded campaign must
+  prepare its scheduler/transport receipt immediately, identify the selected
+  provider and endpoint, and stop at one explicit send gate. A returned plan is
+  locally digest-bound and shown before Approve/Reject; approval may request
+  one exact source proposal but never implies patch apply, promotion, Git,
+  release, server, listener, or broader transport authority.
+- Preserve the four-part Timeline workspace: Sequence owns playback and event
+  keys; Checkpoints owns truthful evidence staging/cadence; Media owns admitted
+  source and decoder availability; Diagnostics owns raw simulation/lane/save
+  contract data. Do not relabel staged checkpoint evidence as a recoverable
+  save until serializer, writer, restore reader, and round-trip tests exist.
 - Preserve the native direct-tab handoff: routed floating panes remain separate
   during movement, use 50% held-window opacity, capture background editor input,
   and reparent only on deliberate release over a compatible target. The editor

@@ -1,5 +1,15 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Repair the editor self-iteration start path so campaign construction also
+  prepares the bounded plan request. The operational panel identifies the
+  provider/endpoint and exposes one explicit send action; returned plans are
+  digest-bound and rendered before Approve/Reject, and approval requests only
+  the next bounded proposal without applying or promoting source.
+- Recompose Timeline into Sequence, Checkpoints, Media, and Diagnostics. The
+  existing playback, recording, checkpoint cadence, media admission, and raw
+  evidence controls remain available, while normal authoring is no longer
+  buried inside an unstructured diagnostic dump or described as a completed
+  save/restore or video-decoder system.
 - Extend direct tab-slot insertion to native routed-pane movement. Floating
   panes stay top-level until button release, publish an exact target tab index,
   and redock only on a compatible deliberate drop instead of merging during

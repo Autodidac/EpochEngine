@@ -943,6 +943,8 @@ namespace epochengine::editor_ai_development_panel
             campaign_pending_operation{};
         std::string campaign_pending_response{};
         std::string campaign_pending_response_digest{};
+        std::string campaign_plan_review{};
+        std::string campaign_plan_review_digest{};
         ai::self_iteration_orchestrator::Configuration campaign_configuration{};
         std::filesystem::path campaign_state_path{};
         ai::project_profile::Provider campaign_provider{
@@ -1025,6 +1027,8 @@ namespace epochengine::editor_ai_development_panel
             campaign_pending_operation.reset();
             campaign_pending_response.clear();
             campaign_pending_response_digest.clear();
+            campaign_plan_review.clear();
+            campaign_plan_review_digest.clear();
             campaign_state_path.clear();
             campaign_scope_digest.clear();
             campaign_request_digest.clear();
@@ -1231,7 +1235,7 @@ namespace epochengine::editor_ai_development_panel
             const ai::project_profile::Provider provider) noexcept
         {
             return provider == ai::project_profile::Provider::external_mcp
-                ? "External MCP" : provider
+                ? "External model + MCP guards" : provider
                     == ai::project_profile::Provider::epoch_local_qwen38
                     ? "Epoch-local Qwen3.8" : "Disabled";
         }
@@ -1292,8 +1296,18 @@ namespace epochengine::editor_ai_development_panel
         {
             return transport
                     == ai::self_iteration_orchestrator::TransportKind::external_mcp
-                ? "External MCP"
-                : "Guarded local MCP child (stdio only)";
+                ? "Guarded external compute"
+                : "Guarded local child (stdio only)";
+        }
+
+        [[nodiscard]] static std::string bounded_review_text(
+            const std::string_view text)
+        {
+            constexpr std::size_t maximumVisibleBytes = 4u * 1024u;
+            if (text.size() <= maximumVisibleBytes)
+                return std::string{text};
+            return std::string{text.substr(0u, maximumVisibleBytes)}
+                + "\n\n[Plan preview truncated; the complete digest-bound response remains in AI Chat.]";
         }
 
         struct SupervisorActions final
@@ -1655,6 +1669,91 @@ namespace epochengine::editor_ai_development_panel
             campaign_control_generation = 0u;
             status_message =
                 "Campaign queue, scheduler, and supervisor are bound; transport remains idle until requested.";
+            output.campaign_evidence.push_back(status_message);
+            output.status = status_message;
+            return true;
+        }
+
+        [[nodiscard]] bool stage_campaign_plan_request(
+            RenderResult& output,
+            const std::uint64_t now)
+        {
+            using SchedulerPhase = ai::iteration_campaign_scheduler::Phase;
+            if (!campaign_orchestrator || !campaign_queue || !campaign_scheduler
+                || !campaign_supervisor || !campaign_bridge)
+            {
+                status_message =
+                    "The campaign control spine is incomplete; no transport request was staged.";
+                output.status = status_message;
+                return false;
+            }
+            const auto campaign = campaign_orchestrator->snapshot();
+            if (campaign.phase
+                    != ai::self_iteration_orchestrator::Phase::awaiting_plan_request
+                || campaign_scheduler->snapshot().phase != SchedulerPhase::idle)
+            {
+                status_message =
+                    "The bounded plan request is not ready in the current campaign state.";
+                output.status = status_message;
+                return false;
+            }
+
+            auto dispatched = campaign_scheduler->dispatch_next(
+                scheduler_authority(now),
+                *campaign_queue,
+                *campaign_bridge,
+                *campaign_orchestrator);
+            const bool accepted = static_cast<bool>(dispatched);
+            capture_scheduler_result(output, std::move(dispatched));
+            if (accepted)
+            {
+                (void)synchronize_supervisor(output, now);
+                status_message =
+                    "Bounded plan request is ready. Review the displayed provider and endpoint, then explicitly send it.";
+                output.campaign_evidence.push_back(status_message);
+                output.status = status_message;
+            }
+            return accepted;
+        }
+
+        [[nodiscard]] bool continue_approved_plan(
+            RenderResult& output,
+            const std::uint64_t now)
+        {
+            using Phase = ai::self_iteration_orchestrator::Phase;
+            if (!campaign_orchestrator)
+                return false;
+            auto snapshot = campaign_orchestrator->snapshot();
+            if (snapshot.phase != Phase::awaiting_curated_evidence)
+                return false;
+
+            auto shared = campaign_orchestrator->share_curated_evidence(
+                campaign_action(snapshot, "share-curated", now),
+                snapshot.campaign.session.scope_digest,
+                campaign_scope_digest,
+                "Operator approved the digest-bound plan and retained the exact reviewed source scope.");
+            const bool sharedAccepted = static_cast<bool>(shared);
+            capture_campaign_result(output, std::move(shared));
+            if (!sharedAccepted)
+                return false;
+
+            snapshot = campaign_orchestrator->snapshot();
+            if (snapshot.phase != Phase::awaiting_proposal_request)
+                return false;
+            auto requested = campaign_orchestrator->request_proposal(
+                campaign_action(snapshot, "proposal-request", now));
+            const bool requestAccepted = static_cast<bool>(requested);
+            capture_campaign_result(output, std::move(requested));
+            if (!requestAccepted)
+                return false;
+
+            output.action = HostAction::request_model_source_proposal;
+            output.model_prompt = campaign_model_prompt(
+                ai::self_iteration_orchestrator::OperationKind::model_proposal);
+            campaign_plan_review.clear();
+            campaign_plan_review_digest.clear();
+            status_message =
+                "Approved plan advanced to one exact reviewed-scope source proposal request.";
             output.campaign_evidence.push_back(status_message);
             output.status = status_message;
             return true;
@@ -2161,8 +2260,8 @@ namespace epochengine::editor_ai_development_panel
                     .width = 132.0f,
                     .enabled = !campaign_orchestrator || terminal},
                 gui::InlineButtonSpec{
-                    .label = "External MCP",
-                    .width = 120.0f,
+                    .label = "External endpoint",
+                    .width = 148.0f,
                     .enabled = !campaign_orchestrator || terminal}}
             ;
             if (const auto provider = gui::inline_button_row(
@@ -2234,7 +2333,10 @@ namespace epochengine::editor_ai_development_panel
                         const bool accepted = static_cast<bool>(begun);
                         capture_campaign_result(output, std::move(begun));
                         if (accepted)
-                            (void)initialize_campaign_control(output, now);
+                        {
+                            if (initialize_campaign_control(output, now))
+                                (void)stage_campaign_plan_request(output, now);
+                        }
                     }
                 }
                 else if (*action == 1u)
@@ -2341,55 +2443,95 @@ namespace epochengine::editor_ai_development_panel
                     queueSnapshot, schedulerSnapshot);
                 gui::label("Operational Campaign Control");
                 gui::property_row(
+                    "Current step", campaign_phase_name(snapshot.phase));
+                gui::property_row(
                     "Provider", campaign_provider_name(campaign_provider));
                 gui::property_row(
-                    "Transport", campaign_transport_name(
-                        schedulerSnapshot.configuration.transport));
+                    "Endpoint",
+                    input.selected_endpoint.empty()
+                        ? std::string{"Not configured"}
+                        : input.selected_endpoint);
                 gui::property_row(
-                    "Supervisor", supervisor_phase_name(controlSnapshot.phase));
-                gui::property_row(
-                    "Scheduler", scheduler_phase_name(schedulerSnapshot.phase));
-                gui::property_row(
-                    "Operation",
-                    schedulerSnapshot.pending_operation_id.empty()
-                        ? std::string{"None"}
-                        : schedulerSnapshot.pending_operation_id);
-                gui::property_row(
-                    "Request SHA-256",
-                    schedulerSnapshot.request.request_sha256.empty()
-                        ? std::string{"Not issued"}
-                        : schedulerSnapshot.request.request_sha256);
-                gui::property_row(
-                    "Transport binding",
-                    schedulerSnapshot.transport_binding_sha256.empty()
-                        ? std::string{"Not issued"}
-                        : schedulerSnapshot.transport_binding_sha256);
-                gui::property_row(
-                    "Attempt / backoff",
-                    epochengine::format_text("{} / {}",
-                        schedulerSnapshot.attempts,
-                        schedulerSnapshot.next_retry_at_unix_seconds));
-                gui::property_row(
-                    "Human review",
+                    "Next",
                     schedulerSnapshot.phase
                             == ai::iteration_campaign_scheduler::Phase::
                                 awaiting_human_review
-                        ? "Awaiting explicit approval or rejection"
-                        : "Not waiting");
-                if (!queueSnapshot.items.empty())
+                        ? "Review the returned plan"
+                    : schedulerSnapshot.phase
+                            == ai::iteration_campaign_scheduler::Phase::
+                                awaiting_transport_approval
+                        ? "Confirm and send the bounded plan request"
+                    : schedulerSnapshot.phase
+                            == ai::iteration_campaign_scheduler::Phase::
+                                awaiting_transport_response
+                        ? "Waiting for the selected provider"
+                        : std::string{scheduler_phase_name(
+                            schedulerSnapshot.phase)});
+                if (advanced_controls)
                 {
                     gui::property_row(
-                        "Queue item",
-                        queue_item_phase_name(queueSnapshot.items.front().phase));
+                        "Transport", campaign_transport_name(
+                            schedulerSnapshot.configuration.transport));
                     gui::property_row(
-                        "Objective SHA-256",
-                        queueSnapshot.items.front().objective_sha256);
+                        "Supervisor", supervisor_phase_name(controlSnapshot.phase));
+                    gui::property_row(
+                        "Scheduler", scheduler_phase_name(schedulerSnapshot.phase));
+                    gui::property_row(
+                        "Operation",
+                        schedulerSnapshot.pending_operation_id.empty()
+                            ? std::string{"None"}
+                            : schedulerSnapshot.pending_operation_id);
+                    gui::property_row(
+                        "Request SHA-256",
+                        schedulerSnapshot.request.request_sha256.empty()
+                            ? std::string{"Not issued"}
+                            : schedulerSnapshot.request.request_sha256);
+                    gui::property_row(
+                        "Transport binding",
+                        schedulerSnapshot.transport_binding_sha256.empty()
+                            ? std::string{"Not issued"}
+                            : schedulerSnapshot.transport_binding_sha256);
+                    gui::property_row(
+                        "Attempt / backoff",
+                        epochengine::format_text("{} / {}",
+                            schedulerSnapshot.attempts,
+                            schedulerSnapshot.next_retry_at_unix_seconds));
+                }
+                if (!queueSnapshot.items.empty())
+                {
+                    if (advanced_controls)
+                    {
+                        gui::property_row(
+                            "Queue item",
+                            queue_item_phase_name(queueSnapshot.items.front().phase));
+                        gui::property_row(
+                            "Objective SHA-256",
+                            queueSnapshot.items.front().objective_sha256);
+                    }
                     planApproved = queueSnapshot.items.front().phase
                         == ai::iteration_campaign_queue::ItemPhase::
                             approved_for_campaign;
                 }
                 if (!controlQuery)
                     gui::wrapped_label(controlQuery.status, width);
+                if (schedulerSnapshot.phase
+                        == ai::iteration_campaign_scheduler::Phase::
+                            awaiting_human_review
+                    && !campaign_plan_review.empty())
+                {
+                    gui::label("Returned Plan Review");
+                    gui::wrapped_label(
+                        bounded_review_text(campaign_plan_review),
+                        width);
+                    if (advanced_controls)
+                    {
+                        gui::property_row(
+                            "Plan SHA-256", campaign_plan_review_digest);
+                    }
+                    gui::wrapped_label(
+                        "Approve only if this bounded plan matches the requested objective. Approval requests one source proposal; it does not apply or promote a patch.",
+                        width);
+                }
 
                 const auto availability = available_supervisor_actions(
                     controlSnapshot.phase,
@@ -2423,7 +2565,8 @@ namespace epochengine::editor_ai_development_panel
                     CommandKind::cancel);
                 addAction(availability.retry, "Retry", 76.0f,
                     CommandKind::retry);
-                addAction(availability.approve, "Admit Response", 126.0f,
+                addAction(availability.approve,
+                    "Approve Plan & Request Patch", 214.0f,
                     CommandKind::approve);
                 addAction(availability.reject, "Reject", 82.0f,
                     CommandKind::reject);
@@ -2461,11 +2604,17 @@ namespace epochengine::editor_ai_development_panel
                         }
                         else if (accepted && kind == CommandKind::reject)
                         {
+                            campaign_plan_review.clear();
+                            campaign_plan_review_digest.clear();
                             capture_campaign_result(output,
                                 campaign_orchestrator->cancel(
                                     campaign_action(snapshot,
                                         "supervisor-reject", now),
                                     "Supervisor rejected the digest-bound plan response."));
+                        }
+                        else if (accepted && kind == CommandKind::approve)
+                        {
+                            (void)continue_approved_plan(output, now);
                         }
                     }
                 }
@@ -2489,7 +2638,7 @@ namespace epochengine::editor_ai_development_panel
                     && schedulerSnapshot.phase
                         == ai::iteration_campaign_scheduler::Phase::idle
                     && snapshot.phase == Phase::awaiting_plan_request
-                    && gui::button("Request Bounded Plan", {width, 30.0f}))
+                    && gui::button("Prepare Bounded Plan Request", {width, 30.0f}))
                 {
                     const auto before = campaign_scheduler->snapshot().generation;
                     auto dispatched = campaign_scheduler->dispatch_next(
@@ -2506,73 +2655,55 @@ namespace epochengine::editor_ai_development_panel
                         == ai::iteration_campaign_scheduler::Phase::
                             awaiting_transport_approval
                     && campaign_bridge_receipt
-                    && gui::button(
-                        "Approve Transport Request", {width, 30.0f}))
+                    )
                 {
-                    const auto receipt = *campaign_bridge_receipt;
-                    const auto before = campaign_scheduler->snapshot().generation;
-                    auto approved = campaign_scheduler->approve_dispatch(
-                        scheduler_authority(now),
-                        {
-                            .receipt_id = receipt.receipt_id(),
-                            .connection_generation =
-                                receipt.connection_generation(),
-                            .expected_orchestrator_generation =
-                                receipt.expected_orchestrator_generation(),
-                            .expected_state_sha256 =
-                                receipt.expected_state_sha256(),
-                            .now_unix_seconds = now,
-                            .operator_approved = true},
-                        *campaign_queue,
-                        *campaign_bridge,
-                        *campaign_orchestrator);
-                    const bool accepted = static_cast<bool>(approved);
-                    capture_scheduler_result(output, std::move(approved));
-                    if (campaign_scheduler->snapshot().generation != before)
-                        (void)synchronize_supervisor(output, now);
-                    if (accepted && campaign_pending_operation)
+                    gui::wrapped_label(
+                        "Send the bounded objective and its reviewed scope digest to "
+                            + (input.selected_endpoint.empty()
+                                ? std::string{"the selected provider"}
+                                : input.selected_endpoint)
+                            + ". No source-file bytes are added by this plan request.",
+                        width);
+                    if (gui::button(
+                            "Send Bounded Plan Request", {width, 30.0f}))
                     {
-                        output.action = HostAction::request_model_source_proposal;
-                        output.model_prompt = campaign_model_prompt(
-                            OperationKind::model_plan);
+                        const auto receipt = *campaign_bridge_receipt;
+                        const auto before = campaign_scheduler->snapshot().generation;
+                        auto approved = campaign_scheduler->approve_dispatch(
+                            scheduler_authority(now),
+                            {
+                                .receipt_id = receipt.receipt_id(),
+                                .connection_generation =
+                                    receipt.connection_generation(),
+                                .expected_orchestrator_generation =
+                                    receipt.expected_orchestrator_generation(),
+                                .expected_state_sha256 =
+                                    receipt.expected_state_sha256(),
+                                .now_unix_seconds = now,
+                                .operator_approved = true},
+                            *campaign_queue,
+                            *campaign_bridge,
+                            *campaign_orchestrator);
+                        const bool accepted = static_cast<bool>(approved);
+                        capture_scheduler_result(output, std::move(approved));
+                        campaign_bridge_receipt.reset();
+                        if (campaign_scheduler->snapshot().generation != before)
+                            (void)synchronize_supervisor(output, now);
+                        if (accepted && campaign_pending_operation)
+                        {
+                            output.action = HostAction::request_model_source_proposal;
+                            output.model_prompt = campaign_model_prompt(
+                                OperationKind::model_plan);
+                        }
                     }
                 }
-                else if (supervisorAllowsProgress
-                    && schedulerSnapshot.phase
-                        == ai::iteration_campaign_scheduler::Phase::
-                            awaiting_transport_response
-                    && campaign_pending_operation
-                    && !campaign_pending_response.empty()
-                    && gui::button(
-                        "Admit Response For Review", {width, 30.0f}))
+                else if (schedulerSnapshot.phase
+                    == ai::iteration_campaign_scheduler::Phase::
+                        awaiting_transport_response)
                 {
-                    const auto pending = *campaign_pending_operation;
-                    const auto before = campaign_scheduler->snapshot().generation;
-                    auto completed = campaign_scheduler->complete_response(
-                        scheduler_authority(now),
-                        pending,
-                        {
-                            .operation_id = pending.operation_id(),
-                            .expected_generation = pending.expected_generation(),
-                            .expected_state_sha256 =
-                                pending.expected_state_sha256(),
-                            .transition_id = pending.transition_id(),
-                            .now_unix_seconds = now,
-                            .content = campaign_pending_response,
-                            .evidence_sha256 = campaign_pending_response_digest,
-                            .summary =
-                                "Operator admitted the digest-bound transport response to supervisor review; campaign approval remains pending.",
-                            .passed = false,
-                            .operator_approved = true},
-                        *campaign_queue,
-                        *campaign_bridge,
-                        *campaign_orchestrator);
-                    capture_scheduler_result(output, std::move(completed));
-                    campaign_pending_operation.reset();
-                    campaign_pending_response.clear();
-                    campaign_pending_response_digest.clear();
-                    if (campaign_scheduler->snapshot().generation != before)
-                        (void)synchronize_supervisor(output, now);
+                    gui::wrapped_label(
+                        "The bounded request is active. Epoch will digest-bind the returned plan locally, then present it here for explicit approval.",
+                        width);
                 }
             }
 
@@ -3193,6 +3324,18 @@ namespace epochengine::editor_ai_development_panel
             || !pausedActions.cancel || backoffEarly.retry
             || !reviewActions.approve || !reviewActions.reject
             || !reviewActions.pause || !reviewActions.cancel)
+        {
+            return false;
+        }
+        const std::string shortPlan{"Inspect one bounded source defect."};
+        if (Implementation::bounded_review_text(shortPlan) != shortPlan)
+            return false;
+        const std::string longPlan(5u * 1024u, 'p');
+        const std::string boundedPlan =
+            Implementation::bounded_review_text(longPlan);
+        if (boundedPlan.size() <= 4u * 1024u
+            || boundedPlan.size() >= longPlan.size()
+            || boundedPlan.find("preview truncated") == std::string::npos)
         {
             return false;
         }
@@ -4338,15 +4481,55 @@ namespace epochengine::editor_ai_development_panel
                         == ai::iteration_campaign_scheduler::Phase::
                             awaiting_transport_response)
                 {
-                    state.campaign_pending_response =
-                        input.latest_raw_model_reply;
-                    state.campaign_pending_response_digest =
+                    state.campaign_plan_review = input.latest_raw_model_reply;
+                    state.campaign_plan_review_digest =
                         Implementation::digest_text(input.latest_raw_model_reply);
-                    state.status_message =
-                        "Transport response received and digest-bound locally; explicit Admit Response is required before supervisor review.";
-                    output.campaign_evidence.push_back(
-                        "Pending response SHA-256: "
-                        + state.campaign_pending_response_digest);
+                    const auto before = state.campaign_scheduler->snapshot()
+                        .generation;
+                    auto completed = state.campaign_scheduler->complete_response(
+                        state.scheduler_authority(now),
+                        pending,
+                        {
+                            .operation_id = pending.operation_id(),
+                            .expected_generation = pending.expected_generation(),
+                            .expected_state_sha256 =
+                                pending.expected_state_sha256(),
+                            .transition_id = pending.transition_id(),
+                            .now_unix_seconds = now,
+                            .content = input.latest_raw_model_reply,
+                            .evidence_sha256 =
+                                state.campaign_plan_review_digest,
+                            .summary =
+                                "Host received and digest-bound the bounded plan response; explicit plan approval remains pending.",
+                            .passed = true,
+                            .operator_approved = true},
+                        *state.campaign_queue,
+                        *state.campaign_bridge,
+                        *state.campaign_orchestrator);
+                    const bool accepted = static_cast<bool>(completed);
+                    state.capture_scheduler_result(output, std::move(completed));
+                    if (state.campaign_scheduler->snapshot().generation
+                        != before)
+                    {
+                        (void)state.synchronize_supervisor(output, now);
+                    }
+                    if (!accepted)
+                    {
+                        state.campaign_plan_review.clear();
+                        state.campaign_plan_review_digest.clear();
+                    }
+                    state.campaign_pending_operation.reset();
+                    state.campaign_pending_response.clear();
+                    state.campaign_pending_response_digest.clear();
+                    state.status_message = accepted
+                        ? "Returned plan is digest-bound and ready for review. Approve it to request one exact source proposal, or reject it without changing source."
+                        : state.status_message;
+                    if (accepted)
+                    {
+                        output.campaign_evidence.push_back(
+                            "Plan response SHA-256: "
+                            + state.campaign_plan_review_digest);
+                    }
                     output.status = state.status_message;
                     return output;
                 }

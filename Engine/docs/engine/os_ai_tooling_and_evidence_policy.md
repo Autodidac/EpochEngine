@@ -161,6 +161,17 @@ The durable orchestration pipeline is now source- and contract-complete:
   documented at `eadfea94`. They are Site-readable evidence with upload and
   release authority false.
 
+The editor operational flow is deliberately guided rather than disconnected.
+Starting an admitted campaign constructs its queue, scheduler, supervisor, and
+bridge and immediately prepares the bounded plan request. The panel displays
+the selected provider and exact endpoint, then stops at the explicit
+`Send Bounded Plan Request` action. No transport starts during campaign setup.
+When the selected model returns a plan, the host digest-binds it locally and
+renders a bounded preview before Approve/Reject. Approval requests one bounded
+source proposal; it does not approve a patch, live-source mutation, promotion,
+Git, upload, publication, listener, server, or release. The complete returned
+response remains visible in AI Chat when the operational preview is truncated.
+
 `ai.mcp_supervisor_adapter` is not part of the registered pipeline yet. Its
 five local files implement a caller-fed canonical JSON-RPC allowlist and replay
 checkpoint, but registration, build proof, and publication are pending fresh

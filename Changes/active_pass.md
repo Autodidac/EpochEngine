@@ -1,3 +1,17 @@
+- The v0.89.35 self-iteration repair makes the first bounded campaign step
+  visible and executable. Start now prepares the digest-bound plan request,
+  shows the selected provider and endpoint, and waits at one explicit
+  `Send Bounded Plan Request` gate instead of leaving an idle scheduler with an
+  unissued request. Returned plans are digest-bound locally, displayed before
+  Approve/Reject, and require explicit approval before Epoch requests one
+  source proposal. Approval still does not apply, promote, commit, push, or
+  release source.
+- The Timeline workspace is organized into Sequence, Checkpoints, Media, and
+  Diagnostics sections. Playback/event-key authoring, truthful checkpoint
+  evidence staging, media admission state, and low-level timing/layout data no
+  longer render as one undifferentiated telemetry wall. The UI states plainly
+  that checkpoint writing/restoration and decoded media frames remain
+  unavailable until their real serializer/writer/decoder paths are verified.
 - The v0.89.35 acceptance repair extends direct tab insertion through native
   routed-pane drags. A floating pane remains a distinct top-level window until
   deliberate button release, renders exact target-strip insertion slots in the

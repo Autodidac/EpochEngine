@@ -1231,6 +1231,14 @@ the write ranges are explicitly isolated.
 - Streaming-save profile-change plans are review-first. They let the Video
   Editor show what an interval/frame/manual/keyed profile transition would
   change before any dropdown mutates live save configuration.
+- The central Timeline workspace presents this state through four task-focused
+  sections. **Sequence** owns playback, scrubbing, the event recording gate,
+  and checkpoint keys at the playhead. **Checkpoints** owns evidence-staging
+  cadence and labels and explicitly reports that writer/restore round-trip is
+  unavailable. **Media** owns admitted-source metadata and truthful decoder
+  availability. **Diagnostics** owns detailed clock, lane-layout, cadence,
+  retention, and restore-plan evidence. These sections view the same temporal
+  state; they are not independent clocks or fabricated save/video systems.
 - `input.engine` is the shared input profile spine. The default editor profile
   now names camera reset-to-center, frame selection, clipboard copy/paste,
   right-click context menu, play-in-editor, timeline play/step, and package
@@ -1418,6 +1426,14 @@ evidence, not publication authority: upload and release permissions are always
 false, and Site ingestion remains a separate explicitly authorized operation.
 Generated-project self-iteration uses the same mechanics only when its project
 profile enables it; engine-source authority is never inherited by that project.
+
+In the operational panel, Start also prepares the first bounded plan request so
+the scheduler cannot remain mysteriously idle with an unissued request. Epoch
+shows the selected provider and endpoint and waits for the operator to choose
+`Send Bounded Plan Request`. A returned plan is digest-bound locally and shown
+before Approve/Reject. Approving that plan requests one exact source proposal;
+patch admission, disposable application, validation, repair, promotion, Git,
+and release gates remain separate.
 
 `editor.ai_development_controller` maps production calls to trusted monotonic
 time, serializes execution entry, and rejects caller-driven backdating. Before a

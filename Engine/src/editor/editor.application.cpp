@@ -851,6 +851,14 @@ namespace epochengine
                 publishPending{};
         };
 
+        enum class TimelineWorkspaceSection : std::uint8_t
+        {
+            sequence = 0,
+            save_restore,
+            media,
+            diagnostics
+        };
+
         struct EditorState
         {
             bool initialized{ false };
@@ -1063,6 +1071,8 @@ namespace epochengine
             std::vector<epochengine::timeline::TimelineEvent> timelineEvents{};
             epochengine::media::timeline_preview::PreviewState
                 mediaTimelinePreview{};
+            TimelineWorkspaceSection timelineWorkspaceSection{
+                TimelineWorkspaceSection::sequence};
             EditorApplicationKind applicationKind{ EditorApplicationKind::Standard };
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
@@ -31906,7 +31916,283 @@ namespace epochengine
                     push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
                 }
 
-                gui::label("Media Preview");
+                const std::array timelineSections{
+                    gui::InlineButtonSpec{ .label = "Sequence", .width = 104.0f },
+                    gui::InlineButtonSpec{ .label = "Checkpoints", .width = 116.0f },
+                    gui::InlineButtonSpec{ .label = "Media", .width = 84.0f },
+                    gui::InlineButtonSpec{ .label = "Diagnostics", .width = 112.0f }
+                };
+                if (const auto section = gui::inline_button_row(
+                        timelineSections, 30.0f, 6.0f))
+                {
+                    editor.timelineWorkspaceSection =
+                        static_cast<TimelineWorkspaceSection>(*section);
+                }
+
+                const auto stageTimelineCheckpoint = [&]()
+                {
+                    epochengine::saveload::mark_checkpoint_captured(
+                        editor.streamingSaveStatus,
+                        editor.streamingSaveConfig,
+                        timelineStats);
+                    editor.timelineEvents.push_back(
+                        epochengine::timeline::make_event_from_stats(
+                            "save",
+                            epochengine::timeline::TimelineEventKind::Checkpoint,
+                            timelineStats,
+                            editor.streamingSaveStatus.last_snapshot_label,
+                            "PersistentLevel",
+                            editor.streamingSaveStatus.last_output_path));
+                    epochengine::timeline::sort_events(editor.timelineEvents);
+                    editor.lastCheckpointRecord =
+                        epochengine::saveload::make_checkpoint_record(
+                            editor.streamingSaveConfig,
+                            editor.streamingSaveStatus,
+                            timelineStats,
+                            0u,
+                            editor.timelineEvents.size());
+                    push_editor_log(
+                        editor,
+                        "[timeline] Manual checkpoint evidence staged: "
+                            + editor.streamingSaveStatus.last_snapshot_label);
+                };
+
+                if (editor.timelineWorkspaceSection
+                    == TimelineWorkspaceSection::sequence)
+                {
+                    gui::label("Sequence");
+                    gui::wrapped_label(
+                        "The Timeline drives Epoch's shared simulation clock and visible event keys. Playback changes the editor playhead; Record Gate controls whether visible editor events may be added to the sequence.",
+                        centerWidth);
+                    gui::property_row(
+                        "Playhead",
+                        epochengine::format_text(
+                            "{:.2f}s / {:.2f}s | frame {}",
+                            editor.timelineState.playhead_seconds,
+                            editor.timelineState.duration_seconds,
+                            editor.timelineState.playhead_frame),
+                        118.0f);
+                    gui::property_row(
+                        "Sequence",
+                        epochengine::format_text(
+                            "{} tracks | {} keys | {}",
+                            epochengine::timeline::enabled_track_count(
+                                editor.timelineTracks),
+                            editor.timelineEvents.size(),
+                            editor.timelineState.recording
+                                ? "record gate armed"
+                                : "record gate paused"),
+                        118.0f);
+
+                    const std::array playbackButtons{
+                        gui::InlineButtonSpec{ .label = "Rewind", .width = 76.0f },
+                        gui::InlineButtonSpec{ .label = "-1s", .width = 56.0f },
+                        gui::InlineButtonSpec{
+                            .label = editor.timelineState.playing ? "Pause" : "Play",
+                            .width = 72.0f },
+                        gui::InlineButtonSpec{ .label = "+1s", .width = 56.0f },
+                        gui::InlineButtonSpec{
+                            .label = editor.timelineState.recording
+                                ? "Stop Rec"
+                                : "Record Gate",
+                            .width = 112.0f }
+                    };
+                    if (const auto action = gui::inline_button_row(
+                            playbackButtons, 28.0f, 6.0f))
+                    {
+                        switch (*action)
+                        {
+                        case 0:
+                            editor.timelineState.playhead_seconds = 0.0;
+                            editor.timelineState.playhead_frame = 0;
+                            push_editor_log(
+                                editor,
+                                "[timeline] Playhead rewound to the beginning.");
+                            break;
+                        case 1:
+                            epochengine::timeline::scrub_seconds(
+                                editor.timelineState, -1.0);
+                            editor.timelineState.playing = false;
+                            editor.timeControl.paused = true;
+                            push_editor_log(
+                                editor,
+                                "[timeline] Playhead scrubbed backward.");
+                            break;
+                        case 2:
+                            editor.timelineState.playing =
+                                !editor.timelineState.playing;
+                            editor.timeControl.paused =
+                                !editor.timelineState.playing;
+                            push_editor_log(
+                                editor,
+                                editor.timelineState.playing
+                                    ? "[timeline] Playback follows the shared simulation clock."
+                                    : "[timeline] Playback paused for scrubbing.");
+                            break;
+                        case 3:
+                            epochengine::timeline::scrub_seconds(
+                                editor.timelineState, 1.0);
+                            editor.timelineState.playing = false;
+                            editor.timeControl.paused = true;
+                            push_editor_log(
+                                editor,
+                                "[timeline] Playhead scrubbed forward.");
+                            break;
+                        case 4:
+                            editor.timelineState.recording =
+                                !editor.timelineState.recording;
+                            push_editor_log(
+                                editor,
+                                editor.timelineState.recording
+                                    ? "[timeline] Event recording gate armed."
+                                    : "[timeline] Event recording gate paused.");
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+
+                    if (gui::button(
+                            "Add Checkpoint Key At Playhead",
+                            {244.0f, 30.0f}))
+                    {
+                        stageTimelineCheckpoint();
+                    }
+                    if (const auto* nextEvent =
+                            epochengine::timeline::next_event_after(
+                                editor.timelineEvents,
+                                editor.timelineState.playhead_seconds))
+                    {
+                        gui::property_row(
+                            "Next key",
+                            epochengine::timeline::describe_event(*nextEvent),
+                            118.0f);
+                    }
+                    else
+                    {
+                        gui::property_row("Next key", "(none)", 118.0f);
+                    }
+                    for (const auto& track : editor.timelineTracks)
+                    {
+                        gui::property_row(
+                            track.label,
+                            track.enabled ? "Enabled" : "Muted",
+                            118.0f);
+                    }
+                }
+                else if (editor.timelineWorkspaceSection
+                    == TimelineWorkspaceSection::save_restore)
+                {
+                    gui::label("Checkpoint Staging");
+                    gui::wrapped_label(
+                        "Checkpoint keys currently stage reviewable timeline evidence. A complete scene serializer, writer, and restore reader are still required before Epoch can call these recoverable saves.",
+                        centerWidth);
+                    const auto activeSaveProfile =
+                        epochengine::saveload::detect_streaming_save_profile(
+                            editor.streamingSaveConfig);
+                    gui::property_row(
+                        "Mode",
+                        std::string(epochengine::saveload::mode_name(
+                            editor.streamingSaveConfig.mode)),
+                        118.0f);
+                    gui::property_row(
+                        "Profile",
+                        std::string(epochengine::saveload::stream_profile_name(
+                            activeSaveProfile)),
+                        118.0f);
+                    gui::property_row(
+                        "Retention",
+                        epochengine::saveload::describe_retention(
+                            editor.streamingSaveConfig),
+                        118.0f);
+                    gui::property_row(
+                        "Last key",
+                        editor.streamingSaveStatus.last_snapshot_label.empty()
+                            ? std::string{"(none staged)"}
+                            : editor.streamingSaveStatus.last_snapshot_label,
+                        118.0f);
+                    gui::property_row(
+                        "Writer",
+                        "Not connected; evidence remains staged locally",
+                        118.0f);
+                    gui::property_row(
+                        "Restore",
+                        "Unavailable until scene payload round-trip is verified",
+                        118.0f);
+
+                    const std::array streamButtons{
+                        gui::InlineButtonSpec{
+                            .label = editor.streamingSaveConfig.enabled
+                                ? "Pause Stream"
+                                : "Arm Stream",
+                            .width = 118.0f },
+                        gui::InlineButtonSpec{ .label = "Stage Key Now", .width = 116.0f },
+                        gui::InlineButtonSpec{ .label = "Every 15s", .width = 92.0f },
+                        gui::InlineButtonSpec{ .label = "Every 120f", .width = 96.0f },
+                        gui::InlineButtonSpec{ .label = "On Timeline Key", .width = 128.0f }
+                    };
+                    if (const auto action = gui::inline_button_row(
+                            streamButtons, 28.0f, 6.0f))
+                    {
+                        switch (*action)
+                        {
+                        case 0:
+                            editor.streamingSaveConfig.enabled =
+                                !editor.streamingSaveConfig.enabled;
+                            editor.streamingSaveStatus.active =
+                                editor.streamingSaveConfig.enabled;
+                            editor.streamingSaveStatus.message =
+                                editor.streamingSaveConfig.enabled
+                                    ? "Checkpoint evidence staging is armed."
+                                    : "Checkpoint evidence staging is paused.";
+                            push_editor_log(
+                                editor,
+                                editor.streamingSaveConfig.enabled
+                                    ? "[timeline] Checkpoint evidence staging armed."
+                                    : "[timeline] Checkpoint evidence staging paused.");
+                            break;
+                        case 1:
+                            stageTimelineCheckpoint();
+                            break;
+                        case 2:
+                            epochengine::saveload::apply_streaming_save_profile(
+                                editor.streamingSaveConfig,
+                                epochengine::saveload::StreamingSaveProfile::
+                                    EditorInterval15s);
+                            push_editor_log(
+                                editor,
+                                "[timeline] Checkpoint cadence set to 15 seconds.");
+                            break;
+                        case 3:
+                            epochengine::saveload::apply_streaming_save_profile(
+                                editor.streamingSaveConfig,
+                                epochengine::saveload::StreamingSaveProfile::
+                                    EditorFrame120);
+                            push_editor_log(
+                                editor,
+                                "[timeline] Checkpoint cadence set to 120 frames.");
+                            break;
+                        case 4:
+                            epochengine::saveload::apply_streaming_save_profile(
+                                editor.streamingSaveConfig,
+                                epochengine::saveload::StreamingSaveProfile::
+                                    TimelineKeyed);
+                            push_editor_log(
+                                editor,
+                                "[timeline] Checkpoint cadence follows timeline keys.");
+                            break;
+                        default:
+                            break;
+                        }
+                    }
+                    gui::wrapped_label(
+                        editor.streamingSaveStatus.message,
+                        centerWidth);
+                }
+                else if (editor.timelineWorkspaceSection
+                    == TimelineWorkspaceSection::media)
+                {
+                    gui::label("Media Preview");
                 const auto mediaAvailability =
                     epochengine::media::timeline_preview::
                         presentation_availability(editor.mediaTimelinePreview);
@@ -31957,12 +32243,14 @@ namespace epochengine
                         132.0f);
                 }
 
-                gui::label("Simulation Timeline");
-                gui::wrapped_label(
-                    "Epoch treats time as a first-class 4D authoring spine. These controls own the shared simulation clock, event tracks, checkpoint gates, and configurable streaming-save contract.",
-                    centerWidth);
-                render_timeline_time_controls(centerWidth, false);
-                gui::label("Timeline Data");
+                }
+                else
+                {
+                    gui::label("Timeline Diagnostics");
+                    gui::wrapped_label(
+                        "Detailed simulation, lane-layout, and checkpoint-contract evidence for debugging. Normal sequencing and checkpoint controls remain in their dedicated sections.",
+                        centerWidth);
+                    render_timeline_time_controls(centerWidth, false);
                 gui::property_row("[timeline] Frame", std::to_string(timelineStats.frame_index), 132.0f);
                 gui::property_row("[timeline] Simulated", format_seconds(timelineStats.simulated_seconds), 132.0f);
                 gui::property_row("[timeline] Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
@@ -32005,10 +32293,6 @@ namespace epochengine
                     "[timeline] Layout",
                     epochengine::timeline::describe_lane_layout(activeTimelineLanes, activeTimelineMarkers),
                     132.0f);
-                if (const auto* nextEvent = epochengine::timeline::next_event_after(editor.timelineEvents, editor.timelineState.playhead_seconds))
-                    gui::property_row("[timeline] Next key", epochengine::timeline::describe_event(*nextEvent), 132.0f);
-                else
-                    gui::property_row("[timeline] Next key", "(none)", 132.0f);
                 const auto activeSaveProfile = epochengine::saveload::detect_streaming_save_profile(editor.streamingSaveConfig);
                 if (const auto* profileDescriptor = epochengine::saveload::find_streaming_save_profile(activeSaveProfile))
                 {
@@ -32061,120 +32345,7 @@ namespace epochengine
                         132.0f);
                 }
 
-                const std::array playbackButtons{
-                    gui::InlineButtonSpec{ .label = "Rewind", .width = 76.0f },
-                    gui::InlineButtonSpec{ .label = "-1s", .width = 56.0f },
-                    gui::InlineButtonSpec{ .label = editor.timelineState.playing ? "Pause" : "Play", .width = 72.0f },
-                    gui::InlineButtonSpec{ .label = "+1s", .width = 56.0f },
-                    gui::InlineButtonSpec{ .label = editor.timelineState.recording ? "Stop Rec" : "Record Gate", .width = 112.0f }
-                };
-                if (const auto action = gui::inline_button_row(playbackButtons, 26.0f, 6.0f))
-                {
-                    switch (*action)
-                    {
-                    case 0:
-                        editor.timelineState.playhead_seconds = 0.0;
-                        editor.timelineState.playhead_frame = 0;
-                        push_editor_log(editor, "[timeline] Playhead rewound to the beginning.");
-                        break;
-                    case 1:
-                        epochengine::timeline::scrub_seconds(editor.timelineState, -1.0);
-                        editor.timelineState.playing = false;
-                        editor.timeControl.paused = true;
-                        push_editor_log(editor, "[timeline] Playhead scrubbed backward.");
-                        break;
-                    case 2:
-                        editor.timelineState.playing = !editor.timelineState.playing;
-                        editor.timeControl.paused = !editor.timelineState.playing;
-                        push_editor_log(editor, editor.timelineState.playing
-                            ? "[timeline] Timeline playback follows the shared simulation clock."
-                            : "[timeline] Timeline playback paused for scrubbing.");
-                        break;
-                    case 3:
-                        epochengine::timeline::scrub_seconds(editor.timelineState, 1.0);
-                        editor.timelineState.playing = false;
-                        editor.timeControl.paused = true;
-                        push_editor_log(editor, "[timeline] Playhead scrubbed forward.");
-                        break;
-                    case 4:
-                        editor.timelineState.recording = !editor.timelineState.recording;
-                        push_editor_log(editor, editor.timelineState.recording
-                            ? "[timeline] Timeline recording gate armed for visible editor events."
-                            : "[timeline] Timeline recording gate paused.");
-                        break;
-                    default:
-                        break;
-                    }
                 }
-
-                const std::array streamButtons{
-                    gui::InlineButtonSpec{ .label = editor.streamingSaveConfig.enabled ? "Pause Stream" : "Arm Stream", .width = 118.0f },
-                    gui::InlineButtonSpec{ .label = "Manual Key", .width = 96.0f },
-                    gui::InlineButtonSpec{ .label = "15s Mode", .width = 84.0f },
-                    gui::InlineButtonSpec{ .label = "120f Mode", .width = 92.0f },
-                    gui::InlineButtonSpec{ .label = "Timeline Key", .width = 112.0f }
-                };
-                if (const auto action = gui::inline_button_row(streamButtons, 26.0f, 6.0f))
-                {
-                    switch (*action)
-                    {
-                    case 0:
-                        editor.streamingSaveConfig.enabled = !editor.streamingSaveConfig.enabled;
-                        editor.streamingSaveStatus.active = editor.streamingSaveConfig.enabled;
-                        editor.streamingSaveStatus.message = editor.streamingSaveConfig.enabled
-                            ? "Timeline save stream armed; checkpoints stage as reviewable evidence."
-                            : "Timeline save stream is disabled.";
-                        push_editor_log(editor, editor.streamingSaveConfig.enabled
-                            ? "[timeline] Streaming save contract armed."
-                            : "[timeline] Streaming save contract paused.");
-                        break;
-                    case 1:
-                        epochengine::saveload::mark_checkpoint_captured(
-                            editor.streamingSaveStatus,
-                            editor.streamingSaveConfig,
-                            timelineStats);
-                        editor.timelineEvents.push_back(epochengine::timeline::make_event_from_stats(
-                            "save",
-                            epochengine::timeline::TimelineEventKind::Checkpoint,
-                            timelineStats,
-                            editor.streamingSaveStatus.last_snapshot_label,
-                            "PersistentLevel",
-                            editor.streamingSaveStatus.last_output_path));
-                        epochengine::timeline::sort_events(editor.timelineEvents);
-                        editor.lastCheckpointRecord = epochengine::saveload::make_checkpoint_record(
-                            editor.streamingSaveConfig,
-                            editor.streamingSaveStatus,
-                            timelineStats,
-                            0u,
-                            editor.timelineEvents.size());
-                        push_editor_log(editor, "[timeline] Manual checkpoint staged: " + editor.streamingSaveStatus.last_snapshot_label);
-                        break;
-                    case 2:
-                        epochengine::saveload::apply_streaming_save_profile(
-                            editor.streamingSaveConfig,
-                            epochengine::saveload::StreamingSaveProfile::EditorInterval15s);
-                        push_editor_log(editor, "[timeline] Streaming save mode set to 15 second intervals.");
-                        break;
-                    case 3:
-                        epochengine::saveload::apply_streaming_save_profile(
-                            editor.streamingSaveConfig,
-                            epochengine::saveload::StreamingSaveProfile::EditorFrame120);
-                        push_editor_log(editor, "[timeline] Streaming save mode set to 120 frame intervals.");
-                        break;
-                    case 4:
-                        epochengine::saveload::apply_streaming_save_profile(
-                            editor.streamingSaveConfig,
-                            epochengine::saveload::StreamingSaveProfile::TimelineKeyed);
-                        push_editor_log(editor, "[timeline] Streaming save mode set to timeline key staging.");
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                gui::wrapped_label(editor.streamingSaveStatus.message, centerWidth);
-                gui::wrapped_label(
-                    "Next gate: bind timeline events to the scene parser/serializer and streaming-save writer so .epoch snapshots, replay keys, and restore points round-trip from live editor state.",
-                    centerWidth);
                 break;
             }
             case EditorMainSurface::AISandbox:
