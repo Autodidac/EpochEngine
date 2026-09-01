@@ -1,5 +1,15 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Complete the operational self-iteration handoff after exact proposal return.
+  The typed campaign now reuses the existing guarded atomic source transaction
+  to stage reviewed postimages only in the generated disposable session, then
+  binds implementation evidence plus Debug, Release, HeadlessCI, and full
+  validation completions into the campaign through checkpoint-ready. The
+  failed-validation path preserves its exact receipt and typed campaign while
+  allocating a fresh bounded repair sandbox and requesting a new proposal. The
+  build-safe contract proves failure, repair, and the complete
+  plan/proposal/apply/seven-actor chain; live source, promotion, Git, release,
+  servers, and listeners remain separate.
 - Make campaign and orchestrator persistence Windows-path-safe by keeping one
   content-addressed identity in each compact state directory. Start is now
   transactional: durable state commits before the controller becomes active,

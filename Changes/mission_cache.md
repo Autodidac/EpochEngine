@@ -1,5 +1,17 @@
 # Mission Cache
 
+- Preserve the consolidated operational self-iteration transaction. A typed
+  campaign proposal that the existing guarded codec admits must be reviewable
+  and atomically applicable through the existing source controller inside the
+  generated session workspace; do not require an unproduced second proposal
+  type or add a duplicate executor. Bind implementation evidence and each of
+  the seven trusted Debug/Release/Headless/full-validation actors back to the
+  same campaign generation/digests through checkpoint-ready. This grants no
+  live-source, promotion, Git, release, network, server, or listener authority.
+  A trusted failed actor must retain its typed campaign evidence while the
+  guarded controller allocates a fresh repair sandbox and returns to a new
+  proposal; ordinary Reset and New Sandbox Iteration must still clear campaign
+  state.
 - Preserve compact transactional self-iteration persistence. Durable campaign
   and orchestration paths must remain below practical Windows path limits;
   start cannot publish an active in-memory session until its atomic state write

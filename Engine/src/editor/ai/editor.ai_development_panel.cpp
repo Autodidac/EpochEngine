@@ -13,6 +13,7 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -1016,35 +1017,39 @@ namespace epochengine::editor_ai_development_panel
         void reset_controller(
             std::string requestedWorkspace,
             std::string requestedSourceRoot,
-            std::string requestedSandboxBaseRoot)
+            std::string requestedSandboxBaseRoot,
+            const bool preserveCampaign = false)
         {
-            campaign_supervisor.reset();
-            campaign_scheduler.reset();
-            campaign_queue.reset();
-            campaign_bridge.reset();
-            campaign_orchestrator.reset();
-            campaign_bridge_receipt.reset();
-            campaign_pending_operation.reset();
-            campaign_pending_response.clear();
-            campaign_pending_response_digest.clear();
-            campaign_plan_review.clear();
-            campaign_plan_review_digest.clear();
-            campaign_state_path.clear();
-            campaign_scope_digest.clear();
-            campaign_request_digest.clear();
-            campaign_bundle_summary.clear();
-            campaign_bundle_objective.clear();
-            campaign_bundle_binding_digest.clear();
-            campaign_reviewed_evidence.clear();
-            campaign_reviewed_paths.clear();
+            if (!preserveCampaign)
+            {
+                campaign_supervisor.reset();
+                campaign_scheduler.reset();
+                campaign_queue.reset();
+                campaign_bridge.reset();
+                campaign_orchestrator.reset();
+                campaign_bridge_receipt.reset();
+                campaign_pending_operation.reset();
+                campaign_pending_response.clear();
+                campaign_pending_response_digest.clear();
+                campaign_plan_review.clear();
+                campaign_plan_review_digest.clear();
+                campaign_state_path.clear();
+                campaign_scope_digest.clear();
+                campaign_request_digest.clear();
+                campaign_bundle_summary.clear();
+                campaign_bundle_objective.clear();
+                campaign_bundle_binding_digest.clear();
+                campaign_reviewed_evidence.clear();
+                campaign_reviewed_paths.clear();
+                campaign_transition_generation = 0u;
+                campaign_control_generation = 0u;
+            }
             source_patch_review.reset();
             source_patch_review_binding = {};
             source_patch_selected_file = 0u;
             source_patch_selected_path.clear();
             source_patch_review_status =
                 "No sealed source-patch proposal is admitted for review.";
-            campaign_transition_generation = 0u;
-            campaign_control_generation = 0u;
             promotion_controller.reset();
             source_candidate_raw_reply.clear();
             source_candidate_operations.clear();
@@ -2005,6 +2010,233 @@ namespace epochengine::editor_ai_development_panel
             return accepted;
         }
 
+        [[nodiscard]] bool campaign_candidate_ready(
+            std::string& evidence) const
+        {
+            evidence.clear();
+            if (!campaign_orchestrator || !controller)
+            {
+                evidence =
+                    "The typed campaign or guarded source controller is unavailable.";
+                return false;
+            }
+            const auto campaign = campaign_orchestrator->snapshot();
+            const auto guarded = controller->snapshot();
+            if (campaign.phase
+                    != ai::self_iteration_orchestrator::Phase::
+                        awaiting_manual_review
+                || guarded.phase
+                    != editor_ai_development::ControllerPhase::proposed)
+            {
+                evidence =
+                    "No exact digest-bound campaign proposal is awaiting review.";
+                return false;
+            }
+            if (!source_workspace_ready || source_candidate_raw_reply.empty()
+                || source_candidate_operations.empty())
+            {
+                evidence =
+                    "The exact proposal is waiting for a verified disposable workspace or operation packet.";
+                return false;
+            }
+            if (guarded.operations != source_candidate_operations
+                || guarded.digest_hex.empty()
+                || digest_text(source_candidate_raw_reply)
+                    != campaign.proposal_sha256)
+            {
+                evidence =
+                    "The guarded source packet no longer matches the campaign proposal digest.";
+                return false;
+            }
+            evidence = epochengine::format_text(
+                "{} exact source operation(s) are digest-bound to the reviewed campaign response. Approval may write only the disposable workspace; live source, Git, release, network, servers, and listeners remain denied.",
+                source_candidate_operations.size());
+            return true;
+        }
+
+        [[nodiscard]] bool record_campaign_validation(
+            RenderResult& output,
+            const ai::iteration_session::ValidationActor expectedActor,
+            const bool succeeded,
+            const std::string_view summary,
+            const std::uint64_t now)
+        {
+            using Phase = ai::self_iteration_orchestrator::Phase;
+            using OperationKind = ai::self_iteration_orchestrator::OperationKind;
+            if (!campaign_orchestrator)
+                return true;
+            const auto snapshot = campaign_orchestrator->snapshot();
+            if (snapshot.phase != Phase::awaiting_validation_result)
+                return true;
+            if (!campaign_pending_operation
+                || campaign_pending_operation->kind()
+                    != OperationKind::trusted_validation
+                || campaign_pending_operation->validation_actor()
+                    != expectedActor)
+            {
+                status_message =
+                    "Trusted validation completion refused because it does not match the current digest-bound campaign actor.";
+                output.status = status_message;
+                return false;
+            }
+
+            const auto pending = *campaign_pending_operation;
+            auto recorded = campaign_orchestrator->record_validation(
+                campaign_receipt(pending, now),
+                digest_text(summary),
+                std::string{summary},
+                succeeded);
+            const bool accepted = static_cast<bool>(recorded);
+            capture_campaign_result(output, std::move(recorded));
+            if (!accepted)
+                return false;
+            if (succeeded
+                && campaign_orchestrator->snapshot().phase
+                    == Phase::awaiting_validation_request
+                && !request_next_campaign_validation(output, now))
+            {
+                status_message =
+                    "The completed validation was recorded, but the next trusted actor could not be requested.";
+                output.status = status_message;
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] RenderResult approve_campaign_candidate_and_queue_build(
+            const std::uint64_t now)
+        {
+            using CampaignPhase = ai::self_iteration_orchestrator::Phase;
+            RenderResult output{};
+            std::string evidence{};
+            if (!campaign_candidate_ready(evidence))
+            {
+                status_message = std::move(evidence);
+                output.status = status_message;
+                return output;
+            }
+
+            auto campaign = campaign_orchestrator->snapshot();
+            auto reviewed = campaign_orchestrator->review_proposal(
+                campaign_action(campaign, "proposal-review", now),
+                true,
+                "Operator approved the exact digest-bound source packet for disposable sandbox staging only.");
+            const bool reviewAccepted = static_cast<bool>(reviewed);
+            capture_campaign_result(output, std::move(reviewed));
+            if (!reviewAccepted)
+                return output;
+
+            campaign = campaign_orchestrator->snapshot();
+            auto apply = campaign_orchestrator->decide_apply(
+                campaign_action(campaign, "sandbox-apply", now),
+                true,
+                "Operator authorized one guarded disposable-workspace source transaction.");
+            const bool applyAccepted = static_cast<bool>(apply);
+            capture_campaign_result(output, std::move(apply));
+            if (!applyAccepted || !campaign_pending_operation)
+                return output;
+            const auto applyOperation = *campaign_pending_operation;
+
+            auto guardedPhase = controller->snapshot().phase;
+            if (guardedPhase == editor_ai_development::ControllerPhase::proposed)
+            {
+                const auto guardedReview = controller->review(
+                    "epoch.operator",
+                    "Operator reviewed the exact campaign-bound source packet.",
+                    editor_ai_development::LogicalTime{now});
+                status_message = guardedReview.status;
+                if (!guardedReview)
+                {
+                    output.status = status_message;
+                    return output;
+                }
+                guardedPhase = controller->snapshot().phase;
+            }
+            if (guardedPhase == editor_ai_development::ControllerPhase::reviewed)
+            {
+                const auto guardedApproval = controller->approve(
+                    "epoch.operator",
+                    "Operator approves this immutable packet for disposable sandbox execution only.",
+                    editor_ai_development::LogicalTime{now},
+                    editor_ai_development::LogicalTime{now + 10u * 60u});
+                status_message = guardedApproval.status;
+                if (!guardedApproval)
+                {
+                    output.status = status_message;
+                    return output;
+                }
+                guardedPhase = controller->snapshot().phase;
+            }
+            if (guardedPhase == editor_ai_development::ControllerPhase::approved)
+            {
+                const auto authorized = controller->authorize(
+                    editor_ai_development::LogicalTime{now},
+                    editor_ai_development::Duration{5u * 60u});
+                status_message = authorized.status;
+                if (!authorized)
+                {
+                    output.status = status_message;
+                    return output;
+                }
+                guardedPhase = controller->snapshot().phase;
+            }
+            if (guardedPhase
+                != editor_ai_development::ControllerPhase::authorized)
+            {
+                status_message =
+                    "The guarded source packet could not enter its authorized disposable staging phase.";
+                output.status = status_message;
+                return output;
+            }
+            if (iteration_session)
+            {
+                const auto approved = iteration_session->approve_candidate(
+                    iteration_session->identity());
+                if (!approved)
+                {
+                    status_message = approved.status;
+                    output.status = status_message;
+                    return output;
+                }
+            }
+
+            output = execute_source_and_queue_build(
+                editor_ai_development::LogicalTime{now});
+            if (output.action != HostAction::compile_source_workspace
+                || last_implementation_evidence_digest.size() != 64u)
+            {
+                if (output.status.empty())
+                {
+                    status_message =
+                        "Disposable source staging did not produce exact implementation evidence; validation was not queued.";
+                    output.status = status_message;
+                }
+                return output;
+            }
+
+            auto implemented = campaign_orchestrator->record_apply(
+                campaign_receipt(applyOperation, now),
+                last_implementation_evidence_digest,
+                "Exact proposal postimages were committed atomically in the disposable workspace; live source remained read-only.");
+            const bool implementationAccepted = static_cast<bool>(implemented);
+            capture_campaign_result(output, std::move(implemented));
+            if (!implementationAccepted
+                || campaign_orchestrator->snapshot().phase
+                    != CampaignPhase::awaiting_validation_request
+                || !request_next_campaign_validation(output, now))
+            {
+                output.action = HostAction::none;
+                status_message =
+                    "Disposable staging completed, but the digest-bound Debug compiler actor could not be requested; host validation was not launched.";
+                output.status = status_message;
+                return output;
+            }
+            status_message =
+                "Exact campaign proposal staged atomically in the disposable workspace; the digest-bound Debug compiler actor is queued. Live source remains read-only.";
+            output.status = status_message;
+            return output;
+        }
+
         [[nodiscard]] static std::string_view source_patch_kind_name(
             const ai::source_patch_proposal::OperationKind kind) noexcept
         {
@@ -2784,9 +3016,36 @@ namespace epochengine::editor_ai_development_panel
             }
             else if (snapshot.phase == Phase::awaiting_manual_review)
             {
+                std::string candidateEvidence{};
+                const bool candidateReady =
+                    campaign_candidate_ready(candidateEvidence);
                 gui::wrapped_label(
-                    "A sealed ai.source_patch_proposal receipt must be admitted before this response can be approved for disposable staging.",
+                    candidateReady
+                        ? candidateEvidence
+                        : "The returned proposal is not yet an exact guarded source packet: "
+                            + candidateEvidence,
                     width);
+                if (candidateReady)
+                {
+                    gui::label("Exact Source Operations");
+                    for (const auto& operation : source_candidate_operations)
+                    {
+                        gui::wrapped_label(
+                            epochengine::format_text(
+                                "{} | {} -> {} | {}",
+                                operation.relative_path,
+                                content_state_summary(operation.before),
+                                content_state_summary(operation.after),
+                                operation.summary),
+                            width);
+                    }
+                    if (gui::button(
+                            "Approve Exact Proposal & Stage In Sandbox",
+                            {width, 30.0f}))
+                    {
+                        output = approve_campaign_candidate_and_queue_build(now);
+                    }
+                }
                 if (gui::button("Reject", {82.0f, 30.0f}))
                 {
                     capture_campaign_result(output,
@@ -3043,11 +3302,16 @@ namespace epochengine::editor_ai_development_panel
             const std::string preservedEvidenceObjective =
                 source_context_evidence_objective;
             const Domain preservedDomain = active_domain;
+            const bool preserveTypedCampaign = campaign_orchestrator
+                && campaign_orchestrator->snapshot().phase
+                    == ai::self_iteration_orchestrator::Phase::
+                        awaiting_proposal_request;
 
             reset_controller(
                 preservedWorkspaceId,
                 preservedSourceRoot,
-                preservedSandboxBase);
+                preservedSandboxBase,
+                preserveTypedCampaign);
             development_objective = preservedObjective;
             source_baseline_evidence = preservedBaseline;
             source_context_evidence = preservedBaseline;
@@ -3491,7 +3755,7 @@ namespace epochengine::editor_ai_development_panel
                                 .time_since_epoch().count()))};
 
             const std::string reviewedPath =
-                "Engine/src/editor/reviewed.cpp";
+                "Engine/src/editor/editor.reviewed_contract.cpp";
             std::error_code fixtureError{};
             std::filesystem::create_directories(
                 fixture.path / "Engine/src/editor",
@@ -3662,7 +3926,8 @@ namespace epochengine::editor_ai_development_panel
             localOpenInput.selected_model = "qwen/qwen3.8-27b";
             localOpenInput.selected_endpoint = "http://127.0.0.1:1234";
             localOpenInput.development_objective =
-                "inspect reviewed editor source";
+                "Change reviewed editor source value from 1 to 2 in "
+                "Engine/src/editor/editor.reviewed_contract.cpp.";
             localOpenInput.architecture_evidence =
                 "PATH " + reviewedPath + "\n";
 
@@ -3832,6 +4097,236 @@ namespace epochengine::editor_ai_development_panel
                         awaiting_proposal_result
                 || !localOpenState.campaign_plan_review.empty()
                 || !localOpenState.campaign_plan_review_digest.empty())
+            {
+                return false;
+            }
+
+            const std::filesystem::path stagedSource =
+                std::filesystem::path{localOpenState.workspace_root}
+                / reviewedPath;
+            std::filesystem::create_directories(
+                stagedSource.parent_path(), fixtureError);
+            if (fixtureError)
+                return false;
+            {
+                std::ofstream sandboxSource{
+                    stagedSource, std::ios::binary | std::ios::trunc};
+                sandboxSource
+                    << "namespace epochengine::reviewed { int value = 1; }\n";
+                if (!sandboxSource.good())
+                    return false;
+            }
+
+            Input proposalResponseInput = localOpenInput;
+            proposalResponseInput.latest_raw_model_reply =
+                "EPOCH_SOURCE_PATCH_PROPOSAL_V1\n"
+                "title: Change reviewed editor source value\n"
+                "rationale: Change reviewed editor source value from 1 to 2 in the exact reviewed file\n"
+                "lifetime_seconds: 900\n"
+                "operation_count: 1\n"
+                "begin_operation\n"
+                "area: engine\n"
+                "path: Engine/src/editor/editor.reviewed_contract.cpp\n"
+                "summary: Change reviewed editor source value from 1 to 2\n"
+                "search_final_newline: true\n"
+                "begin_search\n"
+                "|namespace epochengine::reviewed { int value = 1; }\n"
+                "end_search\n"
+                "replacement_final_newline: true\n"
+                "begin_replacement\n"
+                "|namespace epochengine::reviewed { int value = 2; }\n"
+                "end_replacement\n"
+                "end_operation\n"
+                "end_proposal\n";
+            const RenderResult proposalReviewed =
+                localOpen.stage_latest_model_proposal(proposalResponseInput);
+            std::string campaignCandidateEvidence{};
+            if (proposalReviewed.action != HostAction::none
+                || localOpenState.campaign_orchestrator->snapshot().phase
+                    != ai::self_iteration_orchestrator::Phase::
+                        awaiting_manual_review
+                || !localOpenState.campaign_candidate_ready(
+                    campaignCandidateEvidence))
+            {
+                return false;
+            }
+
+            const RenderResult stagedCampaign =
+                localOpenState.approve_campaign_candidate_and_queue_build(
+                    campaignNow + 3u);
+            if (stagedCampaign.action
+                    != HostAction::compile_source_workspace
+                || !localOpenState.source_build_pending
+                || !localOpenState.campaign_pending_operation
+                || localOpenState.campaign_pending_operation->kind()
+                    != ai::self_iteration_orchestrator::OperationKind::
+                        trusted_validation
+                || localOpenState.campaign_pending_operation->validation_actor()
+                    != ai::iteration_session::ValidationActor::debug_compiler)
+            {
+                return false;
+            }
+            {
+                std::ifstream sandboxSource{stagedSource, std::ios::binary};
+                const std::string stagedBytes{
+                    std::istreambuf_iterator<char>{sandboxSource},
+                    std::istreambuf_iterator<char>{}};
+                if (stagedBytes
+                    != "namespace epochengine::reviewed { int value = 2; }\n")
+                {
+                    return false;
+                }
+            }
+
+            const std::uint32_t failedGeneration = localOpenState.generation;
+            const std::string failedWorkspace = localOpenState.workspace_root;
+            const RenderResult campaignFailedBuild =
+                localOpen.complete_source_build(
+                    failedGeneration,
+                    false,
+                    "Debug compiler produced one exact repair diagnostic.");
+            const auto repairCampaign =
+                localOpenState.campaign_orchestrator->snapshot();
+            if (campaignFailedBuild.action
+                    != HostAction::materialize_source_workspace
+                || localOpenState.generation == failedGeneration
+                || localOpenState.workspace_root == failedWorkspace
+                || !localOpenState.source_workspace_pending
+                || localOpenState.source_repair_attempts != 1u
+                || repairCampaign.phase
+                    != ai::self_iteration_orchestrator::Phase::
+                        awaiting_proposal_request
+                || repairCampaign.evidence.empty()
+                || repairCampaign.evidence.back().passed)
+            {
+                return false;
+            }
+
+            const std::filesystem::path repairSource =
+                std::filesystem::path{localOpenState.workspace_root}
+                / reviewedPath;
+            fixtureError.clear();
+            std::filesystem::create_directories(
+                repairSource.parent_path(), fixtureError);
+            if (fixtureError)
+                return false;
+            {
+                std::ofstream repairSourceFile{
+                    repairSource, std::ios::binary | std::ios::trunc};
+                repairSourceFile
+                    << "namespace epochengine::reviewed { int value = 1; }\n";
+                if (!repairSourceFile.good())
+                    return false;
+            }
+            const RenderResult repairWorkspaceCompleted =
+                localOpen.complete_source_workspace(
+                    localOpenState.generation,
+                    true,
+                    "Fresh bounded repair workspace materialized.",
+                    1u,
+                    64u);
+            if (!localOpenState.source_workspace_ready
+                || localOpenState.source_workspace_pending
+                || repairWorkspaceCompleted.status.find("Verified disposable")
+                    == std::string::npos)
+            {
+                return false;
+            }
+
+            RenderResult repairProposalRequested{};
+            auto repairRequested =
+                localOpenState.campaign_orchestrator->request_proposal(
+                    localOpenState.campaign_action(
+                        repairCampaign,
+                        "repair-proposal-request",
+                        campaignNow + 4u));
+            const bool repairRequestAccepted =
+                static_cast<bool>(repairRequested);
+            localOpenState.capture_campaign_result(
+                repairProposalRequested, std::move(repairRequested));
+            if (!repairRequestAccepted
+                || !localOpenState.campaign_pending_operation
+                || localOpenState.campaign_pending_operation->kind()
+                    != ai::self_iteration_orchestrator::OperationKind::
+                        model_proposal)
+            {
+                return false;
+            }
+
+            const RenderResult repairProposalReviewed =
+                localOpen.stage_latest_model_proposal(proposalResponseInput);
+            std::string repairCandidateEvidence{};
+            if (repairProposalReviewed.action != HostAction::none
+                || !localOpenState.campaign_candidate_ready(
+                    repairCandidateEvidence))
+            {
+                return false;
+            }
+            const RenderResult repairedCampaign =
+                localOpenState.approve_campaign_candidate_and_queue_build(
+                    campaignNow + 5u);
+            if (repairedCampaign.action
+                    != HostAction::compile_source_workspace
+                || !localOpenState.source_build_pending)
+            {
+                return false;
+            }
+            {
+                std::ifstream repairedSource{repairSource, std::ios::binary};
+                const std::string repairedBytes{
+                    std::istreambuf_iterator<char>{repairedSource},
+                    std::istreambuf_iterator<char>{}};
+                if (repairedBytes
+                    != "namespace epochengine::reviewed { int value = 2; }\n")
+                {
+                    return false;
+                }
+            }
+
+            const std::uint32_t campaignGeneration = localOpenState.generation;
+            const RenderResult campaignDebugBuild =
+                localOpen.complete_source_build(
+                    campaignGeneration, true, "Debug compiler passed.");
+            const RenderResult campaignDebugContract =
+                localOpen.complete_source_test(
+                    campaignGeneration, true, "Debug contract passed.");
+            const RenderResult campaignReleaseBuild =
+                localOpen.complete_source_release_build(
+                    campaignGeneration, true, "Release compiler passed.");
+            const RenderResult campaignReleaseContract =
+                localOpen.complete_source_release_test(
+                    campaignGeneration, true, "Release contract passed.");
+            const RenderResult campaignHeadlessBuild =
+                localOpen.complete_source_headless_build(
+                    campaignGeneration, true, "Headless compiler passed.");
+            const RenderResult campaignHeadlessContract =
+                localOpen.complete_source_headless_test(
+                    campaignGeneration, true, "Headless contract passed.");
+            const RenderResult campaignFullRequested =
+                localOpen.approve_source_full_validation();
+            const RenderResult campaignFullCompleted =
+                localOpen.complete_source_full_validation(
+                    campaignGeneration, true, "Full validation passed.");
+            const auto completedCampaign =
+                localOpenState.campaign_orchestrator->snapshot();
+            if (campaignDebugBuild.action
+                    != HostAction::test_source_workspace
+                || campaignDebugContract.action
+                    != HostAction::compile_source_release_workspace
+                || campaignReleaseBuild.action
+                    != HostAction::test_source_release_workspace
+                || campaignReleaseContract.action
+                    != HostAction::compile_source_headless_workspace
+                || campaignHeadlessBuild.action
+                    != HostAction::test_source_headless_workspace
+                || campaignHeadlessContract.action != HostAction::none
+                || campaignFullRequested.action
+                    != HostAction::test_source_full_validation_workspace
+                || campaignFullCompleted.action != HostAction::none
+                || !localOpenState.source_full_validation_verified
+                || completedCampaign.phase
+                    != ai::self_iteration_orchestrator::Phase::checkpoint_ready
+                || completedCampaign.validation_index != 7u)
             {
                 return false;
             }
@@ -5232,6 +5727,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The Debug compiler completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::debug_compiler,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::debug_compiler,
                 succeeded,
@@ -5295,6 +5800,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The Debug contract completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::debug_contract,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::debug_contract,
                 succeeded,
@@ -5365,6 +5880,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The Release compiler completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::release_compiler,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::release_compiler,
                 succeeded,
@@ -5430,6 +5955,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The Release contract completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::release_contract,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::release_contract,
                 succeeded,
@@ -5502,6 +6037,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The HeadlessCI compiler completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::headless_compiler,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::headless_compiler,
                 succeeded,
@@ -5571,6 +6116,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The HeadlessCI contract completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::headless_contract,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::headless_contract,
                 succeeded,
@@ -5683,6 +6238,16 @@ namespace epochengine::editor_ai_development_panel
         const std::string iterationEvidence = status.empty()
             ? std::string{"The full-validation completion contained no diagnostic text."}
             : status;
+        if (!state.record_campaign_validation(
+                output,
+                ai::iteration_session::ValidationActor::full_validation,
+                succeeded,
+                iterationEvidence,
+                logical_time_now().value))
+        {
+            output.status = state.status_message;
+            return output;
+        }
         if (!state.record_iteration_validation(
                 ai::iteration_session::ValidationActor::full_validation,
                 succeeded,

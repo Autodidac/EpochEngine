@@ -1,3 +1,17 @@
+- The v0.89.35 operational self-iteration path now carries the already-admitted
+  exact model proposal through the existing guarded source controller instead
+  of stopping at an unproduced sealed-adapter handoff. One explicit operator
+  action reviews and authorizes the digest-bound packet, commits its exact
+  postimages atomically only inside the generated session workspace, records
+  implementation evidence in the typed orchestrator, and queues the Debug
+  compiler. Each existing Debug/Release/Headless/full-validation completion is
+  then actor-matched and digest-bound back into the same campaign until it
+  reaches checkpoint-ready. A failed trusted actor now opens a fresh generated
+  sandbox without erasing the campaign, preserves the failed receipt, and
+  returns to one new proposal request within the existing repair budget. Live
+  source, promotion, Git, release, listeners, and servers remain separate and
+  denied. The aggregate contract proves failure, repair, and the complete
+  plan/proposal/apply/seven-actor sequence over real session-scoped files.
 - The v0.89.35 durable self-iteration repair removes redundant target digests
   from campaign/orchestration directory names so Windows can atomically write
   temporary state and rename it into place. Campaign start now commits durable

@@ -52,6 +52,14 @@ at `Changes/roadmap_baseline_2026-08-10.md`; the current evidence review is
 Local source candidate v0.89.35 contains the focused Package Manager row-origin
 repair over the published v0.89.34 foundation:
 
+- the operational self-iteration spine now continues beyond returned proposal
+  admission: explicit review authorizes the existing guarded atomic transaction
+  in the generated session workspace, and implementation plus all seven trusted
+  host validations are recorded into the same typed campaign through
+  checkpoint-ready. A failed trusted actor retains its receipt and campaign,
+  allocates a fresh bounded repair sandbox, and returns to a new proposal
+  instead of losing orchestration state. The path remains sandbox-only until
+  separate human-owned live promotion and release decisions;
 - rollbackable August 28 checkpoints now cover canonical generated-game input
   and Project Defaults editing (`38d541b2` through `de937045`), local build
   admission receipts (`148fffa0`, `eadfea94`), durable AI queue/scheduler/
