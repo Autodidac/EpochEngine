@@ -742,7 +742,7 @@ namespace epochengine::ai::iteration_campaign
             return {};
         return cache_root / "campaigns"
             / target_kind_name(report.session.source.target_kind)
-            / report.target_key / report.campaign_id / "state.epochai";
+            / report.campaign_id / "state.epochai";
     }
 
     CampaignResult save_report(
@@ -810,11 +810,17 @@ namespace epochengine::ai::iteration_campaign
 
     CampaignResult load_report(const std::filesystem::path& report_path)
     {
+        if (!report_path.is_absolute())
+            return reject("Campaign state path is not absolute.");
         std::error_code ec{};
-        if (!report_path.is_absolute()
-            || !std::filesystem::is_regular_file(report_path, ec)
-            || std::filesystem::is_symlink(report_path, ec))
-            return reject("Campaign state path is missing, non-regular, linked, or not absolute.");
+        const auto state = std::filesystem::symlink_status(report_path, ec);
+        if (ec)
+            return reject("Campaign state path metadata could not be inspected: "
+                + ec.message());
+        if (std::filesystem::is_symlink(state))
+            return reject("Campaign state path is linked and was refused.");
+        if (!std::filesystem::is_regular_file(state))
+            return reject("Campaign state path is missing or non-regular.");
         const std::string bytes = read_small_file(report_path);
         CampaignReport report{};
         std::string digest{};

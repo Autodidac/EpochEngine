@@ -1,5 +1,16 @@
 # Mission Cache
 
+- Preserve compact transactional self-iteration persistence. Durable campaign
+  and orchestration paths must remain below practical Windows path limits;
+  start cannot publish an active in-memory session until its atomic state write
+  succeeds, and resume must reject a present-but-invalid compact checkpoint
+  rather than silently loading another identity. Keep the operational contract
+  through explicit send, replay refusal, plan review/approval, and proposal
+  request.
+- Preserve progressive disclosure in Timeline and AI Development. Timeline's
+  four workflows use selected responsive tabs and Sequence owns the visible
+  scrubber. The campaign's next required action stays above raw digests and
+  validation matrices; detailed evidence remains available through Advanced.
 - Preserve the guided self-iteration handoff. Starting a bounded campaign must
   prepare its scheduler/transport receipt immediately, identify the selected
   provider and endpoint, and stop at one explicit send gate. A returned plan is

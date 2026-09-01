@@ -29448,7 +29448,7 @@ namespace epochengine
             {
                 const std::array compactPlaybackButtons{
                     gui::InlineButtonSpec{
-                        .label = "Start",
+                        .label = "Rewind",
                         .width = 54.0f},
                     gui::InlineButtonSpec{
                         .label = "-1s",
@@ -31917,16 +31917,47 @@ namespace epochengine
                 }
 
                 const std::array timelineSections{
-                    gui::InlineButtonSpec{ .label = "Sequence", .width = 104.0f },
-                    gui::InlineButtonSpec{ .label = "Checkpoints", .width = 116.0f },
-                    gui::InlineButtonSpec{ .label = "Media", .width = 84.0f },
-                    gui::InlineButtonSpec{ .label = "Diagnostics", .width = 112.0f }
+                    gui::TabButtonSpec{
+                        .id = "timeline.sequence",
+                        .label = "Sequence",
+                        .width = 104.0f,
+                        .active = editor.timelineWorkspaceSection
+                            == TimelineWorkspaceSection::sequence},
+                    gui::TabButtonSpec{
+                        .id = "timeline.checkpoints",
+                        .label = "Checkpoints",
+                        .width = 116.0f,
+                        .active = editor.timelineWorkspaceSection
+                            == TimelineWorkspaceSection::save_restore},
+                    gui::TabButtonSpec{
+                        .id = "timeline.media",
+                        .label = "Media",
+                        .width = 84.0f,
+                        .active = editor.timelineWorkspaceSection
+                            == TimelineWorkspaceSection::media},
+                    gui::TabButtonSpec{
+                        .id = "timeline.diagnostics",
+                        .label = "Diagnostics",
+                        .width = 112.0f,
+                        .active = editor.timelineWorkspaceSection
+                            == TimelineWorkspaceSection::diagnostics}
                 };
-                if (const auto section = gui::inline_button_row(
-                        timelineSections, 30.0f, 6.0f))
+                const auto section = gui::responsive_tab_bar_buttons(
+                    gui::ResponsiveTabBarOptions{
+                        .overflow_id = "timeline-workspace-overflow",
+                        .overflow_label = "Timeline tools",
+                        .tabs = timelineSections,
+                        .available_width = centerWidth,
+                        .overflow_width = 132.0f,
+                        .height = 30.0f,
+                        .gap = 2.0f,
+                        .presentation = gui::TabBarPresentation::Workbench,
+                        .keyboard_navigation = true});
+                if (section.selected_index)
                 {
                     editor.timelineWorkspaceSection =
-                        static_cast<TimelineWorkspaceSection>(*section);
+                        static_cast<TimelineWorkspaceSection>(
+                            *section.selected_index);
                 }
 
                 const auto stageTimelineCheckpoint = [&]()
@@ -31984,61 +32015,22 @@ namespace epochengine
                                 : "record gate paused"),
                         118.0f);
 
-                    const std::array playbackButtons{
-                        gui::InlineButtonSpec{ .label = "Rewind", .width = 76.0f },
-                        gui::InlineButtonSpec{ .label = "-1s", .width = 56.0f },
-                        gui::InlineButtonSpec{
-                            .label = editor.timelineState.playing ? "Pause" : "Play",
-                            .width = 72.0f },
-                        gui::InlineButtonSpec{ .label = "+1s", .width = 56.0f },
+                    render_timeline_time_controls(centerWidth, true);
+                    const std::array sequenceActions{
                         gui::InlineButtonSpec{
                             .label = editor.timelineState.recording
-                                ? "Stop Rec"
-                                : "Record Gate",
-                            .width = 112.0f }
+                                ? "Stop Recording"
+                                : "Arm Record Gate",
+                            .width = 142.0f },
+                        gui::InlineButtonSpec{
+                            .label = "Add Checkpoint Key",
+                            .width = 166.0f }
                     };
                     if (const auto action = gui::inline_button_row(
-                            playbackButtons, 28.0f, 6.0f))
+                            sequenceActions, 28.0f, 6.0f))
                     {
-                        switch (*action)
+                        if (*action == 0u)
                         {
-                        case 0:
-                            editor.timelineState.playhead_seconds = 0.0;
-                            editor.timelineState.playhead_frame = 0;
-                            push_editor_log(
-                                editor,
-                                "[timeline] Playhead rewound to the beginning.");
-                            break;
-                        case 1:
-                            epochengine::timeline::scrub_seconds(
-                                editor.timelineState, -1.0);
-                            editor.timelineState.playing = false;
-                            editor.timeControl.paused = true;
-                            push_editor_log(
-                                editor,
-                                "[timeline] Playhead scrubbed backward.");
-                            break;
-                        case 2:
-                            editor.timelineState.playing =
-                                !editor.timelineState.playing;
-                            editor.timeControl.paused =
-                                !editor.timelineState.playing;
-                            push_editor_log(
-                                editor,
-                                editor.timelineState.playing
-                                    ? "[timeline] Playback follows the shared simulation clock."
-                                    : "[timeline] Playback paused for scrubbing.");
-                            break;
-                        case 3:
-                            epochengine::timeline::scrub_seconds(
-                                editor.timelineState, 1.0);
-                            editor.timelineState.playing = false;
-                            editor.timeControl.paused = true;
-                            push_editor_log(
-                                editor,
-                                "[timeline] Playhead scrubbed forward.");
-                            break;
-                        case 4:
                             editor.timelineState.recording =
                                 !editor.timelineState.recording;
                             push_editor_log(
@@ -32046,17 +32038,11 @@ namespace epochengine
                                 editor.timelineState.recording
                                     ? "[timeline] Event recording gate armed."
                                     : "[timeline] Event recording gate paused.");
-                            break;
-                        default:
-                            break;
                         }
-                    }
-
-                    if (gui::button(
-                            "Add Checkpoint Key At Playhead",
-                            {244.0f, 30.0f}))
-                    {
-                        stageTimelineCheckpoint();
+                        else
+                        {
+                            stageTimelineCheckpoint();
+                        }
                     }
                     if (const auto* nextEvent =
                             epochengine::timeline::next_event_after(

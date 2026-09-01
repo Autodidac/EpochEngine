@@ -1,5 +1,15 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Make campaign and orchestrator persistence Windows-path-safe by keeping one
+  content-addressed identity in each compact state directory. Start is now
+  transactional: durable state commits before the controller becomes active,
+  and a failed commit clears the partial in-memory session. Extend the
+  build-safe aggregate contract through workspace materialization, plan send,
+  replay refusal, returned-plan admission, human approval, and proposal request.
+- Render Timeline sections as real responsive selected tabs, restore the
+  Sequence playhead progress/scrubber, and keep recording/checkpoint actions
+  beside transport. Move self-iteration hashes and pending validation matrices
+  behind Advanced evidence so the next required action remains visible.
 - Repair the editor self-iteration start path so campaign construction also
   prepares the bounded plan request. The operational panel identifies the
   provider/endpoint and exposes one explicit send action; returned plans are

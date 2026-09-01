@@ -1232,7 +1232,8 @@ the write ranges are explicitly isolated.
   Editor show what an interval/frame/manual/keyed profile transition would
   change before any dropdown mutates live save configuration.
 - The central Timeline workspace presents this state through four task-focused
-  sections. **Sequence** owns playback, scrubbing, the event recording gate,
+  responsive tabs with persistent selected state. **Sequence** owns the visible
+  playhead progress/scrubber, playback, the event recording gate,
   and checkpoint keys at the playhead. **Checkpoints** owns evidence-staging
   cadence and labels and explicitly reports that writer/restore round-trip is
   unavailable. **Media** owns admitted-source metadata and truthful decoder
@@ -1418,6 +1419,14 @@ reviewed text bundle inside the disposable sandbox; and the validation adapter
 requests the seven trusted local build stages through injected host tasks. No
 adapter launches a shell, editor, renderer, child, or network connection by
 itself.
+
+Campaign and orchestrator checkpoints use compact content-addressed directory
+layouts so atomic temporary writes remain inside practical Windows path limits.
+Start is transactional: the controller becomes active only after its durable
+state is committed, and any write failure clears the partial session instead of
+showing an in-memory campaign that the scheduler cannot resume. Resume prefers
+the compact state and fails closed when that exact file is present but invalid;
+legacy layout fallback is used only when compact state is absent.
 
 Successful validation aggregates existing `epoch.build_validation` receipts
 into deterministic Site-readable JSON bound to the exact candidate, bundle,

@@ -1,3 +1,14 @@
+- The v0.89.35 durable self-iteration repair removes redundant target digests
+  from campaign/orchestration directory names so Windows can atomically write
+  temporary state and rename it into place. Campaign start now commits durable
+  state before it becomes active and rolls the entire in-memory session back on
+  persistence failure. The aggregate contract proves materialized workspace,
+  start, plan staging, explicit send, replay refusal, returned-plan admission,
+  human approval, and one digest-bound proposal request end to end.
+- Timeline sections now use the real responsive selected-tab control and
+  Sequence restores a visible progress/scrub surface. AI Development places
+  the guided campaign action before raw hashes and hides pending validation
+  matrices until validation is relevant or Advanced evidence is enabled.
 - The v0.89.35 self-iteration repair makes the first bounded campaign step
   visible and executable. Start now prepares the digest-bound plan request,
   shows the selected provider and endpoint, and waits at one explicit

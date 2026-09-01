@@ -257,6 +257,7 @@ namespace epochengine::ai::self_iteration_orchestrator
             result.target_key.assign(value);
             if (!lowercase_hex(result.target_key, 64u)
                 || !number("target_kind", raw) || raw > 1u) return false;
+            result.campaign.target_key = result.target_key;
             persisted.target_kind = static_cast<iteration_session::IterationTargetKind>(raw);
             result.campaign.session.source.target_kind = persisted.target_kind;
             if (!number("phase", raw) || raw > static_cast<unsigned>(Phase::blocked)) return false;
@@ -541,7 +542,7 @@ namespace epochengine::ai::self_iteration_orchestrator
         snapshot_.live_source_read_only = true;
         state_path_ = cache_root_ / "orchestrations"
             / target_name(snapshot_.campaign.session.source.target_kind)
-            / snapshot_.target_key / snapshot_.orchestrator_id / "state.epochai";
+            / snapshot_.orchestrator_id / "state.epochai";
         snapshot_.evidence.push_back(EvidenceRecord{
             .sequence = 1u,
             .kind = EvidenceKind::configured,
@@ -550,8 +551,18 @@ namespace epochengine::ai::self_iteration_orchestrator
                 + snapshot_.profile_sha256 + "\n" + snapshot_.host.configuration_sha256),
             .summary = "Strict target, provider, host binding, budgets, and manual approval policy admitted.",
             .passed = true});
+        auto persisted = persist(snapshot_.status);
+        if (!persisted)
+        {
+            const std::string failure = persisted.status;
+            cache_root_.clear();
+            state_path_.clear();
+            snapshot_ = {};
+            session_ = {};
+            return reject("Campaign start failed closed: " + failure);
+        }
         configured_ = true;
-        return persist(snapshot_.status);
+        return persisted;
     }
 
     Result Orchestrator::resume(
@@ -587,14 +598,31 @@ namespace epochengine::ai::self_iteration_orchestrator
             || configuration.host.generation != persisted.snapshot.host.generation
             || configuration.authority.target_kind != persisted.target_kind)
             return reject("Resume refused provider, profile, target, or host-binding drift.");
-        const auto campaign_path = cache_root_ / "campaigns"
-            / target_name(persisted.target_kind) / persisted.snapshot.target_key
-            / persisted.snapshot.campaign.campaign_id / "state.epochai";
+        const auto campaign_path = iteration_campaign::state_path(
+            cache_root_, persisted.snapshot.campaign);
         auto loaded = iteration_campaign::load_report(campaign_path);
-        if (!loaded || loaded.report.campaign_id != persisted.snapshot.campaign.campaign_id
-            || loaded.report.target_key != persisted.snapshot.target_key
-            || loaded.report.record_generation < persisted.campaign_generation)
-            return reject("Resume refused missing, stale, or mismatched durable campaign state.");
+        std::error_code campaign_path_error{};
+        const bool compact_campaign_state_exists =
+            std::filesystem::is_regular_file(
+                campaign_path, campaign_path_error)
+            && !campaign_path_error;
+        if (!loaded && !compact_campaign_state_exists)
+        {
+            const auto legacy_campaign_path = cache_root_ / "campaigns"
+                / target_name(persisted.target_kind)
+                / persisted.snapshot.target_key
+                / persisted.snapshot.campaign.campaign_id / "state.epochai";
+            loaded = iteration_campaign::load_report(legacy_campaign_path);
+        }
+        if (!loaded)
+            return reject("Resume refused missing durable campaign state: "
+                + loaded.status);
+        if (loaded.report.campaign_id
+                != persisted.snapshot.campaign.campaign_id
+            || loaded.report.target_key != persisted.snapshot.target_key)
+            return reject("Resume refused mismatched durable campaign identity.");
+        if (loaded.report.record_generation < persisted.campaign_generation)
+            return reject("Resume refused stale durable campaign generation.");
         auto resumed = iteration_campaign::resume_campaign(
             loaded.report, configuration.authority, configuration.curated_files,
             now, session_, false);
