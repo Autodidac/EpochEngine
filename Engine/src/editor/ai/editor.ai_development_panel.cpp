@@ -1398,13 +1398,84 @@ namespace epochengine::editor_ai_development_panel
             return "Unknown";
         }
 
+        struct CampaignPresentation final
+        {
+            std::uint8_t step{1u};
+            std::string_view title{"Describe the change"};
+            std::string_view next_action{
+                "Name the Engine area and explain what should change."};
+        };
+
+        [[nodiscard]] static CampaignPresentation campaign_presentation(
+            const ai::self_iteration_orchestrator::Phase phase,
+            const bool sourceReady,
+            const bool campaignStarted) noexcept
+        {
+            using Phase = ai::self_iteration_orchestrator::Phase;
+            if (!campaignStarted)
+            {
+                return sourceReady
+                    ? CampaignPresentation{
+                        2u,
+                        "Start the sandbox",
+                        "The reviewed source is ready. Start a separate sandbox session."}
+                    : CampaignPresentation{
+                        1u,
+                        "Describe and review source",
+                        "Describe one change, then review the exact source files Epoch selects."};
+            }
+
+            switch (phase)
+            {
+            case Phase::idle:
+                return {2u, "Start the sandbox",
+                    "Start a separate sandbox session for this change."};
+            case Phase::awaiting_plan_request:
+                return {3u, "Ask for a plan",
+                    "Review the destination, then send the change request for a plan."};
+            case Phase::awaiting_plan_result:
+                return {3u, "Waiting for the plan",
+                    "The model request is active. Epoch will show the returned plan here."};
+            case Phase::awaiting_curated_evidence:
+                return {3u, "Review the plan",
+                    "Approve the plan to request proposed source changes, or reject it."};
+            case Phase::awaiting_proposal_request:
+                return {4u, "Generate changes",
+                    "Request exact proposed changes for the reviewed source."};
+            case Phase::awaiting_proposal_result:
+                return {4u, "Waiting for proposed changes",
+                    "The model is preparing changes. Nothing has been applied."};
+            case Phase::awaiting_manual_review:
+            case Phase::awaiting_apply_decision:
+            case Phase::awaiting_apply_result:
+                return {4u, "Review proposed changes",
+                    "Review every changed file before anything is staged in the sandbox."};
+            case Phase::awaiting_validation_request:
+            case Phase::awaiting_validation_result:
+                return {5u, "Build and test",
+                    "Epoch is validating the candidate inside the separate sandbox."};
+            case Phase::checkpoint_ready:
+                return {6u, "Save the candidate",
+                    "Save this validated sandbox version as the next comparison point."};
+            case Phase::checkpointed:
+                return {6u, "Candidate saved",
+                    "This sandbox candidate is saved. Live source is still unchanged."};
+            case Phase::rejected:
+            case Phase::cancelled:
+            case Phase::blocked:
+                return {1u, "Session stopped",
+                    "Review the status, then begin a new sandbox session when ready."};
+            }
+            return {};
+        }
+
         [[nodiscard]] static std::string_view campaign_provider_name(
             const ai::project_profile::Provider provider) noexcept
         {
             return provider == ai::project_profile::Provider::external_mcp
-                ? "External MCP connector" : provider
+                ? "External MCP" : provider
                     == ai::project_profile::Provider::epoch_local_qwen38
-                    ? "Selected local model" : "Disabled";
+                    ? "Local model" : "Disabled";
         }
 
         [[nodiscard]] static std::string_view scheduler_phase_name(
@@ -2714,70 +2785,86 @@ namespace epochengine::editor_ai_development_panel
                     ai::project_profile::Provider::epoch_local_qwen38;
             }
 
-            gui::label("Engine Self-Coding Workflow");
-            gui::wrapped_label(
-                "1 Describe the result  2 Review source  3 Review the plan  "
-                "4 Review changes  5 Build and validate  6 Approve promotion",
-                width);
+            const CampaignPresentation presentation = campaign_presentation(
+                snapshot.phase,
+                source_workspace_ready && !source_workspace_pending,
+                static_cast<bool>(campaign_orchestrator));
+            gui::label("Guided Session");
             gui::property_row(
-                "Provider", campaign_provider_name(campaign_provider));
+                "Progress",
+                epochengine::format_text(
+                    "Step {} of 6 - {}",
+                    presentation.step,
+                    presentation.title));
+            gui::wrapped_label(presentation.next_action, width);
             gui::property_row(
                 "Model",
                 input.selected_model.empty()
-                    ? std::string{"No confirmed model"}
+                    ? std::string{"Choose and confirm a model"}
                     : input.selected_model);
             gui::property_row(
-                "Transport",
-                input.selected_transport.empty()
-                    ? std::string{"Not configured"}
-                    : input.selected_transport);
-            gui::property_row(
-                "Endpoint",
-                input.selected_endpoint.empty()
-                    ? std::string{"Not configured"}
-                    : input.selected_endpoint);
-            const std::array providerActions{
-                gui::InlineButtonSpec{
-                    .label = "Use selected model",
-                    .width = 0.0f,
-                    .enabled = !campaign_orchestrator || terminal},
-                gui::InlineButtonSpec{
-                    .label = input.external_mcp_available
-                        ? "Use external MCP"
-                        : "External MCP not connected",
-                    .width = 0.0f,
-                    .enabled = input.external_mcp_available
-                        && (!campaign_orchestrator || terminal)}}
-            ;
-            if (const auto provider = gui::inline_button_row(
-                    providerActions, 29.0f, 5.0f))
+                "Connection",
+                input.selected_model.empty()
+                    ? std::string{"Not ready"}
+                    : input.selected_transport.empty()
+                        ? std::string{"Transport not configured"}
+                        : std::string{"Ready - "} + input.selected_transport);
+
+            if (input.external_mcp_available
+                && (!campaign_orchestrator || terminal))
             {
-                const auto selectedProvider = *provider == 0u
-                    ? ai::project_profile::Provider::epoch_local_qwen38
-                    : ai::project_profile::Provider::external_mcp;
-                if (selectedProvider != campaign_provider)
+                const std::array providerActions{
+                    gui::InlineButtonSpec{
+                        .label = "Use local model",
+                        .width = 0.0f,
+                        .enabled = true},
+                    gui::InlineButtonSpec{
+                        .label = "Use external MCP",
+                        .width = 0.0f,
+                        .enabled = true}}
+                ;
+                if (const auto provider = gui::inline_button_row(
+                        providerActions, 29.0f, 5.0f))
                 {
-                    campaign_provider = selectedProvider;
-                    campaign_scope_digest.clear();
-                    campaign_request_digest.clear();
-                    campaign_bundle_summary.clear();
-                    campaign_bundle_objective.clear();
-                    campaign_bundle_binding_digest.clear();
-                    campaign_reviewed_evidence.clear();
-                    campaign_reviewed_paths.clear();
+                    const auto selectedProvider = *provider == 0u
+                        ? ai::project_profile::Provider::epoch_local_qwen38
+                        : ai::project_profile::Provider::external_mcp;
+                    if (selectedProvider != campaign_provider)
+                    {
+                        campaign_provider = selectedProvider;
+                        campaign_scope_digest.clear();
+                        campaign_request_digest.clear();
+                        campaign_bundle_summary.clear();
+                        campaign_bundle_objective.clear();
+                        campaign_bundle_binding_digest.clear();
+                        campaign_reviewed_evidence.clear();
+                        campaign_reviewed_paths.clear();
+                    }
+                    status_message = std::string{"Selected "}
+                        + std::string{campaign_provider_name(campaign_provider)}
+                        + "; no session started and no source sent.";
+                    output.campaign_evidence.push_back(status_message);
                 }
-                status_message = std::string{"Selected "}
-                    + std::string{campaign_provider_name(campaign_provider)}
-                    + "; no campaign started and no source bytes sent.";
-                output.campaign_evidence.push_back(status_message);
             }
-            if (!input.external_mcp_available)
+            if (advanced_controls)
             {
-                gui::wrapped_label(
-                    "External MCP is unavailable because no host connector is "
-                    "registered. Local self-coding uses the selected model over "
-                    "the transport and endpoint shown above.",
-                    width);
+                gui::property_row(
+                    "Provider", campaign_provider_name(campaign_provider));
+                gui::property_row(
+                    "Transport",
+                    input.selected_transport.empty()
+                        ? std::string{"Not configured"}
+                        : input.selected_transport);
+                gui::property_row(
+                    "Endpoint",
+                    input.selected_endpoint.empty()
+                        ? std::string{"Not configured"}
+                        : input.selected_endpoint);
+                gui::property_row(
+                    "External MCP",
+                    input.external_mcp_available
+                        ? std::string{"Connector available"}
+                        : std::string{"No connector registered"});
             }
 
             const bool canStart = (!campaign_orchestrator || terminal)
@@ -2818,11 +2905,13 @@ namespace epochengine::editor_ai_development_panel
                     .label = std::string{label}, .width = 0.0f, .enabled = true});
                 lifecycleKinds.push_back(kind);
             };
-            addLifecycleAction(canStart, "Begin Reviewed Session",
+            addLifecycleAction(canStart, "Start Sandbox Session",
                 LifecycleAction::begin);
-            addLifecycleAction(!campaign_orchestrator && canResume, "Resume",
+            addLifecycleAction(!campaign_orchestrator && canResume,
+                "Resume Saved Session",
                 LifecycleAction::resume);
-            addLifecycleAction(canCancel, "Cancel", LifecycleAction::cancel);
+            addLifecycleAction(canCancel, "Stop Session",
+                LifecycleAction::cancel);
             if (!lifecycleActions.empty())
             {
                 if (const auto action = gui::inline_button_row(
@@ -2895,73 +2984,26 @@ namespace epochengine::editor_ai_development_panel
                 }
             }
 
-            gui::property_row("Phase", campaign_phase_name(snapshot.phase));
-            std::string_view nextAction{"Describe a result above"};
-            switch (snapshot.phase)
-            {
-            case Phase::idle:
-                nextAction = source_workspace_ready
-                    ? "Begin the reviewed session"
-                    : "Review source and prepare the sandbox";
-                break;
-            case Phase::awaiting_plan_request:
-                nextAction = "Approve sending the objective for a plan";
-                break;
-            case Phase::awaiting_plan_result:
-                nextAction = "Wait for the plan response";
-                break;
-            case Phase::awaiting_curated_evidence:
-                nextAction = "Review and approve the returned plan";
-                break;
-            case Phase::awaiting_proposal_request:
-                nextAction = "Request exact proposed source changes";
-                break;
-            case Phase::awaiting_proposal_result:
-                nextAction = "Wait for proposed source changes";
-                break;
-            case Phase::awaiting_manual_review:
-                nextAction = "Review every proposed source operation";
-                break;
-            case Phase::awaiting_apply_decision:
-                nextAction = "Approve disposable-sandbox staging";
-                break;
-            case Phase::awaiting_apply_result:
-                nextAction = "Wait for sandbox staging evidence";
-                break;
-            case Phase::awaiting_validation_request:
-            case Phase::awaiting_validation_result:
-                nextAction = "Complete the displayed validation stage";
-                break;
-            case Phase::checkpoint_ready:
-                nextAction = "Record the validated rollback checkpoint";
-                break;
-            case Phase::checkpointed:
-                nextAction = "Review the separate live-source promotion";
-                break;
-            case Phase::rejected:
-            case Phase::cancelled:
-            case Phase::blocked:
-                nextAction = "Begin a new reviewed session";
-                break;
-            }
-            gui::property_row("Next action", nextAction);
-            gui::property_row(
-                "Objective",
-                development_objective.empty()
-                    ? std::string{"Enter a bounded objective above"}
-                    : development_objective);
-            gui::property_row(
-                "Reviewed scope",
-                campaign_reviewed_evidence.empty()
-                    ? std::string{"Share curated context to begin"}
-                    : epochengine::format_text(
-                        "{} source selection(s) | disposable workspace {}",
-                        campaign_reviewed_evidence.size(),
-                        source_workspace_ready && !source_workspace_pending
-                            ? "ready"
-                            : "pending"));
             if (advanced_controls)
             {
+                gui::label("Session Details");
+                gui::property_row("Internal phase",
+                    campaign_phase_name(snapshot.phase));
+                gui::property_row(
+                    "Objective",
+                    development_objective.empty()
+                        ? std::string{"Not entered"}
+                        : development_objective);
+                gui::property_row(
+                    "Reviewed source",
+                    campaign_reviewed_evidence.empty()
+                        ? std::string{"Not reviewed"}
+                        : epochengine::format_text(
+                            "{} file(s) | sandbox {}",
+                            campaign_reviewed_evidence.size(),
+                            source_workspace_ready && !source_workspace_pending
+                                ? "ready"
+                                : "pending"));
                 gui::property_row(
                     "Curated scope",
                     campaign_scope_digest.empty()
@@ -2995,19 +3037,28 @@ namespace epochengine::editor_ai_development_panel
                         ? std::string{"Not written"}
                         : campaign_state_path.generic_string());
             }
+            else if (!campaign_reviewed_evidence.empty())
+            {
+                gui::property_row(
+                    "Reviewed source",
+                    epochengine::format_text(
+                        "{} file(s) - sandbox {}",
+                        campaign_reviewed_evidence.size(),
+                        source_workspace_ready && !source_workspace_pending
+                            ? "ready"
+                            : "preparing"));
+            }
             gui::wrapped_label(
-                "Every model request, source edit, validation, and checkpoint is "
-                "bound to the reviewed session. Live source and projects stay "
-                "read-only until a separately reviewed promotion; this workflow "
-                "cannot approve Git, releases, listeners, servers, or unrestricted execution.",
+                "Safety: changes stay in the disposable sandbox. Live source and "
+                "projects remain unchanged.",
                 width);
 
             if (!campaign_orchestrator)
             {
                 gui::wrapped_label(
-                    "First use Find Relevant Systems & Source above. Approve the "
-                    "exact files, choose a model provider, then Start. Project "
-                    "authoring, engine source, and each disposable session remain separate.",
+                    source_workspace_ready && !source_workspace_pending
+                        ? "Source review is complete. Start the sandbox session to request a plan."
+                        : "Describe the change above, then use Find Source to review exactly what Epoch may read.",
                     width);
                 return;
             }
@@ -3022,14 +3073,14 @@ namespace epochengine::editor_ai_development_panel
                 auto controlSnapshot = campaign_supervisor->snapshot();
                 const auto controlQuery = campaign_supervisor->query(
                     queueSnapshot, schedulerSnapshot);
-                gui::label("Plan Request");
-                gui::property_row(
-                    "Endpoint",
-                    input.selected_endpoint.empty()
-                        ? std::string{"Not configured"}
-                        : input.selected_endpoint);
                 if (advanced_controls)
                 {
+                    gui::label("Plan Request Details");
+                    gui::property_row(
+                        "Endpoint",
+                        input.selected_endpoint.empty()
+                            ? std::string{"Not configured"}
+                            : input.selected_endpoint);
                     gui::property_row(
                         "Control path", campaign_transport_name(
                             schedulerSnapshot.configuration.transport));
@@ -3080,7 +3131,7 @@ namespace epochengine::editor_ai_development_panel
                             awaiting_human_review
                     && !campaign_plan_review.empty())
                 {
-                    gui::label("Returned Plan Review");
+                    gui::label("Review the Plan");
                     gui::wrapped_label(
                         bounded_review_text(campaign_plan_review),
                         width);
@@ -3090,7 +3141,7 @@ namespace epochengine::editor_ai_development_panel
                             "Plan SHA-256", campaign_plan_review_digest);
                     }
                     gui::wrapped_label(
-                        "Approve only if this bounded plan matches the requested objective. Approval requests one source proposal; it does not apply or promote a patch.",
+                        "Use this plan only if it matches your request. The next step proposes changes; it does not modify source.",
                         width);
                 }
 
@@ -3119,11 +3170,11 @@ namespace epochengine::editor_ai_development_panel
                     ai::iteration_supervisor_control::CommandKind;
                 addAction(availability.pause, "Pause", CommandKind::pause);
                 addAction(availability.resume, "Resume", CommandKind::resume);
-                addAction(availability.cancel, "Cancel", CommandKind::cancel);
+                addAction(availability.cancel, "Stop", CommandKind::cancel);
                 addAction(availability.retry, "Retry", CommandKind::retry);
                 addAction(availability.approve,
-                    "Approve Plan & Request Patch", CommandKind::approve);
-                addAction(availability.reject, "Reject", CommandKind::reject);
+                    "Use This Plan", CommandKind::approve);
+                addAction(availability.reject, "Reject Plan", CommandKind::reject);
                 if (!actionButtons.empty())
                 {
                     if (const auto chosen = gui::inline_button_row(
@@ -3192,7 +3243,7 @@ namespace epochengine::editor_ai_development_panel
                     && schedulerSnapshot.phase
                         == ai::iteration_campaign_scheduler::Phase::idle
                     && snapshot.phase == Phase::awaiting_plan_request
-                    && gui::button("Prepare Bounded Plan Request", {width, 30.0f}))
+                    && gui::button("Prepare Plan Request", {width, 30.0f}))
                 {
                     const auto before = campaign_scheduler->snapshot().generation;
                     auto dispatched = campaign_scheduler->dispatch_next(
@@ -3212,16 +3263,13 @@ namespace epochengine::editor_ai_development_panel
                     )
                 {
                     gui::wrapped_label(
-                        "Send the bounded objective and its reviewed scope digest to "
+                        "Send the change request and reviewed-source fingerprint to "
                             + (input.selected_endpoint.empty()
                                 ? std::string{"the selected provider"}
                                 : input.selected_endpoint)
-                            + ". No source-file bytes are added by this plan request.",
+                            + ". Source-file contents are not included in this planning step.",
                         width);
-                    const std::string sendLabel =
-                        std::string{"Send Plan Request to "}
-                        + std::string{
-                            campaign_provider_name(campaign_provider)};
+                    const std::string sendLabel{"Send for Plan"};
                     if (gui::button(sendLabel, {width, 30.0f}))
                     {
                         (void)send_staged_campaign_plan(output, now);
@@ -3232,7 +3280,7 @@ namespace epochengine::editor_ai_development_panel
                         awaiting_transport_response)
                 {
                     gui::wrapped_label(
-                        "The bounded request is active. Epoch will digest-bind the returned plan locally, then present it here for explicit approval.",
+                        "Waiting for the model. Epoch will show the returned plan here before requesting any changes.",
                         width);
                 }
             }
@@ -3255,7 +3303,7 @@ namespace epochengine::editor_ai_development_panel
 
             if (!campaign_scheduler
                 && snapshot.phase == Phase::awaiting_plan_request
-                && gui::button("Send Objective For Plan", {width, 30.0f}))
+                && gui::button("Ask for a Plan", {width, 30.0f}))
             {
                 requestModel(OperationKind::model_plan,
                     campaign_orchestrator->request_plan(
@@ -3263,7 +3311,7 @@ namespace epochengine::editor_ai_development_panel
             }
             else if (supervisorAllowsProgress && planApproved
                 && snapshot.phase == Phase::awaiting_curated_evidence
-                && gui::button("Share Exact Curated Evidence", {width, 30.0f}))
+                && gui::button("Continue to Proposed Changes", {width, 30.0f}))
             {
                 capture_campaign_result(output,
                     campaign_orchestrator->share_curated_evidence(
@@ -3273,7 +3321,7 @@ namespace epochengine::editor_ai_development_panel
                         "Operator shared only the exact reviewed scope digest."));
             }
             else if (snapshot.phase == Phase::awaiting_proposal_request
-                && gui::button("Request Digest-Bound Proposal", {width, 30.0f}))
+                && gui::button("Generate Proposed Changes", {width, 30.0f}))
             {
                 requestModel(OperationKind::model_proposal,
                     campaign_orchestrator->request_proposal(
@@ -3305,7 +3353,7 @@ namespace epochengine::editor_ai_development_panel
                             width);
                     }
                     if (gui::button(
-                            "Approve Exact Proposal & Stage In Sandbox",
+                            "Use Changes in Sandbox & Build",
                             {width, 30.0f}))
                     {
                         output = approve_campaign_candidate_and_queue_build(now);
@@ -3335,7 +3383,7 @@ namespace epochengine::editor_ai_development_panel
                 }
             }
             else if (snapshot.phase == Phase::checkpoint_ready
-                && gui::button("Record Rollback Checkpoint", {width, 30.0f}))
+                && gui::button("Save Sandbox Candidate", {width, 30.0f}))
             {
                 capture_campaign_result(output,
                     campaign_orchestrator->checkpoint(
@@ -3357,7 +3405,7 @@ namespace epochengine::editor_ai_development_panel
                 || current.phase == Phase::blocked;
             if (validationRelevant)
             {
-                gui::label("Validation Evidence");
+                gui::label("Build & Test");
                 for (std::size_t index = 0u; index < stages.size(); ++index)
                 {
                     gui::property_row(
@@ -3399,7 +3447,20 @@ namespace epochengine::editor_ai_development_panel
                         width);
                 }
             }
-            gui::wrapped_label(status_message, width);
+            const bool statusNeedsAttention =
+                current.phase == Phase::rejected
+                || current.phase == Phase::cancelled
+                || current.phase == Phase::blocked
+                || status_message.find("failed") != std::string::npos
+                || status_message.find("refused") != std::string::npos
+                || status_message.find("error") != std::string::npos
+                || status_message.find("unavailable") != std::string::npos;
+            if (advanced_controls || statusNeedsAttention)
+            {
+                gui::label(statusNeedsAttention
+                    ? "Needs Attention" : "Latest Activity");
+                gui::wrapped_label(status_message, width);
+            }
         }
 
         [[nodiscard]] bool record_iteration_validation(
@@ -3912,6 +3973,31 @@ namespace epochengine::editor_ai_development_panel
             || !pausedActions.cancel || backoffEarly.retry
             || !reviewActions.approve || !reviewActions.reject
             || !reviewActions.pause || !reviewActions.cancel)
+        {
+            return false;
+        }
+        using CampaignPhase = ai::self_iteration_orchestrator::Phase;
+        const auto describeStep = Implementation::campaign_presentation(
+            CampaignPhase::idle, false, false);
+        const auto sandboxStep = Implementation::campaign_presentation(
+            CampaignPhase::idle, true, false);
+        const auto planStep = Implementation::campaign_presentation(
+            CampaignPhase::awaiting_curated_evidence, true, true);
+        const auto changeStep = Implementation::campaign_presentation(
+            CampaignPhase::awaiting_manual_review, true, true);
+        const auto validationStep = Implementation::campaign_presentation(
+            CampaignPhase::awaiting_validation_result, true, true);
+        const auto savedStep = Implementation::campaign_presentation(
+            CampaignPhase::checkpointed, true, true);
+        if (describeStep.step != 1u
+            || describeStep.title != "Describe and review source"
+            || sandboxStep.step != 2u
+            || planStep.step != 3u
+            || changeStep.step != 4u
+            || validationStep.step != 5u
+            || savedStep.step != 6u
+            || savedStep.next_action.find("Live source is still unchanged")
+                == std::string_view::npos)
         {
             return false;
         }
@@ -5220,68 +5306,89 @@ namespace epochengine::editor_ai_development_panel
         auto snapshot = controller.snapshot();
         const float width = (std::max)(180.0f, input.available_width);
 
-        gui::label("Engine Development Sandbox");
-        gui::property_row("Phase",
-            editor_ai_development::to_string(snapshot.phase));
-        gui::property_row("Live source",
-            state.source_root.empty()
-                ? std::string{"Unavailable"}
-                : state.source_root);
-        gui::property_row("Disposable sandbox",
-            state.workspace_root.empty()
-                ? std::string{"Unavailable"}
-                : state.workspace_root);
+        const auto findRelevantSource = [&]()
+        {
+            if (state.development_objective.empty())
+            {
+                state.status_message =
+                    "Name the Engine area and the change you want first.";
+                return;
+            }
+            const HostSourceContextSelection selection = curate_source_context(
+                input.source_snapshot_root,
+                input.domain,
+                state.development_objective);
+            state.pending_source_context_systems = selection.systems;
+            state.pending_source_context_paths = selection.paths;
+            state.pending_source_context_reason = selection.status;
+            state.pending_source_context_objective =
+                state.development_objective;
+            state.source_context_evidence = input.architecture_evidence;
+            state.source_context_evidence_objective =
+                state.development_objective;
+            state.active_domain = input.domain;
+            if (selection.accepted)
+            {
+                state.status_message = selection.status;
+                return;
+            }
+            state.status_message = "Source selection needs more detail: "
+                + selection.status + " No source was read or sent.";
+            if (!state.iteration_session)
+            {
+                state.iteration_session = std::make_unique<
+                    ai::iteration_session::IterationSession>();
+            }
+            (void)state.iteration_session->require_selection(
+                state.status_message);
+            output.status = state.status_message;
+        };
+
+        gui::label("Engine Self-Coding");
         if (input.domain != Domain::tooling)
         {
-            gui::label("What should Epoch improve?");
+            gui::label("What should change?");
             (void)gui::edit_box(
                 state.development_objective,
                 {width, 82.0f},
                 4'096u,
                 true);
             gui::wrapped_label(
-                "Name the Engine area and state the change you want. Epoch resolves "
-                "that area to owned source and shows every selected file before "
-                "reading or sending its bytes.",
+                "Name the Engine area and the result you want. Epoch will show "
+                "the exact source files before it reads or sends anything.",
                 width);
-            gui::wrapped_label(
-                "Example: 'AI Controls: repair provider selection and simplify the "
-                "self-coding workflow.'",
-                width);
-            gui::label("Data Boundaries");
-            gui::property_row("Reads",
-                "Only source files you review and approve");
-            gui::property_row("Sends",
-                "Objective + approved UTF-8 source excerpts");
-            gui::property_row("Writes",
-                "Disposable session sandbox only");
-            gui::property_row("Protected",
-                "Live engine source and every project");
+            if (state.advanced_controls)
+            {
+                gui::wrapped_label(
+                    "Example: AI Controls - simplify provider selection and make the next action obvious.",
+                    width);
+            }
+            if (snapshot.phase
+                    == editor_ai_development::ControllerPhase::ready
+                && state.pending_source_context_paths.empty()
+                && state.campaign_reviewed_paths.empty()
+                && gui::button("Find Source", {width, 32.0f}))
+            {
+                findRelevantSource();
+            }
             if (!state.pending_source_context_paths.empty())
             {
-                gui::label("Relevant Systems & Source Review");
-                gui::property_row("Target model",
-                    input.selected_model.empty()
-                        ? std::string{"Unavailable"}
-                        : input.selected_model);
-                gui::property_row("Endpoint",
-                    input.selected_endpoint.empty()
-                        ? std::string{"Unavailable"}
-                        : input.selected_endpoint);
-                gui::property_row("Selection",
-                    state.pending_source_context_reason.empty()
-                        ? std::string{"Ranked from the approved objective"}
-                        : state.pending_source_context_reason);
+                gui::label("Review Source Access");
                 if (!state.pending_source_context_systems.empty())
                 {
-                    gui::label("Resolved systems");
+                    gui::property_row(
+                        "Engine area",
+                        state.pending_source_context_systems.front());
+                    if (state.advanced_controls)
+                        gui::label("All matched systems");
                     for (const auto& system :
                         state.pending_source_context_systems)
                     {
-                        gui::wrapped_label(system, width);
+                        if (state.advanced_controls)
+                            gui::wrapped_label(system, width);
                     }
                 }
-                gui::label("Exact source files");
+                gui::label("Files Epoch may read");
                 for (const auto& path : state.pending_source_context_paths)
                     gui::wrapped_label(path, width);
                 const bool staleObjective =
@@ -5289,35 +5396,50 @@ namespace epochengine::editor_ai_development_panel
                         != state.development_objective;
                 gui::wrapped_label(
                     staleObjective
-                        ? "The objective changed after selection. Reject it and request fresh context."
-                        : "Epoch validated these paths without reading them. Approve reads only the listed UTF-8 files, prepares a separate session sandbox, and sends nothing until the later model-request approval. Reject reads and sends nothing.",
+                        ? "The request changed. Choose different source and run Find Source again."
+                        : "Continue reads only these files and creates a separate sandbox. It does not contact the model yet.",
                     width);
                 if (!staleObjective
                     && gui::button(
-                        "Approve Context & Prepare Sandbox",
+                        "Continue with These Files",
                         {width, 30.0f}))
                 {
                     return share_requested_source_context(input);
                 }
-                if (gui::button("Reject Selection", {width, 30.0f}))
+                if (gui::button("Choose Different Source", {width, 30.0f}))
                     return reject_requested_source_context();
             }
         }
+        (void)gui::toggle_switch(
+            "Show technical details",
+            state.advanced_controls,
+            {width, 28.0f});
+        if (state.advanced_controls)
+        {
+            gui::label("Safety & Storage");
+            gui::property_row("Reads",
+                "Only source files you review and approve");
+            gui::property_row("Sends",
+                "Request + approved UTF-8 source excerpts");
+            gui::property_row("Writes",
+                "Disposable session sandbox only");
+            gui::property_row("Protected",
+                "Live engine source and every project");
+            gui::property_row("Controller phase",
+                editor_ai_development::to_string(snapshot.phase));
+            gui::property_row("Live source",
+                state.source_root.empty()
+                    ? std::string{"Unavailable"}
+                    : state.source_root);
+            gui::property_row("Disposable sandbox",
+                state.workspace_root.empty()
+                    ? std::string{"Unavailable"}
+                    : state.workspace_root);
+        }
         if (input.domain == Domain::engine_source)
         {
-            (void)gui::toggle_switch(
-                "Advanced evidence details",
-                state.advanced_controls,
-                {width, 28.0f});
             state.render_typed_campaign(input, width, output);
             state.render_source_patch_review(width, output);
-        }
-        else
-        {
-            (void)gui::toggle_switch(
-                "Advanced evidence details",
-                state.advanced_controls,
-                {width, 28.0f});
         }
         if (state.advanced_controls)
         {
@@ -5363,8 +5485,12 @@ namespace epochengine::editor_ai_development_panel
         }
 
         {
-            gui::property_row("Status", state.status_message);
-            gui::property_row("Isolation", "Live source is read-only");
+            if (input.domain != Domain::engine_source
+                || state.advanced_controls)
+            {
+                gui::property_row("Controller status", state.status_message);
+                gui::property_row("Isolation", "Live source is read-only");
+            }
             if (state.source_headless_test_verified
                 && !state.source_candidate_operations.empty())
             {
@@ -5379,11 +5505,15 @@ namespace epochengine::editor_ai_development_panel
             }
             for (const auto& operation : snapshot.operations)
             {
-                gui::wrapped_label(
-                    epochengine::format_text("{} | {}",
-                        editor_ai_development::to_string(operation.kind),
-                        operation.relative_path),
-                    width);
+                if (input.domain != Domain::engine_source
+                    || state.advanced_controls)
+                {
+                    gui::wrapped_label(
+                        epochengine::format_text("{} | {}",
+                            editor_ai_development::to_string(operation.kind),
+                            operation.relative_path),
+                        width);
+                }
             }
 
             const auto compactNow = logical_time_now();
@@ -5482,54 +5612,6 @@ namespace epochengine::editor_ai_development_panel
                             state.status_message = proposed.status;
                             if (proposed)
                                 state.active_domain = Domain::tooling;
-                        }
-                    }
-                }
-                else
-                {
-                    if (gui::button(
-                            "Find Relevant Systems & Source",
-                            {width, 30.0f}))
-                    {
-                        if (state.development_objective.empty())
-                        {
-                            state.status_message =
-                                "Enter one bounded development objective first.";
-                        }
-                        else
-                        {
-                            const HostSourceContextSelection selection =
-                                curate_source_context(
-                                    input.source_snapshot_root,
-                                    input.domain,
-                                    state.development_objective);
-                            state.pending_source_context_systems =
-                                selection.systems;
-                            state.pending_source_context_paths = selection.paths;
-                            state.pending_source_context_reason = selection.status;
-                            state.pending_source_context_objective =
-                                state.development_objective;
-                            state.source_context_evidence =
-                                input.architecture_evidence;
-                            state.source_context_evidence_objective =
-                                state.development_objective;
-                            state.active_domain = input.domain;
-                            if (selection.accepted)
-                            {
-                                state.status_message = selection.status;
-                            }
-                            else
-                            {
-                                state.status_message =
-                                    "selection_required: " + selection.status
-                                    + " No source bytes were read or sent.";
-                                if (!state.iteration_session)
-                                    state.iteration_session = std::make_unique<
-                                        ai::iteration_session::IterationSession>();
-                                (void)state.iteration_session->require_selection(
-                                    state.status_message);
-                                output.status = state.status_message;
-                            }
                         }
                     }
                 }

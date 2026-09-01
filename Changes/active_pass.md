@@ -1623,3 +1623,15 @@ verified published `v0.89.33` runtime release, historical `v0.89.30`,
 `multicontext-base-stable` ref, and the Site-hosted updater contract.
 The canonical schedule is
 `Changes/roadmap.md`; durable follow-up is `Changes/mission_cache.md`.
+- The current v0.89.35 AI Controls usability correction presents Engine
+  self-coding as one six-step sandbox workflow: describe and review source,
+  start the sandbox, review the plan, review proposed changes, build/test, and
+  save the candidate. The request owns a visible `Find Source` primary action;
+  each later phase exposes one task-oriented next action. Routine controller
+  phases, endpoints, hashes, queue state, storage paths, and receipts remain
+  available under `Show technical details`, while failures and blockers remain
+  visible without enabling it. Model/connection readiness stays truthful and
+  no unavailable external MCP action is presented. Source isolation, exact-file
+  review, separate transport approval, sandbox-only writes, and separate live
+  promotion authority are unchanged. Debug/Release editor builds and aggregate
+  contracts are required, followed by an exact Release native eye test.
