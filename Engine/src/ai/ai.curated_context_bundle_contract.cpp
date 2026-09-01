@@ -133,7 +133,8 @@ namespace epochengine::ai::curated_context_bundle
                 != "Scripts/alpha.cpp"
             || local.bundle.chunks.empty()
             || local.bundle.evidence.size() != 2u
-            || local.bundle.evidence_summary.find("No path was read")
+            || local.bundle.evidence_summary.find(
+                "opened no additional path")
                 == std::string::npos)
             return ContractFailure::local_roundtrip;
 

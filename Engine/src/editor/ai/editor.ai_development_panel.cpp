@@ -4253,7 +4253,8 @@ namespace epochengine::editor_ai_development_panel
                     64u);
             if (!localOpenState.source_workspace_ready
                 || localOpenState.source_workspace_pending
-                || workspaceCompleted.status.find("Verified disposable")
+                || workspaceCompleted.status.find(
+                    "Disposable build sandbox ready")
                     == std::string::npos)
             {
                 return false;
@@ -4505,7 +4506,8 @@ namespace epochengine::editor_ai_development_panel
                     64u);
             if (!localOpenState.source_workspace_ready
                 || localOpenState.source_workspace_pending
-                || repairWorkspaceCompleted.status.find("Verified disposable")
+                || repairWorkspaceCompleted.status.find(
+                    "Disposable build sandbox ready")
                     == std::string::npos)
             {
                 return false;
@@ -5831,9 +5833,14 @@ namespace epochengine::editor_ai_development_panel
         }
 
         state.status_message = epochengine::format_text(
-            "Verified disposable build workspace: {} source file(s), {} KiB copied locally. Curated context remains locally admitted until an explicit campaign request; live source remained read-only.",
+            "Disposable build sandbox ready: {} source file(s), {} KiB copied "
+            "locally for compilation. Model input remains limited to the {} "
+            "reviewed source file(s), and nothing has been sent. Live engine "
+            "source and the active project remain read-only. Next: begin the "
+            "reviewed session, then explicitly send the objective for a plan.",
             file_count,
-            (total_bytes + 1023u) / 1024u);
+            (total_bytes + 1023u) / 1024u,
+            state.campaign_reviewed_paths.size());
         output.status = state.status_message;
         output.reveal_source_workspace = false;
         return output;

@@ -382,7 +382,9 @@ namespace epochengine::ai::curated_context_bundle
                     static_cast<unsigned>(b.provider))
                 + ", bundle_sha256="
                 + r.bundle.bundle_sha256
-                + ". No path was read and no transport was started.";
+                + ". Only operator-reviewed source bytes are present; the "
+                  "bundle builder opened no additional path and started no "
+                  "transport.";
             r.bundle.resume = {.project_id=b.project_id, .reviewed_root=root,
                 .campaign_id=b.campaign_id, .session_id=b.session_id,
                 .request_id=b.request_id, .generation=generation,
