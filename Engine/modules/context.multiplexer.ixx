@@ -191,6 +191,13 @@ namespace epochengine::core
             ResizeCallback onResize,
             ContextType type);
 
+        bool AddExternalProcessWindow(
+            std::uintptr_t native_window,
+            std::uint64_t process_id,
+            std::string route,
+            RoutedPanelDockTarget dock_target);
+        void RemoveExternalProcessWindow(std::uintptr_t native_window);
+
         void RemoveWindow(HWND hwnd);
         void CleanupFinishedWindows();
         void ArrangeDockedWindowsGrid();
@@ -281,6 +288,13 @@ namespace epochengine::core
             ResizeCallback onResize,
             ContextType type);
 
+        bool AddExternalProcessWindow(
+            std::uintptr_t,
+            std::uint64_t,
+            std::string,
+            RoutedPanelDockTarget) { return false; }
+        void RemoveExternalProcessWindow(std::uintptr_t) {}
+
         void RemoveWindow(HWND hwnd);
         void CleanupFinishedWindows() {}
         void ArrangeDockedWindowsGrid();
@@ -365,6 +379,12 @@ namespace epochengine::core
         void StopRunning() noexcept {}
 
         void AddWindow(HWND, HWND, HDC, HGLRC, bool, ResizeCallback, ContextType) {}
+        bool AddExternalProcessWindow(
+            std::uintptr_t,
+            std::uint64_t,
+            std::string,
+            RoutedPanelDockTarget) { return false; }
+        void RemoveExternalProcessWindow(std::uintptr_t) {}
         void RemoveWindow(HWND) {}
         void CleanupFinishedWindows() {}
         void ArrangeDockedWindowsGrid() {}

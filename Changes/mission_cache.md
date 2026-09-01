@@ -1,5 +1,17 @@
 # Mission Cache
 
+- Preserve the candidate-lab succession contract. After one reviewed objective
+  and source scope, same-scope plan/proposal/apply/Debug/Release/Headless/full
+  validation may advance without another approval click, but every codec,
+  preimage, actor, receipt, generation, digest, and repair check remains real.
+  A validated sandbox Release editor runs under a distinct supervised PID and
+  is registered as a backend-ready external context in the parent grid's bottom
+  slot. `Keep Current` kills the challenger; `Choose Candidate` kills the prior
+  sandbox child, makes the chosen sandbox root the next iteration parent, and
+  resumes the saved numbered mission with its selection checkpoints. `Stop
+  Lab` retires both. The loop can replace only disposable sandbox lineage; live
+  source, promotion, Git, release, upload, listener, and server authority remain
+  separate and unavailable.
 - Preserve the consolidated operational self-iteration transaction. A typed
   campaign proposal that the existing guarded codec admits must be reviewable
   and atomically applicable through the existing source controller inside the
@@ -36,12 +48,13 @@
   widget construction. Properties groups identity, transform/layout,
   interaction, appearance, state, preview, and runtime information instead of
   presenting one raw telemetry list.
-- Preserve the guided self-iteration handoff. Starting a bounded campaign must
-  prepare its scheduler/transport receipt immediately, identify the selected
-  provider and endpoint, and stop at one explicit send gate. A returned plan is
-  locally digest-bound and shown before Approve/Reject; approval may request
-  one exact source proposal but never implies patch apply, promotion, Git,
-  release, server, listener, or broader transport authority.
+- Preserve the guided self-iteration handoff outside Candidate Lab. Candidate
+  Lab itself prepares and sends the plan after the reviewed scope starts,
+  locally digest-binds the returned numbered plan, and continues same-scope
+  proposal/apply/validation automatically until it reaches candidate
+  comparison. The selected provider and endpoint stay visible. Neither mode
+  implies live-source promotion, Git, release, server, listener, or broader
+  transport authority.
 - Preserve the four-part Timeline workspace: Sequence owns playback and event
   keys; Checkpoints owns truthful evidence staging/cadence; Media owns admitted
   source and decoder availability; Diagnostics owns raw simulation/lane/save
@@ -1073,15 +1086,16 @@ release history belong in the changelog/archive, not architecture docs.
   objective. High-zoom/narrow workflow rows show only state-relevant responsive
   actions.
 - Candidate visual comparison reuses Epoch's existing child-process and
-  multicontext ownership. Each reviewed sandbox candidate launches as a separate
-  child engine, publishes its PID plus visible native-window identity, and is
-  registered under a bounded `candidate_preview` route. Candidate A and B have
-  distinct sandbox roots, source/binary/evidence digests, process handles, and
-  teardown. The operator may choose A, B, or neither; selection advances only
-  the disposable checkpoint lineage. No preview context can edit live source,
-  promote itself, replace the current executable, create Git/release authority,
-  or trigger an automatic follow-on. Full automatic replacement remains future
-  policy work and is explicitly out of scope.
+  multicontext ownership. The current sandbox head remains the baseline while
+  one newly validated challenger launches as a separate child editor, publishes
+  its PID plus visible native-window identity, and is registered under the
+  bounded `candidate_preview.challenger` route in the bottom context grid.
+  `Keep Current`, `Choose Candidate`, or `Stop Lab` deterministically retire the
+  losing process. Selection advances only the disposable checkpoint lineage and
+  automatically starts the next mission step from that chosen sandbox root. No
+  preview context can edit live source, promote itself, replace the installed
+  executable, or create Git/release authority. Automatic live replacement
+  remains future policy work and is explicitly out of scope.
 
   Direct local source inference uses below-normal process priority, half the
   available logical CPUs for both generation and batch work, and CPU-only model

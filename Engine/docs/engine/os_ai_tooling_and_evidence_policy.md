@@ -136,8 +136,12 @@ claim that extracted files remained unchanged. An explicit checkout may also be
 dirty relative to its reported Git commit. Current curated-file digests are the
 source bytes authorized for that request.
 
-The default policy is `manual_each_candidate`. The data type reserves
-`auto_validate_within_approved_scope`, but no editor route enables it and no
+The ordinary one-change policy remains `manual_each_candidate`. Candidate Lab
+enables `auto_validate_within_approved_scope` only after the operator has
+reviewed one objective and exact source scope. Within that boundary the model
+may produce successive sandbox candidates and the host may apply and validate
+them without repeating approval UI; strict proposal, preimage, transaction,
+actor, receipt, generation, digest, and repair checks are not bypassed. No
 candidate can promote itself to live source.
 
 The durable orchestration pipeline is now source- and contract-complete:
@@ -162,23 +166,23 @@ The durable orchestration pipeline is now source- and contract-complete:
   release authority false.
 
 The editor operational flow is deliberately guided rather than disconnected.
-Starting an admitted campaign constructs its queue, scheduler, supervisor, and
-bridge and immediately prepares the bounded plan request. The panel displays
-the selected provider and exact endpoint, then stops at the explicit
-`Send Bounded Plan Request` action. No transport starts during campaign setup.
-When the selected model returns a plan, the host digest-binds it locally and
-renders a bounded preview before Approve/Reject. Approval requests one bounded
-source proposal; it does not approve a patch, live-source mutation, promotion,
-Git, upload, publication, listener, server, or release. The complete returned
-response remains visible in AI Chat when the operational preview is truncated.
+Starting Candidate Lab constructs its queue, scheduler, supervisor, and bridge,
+shows the selected provider and endpoint, then submits the first bounded plan
+request. The returned numbered plan is digest-bound, displayed, retained across
+candidate selections, and supplied with selection checkpoints to each next
+generation. Same-scope proposal, disposable apply, validation, and bounded
+repair proceed automatically until a validated candidate is ready for native
+comparison. This does not approve live-source mutation, promotion, Git, upload,
+publication, listener, server, or release. Complete model responses remain
+visible in AI Chat when the operational preview is truncated.
 
 `ai.mcp_supervisor_adapter` is not part of the registered pipeline yet. Its
 five local files implement a caller-fed canonical JSON-RPC allowlist and replay
 checkpoint, but registration, build proof, and publication are pending fresh
 approval. It must not be described as available MCP transport or editor
-behavior. The source-iteration worker is blocked on missing prerequisites and
-has no commit; `disposable_sandbox` remains a pending design rather than an
-implemented authority boundary.
+behavior. Candidate Lab uses the registered guarded controller, exact-copy
+disposable workspace, validation adapters, and child-process supervisor; it
+does not depend on or silently activate those five files.
 
 - `ai.project_profile` strictly decodes generated-project choices for disabled,
   Epoch-local, shared, or external MCP operation. It preserves

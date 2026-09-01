@@ -3816,6 +3816,71 @@ namespace epochengine::core
         ArrangeDockedWindowsGrid();
     }
 
+    bool MultiContextManager::AddExternalProcessWindow(
+        const std::uintptr_t nativeWindow,
+        const std::uint64_t processId,
+        std::string route,
+        const RoutedPanelDockTarget dockTarget)
+    {
+        const HWND hwnd = reinterpret_cast<HWND>(nativeWindow);
+        if (!running.load(std::memory_order_acquire)
+            || !parent || ::IsWindow(parent) == FALSE
+            || !hwnd || ::IsWindow(hwnd) == FALSE
+            || processId == 0u || route.empty())
+        {
+            return false;
+        }
+
+        DWORD observedProcessId{};
+        (void)::GetWindowThreadProcessId(hwnd, &observedProcessId);
+        if (observedProcessId == 0u
+            || static_cast<std::uint64_t>(observedProcessId) != processId)
+        {
+            return false;
+        }
+
+        {
+            std::scoped_lock lock(windowsMutex);
+            if (std::ranges::any_of(
+                    windows,
+                    [hwnd](const std::unique_ptr<WindowData>& window)
+                    {
+                        return matches_window_handle(window.get(), hwnd);
+                    }))
+            {
+                return true;
+            }
+        }
+
+        MakeDockable(hwnd, parent);
+        auto window = std::make_unique<WindowData>(
+            hwnd, nullptr, nullptr, false, ContextType::Custom);
+        window->running.store(true, std::memory_order_release);
+        window->guiRoute = std::move(route);
+        window->titleNarrow =
+            "Sandbox Candidate | PID " + std::to_string(processId);
+        window->dockTargetPreference.store(
+            static_cast<std::uint8_t>(dockTarget),
+            std::memory_order_release);
+        window->set_backend_lifecycle(BackendLifecycleState::ready);
+        window->successfulFrameGeneration.store(1u, std::memory_order_release);
+        window->firstPresentComplete.store(true, std::memory_order_release);
+        {
+            std::scoped_lock lock(windowsMutex);
+            windows.emplace_back(std::move(window));
+        }
+        ArrangeDockedWindowsGrid();
+        return true;
+    }
+
+    void MultiContextManager::RemoveExternalProcessWindow(
+        const std::uintptr_t nativeWindow)
+    {
+        const HWND hwnd = reinterpret_cast<HWND>(nativeWindow);
+        if (hwnd)
+            RemoveWindow(hwnd);
+    }
+
     void MultiContextManager::HandleResize(HWND hwnd, int width, int height)
     {
         if (!hwnd) return;

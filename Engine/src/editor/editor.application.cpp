@@ -181,7 +181,9 @@ namespace epochengine
             None = 0,
             SmartUpdate,
             SourceUpdate,
-            AssetsInteractionProof
+            AssetsInteractionProof,
+            CandidateLabSmokeChoose,
+            CandidateLabSmokeKeep
         };
 
         enum class EditorUpdateState : unsigned char
@@ -1175,6 +1177,7 @@ namespace epochengine
             std::chrono::steady_clock::time_point updateRestartCountdownStartedAt{};
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
+            std::uint8_t candidateLabSmokePhase{};
             SystemsSurfaceState systems{};
             std::unique_ptr<editor_tasks::Scheduler> taskScheduler{};
             AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Engine };
@@ -1260,6 +1263,18 @@ namespace epochengine
             std::uint32_t aiSourceTestGeneration{};
             AiSourceValidationLane aiSourceTestLane{
                 AiSourceValidationLane::DebugEditor};
+            platform::child_process::ProcessHandle
+                aiCandidateCurrentProcess{};
+            std::optional<platform::child_process::ProcessSnapshot>
+                aiCandidateCurrentSnapshot{};
+            platform::child_process::ProcessHandle
+                aiCandidateChallengerProcess{};
+            std::optional<platform::child_process::ProcessSnapshot>
+                aiCandidateChallengerSnapshot{};
+            std::vector<platform::child_process::ProcessHandle>
+                aiCandidateRetiringProcesses{};
+            std::uint32_t aiCandidatePreviewGeneration{};
+            bool aiCandidatePreviewReported{};
             std::optional<std::future<EditorScriptBuildResult>> aiGuardedHarnessPending{};
             std::string aiGuardedHarnessBefore{};
         };
@@ -3679,6 +3694,16 @@ namespace epochengine
             {
                 consume();
                 return EditorAutomationCommand::AssetsInteractionProof;
+            }
+            if (value == "candidate-lab-smoke-choose")
+            {
+                consume();
+                return EditorAutomationCommand::CandidateLabSmokeChoose;
+            }
+            if (value == "candidate-lab-smoke-keep")
+            {
+                consume();
+                return EditorAutomationCommand::CandidateLabSmokeKeep;
             }
 
             return EditorAutomationCommand::None;
@@ -20641,6 +20666,14 @@ namespace epochengine
                     it->second.autoUpdateCheckQueued = false;
                     push_editor_log(it->second, "[info] Auto command armed: Assets interaction proof.");
                 }
+                else if (it->second.automationCommand
+                    == EditorAutomationCommand::CandidateLabSmokeChoose
+                    || it->second.automationCommand
+                        == EditorAutomationCommand::CandidateLabSmokeKeep)
+                {
+                    it->second.autoUpdateCheckQueued = false;
+                    push_editor_log(it->second, "[candidate-lab] Native PID/context comparison smoke armed.");
+                }
             }
             return it->second;
         }
@@ -22533,6 +22566,59 @@ namespace epochengine
         auto dispatch_ai_development_action = [&](
             const editor_ai_development_panel::RenderResult& action)
         {
+            const auto retireCandidate = [&editor](
+                platform::child_process::ProcessHandle& handle,
+                std::optional<platform::child_process::ProcessSnapshot>& snapshot)
+            {
+                if (snapshot && snapshot->platform_window_id != 0u)
+                {
+                    if (auto* manager =
+                            core::GetActiveMultiContextManager())
+                    {
+                        manager->RemoveExternalProcessWindow(
+                            snapshot->platform_window_id);
+                    }
+                }
+                if (handle.valid())
+                {
+                    (void)platform::child_process::stop(
+                        handle,
+                        platform::child_process::StopMode::force);
+                    editor.aiCandidateRetiringProcesses.push_back(handle);
+                }
+                handle = {};
+                snapshot.reset();
+            };
+            using CandidateDecision =
+                editor_ai_development_panel::CandidateDecision;
+            if (action.candidate_decision == CandidateDecision::keep_current)
+            {
+                retireCandidate(
+                    editor.aiCandidateChallengerProcess,
+                    editor.aiCandidateChallengerSnapshot);
+            }
+            else if (action.candidate_decision
+                == CandidateDecision::choose_candidate)
+            {
+                retireCandidate(
+                    editor.aiCandidateCurrentProcess,
+                    editor.aiCandidateCurrentSnapshot);
+                editor.aiCandidateCurrentProcess =
+                    editor.aiCandidateChallengerProcess;
+                editor.aiCandidateCurrentSnapshot =
+                    editor.aiCandidateChallengerSnapshot;
+                editor.aiCandidateChallengerProcess = {};
+                editor.aiCandidateChallengerSnapshot.reset();
+            }
+            else if (action.candidate_decision == CandidateDecision::stop_lab)
+            {
+                retireCandidate(
+                    editor.aiCandidateChallengerProcess,
+                    editor.aiCandidateChallengerSnapshot);
+                retireCandidate(
+                    editor.aiCandidateCurrentProcess,
+                    editor.aiCandidateCurrentSnapshot);
+            }
             if (action.reveal_source_patch_workbench
                 && !action.source_patch_relative_path.empty())
             {
@@ -23013,6 +23099,86 @@ namespace epochengine
                 break;
             }
             case editor_ai_development_panel::HostAction::
+                launch_source_candidate_preview:
+            {
+                if (action.workspace_root.empty())
+                {
+                    if (editor.aiDevelopmentPanel)
+                    {
+                        const auto failed = editor.aiDevelopmentPanel
+                            ->complete_candidate_preview(
+                                action.workspace_generation,
+                                false, 0u, 0u,
+                                "Candidate launch refused an empty sandbox root.");
+                        push_ai_development_log(
+                            editor, "[candidate-lab] " + failed.status);
+                    }
+                    break;
+                }
+                if (editor.aiCandidateChallengerProcess.valid())
+                {
+                    push_ai_development_log(
+                        editor,
+                        "[candidate-lab] A challenger is already running; duplicate launch refused.");
+                    break;
+                }
+                const std::filesystem::path workspace =
+                    resolve_editor_path(action.workspace_root);
+                const std::filesystem::path executable =
+                    workspace / "x64/Release/EpochEditor.exe";
+                std::error_code candidateError{};
+                if (!std::filesystem::is_regular_file(
+                        executable, candidateError) || candidateError)
+                {
+                    const auto failed = editor.aiDevelopmentPanel
+                        ->complete_candidate_preview(
+                            action.workspace_generation,
+                            false, 0u, 0u,
+                            "Validated candidate executable is missing from x64/Release.");
+                    push_ai_development_log(
+                        editor, "[candidate-lab] " + failed.status);
+                    break;
+                }
+                platform::child_process::LaunchRequest request{};
+                request.executable = executable;
+                request.working_directory = executable.parent_path();
+                request.merged_output_path = workspace
+                    / "logs/candidate-preview.log";
+                request.arguments = {"--editor"};
+                request.correlation_key = epochengine::format_text(
+                    "epoch.ai.candidate.{}", action.workspace_generation);
+                request.exclusive_group = request.correlation_key;
+                request.display_name = epochengine::format_text(
+                    "Epoch Sandbox Candidate {}",
+                    action.workspace_generation);
+                request.window_mode =
+                    platform::child_process::WindowMode::normal;
+                const auto launched =
+                    platform::child_process::launch_or_focus(request);
+                if (!launched)
+                {
+                    const auto failed = editor.aiDevelopmentPanel
+                        ->complete_candidate_preview(
+                            action.workspace_generation,
+                            false, 0u, 0u,
+                            "Candidate process did not start: "
+                                + launched.message);
+                    push_ai_development_log(
+                        editor, "[candidate-lab] " + failed.status);
+                    break;
+                }
+                editor.aiCandidateChallengerProcess = launched.handle;
+                editor.aiCandidateChallengerSnapshot =
+                    platform::child_process::snapshot(launched.handle);
+                editor.aiCandidatePreviewGeneration =
+                    action.workspace_generation;
+                editor.aiCandidatePreviewReported = false;
+                push_ai_development_log(
+                    editor,
+                    "[candidate-lab] Started the validated candidate process; waiting for its native window before bottom-grid admission.");
+                break;
+            }
+            case editor_ai_development_panel::HostAction::
                 request_model_source_proposal:
                 if (!action.model_prompt.empty())
                 {
@@ -23262,6 +23428,215 @@ namespace epochengine
             dispatch_ai_development_action(completed);
         };
         pump_ai_source_test();
+
+        auto reconcile_ai_candidate_preview = [&]()
+        {
+            platform::child_process::poll();
+            std::erase_if(
+                editor.aiCandidateRetiringProcesses,
+                [](const platform::child_process::ProcessHandle handle)
+                {
+                    const auto observed =
+                        platform::child_process::snapshot(handle);
+                    if (observed && observed->active())
+                        return false;
+                    (void)platform::child_process::release(handle);
+                    return true;
+                });
+            if (editor.aiCandidateCurrentProcess.valid())
+            {
+                editor.aiCandidateCurrentSnapshot =
+                    platform::child_process::snapshot(
+                        editor.aiCandidateCurrentProcess);
+                if (!editor.aiCandidateCurrentSnapshot
+                    || !editor.aiCandidateCurrentSnapshot->active())
+                {
+                    if (editor.aiCandidateCurrentSnapshot
+                        && editor.aiCandidateCurrentSnapshot
+                            ->platform_window_id != 0u)
+                    {
+                        if (auto* manager =
+                                core::GetActiveMultiContextManager())
+                        {
+                            manager->RemoveExternalProcessWindow(
+                                editor.aiCandidateCurrentSnapshot
+                                    ->platform_window_id);
+                        }
+                    }
+                    (void)platform::child_process::release(
+                        editor.aiCandidateCurrentProcess);
+                    editor.aiCandidateCurrentProcess = {};
+                    editor.aiCandidateCurrentSnapshot.reset();
+                }
+            }
+
+            if (!editor.aiCandidateChallengerProcess.valid())
+                return;
+            editor.aiCandidateChallengerSnapshot =
+                platform::child_process::snapshot(
+                    editor.aiCandidateChallengerProcess);
+            const auto& observed = editor.aiCandidateChallengerSnapshot;
+            if (!observed || !observed->active())
+            {
+                if (!editor.aiCandidatePreviewReported
+                    && editor.aiDevelopmentPanel)
+                {
+                    const auto failed = editor.aiDevelopmentPanel
+                        ->complete_candidate_preview(
+                            editor.aiCandidatePreviewGeneration,
+                            false,
+                            observed ? observed->platform_process_id : 0u,
+                            observed ? observed->platform_window_id : 0u,
+                            "Candidate process exited before bottom-grid admission.");
+                    push_ai_development_log(
+                        editor, "[candidate-lab] " + failed.status);
+                }
+                (void)platform::child_process::release(
+                    editor.aiCandidateChallengerProcess);
+                editor.aiCandidateChallengerProcess = {};
+                editor.aiCandidateChallengerSnapshot.reset();
+                editor.aiCandidatePreviewReported = true;
+                return;
+            }
+            if (editor.aiCandidatePreviewReported
+                || observed->platform_process_id == 0u
+                || observed->platform_window_id == 0u)
+            {
+                return;
+            }
+
+            auto* manager = core::GetActiveMultiContextManager();
+            const bool admitted = manager
+                && manager->AddExternalProcessWindow(
+                    observed->platform_window_id,
+                    observed->platform_process_id,
+                    "candidate_preview.challenger",
+                    core::RoutedPanelDockTarget::bottom_right_tabs);
+            if (!admitted)
+                return;
+
+            editor.aiCandidatePreviewReported = true;
+            if (editor.aiDevelopmentPanel)
+            {
+                const auto completed = editor.aiDevelopmentPanel
+                    ->complete_candidate_preview(
+                        editor.aiCandidatePreviewGeneration,
+                        true,
+                        observed->platform_process_id,
+                        observed->platform_window_id,
+                        epochengine::format_text(
+                            "Candidate PID {} is live in bottom context window {}. Compare it, then choose which sandbox head continues.",
+                            observed->platform_process_id,
+                            observed->platform_window_id));
+                push_ai_development_log(
+                    editor, "[candidate-lab] " + completed.status);
+            }
+        };
+        reconcile_ai_candidate_preview();
+
+        if (!editor.automationConsumed
+            && (editor.automationCommand
+                    == EditorAutomationCommand::CandidateLabSmokeChoose
+                || editor.automationCommand
+                    == EditorAutomationCommand::CandidateLabSmokeKeep))
+        {
+            const auto launchSmokeCandidate = [&](const std::uint32_t generation)
+            {
+                editor_ai_development_panel::RenderResult launch{};
+                launch.action = editor_ai_development_panel::HostAction::
+                    launch_source_candidate_preview;
+                launch.workspace_generation = generation;
+                launch.workspace_root = display_project_path(
+                    epochengine::core::path::find_epoch_repo_root(
+                        epochengine::core::path::executable_dir()));
+                dispatch_ai_development_action(launch);
+            };
+            const auto finishSmoke = [&](const bool passed, std::string_view detail)
+            {
+                append_editor_automation_trace(
+                    epochengine::format_text(
+                        "CANDIDATE_LAB_SMOKE {} {}",
+                        passed ? "PASS" : "FAIL",
+                        detail));
+                editor_ai_development_panel::RenderResult stop{};
+                stop.candidate_decision =
+                    editor_ai_development_panel::CandidateDecision::stop_lab;
+                dispatch_ai_development_action(stop);
+                editor.automationConsumed = true;
+                result.command = EditorCommand::Exit;
+                result.command_argument = passed
+                    ? "candidate_lab_smoke_pass"
+                    : "candidate_lab_smoke_fail";
+                result.scene_input_captured = true;
+            };
+
+            if (editor.candidateLabSmokePhase == 0u)
+            {
+                append_editor_automation_trace(
+                    editor.automationCommand
+                        == EditorAutomationCommand::CandidateLabSmokeChoose
+                        ? "CANDIDATE_LAB_SMOKE BEGIN choose"
+                        : "CANDIDATE_LAB_SMOKE BEGIN keep");
+                launchSmokeCandidate(4'000'000'001u);
+                editor.candidateLabSmokePhase = 1u;
+            }
+            else if (editor.candidateLabSmokePhase == 1u
+                && editor.aiCandidatePreviewReported)
+            {
+                if (!editor.aiCandidateChallengerSnapshot
+                    || editor.aiCandidateChallengerSnapshot
+                        ->platform_process_id == 0u
+                    || editor.aiCandidateChallengerSnapshot
+                        ->platform_window_id == 0u)
+                {
+                    finishSmoke(false, "first challenger was not admitted");
+                }
+                else
+                {
+                    append_editor_automation_trace(
+                        epochengine::format_text(
+                            "CANDIDATE_LAB_SMOKE ADMITTED pid={} window={}",
+                            editor.aiCandidateChallengerSnapshot
+                                ->platform_process_id,
+                            editor.aiCandidateChallengerSnapshot
+                                ->platform_window_id));
+                    const bool choosing = editor.automationCommand
+                        == EditorAutomationCommand::CandidateLabSmokeChoose;
+                    editor_ai_development_panel::RenderResult decision{};
+                    decision.candidate_decision = choosing
+                        ? editor_ai_development_panel::CandidateDecision::
+                            choose_candidate
+                        : editor_ai_development_panel::CandidateDecision::
+                            keep_current;
+                    dispatch_ai_development_action(decision);
+                    const bool ownershipPassed = choosing
+                        ? editor.aiCandidateCurrentProcess.valid()
+                            && !editor.aiCandidateChallengerProcess.valid()
+                        : !editor.aiCandidateCurrentProcess.valid()
+                            && !editor.aiCandidateChallengerProcess.valid();
+                    if (!ownershipPassed)
+                    {
+                        finishSmoke(
+                            false,
+                            choosing
+                                ? "Choose Candidate ownership transition failed"
+                                : "Keep Current ownership transition failed");
+                    }
+                    else
+                    {
+                        append_editor_automation_trace(
+                            choosing
+                                ? "CANDIDATE_LAB_SMOKE CHOOSE PASS"
+                                : "CANDIDATE_LAB_SMOKE KEEP PASS");
+                        finishSmoke(
+                            true,
+                            choosing
+                                ? "bottom-grid admission plus Choose Candidate transition passed"
+                                : "bottom-grid admission plus Keep Current transition passed");
+                    }
+                }
+            }
+        }
 
         auto request_ai_authoring_plan = [&](bool goalMilestone = false) -> bool
         {

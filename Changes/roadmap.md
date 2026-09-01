@@ -60,6 +60,12 @@ repair over the published v0.89.34 foundation:
   allocates a fresh bounded repair sandbox, and returns to a new proposal
   instead of losing orchestration state. The path remains sandbox-only until
   separate human-owned live promotion and release decisions;
+- Candidate Lab now uses that spine as a successive sandbox worktree loop. One
+  reviewed objective/scope owns a saved numbered mission; each validated
+  Release candidate launches as a separate supervised editor PID and is
+  registered at the bottom of the parent multicontext grid. Keep/Choose retires
+  the loser, advances only the selected sandbox lineage, and resumes the next
+  unfinished mission step. Live source and publication remain separate;
 - rollbackable August 28 checkpoints now cover canonical generated-game input
   and Project Defaults editing (`38d541b2` through `de937045`), local build
   admission receipts (`148fffa0`, `eadfea94`), durable AI queue/scheduler/
@@ -736,19 +742,16 @@ destructive rewrites, share objective-specific vocabulary, and name a reviewed
 existing symbol or block in every C++ operation summary. Accepted source changes
 then require the reviewed digest, private guard-issued permit, one execution
 claim, verified preimages/postimages, and executor evidence inside
-a disposable iteration sandbox. The bounded iteration loop sequences
-inspection, invariants, planning, approval, implementation, compiler/tests/
-analyzers/sanitizers, local self-review, and risk-selected architecture/visual/
-frontier review. Qwen-class local models may write bounded candidates; model text
-never certifies its own evidence. After Debug and Release compiler/contract
-evidence plus a separate HeadlessCI Debug build/run pass, a visible operator
-approval runs full engine validation across project profiles, generated-child
-self-tests, and the AI gate for that same generation. Only then does a
-two-action live-source gate verify exact live preimages, tested sandbox
-postimages, and a freshly reparsed identical operation set. Staging shows
-a new digest without writing; the second approval rechecks and atomically applies
-only that reviewed existing-file source with a fresh one-shot permit. Success
-consumes the candidate and grants no automatic next request or broader authority.
+a disposable iteration sandbox. Candidate Lab sequences inspection, invariants,
+numbered mission planning, implementation, compiler/contracts, HeadlessCI, full
+validation, native comparison, and the next unfinished mission step under one
+reviewed scope. Qwen-class local models may write bounded candidates; model text
+never certifies its own evidence. A passing Release candidate launches as a
+separate supervised editor process and joins the parent grid as an external
+bottom context. Keep/Choose advances only the winning disposable sandbox and
+automatically begins its next challenger. Live-source promotion remains a
+separate two-action gate that reparses identical operations and rechecks exact
+live preimages; Candidate Lab cannot invoke it or acquire broader authority.
 The optional Extensions package stages a human-approved build plan and never
 starts a server; GGUF model acquisition and licensing remain separate.
 For non-source active-project work, `EPOCH_TOOL_PLAN_V1` accepts exactly one

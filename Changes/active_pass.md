@@ -1,3 +1,18 @@
+- The current v0.89.35 candidate-lab pass turns the verified disposable
+  workspace into a succession loop rather than a promotion gate. One reviewed
+  objective and source scope start a mission plan; returned plan/proposal,
+  sandbox apply, Debug/Release/Headless/full validation, and bounded repair run
+  without repeated approval clicks inside that scope. A passing
+  `x64/Release/EpochEditor.exe` launches as a distinct supervised PID, its
+  native window is admitted as a backend-ready custom context at the bottom of
+  the parent grid, and AI Controls presents `Keep Current`,
+  `Choose Candidate`, and `Stop Lab`. The selected sandbox root becomes the
+  sole parent for the next mission step while the rejected child is forcibly
+  retired; the saved numbered plan and selection checkpoints are fed into the
+  next generation. Live source, Git, promotion, release, upload, listeners, and
+  servers remain outside the lab. Debug and Release aggregate contracts pass,
+  and two independent native smokes proved bottom-grid admission plus Choose
+  and Keep transitions with no surviving EpochEditor PID.
 - The current v0.89.35 screenshot-driven self-coding correction rejects
   content-free objectives such as `find and fix files` before source selection,
   sandbox materialization, or transport. The operator is prompted for the

@@ -36,6 +36,7 @@ export namespace epochengine::editor_ai_development_panel
         compile_source_headless_workspace,
         test_source_headless_workspace,
         test_source_full_validation_workspace,
+        launch_source_candidate_preview,
         request_model_source_proposal,
         execute_tool_harness
     };
@@ -52,6 +53,14 @@ export namespace epochengine::editor_ai_development_panel
         queued_by_host,
         transport_started,
         rejected
+    };
+
+    enum class CandidateDecision : unsigned char
+    {
+        none,
+        keep_current,
+        choose_candidate,
+        stop_lab
     };
 
     struct SourcePatchReviewBinding final
@@ -141,6 +150,8 @@ export namespace epochengine::editor_ai_development_panel
         std::vector<std::string> source_patch_evidence{};
         std::optional<SourcePatchStagingRequest> source_patch_staging{};
         std::uint32_t workspace_generation{};
+        bool retire_candidate_preview{};
+        CandidateDecision candidate_decision{CandidateDecision::none};
     };
 
     class Panel final
@@ -206,6 +217,12 @@ export namespace epochengine::editor_ai_development_panel
         [[nodiscard]] RenderResult complete_source_full_validation(
             std::uint32_t generation,
             bool succeeded,
+            std::string status);
+        [[nodiscard]] RenderResult complete_candidate_preview(
+            std::uint32_t generation,
+            bool succeeded,
+            std::uint64_t platform_process_id,
+            std::uint64_t platform_window_id,
             std::string status);
         [[nodiscard]] RenderResult stage_verified_source_promotion(
             const Input& input);

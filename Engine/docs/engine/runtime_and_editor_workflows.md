@@ -1446,13 +1446,25 @@ false, and Site ingestion remains a separate explicitly authorized operation.
 Generated-project self-iteration uses the same mechanics only when its project
 profile enables it; engine-source authority is never inherited by that project.
 
-In the operational panel, Start also prepares the first bounded plan request so
-the scheduler cannot remain mysteriously idle with an unissued request. Epoch
-shows the selected provider and endpoint and waits for the operator to choose
-`Send Bounded Plan Request`. A returned plan is digest-bound locally and shown
-before Approve/Reject. Approving that plan requests one exact source proposal;
-patch admission, disposable application, validation, repair, promotion, Git,
-and release gates remain separate.
+In the operational panel, `Start Candidate Lab` prepares and submits the first
+bounded plan request after the operator has reviewed the objective and exact
+source scope. Epoch keeps the selected provider and endpoint visible. The
+returned numbered plan is digest-bound, shown as the Saved Mission Plan, and
+fed back with selection checkpoints when the loop resumes. Proposal admission,
+disposable application, Debug/Release/Headless/full validation, and bounded
+repair advance without another same-scope approval click; their existing
+preimage, actor, receipt, generation, and digest checks remain mandatory.
+
+After full validation, the exact sandbox `x64/Release/EpochEditor.exe` starts as
+a separately supervised normal-window child. Its PID and native-window identity
+must match, the Win32 host reparents that external window as a backend-ready
+custom `candidate_preview.challenger` context, and the existing grid places the
+route at the bottom. `Keep Current` retires the challenger. `Choose Candidate`
+retires the prior sandbox child, adopts the challenger workspace as the only
+next source parent, re-curates the reviewed scope there, and begins the next
+unfinished mission step. `Stop Lab` retires both. Selection cannot write live
+source or invoke promotion, Git, upload, publication, listener, server, or
+release work.
 
 `editor.ai_development_controller` maps production calls to trusted monotonic
 time, serializes execution entry, and rejects caller-driven backdating. Before a

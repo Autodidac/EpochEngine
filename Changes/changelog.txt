@@ -1,5 +1,14 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Add Candidate Lab as a successive sandbox-only self-coding loop. One reviewed
+  objective and source scope drive saved numbered planning, proposal admission,
+  disposable apply, Debug/Release/Headless/full validation, and bounded repair
+  without repeated same-scope gates. A passing Release editor starts under a
+  distinct supervised PID and is registered in the parent multicontext grid''s
+  bottom slot; Keep Current, Choose Candidate, and Stop Lab deterministically
+  retire the losing child, and the selected sandbox becomes the next iteration
+  parent while live source and publication remain unavailable. Debug/Release
+  aggregate contracts and independent native Choose/Keep GUI/PID smokes pass.
 - Complete the operational self-iteration handoff after exact proposal return.
   The typed campaign now reuses the existing guarded atomic source transaction
   to stage reviewed postimages only in the generated disposable session, then
