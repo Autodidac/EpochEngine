@@ -297,17 +297,31 @@ start is never reusable authority.
 `editor.ai_development_controller` composes this sequence, serializes execution
 entry, maps production calls to trusted monotonic time, and refuses public
 source-completion evidence unless its internal transaction executor produced it
-inside the selected iteration root. AI Controls owns objective entry, Request
-Proposal, the host-curated candidate list, Share Curated Context or Reject
-Selection, and read-only inspection of the selected model, endpoint, and sandbox
-evidence. After context is explicitly shared, proposal-specific Review Proposal
-and Approve Sandbox or Cancel Proposal authority stays attached to the resulting
-AI Chat response. Changing the objective invalidates reviewed source evidence before another
-request can be staged. Advanced controls are read-only evidence. No action
+inside the selected iteration root. AI Controls accepts an observable outcome or
+symptom in ordinary language. A deterministic host resolver maps that objective
+to owned source systems and ranks only existing C++ source paths; the operator
+reviews the resolved systems and exact paths before any file is read or any
+excerpt can leave the host. The resolver must not require the operator to know a
+subsystem, filename, or symbol, and it must stop without sending bytes when a
+request is too vague or no supported source system can be resolved. AI Controls
+then owns context approval or rejection and read-only inspection of the selected
+model, endpoint, sandbox, next required action, and evidence. After context is
+explicitly shared, proposal-specific plan review, sandbox approval, or rejection
+authority stays attached to the resulting AI Chat response. Changing the
+objective invalidates reviewed source evidence before another request can be
+staged. Advanced controls are read-only evidence. No action
 automatically promotes sandbox bytes into live source: a verified candidate
 requires distinct `Stage Live Promotion` and `Approve Live Promotion` actions.
 No chat/build/tool result becomes an automatic live-source change or training
 record. No GUI eye-test or responsiveness proof is claimed for this source candidate.
+
+The visible workflow states its I/O boundary before the first send: reviewed
+UTF-8 C++ excerpts and the objective are the only model input; model output is a
+strict plan or exact source proposal; all writes target the generation-owned
+disposable session root. Project roots and live engine source remain separate
+and read-only. Contract fixtures reject absolute paths, traversal, non-source
+files, unreviewed canary content, stale revisions, and cross-root mutation, and
+prove that sandbox repair leaves the live source preimage byte-identical.
 
 ## Bounded Iteration Loop
 

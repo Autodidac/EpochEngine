@@ -23,6 +23,19 @@
   four workflows use selected responsive tabs and Sequence owns the visible
   scrubber. The campaign's next required action stays above raw digests and
   validation matrices; detailed evidence remains available through Advanced.
+- Preserve plain-language self-coding entry. The operator describes an outcome
+  or symptom; a deterministic host resolver identifies named owned systems and
+  ranks existing C++ paths. The UI shows those systems and exact paths before
+  reading or transport. Vague requests, unsupported systems, absolute/traversal
+  paths, non-source files, and unreviewed bytes stop locally. Reviewed excerpts
+  may enter only the selected model request, and exact proposal writes remain in
+  the generation-owned disposable sandbox until separately reviewed promotion.
+- Preserve the current interface focus boundary. World, World Outliner, World
+  Settings, and the two top command rows are accepted for this pass. `2D / UI`
+  exposes Tile Map and GUI Overlay explicitly; the dedicated GUI Editor owns
+  widget construction. Properties groups identity, transform/layout,
+  interaction, appearance, state, preview, and runtime information instead of
+  presenting one raw telemetry list.
 - Preserve the guided self-iteration handoff. Starting a bounded campaign must
   prepare its scheduler/transport receipt immediately, identify the selected
   provider and endpoint, and stop at one explicit send gate. A returned plan is

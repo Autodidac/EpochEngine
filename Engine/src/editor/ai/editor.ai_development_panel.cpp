@@ -13,6 +13,7 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <string>
@@ -141,8 +142,16 @@ namespace epochengine::editor_ai_development_panel
         struct HostSourceContextSelection final
         {
             bool accepted{};
+            std::vector<std::string> systems{};
             std::vector<std::string> paths{};
             std::string status{};
+        };
+
+        struct ResolvedSourceSystem final
+        {
+            std::string name{};
+            std::vector<std::string> ranking_terms{};
+            std::vector<std::string> path_hints{};
         };
 
         struct SourceContextCandidate final
@@ -305,6 +314,109 @@ namespace epochengine::editor_ai_development_panel
             return terms;
         }
 
+        [[nodiscard]] bool contains_any_phrase(
+            std::string_view text,
+            std::initializer_list<std::string_view> phrases) noexcept
+        {
+            return std::ranges::any_of(
+                phrases,
+                [text](const std::string_view phrase)
+                {
+                    return text.find(phrase) != std::string_view::npos;
+                });
+        }
+
+        [[nodiscard]] std::vector<ResolvedSourceSystem> resolve_source_systems(
+            std::string_view objective)
+        {
+            const std::string lowered = lower_ascii(objective);
+            std::vector<ResolvedSourceSystem> systems{};
+            const auto add = [&](std::string name,
+                                 std::vector<std::string> rankingTerms,
+                                 std::vector<std::string> pathHints)
+            {
+                systems.push_back(ResolvedSourceSystem{
+                    std::move(name),
+                    std::move(rankingTerms),
+                    std::move(pathHints)});
+            };
+
+            if (contains_any_phrase(lowered, {
+                    "ai", "model", "qwen", "nemotron", "mcp", "prompt",
+                    "self iteration", "self-iteration", "self coding",
+                    "self-coding", "campaign", "proposal", "sandbox"}))
+            {
+                add("AI Controls & Engine Self-Coding",
+                    {"ai", "iteration", "campaign", "proposal", "development_panel"},
+                    {"engine/src/editor/ai/", "engine/src/ai/", "engine/modules/ai."});
+            }
+            if (contains_any_phrase(lowered, {
+                    "interface", "properties", "inspector", "dock", "tab",
+                    "window", "menu", "layout", "panel", "control"}))
+            {
+                add("Editor Interface & Properties",
+                    {"editor", "properties", "inspector", "dock", "panel", "gui"},
+                    {"engine/src/editor/editor.application.cpp", "engine/dep/epochgui/"});
+            }
+            if (contains_any_phrase(lowered, {
+                    "gui", "widget", "button", "text input", "textbox",
+                    "canvas", "placement", "style"}))
+            {
+                add("GUI Authoring & EpochGui",
+                    {"gui", "widget", "canvas", "placement", "epochgui"},
+                    {"engine/src/editor/", "engine/dep/epochgui/"});
+            }
+            if (contains_any_phrase(lowered, {
+                    "2d", "tile", "tilemap", "sprite", "orthographic"}))
+            {
+                add("2D Scene & Tile Map Authoring",
+                    {"tilemap", "canvas2d", "game2d", "sprite"},
+                    {"engine/src/editor/editor.tilemap_", "engine/modules/editor.tilemap_",
+                        "engine/src/canvas2d/", "engine/modules/canvas2d."});
+            }
+            if (contains_any_phrase(lowered, {
+                    "timeline", "playhead", "checkpoint", "temporal", "rewind",
+                    "undo", "redo", "history"}))
+            {
+                add("Timeline & Reversible Authoring History",
+                    {"timeline", "temporal", "history", "undo", "redo"},
+                    {"engine/src/editor/editor.timeline_", "engine/modules/editor.timeline_",
+                        "engine/modules/editor.authoring_history.ixx"});
+            }
+            if (contains_any_phrase(lowered, {
+                    "script", "text editor", "source editor", "code editor",
+                    "syntax", "caret"}))
+            {
+                add("Script & Text Editing",
+                    {"script", "text", "editor_text", "source_editor"},
+                    {"engine/src/editor/", "engine/dep/epochgui/src/"});
+            }
+            if (contains_any_phrase(lowered, {
+                    "package", "install", "download", "model cache", "huggingface"}))
+            {
+                add("Packages, Models & Local Admission",
+                    {"package", "model_install", "catalog", "local_ai"},
+                    {"engine/src/packages/", "engine/src/ai/", "engine/modules/package"});
+            }
+            if (contains_any_phrase(lowered, {
+                    "project", "workspace", "source overwrite", "data leak",
+                    "isolation", "source safe", "source-safe"}))
+            {
+                add("Project Lifecycle & Source Isolation",
+                    {"project", "workspace", "isolation", "source"},
+                    {"engine/src/project/", "engine/src/editor/ai/", "engine/modules/project"});
+            }
+            if (contains_any_phrase(lowered, {
+                    "renderer", "rendering", "viewport", "opengl", "raylib",
+                    "vulkan", "camera"}))
+            {
+                add("Renderer & Viewport",
+                    {"render", "renderer", "viewport", "preview_grid"},
+                    {"engine/src/renderers/", "engine/src/editor/", "engine/modules/render."});
+            }
+            return systems;
+        }
+
         [[nodiscard]] std::optional<std::string>
             unique_explicit_replacement_target(
                 std::string_view objective,
@@ -407,11 +519,20 @@ namespace epochengine::editor_ai_development_panel
             std::string normalizedObjective = lower_ascii(objective);
             std::ranges::replace(normalizedObjective, '\\', '/');
 
-            const std::vector<std::string> terms = source_context_terms(objective);
-            if (terms.empty())
+            std::vector<std::string> terms = source_context_terms(objective);
+            const std::vector<ResolvedSourceSystem> systems =
+                resolve_source_systems(objective);
+            for (const auto& system : systems)
+            {
+                result.systems.push_back(system.name);
+                for (const auto& term : system.ranking_terms)
+                    add_source_context_term(terms, term);
+            }
+            if (terms.empty() || objective.size() < 8u)
             {
                 result.status =
-                    "The objective does not identify a source subsystem. Name the affected behavior or owner before requesting a proposal.";
+                    "Describe the behavior you want or the symptom you can see. "
+                    "You do not need to know a system, file, or symbol; Epoch resolves those internally.";
                 return result;
             }
 
@@ -501,6 +622,17 @@ namespace epochengine::editor_ai_development_panel
                                 if (searchable.find(term) != std::string::npos)
                                     score += explicitOwner ? 16 : 4;
                             }
+                            for (const auto& system : systems)
+                            {
+                                for (const auto& hint : system.path_hints)
+                                {
+                                    if (!hint.empty()
+                                        && searchable.find(hint) != std::string::npos)
+                                    {
+                                        score += 96;
+                                    }
+                                }
+                            }
                             if (score > 0)
                             {
                                 if (searchable.find("/src/") != std::string::npos)
@@ -563,7 +695,7 @@ namespace epochengine::editor_ai_development_panel
             if (result.paths.empty())
             {
                 result.status =
-                    "Epoch found no unambiguous host-ranked source match for the objective.";
+                    "Epoch could not yet prove a relevant source selection. Add one observable symptom or desired outcome; do not guess a system or file name.";
                 return result;
             }
 
@@ -578,7 +710,8 @@ namespace epochengine::editor_ai_development_panel
             else
             {
                 result.status = epochengine::format_text(
-                    "Epoch ranked {} existing source file(s) from the objective ({} KiB total). Review this host-owned selection before sharing any bytes.",
+                    "Epoch resolved {} relevant system(s) and ranked {} existing source file(s) from your description ({} KiB total). Review them before sharing any bytes.",
+                    result.systems.size(),
                     result.paths.size(),
                     (selectedBytes + 1023u) / 1024u);
             }
@@ -622,8 +755,24 @@ namespace epochengine::editor_ai_development_panel
 
             for (const auto& relativeText : relativePaths)
             {
+                const std::filesystem::path relativePath{relativeText};
+                if (relativePath.empty() || relativePath.is_absolute()
+                    || relativePath.has_root_name()
+                    || std::ranges::any_of(
+                        relativePath,
+                        [](const std::filesystem::path& component)
+                        {
+                            return component == "..";
+                        })
+                    || !source_context_extension(relativePath))
+                {
+                    result.status =
+                        "The reviewed source path is not a relative C++ source "
+                        "file inside the selected root: " + relativeText + ".";
+                    return result;
+                }
                 const std::filesystem::path requested =
-                    root / std::filesystem::path{relativeText};
+                    root / relativePath;
                 error.clear();
                 const bool exists = std::filesystem::exists(requested, error);
                 if (error)
@@ -976,6 +1125,7 @@ namespace epochengine::editor_ai_development_panel
         std::string source_context_evidence{};
         std::string source_baseline_evidence{};
         std::string source_context_evidence_objective{};
+        std::vector<std::string> pending_source_context_systems{};
         std::vector<std::string> pending_source_context_paths{};
         std::string pending_source_context_reason{};
         std::string pending_source_context_objective{};
@@ -1096,6 +1246,7 @@ namespace epochengine::editor_ai_development_panel
             model_reply_corrections = 0u;
             source_diagnostic_recheck_queued = false;
             model_reply_correction_diagnostic.clear();
+            pending_source_context_systems.clear();
             pending_source_context_paths.clear();
             pending_source_context_reason.clear();
             pending_source_context_objective.clear();
@@ -2535,7 +2686,11 @@ namespace epochengine::editor_ai_development_panel
                 || snapshot.phase == Phase::cancelled
                 || snapshot.phase == Phase::blocked;
 
-            gui::label("Typed Self-Iteration Campaign");
+            gui::label("Engine Self-Coding Workflow");
+            gui::wrapped_label(
+                "1 Describe the result  2 Review source  3 Review the plan  "
+                "4 Review changes  5 Build and validate  6 Approve promotion",
+                width);
             gui::property_row(
                 "Provider", campaign_provider_name(campaign_provider));
             const std::array providerActions{
@@ -2590,7 +2745,9 @@ namespace epochengine::editor_ai_development_panel
                 && snapshot.phase != Phase::idle;
             const std::array lifecycleActions{
                 gui::InlineButtonSpec{
-                    .label = "Start", .width = 76.0f, .enabled = canStart},
+                    .label = "Begin Reviewed Session",
+                    .width = 176.0f,
+                    .enabled = canStart},
                 gui::InlineButtonSpec{
                     .label = "Resume", .width = 82.0f, .enabled = canResume},
                 gui::InlineButtonSpec{
@@ -2665,6 +2822,55 @@ namespace epochengine::editor_ai_development_panel
             }
 
             gui::property_row("Phase", campaign_phase_name(snapshot.phase));
+            std::string_view nextAction{"Describe a result above"};
+            switch (snapshot.phase)
+            {
+            case Phase::idle:
+                nextAction = source_workspace_ready
+                    ? "Begin the reviewed session"
+                    : "Review source and prepare the sandbox";
+                break;
+            case Phase::awaiting_plan_request:
+                nextAction = "Approve sending the objective for a plan";
+                break;
+            case Phase::awaiting_plan_result:
+                nextAction = "Wait for the plan response";
+                break;
+            case Phase::awaiting_curated_evidence:
+                nextAction = "Review and approve the returned plan";
+                break;
+            case Phase::awaiting_proposal_request:
+                nextAction = "Request exact proposed source changes";
+                break;
+            case Phase::awaiting_proposal_result:
+                nextAction = "Wait for proposed source changes";
+                break;
+            case Phase::awaiting_manual_review:
+                nextAction = "Review every proposed source operation";
+                break;
+            case Phase::awaiting_apply_decision:
+                nextAction = "Approve disposable-sandbox staging";
+                break;
+            case Phase::awaiting_apply_result:
+                nextAction = "Wait for sandbox staging evidence";
+                break;
+            case Phase::awaiting_validation_request:
+            case Phase::awaiting_validation_result:
+                nextAction = "Complete the displayed validation stage";
+                break;
+            case Phase::checkpoint_ready:
+                nextAction = "Record the validated rollback checkpoint";
+                break;
+            case Phase::checkpointed:
+                nextAction = "Review the separate live-source promotion";
+                break;
+            case Phase::rejected:
+            case Phase::cancelled:
+            case Phase::blocked:
+                nextAction = "Begin a new reviewed session";
+                break;
+            }
+            gui::property_row("Next action", nextAction);
             gui::property_row(
                 "Objective",
                 development_objective.empty()
@@ -2716,13 +2922,18 @@ namespace epochengine::editor_ai_development_panel
                         : campaign_state_path.generic_string());
             }
             gui::wrapped_label(
-                "Every model, apply, validation, and checkpoint transition is digest-bound. Live source stays read-only; this controller cannot approve promotion, Git, release, listeners, servers, or unrestricted execution.",
+                "Every model request, source edit, validation, and checkpoint is "
+                "bound to the reviewed session. Live source and projects stay "
+                "read-only until a separately reviewed promotion; this workflow "
+                "cannot approve Git, releases, listeners, servers, or unrestricted execution.",
                 width);
 
             if (!campaign_orchestrator)
             {
                 gui::wrapped_label(
-                    "Share exact curated context, choose a provider, then Start. Authoring and project build/output remain separate.",
+                    "First use Find Relevant Systems & Source above. Approve the "
+                    "exact files, choose a model provider, then Start. Project "
+                    "authoring, engine source, and each disposable session remain separate.",
                     width);
                 return;
             }
@@ -2961,7 +3172,7 @@ namespace epochengine::editor_ai_development_panel
                             + ". No source-file bytes are added by this plan request.",
                         width);
                     if (gui::button(
-                            "Send Bounded Plan Request", {width, 30.0f}))
+                            "Send Objective For Plan", {width, 30.0f}))
                     {
                         (void)send_staged_campaign_plan(output, now);
                     }
@@ -2990,7 +3201,7 @@ namespace epochengine::editor_ai_development_panel
 
             if (!campaign_scheduler
                 && snapshot.phase == Phase::awaiting_plan_request
-                && gui::button("Request Bounded Plan", {width, 30.0f}))
+                && gui::button("Send Objective For Plan", {width, 30.0f}))
             {
                 requestModel(OperationKind::model_plan,
                     campaign_orchestrator->request_plan(
@@ -3454,6 +3665,7 @@ namespace epochengine::editor_ai_development_panel
                     reply, area);
             if (contextRequest.recognized)
             {
+                pending_source_context_systems.clear();
                 pending_source_context_paths.clear();
                 pending_source_context_reason.clear();
                 pending_source_context_objective.clear();
@@ -3466,6 +3678,7 @@ namespace epochengine::editor_ai_development_panel
                     output.status = status_message;
                     return output;
                 }
+                pending_source_context_systems.clear();
                 pending_source_context_paths = contextRequest.request.paths;
                 pending_source_context_reason =
                     "Model request: " + contextRequest.request.reason;
@@ -3499,8 +3712,8 @@ namespace epochengine::editor_ai_development_panel
                 {
                     source_diagnostic_recheck_queued = true;
                     return queue_model_reply_correction(
-                        "The operator requested one source-proven defect in a "
-                        "named subsystem. Re-inspect the supplied exact source "
+                        "The operator requested one source-proven defect from a "
+                        "described behavior. Re-inspect the supplied exact source "
                         "and select one concrete bug only when its cause, the "
                         "violated nearby invariant, and a bounded repair are "
                         "all proven by those bytes. A pre-named symbol is not "
@@ -3511,7 +3724,7 @@ namespace epochengine::editor_ai_development_panel
                 status_message =
                     !source_diagnostic_recheck_queued
                     ? "Qwen could not justify a bounded source step from the supplied evidence. No source was staged; refine the objective or request again after architecture evidence improves."
-                    : "Qwen could not prove a concrete defect in the shared reviewed source after one diagnostic recheck. No source was staged; name a behavior or symbol and request again.";
+                    : "Qwen could not prove a concrete defect in the shared reviewed source after one diagnostic recheck. No source was staged; add one observable symptom and request again.";
                 output.status = status_message;
                 return output;
             }
@@ -3796,6 +4009,14 @@ namespace epochengine::editor_ai_development_panel
                     static_cast<std::streamsize>(contents.size()));
                 return output.good();
             };
+            const auto readFixtureSource = [&](
+                const std::filesystem::path& path)
+            {
+                std::ifstream input{path, std::ios::binary};
+                return std::string{
+                    std::istreambuf_iterator<char>{input},
+                    std::istreambuf_iterator<char>{}};
+            };
             std::string aiImplementation{
                 "namespace epochengine::ai { int ai_development_panel = 1; "
                 "int direct_runtime = 1; }\n"};
@@ -3825,7 +4046,37 @@ namespace epochengine::editor_ai_development_panel
                     legacyContract)
                 || !writeFixtureSource(
                     "Engine/src/physics/physics.manager_contract.cpp",
-                    "namespace epochengine::physics { int contract = 1; }\n"))
+                    "namespace epochengine::physics { int contract = 1; }\n")
+                || !writeFixtureSource(
+                    "Engine/src/editor/editor.secret_canary.cpp",
+                    "constexpr auto EPOCH_UNREVIEWED_CANARY = \"must-not-leak\";\n"))
+            {
+                return false;
+            }
+
+            const HostSourceContextSelection naturalLanguageSelection =
+                curate_source_context(
+                    fixture.path.generic_string(),
+                    Domain::engine_source,
+                    "Make self coding easier to understand and stop the AI "
+                    "controls from waiting without telling me what to do next.");
+            if (!naturalLanguageSelection.accepted
+                || naturalLanguageSelection.paths.empty()
+                || std::ranges::find(
+                    naturalLanguageSelection.systems,
+                    "AI Controls & Engine Self-Coding")
+                    == naturalLanguageSelection.systems.end())
+            {
+                return false;
+            }
+            const HostSourceContextSelection vagueSelection =
+                curate_source_context(
+                    fixture.path.generic_string(),
+                    Domain::engine_source,
+                    "make it better");
+            if (vagueSelection.accepted
+                || vagueSelection.status.find("do not guess")
+                    == std::string::npos)
             {
                 return false;
             }
@@ -3882,6 +4133,29 @@ namespace epochengine::editor_ai_development_panel
                     "FILE_CONTENT_BEGIN Engine/src/ai/ai.engine.cpp\n")
                     != std::string::npos
                 || excerptLoaded.evidence.find(transcriptOwner)
+                    == std::string::npos
+                || excerptLoaded.evidence.find("EPOCH_UNREVIEWED_CANARY")
+                    != std::string::npos)
+            {
+                return false;
+            }
+
+            const SourceContextLoadResult escapedLoad =
+                load_reviewed_source_context(
+                    fixture.path.generic_string(),
+                    {"../outside.cpp"},
+                    {},
+                    focusedObjective);
+            const SourceContextLoadResult nonSourceLoad =
+                load_reviewed_source_context(
+                    fixture.path.generic_string(),
+                    {"Engine/secret.env"},
+                    {},
+                    focusedObjective);
+            if (escapedLoad.accepted || nonSourceLoad.accepted
+                || escapedLoad.status.find("relative C++ source")
+                    == std::string::npos
+                || nonSourceLoad.status.find("relative C++ source")
                     == std::string::npos)
             {
                 return false;
@@ -4029,6 +4303,8 @@ namespace epochengine::editor_ai_development_panel
                 || planSent.model_prompt.find(
                     "EPOCH_SELF_ITERATION_PLAN_V1")
                     == std::string::npos
+                || planSent.model_prompt.find("EPOCH_UNREVIEWED_CANARY")
+                    != std::string::npos
                 || localOpenState.campaign_bridge_receipt
                 || !localOpenState.campaign_pending_operation
                 || localOpenState.campaign_scheduler->snapshot().phase
@@ -4172,7 +4448,9 @@ namespace epochengine::editor_ai_development_panel
                     std::istreambuf_iterator<char>{sandboxSource},
                     std::istreambuf_iterator<char>{}};
                 if (stagedBytes
-                    != "namespace epochengine::reviewed { int value = 2; }\n")
+                        != "namespace epochengine::reviewed { int value = 2; }\n"
+                    || readFixtureSource(fixture.path / reviewedPath)
+                        != "namespace epochengine::reviewed { int value = 1; }\n")
                 {
                     return false;
                 }
@@ -4277,7 +4555,9 @@ namespace epochengine::editor_ai_development_panel
                     std::istreambuf_iterator<char>{repairedSource},
                     std::istreambuf_iterator<char>{}};
                 if (repairedBytes
-                    != "namespace epochengine::reviewed { int value = 2; }\n")
+                        != "namespace epochengine::reviewed { int value = 2; }\n"
+                    || readFixtureSource(fixture.path / reviewedPath)
+                        != "namespace epochengine::reviewed { int value = 1; }\n")
                 {
                     return false;
                 }
@@ -4789,6 +5069,7 @@ namespace epochengine::editor_ai_development_panel
         {
             state.source_context_evidence = input.architecture_evidence;
             state.source_context_evidence_objective.clear();
+            state.pending_source_context_systems.clear();
             state.pending_source_context_paths.clear();
             state.pending_source_context_reason.clear();
             state.pending_source_context_objective.clear();
@@ -4811,21 +5092,30 @@ namespace epochengine::editor_ai_development_panel
                 : state.workspace_root);
         if (input.domain != Domain::tooling)
         {
-            gui::label("Development Objective");
+            gui::label("What should Epoch improve?");
             (void)gui::edit_box(
                 state.development_objective,
                 {width, 82.0f},
                 4'096u,
                 true);
             gui::wrapped_label(
-                "Name one bounded source outcome, or ask for one source-proven "
-                "defect in a named subsystem. Epoch accepts only existing paths "
-                "and evidence-backed edits. Invented source operations are "
-                "rejected before staging.",
+                "Describe the result you want or the problem you can see in normal "
+                "language. You do not need to know the system, file, or symbol: "
+                "Epoch resolves real owned systems and shows every selected source "
+                "file before reading or sending its bytes.",
                 width);
+            gui::label("Data Boundaries");
+            gui::property_row("Reads",
+                "Only source files you review and approve");
+            gui::property_row("Sends",
+                "Objective + approved UTF-8 source excerpts");
+            gui::property_row("Writes",
+                "Disposable session sandbox only");
+            gui::property_row("Protected",
+                "Live engine source and every project");
             if (!state.pending_source_context_paths.empty())
             {
-                gui::label("Host-Curated Source Context");
+                gui::label("Relevant Systems & Source Review");
                 gui::property_row("Target model",
                     input.selected_model.empty()
                         ? std::string{"Unavailable"}
@@ -4838,6 +5128,16 @@ namespace epochengine::editor_ai_development_panel
                     state.pending_source_context_reason.empty()
                         ? std::string{"Ranked from the approved objective"}
                         : state.pending_source_context_reason);
+                if (!state.pending_source_context_systems.empty())
+                {
+                    gui::label("Resolved systems");
+                    for (const auto& system :
+                        state.pending_source_context_systems)
+                    {
+                        gui::wrapped_label(system, width);
+                    }
+                }
+                gui::label("Exact source files");
                 for (const auto& path : state.pending_source_context_paths)
                     gui::wrapped_label(path, width);
                 const bool staleObjective =
@@ -4846,10 +5146,12 @@ namespace epochengine::editor_ai_development_panel
                 gui::wrapped_label(
                     staleObjective
                         ? "The objective changed after selection. Reject it and request fresh context."
-                        : "Epoch validated these requested paths without reading them. Share reads and sends only their reviewed UTF-8 bytes to the selected endpoint; Reject sends nothing.",
+                        : "Epoch validated these paths without reading them. Approve reads only the listed UTF-8 files, prepares a separate session sandbox, and sends nothing until the later model-request approval. Reject reads and sends nothing.",
                     width);
                 if (!staleObjective
-                    && gui::button("Share Curated Context", {width, 30.0f}))
+                    && gui::button(
+                        "Approve Context & Prepare Sandbox",
+                        {width, 30.0f}))
                 {
                     return share_requested_source_context(input);
                 }
@@ -5041,7 +5343,9 @@ namespace epochengine::editor_ai_development_panel
                 }
                 else
                 {
-                    if (gui::button("Request Proposal", {width, 30.0f}))
+                    if (gui::button(
+                            "Find Relevant Systems & Source",
+                            {width, 30.0f}))
                     {
                         if (state.development_objective.empty())
                         {
@@ -5055,6 +5359,8 @@ namespace epochengine::editor_ai_development_panel
                                     input.source_snapshot_root,
                                     input.domain,
                                     state.development_objective);
+                            state.pending_source_context_systems =
+                                selection.systems;
                             state.pending_source_context_paths = selection.paths;
                             state.pending_source_context_reason = selection.status;
                             state.pending_source_context_objective =
@@ -5072,7 +5378,7 @@ namespace epochengine::editor_ai_development_panel
                             {
                                 state.status_message =
                                     "selection_required: " + selection.status
-                                    + " Name an existing path or symbol; no source bytes were read or sent.";
+                                    + " No source bytes were read or sent.";
                                 if (!state.iteration_session)
                                     state.iteration_session = std::make_unique<
                                         ai::iteration_session::IterationSession>();
@@ -5435,6 +5741,7 @@ namespace epochengine::editor_ai_development_panel
         state.model_reply_correction_diagnostic.clear();
         state.source_context_evidence_objective =
             state.development_objective;
+        state.pending_source_context_systems.clear();
         state.pending_source_context_paths.clear();
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();
@@ -5541,6 +5848,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         auto& state = *implementation_;
+        state.pending_source_context_systems.clear();
         state.pending_source_context_paths.clear();
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();

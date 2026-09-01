@@ -824,12 +824,21 @@ execution.
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 
-## 2D Scene/UI editor surface
+## 2D / UI editor surface
 
-- `2D Scene/UI` is the same scene viewed through a dedicated Canvas2D camera, not a
-  separate scene or project island.
-- entering `2D Scene/UI` creates/selects an editor-only `Canvas2D` plane and switches
-  the preview camera to the locked 2D Canvas rig
+- `2D / UI` is one document workspace with explicit `Tile Map` and `GUI Overlay`
+  modes. It defaults to Tile Map so opening the workspace does not silently
+  force a GUI-placement branch. Both modes remain part of the active project;
+  neither creates a separate scene or project island.
+- Tile Map owns map source, layers, palettes, object/collision editing, its own
+  semantic Undo/Redo journal, exact Library publication, and Canvas2D preview.
+  GUI Overlay owns placement and adjustment of the project's canonical
+  `.epochgui` document. Full widget creation, component graph, styles, templates,
+  and runtime preview remain in the dedicated GUI Editor rather than being
+  duplicated in the project editor.
+- entering GUI Overlay creates/selects an editor-only `Canvas2D` plane when the
+  project document needs one and switches the preview camera to the locked 2D
+  Canvas rig
 - the `Canvas2D` plane is an upright XY-style editor canvas viewed by a
   front-facing orthographic camera. It should not be a floor-like XZ plane; the
   2D workspace reuses the scene view from a locked 2D perspective, similar to
@@ -839,8 +848,9 @@ execution.
   software-preview paths should all use that helper so 2D editing behaves like
   a Unity-style scene camera locked to a 3D canvas instead of drifting per
   backend.
-- future 2D work should add tile/layer/canvas tools on top of this same
-  entity/project spine
+- remaining 2D work should improve discoverability, property grouping, direct
+  manipulation, and native interaction proof on top of the existing
+  tile/layer/canvas source and history spine
 
 ## Surface-relative placement
 

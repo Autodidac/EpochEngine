@@ -1615,7 +1615,7 @@ namespace epochengine
             case EditorMainSurface::Scene:
                 return "3D Scene";
             case EditorMainSurface::Game2D:
-                return "2D Scene/UI";
+                return "2D / UI";
             case EditorMainSurface::Assets:
                 return "Assets";
             case EditorMainSurface::Project:
@@ -1625,7 +1625,7 @@ namespace epochengine
             case EditorMainSurface::PlantLab:
                 return "Plant Lab";
             case EditorMainSurface::Timeline:
-                return "Video";
+                return "Timeline";
             case EditorMainSurface::AISandbox:
                 return "AI Development";
             case EditorMainSurface::Systems:
@@ -24351,11 +24351,11 @@ namespace epochengine
                 editor.showConsoleDock = true;
                 editor.showAiChat = true;
                 editor.workspaceTab = EditorWorkspaceTab::Project;
-                editor.outlinerToolTab = OutlinerToolTab::Gui;
-                set_pane_shown("pane.gui_hierarchy", true);
+                editor.outlinerToolTab = OutlinerToolTab::TileMap;
+                set_pane_shown("pane.tile_map", true);
                 set_active_pane(
-                    pane_dock_region("pane.gui_hierarchy"),
-                    "pane.gui_hierarchy");
+                    pane_dock_region("pane.tile_map"),
+                    "pane.tile_map");
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.viewportCameraMode = previewgrid::CameraMode::Canvas2D;
                 if (ctx)
@@ -24363,7 +24363,7 @@ namespace epochengine
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Canvas2D);
                     epochengine::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[editor] 2D Scene/UI opened with the locked Canvas2D camera.");
+                push_editor_log(editor, "[editor] 2D / UI opened in Tile Map mode with the locked Canvas2D camera.");
                 break;
             case EditorMainSurface::Assets:
                 editor.showOutliner = true;
@@ -24939,7 +24939,7 @@ namespace epochengine
         };
 
         addDocumentTab(EditorMainSurface::Scene, "document.world", "World", 72.0f);
-        addDocumentTab(EditorMainSurface::Game2D, "document.gui", "GUI Canvas", 104.0f);
+        addDocumentTab(EditorMainSurface::Game2D, "document.game2d", "2D / UI", 86.0f);
         addDocumentTab(EditorMainSurface::ForestFactory, "document.forest", "Forest Factory", 126.0f);
         addDocumentTab(EditorMainSurface::PlantLab, "document.plant", "Plant Lab", 92.0f);
         addDocumentTab(EditorMainSurface::Timeline, "document.timeline", "Timeline", 88.0f);
@@ -28724,14 +28724,14 @@ namespace epochengine
             const std::array aiInspectorTabs{
                 gui::TabButtonSpec{
                     .id = "inspector.ai.authoring",
-                    .label = "Authoring",
-                    .width = 104.0f,
+                    .label = "Project Assistant",
+                    .width = 0.0f,
                     .active = editor.aiWorkspaceDomain
                         == AiWorkspaceDomain::Engine},
                 gui::TabButtonSpec{
                     .id = "inspector.ai.engine_development",
-                    .label = "Engine Development",
-                    .width = 122.0f,
+                    .label = "Engine Self-Coding",
+                    .width = 0.0f,
                     .active = editor.aiWorkspaceDomain
                         == AiWorkspaceDomain::Control}
             };
@@ -28763,11 +28763,11 @@ namespace epochengine
 
             if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine)
             {
-                gui::label("AI Authoring");
+                gui::label("Project Assistant");
                 gui::wrapped_label(
-                    "Plan against the live scene. Epoch validates every call "
-                    "and changes nothing until you approve the staged plan in "
-                    "AI Chat. Use /plan for one change or /goal for milestones.",
+                    "Describe a scene or GUI result in normal language. Epoch "
+                    "turns it into a visible plan, validates every operation, "
+                    "and changes the active project only after you approve that plan.",
                     inspectorWidth);
                 render_ai_model_picker(
                     editor,
@@ -28815,7 +28815,7 @@ namespace epochengine
                           "without a visible, operator-started session.",
                     inspectorWidth);
 
-                gui::label("Describe Scene Or GUI Changes");
+                gui::label("What should change in this project?");
                 const auto requestInput = gui::edit_box(
                     editor.aiAuthoringRequest,
                     {inspectorWidth, 92.0f},
@@ -28901,11 +28901,10 @@ namespace epochengine
             }
 
             gui::wrapped_label(
-                "The selected external model works on one bounded objective. "
-                "Epoch first shows a host-curated existing-source selection "
-                "without reading file bytes. Share Curated Context explicitly "
-                "reads and sends only that reviewed bounded evidence to the "
-                "displayed endpoint.",
+                "Describe one engine result or visible defect. Epoch resolves "
+                "the owned systems and exact source files for you, shows them "
+                "before reading anything, and keeps every model-authored change "
+                "inside a separate disposable session until you approve promotion.",
                 inspectorWidth);
             if (!editor.aiDevelopmentPanel)
             {
@@ -29171,7 +29170,8 @@ namespace epochengine
                     const float inspectorWidth =
                         (std::max)(160.0f, pane_size.x - 24.0f);
 
-                    gui::label("GUI Widget");
+                    gui::label("Selected GUI Element");
+                    gui::label("Identity");
                     gui::property_row(
                         "Name",
                         widget->descriptor.name,
@@ -29233,6 +29233,10 @@ namespace epochengine
                             "Applied widget content and interaction.";
                     }
 
+                    gui::label("Layout");
+                    gui::wrapped_label(
+                        "Position and size use the project canvas coordinate space.",
+                        inspectorWidth);
                     LayoutDescriptor layout =
                         widget->descriptor.layout;
                     bool layoutChanged = false;
@@ -29297,6 +29301,7 @@ namespace epochengine
                             editor);
                     }
 
+                    gui::label("Interaction");
                     InteractionDescriptor interaction =
                         widget->descriptor.interaction;
                     bool interactionChanged = false;
@@ -29331,6 +29336,7 @@ namespace epochengine
                             std::move(interaction));
                     }
 
+                    gui::label("Appearance");
                     StyleDescriptor style =
                         widget->descriptor.style;
                     const auto opacitySlider = gui::slider({
@@ -29369,30 +29375,55 @@ namespace epochengine
             if (!specializedProperties && selectedIndex)
             {
                 const auto& entity = editor.entities[*selectedIndex];
-                gui::label(std::string("Selected: ") + entity.name);
-                gui::label(std::string("Type: ") + entity.type);
-                gui::label(std::string("Category: ") + entity.category);
-                gui::label(std::string("Position: ") + vec3_text(entity.position));
-                gui::label(std::string("Rotation: ") + vec3_text(entity.rotation));
-                gui::label(std::string("Scale: ") + vec3_text(entity.scale));
-                gui::label(std::string("Visible: ") + (entity.visible ? "true" : "false"));
-                gui::label(std::string("EditorOnly: ") + (entity.editorOnly ? "true" : "false"));
+                gui::label("Selected Object");
+                gui::property_row("Name", entity.name, 84.0f);
+                gui::property_row("Type", entity.type, 84.0f);
+                gui::property_row("Category", entity.category, 84.0f);
+                gui::label("Transform");
+                gui::property_row(
+                    "Position", vec3_text(entity.position), 84.0f);
+                gui::property_row(
+                    "Rotation", vec3_text(entity.rotation), 84.0f);
+                gui::property_row("Scale", vec3_text(entity.scale), 84.0f);
+                gui::label("Object State");
+                gui::property_row(
+                    "Visible", entity.visible ? "Yes" : "No", 84.0f);
+                gui::property_row(
+                    "Editor only", entity.editorOnly ? "Yes" : "No", 84.0f);
             }
             else if (!specializedProperties)
             {
-                gui::label("Selected: <none>");
+                gui::label("No Object Selected");
+                gui::wrapped_label(
+                    "Select an object in the viewport or World Outliner to inspect it.",
+                    (std::max)(160.0f, pane_size.x - 24.0f));
             }
             if (!specializedProperties)
             {
-                gui::label(std::string("Viewport Target: ") + renderer_name(ctx));
-                gui::label(std::string("Helpers Visible: ") + (editor.helpersVisible ? "true" : "false"));
-                gui::label(std::string("Preview Mode: ") + std::string(preview_mode_name(editor.previewMode)));
-                gui::label(std::string("Preview Camera: ") + preview_camera_name(ctx));
-                gui::label(std::string("Preview Zoom: ") + preview_zoom_text(ctx));
-                gui::label(std::string("Preview Objects: ") + std::to_string(visible_entity_count(editor)));
-                gui::label(std::string("Editor Script: ") + editor.activeScript);
-                gui::label(std::string("Runtime Target: ") + editor.activeRuntimeScene);
-                gui::label("Viewport Input: LMB select  |  MMB pan  |  Alt+LMB orbit  |  Alt+RMB dolly  |  RMB+WASD/QE fly  |  F focus");
+                gui::label("Scene Preview");
+                gui::property_row(
+                    "Renderer", renderer_name(ctx), 92.0f);
+                gui::property_row(
+                    "Helpers", editor.helpersVisible ? "Visible" : "Hidden", 92.0f);
+                gui::property_row(
+                    "Mode", std::string(preview_mode_name(editor.previewMode)), 92.0f);
+                gui::property_row(
+                    "Camera", preview_camera_name(ctx), 92.0f);
+                gui::property_row(
+                    "Zoom", preview_zoom_text(ctx), 92.0f);
+                gui::property_row(
+                    "Objects", std::to_string(visible_entity_count(editor)), 92.0f);
+                gui::label("Project Runtime");
+                gui::property_row(
+                    "Editor script", editor.activeScript, 92.0f);
+                gui::property_row(
+                    "Run target", editor.activeRuntimeScene, 92.0f);
+                gui::label("Viewport Controls");
+                gui::wrapped_label(
+                    "Select: left mouse  |  Pan: middle mouse  |  Orbit: "
+                    "Alt + left mouse  |  Dolly: Alt + right mouse  |  "
+                    "Fly: right mouse + WASD/QE  |  Focus: F",
+                    (std::max)(160.0f, pane_size.x - 24.0f));
             }
         }
         gui::end_scroll_area();
@@ -29577,12 +29608,12 @@ namespace epochengine
             }
         };
 
-        const bool guiDocumentWorkspace =
+        bool guiDocumentWorkspace =
             editor.mainSurface == EditorMainSurface::Game2D
             && (editor.outlinerToolTab == OutlinerToolTab::Gui
                 || editor_application_owns_dedicated_gui_workspace(
                     editor.applicationKind));
-        const bool active_center_uses_scene =
+        bool active_center_uses_scene =
             main_surface_uses_scene(editor.mainSurface)
             && !guiDocumentWorkspace;
         if (editor.surfaceSettleFrames > 0)
@@ -29592,6 +29623,50 @@ namespace epochengine
             viewport_pos,
             viewport_size,
             !active_center_uses_scene);
+        if (editor.mainSurface == EditorMainSurface::Game2D
+            && !editor_application_owns_dedicated_gui_workspace(
+                editor.applicationKind))
+        {
+            const std::array modeTabs{
+                gui::TabButtonSpec{
+                    .id = "game2d.workspace.tilemap",
+                    .label = "Tile Map",
+                    .width = 0.0f,
+                    .active = !guiDocumentWorkspace},
+                gui::TabButtonSpec{
+                    .id = "game2d.workspace.gui",
+                    .label = "GUI Overlay",
+                    .width = 0.0f,
+                    .active = guiDocumentWorkspace}
+            };
+            if (const auto selected = gui::tab_bar_buttons(
+                    modeTabs, 31.0f, 2.0f);
+                selected.selected_index)
+            {
+                guiDocumentWorkspace = *selected.selected_index == 1u;
+                active_center_uses_scene = !guiDocumentWorkspace;
+                editor.outlinerToolTab = guiDocumentWorkspace
+                    ? OutlinerToolTab::Gui
+                    : OutlinerToolTab::TileMap;
+                const std::string_view route = guiDocumentWorkspace
+                    ? "pane.gui_hierarchy"
+                    : "pane.tile_map";
+                set_pane_shown(route, true);
+                set_active_pane(pane_dock_region(route), route);
+                push_editor_log(
+                    editor,
+                    guiDocumentWorkspace
+                        ? "[editor] 2D / UI switched to GUI Overlay placement."
+                        : "[editor] 2D / UI switched to Tile Map authoring.");
+            }
+            gui::wrapped_label(
+                guiDocumentWorkspace
+                    ? "Place and adjust project GUI elements here. Full widget "
+                      "construction remains in the dedicated Epoch GUI Editor."
+                    : "Paint tiles, manage layers, and attach project textures. "
+                      "Undo and Redo stay on this tile-map document.",
+                (std::max)(160.0f, viewport_size.x - 16.0f));
+        }
         if (active_center_uses_scene)
         {
             const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
@@ -29699,7 +29774,7 @@ namespace epochengine
                 gui::panel_rect(timelinePos, { scene_size.x, timelineStripHeight });
                 gui::titlebar_rect(timelinePos, { scene_size.x, 24.0f });
                 gui::set_cursor({ timelinePos.x + 8.0f, timelinePos.y + 5.0f });
-                gui::label("Video Timeline");
+                gui::label("Timeline");
                 gui::set_cursor({ timelinePos.x + 8.0f, timelinePos.y + 30.0f });
                 render_timeline_time_controls(scene_size.x, true);
             }

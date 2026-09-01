@@ -1,3 +1,17 @@
+- The current v0.89.35 interface/self-iteration repair accepts an observable
+  outcome or symptom without requiring the operator to name an internal system,
+  path, or symbol. A deterministic host resolver reports the owned source
+  systems it selected and ranks only existing C++ paths for explicit review.
+  Absolute paths, traversal, non-source files, and unreviewed canary bytes are
+  rejected before transport; sandbox apply/repair contracts prove the live
+  source preimage remains byte-identical. AI Controls states this boundary and
+  exposes the next required action instead of leading with raw hashes. The
+  central `2D / UI` workspace now distinguishes Tile Map from GUI Overlay, and
+  Properties groups user-facing identity, transform/layout, interaction,
+  appearance, state, preview, and runtime fields. World/Outliner/World Settings
+  and the top command rows are intentionally unchanged in this pass. Debug and
+  Release builds/contracts are required; native UI interaction remains an
+  operator evidence gate.
 - The v0.89.35 operational self-iteration path now carries the already-admitted
   exact model proposal through the existing guarded source controller instead
   of stopping at an unproduced sealed-adapter handoff. One explicit operator
