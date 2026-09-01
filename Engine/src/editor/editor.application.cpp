@@ -853,6 +853,27 @@ namespace epochengine
                 publishPending{};
         };
 
+        struct EditorLocalMcpState
+        {
+            platform::child_process::ProcessHandle process{};
+            std::filesystem::path requestRoot{};
+            std::filesystem::path promptPath{};
+            std::filesystem::path responsePath{};
+            std::filesystem::path statusPath{};
+            std::filesystem::path receiptPath{};
+            std::filesystem::path threadPath{};
+            std::filesystem::path logPath{};
+            std::string threadId{};
+            std::string status{
+                "Local MCP is idle. Select External MCP to run a reviewed "
+                "Candidate Lab request through the visible stdio worker."};
+            std::uint64_t requestGeneration{};
+            std::uint64_t bridgeProcessId{};
+            std::uint64_t startedTickNs{};
+            std::uint64_t elapsedMs{};
+            bool awaitingResponse{};
+        };
+
         enum class TimelineWorkspaceSection : std::uint8_t
         {
             sequence = 0,
@@ -1239,6 +1260,7 @@ namespace epochengine
             std::string aiToolHarnessStatus{ "AI tool harness has not run yet." };
             std::size_t aiToolHarnessRunCount{ 0 };
             std::unique_ptr<editor_ai_development_panel::Panel> aiDevelopmentPanel{};
+            EditorLocalMcpState aiLocalMcp{};
             bool aiSourcePatchReviewMode{};
             std::string aiSourcePatchReviewPath{};
             std::string aiSourcePatchReviewPostimage{};
@@ -10899,6 +10921,154 @@ namespace epochengine
             std::error_code ec;
             const auto cwd = std::filesystem::current_path(ec);
             return ec ? std::filesystem::path{} : cwd.lexically_normal();
+        }
+
+        [[nodiscard]] std::uint64_t editor_steady_tick_ns() noexcept
+        {
+            return static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count());
+        }
+
+        [[nodiscard]] std::filesystem::path local_mcp_bridge_script()
+        {
+#if defined(_WIN32)
+            const std::filesystem::path root = editor_runtime_root();
+            const std::array candidates{
+                root / "assets/ai/epoch.local_mcp_iteration.ps1",
+                root / "Engine/assets/ai/epoch.local_mcp_iteration.ps1",
+                epochengine::core::path::find_epoch_repo_root(
+                    epochengine::core::path::executable_dir())
+                    / "Engine/assets/ai/epoch.local_mcp_iteration.ps1"};
+            std::error_code error{};
+            for (const auto& candidate : candidates)
+            {
+                if (!candidate.empty()
+                    && std::filesystem::is_regular_file(candidate, error)
+                    && !error)
+                {
+                    return std::filesystem::weakly_canonical(candidate, error);
+                }
+                error.clear();
+            }
+#endif
+            return {};
+        }
+
+        [[nodiscard]] std::filesystem::path local_mcp_powershell()
+        {
+#if defined(_WIN32)
+            const auto windowsDirectory = epochengine::core::env::get("WINDIR");
+            if (windowsDirectory && !windowsDirectory->empty())
+            {
+                const auto path = std::filesystem::path{
+                    std::string{windowsDirectory->data(), windowsDirectory->size()}}
+                    / "System32/WindowsPowerShell/v1.0/powershell.exe";
+                std::error_code error{};
+                if (std::filesystem::is_regular_file(path, error) && !error)
+                    return path.lexically_normal();
+            }
+#endif
+            return {};
+        }
+
+        [[nodiscard]] bool local_mcp_connector_available()
+        {
+            return !local_mcp_bridge_script().empty()
+                && !local_mcp_powershell().empty();
+        }
+
+        [[nodiscard]] bool local_mcp_sandbox_root(
+            const std::filesystem::path& candidate,
+            std::filesystem::path& canonical,
+            std::string& refusal)
+        {
+            std::error_code error{};
+            canonical = std::filesystem::weakly_canonical(candidate, error);
+            if (error || canonical.empty()
+                || !std::filesystem::is_directory(canonical, error) || error)
+            {
+                refusal = "The Candidate Lab sandbox does not exist.";
+                return false;
+            }
+            std::string normalized = canonical.generic_string();
+            std::transform(normalized.begin(), normalized.end(), normalized.begin(),
+                [](const unsigned char value)
+                {
+                    return static_cast<char>(std::tolower(value));
+                });
+            if (normalized.find("/cache/ai/iterations/session_")
+                == std::string::npos)
+            {
+                refusal = "Local MCP refused a workspace outside the disposable Candidate Lab session root.";
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool write_local_mcp_prompt(
+            const std::filesystem::path& path,
+            const std::string_view prompt,
+            std::string& refusal)
+        {
+            if (prompt.empty() || prompt.size() > 512u * 1024u)
+            {
+                refusal = "Local MCP refused an empty or oversized request.";
+                return false;
+            }
+            std::error_code error{};
+            std::filesystem::create_directories(path.parent_path(), error);
+            if (error)
+            {
+                refusal = "Local MCP could not create its sandbox request folder.";
+                return false;
+            }
+            const auto temporary = std::filesystem::path{
+                path.string() + ".tmp"};
+            {
+                std::ofstream output{
+                    temporary, std::ios::binary | std::ios::trunc};
+                if (!output)
+                {
+                    refusal = "Local MCP could not open its sandbox prompt file.";
+                    return false;
+                }
+                output.write(prompt.data(), static_cast<std::streamsize>(prompt.size()));
+                output.flush();
+                if (!output)
+                {
+                    refusal = "Local MCP could not commit its bounded prompt bytes.";
+                    return false;
+                }
+            }
+            std::filesystem::rename(temporary, path, error);
+            if (error)
+            {
+                std::filesystem::remove(temporary, error);
+                refusal = "Local MCP could not atomically publish its sandbox request.";
+                return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::optional<std::string> read_local_mcp_text(
+            const std::filesystem::path& path,
+            const std::size_t maximumBytes)
+        {
+            std::error_code error{};
+            if (!std::filesystem::is_regular_file(path, error) || error)
+                return std::nullopt;
+            const auto bytes = std::filesystem::file_size(path, error);
+            if (error || bytes == 0u || bytes > maximumBytes)
+                return std::nullopt;
+            std::ifstream input{path, std::ios::binary};
+            if (!input)
+                return std::nullopt;
+            std::string text(static_cast<std::size_t>(bytes), '\0');
+            input.read(text.data(), static_cast<std::streamsize>(text.size()));
+            if (!input)
+                return std::nullopt;
+            return text;
         }
 
         void apply_verified_ai_source_authority(
@@ -23179,21 +23349,191 @@ namespace epochengine
                 break;
             }
             case editor_ai_development_panel::HostAction::
+                cancel_model_source_request:
+            {
+                auto& mcp = editor.aiLocalMcp;
+                if (mcp.process.valid())
+                {
+                    (void)platform::child_process::stop(
+                        mcp.process,
+                        platform::child_process::StopMode::force);
+                    platform::child_process::poll();
+                    (void)platform::child_process::release(mcp.process);
+                }
+                mcp.process = {};
+                mcp.awaitingResponse = false;
+                editor.aiSourceAwaitingReply = false;
+                mcp.status = epochengine::format_text(
+                    "Stopped local MCP bridge PID {} after {} ms. Live source "
+                    "and projects were not changed.",
+                    mcp.bridgeProcessId,
+                    mcp.elapsedMs);
+                std::error_code cleanupError{};
+                std::filesystem::remove(mcp.promptPath, cleanupError);
+                cleanupError.clear();
+                std::filesystem::remove(mcp.responsePath, cleanupError);
+                const auto cancelled = editor.aiDevelopmentPanel
+                    ? editor.aiDevelopmentPanel->cancel_active_campaign(
+                        "The operator stopped the local MCP transport request.")
+                    : editor_ai_development_panel::RenderResult{};
+                chat.append_status(mcp.status);
+                push_ai_development_log(
+                    editor, "[local-mcp] " + mcp.status);
+                if (!cancelled.status.empty())
+                    push_ai_development_log(
+                        editor, "[local-mcp] " + cancelled.status);
+                break;
+            }
+            case editor_ai_development_panel::HostAction::
                 request_model_source_proposal:
                 if (!action.model_prompt.empty())
                 {
                     if (action.model_transport
                         == editor_ai_development_panel::ModelTransport::external_mcp)
                     {
-                        const auto rejected = editor.aiDevelopmentPanel
-                            ? editor.aiDevelopmentPanel->report_model_dispatch(
-                                editor_ai_development_panel::ModelDispatchState::rejected,
-                                "external MCP",
-                                "no registered connector")
-                            : editor_ai_development_panel::RenderResult{};
-                        if (!rejected.status.empty())
+                        auto& mcp = editor.aiLocalMcp;
+                        const auto active = mcp.process.valid()
+                            ? platform::child_process::snapshot(mcp.process)
+                            : std::nullopt;
+                        if (active && active->active())
+                        {
+                            const auto rejected = editor.aiDevelopmentPanel
+                                ? editor.aiDevelopmentPanel->report_model_dispatch(
+                                    editor_ai_development_panel::ModelDispatchState::rejected,
+                                    "local stdio MCP",
+                                    "request already running")
+                                : editor_ai_development_panel::RenderResult{};
                             push_ai_development_log(
-                                editor, "[ai] " + rejected.status);
+                                editor, "[local-mcp] " + rejected.status);
+                            break;
+                        }
+
+                        std::filesystem::path sandboxRoot{};
+                        std::string refusal{};
+                        if (!local_mcp_connector_available()
+                            || !local_mcp_sandbox_root(
+                                std::filesystem::path{action.workspace_root},
+                                sandboxRoot,
+                                refusal))
+                        {
+                            if (refusal.empty())
+                                refusal = "The local stdio MCP bridge is not installed in this build.";
+                            const auto rejected = editor.aiDevelopmentPanel
+                                ? editor.aiDevelopmentPanel->report_model_dispatch(
+                                    editor_ai_development_panel::ModelDispatchState::rejected,
+                                    "local stdio MCP",
+                                    refusal)
+                                : editor_ai_development_panel::RenderResult{};
+                            mcp.status = refusal;
+                            push_ai_development_log(
+                                editor, "[local-mcp] " + rejected.status);
+                            break;
+                        }
+
+                        if (action.model_prompt.starts_with(
+                                "EPOCH_SELF_ITERATION_PLAN_V2"))
+                        {
+                            mcp.threadId.clear();
+                        }
+                        ++mcp.requestGeneration;
+                        if (mcp.requestGeneration == 0u)
+                            mcp.requestGeneration = 1u;
+                        mcp.requestRoot = sandboxRoot / ".epoch/local_mcp"
+                            / epochengine::format_text(
+                                "request_{}", mcp.requestGeneration);
+                        mcp.promptPath = mcp.requestRoot / "prompt.txt";
+                        mcp.responsePath = mcp.requestRoot / "response.txt";
+                        mcp.statusPath = mcp.requestRoot / "status.json";
+                        mcp.receiptPath = mcp.requestRoot / "receipt.json";
+                        mcp.threadPath = mcp.requestRoot / "thread.txt";
+                        mcp.logPath = mcp.requestRoot / "bridge.log";
+                        if (!write_local_mcp_prompt(
+                                mcp.promptPath, action.model_prompt, refusal))
+                        {
+                            const auto rejected = editor.aiDevelopmentPanel
+                                ? editor.aiDevelopmentPanel->report_model_dispatch(
+                                    editor_ai_development_panel::ModelDispatchState::rejected,
+                                    "local stdio MCP",
+                                    refusal)
+                                : editor_ai_development_panel::RenderResult{};
+                            mcp.status = refusal;
+                            push_ai_development_log(
+                                editor, "[local-mcp] " + rejected.status);
+                            break;
+                        }
+
+                        platform::child_process::LaunchRequest request{};
+                        request.executable = local_mcp_powershell();
+                        request.working_directory = sandboxRoot;
+                        request.merged_output_path = mcp.logPath;
+                        request.arguments = {
+                            "-NoLogo", "-NoProfile", "-NonInteractive",
+                            "-ExecutionPolicy", "Bypass", "-File",
+                            local_mcp_bridge_script().string(),
+                            "-PromptPath", mcp.promptPath.string(),
+                            "-WorkspaceRoot", sandboxRoot.string(),
+                            "-ResponsePath", mcp.responsePath.string(),
+                            "-StatusPath", mcp.statusPath.string(),
+                            "-ReceiptPath", mcp.receiptPath.string(),
+                            "-ThreadPath", mcp.threadPath.string(),
+                            "-TimeoutSeconds", "900"};
+                        if (!mcp.threadId.empty())
+                        {
+                            request.arguments.push_back("-ThreadId");
+                            request.arguments.push_back(mcp.threadId);
+                        }
+                        request.correlation_key = epochengine::format_text(
+                            "epoch.ai.local_mcp.{}", mcp.requestGeneration);
+                        request.exclusive_group = "epoch.ai.local_mcp";
+                        request.display_name = "Epoch Local MCP Iteration";
+                        request.window_mode =
+                            platform::child_process::WindowMode::hidden;
+                        const auto launched =
+                            platform::child_process::launch_or_focus(request);
+                        if (!launched)
+                        {
+                            mcp.status = "Local MCP bridge did not start: "
+                                + launched.message;
+                            const auto rejected = editor.aiDevelopmentPanel
+                                ? editor.aiDevelopmentPanel->report_model_dispatch(
+                                    editor_ai_development_panel::ModelDispatchState::rejected,
+                                    "local stdio MCP",
+                                    mcp.status)
+                                : editor_ai_development_panel::RenderResult{};
+                            push_ai_development_log(
+                                editor, "[local-mcp] " + rejected.status);
+                            break;
+                        }
+
+                        mcp.process = launched.handle;
+                        mcp.startedTickNs = editor_steady_tick_ns();
+                        mcp.elapsedMs = 0u;
+                        mcp.awaitingResponse = true;
+                        if (const auto snapshot =
+                                platform::child_process::snapshot(mcp.process))
+                        {
+                            mcp.bridgeProcessId = snapshot->platform_process_id;
+                        }
+                        mcp.status = epochengine::format_text(
+                            "Local MCP bridge PID {} is running one bounded "
+                            "request inside {}.",
+                            mcp.bridgeProcessId,
+                            display_project_path(sandboxRoot));
+                        editor.aiSourceRequestedGeneration =
+                            chat.completionGeneration;
+                        editor.aiSourceAwaitingReply = true;
+                        const auto started = editor.aiDevelopmentPanel
+                            ? editor.aiDevelopmentPanel->report_model_dispatch(
+                                editor_ai_development_panel::ModelDispatchState::transport_started,
+                                "local stdio MCP",
+                                epochengine::format_text(
+                                    "PID {} | 900s timeout", mcp.bridgeProcessId))
+                            : editor_ai_development_panel::RenderResult{};
+                        push_ai_development_log(
+                            editor, "[local-mcp] " + mcp.status);
+                        if (!started.status.empty())
+                            push_ai_development_log(
+                                editor, "[local-mcp] " + started.status);
                         break;
                     }
                     const auto [queued, waitingForConsent] =
@@ -23225,6 +23565,93 @@ namespace epochengine
                 break;
             }
         };
+
+        auto pump_local_mcp_iteration = [&]()
+        {
+            auto& mcp = editor.aiLocalMcp;
+            if (!mcp.awaitingResponse || !mcp.process.valid())
+                return;
+            platform::child_process::poll();
+            const auto snapshot =
+                platform::child_process::snapshot(mcp.process);
+            if (!snapshot)
+            {
+                mcp.status =
+                    "Local MCP process evidence was lost; the request stopped.";
+                chat.latestRawReply = "EPOCH_LOCAL_MCP_TRANSPORT_FAILED_V1";
+                ++chat.completionGeneration;
+                mcp.awaitingResponse = false;
+                mcp.process = {};
+                chat.append_status(mcp.status);
+                push_ai_development_log(editor, "[local-mcp] " + mcp.status);
+                return;
+            }
+
+            mcp.bridgeProcessId = snapshot->platform_process_id;
+            const std::uint64_t now = editor_steady_tick_ns();
+            mcp.elapsedMs = now >= mcp.startedTickNs
+                ? (now - mcp.startedTickNs) / 1'000'000u : 0u;
+            if (snapshot->active())
+            {
+                mcp.status = epochengine::format_text(
+                    "Local MCP bridge PID {} is running ({} ms / 900000 ms).",
+                    mcp.bridgeProcessId,
+                    mcp.elapsedMs);
+                return;
+            }
+
+            const bool exitedCleanly = snapshot->state
+                    == platform::child_process::ProcessState::exited
+                && snapshot->exit_code_valid && snapshot->exit_code == 0;
+            const auto response = exitedCleanly
+                ? read_local_mcp_text(mcp.responsePath, 512u * 1024u)
+                : std::nullopt;
+            if (const auto thread =
+                    read_local_mcp_text(mcp.threadPath, 4u * 1024u))
+            {
+                mcp.threadId = *thread;
+            }
+
+            if (response)
+            {
+                chat.latestRawReply = *response;
+                mcp.status = epochengine::format_text(
+                    "Local MCP completed in {} ms. The response is queued for "
+                    "the existing source-protocol and sandbox review gates. "
+                    "Receipt: {}",
+                    mcp.elapsedMs,
+                    display_project_path(mcp.receiptPath));
+            }
+            else
+            {
+                chat.latestRawReply = "EPOCH_LOCAL_MCP_TRANSPORT_FAILED_V1";
+                mcp.status = epochengine::format_text(
+                    "Local MCP stopped without a bounded response (state {}, "
+                    "exit {}). Receipt: {} Log: {}",
+                    platform::child_process::process_state_name(snapshot->state),
+                    snapshot->exit_code_valid
+                        ? std::to_string(snapshot->exit_code)
+                        : std::string{"unavailable"},
+                    display_project_path(mcp.receiptPath),
+                    display_project_path(mcp.logPath));
+            }
+            ++chat.completionGeneration;
+            if (chat.completionGeneration <= editor.aiSourceRequestedGeneration)
+                chat.completionGeneration = editor.aiSourceRequestedGeneration + 1u;
+            mcp.awaitingResponse = false;
+            (void)platform::child_process::release(mcp.process);
+            mcp.process = {};
+
+            std::error_code cleanupError{};
+            std::filesystem::remove(mcp.promptPath, cleanupError);
+            cleanupError.clear();
+            std::filesystem::remove(mcp.responsePath, cleanupError);
+            cleanupError.clear();
+            std::filesystem::remove(mcp.threadPath, cleanupError);
+            chat.append_status(mcp.status);
+            push_ai_development_log(editor, "[local-mcp] " + mcp.status);
+        };
+        pump_local_mcp_iteration();
 
         auto pump_ai_source_workspace = [&]()
         {
@@ -29352,7 +29779,18 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
-                    .external_mcp_available = false,
+                    .external_mcp_available = local_mcp_connector_available(),
+                    .external_mcp_status = editor.aiLocalMcp.status,
+                    .external_mcp_process_id =
+                        editor.aiLocalMcp.bridgeProcessId,
+                    .external_mcp_elapsed_ms = editor.aiLocalMcp.elapsedMs,
+                    .external_mcp_receipt_path =
+                        editor.aiLocalMcp.receiptPath.empty()
+                            ? std::string{}
+                            : display_project_path(
+                                editor.aiLocalMcp.receiptPath),
+                    .external_mcp_running =
+                        editor.aiLocalMcp.awaitingResponse,
                     .tool_source_ready =
                         !inspectorActiveScriptSource.empty(),
                     .execution_pending =
@@ -34438,7 +34876,18 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
-                    .external_mcp_available = false,
+                    .external_mcp_available = local_mcp_connector_available(),
+                    .external_mcp_status = editor.aiLocalMcp.status,
+                    .external_mcp_process_id =
+                        editor.aiLocalMcp.bridgeProcessId,
+                    .external_mcp_elapsed_ms = editor.aiLocalMcp.elapsedMs,
+                    .external_mcp_receipt_path =
+                        editor.aiLocalMcp.receiptPath.empty()
+                            ? std::string{}
+                            : display_project_path(
+                                editor.aiLocalMcp.receiptPath),
+                    .external_mcp_running =
+                        editor.aiLocalMcp.awaitingResponse,
                     .execution_pending =
                         editor.aiContinuousBuildPending.has_value()
                         || editor.aiSourceWorkspacePending.has_value()
@@ -34499,7 +34948,18 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
-                    .external_mcp_available = false,
+                    .external_mcp_available = local_mcp_connector_available(),
+                    .external_mcp_status = editor.aiLocalMcp.status,
+                    .external_mcp_process_id =
+                        editor.aiLocalMcp.bridgeProcessId,
+                    .external_mcp_elapsed_ms = editor.aiLocalMcp.elapsedMs,
+                    .external_mcp_receipt_path =
+                        editor.aiLocalMcp.receiptPath.empty()
+                            ? std::string{}
+                            : display_project_path(
+                                editor.aiLocalMcp.receiptPath),
+                    .external_mcp_running =
+                        editor.aiLocalMcp.awaitingResponse,
                     .execution_pending =
                         editor.aiContinuousBuildPending.has_value()
                         || editor.aiSourceWorkspacePending.has_value()

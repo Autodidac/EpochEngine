@@ -1,3 +1,26 @@
+- The current v0.89.35 local-MCP rig replaces the editor's hardcoded
+  `External MCP` rejection with an explicit Windows stdio bridge to the
+  installed Codex MCP server. Epoch writes the bounded request only beneath the
+  materialized `cache/ai/iterations/session_*` sandbox, launches a hidden
+  supervised bridge PID, shows PID/elapsed time/status/receipt in AI Controls,
+  and exposes `Stop MCP Request`. The bridge starts `codex mcp-server` without
+  a shell, verifies `initialize` and `tools/list`, invokes `codex` with
+  `approval-policy=never` and `sandbox=workspace-write` rooted at that
+  disposable session, and returns only the model text to the existing exact
+  plan/proposal parser. A Codex MCP thread is server-process-local, so every
+  iteration is a fresh server request containing the engine-owned persisted
+  plan and selection checkpoints; the UI does not pretend a dead server can
+  resume a thread ID. Receipts bind bridge/server PID, elapsed time, executable
+  hash, and exact prompt/response hashes. Transient prompt/response bytes are
+  removed after host ingestion; live source, projects, Git, Site, release,
+  listeners, and promotion remain outside the rig. Windows Debug/Release builds
+  and engine-contract self-tests pass, managed-Clang 22.1.8 Release links, and
+  the packaged Release bridge completed an exact-response MCP smoke in 4.6
+  seconds with independently matching prompt/response hashes and no surviving
+  worker process. The currently installed Codex still exposes `mcp-server` but
+  labels it deprecated; the transport is isolated in one packaged bridge asset
+  so a documented stable successor can replace it without changing Candidate
+  Lab state, source isolation, or the editor host contract.
 - The current v0.89.35 candidate-lab pass turns the verified disposable
   workspace into a succession loop rather than a promotion gate. One reviewed
   objective and source scope start a mission plan; returned plan/proposal,

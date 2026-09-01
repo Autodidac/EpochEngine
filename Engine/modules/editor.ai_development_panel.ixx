@@ -38,6 +38,7 @@ export namespace epochengine::editor_ai_development_panel
         test_source_full_validation_workspace,
         launch_source_candidate_preview,
         request_model_source_proposal,
+        cancel_model_source_request,
         execute_tool_harness
     };
 
@@ -127,6 +128,11 @@ export namespace epochengine::editor_ai_development_panel
         std::string selected_endpoint{};
         std::string selected_transport{};
         bool external_mcp_available{};
+        std::string external_mcp_status{};
+        std::uint64_t external_mcp_process_id{};
+        std::uint64_t external_mcp_elapsed_ms{};
+        std::string external_mcp_receipt_path{};
+        bool external_mcp_running{};
         bool tool_source_ready{};
         bool execution_pending{};
     };
@@ -230,6 +236,7 @@ export namespace epochengine::editor_ai_development_panel
             const Input& input);
         [[nodiscard]] RenderResult discard_verified_source_candidate();
         [[nodiscard]] RenderResult cancel_staged_proposal();
+        [[nodiscard]] RenderResult cancel_active_campaign(std::string reason);
         [[nodiscard]] bool has_pending_source_context() const;
         [[nodiscard]] bool has_staged_proposal() const;
         [[nodiscard]] bool has_source_full_validation_candidate() const;

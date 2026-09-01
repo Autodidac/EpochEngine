@@ -78,10 +78,14 @@ repair over the published v0.89.34 foundation:
 - renderer pacing uses the centralized 120-Hz-capable policy from `1417a8e4`.
   SDL capture/loading/first-present is committed at `c937fa2f`; minimize/restore
   remains a separate pending tranche;
-- the MCP supervisor adapter is implemented but deliberately unregistered,
-  unbuilt, and unpublished pending approval. The source-iteration worker is
-  still in audit/in-progress, is blocked on missing prerequisites, and has no
-  checkpoint; the `disposable_sandbox` design remains pending;
+- the MCP supervisor adapter remains deliberately unregistered, unbuilt, and
+  unpublished. Separately, Candidate Lab now owns an explicit local MCP client
+  rig: the Windows editor supervises a packaged stdio bridge to the installed
+  Codex MCP server, restricts it to the materialized disposable session, shows
+  PID/timing/receipt/stop controls, and feeds replies through the same typed
+  plan/proposal/sandbox validation path. Iteration continuity comes from the
+  engine-owned saved plan and selection checkpoints supplied to each fresh MCP
+  server request, not from a stale process-local model thread;
 - ParticleEngine PR-009 is a local-only, package-gated dependency candidate at
   `98d10d41c3e2d534e7023014a79333ba121b362b`; it is not an EpochEngine
   mainline or public-release claim.

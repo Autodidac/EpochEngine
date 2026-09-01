@@ -248,6 +248,10 @@
     </ItemGroup>
     <Copy SourceFiles="@(EpochReleaseVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochReleaseVcpkgRuntimeDlls)'!=''" />
   </Target>
+  <Target Name="EpochCopyLocalMcpBridge" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
+    <MakeDir Directories="$(OutDir)assets\ai" />
+    <Copy SourceFiles="$(SolutionDir)Engine\assets\ai\epoch.local_mcp_iteration.ps1" DestinationFolder="$(OutDir)assets\ai" SkipUnchangedFiles="true" />
+  </Target>
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

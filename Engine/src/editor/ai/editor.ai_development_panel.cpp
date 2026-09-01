@@ -407,8 +407,16 @@ namespace epochengine::editor_ai_development_panel
                     {"project", "workspace", "isolation", "source"},
                     {"engine/src/project/", "engine/src/editor/ai/", "engine/modules/project"});
             }
-            if (contains_any_phrase(lowered, {
-                    "renderer", "rendering", "viewport", "opengl", "raylib",
+            const bool openGlObjective = contains_any_phrase(lowered, {
+                "opengl", "glsl", "framebuffer", "fbo", "gl texture"});
+            if (openGlObjective)
+            {
+                add("OpenGL Renderer",
+                    {"opengl", "glsl", "shader", "texture", "framebuffer", "context"},
+                    {"engine/src/renderers/opengl/", "engine/modules/opengl."});
+            }
+            if (!openGlObjective && contains_any_phrase(lowered, {
+                    "renderer", "rendering", "viewport", "raylib",
                     "vulkan", "camera"}))
             {
                 add("Renderer & Viewport",
@@ -416,6 +424,31 @@ namespace epochengine::editor_ai_development_panel
                     {"engine/src/renderers/", "engine/src/editor/", "engine/modules/render."});
             }
             return systems;
+        }
+
+        [[nodiscard]] bool plan_names_reviewed_source(
+            std::string_view plan,
+            const std::vector<std::string>& reviewedPaths)
+        {
+            if (plan.empty() || reviewedPaths.empty())
+                return false;
+
+            const std::string loweredPlan = lower_ascii(plan);
+            return std::ranges::any_of(
+                reviewedPaths,
+                [&loweredPlan](const std::string& reviewedPath)
+                {
+                    std::string normalized = lower_ascii(reviewedPath);
+                    std::ranges::replace(normalized, '\\', '/');
+                    const std::filesystem::path path{normalized};
+                    const std::string filename = path.filename().string();
+                    const std::string stem = path.stem().string();
+                    return loweredPlan.find(normalized) != std::string::npos
+                        || (!filename.empty()
+                            && loweredPlan.find(filename) != std::string::npos)
+                        || (stem.size() >= 8u
+                            && loweredPlan.find(stem) != std::string::npos);
+                });
         }
 
         [[nodiscard]] std::optional<std::string>
@@ -465,31 +498,6 @@ namespace epochengine::editor_ai_development_panel
                 return std::nullopt;
             }
             return target;
-        }
-
-        [[nodiscard]] bool bounded_diagnostic_objective(
-            std::string_view objective)
-        {
-            static constexpr std::array<std::string_view, 8> diagnostics{
-                "bug", "bugs", "crash", "defect", "failure", "issue",
-                "regression", "wrong"};
-            const std::string lowered = lower_ascii(objective);
-            const std::vector<std::string> terms =
-                source_context_terms(objective);
-            const bool requestsDiagnosis = std::ranges::any_of(
-                diagnostics,
-                [&lowered](std::string_view term)
-                {
-                    return lowered.find(term) != std::string::npos;
-                });
-            const bool namesOwner = std::ranges::any_of(
-                terms,
-                [](const std::string& term)
-                {
-                    return std::ranges::find(diagnostics, term)
-                        == diagnostics.end();
-                });
-            return requestsDiagnosis && namesOwner;
         }
 
         [[nodiscard]] bool ignored_source_context_component(
@@ -1085,6 +1093,7 @@ namespace epochengine::editor_ai_development_panel
     {
         static constexpr std::size_t maximum_source_repair_attempts = 3u;
         static constexpr std::size_t maximum_model_reply_corrections = 2u;
+        static constexpr std::size_t maximum_plan_reply_corrections = 1u;
 
         std::unique_ptr<editor_ai_development::DevelopmentController> controller{};
         std::unique_ptr<editor_ai_development::DevelopmentController> promotion_controller{};
@@ -1179,7 +1188,7 @@ namespace epochengine::editor_ai_development_panel
         std::uint64_t source_workspace_total_bytes{};
         std::size_t source_repair_attempts{};
         std::size_t model_reply_corrections{};
-        bool source_diagnostic_recheck_queued{};
+        std::size_t plan_reply_corrections{};
         std::string model_reply_correction_diagnostic{};
         std::string last_implementation_evidence_digest{};
         std::string status_message{
@@ -1272,7 +1281,7 @@ namespace epochengine::editor_ai_development_panel
             source_repair_attempts = 0u;
             source_context_evidence_objective.clear();
             model_reply_corrections = 0u;
-            source_diagnostic_recheck_queued = false;
+            plan_reply_corrections = 0u;
             model_reply_correction_diagnostic.clear();
             pending_source_context_systems.clear();
             pending_source_context_paths.clear();
@@ -2020,6 +2029,7 @@ namespace epochengine::editor_ai_development_panel
                 : ModelTransport::local_inference;
             output.model_prompt = campaign_model_prompt(
                 ai::self_iteration_orchestrator::OperationKind::model_plan);
+            output.workspace_root = workspace_root;
             status_message =
                 "Bounded plan request approved for host dispatch. No model transport has started yet.";
             output.campaign_evidence.push_back(status_message);
@@ -2065,6 +2075,7 @@ namespace epochengine::editor_ai_development_panel
                 : ModelTransport::local_inference;
             output.model_prompt = campaign_model_prompt(
                 ai::self_iteration_orchestrator::OperationKind::model_proposal);
+            output.workspace_root = workspace_root;
             campaign_plan_review.clear();
             campaign_plan_review_digest.clear();
             status_message =
@@ -2243,7 +2254,16 @@ namespace epochengine::editor_ai_development_panel
             {
                 std::string prompt = "EPOCH_SELF_ITERATION_PLAN_V2\nOBJECTIVE\n"
                     + development_objective
-                    + "\nCURATED_SCOPE_SHA256\n" + campaign_scope_digest;
+                    + "\nCURATED_SCOPE_SHA256\n" + campaign_scope_digest
+                    + "\nREVIEWED_SOURCE_PATHS\n";
+                for (const auto& path : campaign_reviewed_paths)
+                    prompt += path + "\n";
+                prompt +=
+                    "END_REVIEWED_SOURCE_PATHS\n"
+                    "Ground every implementation step in the reviewed source. "
+                    "Name at least one exact reviewed path or filename. Do not "
+                    "invent runtime symptoms, logs, shaders, APIs, or tests that "
+                    "are not established by the objective and reviewed files.";
                 if (sandbox_lab_enabled && !sandbox_lab_plan.empty())
                 {
                     prompt += "\nPERSISTED_SANDBOX_PLAN\n"
@@ -2261,6 +2281,15 @@ namespace epochengine::editor_ai_development_panel
                 }
                 prompt +=
                     " Do not claim edits, builds, approval, Git, release, or live-source authority.";
+                if (plan_reply_corrections > 0u)
+                {
+                    prompt +=
+                        "\nEPOCH_PLAN_GROUNDING_CORRECTION_V1\n"
+                        "The previous plan was rejected because it named no "
+                        "reviewed source file. Return a replacement plan grounded "
+                        "in the exact path list above.\n"
+                        "END_EPOCH_PLAN_GROUNDING_CORRECTION_V1";
+                }
                 return prompt;
             }
             return "EPOCH_SELF_ITERATION_PROPOSAL_V1\nOBJECTIVE\n"
@@ -2835,12 +2864,20 @@ namespace epochengine::editor_ai_development_panel
             gui::wrapped_label(presentation.next_action, width);
             gui::property_row(
                 "Model",
-                input.selected_model.empty()
+                campaign_provider
+                        == ai::project_profile::Provider::external_mcp
+                    ? std::string{"Codex local MCP"}
+                    : input.selected_model.empty()
                     ? std::string{"Choose and confirm a model"}
                     : input.selected_model);
             gui::property_row(
                 "Connection",
-                input.selected_model.empty()
+                campaign_provider
+                        == ai::project_profile::Provider::external_mcp
+                    ? input.external_mcp_available
+                        ? std::string{"Ready - local stdio MCP"}
+                        : std::string{"Local MCP bridge unavailable"}
+                    : input.selected_model.empty()
                     ? std::string{"Not ready"}
                     : input.selected_transport.empty()
                         ? std::string{"Transport not configured"}
@@ -2882,6 +2919,30 @@ namespace epochengine::editor_ai_development_panel
                     output.campaign_evidence.push_back(status_message);
                 }
             }
+            if (campaign_provider
+                == ai::project_profile::Provider::external_mcp)
+            {
+                gui::wrapped_label(
+                    input.external_mcp_status.empty()
+                        ? std::string{"Local MCP is idle."}
+                        : input.external_mcp_status,
+                    width);
+                gui::property_row(
+                    "MCP worker",
+                    input.external_mcp_running
+                        ? epochengine::format_text(
+                            "PID {} | {} ms",
+                            input.external_mcp_process_id,
+                            input.external_mcp_elapsed_ms)
+                        : std::string{"Idle"});
+                if (input.external_mcp_running
+                    && gui::button("Stop MCP Request", {width, 29.0f}))
+                {
+                    output.action = HostAction::cancel_model_source_request;
+                    output.status =
+                        "Cancellation requested for the visible local MCP worker.";
+                }
+            }
             if (advanced_controls)
             {
                 gui::property_row(
@@ -2901,6 +2962,15 @@ namespace epochengine::editor_ai_development_panel
                     input.external_mcp_available
                         ? std::string{"Connector available"}
                         : std::string{"No connector registered"});
+                if (campaign_provider
+                    == ai::project_profile::Provider::external_mcp)
+                {
+                    if (!input.external_mcp_receipt_path.empty())
+                    {
+                        gui::property_row(
+                            "Receipt", input.external_mcp_receipt_path);
+                    }
+                }
             }
 
             const bool canStart = (!campaign_orchestrator || terminal)
@@ -3346,6 +3416,7 @@ namespace epochengine::editor_ai_development_panel
                         ? ModelTransport::external_mcp
                         : ModelTransport::local_inference;
                     output.model_prompt = campaign_model_prompt(kind);
+                    output.workspace_root = workspace_root;
                 }
             };
 
@@ -3878,24 +3949,10 @@ namespace epochengine::editor_ai_development_panel
                         "in the shared source evidence: " + *target
                         + ". Re-evaluate that exact block.");
                 }
-                if (!source_diagnostic_recheck_queued
-                    && bounded_diagnostic_objective(development_objective))
-                {
-                    source_diagnostic_recheck_queued = true;
-                    return queue_model_reply_correction(
-                        "The operator requested one source-proven defect from a "
-                        "described behavior. Re-inspect the supplied exact source "
-                        "and select one concrete bug only when its cause, the "
-                        "violated nearby invariant, and a bounded repair are "
-                        "all proven by those bytes. A pre-named symbol is not "
-                        "required for this diagnostic objective; return the "
-                        "insufficient-evidence marker again if no such defect "
-                        "is present.");
-                }
                 status_message =
-                    !source_diagnostic_recheck_queued
-                    ? "Qwen could not justify a bounded source step from the supplied evidence. No source was staged; refine the objective or request again after architecture evidence improves."
-                    : "Qwen could not justify a source change after one diagnostic recheck. No source was staged; name the Engine area and the exact change to make before requesting again.";
+                    "The model found no source-proven change in the reviewed "
+                    "files. No source was staged. Choose a more specific Engine "
+                    "area or review a different exact source scope.";
                 output.status = status_message;
                 return output;
             }
@@ -3959,7 +4016,6 @@ namespace epochengine::editor_ai_development_panel
                 source_test_verified = false;
                 source_release_build_pending = false;
                 model_reply_corrections = 0u;
-                source_diagnostic_recheck_queued = false;
                 model_reply_correction_diagnostic.clear();
                 source_release_test_pending = false;
                 source_release_build_verified = false;
@@ -4080,6 +4136,17 @@ namespace epochengine::editor_ai_development_panel
         if (boundedPlan.size() <= 4u * 1024u
             || boundedPlan.size() >= longPlan.size()
             || boundedPlan.find("preview truncated") == std::string::npos)
+        {
+            return false;
+        }
+        const std::vector<std::string> reviewedPlanPaths{
+            "Engine/src/renderers/opengl/opengl.context_init.cpp"};
+        if (!plan_names_reviewed_source(
+                "1. Repair opengl.context_init.cpp and validate the exact change.",
+                reviewedPlanPaths)
+            || plan_names_reviewed_source(
+                "1. Inspect logs. 2. Reproduce the issue. 3. Fix it.",
+                reviewedPlanPaths))
         {
             return false;
         }
@@ -4266,8 +4333,37 @@ namespace epochengine::editor_ai_development_panel
                     "Engine/src/physics/physics.manager_contract.cpp",
                     "namespace epochengine::physics { int contract = 1; }\n")
                 || !writeFixtureSource(
+                    "Engine/src/renderers/opengl/opengl.context_init.cpp",
+                    "namespace epochengine::opengl { int context = 1; }\n")
+                || !writeFixtureSource(
+                    "Engine/src/renderers/opengl/opengl.shader_pipeline.cpp",
+                    "namespace epochengine::opengl { int shader = 1; }\n")
+                || !writeFixtureSource(
+                    "Engine/src/editor/editor.render_noise.cpp",
+                    "namespace epochengine::editor { int render_noise = 1; }\n")
+                || !writeFixtureSource(
                     "Engine/src/editor/editor.secret_canary.cpp",
                     "constexpr auto EPOCH_UNREVIEWED_CANARY = \"must-not-leak\";\n"))
+            {
+                return false;
+            }
+            const HostSourceContextSelection openGlSelection =
+                curate_source_context(
+                    fixture.path.generic_string(),
+                    Domain::engine_source,
+                    "find and fix bugs in opengl");
+            if (!openGlSelection.accepted
+                || openGlSelection.paths.empty()
+                || std::ranges::find(
+                    openGlSelection.systems,
+                    "OpenGL Renderer") == openGlSelection.systems.end()
+                || std::ranges::any_of(
+                    openGlSelection.paths,
+                    [](const std::string& path)
+                    {
+                        return path.find("Engine/src/renderers/opengl/")
+                            == std::string::npos;
+                    }))
             {
                 return false;
             }
@@ -4552,8 +4648,9 @@ namespace epochengine::editor_ai_development_panel
 
             Input planResponseInput = localOpenInput;
             planResponseInput.latest_raw_model_reply =
-                "Inspect the exact reviewed source and propose one bounded "
-                "editor repair with build-safe validation.";
+                "1. Inspect Engine/src/editor/editor.reviewed_contract.cpp. "
+                "2. Propose one bounded edit in editor.reviewed_contract.cpp. "
+                "3. Run build-safe validation for that exact change.";
             const RenderResult planReviewed =
                 localOpen.stage_latest_model_proposal(planResponseInput);
             if (planReviewed.action != HostAction::none
@@ -5167,23 +5264,14 @@ namespace epochengine::editor_ai_development_panel
                 diagnosticInsufficientState.development_objective,
             .architecture_evidence =
                 diagnosticInsufficientState.source_context_evidence};
-        const RenderResult diagnosticRecheck =
+        const RenderResult diagnosticInsufficientResult =
             diagnosticInsufficientState.stage_source_reply(
                 diagnosticInsufficientInput,
                 "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1",
                 logical_time_now());
-        const RenderResult diagnosticExhausted =
-            diagnosticInsufficientState.stage_source_reply(
-                diagnosticInsufficientInput,
-                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1",
-                logical_time_now());
-        if (diagnosticRecheck.action
-                != HostAction::request_model_source_proposal
-            || diagnosticRecheck.model_prompt.find(
-                "A pre-named symbol is not required") == std::string::npos
-            || diagnosticExhausted.action != HostAction::none
-            || diagnosticExhausted.status.find(
-                "after one diagnostic recheck") == std::string::npos)
+        if (diagnosticInsufficientResult.action != HostAction::none
+            || diagnosticInsufficientResult.status.find(
+                "no source-proven change") == std::string::npos)
         {
             return false;
         }
@@ -5881,6 +5969,55 @@ namespace epochengine::editor_ai_development_panel
             const std::uint64_t now = logical_time_now().value;
             if (pending.kind() == OperationKind::model_plan)
             {
+                if (!plan_names_reviewed_source(
+                        input.latest_raw_model_reply,
+                        state.campaign_reviewed_paths))
+                {
+                    if (state.plan_reply_corrections
+                        < Implementation::maximum_plan_reply_corrections)
+                    {
+                        ++state.plan_reply_corrections;
+                        output.action = HostAction::request_model_source_proposal;
+                        output.model_transport = state.campaign_provider
+                                == ai::project_profile::Provider::external_mcp
+                            ? ModelTransport::external_mcp
+                            : ModelTransport::local_inference;
+                        output.model_prompt = state.campaign_model_prompt(
+                            OperationKind::model_plan);
+                        output.workspace_root = state.workspace_root;
+                        state.status_message =
+                            "The returned plan named no reviewed source file. "
+                            "Epoch rejected it and requested one grounded replacement; "
+                            "nothing was staged.";
+                        output.status = state.status_message;
+                        return output;
+                    }
+
+                    const auto campaignSnapshot =
+                        state.campaign_orchestrator->snapshot();
+                    state.capture_campaign_result(
+                        output,
+                        state.campaign_orchestrator->cancel(
+                            state.campaign_action(
+                                campaignSnapshot,
+                                "ungrounded-plan",
+                                now),
+                            "The model plan remained ungrounded after one bounded correction."));
+                    state.campaign_pending_operation.reset();
+                    state.campaign_pending_response.clear();
+                    state.campaign_pending_response_digest.clear();
+                    state.campaign_plan_review.clear();
+                    state.campaign_plan_review_digest.clear();
+                    state.sandbox_lab_plan.clear();
+                    state.sandbox_lab_enabled = false;
+                    state.status_message =
+                        "The model returned two plans without naming any reviewed "
+                        "source file. The sandbox session stopped with no changes; "
+                        "refine the objective or choose a different source scope.";
+                    output.status = state.status_message;
+                    return output;
+                }
+                state.plan_reply_corrections = 0u;
                 if (state.campaign_scheduler && state.campaign_queue
                     && state.campaign_bridge && state.campaign_supervisor
                     && state.campaign_scheduler->snapshot().phase
@@ -5982,6 +6119,40 @@ namespace epochengine::editor_ai_development_panel
                 if (controller.snapshot().phase
                     != editor_ai_development::ControllerPhase::proposed)
                 {
+                    if (staged.action
+                        == HostAction::request_model_source_proposal)
+                    {
+                        return staged;
+                    }
+                    const auto campaignSnapshot =
+                        state.campaign_orchestrator->snapshot();
+                    const std::string refusal = staged.status;
+                    state.capture_campaign_result(
+                        staged,
+                        state.campaign_orchestrator->cancel(
+                            state.campaign_action(
+                                campaignSnapshot,
+                                "proposal-unavailable",
+                                now),
+                            "The selected model produced no admissible reviewed-scope source change."));
+                    state.campaign_pending_operation.reset();
+                    state.campaign_pending_response.clear();
+                    state.campaign_pending_response_digest.clear();
+                    state.campaign_plan_review.clear();
+                    state.campaign_plan_review_digest.clear();
+                    state.campaign_reviewed_paths.clear();
+                    state.campaign_reviewed_evidence.clear();
+                    state.campaign_scope_digest.clear();
+                    state.campaign_request_digest.clear();
+                    state.campaign_bundle_summary.clear();
+                    state.campaign_bundle_objective.clear();
+                    state.campaign_bundle_binding_digest.clear();
+                    state.sandbox_lab_plan.clear();
+                    state.sandbox_lab_enabled = false;
+                    state.status_message = refusal
+                        + " The sandbox session is stopped, not waiting. "
+                          "Find Source is available for a revised exact scope.";
+                    staged.status = state.status_message;
                     return staged;
                 }
                 state.capture_campaign_result(
@@ -6176,7 +6347,7 @@ namespace epochengine::editor_ai_development_panel
         state.source_baseline_evidence = loaded.evidence;
         state.source_repair_attempts = 0u;
         state.model_reply_corrections = 0u;
-        state.source_diagnostic_recheck_queued = false;
+        state.plan_reply_corrections = 0u;
         state.model_reply_correction_diagnostic.clear();
         state.source_context_evidence_objective =
             state.development_objective;
@@ -7358,6 +7529,38 @@ namespace epochengine::editor_ai_development_panel
             logical_time_now());
         state.status_message = cancelled.status;
         output.status = state.status_message;
+        return output;
+    }
+
+    RenderResult Panel::cancel_active_campaign(std::string reason)
+    {
+        RenderResult output{};
+        if (!implementation_ || !implementation_->campaign_orchestrator)
+        {
+            output.status = "No self-iteration campaign is active.";
+            return output;
+        }
+        auto& state = *implementation_;
+        const auto snapshot = state.campaign_orchestrator->snapshot();
+        if (reason.empty())
+            reason = "The operator cancelled the active model request.";
+        state.capture_campaign_result(
+            output,
+            state.campaign_orchestrator->cancel(
+                state.campaign_action(
+                    snapshot,
+                    "transport-cancel",
+                    logical_time_now().value),
+                reason));
+        state.campaign_pending_operation.reset();
+        state.campaign_pending_response.clear();
+        state.campaign_pending_response_digest.clear();
+        state.sandbox_lab_enabled = false;
+        state.status_message =
+            "The local MCP request and self-iteration session were stopped. "
+            "Live source and projects were not changed.";
+        output.status = state.status_message;
+        output.campaign_evidence.push_back(state.status_message);
         return output;
     }
 

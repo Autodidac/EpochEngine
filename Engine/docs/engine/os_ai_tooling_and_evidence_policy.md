@@ -127,6 +127,27 @@ or server. Timeouts, stderr evidence, frame/request budgets, graceful stop,
 force-stop, and cancellation remain host-owned. Its contracts use fake ports
 and launch no process.
 
+Candidate Lab also owns the opposite direction: an explicit local MCP client
+rig for asking an operator-selected coding agent to produce the already-defined
+bounded plan/proposal packets. On Windows the packaged
+`assets/ai/epoch.local_mcp_iteration.ps1` bridge is launched directly as a
+supervised hidden child only after `External MCP` is selected and a disposable
+`cache/ai/iterations/session_*` workspace exists. The bridge launches the
+installed `codex mcp-server` with redirected standard streams and no shell,
+performs `initialize` and `tools/list`, and calls `codex` with approvals denied
+and workspace-write rooted at that disposable session. AI Controls displays the
+bridge PID, elapsed time, receipt, and a real stop action.
+
+Codex MCP reply-thread identity is scoped to one MCP server process. The bridge
+therefore does not claim cross-process `codex-reply` continuity. The engine
+persists the reviewed mission plan and chosen-candidate checkpoints and includes
+them in each next fresh request. The bridge receipt records bridge/server PIDs,
+elapsed time, exact executable SHA-256, and exact prompt/response SHA-256; the
+editor deletes transient prompt/response files after ingesting the response.
+No MCP response bypasses the exact protocol parser, reviewed-source bounds,
+disposable transaction, trusted build actors, candidate comparison, or later
+human-owned promotion boundary.
+
 `ai.iteration_session` is the non-GUI coordinator for one bounded source
 candidate. The trusted host supplies the selected model, verified authority,
 objective, and files; the coordinator rehashes every curated current file before
