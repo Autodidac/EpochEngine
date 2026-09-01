@@ -337,5 +337,105 @@ export namespace epochengine::ai::iteration
         bool repair_cycle_{};
     };
 
+    enum class CandidateSlot : std::uint8_t
+    {
+        candidate_a,
+        candidate_b
+    };
+
+    enum class CandidateChoice : std::uint8_t
+    {
+        candidate_a,
+        candidate_b,
+        reject_both
+    };
+
+    enum class CandidateLineageCode : std::uint8_t
+    {
+        none,
+        invalid_state,
+        invalid_candidate,
+        stale_generation,
+        parent_mismatch,
+        duplicate_candidate,
+        comparison_incomplete
+    };
+
+    struct SandboxCandidateEvidence final
+    {
+        CandidateSlot slot{CandidateSlot::candidate_a};
+        std::uint64_t generation{};
+        EvidenceDigest parent_source_digest{};
+        EvidenceDigest source_tree_digest{};
+        EvidenceDigest executable_digest{};
+        EvidenceDigest validation_digest{};
+        EvidenceDigest capture_digest{};
+        std::string sandbox_identity{};
+        std::uint64_t platform_process_id{};
+        std::uint64_t platform_window_id{};
+    };
+
+    struct CandidateSelectionEvidence final
+    {
+        std::uint64_t generation{};
+        CandidateChoice choice{CandidateChoice::reject_both};
+        EvidenceDigest parent_source_digest{};
+        EvidenceDigest selected_source_digest{};
+        EvidenceDigest operator_review_digest{};
+    };
+
+    struct CandidateLineageResult final
+    {
+        CandidateLineageCode code{CandidateLineageCode::none};
+        std::string status{};
+        std::vector<std::uint64_t> retire_process_ids{};
+
+        [[nodiscard]] explicit operator bool() const noexcept
+        {
+            return code == CandidateLineageCode::none;
+        }
+    };
+
+    struct CandidateLineageSnapshot final
+    {
+        std::uint64_t generation{};
+        EvidenceDigest head_source_digest{};
+        std::string head_sandbox_identity{};
+        std::vector<SandboxCandidateEvidence> candidates{};
+        std::size_t selection_count{};
+        bool comparison_ready{};
+    };
+
+    class SandboxCandidateLineage final
+    {
+    public:
+        [[nodiscard]] CandidateLineageResult configure(
+            EvidenceDigest initial_source_digest,
+            std::string initial_sandbox_identity);
+        [[nodiscard]] CandidateLineageResult admit(
+            SandboxCandidateEvidence candidate);
+        [[nodiscard]] CandidateLineageResult select(
+            CandidateChoice choice,
+            EvidenceDigest operator_review_digest);
+        [[nodiscard]] CandidateLineageSnapshot snapshot() const;
+        [[nodiscard]] const std::vector<CandidateSelectionEvidence>&
+            selections() const noexcept;
+
+    private:
+        [[nodiscard]] CandidateLineageResult remember(
+            CandidateLineageCode code,
+            std::string status);
+
+        std::uint64_t generation_{};
+        EvidenceDigest head_source_digest_{};
+        std::string head_sandbox_identity_{};
+        std::vector<SandboxCandidateEvidence> candidates_{};
+        std::vector<CandidateSelectionEvidence> selections_{};
+        CandidateLineageCode last_code_{CandidateLineageCode::invalid_state};
+        std::string status_{
+            "Configure a sandbox candidate lineage before admitting previews."};
+        bool configured_{};
+    };
+
     [[nodiscard]] bool run_contract();
 }

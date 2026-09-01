@@ -22553,7 +22553,6 @@ namespace epochengine
             }
             for (const auto& evidence : action.campaign_evidence)
             {
-                chat.append_status(evidence);
                 push_ai_development_log(editor, "[self-iteration] " + evidence);
             }
             if (action.reveal_source_workspace
@@ -23079,7 +23078,6 @@ namespace epochengine
                     std::move(status),
                     fileCount,
                     totalBytes);
-            chat.append_status(completed.status);
             push_ai_development_log(editor, "[ai] " + completed.status);
             dispatch_ai_development_action(completed);
         };
@@ -23150,7 +23148,6 @@ namespace epochengine
                         succeeded,
                         std::move(status));
             }();
-            chat.append_status(completed.status);
             push_ai_development_log(editor, "[ai] " + completed.status);
             dispatch_ai_development_action(completed);
         };
@@ -23225,7 +23222,6 @@ namespace epochengine
                         succeeded,
                         std::move(status));
             }();
-            chat.append_status(completed.status);
             push_ai_development_log(editor, "[ai] " + completed.status);
             dispatch_ai_development_action(completed);
         };
@@ -32468,7 +32464,7 @@ namespace epochengine
                 {
                     gui::wrapped_label(
                         "Engine self-iteration is isolated from the active project. "
-                        "Use AI Controls > Engine Development to request and review "
+                        "Use AI Controls > Engine Self-Coding to request and review "
                         "one bounded source iteration. Shared files open here; "
                         "project scripts and project build output remain unchanged.",
                         centerWidth);
@@ -32484,7 +32480,11 @@ namespace epochengine
                         112.0f);
                     if (!editor.aiDevelopmentLines.empty())
                     {
-                        gui::label("AI Development Output");
+                        gui::label("Detailed Session Activity");
+                        gui::wrapped_label(
+                            "Local workflow receipts and validation details stay here; "
+                            "AI Chat is reserved for project-assistant conversation and model replies.",
+                            centerWidth);
                         (void)gui::scroll_text_panel(
                             gui::ScrollTextPanelOptions{
                                 .id = "ai-development-output",
@@ -33640,8 +33640,8 @@ namespace epochengine
         };
         const std::array goalInactiveActions{
             gui::ConsoleWindowActionSpec{
-                .label = "New Goal",
-                .width = 108.0f,
+                .label = "New Project Goal",
+                .width = 148.0f,
                 .activate_on_press = true}
         };
         const std::array followActions{
@@ -33709,11 +33709,13 @@ namespace epochengine
             .send_button_width = 88.0f,
             .send_button_label = chat.pending ? "Send > (busy)" : "Send >",
             .task_label = editor.aiGoalEditing
-                ? "Edit goal"
-                : editor.aiGoalRunning ? "Goal (running)" : "Goal (paused)",
+                ? "Edit project-assistant goal"
+                : editor.aiGoalRunning
+                    ? "Project Assistant Goal (running)"
+                    : "Project Assistant Goal (paused)",
             .task_value = editor.aiGoalActive
                 ? std::string_view{editor.aiGoal}
-                : std::string_view{"No active goal"},
+                : std::string_view{"No project-assistant goal"},
             .task_edit_buffer = editor.aiGoalEditing ? &editor.aiGoalDraft : nullptr,
             .task_editing = editor.aiGoalEditing,
             .task_actions = taskActions,

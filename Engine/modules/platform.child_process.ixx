@@ -122,6 +122,7 @@ export namespace epochengine::platform::child_process
         ProcessHandle handle{};
         ProcessState state{ProcessState::idle};
         std::uint64_t platform_process_id{};
+        std::uint64_t platform_window_id{};
         std::filesystem::path executable{};
         std::string correlation_key{};
         std::string exclusive_group{};

@@ -50,7 +50,8 @@ int main(int argc, char** argv)
     const auto running = child_process::snapshot(launched.handle);
     if (!running || !running->active()
         || running->correlation_key != first.correlation_key
-        || running->platform_process_id == 0u)
+        || running->platform_process_id == 0u
+        || running->platform_window_id != 0u)
     {
         return 4;
     }

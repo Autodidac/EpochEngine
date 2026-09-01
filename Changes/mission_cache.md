@@ -1064,6 +1064,25 @@ release history belong in the changelog/archive, not architecture docs.
   ambiguous text still fails closed. The live Qwen3.8 acceptance run reached a
   staged sandbox proposal while live source remained read-only.
 
+- Engine self-coding objectives must name an observable failure and expected
+  result, not generic activity such as `find and fix files`. Content-free
+  objectives stop before source-path selection, sandbox copying, or transport.
+  Engine-campaign receipts belong in the dedicated session-activity surface;
+  project AI Chat retains project-assistant conversation/model replies and names
+  its persistent goal explicitly so it cannot be mistaken for the engine-coding
+  objective. High-zoom/narrow workflow rows show only state-relevant responsive
+  actions.
+- Candidate visual comparison reuses Epoch's existing child-process and
+  multicontext ownership. Each reviewed sandbox candidate launches as a separate
+  child engine, publishes its PID plus visible native-window identity, and is
+  registered under a bounded `candidate_preview` route. Candidate A and B have
+  distinct sandbox roots, source/binary/evidence digests, process handles, and
+  teardown. The operator may choose A, B, or neither; selection advances only
+  the disposable checkpoint lineage. No preview context can edit live source,
+  promote itself, replace the current executable, create Git/release authority,
+  or trigger an automatic follow-on. Full automatic replacement remains future
+  policy work and is explicitly out of scope.
+
   Direct local source inference uses below-normal process priority, half the
   available logical CPUs for both generation and batch work, and CPU-only model
   layers so the editor GPU remains responsive; ordinary AI chat keeps its

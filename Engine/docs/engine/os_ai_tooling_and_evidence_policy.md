@@ -255,7 +255,11 @@ AI-assisted development follows one fail-closed sequence:
    may use the 184 KiB evidence ceiling while additional related files remain
    under the 128 KiB aggregate budget. This metadata-only curation does not read
    or transmit source bytes, and the shared-context status retains the primary
-   evidence path for operator inspection.
+   evidence path for operator inspection. An objective that describes only
+   generic activity, including `find and fix files`, is not a source scope and
+   stops here with zero selected paths. The correction asks what is visibly
+   wrong and what should happen instead; it does not require an internal
+   subsystem, filename, or symbol.
 2. The host displays the selected model, endpoint, objective, and complete
    curated path list. The model cannot request, discover, invent, or expand paths;
    legacy `EPOCH_SOURCE_CONTEXT_REQUEST_V1` output is rejected. If the host cannot
@@ -314,6 +318,32 @@ automatically promotes sandbox bytes into live source: a verified candidate
 requires distinct `Stage Live Promotion` and `Approve Live Promotion` actions.
 No chat/build/tool result becomes an automatic live-source change or training
 record. No GUI eye-test or responsiveness proof is claimed for this source candidate.
+
+### Sandbox Candidate Preview Context
+
+The visual-comparison milestone reuses the existing child-process supervisor
+and multicontext host. A sandbox-built candidate is a separate child engine
+registered as a custom `candidate_preview` context from its generation-checked
+process handle, PID, and visible native-window identity. The child runs only from
+its candidate sandbox root; the context record also binds source, executable,
+validation, and capture digests. Candidate A and Candidate B never share a
+writable root or process handle.
+
+The comparison surface may show A and B in succession or side by side and offers
+exactly three outcomes: select A, select B, or reject both. Selection records a
+reviewed sandbox checkpoint and stops both preview children. The selected
+candidate becomes the next generation's sandbox head: new A/B worktrees branch
+from those selected sandbox bytes, compile into distinct executables, and return
+as new preview contexts for another explicit comparison. Rejecting both retains
+the previous sandbox head. Selection does not copy bytes to live source, replace
+the running editor, promote a candidate, approve a new model request, or grant
+Git, updater, release, package, network, listener, or server authority. Automated
+live-source replacement is deliberately not part of this milestone.
+
+The platform child-process snapshot exposes both `platform_process_id` and
+`platform_window_id`; hidden/headless children report no visible window. The
+remaining implementation gate is the editor-owned custom-context registry,
+capture lifecycle, A/B evidence UI, and explicit teardown/selection contract.
 
 The visible workflow states its I/O boundary before the first send: reviewed
 UTF-8 C++ excerpts and the objective are the only model input; model output is a

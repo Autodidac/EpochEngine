@@ -225,6 +225,19 @@ namespace epochengine::platform::child_process
             return TRUE;
         }
 
+        [[nodiscard]] std::uint64_t process_window_id(
+            const DWORD processId) noexcept
+        {
+            if (processId == 0u)
+                return 0u;
+            WindowSearch search{.process_id = processId};
+            (void)::EnumWindows(
+                find_process_window,
+                reinterpret_cast<LPARAM>(&search));
+            return static_cast<std::uint64_t>(
+                reinterpret_cast<std::uintptr_t>(search.window));
+        }
+
         [[nodiscard]] FocusCode focus_slot(ProcessSlot& slot) noexcept
         {
             if (!active(slot.state))
@@ -740,10 +753,12 @@ namespace epochengine::platform::child_process
                 .state = slot.state,
 #if defined(_WIN32)
                 .platform_process_id = static_cast<std::uint64_t>(slot.process_id),
+                .platform_window_id = process_window_id(slot.process_id),
 #else
                 .platform_process_id = slot.process_id > 0
                     ? static_cast<std::uint64_t>(slot.process_id)
                     : 0u,
+                .platform_window_id = 0u,
 #endif
                 .executable = slot.executable,
                 .correlation_key = slot.correlation_key,

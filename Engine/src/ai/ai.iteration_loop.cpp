@@ -659,4 +659,173 @@ namespace epochengine::ai::iteration
         if (dispatch_id_ == 0u)
             ++dispatch_id_;
     }
+
+    CandidateLineageResult SandboxCandidateLineage::configure(
+        const EvidenceDigest initialSourceDigest,
+        std::string initialSandboxIdentity)
+    {
+        if (!initialSourceDigest.valid()
+            || !valid_summary(initialSandboxIdentity))
+        {
+            return remember(
+                CandidateLineageCode::invalid_candidate,
+                "A candidate lineage requires a valid source digest and bounded sandbox identity.");
+        }
+        generation_ = 1u;
+        head_source_digest_ = initialSourceDigest;
+        head_sandbox_identity_ = std::move(initialSandboxIdentity);
+        candidates_.clear();
+        selections_.clear();
+        configured_ = true;
+        return remember(
+            CandidateLineageCode::none,
+            "Sandbox lineage configured; live source is not a writable lineage member.");
+    }
+
+    CandidateLineageResult SandboxCandidateLineage::admit(
+        SandboxCandidateEvidence candidate)
+    {
+        if (!configured_)
+        {
+            return remember(
+                CandidateLineageCode::invalid_state,
+                "Configure the sandbox lineage before admitting a preview candidate.");
+        }
+        if (candidate.generation != generation_)
+        {
+            return remember(
+                CandidateLineageCode::stale_generation,
+                "A stale candidate generation cannot enter the current comparison.");
+        }
+        if (candidate.parent_source_digest != head_source_digest_)
+        {
+            return remember(
+                CandidateLineageCode::parent_mismatch,
+                "The candidate was not built from the selected sandbox head.");
+        }
+        if (!candidate.source_tree_digest.valid()
+            || candidate.source_tree_digest == head_source_digest_
+            || !candidate.executable_digest.valid()
+            || !candidate.validation_digest.valid()
+            || !candidate.capture_digest.valid()
+            || !valid_summary(candidate.sandbox_identity)
+            || candidate.sandbox_identity == head_sandbox_identity_
+            || candidate.platform_process_id == 0u
+            || candidate.platform_window_id == 0u)
+        {
+            return remember(
+                CandidateLineageCode::invalid_candidate,
+                "A preview candidate requires distinct sandbox source, executable, validation, capture, PID, and visible-window evidence.");
+        }
+        const bool duplicate = std::ranges::any_of(
+            candidates_,
+            [&candidate](const SandboxCandidateEvidence& existing)
+            {
+                return existing.slot == candidate.slot
+                    || existing.sandbox_identity == candidate.sandbox_identity
+                    || existing.platform_process_id
+                        == candidate.platform_process_id
+                    || existing.platform_window_id
+                        == candidate.platform_window_id;
+            });
+        if (duplicate)
+        {
+            return remember(
+                CandidateLineageCode::duplicate_candidate,
+                "Candidate slots, sandbox roots, processes, and preview windows must be distinct.");
+        }
+        candidates_.push_back(std::move(candidate));
+        return remember(
+            CandidateLineageCode::none,
+            candidates_.size() == 2u
+                ? "Candidate A and B are ready for operator comparison."
+                : "The first candidate preview is ready; admit its peer before selection.");
+    }
+
+    CandidateLineageResult SandboxCandidateLineage::select(
+        const CandidateChoice choice,
+        const EvidenceDigest operatorReviewDigest)
+    {
+        if (!configured_ || candidates_.size() != 2u)
+        {
+            return remember(
+                CandidateLineageCode::comparison_incomplete,
+                "Candidate A and B must both be admitted before choosing a sandbox head.");
+        }
+        if (!operatorReviewDigest.valid())
+        {
+            return remember(
+                CandidateLineageCode::invalid_candidate,
+                "Candidate selection requires a non-zero operator review digest.");
+        }
+
+        const SandboxCandidateEvidence* selected{};
+        if (choice != CandidateChoice::reject_both)
+        {
+            const CandidateSlot slot = choice == CandidateChoice::candidate_a
+                ? CandidateSlot::candidate_a
+                : CandidateSlot::candidate_b;
+            const auto found = std::ranges::find(
+                candidates_, slot, &SandboxCandidateEvidence::slot);
+            if (found == candidates_.end())
+            {
+                return remember(
+                    CandidateLineageCode::comparison_incomplete,
+                    "The selected candidate slot is not available.");
+            }
+            selected = &*found;
+        }
+
+        CandidateLineageResult result{};
+        result.retire_process_ids.reserve(candidates_.size());
+        for (const auto& candidate : candidates_)
+            result.retire_process_ids.push_back(candidate.platform_process_id);
+
+        const EvidenceDigest parentDigest = head_source_digest_;
+        if (selected != nullptr)
+        {
+            head_source_digest_ = selected->source_tree_digest;
+            head_sandbox_identity_ = selected->sandbox_identity;
+        }
+        selections_.push_back(CandidateSelectionEvidence{
+            .generation = generation_,
+            .choice = choice,
+            .parent_source_digest = parentDigest,
+            .selected_source_digest = head_source_digest_,
+            .operator_review_digest = operatorReviewDigest});
+        ++generation_;
+        candidates_.clear();
+        last_code_ = CandidateLineageCode::none;
+        status_ = selected != nullptr
+            ? "The selected candidate is the next sandbox head; both preview children must now retire."
+            : "Both candidates were rejected; the sandbox head is unchanged and both preview children must now retire.";
+        result.status = status_;
+        return result;
+    }
+
+    CandidateLineageSnapshot SandboxCandidateLineage::snapshot() const
+    {
+        return {
+            .generation = generation_,
+            .head_source_digest = head_source_digest_,
+            .head_sandbox_identity = head_sandbox_identity_,
+            .candidates = candidates_,
+            .selection_count = selections_.size(),
+            .comparison_ready = candidates_.size() == 2u};
+    }
+
+    const std::vector<CandidateSelectionEvidence>&
+    SandboxCandidateLineage::selections() const noexcept
+    {
+        return selections_;
+    }
+
+    CandidateLineageResult SandboxCandidateLineage::remember(
+        const CandidateLineageCode code,
+        std::string status)
+    {
+        last_code_ = code;
+        status_ = std::move(status);
+        return {.code = last_code_, .status = status_};
+    }
 }

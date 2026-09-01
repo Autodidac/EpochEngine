@@ -178,10 +178,11 @@ namespace epochengine::editor_ai_development_panel
             std::vector<std::string>& terms,
             std::string term)
         {
-            static constexpr std::array<std::string_view, 44> stopWords{
+            static constexpr std::array<std::string_view, 46> stopWords{
                 "a", "add", "an", "and", "be", "build", "by", "cannot",
                 "change", "code", "confused", "cpp", "create", "currently",
-                "cxx", "does", "doesn", "engine", "feature", "file", "fix",
+                "cxx", "does", "doesn", "engine", "feature", "file", "files",
+                "find", "fix",
                 "for", "from", "hpp", "inside", "it", "ixx", "just",
                 "line", "make", "not", "now", "only", "please", "proving",
                 "should", "shouldn", "source", "that", "the", "this", "user",
@@ -528,11 +529,18 @@ namespace epochengine::editor_ai_development_panel
                 for (const auto& term : system.ranking_terms)
                     add_source_context_term(terms, term);
             }
+            if (systems.empty()
+                && contains_any_phrase(normalizedObjective, {
+                    "llama", "inference", "transcript"}))
+            {
+                result.systems.push_back(
+                    "AI Runtime & Transcript Handling");
+            }
             if (terms.empty() || objective.size() < 8u)
             {
                 result.status =
-                    "Describe the behavior you want or the symptom you can see. "
-                    "You do not need to know a system, file, or symbol; Epoch resolves those internally.";
+                    "Tell Epoch what is visibly wrong and what should happen instead. "
+                    "You do not need to guess a system, file, or symbol; Epoch resolves those internally.";
                 return result;
             }
 
@@ -2696,11 +2704,11 @@ namespace epochengine::editor_ai_development_panel
             const std::array providerActions{
                 gui::InlineButtonSpec{
                     .label = "Local Qwen3.8",
-                    .width = 132.0f,
+                    .width = 0.0f,
                     .enabled = !campaign_orchestrator || terminal},
                 gui::InlineButtonSpec{
                     .label = "External endpoint",
-                    .width = 148.0f,
+                    .width = 0.0f,
                     .enabled = !campaign_orchestrator || terminal}}
             ;
             if (const auto provider = gui::inline_button_row(
@@ -2743,82 +2751,99 @@ namespace epochengine::editor_ai_development_panel
             const bool canCancel = !campaign_supervisor
                 && campaign_orchestrator && !terminal
                 && snapshot.phase != Phase::idle;
-            const std::array lifecycleActions{
-                gui::InlineButtonSpec{
-                    .label = "Begin Reviewed Session",
-                    .width = 176.0f,
-                    .enabled = canStart},
-                gui::InlineButtonSpec{
-                    .label = "Resume", .width = 82.0f, .enabled = canResume},
-                gui::InlineButtonSpec{
-                    .label = "Cancel", .width = 82.0f, .enabled = canCancel}}
-            ;
-            if (const auto action = gui::inline_button_row(
-                    lifecycleActions, 30.0f, 5.0f))
+            enum class LifecycleAction : std::uint8_t
             {
-                if (*action == 0u)
+                begin,
+                resume,
+                cancel
+            };
+            std::vector<gui::InlineButtonSpec> lifecycleActions{};
+            std::vector<LifecycleAction> lifecycleKinds{};
+            const auto addLifecycleAction = [&](const bool visible,
+                                                const std::string_view label,
+                                                const LifecycleAction kind)
+            {
+                if (!visible)
+                    return;
+                lifecycleActions.push_back(gui::InlineButtonSpec{
+                    .label = std::string{label}, .width = 0.0f, .enabled = true});
+                lifecycleKinds.push_back(kind);
+            };
+            addLifecycleAction(canStart, "Begin Reviewed Session",
+                LifecycleAction::begin);
+            addLifecycleAction(!campaign_orchestrator && canResume, "Resume",
+                LifecycleAction::resume);
+            addLifecycleAction(canCancel, "Cancel", LifecycleAction::cancel);
+            if (!lifecycleActions.empty())
+            {
+                if (const auto action = gui::inline_button_row(
+                        lifecycleActions, 30.0f, 5.0f))
                 {
-                    std::string refusal{};
-                    const auto configuration = prepare_campaign_configuration(
-                        input, now, refusal);
-                    if (!configuration)
+                    const LifecycleAction kind = lifecycleKinds[*action];
+                    if (kind == LifecycleAction::begin)
                     {
-                        status_message = std::move(refusal);
-                        output.campaign_evidence.push_back(status_message);
-                    }
-                    else
-                    {
-                        campaign_configuration = *configuration;
-                        campaign_orchestrator = std::make_unique<Orchestrator>();
-                        campaign_pending_operation.reset();
-                        auto begun = campaign_orchestrator->begin(
-                            campaign_configuration);
-                        const bool accepted = static_cast<bool>(begun);
-                        capture_campaign_result(output, std::move(begun));
-                        if (accepted)
+                        std::string refusal{};
+                        const auto configuration = prepare_campaign_configuration(
+                            input, now, refusal);
+                        if (!configuration)
                         {
-                            if (initialize_campaign_control(output, now))
-                                (void)stage_campaign_plan_request(output, now);
+                            status_message = std::move(refusal);
+                            output.campaign_evidence.push_back(status_message);
+                        }
+                        else
+                        {
+                            campaign_configuration = *configuration;
+                            campaign_orchestrator = std::make_unique<Orchestrator>();
+                            campaign_pending_operation.reset();
+                            auto begun = campaign_orchestrator->begin(
+                                campaign_configuration);
+                            const bool accepted = static_cast<bool>(begun);
+                            capture_campaign_result(output, std::move(begun));
+                            if (accepted)
+                            {
+                                if (initialize_campaign_control(output, now))
+                                    (void)stage_campaign_plan_request(output, now);
+                            }
                         }
                     }
-                }
-                else if (*action == 1u)
-                {
-                    std::string refusal{};
-                    const auto configuration = prepare_campaign_configuration(
-                        input, now, refusal);
-                    if (!configuration || campaign_state_path.empty())
+                    else if (kind == LifecycleAction::resume)
                     {
-                        status_message = configuration
-                            ? "No saved typed campaign state is available."
-                            : std::move(refusal);
-                        output.campaign_evidence.push_back(status_message);
+                        std::string refusal{};
+                        const auto configuration = prepare_campaign_configuration(
+                            input, now, refusal);
+                        if (!configuration || campaign_state_path.empty())
+                        {
+                            status_message = configuration
+                                ? "No saved typed campaign state is available."
+                                : std::move(refusal);
+                            output.campaign_evidence.push_back(status_message);
+                        }
+                        else
+                        {
+                            campaign_configuration = *configuration;
+                            campaign_orchestrator = std::make_unique<Orchestrator>();
+                            campaign_pending_operation.reset();
+                            auto resumed = campaign_orchestrator->resume(
+                                campaign_configuration,
+                                campaign_state_path,
+                                now);
+                            const bool accepted = static_cast<bool>(resumed);
+                            capture_campaign_result(output, std::move(resumed));
+                            if (accepted)
+                                (void)initialize_campaign_control(output, now);
+                        }
                     }
-                    else
+                    else if (campaign_orchestrator)
                     {
-                        campaign_configuration = *configuration;
-                        campaign_orchestrator = std::make_unique<Orchestrator>();
-                        campaign_pending_operation.reset();
-                        auto resumed = campaign_orchestrator->resume(
-                            campaign_configuration,
-                            campaign_state_path,
-                            now);
-                        const bool accepted = static_cast<bool>(resumed);
-                        capture_campaign_result(output, std::move(resumed));
-                        if (accepted)
-                            (void)initialize_campaign_control(output, now);
+                        capture_campaign_result(
+                            output,
+                            campaign_orchestrator->cancel(
+                                campaign_action(snapshot, "cancel", now),
+                                "Operator cancelled the typed self-iteration campaign."));
                     }
+                    snapshot = campaign_orchestrator
+                        ? campaign_orchestrator->snapshot() : Snapshot{};
                 }
-                else if (campaign_orchestrator)
-                {
-                    capture_campaign_result(
-                        output,
-                        campaign_orchestrator->cancel(
-                            campaign_action(snapshot, "cancel", now),
-                            "Operator cancelled the typed self-iteration campaign."));
-                }
-                snapshot = campaign_orchestrator
-                    ? campaign_orchestrator->snapshot() : Snapshot{};
             }
 
             gui::property_row("Phase", campaign_phase_name(snapshot.phase));
@@ -2948,32 +2973,12 @@ namespace epochengine::editor_ai_development_panel
                 auto controlSnapshot = campaign_supervisor->snapshot();
                 const auto controlQuery = campaign_supervisor->query(
                     queueSnapshot, schedulerSnapshot);
-                gui::label("Operational Campaign Control");
-                gui::property_row(
-                    "Current step", campaign_phase_name(snapshot.phase));
-                gui::property_row(
-                    "Provider", campaign_provider_name(campaign_provider));
+                gui::label("Plan Request");
                 gui::property_row(
                     "Endpoint",
                     input.selected_endpoint.empty()
                         ? std::string{"Not configured"}
                         : input.selected_endpoint);
-                gui::property_row(
-                    "Next",
-                    schedulerSnapshot.phase
-                            == ai::iteration_campaign_scheduler::Phase::
-                                awaiting_human_review
-                        ? "Review the returned plan"
-                    : schedulerSnapshot.phase
-                            == ai::iteration_campaign_scheduler::Phase::
-                                awaiting_transport_approval
-                        ? "Confirm and send the bounded plan request"
-                    : schedulerSnapshot.phase
-                            == ai::iteration_campaign_scheduler::Phase::
-                                awaiting_transport_response
-                        ? "Waiting for the selected provider"
-                        : std::string{scheduler_phase_name(
-                            schedulerSnapshot.phase)});
                 if (advanced_controls)
                 {
                     gui::property_row(
@@ -3051,32 +3056,25 @@ namespace epochengine::editor_ai_development_panel
                     actionKinds{};
                 const auto addAction = [&](const bool enabled,
                                            const std::string_view label,
-                                           const float buttonWidth,
                                            const auto kind)
                 {
                     if (!enabled)
                         return;
                     actionButtons.push_back({
                         .label = std::string{label},
-                        .width = buttonWidth,
+                        .width = 0.0f,
                         .enabled = true});
                     actionKinds.push_back(kind);
                 };
                 using CommandKind =
                     ai::iteration_supervisor_control::CommandKind;
-                addAction(availability.pause, "Pause", 76.0f,
-                    CommandKind::pause);
-                addAction(availability.resume, "Resume", 82.0f,
-                    CommandKind::resume);
-                addAction(availability.cancel, "Cancel", 82.0f,
-                    CommandKind::cancel);
-                addAction(availability.retry, "Retry", 76.0f,
-                    CommandKind::retry);
+                addAction(availability.pause, "Pause", CommandKind::pause);
+                addAction(availability.resume, "Resume", CommandKind::resume);
+                addAction(availability.cancel, "Cancel", CommandKind::cancel);
+                addAction(availability.retry, "Retry", CommandKind::retry);
                 addAction(availability.approve,
-                    "Approve Plan & Request Patch", 214.0f,
-                    CommandKind::approve);
-                addAction(availability.reject, "Reject", 82.0f,
-                    CommandKind::reject);
+                    "Approve Plan & Request Patch", CommandKind::approve);
+                addAction(availability.reject, "Reject", CommandKind::reject);
                 if (!actionButtons.empty())
                 {
                     if (const auto chosen = gui::inline_button_row(
@@ -3171,8 +3169,11 @@ namespace epochengine::editor_ai_development_panel
                                 : input.selected_endpoint)
                             + ". No source-file bytes are added by this plan request.",
                         width);
-                    if (gui::button(
-                            "Send Objective For Plan", {width, 30.0f}))
+                    const std::string sendLabel =
+                        std::string{"Send Plan Request to "}
+                        + std::string{
+                            campaign_provider_name(campaign_provider)};
+                    if (gui::button(sendLabel, {width, 30.0f}))
                     {
                         (void)send_staged_campaign_plan(output, now);
                     }
@@ -3318,7 +3319,15 @@ namespace epochengine::editor_ai_development_panel
                         126.0f);
                 }
             }
-            if (!current.evidence.empty())
+            const bool hasFailedEvidence = std::ranges::any_of(
+                current.evidence,
+                [](const auto& record) { return !record.passed; });
+            const bool checkpointEvidenceRelevant = advanced_controls
+                || hasFailedEvidence
+                || current.phase == Phase::checkpoint_ready
+                || current.phase == Phase::checkpointed
+                || current.phase == Phase::blocked;
+            if (checkpointEvidenceRelevant && !current.evidence.empty())
             {
                 gui::label("Checkpoint / Error Evidence");
                 const std::size_t begin = current.evidence.size() > 8u
@@ -4080,7 +4089,16 @@ namespace epochengine::editor_ai_development_panel
             {
                 return false;
             }
-
+            const HostSourceContextSelection meaninglessSelection =
+                curate_source_context(
+                    fixture.path.generic_string(),
+                    Domain::engine_source,
+                    "find and fix files");
+            if (meaninglessSelection.accepted
+                || !meaninglessSelection.paths.empty())
+            {
+                return false;
+            }
             const HostSourceContextSelection exactPathSelection =
                 curate_source_context(
                     fixture.path.generic_string(),
@@ -5105,6 +5123,11 @@ namespace epochengine::editor_ai_development_panel
                 "language. You do not need to know the system, file, or symbol: "
                 "Epoch resolves real owned systems and shows every selected source "
                 "file before reading or sending its bytes.",
+                width);
+            gui::wrapped_label(
+                "Good objective: say what is visibly wrong and what should happen "
+                "instead. Example: 'Properties is hard to scan; group editable "
+                "transform and state fields.'",
                 width);
             gui::label("Data Boundaries");
             gui::property_row("Reads",

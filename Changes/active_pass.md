@@ -1,3 +1,16 @@
+- The current v0.89.35 screenshot-driven self-coding correction rejects
+  content-free objectives such as `find and fix files` before source selection,
+  sandbox materialization, or transport. The operator is prompted for the
+  visible problem and expected result; valid ordinary-language subsystem
+  descriptions and exact existing source paths remain supported. Engine-session
+  receipts stay in Detailed Session Activity instead of being duplicated into
+  project AI Chat, the project-assistant goal is labeled separately from the
+  engine-coding objective, and narrow AI Controls rows use responsive,
+  state-relevant actions. The existing child-process supervisor now exposes the
+  visible native-window identity beside its PID as the first concrete seam for a
+  later `candidate_preview` custom context. The planned comparison owns two
+  separately built sandbox children and A/B/neither selection; it grants no
+  live-source replacement or promotion authority.
 - The current v0.89.35 interface/self-iteration repair accepts an observable
   outcome or symptom without requiring the operator to name an internal system,
   path, or symbol. A deterministic host resolver reports the owned source

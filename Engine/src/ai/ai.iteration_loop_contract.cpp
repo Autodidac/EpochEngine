@@ -7,6 +7,7 @@ module;
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 module ai.iteration_loop;
 
@@ -372,6 +373,109 @@ namespace epochengine::ai::iteration
                 && assessed.disposition == CapabilityDisposition::eligible;
         }
 
+        [[nodiscard]] SandboxCandidateEvidence candidate(
+            const CandidateSlot slot,
+            const std::uint64_t generation,
+            const EvidenceDigest parent,
+            const std::uint64_t ordinal)
+        {
+            return {
+                .slot = slot,
+                .generation = generation,
+                .parent_source_digest = parent,
+                .source_tree_digest = digest(2'000u + ordinal),
+                .executable_digest = digest(3'000u + ordinal),
+                .validation_digest = digest(4'000u + ordinal),
+                .capture_digest = digest(5'000u + ordinal),
+                .sandbox_identity = slot == CandidateSlot::candidate_a
+                    ? "session_1/candidate_a"
+                    : "session_1/candidate_b",
+                .platform_process_id = 10'000u + ordinal,
+                .platform_window_id = 20'000u + ordinal};
+        }
+
+        [[nodiscard]] bool sandbox_candidate_lineage_contract()
+        {
+            const EvidenceDigest initial = digest(1'900u);
+            SandboxCandidateLineage lineage{};
+            if (!lineage.configure(initial, "session_0/head"))
+                return false;
+
+            SandboxCandidateEvidence candidateA = candidate(
+                CandidateSlot::candidate_a, 1u, initial, 1u);
+            SandboxCandidateEvidence candidateB = candidate(
+                CandidateSlot::candidate_b, 1u, initial, 2u);
+            const EvidenceDigest selectedA = candidateA.source_tree_digest;
+            if (!lineage.admit(candidateA)
+                || lineage.snapshot().comparison_ready
+                || !lineage.admit(candidateB)
+                || !lineage.snapshot().comparison_ready)
+            {
+                return false;
+            }
+
+            SandboxCandidateEvidence duplicate = candidateB;
+            duplicate.slot = CandidateSlot::candidate_a;
+            if (lineage.admit(std::move(duplicate)).code
+                != CandidateLineageCode::duplicate_candidate)
+            {
+                return false;
+            }
+
+            const CandidateLineageResult selected = lineage.select(
+                CandidateChoice::candidate_a,
+                digest(6'001u));
+            const CandidateLineageSnapshot advanced = lineage.snapshot();
+            if (!selected
+                || selected.retire_process_ids
+                    != std::vector<std::uint64_t>{10'001u, 10'002u}
+                || advanced.generation != 2u
+                || advanced.head_source_digest != selectedA
+                || advanced.head_sandbox_identity != "session_1/candidate_a"
+                || !advanced.candidates.empty()
+                || advanced.selection_count != 1u)
+            {
+                return false;
+            }
+
+            SandboxCandidateEvidence stale = candidate(
+                CandidateSlot::candidate_a, 1u, initial, 3u);
+            if (lineage.admit(std::move(stale)).code
+                != CandidateLineageCode::stale_generation)
+            {
+                return false;
+            }
+            SandboxCandidateEvidence wrongParent = candidate(
+                CandidateSlot::candidate_a, 2u, initial, 4u);
+            if (lineage.admit(std::move(wrongParent)).code
+                != CandidateLineageCode::parent_mismatch)
+            {
+                return false;
+            }
+
+            SandboxCandidateEvidence nextA = candidate(
+                CandidateSlot::candidate_a, 2u, selectedA, 5u);
+            nextA.sandbox_identity = "session_2/candidate_a";
+            SandboxCandidateEvidence nextB = candidate(
+                CandidateSlot::candidate_b, 2u, selectedA, 6u);
+            nextB.sandbox_identity = "session_2/candidate_b";
+            if (!lineage.admit(std::move(nextA))
+                || !lineage.admit(std::move(nextB))
+                || !lineage.select(
+                    CandidateChoice::reject_both,
+                    digest(6'002u)))
+            {
+                return false;
+            }
+            const CandidateLineageSnapshot rejected = lineage.snapshot();
+            return rejected.generation == 3u
+                && rejected.head_source_digest == selectedA
+                && rejected.head_sandbox_identity == "session_1/candidate_a"
+                && rejected.selection_count == 2u
+                && lineage.selections().back().choice
+                    == CandidateChoice::reject_both;
+        }
+
         [[nodiscard]] int failure_code()
         {
             if (!contained_flow_contract()) return 1;
@@ -382,6 +486,7 @@ namespace epochengine::ai::iteration
             if (!visual_gate_contract()) return 6;
             if (!authority_binding_contract()) return 7;
             if (!qwen38_admission_contract()) return 8;
+            if (!sandbox_candidate_lineage_contract()) return 9;
             return 0;
         }
     }
