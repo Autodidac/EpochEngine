@@ -20338,7 +20338,7 @@ namespace epochengine
                             : "Discover Direct Runtime",
                         .width = 206.0f},
                     gui::InlineButtonSpec{
-                        .label = "Use External Model + MCP",
+                        .label = "Use OpenAI-compatible API",
                         .width = 190.0f}
                 };
                 if (const auto action =
@@ -20375,11 +20375,11 @@ namespace epochengine
                         editor.aiModelInventoryScanned = false;
                         editor.aiPendingModelSelection.clear();
                         editor.aiModelConsentStatus =
-                            "External model host selected. Inventory will be discovered "
+                            "OpenAI-compatible model host selected. Inventory will be discovered "
                             "without sending a prompt.";
                         push_editor_log(
                             editor,
-                            "[ai] External model endpoint selected; Epoch MCP guards remain active.");
+                            "[ai] OpenAI-compatible HTTP endpoint selected; no MCP model transport is implied.");
                     }
                 }
 
@@ -22501,12 +22501,15 @@ namespace epochengine
             std::string prompt,
             std::string_view logLine)
         {
+            const bool modelConfirmed =
+                epochengine::ai::is_model_use_confirmed();
             const bool submitted = submit_ai_request(
                     std::move(prompt),
                     "Guarded source iteration over explicitly shared context.",
                     AiDeferredRequestKind::SourceIteration);
             const bool waitingForConsent =
-                editor.aiDeferredRequestKind
+                !modelConfirmed
+                && editor.aiDeferredRequestKind
                     == AiDeferredRequestKind::SourceIteration;
             if (submitted || waitingForConsent)
             {
@@ -22524,6 +22527,7 @@ namespace epochengine
                 chat.append_status(editor.aiAuthoringStatus);
                 push_ai_development_log(editor, std::string(logLine));
             }
+            return std::pair{submitted, waitingForConsent};
         };
 
         auto dispatch_ai_development_action = [&](
@@ -23012,9 +23016,41 @@ namespace epochengine
                 request_model_source_proposal:
                 if (!action.model_prompt.empty())
                 {
-                    submit_source_iteration_prompt(
-                        action.model_prompt,
-                        "[ai] Submitted one bounded source iteration to the selected AI provider.");
+                    if (action.model_transport
+                        == editor_ai_development_panel::ModelTransport::external_mcp)
+                    {
+                        const auto rejected = editor.aiDevelopmentPanel
+                            ? editor.aiDevelopmentPanel->report_model_dispatch(
+                                editor_ai_development_panel::ModelDispatchState::rejected,
+                                "external MCP",
+                                "no registered connector")
+                            : editor_ai_development_panel::RenderResult{};
+                        if (!rejected.status.empty())
+                            push_ai_development_log(
+                                editor, "[ai] " + rejected.status);
+                        break;
+                    }
+                    const auto [queued, waitingForConsent] =
+                        submit_source_iteration_prompt(
+                            action.model_prompt,
+                            "[ai] Accepted one bounded source iteration into the host request queue.");
+                    if (editor.aiDevelopmentPanel
+                        && (queued || waitingForConsent))
+                    {
+                        const auto manifest =
+                            epochengine::ai::active_model_manifest();
+                        const auto staged = editor.aiDevelopmentPanel
+                            ->report_model_dispatch(
+                                waitingForConsent
+                                    ? editor_ai_development_panel::ModelDispatchState::waiting_for_confirmation
+                                    : editor_ai_development_panel::ModelDispatchState::queued_by_host,
+                                std::string{
+                                    epochengine::ai::local_inference_transport_name(
+                                        epochengine::ai::current_local_inference_transport())},
+                                manifest.endpoint);
+                        push_ai_development_log(
+                            editor, "[ai] " + staged.status);
+                    }
                 }
                 break;
             case editor_ai_development_panel::HostAction::
@@ -23440,9 +23476,25 @@ namespace epochengine
                 editor.aiAuthoringAwaitingReply = false;
                 editor.aiAuthoringPlanForGoal = false;
                 editor.aiAuthoringStatus = submitted
-                    ? "Guarded source iteration sent to the approved local model. Scene authoring is inactive for this response."
+                    ? "Host started the guarded source request worker. Scene authoring is inactive while it waits for the selected model endpoint."
                     : "The local model is busy; the waiting source request was not sent.";
                 chat.append_status(editor.aiAuthoringStatus);
+                if (editor.aiDevelopmentPanel)
+                {
+                    const auto manifest =
+                        epochengine::ai::active_model_manifest();
+                    const auto dispatch = editor.aiDevelopmentPanel
+                        ->report_model_dispatch(
+                            submitted
+                                ? editor_ai_development_panel::ModelDispatchState::transport_started
+                                : editor_ai_development_panel::ModelDispatchState::rejected,
+                            std::string{
+                                epochengine::ai::local_inference_transport_name(
+                                    epochengine::ai::current_local_inference_transport())},
+                            manifest.endpoint);
+                    push_ai_development_log(
+                        editor, "[ai] " + dispatch.status);
+                }
             }
             else if (submitted)
             {
@@ -28922,6 +28974,10 @@ namespace epochengine
                     .latest_raw_model_reply = chat.latestRawReply,
                     .selected_model = inspectorManifest.display_name,
                     .selected_endpoint = inspectorManifest.endpoint,
+                    .selected_transport = std::string{
+                        epochengine::ai::local_inference_transport_name(
+                            epochengine::ai::current_local_inference_transport())},
+                    .external_mcp_available = false,
                     .tool_source_ready =
                         !inspectorActiveScriptSource.empty(),
                     .execution_pending =
@@ -34004,6 +34060,10 @@ namespace epochengine
                         std::string{ai_source_architecture_contract()},
                     .selected_model = manifest.display_name,
                     .selected_endpoint = manifest.endpoint,
+                    .selected_transport = std::string{
+                        epochengine::ai::local_inference_transport_name(
+                            epochengine::ai::current_local_inference_transport())},
+                    .external_mcp_available = false,
                     .execution_pending =
                         editor.aiContinuousBuildPending.has_value()
                         || editor.aiSourceWorkspacePending.has_value()
@@ -34061,6 +34121,10 @@ namespace epochengine
                     .latest_raw_model_reply = chat.latestRawReply,
                     .selected_model = manifest.display_name,
                     .selected_endpoint = manifest.endpoint,
+                    .selected_transport = std::string{
+                        epochengine::ai::local_inference_transport_name(
+                            epochengine::ai::current_local_inference_transport())},
+                    .external_mcp_available = false,
                     .execution_pending =
                         editor.aiContinuousBuildPending.has_value()
                         || editor.aiSourceWorkspacePending.has_value()

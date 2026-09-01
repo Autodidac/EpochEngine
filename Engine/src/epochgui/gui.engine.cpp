@@ -6478,10 +6478,12 @@ namespace epochengine::gui
     }
 
     [[nodiscard]] static bool source_editor_navigation_contract() noexcept;
+    [[nodiscard]] static bool inline_button_auto_width_contract();
 
     bool run_runtime_surface_contract() noexcept
     {
         if (!nested_content_clip_contract()
+            || !inline_button_auto_width_contract()
             || !source_editor_navigation_contract())
             return false;
         constexpr std::string_view utf8Sample{
@@ -8573,6 +8575,69 @@ namespace epochengine::gui
         return result;
     }
 
+    [[nodiscard]] static std::vector<float> resolve_inline_button_widths(
+        std::span<const InlineButtonSpec> items,
+        const float availableWidth,
+        const float gap)
+    {
+        std::vector<float> widths(items.size(), 1.0f);
+        std::size_t automaticCount{};
+        float fixedWidth{};
+        for (std::size_t index = 0u; index < items.size(); ++index)
+        {
+            if (items[index].width > 0.0f)
+            {
+                widths[index] = items[index].width;
+                fixedWidth += items[index].width;
+            }
+            else
+            {
+                ++automaticCount;
+            }
+        }
+
+        if (automaticCount == 0u)
+            return widths;
+
+        const float totalGap = items.size() > 1u
+            ? (std::max)(0.0f, gap)
+                * static_cast<float>(items.size() - 1u)
+            : 0.0f;
+        const float automaticWidth = (std::max)(
+            1.0f,
+            ((std::max)(1.0f, availableWidth) - totalGap - fixedWidth)
+                / static_cast<float>(automaticCount));
+        for (std::size_t index = 0u; index < items.size(); ++index)
+        {
+            if (items[index].width <= 0.0f)
+                widths[index] = automaticWidth;
+        }
+        return widths;
+    }
+
+    [[nodiscard]] static bool inline_button_auto_width_contract()
+    {
+        constexpr std::array allAutomatic{
+            InlineButtonSpec{.label = "A", .width = 0.0f},
+            InlineButtonSpec{.label = "B", .width = 0.0f}};
+        const auto equal = resolve_inline_button_widths(
+            allAutomatic, 305.0f, 5.0f);
+        if (equal.size() != 2u
+            || equal[0] != 150.0f
+            || equal[1] != 150.0f)
+        {
+            return false;
+        }
+
+        constexpr std::array mixed{
+            InlineButtonSpec{.label = "Fixed", .width = 100.0f},
+            InlineButtonSpec{.label = "Fill", .width = 0.0f}};
+        const auto shared = resolve_inline_button_widths(mixed, 305.0f, 5.0f);
+        return shared.size() == 2u
+            && shared[0] == 100.0f
+            && shared[1] == 200.0f;
+    }
+
     std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height,
@@ -8583,6 +8648,10 @@ namespace epochengine::gui
 
         const Vec2 rowStart = g_frame.cursor;
         std::optional<std::size_t> clicked{};
+        const std::vector<float> widths = resolve_inline_button_widths(
+            items,
+            content_available_width(rowStart.x),
+            gap);
         float x = rowStart.x;
 
         for (std::size_t i = 0; i < items.size(); ++i)
@@ -8591,13 +8660,13 @@ namespace epochengine::gui
             set_cursor({ x, rowStart.y });
             if (button_with_state(
                     item.label,
-                    { item.width, height },
+                    { widths[i], height },
                     false,
                     item.enabled))
             {
                 clicked = i;
             }
-            x += (std::max)(1.0f, item.width) + gap;
+            x += widths[i] + gap;
         }
 
         set_cursor(rowStart);

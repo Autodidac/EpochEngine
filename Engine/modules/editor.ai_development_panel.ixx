@@ -40,6 +40,20 @@ export namespace epochengine::editor_ai_development_panel
         execute_tool_harness
     };
 
+    enum class ModelTransport : unsigned char
+    {
+        local_inference,
+        external_mcp
+    };
+
+    enum class ModelDispatchState : unsigned char
+    {
+        waiting_for_confirmation,
+        queued_by_host,
+        transport_started,
+        rejected
+    };
+
     struct SourcePatchReviewBinding final
     {
         std::string admitted_response_sha256{};
@@ -102,6 +116,8 @@ export namespace epochengine::editor_ai_development_panel
         std::string latest_raw_model_reply{};
         std::string selected_model{};
         std::string selected_endpoint{};
+        std::string selected_transport{};
+        bool external_mcp_available{};
         bool tool_source_ready{};
         bool execution_pending{};
     };
@@ -109,6 +125,7 @@ export namespace epochengine::editor_ai_development_panel
     struct RenderResult final
     {
         HostAction action{HostAction::none};
+        ModelTransport model_transport{ModelTransport::local_inference};
         bool reveal_source_workspace{true};
         bool reveal_source_patch_workbench{};
         std::string status{};
@@ -141,6 +158,10 @@ export namespace epochengine::editor_ai_development_panel
         [[nodiscard]] RenderResult render(const Input& input);
         [[nodiscard]] RenderResult stage_latest_model_proposal(
             const Input& input);
+        [[nodiscard]] RenderResult report_model_dispatch(
+            ModelDispatchState state,
+            std::string transport,
+            std::string endpoint);
         [[nodiscard]] RenderResult share_requested_source_context(
             const Input& input);
         [[nodiscard]] RenderResult reject_requested_source_context();

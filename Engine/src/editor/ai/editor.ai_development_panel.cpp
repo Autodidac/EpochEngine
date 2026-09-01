@@ -539,8 +539,9 @@ namespace epochengine::editor_ai_development_panel
             if (terms.empty() || objective.size() < 8u)
             {
                 result.status =
-                    "Tell Epoch what is visibly wrong and what should happen instead. "
-                    "You do not need to guess a system, file, or symbol; Epoch resolves those internally.";
+                    "Name the Engine area to change and state the requested change. "
+                    "Examples include AI Controls, Properties, Timeline, 2D / UI, "
+                    "Assets, Package Manager, rendering, input, or scripting.";
                 return result;
             }
 
@@ -703,7 +704,9 @@ namespace epochengine::editor_ai_development_panel
             if (result.paths.empty())
             {
                 result.status =
-                    "Epoch could not yet prove a relevant source selection. Add one observable symptom or desired outcome; do not guess a system or file name.";
+                    "Epoch could not match the request to owned source. Name the "
+                    "Engine area and the change it needs; Epoch will show the exact "
+                    "files before reading or sending them.";
                 return result;
             }
 
@@ -1399,9 +1402,9 @@ namespace epochengine::editor_ai_development_panel
             const ai::project_profile::Provider provider) noexcept
         {
             return provider == ai::project_profile::Provider::external_mcp
-                ? "External model + MCP guards" : provider
+                ? "External MCP connector" : provider
                     == ai::project_profile::Provider::epoch_local_qwen38
-                    ? "Epoch-local Qwen3.8" : "Disabled";
+                    ? "Selected local model" : "Disabled";
         }
 
         [[nodiscard]] static std::string_view scheduler_phase_name(
@@ -1460,8 +1463,8 @@ namespace epochengine::editor_ai_development_panel
         {
             return transport
                     == ai::self_iteration_orchestrator::TransportKind::external_mcp
-                ? "Guarded external compute"
-                : "Guarded local child (stdio only)";
+                ? "External MCP campaign control"
+                : "Local guarded campaign control";
         }
 
         [[nodiscard]] static std::string bounded_review_text(
@@ -1921,10 +1924,14 @@ namespace epochengine::editor_ai_development_panel
                 return false;
 
             output.action = HostAction::request_model_source_proposal;
+            output.model_transport = campaign_provider
+                    == ai::project_profile::Provider::external_mcp
+                ? ModelTransport::external_mcp
+                : ModelTransport::local_inference;
             output.model_prompt = campaign_model_prompt(
                 ai::self_iteration_orchestrator::OperationKind::model_plan);
             status_message =
-                "Bounded plan request sent to the explicitly selected provider; one digest-bound response is pending.";
+                "Bounded plan request approved for host dispatch. No model transport has started yet.";
             output.campaign_evidence.push_back(status_message);
             output.status = status_message;
             return true;
@@ -1962,6 +1969,10 @@ namespace epochengine::editor_ai_development_panel
                 return false;
 
             output.action = HostAction::request_model_source_proposal;
+            output.model_transport = campaign_provider
+                    == ai::project_profile::Provider::external_mcp
+                ? ModelTransport::external_mcp
+                : ModelTransport::local_inference;
             output.model_prompt = campaign_model_prompt(
                 ai::self_iteration_orchestrator::OperationKind::model_proposal);
             campaign_plan_review.clear();
@@ -2694,6 +2705,15 @@ namespace epochengine::editor_ai_development_panel
                 || snapshot.phase == Phase::cancelled
                 || snapshot.phase == Phase::blocked;
 
+            if (campaign_provider
+                    == ai::project_profile::Provider::external_mcp
+                && !input.external_mcp_available
+                && (!campaign_orchestrator || terminal))
+            {
+                campaign_provider =
+                    ai::project_profile::Provider::epoch_local_qwen38;
+            }
+
             gui::label("Engine Self-Coding Workflow");
             gui::wrapped_label(
                 "1 Describe the result  2 Review source  3 Review the plan  "
@@ -2701,15 +2721,33 @@ namespace epochengine::editor_ai_development_panel
                 width);
             gui::property_row(
                 "Provider", campaign_provider_name(campaign_provider));
+            gui::property_row(
+                "Model",
+                input.selected_model.empty()
+                    ? std::string{"No confirmed model"}
+                    : input.selected_model);
+            gui::property_row(
+                "Transport",
+                input.selected_transport.empty()
+                    ? std::string{"Not configured"}
+                    : input.selected_transport);
+            gui::property_row(
+                "Endpoint",
+                input.selected_endpoint.empty()
+                    ? std::string{"Not configured"}
+                    : input.selected_endpoint);
             const std::array providerActions{
                 gui::InlineButtonSpec{
-                    .label = "Local Qwen3.8",
+                    .label = "Use selected model",
                     .width = 0.0f,
                     .enabled = !campaign_orchestrator || terminal},
                 gui::InlineButtonSpec{
-                    .label = "External endpoint",
+                    .label = input.external_mcp_available
+                        ? "Use external MCP"
+                        : "External MCP not connected",
                     .width = 0.0f,
-                    .enabled = !campaign_orchestrator || terminal}}
+                    .enabled = input.external_mcp_available
+                        && (!campaign_orchestrator || terminal)}}
             ;
             if (const auto provider = gui::inline_button_row(
                     providerActions, 29.0f, 5.0f))
@@ -2733,8 +2771,19 @@ namespace epochengine::editor_ai_development_panel
                     + "; no campaign started and no source bytes sent.";
                 output.campaign_evidence.push_back(status_message);
             }
+            if (!input.external_mcp_available)
+            {
+                gui::wrapped_label(
+                    "External MCP is unavailable because no host connector is "
+                    "registered. Local self-coding uses the selected model over "
+                    "the transport and endpoint shown above.",
+                    width);
+            }
 
             const bool canStart = (!campaign_orchestrator || terminal)
+                && (campaign_provider
+                        != ai::project_profile::Provider::external_mcp
+                    || input.external_mcp_available)
                 && !development_objective.empty()
                 && input.source_authority_verified
                 && source_workspace_ready
@@ -2982,7 +3031,7 @@ namespace epochengine::editor_ai_development_panel
                 if (advanced_controls)
                 {
                     gui::property_row(
-                        "Transport", campaign_transport_name(
+                        "Control path", campaign_transport_name(
                             schedulerSnapshot.configuration.transport));
                     gui::property_row(
                         "Supervisor", supervisor_phase_name(controlSnapshot.phase));
@@ -3196,6 +3245,10 @@ namespace epochengine::editor_ai_development_panel
                 if (accepted)
                 {
                     output.action = HostAction::request_model_source_proposal;
+                    output.model_transport = campaign_provider
+                            == ai::project_profile::Provider::external_mcp
+                        ? ModelTransport::external_mcp
+                        : ModelTransport::local_inference;
                     output.model_prompt = campaign_model_prompt(kind);
                 }
             };
@@ -3733,7 +3786,7 @@ namespace epochengine::editor_ai_development_panel
                 status_message =
                     !source_diagnostic_recheck_queued
                     ? "Qwen could not justify a bounded source step from the supplied evidence. No source was staged; refine the objective or request again after architecture evidence improves."
-                    : "Qwen could not prove a concrete defect in the shared reviewed source after one diagnostic recheck. No source was staged; add one observable symptom and request again.";
+                    : "Qwen could not justify a source change after one diagnostic recheck. No source was staged; name the Engine area and the exact change to make before requesting again.";
                 output.status = status_message;
                 return output;
             }
@@ -3859,6 +3912,28 @@ namespace epochengine::editor_ai_development_panel
             || !pausedActions.cancel || backoffEarly.retry
             || !reviewActions.approve || !reviewActions.reject
             || !reviewActions.pause || !reviewActions.cancel)
+        {
+            return false;
+        }
+        Panel dispatchEvidence{};
+        const auto queuedDispatch = dispatchEvidence.report_model_dispatch(
+            ModelDispatchState::queued_by_host,
+            "OpenAI-compatible HTTP API",
+            "http://localhost:1234");
+        const auto startedDispatch = dispatchEvidence.report_model_dispatch(
+            ModelDispatchState::transport_started,
+            "OpenAI-compatible HTTP API",
+            "http://localhost:1234");
+        const auto rejectedDispatch = dispatchEvidence.report_model_dispatch(
+            ModelDispatchState::rejected,
+            "external MCP",
+            "no registered connector");
+        if (queuedDispatch.status.find("has not started")
+                == std::string::npos
+            || startedDispatch.status.find("http://localhost:1234")
+                == std::string::npos
+            || rejectedDispatch.status.find("no model request was sent")
+                == std::string::npos)
         {
             return false;
         }
@@ -4084,7 +4159,7 @@ namespace epochengine::editor_ai_development_panel
                     Domain::engine_source,
                     "make it better");
             if (vagueSelection.accepted
-                || vagueSelection.status.find("do not guess")
+                || vagueSelection.status.find("Name the Engine area")
                     == std::string::npos)
             {
                 return false;
@@ -4319,6 +4394,8 @@ namespace epochengine::editor_ai_development_panel
                     planSent, campaignNow)
                 || planSent.action
                     != HostAction::request_model_source_proposal
+                || planSent.model_transport
+                    != ModelTransport::local_inference
                 || planSent.model_prompt.find(
                     "EPOCH_SELF_ITERATION_PLAN_V1")
                     == std::string::npos
@@ -5003,6 +5080,50 @@ namespace epochengine::editor_ai_development_panel
             : std::string{"Guarded development panel is unavailable."};
     }
 
+    RenderResult Panel::report_model_dispatch(
+        const ModelDispatchState dispatchState,
+        std::string transport,
+        std::string endpoint)
+    {
+        RenderResult output{};
+        if (!implementation_)
+        {
+            output.status = "Guarded development panel is unavailable.";
+            return output;
+        }
+
+        auto& state = *implementation_;
+        if (transport.empty())
+            transport = "unconfigured model transport";
+        if (endpoint.empty())
+            endpoint = "unconfigured endpoint";
+
+        switch (dispatchState)
+        {
+        case ModelDispatchState::waiting_for_confirmation:
+            state.status_message =
+                "Model confirmation is required. The bounded request is staged locally; no transport started.";
+            break;
+        case ModelDispatchState::queued_by_host:
+            state.status_message =
+                "The host queued the bounded request. Transport has not started yet.";
+            break;
+        case ModelDispatchState::transport_started:
+            state.status_message = "Host started one " + transport
+                + " request to " + endpoint
+                + "; waiting for an endpoint response.";
+            break;
+        case ModelDispatchState::rejected:
+            state.status_message = "Host rejected the requested " + transport
+                + " dispatch to " + endpoint
+                + "; no model request was sent.";
+            break;
+        }
+        output.status = state.status_message;
+        output.campaign_evidence.push_back(state.status_message);
+        return output;
+    }
+
     SourcePatchReviewResult Panel::admit_source_patch_review(
         ai::source_patch_proposal::SealedProposal proposal,
         SourcePatchReviewBinding binding)
@@ -5119,15 +5240,13 @@ namespace epochengine::editor_ai_development_panel
                 4'096u,
                 true);
             gui::wrapped_label(
-                "Describe the result you want or the problem you can see in normal "
-                "language. You do not need to know the system, file, or symbol: "
-                "Epoch resolves real owned systems and shows every selected source "
-                "file before reading or sending its bytes.",
+                "Name the Engine area and state the change you want. Epoch resolves "
+                "that area to owned source and shows every selected file before "
+                "reading or sending its bytes.",
                 width);
             gui::wrapped_label(
-                "Good objective: say what is visibly wrong and what should happen "
-                "instead. Example: 'Properties is hard to scan; group editable "
-                "transform and state fields.'",
+                "Example: 'AI Controls: repair provider selection and simplify the "
+                "self-coding workflow.'",
                 width);
             gui::label("Data Boundaries");
             gui::property_row("Reads",

@@ -2917,7 +2917,7 @@ namespace epochengine::ai
         switch (transport)
         {
         case LocalInferenceTransport::OpenAiCompatible:
-            return "External model endpoint + Epoch MCP";
+            return "OpenAI-compatible HTTP API";
         case LocalInferenceTransport::LlamaCppCli:
             return "Direct llama.cpp CLI";
         }
