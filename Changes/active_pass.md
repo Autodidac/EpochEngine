@@ -1,3 +1,16 @@
+- The current v0.89.35 self-coding entry is prompt-first. The operator may
+  describe an outcome in ordinary language without naming an internal system
+  or file. Epoch sends the selected local model or external MCP only a bounded
+  catalog of verified C++ path names; the model requests one exact source
+  slice, and the host rejects traversal, missing, or off-catalog paths before
+  reading any file contents. The validated list remains visible for operator
+  review before source bytes enter a disposable sandbox. Candidate Lab carries
+  the model-selected slice into the chosen sandbox parent instead of rerunning
+  the old keyword resolver. Dynamic self-coding action labels now retain valid
+  storage for the complete render pass, repairing the blank-button regression.
+  Windows Debug and Release EpochEditor builds and both build-safe aggregate
+  engine contracts pass; native visual interaction remains an operator eye-test
+  gate.
 - The current v0.89.35 local-MCP rig replaces the editor's hardcoded
   `External MCP` rejection with an explicit Windows stdio bridge to the
   installed Codex MCP server. Epoch writes the bounded request only beneath the
