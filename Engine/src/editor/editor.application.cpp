@@ -531,6 +531,7 @@ namespace epochengine
             std::string latestRawReply{};
             std::uint64_t completionGeneration{};
             std::shared_ptr<AiChatRequestState> pending{};
+            std::chrono::steady_clock::time_point requestStartedAt{};
             std::jthread worker{};
 
             AiChat()
@@ -598,6 +599,18 @@ namespace epochengine
                 return true;
             }
 
+            [[nodiscard]] std::uint64_t elapsed_milliseconds() const noexcept
+            {
+                if (!pending || requestStartedAt.time_since_epoch().count() == 0)
+                    return 0u;
+                const auto elapsed = std::chrono::duration_cast<
+                    std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - requestStartedAt);
+                return elapsed.count() <= 0
+                    ? 0u
+                    : static_cast<std::uint64_t>(elapsed.count());
+            }
+
             void append_status(std::string text)
             {
                 text = normalize_editor_text_for_gui(text);
@@ -638,6 +651,7 @@ namespace epochengine
                 pendingPrompt = displayText;
 
                 pending = std::make_shared<AiChatRequestState>();
+                requestStartedAt = std::chrono::steady_clock::now();
                 if (worker.joinable())
                     worker.join();
                 worker = std::jthread(
@@ -29755,8 +29769,9 @@ namespace epochengine
             gui::wrapped_label(
                 "Describe one engine result or visible defect. Epoch resolves "
                 "the owned systems and exact source files for you, shows them "
-                "before reading anything, and keeps every model-authored change "
-                "inside a separate disposable session until you approve promotion.",
+                "in Detailed Session Activity, and keeps every model-authored "
+                "change inside a separate disposable session until you choose "
+                "a candidate.",
                 inspectorWidth);
             if (!editor.aiDevelopmentPanel)
             {
@@ -29781,6 +29796,10 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
+                    .local_model_running = editor.aiSourceAwaitingReply
+                        && chat.pending,
+                    .local_model_elapsed_ms = editor.aiSourceAwaitingReply
+                        ? chat.elapsed_milliseconds() : 0u,
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =
@@ -34878,6 +34897,10 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
+                    .local_model_running = editor.aiSourceAwaitingReply
+                        && chat.pending,
+                    .local_model_elapsed_ms = editor.aiSourceAwaitingReply
+                        ? chat.elapsed_milliseconds() : 0u,
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =
@@ -34950,6 +34973,10 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
+                    .local_model_running = editor.aiSourceAwaitingReply
+                        && chat.pending,
+                    .local_model_elapsed_ms = editor.aiSourceAwaitingReply
+                        ? chat.elapsed_milliseconds() : 0u,
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =

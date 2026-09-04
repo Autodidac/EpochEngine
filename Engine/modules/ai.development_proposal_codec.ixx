@@ -181,7 +181,7 @@ export namespace epochengine::ai::development_proposal_codec
     [[nodiscard]] ContextRequestDecodeResult decode_context_request(
         std::string_view reply,
         SourceArea area,
-        std::size_t maximum_paths = 4u,
+        std::size_t maximum_paths = 12u,
         std::size_t maximum_reason_bytes = 512u,
         std::size_t maximum_path_bytes = 1024u);
 

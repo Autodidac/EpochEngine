@@ -182,6 +182,22 @@ namespace epochengine::editor_ai_development_panel
             return result;
         }
 
+        [[nodiscard]] bool model_transport_failure_reply(
+            std::string_view reply)
+        {
+            const std::string lowered = lower_ascii(reply);
+            return lowered.starts_with("local model api error")
+                || lowered.starts_with(
+                    "local openai-compatible request failed")
+                || lowered.starts_with(
+                    "local model returned hidden reasoning")
+                || lowered.starts_with(
+                    "local model returned no decodable assistant text")
+                || lowered.starts_with(
+                    "no decodable reply from selected local model")
+                || lowered.starts_with("direct llama.cpp inference");
+        }
+
         void add_source_context_term(
             std::vector<std::string>& terms,
             std::string term)
@@ -1223,6 +1239,7 @@ namespace epochengine::editor_ai_development_panel
         static constexpr std::size_t maximum_source_repair_attempts = 3u;
         static constexpr std::size_t maximum_model_reply_corrections = 2u;
         static constexpr std::size_t maximum_plan_reply_corrections = 1u;
+        static constexpr std::size_t maximum_source_context_expansions = 3u;
 
         std::unique_ptr<editor_ai_development::DevelopmentController> controller{};
         std::unique_ptr<editor_ai_development::DevelopmentController> promotion_controller{};
@@ -1273,6 +1290,8 @@ namespace epochengine::editor_ai_development_panel
         std::string development_objective{};
         std::string source_context_evidence{};
         std::string source_baseline_evidence{};
+        std::string source_path_catalog_evidence{};
+        std::size_t source_context_expansions{};
         std::string source_context_evidence_objective{};
         std::vector<std::string> pending_source_context_systems{};
         std::vector<std::string> pending_source_context_paths{};
@@ -1407,6 +1426,8 @@ namespace epochengine::editor_ai_development_panel
             source_workspace_total_bytes = 0u;
             source_context_evidence.clear();
             source_baseline_evidence.clear();
+            source_path_catalog_evidence.clear();
+            source_context_expansions = 0u;
             source_repair_attempts = 0u;
             source_context_evidence_objective.clear();
             model_reply_corrections = 0u;
@@ -1560,7 +1581,7 @@ namespace epochengine::editor_ai_development_panel
             std::uint8_t step{1u};
             std::string_view title{"Describe the change"};
             std::string_view next_action{
-                "Name the Engine area and explain what should change."};
+                "Describe the result you want in ordinary language."};
         };
 
         [[nodiscard]] static CampaignPresentation campaign_presentation(
@@ -1578,8 +1599,8 @@ namespace epochengine::editor_ai_development_panel
                         "The reviewed source is ready. Start a separate sandbox session."}
                     : CampaignPresentation{
                         1u,
-                        "Describe and review source",
-                        "Describe one change, then review the exact source files Epoch selects."};
+                        "Describe the result",
+                        "Describe one change; the AI selects bounded source context."};
             }
 
             switch (phase)
@@ -2389,10 +2410,11 @@ namespace epochengine::editor_ai_development_panel
                     prompt += path + "\n";
                 prompt +=
                     "END_REVIEWED_SOURCE_PATHS\n"
-                    "Ground every implementation step in the reviewed source. "
-                    "Name at least one exact reviewed path or filename. Do not "
-                    "invent runtime symptoms, logs, shaders, APIs, or tests that "
-                    "are not established by the objective and reviewed files.";
+                    "Plan against this digest-bound reviewed scope. Describe "
+                    "user-visible results and independently testable steps; you "
+                    "do not need to repeat filenames. Do not invent runtime "
+                    "symptoms, logs, APIs, or tests that are not established by "
+                    "the objective and reviewed source.";
                 if (sandbox_lab_enabled && !sandbox_lab_plan.empty())
                 {
                     prompt += "\nPERSISTED_SANDBOX_PLAN\n"
@@ -2410,23 +2432,29 @@ namespace epochengine::editor_ai_development_panel
                 }
                 prompt +=
                     " Do not claim edits, builds, approval, Git, release, or live-source authority.";
-                if (plan_reply_corrections > 0u)
-                {
-                    prompt +=
-                        "\nEPOCH_PLAN_GROUNDING_CORRECTION_V1\n"
-                        "The previous plan was rejected because it named no "
-                        "reviewed source file. Return a replacement plan grounded "
-                        "in the exact path list above.\n"
-                        "END_EPOCH_PLAN_GROUNDING_CORRECTION_V1";
-                }
                 return prompt;
             }
-            return "EPOCH_SELF_ITERATION_PROPOSAL_V1\nOBJECTIVE\n"
-                + development_objective
-                + "\nCAMPAIGN_SCOPE_SHA256\n"
+            const auto area = active_domain == Domain::engine_source
+                ? ai::development_proposal_codec::SourceArea::engine
+                : ai::development_proposal_codec::SourceArea::project;
+            std::string prompt =
+                "EPOCH_SELF_ITERATION_PROPOSAL_V2\nCAMPAIGN_SCOPE_SHA256\n"
                 + snapshot.campaign.session.scope_digest
                 + "\nCURATED_SCOPE_SHA256\n" + campaign_scope_digest
-                + "\nReturn one exact EPOCH_SOURCE_PATCH_PROPOSAL_V1 packet for the reviewed files only. No approval, promotion, Git, release, or unrestricted execution.";
+                + "\nEND_CAMPAIGN_BINDING\n\n"
+                + ai::development_proposal_codec::protocol_prompt(
+                    area, development_objective, source_context_evidence);
+            if (!source_path_catalog_evidence.empty())
+            {
+                prompt +=
+                    "\n\nVERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
+                    + source_path_catalog_evidence
+                    + "END_VERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
+                    "If the reviewed bytes do not prove the repair, request up "
+                    "to twelve additional listed paths with "
+                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Do not guess.";
+            }
+            return prompt;
         }
 
         [[nodiscard]] bool request_next_campaign_validation(
@@ -3749,7 +3777,37 @@ namespace epochengine::editor_ai_development_panel
                 ai::development_proposal_codec::context_request_prompt(
                     area,
                     development_objective,
-                    source_context_evidence);
+                    source_path_catalog_evidence.empty()
+                        ? std::string_view{source_context_evidence}
+                        : std::string_view{source_path_catalog_evidence});
+            if (!campaign_reviewed_paths.empty())
+            {
+                output.model_prompt +=
+                    "\n\nALREADY_REVIEWED_SOURCE_PATHS\n";
+                for (const auto& path : campaign_reviewed_paths)
+                    output.model_prompt += path + "\n";
+                output.model_prompt +=
+                    "END_ALREADY_REVIEWED_SOURCE_PATHS\n"
+                    "Request only additional listed paths needed to prove the "
+                    "next change.";
+            }
+            if (!model_reply_correction_diagnostic.empty())
+            {
+                output.model_prompt +=
+                    "\n\nEPOCH_SOURCE_CONTEXT_CORRECTION_V1\n"
+                    "The previous source selection was rejected before any "
+                    "source bytes were read or sent. Return a fresh bounded "
+                    "context request.\nCORRECTION_ATTEMPT ";
+                output.model_prompt +=
+                    std::to_string(model_reply_corrections);
+                output.model_prompt += " OF ";
+                output.model_prompt +=
+                    std::to_string(maximum_model_reply_corrections);
+                output.model_prompt += "\nDIAGNOSTIC ";
+                output.model_prompt += model_reply_correction_diagnostic;
+                output.model_prompt +=
+                    "\nEND_EPOCH_SOURCE_CONTEXT_CORRECTION_V1";
+            }
             output.workspace_root = workspace_root;
             output.status = status_message;
             return output;
@@ -3771,6 +3829,16 @@ namespace epochengine::editor_ai_development_panel
                     area,
                     development_objective,
                     source_context_evidence);
+            if (!source_path_catalog_evidence.empty())
+            {
+                output.model_prompt +=
+                    "\n\nVERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
+                    + source_path_catalog_evidence
+                    + "END_VERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
+                    "If the reviewed bytes do not prove the repair, request up "
+                    "to twelve additional listed paths with "
+                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Do not guess.";
+            }
             if (!model_reply_correction_diagnostic.empty())
             {
                 output.model_prompt +=
@@ -3998,11 +4066,40 @@ namespace epochengine::editor_ai_development_panel
             ++model_reply_corrections;
             model_reply_correction_diagnostic = status_message;
             status_message = epochengine::format_text(
-                "Qwen source packet rejected before staging; correction "
+                "Model source packet rejected before staging; correction "
                 "attempt {}/{} is queued with the deterministic host diagnostic.",
                 model_reply_corrections,
                 maximum_model_reply_corrections);
             output = source_model_request();
+            output.status = status_message;
+            return output;
+        }
+
+        [[nodiscard]] RenderResult queue_source_context_reply_correction(
+            std::string rejection)
+        {
+            RenderResult output{};
+            status_message = std::move(rejection);
+            if (model_reply_corrections >= maximum_model_reply_corrections)
+            {
+                status_message +=
+                    " The bounded source-selection correction limit is exhausted; "
+                    "choose another model or revise the objective.";
+                output.status = status_message;
+                return output;
+            }
+
+            constexpr std::size_t maximumDiagnosticBytes = 2u * 1024u;
+            if (status_message.size() > maximumDiagnosticBytes)
+                status_message.resize(maximumDiagnosticBytes);
+            ++model_reply_corrections;
+            model_reply_correction_diagnostic = status_message;
+            status_message = epochengine::format_text(
+                "Model source selection rejected; correction attempt {}/{} "
+                "is running automatically.",
+                model_reply_corrections,
+                maximum_model_reply_corrections);
+            output = source_context_model_request();
             output.status = status_message;
             return output;
         }
@@ -4024,6 +4121,12 @@ namespace epochengine::editor_ai_development_panel
             {
                 status_message =
                     "No local-model source reply is available to validate.";
+                output.status = status_message;
+                return output;
+            }
+            if (model_transport_failure_reply(reply))
+            {
+                status_message = std::string{reply};
                 output.status = status_message;
                 return output;
             }
@@ -4052,41 +4155,41 @@ namespace epochengine::editor_ai_development_panel
                 pending_source_context_objective.clear();
                 if (!contextRequest)
                 {
-                    status_message =
+                    return queue_source_context_reply_correction(
                         "Model source-context request rejected: "
                         + contextRequest.status
-                        + " No source bytes were read or shared.";
-                    output.status = status_message;
-                    return output;
+                        + " No source bytes were read or shared.");
                 }
                 const bool everyPathWasOffered = std::ranges::all_of(
                     contextRequest.request.paths,
                     [&](const std::string& path)
                     {
+                        const std::string_view offeredPaths =
+                            source_path_catalog_evidence.empty()
+                                ? std::string_view{source_context_evidence}
+                                : std::string_view{
+                                    source_path_catalog_evidence};
                         return source_path_is_listed(
-                            source_context_evidence, path);
+                            offeredPaths, path);
                     });
                 if (!everyPathWasOffered)
                 {
-                    status_message =
+                    return queue_source_context_reply_correction(
                         "Model source-context request rejected because it named "
                         "a path outside the verified path catalog. No source bytes "
-                        "were read or shared.";
-                    output.status = status_message;
-                    return output;
+                        "were read or shared.");
                 }
                 pending_source_context_systems.clear();
                 pending_source_context_paths = contextRequest.request.paths;
                 pending_source_context_reason =
                     "Model request: " + contextRequest.request.reason;
                 pending_source_context_objective = development_objective;
-                source_context_evidence = input.architecture_evidence;
                 source_context_evidence_objective = development_objective;
                 active_domain = input.domain;
                 status_message =
                     epochengine::format_text(
-                        "The selected model requested {} bounded source path(s). Review the "
-                        "validated list before Share reads or sends any file bytes.",
+                        "The selected model requested {} bounded source path(s). "
+                        "Candidate Lab is opening only that validated context.",
                         pending_source_context_paths.size());
                 output.status = status_message;
                 return output;
@@ -4104,10 +4207,27 @@ namespace epochengine::editor_ai_development_panel
                         "in the shared source evidence: " + *target
                         + ". Re-evaluate that exact block.");
                 }
+                if (!source_path_catalog_evidence.empty()
+                    && source_context_expansions
+                        < maximum_source_context_expansions)
+                {
+                    ++source_context_expansions;
+                    model_reply_corrections = 0u;
+                    model_reply_correction_diagnostic.clear();
+                    status_message = epochengine::format_text(
+                        "The current source slice was insufficient. The AI is "
+                        "choosing additional verified source automatically "
+                        "(expansion {} of {}).",
+                        source_context_expansions,
+                        maximum_source_context_expansions);
+                    RenderResult expanded = source_context_model_request();
+                    expanded.status = status_message;
+                    return expanded;
+                }
                 status_message =
                     "The model could not form a grounded change from this source "
-                    "slice. No source was staged. Revise the plain-language request "
-                    "or let the model choose a new source slice.";
+                    "after exhausting automatic context expansion. No source was "
+                    "staged; refine the request or choose another model.";
                 output.status = status_message;
                 return output;
             }
@@ -4115,6 +4235,13 @@ namespace epochengine::editor_ai_development_panel
             const std::string_view evidence = source_context_evidence.empty()
                 ? std::string_view{input.architecture_evidence}
                 : std::string_view{source_context_evidence};
+            if (campaign_reviewed_paths.empty()
+                && !source_path_catalog_evidence.empty())
+            {
+                return queue_source_context_reply_correction(
+                    "Expected a bounded source-context selection before any "
+                    "source proposal. No source bytes were read or shared.");
+            }
             const auto decoded =
                 ai::development_proposal_codec::decode(reply);
             if (!decoded)
@@ -4203,6 +4330,34 @@ namespace epochengine::editor_ai_development_panel
         using ControlPhase =
             ai::iteration_supervisor_control::ControlPhase;
         using SchedulerPhase = ai::iteration_campaign_scheduler::Phase;
+        Panel proposalPromptPanel{};
+        auto& proposalPromptState =
+            *proposalPromptPanel.implementation_;
+        proposalPromptState.active_domain = Domain::engine_source;
+        proposalPromptState.development_objective =
+            "Repair the reviewed source.";
+        proposalPromptState.source_context_evidence =
+            "FILE_CONTENT_BEGIN Engine/src/ai/example.cpp\n"
+            "int value = 0;\n"
+            "FILE_CONTENT_END Engine/src/ai/example.cpp\n";
+        proposalPromptState.source_path_catalog_evidence =
+            "PATH Engine/src/ai/example.cpp\n"
+            "PATH Engine/modules/ai.example.ixx\n";
+        const std::string proposalPrompt =
+            proposalPromptState.campaign_model_prompt(
+                ai::self_iteration_orchestrator::OperationKind::
+                    model_proposal);
+        if (proposalPrompt.find(
+                "FILE_CONTENT_BEGIN Engine/src/ai/example.cpp")
+                == std::string::npos
+            || proposalPrompt.find(
+                "VERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION")
+                == std::string::npos
+            || proposalPrompt.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
+                == std::string::npos)
+        {
+            return false;
+        }
         const auto idleActions = Implementation::available_supervisor_actions(
             ControlPhase::active,
             SchedulerPhase::idle,
@@ -4249,7 +4404,7 @@ namespace epochengine::editor_ai_development_panel
         const auto savedStep = Implementation::campaign_presentation(
             CampaignPhase::checkpointed, true, true);
         if (describeStep.step != 1u
-            || describeStep.title != "Describe and review source"
+            || describeStep.title != "Describe the result"
             || sandboxStep.step != 2u
             || planStep.step != 3u
             || changeStep.step != 4u
@@ -4389,9 +4544,13 @@ namespace epochengine::editor_ai_development_panel
             "path: Engine/../secret.cpp\n"
             "end_request\n",
             editor_ai_development::LogicalTime{2u});
-        if (rejectedContext.action != HostAction::none
+        if (rejectedContext.action
+                != HostAction::request_model_source_proposal
             || !contextState.pending_source_context_paths.empty()
-            || rejectedContext.status.find("rejected") == std::string::npos)
+            || rejectedContext.status.find("correction attempt 1/2")
+                == std::string::npos
+            || rejectedContext.model_prompt.find(
+                "EPOCH_SOURCE_CONTEXT_CORRECTION_V1") == std::string::npos)
         {
             return false;
         }
@@ -4403,9 +4562,12 @@ namespace epochengine::editor_ai_development_panel
             "path: Engine/src/editor/not-offered.cpp\n"
             "end_request\n",
             editor_ai_development::LogicalTime{3u});
-        if (unlistedContext.action != HostAction::none
+        if (unlistedContext.action
+                != HostAction::request_model_source_proposal
             || !contextState.pending_source_context_paths.empty()
-            || unlistedContext.status.find("outside the verified path catalog")
+            || unlistedContext.status.find("correction attempt 2/2")
+                == std::string::npos
+            || unlistedContext.model_prompt.find("CORRECTION_ATTEMPT 2 OF 2")
                 == std::string::npos)
         {
             return false;
@@ -4875,7 +5037,7 @@ namespace epochengine::editor_ai_development_panel
                 || proposalRequested.action
                     != HostAction::request_model_source_proposal
                 || proposalRequested.model_prompt.find(
-                    "EPOCH_SELF_ITERATION_PROPOSAL_V1")
+                    "EPOCH_SELF_ITERATION_PROPOSAL_V2")
                     == std::string::npos
                 || !localOpenState.campaign_pending_operation
                 || localOpenState.campaign_pending_operation->kind()
@@ -5462,6 +5624,36 @@ namespace epochengine::editor_ai_development_panel
             return false;
         }
 
+        Panel expandingContext{};
+        auto& expandingContextState =
+            *expandingContext.implementation_;
+        expandingContextState.development_objective =
+            "fix a bug in opengl";
+        expandingContextState.source_context_evidence =
+            diagnosticInsufficientState.source_context_evidence;
+        expandingContextState.source_path_catalog_evidence =
+            "PATH Engine/src/renderers/opengl/opengl.context_init.cpp\n"
+            "PATH Engine/src/renderers/opengl/opengl.context.cpp\n";
+        expandingContextState.campaign_reviewed_paths = {
+            "Engine/src/renderers/opengl/opengl.context_init.cpp"};
+        expandingContextState.active_domain = Domain::engine_source;
+        const RenderResult expandedContextResult =
+            expandingContextState.stage_source_reply(
+                diagnosticInsufficientInput,
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1",
+                logical_time_now());
+        if (expandedContextResult.action
+                != HostAction::request_model_source_proposal
+            || expandingContextState.source_context_expansions != 1u
+            || expandedContextResult.model_prompt.find(
+                "Engine/src/renderers/opengl/opengl.context.cpp")
+                == std::string::npos
+            || expandedContextResult.model_prompt.find(
+                "ALREADY_REVIEWED_SOURCE_PATHS") == std::string::npos)
+        {
+            return false;
+        }
+
         Panel packetCorrection{};
         auto& packetCorrectionState = *packetCorrection.implementation_;
         packetCorrectionState.development_objective =
@@ -5683,9 +5875,14 @@ namespace epochengine::editor_ai_development_panel
             state.pending_source_context_reason.clear();
             state.pending_source_context_objective.clear();
             state.source_context_evidence = catalog.evidence;
+            state.source_path_catalog_evidence = catalog.evidence;
+            state.source_context_expansions = 0u;
             state.source_context_evidence_objective =
                 state.development_objective;
             state.active_domain = input.domain;
+            state.sandbox_lab_enabled = true;
+            if (state.sandbox_parent_root.empty())
+                state.sandbox_parent_root = state.source_root;
             state.status_message = epochengine::format_text(
                 "Asking the selected model to choose a bounded source slice from {} path names. No source-file bytes have been read or sent.",
                 catalog.path_count);
@@ -5693,6 +5890,27 @@ namespace epochengine::editor_ai_development_panel
         };
 
         gui::label("Engine Self-Coding");
+        if (input.local_model_running)
+        {
+            const std::uint64_t elapsedSeconds =
+                input.local_model_elapsed_ms / 1'000u;
+            const std::string elapsed = epochengine::format_text(
+                "{}:{:02}", elapsedSeconds / 60u, elapsedSeconds % 60u);
+            gui::progress_bar(gui::ProgressBarOptions{
+                .label = "Local model working",
+                .status = elapsed,
+                .value = 0.0f,
+                .size = {width, 22.0f},
+                .show_percent = false,
+                .activity = true,
+                .activity_phase = static_cast<float>(
+                    input.local_model_elapsed_ms % 1'600u) / 1'600.0f});
+            gui::wrapped_label(
+                "The selected model is still working. Epoch will continue the "
+                "sandbox session when its response arrives; Stop Session can "
+                "cancel the active request.",
+                width);
+        }
         if (input.domain != Domain::tooling)
         {
             gui::label("What should change?");
@@ -5704,8 +5922,8 @@ namespace epochengine::editor_ai_development_panel
             gui::wrapped_label(
                 "Describe the result in your own words. You do not need to name "
                 "a source file or internal system. Epoch first gives the selected "
-                "model a path-only catalog, then shows the exact files it requests "
-                "before reading or sending their contents.",
+                "model a verified path catalog, records the exact source it selects "
+                "in Detailed Session Activity, and continues inside Candidate Lab.",
                 width);
             if (state.advanced_controls)
             {
@@ -5747,11 +5965,11 @@ namespace epochengine::editor_ai_development_panel
                 gui::wrapped_label(
                     staleObjective
                         ? "The request changed. Ask the AI to choose a fresh source slice."
-                        : "Continue reads only these files and creates a separate sandbox. It does not contact the model yet.",
+                        : "Epoch will use only this verified context inside the separate Candidate Lab.",
                     width);
                 if (!staleObjective
                     && gui::button(
-                        "Continue with These Files",
+                        "Use This Context",
                         {width, 30.0f}))
                 {
                     return share_requested_source_context(input);
@@ -5801,6 +6019,13 @@ namespace epochengine::editor_ai_development_panel
                         ? std::string{"Initial reviewed source"}
                         : state.sandbox_parent_root);
                 gui::property_row(
+                    "Comparison",
+                    state.candidate_preview_ready
+                        ? std::string{
+                            "Main editor = current | bottom context = candidate"}
+                        : std::string{
+                            "Current sandbox retained while candidate builds"});
+                gui::property_row(
                     "Candidate",
                     state.candidate_preview_ready
                         ? epochengine::format_text(
@@ -5808,6 +6033,25 @@ namespace epochengine::editor_ai_development_panel
                             state.candidate_preview_process_id,
                             state.candidate_preview_window_id)
                         : state.candidate_preview_status);
+                if (!state.source_candidate_operations.empty())
+                {
+                    gui::label("Proposed Changes");
+                    for (const auto& operation :
+                         state.source_candidate_operations)
+                    {
+                        gui::wrapped_label(
+                            operation.relative_path + " — "
+                                + operation.summary,
+                            width);
+                    }
+                    gui::property_row(
+                        "Validation",
+                        state.candidate_preview_ready
+                            ? std::string{
+                                "Required sandbox builds and tests passed"}
+                            : std::string{
+                                "Building and testing isolated candidate"});
+                }
                 if (!state.sandbox_lab_plan.empty())
                 {
                     gui::label("Saved Mission Plan");
@@ -5894,6 +6138,16 @@ namespace epochengine::editor_ai_development_panel
                             return next;
                         }
                         state.pending_source_context_systems.clear();
+                        const SourcePathCatalog nextCatalog =
+                            build_source_path_catalog(nextParent, input.domain);
+                        if (!nextCatalog.accepted)
+                        {
+                            state.status_message = nextCatalog.status;
+                            output.status = state.status_message;
+                            return output;
+                        }
+                        state.source_path_catalog_evidence =
+                            nextCatalog.evidence;
                         state.pending_source_context_paths = reviewedPaths;
                         state.pending_source_context_reason =
                             "Continuing the model-selected source slice from the previous candidate.";
@@ -6165,54 +6419,6 @@ namespace epochengine::editor_ai_development_panel
             const std::uint64_t now = logical_time_now().value;
             if (pending.kind() == OperationKind::model_plan)
             {
-                if (!plan_names_reviewed_source(
-                        input.latest_raw_model_reply,
-                        state.campaign_reviewed_paths))
-                {
-                    if (state.plan_reply_corrections
-                        < Implementation::maximum_plan_reply_corrections)
-                    {
-                        ++state.plan_reply_corrections;
-                        output.action = HostAction::request_model_source_proposal;
-                        output.model_transport = state.campaign_provider
-                                == ai::project_profile::Provider::external_mcp
-                            ? ModelTransport::external_mcp
-                            : ModelTransport::local_inference;
-                        output.model_prompt = state.campaign_model_prompt(
-                            OperationKind::model_plan);
-                        output.workspace_root = state.workspace_root;
-                        state.status_message =
-                            "The returned plan named no reviewed source file. "
-                            "Epoch rejected it and requested one grounded replacement; "
-                            "nothing was staged.";
-                        output.status = state.status_message;
-                        return output;
-                    }
-
-                    const auto campaignSnapshot =
-                        state.campaign_orchestrator->snapshot();
-                    state.capture_campaign_result(
-                        output,
-                        state.campaign_orchestrator->cancel(
-                            state.campaign_action(
-                                campaignSnapshot,
-                                "ungrounded-plan",
-                                now),
-                            "The model plan remained ungrounded after one bounded correction."));
-                    state.campaign_pending_operation.reset();
-                    state.campaign_pending_response.clear();
-                    state.campaign_pending_response_digest.clear();
-                    state.campaign_plan_review.clear();
-                    state.campaign_plan_review_digest.clear();
-                    state.sandbox_lab_plan.clear();
-                    state.sandbox_lab_enabled = false;
-                    state.status_message =
-                        "The model returned two plans without naming any reviewed "
-                        "source file. The sandbox session stopped with no changes; "
-                        "refine the objective or choose a different source scope.";
-                    output.status = state.status_message;
-                    return output;
-                }
                 state.plan_reply_corrections = 0u;
                 if (state.campaign_scheduler && state.campaign_queue
                     && state.campaign_bridge && state.campaign_supervisor
@@ -6263,7 +6469,9 @@ namespace epochengine::editor_ai_development_panel
                     state.campaign_pending_response.clear();
                     state.campaign_pending_response_digest.clear();
                     state.status_message = accepted
-                        ? "Returned plan is digest-bound and ready for review. Approve it to request one exact source proposal, or reject it without changing source."
+                        ? (state.sandbox_lab_enabled
+                            ? "Returned plan is recorded. Candidate Lab is continuing automatically inside the disposable sandbox."
+                            : "Returned plan is digest-bound and ready for review. Approve it to request one exact source proposal, or reject it without changing source.")
                         : state.status_message;
                     if (accepted)
                     {
@@ -6319,6 +6527,77 @@ namespace epochengine::editor_ai_development_panel
                         == HostAction::request_model_source_proposal)
                     {
                         return staged;
+                    }
+                    if (!state.pending_source_context_paths.empty())
+                    {
+                        std::vector<std::string> expandedPaths =
+                            state.campaign_reviewed_paths;
+                        for (const auto& path :
+                             state.pending_source_context_paths)
+                        {
+                            if (expandedPaths.size() >= 32u)
+                                break;
+                            if (std::ranges::find(expandedPaths, path)
+                                == expandedPaths.end())
+                            {
+                                expandedPaths.push_back(path);
+                            }
+                        }
+                        const auto campaignSnapshot =
+                            state.campaign_orchestrator->snapshot();
+                        state.capture_campaign_result(
+                            staged,
+                            state.campaign_orchestrator->cancel(
+                                state.campaign_action(
+                                    campaignSnapshot,
+                                    "expand-source-context",
+                                    now),
+                                "The model requested additional verified source; "
+                                "the incomplete campaign is being replaced by a "
+                                "fresh sandbox campaign with the expanded scope."));
+                        const std::string objective =
+                            state.development_objective;
+                        const std::string sourceRoot = state.source_root;
+                        const std::string sandboxParent =
+                            state.sandbox_parent_root.empty()
+                                ? state.source_root
+                                : state.sandbox_parent_root;
+                        const std::string pathCatalog =
+                            state.source_path_catalog_evidence;
+                        const std::size_t expansionCount =
+                            state.source_context_expansions;
+                        const auto provider = state.campaign_provider;
+                        const auto priorEvidence =
+                            std::move(staged.campaign_evidence);
+                        state.reset_controller(
+                            input.workspace_id,
+                            sourceRoot,
+                            input.workspace_root);
+                        state.sandbox_lab_enabled = true;
+                        state.sandbox_parent_root = sandboxParent;
+                        state.development_objective = objective;
+                        state.campaign_provider = provider;
+                        state.active_domain = input.domain;
+                        state.source_path_catalog_evidence = pathCatalog;
+                        state.source_context_expansions = expansionCount;
+                        state.pending_source_context_paths =
+                            std::move(expandedPaths);
+                        state.pending_source_context_reason =
+                            "AI-requested expansion of the verified source slice.";
+                        state.pending_source_context_objective = objective;
+                        RenderResult expanded =
+                            share_requested_source_context(input);
+                        expanded.campaign_evidence.insert(
+                            expanded.campaign_evidence.begin(),
+                            priorEvidence.begin(),
+                            priorEvidence.end());
+                        state.status_message = epochengine::format_text(
+                            "The AI expanded its source context to {} verified "
+                            "file(s). Candidate Lab is rebuilding the isolated "
+                            "campaign automatically.",
+                            state.campaign_reviewed_paths.size());
+                        expanded.status = state.status_message;
+                        return expanded;
                     }
                     const auto campaignSnapshot =
                         state.campaign_orchestrator->snapshot();
@@ -6381,6 +6660,17 @@ namespace epochengine::editor_ai_development_panel
             input,
             input.latest_raw_model_reply,
             logical_time_now());
+        if (!state.pending_source_context_paths.empty())
+        {
+            RenderResult shared = share_requested_source_context(input);
+            shared.campaign_evidence.insert(
+                shared.campaign_evidence.begin(),
+                "AI selected "
+                    + std::to_string(shared.source_paths.size())
+                    + " verified source file(s); Epoch disclosed the list and "
+                      "opened those bytes only inside Candidate Lab.");
+            return shared;
+        }
         output.status = state.status_message;
         return output;
     }
@@ -6591,7 +6881,7 @@ namespace epochengine::editor_ai_development_panel
         }
 
         state.status_message =
-            "Curated bundle and disposable workspace are verified. Start or resume the campaign explicitly; no model request was started.";
+            "Reviewed source and the disposable workspace are ready. Candidate Lab will continue the plan automatically.";
         output.status = state.status_message;
         output.reveal_source_workspace = false;
         output.source_root = state.source_root;
@@ -6640,8 +6930,8 @@ namespace epochengine::editor_ai_development_panel
             "Disposable build sandbox ready: {} source file(s), {} KiB copied "
             "locally for compilation. Model input remains limited to the {} "
             "reviewed source file(s), and nothing has been sent. Live engine "
-            "source and the active project remain read-only. Next: begin the "
-            "reviewed session, then explicitly send the objective for a plan.",
+            "source and the active project remain read-only. Candidate Lab will "
+            "continue with planning automatically.",
             file_count,
             (total_bytes + 1023u) / 1024u,
             state.campaign_reviewed_paths.size());

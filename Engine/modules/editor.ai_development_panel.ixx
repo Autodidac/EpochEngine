@@ -127,6 +127,8 @@ export namespace epochengine::editor_ai_development_panel
         std::string selected_model{};
         std::string selected_endpoint{};
         std::string selected_transport{};
+        bool local_model_running{};
+        std::uint64_t local_model_elapsed_ms{};
         bool external_mcp_available{};
         std::string external_mcp_status{};
         std::uint64_t external_mcp_process_id{};

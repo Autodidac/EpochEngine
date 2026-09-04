@@ -1,3 +1,25 @@
+- The current v0.89.35 self-coding transport correction removes the operator-
+  named source requirement from the real local-model path. `Start With AI`
+  sends the plain-language objective with a verified path catalog; the model
+  may select or expand a coherent slice of up to 12 files, while the host still
+  rejects unsafe, duplicate, missing, and off-catalog paths. Safe compact path
+  replies from current agentic models are normalized before that validation.
+  The proposal stage now actually includes the selected exact source bytes,
+  plans no longer fail for omitting filenames, OpenAI-compatible source calls
+  request visible final content with reasoning disabled, honor the 600-second
+  source-workload timeout, and retry transport/API/empty-content failure once.
+  OpenAI-compatible endpoints receive strict JSON schemas for both source
+  selection and edit operations; Epoch deterministically converts that data to
+  its existing exact review packet instead of depending on fragile magic-text
+  formatting. The live Qwen 35B schema probe returned an exact-search edit that
+  matched the supplied source bytes.
+  AI Controls shows an animated `Local model working` bar and elapsed time for
+  the whole pending request. A live localhost Qwen 35B probe selected source
+  and returned a source-edit packet without hidden reasoning; deterministic
+  exact-search grounding remains authoritative and routes inexact edits through
+  the existing two-attempt correction loop. Windows Debug/Release editor builds,
+  both build-safe aggregate contracts, and 581-file source naming pass. Native
+  Candidate Lab interaction and visual comparison remain an operator eye-test.
 - The current v0.89.35 self-coding entry is prompt-first. The operator may
   describe an outcome in ordinary language without naming an internal system
   or file. Epoch sends the selected local model or external MCP only a bounded

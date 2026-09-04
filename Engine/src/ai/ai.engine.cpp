@@ -933,6 +933,18 @@ namespace epochengine::ai
             return buffer;
         }
 
+        [[nodiscard]] static int model_http_timeout_milliseconds(
+            std::uint32_t timeoutSeconds) noexcept
+        {
+            const std::uint64_t milliseconds =
+                (std::max)(std::uint64_t{1u},
+                    static_cast<std::uint64_t>(timeoutSeconds)) * 1'000u;
+            return static_cast<int>((std::min)(
+                milliseconds,
+                static_cast<std::uint64_t>(
+                    (std::numeric_limits<int>::max)())));
+        }
+
 #if defined(_WIN32)
         struct WinHttpUrl
         {
@@ -1004,7 +1016,10 @@ namespace epochengine::ai
                 WinHttpCloseHandle(request);
         }
 
-        static std::string winhttp_post_json(const std::string& url, const std::string& body_utf8, const std::vector<std::pair<std::string, std::string>>& headers)
+        static std::string winhttp_post_json(const std::string& url,
+            const std::string& body_utf8,
+            const std::vector<std::pair<std::string, std::string>>& headers,
+            std::uint32_t timeoutSeconds)
         {
             const auto u = crack_url(url);
 
@@ -1012,9 +1027,14 @@ namespace epochengine::ai
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
-            // A local model must not hold an editor request forever. The
-            // editor owns retry and milestone policy above this transport.
-            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 15000, 90000);
+            // Source iterations can legitimately take several minutes on a
+            // local model. Honor the workload's bounded timeout while keeping
+            // connect and send failures responsive; the editor can still
+            // cancel the active WinHTTP request immediately.
+            const int receiveTimeout =
+                model_http_timeout_milliseconds(timeoutSeconds);
+            (void)WinHttpSetTimeouts(
+                hSession, 10000, 10000, 15000, receiveTimeout);
 
             HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
             if (!hConnect)
@@ -1244,7 +1264,8 @@ namespace epochengine::ai
 
         static std::string http_post_json(const std::string& url,
             const std::string& body_utf8,
-            const std::vector<std::pair<std::string, std::string>>& headers)
+            const std::vector<std::pair<std::string, std::string>>& headers,
+            std::uint32_t timeoutSeconds)
         {
             CURL* curl = curl_easy_init();
             if (!curl)
@@ -1272,7 +1293,11 @@ namespace epochengine::ai
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
             curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 120000L);
+            curl_easy_setopt(
+                curl,
+                CURLOPT_TIMEOUT_MS,
+                static_cast<long>(
+                    model_http_timeout_milliseconds(timeoutSeconds)));
             curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
             curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curl_ai_request_progress);
 
@@ -1879,46 +1904,505 @@ namespace epochengine::ai
             return {};
         }
 
+        enum class StructuredSourceReply : std::uint8_t
+        {
+            none,
+            context,
+            patch
+        };
+
+        [[nodiscard]] static StructuredSourceReply structured_source_reply_for(
+            std::string_view input,
+            bool suppressReasoning) noexcept
+        {
+            if (!suppressReasoning)
+                return StructuredSourceReply::none;
+            if (input.find("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
+                != std::string_view::npos)
+            {
+                return StructuredSourceReply::patch;
+            }
+            if (input.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
+                != std::string_view::npos)
+            {
+                return StructuredSourceReply::context;
+            }
+            return StructuredSourceReply::none;
+        }
+
+        [[nodiscard]] static std::string_view structured_source_schema(
+            StructuredSourceReply shape) noexcept
+        {
+            if (shape == StructuredSourceReply::context)
+            {
+                return R"json({"type":"json_schema","json_schema":{"name":"epoch_source_context","strict":true,"schema":{"type":"object","additionalProperties":false,"required":["reason","paths"],"properties":{"reason":{"type":"string","minLength":1,"maxLength":512},"paths":{"type":"array","minItems":1,"maxItems":12,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":1024}}}}}})json";
+            }
+            if (shape == StructuredSourceReply::patch)
+            {
+                return R"json({"type":"json_schema","json_schema":{"name":"epoch_source_patch","strict":true,"schema":{"type":"object","additionalProperties":false,"required":["title","rationale","operations"],"properties":{"title":{"type":"string","minLength":1,"maxLength":160},"rationale":{"type":"string","minLength":1,"maxLength":1024},"operations":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"object","additionalProperties":false,"required":["path","summary","search","replacement"],"properties":{"path":{"type":"string","minLength":1,"maxLength":1024},"summary":{"type":"string","minLength":1,"maxLength":512},"search":{"type":"string","minLength":1,"maxLength":32768},"replacement":{"type":"string","maxLength":32768}}}}}}}})json";
+            }
+            return {};
+        }
+
+        class StructuredJsonCursor final
+        {
+        public:
+            explicit StructuredJsonCursor(std::string_view source) noexcept
+                : source_(source)
+            {
+            }
+
+            [[nodiscard]] bool consume(char expected) noexcept
+            {
+                skip_space();
+                if (position_ >= source_.size()
+                    || source_[position_] != expected)
+                {
+                    return false;
+                }
+                ++position_;
+                return true;
+            }
+
+            [[nodiscard]] std::optional<std::string> string()
+            {
+                skip_space();
+                if (position_ >= source_.size()
+                    || source_[position_] != '"')
+                {
+                    return std::nullopt;
+                }
+                const std::size_t begin = ++position_;
+                for (std::size_t index = begin; index < source_.size(); ++index)
+                {
+                    if (source_[index] != '"'
+                        || json_character_is_escaped(source_, index, begin))
+                    {
+                        continue;
+                    }
+                    const std::string_view raw =
+                        source_.substr(begin, index - begin);
+                    std::string decoded = json_unescape(raw);
+                    if (!raw.empty() && decoded.empty())
+                        return std::nullopt;
+                    position_ = index + 1u;
+                    return decoded;
+                }
+                return std::nullopt;
+            }
+
+            [[nodiscard]] bool complete() noexcept
+            {
+                skip_space();
+                return position_ == source_.size();
+            }
+
+        private:
+            void skip_space() noexcept
+            {
+                while (position_ < source_.size()
+                    && std::isspace(static_cast<unsigned char>(
+                        source_[position_])) != 0)
+                {
+                    ++position_;
+                }
+            }
+
+            std::string_view source_{};
+            std::size_t position_{};
+        };
+
+        struct StructuredPatchOperation final
+        {
+            std::string path{};
+            std::string summary{};
+            std::string search{};
+            std::string replacement{};
+        };
+
+        [[nodiscard]] static bool parse_string_array(
+            StructuredJsonCursor& cursor,
+            std::vector<std::string>& values,
+            std::size_t maximumValues)
+        {
+            if (!cursor.consume('['))
+                return false;
+            if (cursor.consume(']'))
+                return true;
+            for (;;)
+            {
+                auto value = cursor.string();
+                if (!value || values.size() >= maximumValues)
+                    return false;
+                values.push_back(std::move(*value));
+                if (cursor.consume(']'))
+                    return true;
+                if (!cursor.consume(','))
+                    return false;
+            }
+        }
+
+        [[nodiscard]] static bool parse_patch_operation(
+            StructuredJsonCursor& cursor,
+            StructuredPatchOperation& operation)
+        {
+            if (!cursor.consume('{'))
+                return false;
+            bool pathSeen{};
+            bool summarySeen{};
+            bool searchSeen{};
+            bool replacementSeen{};
+            if (cursor.consume('}'))
+                return false;
+            for (;;)
+            {
+                const auto key = cursor.string();
+                if (!key || !cursor.consume(':'))
+                    return false;
+                auto value = cursor.string();
+                if (!value)
+                    return false;
+                if (*key == "path" && !pathSeen)
+                {
+                    operation.path = std::move(*value);
+                    pathSeen = true;
+                }
+                else if (*key == "summary" && !summarySeen)
+                {
+                    operation.summary = std::move(*value);
+                    summarySeen = true;
+                }
+                else if (*key == "search" && !searchSeen)
+                {
+                    operation.search = std::move(*value);
+                    searchSeen = true;
+                }
+                else if (*key == "replacement" && !replacementSeen)
+                {
+                    operation.replacement = std::move(*value);
+                    replacementSeen = true;
+                }
+                else
+                {
+                    return false;
+                }
+                if (cursor.consume('}'))
+                    break;
+                if (!cursor.consume(','))
+                    return false;
+            }
+            return pathSeen && summarySeen && searchSeen && replacementSeen;
+        }
+
+        [[nodiscard]] static bool parse_patch_operations(
+            StructuredJsonCursor& cursor,
+            std::vector<StructuredPatchOperation>& operations)
+        {
+            if (!cursor.consume('[') || cursor.consume(']'))
+                return false;
+            for (;;)
+            {
+                if (operations.size() >= 4u)
+                    return false;
+                StructuredPatchOperation operation{};
+                if (!parse_patch_operation(cursor, operation))
+                    return false;
+                operations.push_back(std::move(operation));
+                if (cursor.consume(']'))
+                    return true;
+                if (!cursor.consume(','))
+                    return false;
+            }
+        }
+
+        [[nodiscard]] static std::string one_line_metadata(
+            std::string value,
+            std::size_t maximumBytes)
+        {
+            for (char& byte : value)
+            {
+                if (byte == '\r' || byte == '\n' || byte == '\t')
+                    byte = ' ';
+            }
+            value = trim(value);
+            if (value.size() > maximumBytes)
+                value.resize(maximumBytes);
+            return value;
+        }
+
+        [[nodiscard]] static bool append_protocol_block(
+            std::string& packet,
+            std::string value,
+            std::string_view finalNewlineField,
+            std::string_view beginMarker,
+            std::string_view endMarker,
+            bool requireContent)
+        {
+            if (value.find('\0') != std::string::npos)
+                return false;
+            for (std::size_t position = 0u;
+                 (position = value.find("\r\n", position))
+                    != std::string::npos;)
+            {
+                value.replace(position, 2u, "\n");
+            }
+            std::ranges::replace(value, '\r', '\n');
+            const bool finalNewline = !value.empty() && value.back() == '\n';
+            if (finalNewline)
+                value.pop_back();
+            if (requireContent && value.empty())
+                return false;
+
+            packet.append(finalNewlineField);
+            packet.append(finalNewline ? "true\n" : "false\n");
+            packet.append(beginMarker);
+            packet.push_back('\n');
+            std::size_t begin{};
+            for (;;)
+            {
+                const std::size_t newline = value.find('\n', begin);
+                packet.push_back('|');
+                packet.append(value.substr(
+                    begin,
+                    newline == std::string::npos
+                        ? std::string::npos
+                        : newline - begin));
+                packet.push_back('\n');
+                if (newline == std::string::npos)
+                    break;
+                begin = newline + 1u;
+            }
+            packet.append(endMarker);
+            packet.push_back('\n');
+            return true;
+        }
+
+        [[nodiscard]] static std::string normalize_structured_context_reply(
+            std::string_view reply)
+        {
+            StructuredJsonCursor cursor{reply};
+            if (!cursor.consume('{') || cursor.consume('}'))
+                return {};
+            std::string reason{};
+            std::vector<std::string> paths{};
+            bool reasonSeen{};
+            bool pathsSeen{};
+            for (;;)
+            {
+                const auto key = cursor.string();
+                if (!key || !cursor.consume(':'))
+                    return {};
+                if (*key == "reason" && !reasonSeen)
+                {
+                    auto value = cursor.string();
+                    if (!value)
+                        return {};
+                    reason = one_line_metadata(std::move(*value), 512u);
+                    reasonSeen = true;
+                }
+                else if (*key == "paths" && !pathsSeen)
+                {
+                    if (!parse_string_array(cursor, paths, 12u))
+                        return {};
+                    pathsSeen = true;
+                }
+                else
+                {
+                    return {};
+                }
+                if (cursor.consume('}'))
+                    break;
+                if (!cursor.consume(','))
+                    return {};
+            }
+            if (!cursor.complete() || !reasonSeen || reason.empty()
+                || !pathsSeen || paths.empty())
+            {
+                return {};
+            }
+
+            std::string packet = "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nreason: ";
+            packet += reason;
+            packet += "\npath_count: " + std::to_string(paths.size()) + "\n";
+            for (const auto& path : paths)
+                packet += "path: " + path + "\n";
+            packet += "end_request\n";
+            return packet;
+        }
+
+        [[nodiscard]] static std::string normalize_structured_patch_reply(
+            std::string_view reply)
+        {
+            StructuredJsonCursor cursor{reply};
+            if (!cursor.consume('{') || cursor.consume('}'))
+                return {};
+            std::string title{};
+            std::string rationale{};
+            std::vector<StructuredPatchOperation> operations{};
+            bool titleSeen{};
+            bool rationaleSeen{};
+            bool operationsSeen{};
+            for (;;)
+            {
+                const auto key = cursor.string();
+                if (!key || !cursor.consume(':'))
+                    return {};
+                if (*key == "title" && !titleSeen)
+                {
+                    auto value = cursor.string();
+                    if (!value)
+                        return {};
+                    title = one_line_metadata(std::move(*value), 160u);
+                    titleSeen = true;
+                }
+                else if (*key == "rationale" && !rationaleSeen)
+                {
+                    auto value = cursor.string();
+                    if (!value)
+                        return {};
+                    rationale = one_line_metadata(std::move(*value), 1'024u);
+                    rationaleSeen = true;
+                }
+                else if (*key == "operations" && !operationsSeen)
+                {
+                    if (!parse_patch_operations(cursor, operations))
+                        return {};
+                    operationsSeen = true;
+                }
+                else
+                {
+                    return {};
+                }
+                if (cursor.consume('}'))
+                    break;
+                if (!cursor.consume(','))
+                    return {};
+            }
+            if (!cursor.complete() || !titleSeen || title.empty()
+                || !rationaleSeen || rationale.empty() || !operationsSeen
+                || operations.empty())
+            {
+                return {};
+            }
+
+            std::string packet = "EPOCH_SOURCE_PATCH_PROPOSAL_V1\ntitle: ";
+            packet += title;
+            packet += "\nrationale: " + rationale;
+            packet += "\nlifetime_seconds: 900\noperation_count: ";
+            packet += std::to_string(operations.size());
+            packet.push_back('\n');
+            for (auto& operation : operations)
+            {
+                const std::string summary = one_line_metadata(
+                    std::move(operation.summary), 512u);
+                if (operation.path.empty() || summary.empty())
+                    return {};
+                packet += "begin_operation\narea: ";
+                packet += operation.path.starts_with("Engine/")
+                    ? "engine\n" : "project\n";
+                packet += "path: " + operation.path + "\nsummary: "
+                    + summary + "\n";
+                if (!append_protocol_block(
+                        packet,
+                        std::move(operation.search),
+                        "search_final_newline: ",
+                        "begin_search",
+                        "end_search",
+                        true)
+                    || !append_protocol_block(
+                        packet,
+                        std::move(operation.replacement),
+                        "replacement_final_newline: ",
+                        "begin_replacement",
+                        "end_replacement",
+                        false))
+                {
+                    return {};
+                }
+                packet += "end_operation\n";
+            }
+            packet += "end_proposal\n";
+            return packet;
+        }
+
+        [[nodiscard]] static std::string normalize_structured_source_reply(
+            std::string_view reply,
+            StructuredSourceReply shape)
+        {
+            if (shape == StructuredSourceReply::context)
+                return normalize_structured_context_reply(reply);
+            if (shape == StructuredSourceReply::patch)
+                return normalize_structured_patch_reply(reply);
+            return std::string{reply};
+        }
+
+        [[nodiscard]] static std::string openai_chat_request_body(
+            std::string_view model,
+            std::string_view systemPrompt,
+            std::string_view input,
+            std::size_t maximumTokens,
+            bool recoveryRequest,
+            bool suppressReasoning)
+        {
+            std::string requestInput{input};
+            if (recoveryRequest)
+            {
+                requestInput =
+                    "Return only the final assistant answer. Do not expose analysis, reasoning, debug text, or drafting notes.\n"
+                    "Original request:\n" + requestInput;
+            }
+            if (contains_text(lowercase_ascii(model), "qwen"))
+                requestInput += "\n/no_think";
+
+            const StructuredSourceReply sourceReply =
+                structured_source_reply_for(input, suppressReasoning);
+
+            std::string body;
+            body.reserve(288u + systemPrompt.size() + requestInput.size());
+            body += "{";
+            body += "\"model\":\"" + json_escape(model) + "\",";
+            body += "\"messages\":[";
+            body += "{\"role\":\"system\",\"content\":\""
+                + json_escape(systemPrompt) + "\"},";
+            body += "{\"role\":\"user\",\"content\":\""
+                + json_escape(requestInput) + "\"}";
+            body += "],";
+            if (suppressReasoning)
+                body += "\"reasoning_effort\":\"none\",";
+            body += "\"max_tokens\":" + std::to_string(maximumTokens) + ",";
+            if (sourceReply != StructuredSourceReply::none)
+            {
+                body += "\"response_format\":";
+                body += structured_source_schema(sourceReply);
+                body.push_back(',');
+            }
+            body += "\"stream\":false";
+            body += "}";
+            return body;
+        }
+
         static std::string openai_chat_complete(const std::string& endpoint_full,
             std::string_view model,
             std::string_view system_prompt,
             std::string_view input,
             const std::vector<std::pair<std::string, std::string>>& headers,
-            std::size_t maximumTokens)
+            std::size_t maximumTokens,
+            std::uint32_t timeoutSeconds,
+            bool suppressReasoning)
         {
-            const auto build_body = [&](bool recoveryRequest) -> std::string
-            {
-                std::string requestInput{input};
-                if (recoveryRequest)
-                {
-                    requestInput =
-                        "Return only the final assistant answer. Do not expose analysis, reasoning, debug text, or drafting notes.\n"
-                        "Original request:\n" + requestInput;
-                }
-                if (contains_text(lowercase_ascii(model), "qwen"))
-                    requestInput += "\n/no_think";
-
-                std::string body;
-                body.reserve(256 + input.size());
-                body += "{";
-                body += "\"model\":\"" + json_escape(model) + "\",";
-                body += "\"messages\":[";
-                body += "{\"role\":\"system\",\"content\":\"" + json_escape(system_prompt) + "\"},";
-                body += "{\"role\":\"user\",\"content\":\"" + json_escape(requestInput) + "\"}";
-                body += "],";
-                body += "\"max_tokens\":" + std::to_string(maximumTokens) + ",";
-                body += "\"stream\":false";
-                body += "}";
-                return body;
-            };
-
+            const StructuredSourceReply sourceReply =
+                structured_source_reply_for(input, suppressReasoning);
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
-                const std::string body = build_body(recoveryRequest);
+                const std::string body = openai_chat_request_body(
+                    model, system_prompt, input, maximumTokens, recoveryRequest,
+                    suppressReasoning);
 #if defined(_WIN32)
-                const std::string resp = winhttp_post_json(endpoint_full, body, headers);
+                const std::string resp = winhttp_post_json(
+                    endpoint_full, body, headers, timeoutSeconds);
 #elif defined(EPOCH_HAS_CURL)
-                const std::string resp = http_post_json(endpoint_full, body, headers);
+                const std::string resp = http_post_json(
+                    endpoint_full, body, headers, timeoutSeconds);
 #else
                 (void)endpoint_full;
                 (void)headers;
@@ -1938,7 +2422,18 @@ namespace epochengine::ai
                         parsed = normalize_assistant_text(extract_json_string_field_after(sv, "\"text\""));
                 }
                 if (!parsed.empty())
-                    return parsed;
+                {
+                    if (sourceReply == StructuredSourceReply::none)
+                        return parsed;
+                    std::string normalized =
+                        normalize_structured_source_reply(parsed, sourceReply);
+                    if (!normalized.empty())
+                        return normalized;
+                    core::log::warn(
+                        "ai",
+                        "Schema-constrained source reply could not be normalized; retrying without staging bytes.");
+                    return {};
+                }
 
                 if (!resp.empty())
                 {
@@ -1963,52 +2458,73 @@ namespace epochengine::ai
                 return {};
             };
 
-            try
+            std::string lastFailure{};
+            for (std::size_t attempt = 0u; attempt < 2u; ++attempt)
             {
-                std::string rawResponse{};
-                std::string reply = request_once(false, &rawResponse);
-                if (is_promotable_assistant_text(reply))
-                    return reply;
-
-                const std::string error = extract_json_error_message(rawResponse);
-                if (!error.empty())
+                try
                 {
-                    core::log::warn("ai", epochengine::string_view{error.data(), error.size()});
-                    return std::string("Local model API error: ") + error;
-                }
-
-                if (!rawResponse.empty()
-                    && (!reply.empty()
-                        || has_hidden_reasoning_without_visible_content(rawResponse)))
-                {
-                    core::log::warn(
-                        "ai",
-                        "Local model reply lacked promotable final content; retrying once with an explicit final-answer request.");
-                    rawResponse.clear();
-                    reply = request_once(true, &rawResponse);
+                    std::string rawResponse{};
+                    std::string reply = request_once(
+                        attempt > 0u, &rawResponse);
                     if (is_promotable_assistant_text(reply))
                         return reply;
 
-                    const std::string retryError = extract_json_error_message(rawResponse);
-                    if (!retryError.empty())
+                    const std::string error =
+                        extract_json_error_message(rawResponse);
+                    if (!error.empty())
                     {
-                        core::log::warn("ai", epochengine::string_view{retryError.data(), retryError.size()});
-                        return std::string("Local model API error: ") + retryError;
+                        core::log::warn(
+                            "ai",
+                            epochengine::string_view{
+                                error.data(), error.size()});
+                        lastFailure =
+                            std::string{"Local model API error: "} + error;
+                        if (contains_text(
+                                lowercase_ascii(error), "cancelled"))
+                        {
+                            return lastFailure;
+                        }
+                    }
+                    else
+                    {
+                        if (!reply.empty())
+                            return reply;
+                        lastFailure =
+                            has_hidden_reasoning_without_visible_content(rawResponse)
+                            ? std::string{
+                                "Local model returned hidden reasoning without visible assistant content. Epoch retried with reasoning disabled but received no final answer."}
+                            : std::string{
+                                "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response."};
                     }
                 }
-                if (!reply.empty())
-                    return reply;
-                if (has_hidden_reasoning_without_visible_content(rawResponse))
-                    return "Local model returned hidden reasoning without visible assistant content. Select a content-producing model or disable reasoning export before using OS AI chat.";
-                return "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response.";
+                catch (const std::exception& ex)
+                {
+                    lastFailure =
+                        "Local OpenAI-compatible request failed: ";
+                    lastFailure += ex.what();
+                    if (contains_text(
+                            lowercase_ascii(lastFailure), "cancelled"))
+                    {
+                        core::log::warn(
+                            "ai",
+                            epochengine::string_view{
+                                lastFailure.data(), lastFailure.size()});
+                        return lastFailure;
+                    }
+                }
+
+                if (attempt == 0u)
+                {
+                    core::log::warn(
+                        "ai",
+                        "Local source-model request produced no usable response; retrying once with an explicit final-answer request.");
+                }
             }
-            catch (const std::exception& ex)
-            {
-                std::string msg = "Local OpenAI-compatible request failed: ";
-                msg += ex.what();
-                core::log::error("ai", epochengine::string_view{msg.data(), msg.size()});
-                return {};
-            }
+            core::log::error(
+                "ai",
+                epochengine::string_view{
+                    lastFailure.data(), lastFailure.size()});
+            return lastFailure;
         }
 
         struct ProcessCapture
@@ -2539,9 +3055,11 @@ namespace epochengine::ai
                     m_endpoint_full,
                     effective.model,
                     sys,
-                    build_transcript(sys, user_input),
+                    user_input,
                     {},
-                    effective.output_tokens);
+                    effective.output_tokens,
+                    effective.timeout_seconds,
+                    workload == InferenceWorkload::source_iteration);
 
             if (workload == InferenceWorkload::source_iteration
                 && effective.backend != "llama_cpp_cli")
@@ -3323,6 +3841,46 @@ namespace epochengine::ai
         return direct_llama_cpp_prompt_file_arguments_contract();
     }
 
+    bool openai_source_iteration_request_contract()
+    {
+        const std::string sourceBody = openai_chat_request_body(
+            "qwen/test", "system",
+            "EPOCH_SOURCE_CONTEXT_REQUEST_V1", 512u, false, true);
+        const std::string patchBody = openai_chat_request_body(
+            "qwen/test", "system",
+            "EPOCH_SOURCE_PATCH_PROPOSAL_V1", 512u, false, true);
+        const std::string ordinaryBody = openai_chat_request_body(
+            "qwen/test", "system", "request", 512u, false, false);
+        const std::string contextPacket = normalize_structured_context_reply(
+            R"json({"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Inspect the selected transport"})json");
+        const std::string patchPacket = normalize_structured_patch_reply(
+            R"json({"operations":[{"replacement":"int value = 2;","search":"int value = 1;","summary":"Change the reviewed value","path":"Engine/src/ai/example.cpp"}],"rationale":"Repair the reviewed value","title":"Repair value"})json");
+        return sourceBody.find("\"reasoning_effort\":\"none\"")
+                != std::string::npos
+            && sourceBody.find("/no_think") != std::string::npos
+            && sourceBody.find("\"response_format\"") != std::string::npos
+            && sourceBody.find("epoch_source_context") != std::string::npos
+            && patchBody.find("epoch_source_patch") != std::string::npos
+            && sourceBody.find("\"stream\":false") != std::string::npos
+            && ordinaryBody.find("\"reasoning_effort\"")
+                == std::string::npos
+            && ordinaryBody.find("\"response_format\"")
+                == std::string::npos
+            && contextPacket.find(
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nreason: Inspect the selected transport\npath_count: 1\npath: Engine/src/ai/ai.engine.cpp\nend_request\n")
+                == 0u
+            && patchPacket.find(
+                "EPOCH_SOURCE_PATCH_PROPOSAL_V1\ntitle: Repair value\n")
+                == 0u
+            && patchPacket.find(
+                "begin_search\n|int value = 1;\nend_search\n")
+                != std::string::npos
+            && patchPacket.find(
+                "begin_replacement\n|int value = 2;\nend_replacement\n")
+                != std::string::npos
+            && model_http_timeout_milliseconds(600u) == 600'000;
+    }
+
 
     bool is_promotable_assistant_reply(std::string_view reply)
     {
@@ -3448,7 +4006,14 @@ namespace epochengine::ai
             reply = client->submit(user_text, workload);
         }
         const std::string loweredReply = lowercase_ascii(reply.text);
-        if (starts_with_text(loweredReply,
+        if (starts_with_text(loweredReply, "local model api error")
+            || starts_with_text(loweredReply,
+                "local openai-compatible request failed")
+            || starts_with_text(loweredReply,
+                "local model returned hidden reasoning")
+            || starts_with_text(loweredReply,
+                "local model returned no decodable assistant text")
+            || starts_with_text(loweredReply,
                 "direct llama.cpp inference could not")
             || starts_with_text(loweredReply,
                 "direct llama.cpp inference exceeded")

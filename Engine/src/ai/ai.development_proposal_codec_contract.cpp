@@ -176,7 +176,7 @@ namespace epochengine::ai::development_proposal_codec
             unknown.insert(
                 unknown.find("path_count:"), "unknown: rejected\n");
             if (decode_context_request(unknown, SourceArea::engine).code
-                != DecodeCode::missing_field)
+                != DecodeCode::invalid_field)
             {
                 return false;
             }
@@ -186,7 +186,7 @@ namespace epochengine::ai::development_proposal_codec
                 duplicateCount.find("path: "), "path_count: 2\n");
             if (decode_context_request(
                     duplicateCount, SourceArea::engine).code
-                != DecodeCode::missing_field)
+                != DecodeCode::invalid_field)
             {
                 return false;
             }
@@ -196,9 +196,25 @@ namespace epochengine::ai::development_proposal_codec
                 "reason: Inspect the parser and its public contract\n";
             missingReason.erase(
                 missingReason.find(reasonLine), reasonLine.size());
-            if (decode_context_request(
-                    missingReason, SourceArea::engine).code
-                != DecodeCode::missing_field)
+            const auto inferredReason = decode_context_request(
+                missingReason, SourceArea::engine);
+            if (!inferredReason
+                || inferredReason.request.reason
+                    != "Model-selected verified source context.")
+            {
+                return false;
+            }
+
+            const auto compact = decode_context_request(
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1\n"
+                "PATH Engine/src/ai/ai.development_proposal_codec.cpp\n"
+                "Engine/modules/ai.development_proposal_codec.ixx\n",
+                SourceArea::engine);
+            if (!compact || compact.request.paths.size() != 2u
+                || compact.request.paths[0u]
+                    != "Engine/src/ai/ai.development_proposal_codec.cpp"
+                || compact.request.paths[1u]
+                    != "Engine/modules/ai.development_proposal_codec.ixx")
             {
                 return false;
             }
@@ -279,8 +295,8 @@ namespace epochengine::ai::development_proposal_codec
                 && context.find("path: Engine/") != std::string::npos
                 && context.find("fix bugs") != std::string::npos
                 && context.find(evidence) != std::string::npos
-                && context.find("one to four") != std::string::npos
-                && context.find("no source-file bytes have been shared")
+                && context.find("up to twelve") != std::string::npos
+                && context.find("does not add source-file bytes")
                     != std::string::npos
                 && context.find("EPOCH_SOURCE_PROPOSAL_V1") == std::string::npos
                 && engine.find("path: Engine/") != std::string::npos
@@ -323,9 +339,9 @@ namespace epochengine::ai::development_proposal_codec
                 && engine.find("EPOCH_SOURCE_PROPOSAL_V1")
                     == std::string::npos
                 && engine.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
-                    == std::string::npos
+                    != std::string::npos
                 && engine.find("FILE_ABSENT") != std::string::npos
-                && engine.find("do not request, discover, or invent paths")
+                && engine.find("Never invent a path")
                     != std::string::npos
                 && engine.find("objective-specific owner")
                     != std::string::npos

@@ -767,26 +767,27 @@ execution.
   manipulation, build, and testing instead of inheriting generated-project
   presentation behavior.
 - Engine Development source proposals are two-pass and context-first. AI Controls
-  owns objective entry, host-curated existing-file candidates, model/endpoint
-  evidence, and the explicit Share Curated Context or Reject Selection action.
-  Candidate ranking uses path metadata only; sharing reads and sends only the
-  displayed bounded UTF-8 files to the selected endpoint. Models cannot request or
-  invent paths. Review Proposal and Approve Sandbox or Cancel Proposal remain
-  attached to the resulting AI Chat response. Changing the objective invalidates
-  reviewed evidence. The returned proposal must survive deterministic objective
-  relevance, exact-source-symbol, no-op, preservation, and module-ownership checks
-  before it becomes a reviewable data record executed only in a disposable
-  sandbox; it cannot write live source or self-certify build/test results.
-  A request for one source-proven defect in a named subsystem is bounded without
-  a preselected symbol: one insufficient-evidence reply receives one recheck
-  against the unchanged reviewed bytes, and a repeated refusal stops. A fresh
-  share clears prior correction state. The larger source-file/byte status is the
+  owns ordinary-language objective entry and keeps model/endpoint evidence
+  visible. Epoch first sends a verified names-only C++ catalog; the model chooses
+  up to 12 paths, and the host records and validates that selection before
+  automatically opening only those bytes inside Candidate Lab. The model may
+  request catalog-listed expansion, but cannot invent paths or permissions.
+  Changing the objective invalidates reviewed evidence. The returned proposal
+  must survive deterministic objective relevance, exact-source-symbol, no-op,
+  preservation, and module-ownership checks before it becomes a reviewable data
+  record executed only in a disposable sandbox; it cannot write live source or
+  self-certify build/test results. The larger source-file/byte status is the
   local disposable build-workspace copy, not extra model context.
   Each completed source-model generation is routed into the source controller
   exactly once; malformed packets receive at most two automatic host-diagnosed
-  retries without another click. Direct llama transport strips only line-framed
-  bytes outside a complete structured envelope. Unique-search remains mandatory,
-  so an ambiguous objective is rejected rather than assigned an inferred target.
+  retries without another click. OpenAI-compatible calls also retry one transport,
+  API, hidden-reasoning, malformed-schema, or empty-content failure. Their
+  context and edit replies are constrained by strict JSON schemas and converted
+  deterministically into the existing host packets before validation. AI Controls
+  shows animated elapsed-time activity while the selected model works. Direct
+  llama transport strips only line-framed bytes outside a complete structured
+  envelope. Unique-search remains mandatory, so an ambiguous edit is rejected
+  rather than assigned an inferred target.
 
 - project shells should only be materialized by explicit operator action:
   File > Save Project, Project > Save Active Project, or the centered Run
@@ -1446,12 +1447,16 @@ false, and Site ingestion remains a separate explicitly authorized operation.
 Generated-project self-iteration uses the same mechanics only when its project
 profile enables it; engine-source authority is never inherited by that project.
 
-In the operational panel, `Start Candidate Lab` prepares and submits the first
-bounded plan request after the operator has reviewed the objective and exact
-source scope. Epoch keeps the selected provider and endpoint visible. The
-returned numbered plan is digest-bound, shown as the Saved Mission Plan, and
-fed back with selection checkpoints when the loop resumes. Proposal admission,
-disposable application, Debug/Release/Headless/full validation, and bounded
+In the operational panel, `Start With AI` accepts an ordinary description of the
+desired result. The operator does not name a source file or internal subsystem.
+Epoch keeps the selected provider and endpoint visible, asks the model to choose
+up to 12 paths from a verified names-only catalog, records the validated choice
+in Detailed Session Activity, opens only those bytes inside Candidate Lab, and
+continues into planning. The returned numbered plan is digest-bound, shown as
+the Saved Mission Plan, and fed back with selection checkpoints when the loop
+resumes. Plans describe outcomes and testable steps against the bound reviewed
+scope; they do not have to repeat filenames. Proposal admission, disposable
+application, Debug/Release/Headless/full validation, bounded correction, and
 repair advance without another same-scope approval click; their existing
 preimage, actor, receipt, generation, and digest checks remain mandatory.
 
@@ -1467,34 +1472,30 @@ source or invoke promotion, Git, upload, publication, listener, server, or
 release work.
 
 `editor.ai_development_controller` maps production calls to trusted monotonic
-time, serializes execution entry, and rejects caller-driven backdating. Before a
-source request reaches a model, the trusted host tokenizes the operator objective,
-gives an exact canonical objective path precedence, ranks existing files beneath
-the approved read-only source roots, and presents a bounded candidate list without
-reading or transmitting file contents. Only the visible
-`Share Curated Context` action reads those unchanged candidates and sends bounded
-full-file or objective-centered excerpt evidence to the displayed selected
-endpoint. The same action opens the reviewed files in the large source workspace
-instead of leaving the 3D scene dominant. `Project Scripts` returns to the normal
-script editor and `3D Scene` restores the scene surface. EpochGui decodes UTF-8
-for layout, drawing, hit testing, caret motion, and deletion; unsupported
-box/block decorations use a readable ASCII fallback without changing source
-bytes.
-Model-originated path requests are rejected; models cannot browse, invent, or
-expand the candidate set. The controller preserves exact raw model reply bytes
-and accepts source intent only through the strict bounded
-`EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block codec. The trusted host owns
-canonical workspace roots, full preimages/postimages, hashes, risk, actor
-identity, approval, and permit issuance. Direct local source inference runs
-below normal priority with half logical CPUs, matching batch threads, and
-`--gpu-layers 0`; ordinary chat retains its configured GPU acceleration.
-Build/run evidence comes from registered host paths. Source completion cannot be
-The direct transport selects one line-framed structured header and matching
-terminator before strict decoding, and each completed generation is ingested only
-once. The prompt's packet sample uses the first exact reviewed evidence path;
-explicit two-literal replacements use exact unique reviewed search and requested
-replacement bytes. Packet rejection queues no more than two complete
-host-diagnosed retries over the same evidence.
+time, serializes execution entry, and rejects caller-driven backdating. Before
+source bytes reach a model, the host enumerates existing C++ paths beneath the
+approved read-only root and sends only that verified names-only catalog with the
+operator objective. The model may select or expand a coherent source slice, but
+the host admits only canonical, catalog-listed paths and caps each request at 12.
+Safe compact replies are normalized before the same path checks; no normalization
+grants a new root, path, operation, permission, or write.
+
+After validation, the host records the chosen paths, reads their unchanged
+bounded full-file or objective-centered excerpt evidence into the disposable
+sandbox session, and includes those exact bytes in the plan/proposal request.
+The controller preserves exact raw model reply bytes and accepts source intent
+only through the bounded `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block codec. The
+trusted host owns canonical workspace roots, full preimages/postimages, hashes,
+risk, actor identity, approval, and permit issuance. Build/run evidence comes
+from registered host paths. The direct transport selects one line-framed
+structured header and matching terminator before strict proposal decoding, and
+each completed generation is ingested only once. The prompt's packet sample uses
+the first exact reviewed evidence path; explicit two-literal replacements use
+exact unique reviewed search and requested replacement bytes. Packet rejection
+queues no more than two complete host-diagnosed retries over the same evidence.
+OpenAI-compatible source calls disable hidden reasoning, use the bounded
+600-second source timeout, retry one failed/empty call, and keep an animated
+elapsed-time working indicator visible until the response or cancellation.
 
 submitted through the public completion path; it must come from
 `ai.development_executor`.

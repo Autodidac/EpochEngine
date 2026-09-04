@@ -2835,6 +2835,9 @@ namespace epochengine::core
         check(
             "ai.direct_llama_prompt_file_transport",
             epochengine::ai::direct_llama_cpp_prompt_transport_contract());
+        check(
+            "ai.openai_source_iteration_request",
+            epochengine::ai::openai_source_iteration_request_contract());
         check("ai.mcp.tool_protocol", epochengine::ai::run_mcp_contract());
         check(
             "ai.epoch_local_install",

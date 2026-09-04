@@ -268,6 +268,7 @@ export namespace epochengine::ai
         std::string_view transcript,
         std::string_view user_text);
     [[nodiscard]] bool direct_llama_cpp_prompt_transport_contract();
+    [[nodiscard]] bool openai_source_iteration_request_contract();
     [[nodiscard]] bool is_promotable_assistant_reply(std::string_view reply);
     [[nodiscard]] HelperReviewGateResult classify_helper_review_reply(std::string_view reply);
 }

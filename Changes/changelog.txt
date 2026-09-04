@@ -1,5 +1,18 @@
 ## [Unreleased] - v0.89.35 Package Manager layout hotfix
 
+- Repair the real local-model self-coding path: plain-language objectives now
+  drive an internal, catalog-validated source selection of up to 12 files;
+  current models' safe compact path lists normalize into the strict host
+  boundary; and the proposal request includes the selected exact source bytes
+  instead of only their names and digests. Plans do not need to repeat source
+  filenames. OpenAI-compatible source requests disable hidden reasoning, honor
+  the 600-second workload timeout, retry one transport/API/empty response, and
+  use strict JSON schemas for context and edit operations before deterministic
+  conversion to the existing source packet. This removes model-dependent magic-
+  text formatting while preserving the exact-search boundary. AI Controls also
+  exposes an animated elapsed-time working indicator. Existing exact-search,
+  sandbox-only apply, two-correction, validation, candidate comparison, and
+  no-live-promotion boundaries remain in force.
 - Add Candidate Lab as a successive sandbox-only self-coding loop. One reviewed
   objective and source scope drive saved numbered planning, proposal admission,
   disposable apply, Debug/Release/Headless/full validation, and bounded repair

@@ -272,35 +272,27 @@ restricted to deterministic contract workspaces and rejects backward time.
 
 AI-assisted development follows one fail-closed sequence:
 
-1. Before the model receives a source request, the host tokenizes the approved
-   objective, removes conversational filler, adds known subsystem-owner aliases,
-   and gives explicit module/file owners priority while ranking existing files
-   beneath the selected read-only source roots. An exact canonical objective
-   path has precedence. It stages at most six candidates; the first exact primary
-   may use the 184 KiB evidence ceiling while additional related files remain
-   under the 128 KiB aggregate budget. This metadata-only curation does not read
-   or transmit source bytes, and the shared-context status retains the primary
-   evidence path for operator inspection. An objective that describes only
-   generic activity, including `find and fix files`, is not a source scope and
-   stops here with zero selected paths. The correction asks what is visibly
-   wrong and what should happen instead; it does not require an internal
-   subsystem, filename, or symbol.
-2. The host displays the selected model, endpoint, objective, and complete
-   curated path list. The model cannot request, discover, invent, or expand paths;
-   legacy `EPOCH_SOURCE_CONTEXT_REQUEST_V1` output is rejected. If the host cannot
-   find credible bounded context, the pass stops for a better objective or human
-   selection instead of asking the model to browse.
-3. Only the explicit `Share Curated Context` action reads source. It revalidates
-   the unchanged objective, endpoint, canonical root, regular-file identity, and
-   byte budgets, then sends complete counted evidence through 48 KiB or one
-   UTF-8-safe 16 KiB objective-centered excerpt for a larger reviewed file.
-   Evidence goes only to the displayed selected endpoint and is request-local;
-   no automatic persistence or live-source write occurs. The model may return
-   exactly `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` or one strict
-   `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block packet; it may not negotiate for
-   more filesystem access. The separately reported file/byte count describes
-   the complete disposable build workspace copied locally; it is not the model
-   context and does not expand the explicitly reviewed path list.
+1. The operator enters the desired result in ordinary language. The host
+   enumerates the existing C++ paths beneath the selected read-only source root
+   and sends the selected model only that verified names-only catalog with the
+   objective. It does not require an internal subsystem, filename, or symbol and
+   does not read or transmit source bytes during this selection request.
+2. The model chooses a coherent slice of at most 12 catalog paths. The host
+   accepts the complete `EPOCH_SOURCE_CONTEXT_REQUEST_V1` form or a bounded
+   compact list, then revalidates root containment, catalog membership, type,
+   uniqueness, and count. The exact admitted path list is recorded in Detailed
+   Session Activity. Unknown fields, invented paths, traversal, and paths outside
+   the catalog fail before any source read.
+3. The host automatically opens only the validated paths inside Candidate Lab
+   and sends complete counted evidence through 48 KiB or one UTF-8-safe 16 KiB
+   excerpt for a larger reviewed file. The exact evidence bytes—not only names
+   and hashes—are included in the proposal request. If more evidence is needed,
+   the model may request more catalog-listed paths; the host performs at most
+   three bounded expansions. The model may otherwise return exactly
+   `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` or one strict
+   `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block packet. The separately reported
+   file/byte count describes the complete disposable build workspace copied
+   locally; it is not additional model context.
 4. The trusted host resolves a read-only live source root, snapshots exact
    preimages, computes before/after SHA-256 states, assigns operation IDs,
    permissions, risk, actor identity, and expiration, validates bounds and
@@ -498,22 +490,29 @@ runtime gates.
 
 ## Strict Model Source Proposals
 
-`ai.development_proposal_codec` accepts the production
-`EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block protocol after host-curated
-context. Its legacy whole-file and context-request decoders remain compatibility
-parsers only; the editor prompt does not ask a model to negotiate paths or
-regenerate a complete file. A proposal is a data protocol, not a command
-language: no prose, Markdown fences, unknown fields, trailing bytes, paths
-outside the selected workspace, or model-selected permissions are accepted.
-Source iteration also recognizes exactly
-`EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` as a safe refusal. A request to identify
-one source-proven defect in a named subsystem is already bounded even when the
-operator has not pre-named a symbol. Its first refusal receives exactly one
-deterministic recheck against the same reviewed bytes; the model must identify a
-concrete cause, violated nearby invariant, and bounded repair or repeat the
-refusal. A repeated refusal is terminal and stages nothing. Framed and raw
-direct-CLI transcripts use the same line-boundary strict-packet extractor, so
-ordinary prose cannot enter the source codec.
+`ai.development_proposal_codec` uses a two-stage bounded protocol. The operator
+states an outcome in ordinary language; Epoch first supplies a verified C++ path
+catalog without source bytes, and the selected model requests a coherent slice
+of at most 12 files. The host accepts the full
+`EPOCH_SOURCE_CONTEXT_REQUEST_V1` envelope and the common safe compact forms
+emitted by current agentic models: `PATH <canonical-path>` or a bare canonical
+path after the header. Optional reason/count/terminator fields may be inferred,
+but every selected path is still deduplicated, rooted, size-limited, checked
+against the offered catalog, and disclosed in Detailed Session Activity before
+its bytes enter Candidate Lab. Unknown fields, traversal, missing paths, prose,
+and paths outside the selected workspace remain rejected.
+
+The second request includes the selected counted `FILE_CONTENT` or
+`FILE_EXCERPT` bytes and accepts the production
+`EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block protocol. A proposal is a data
+protocol, not a command language: no Markdown fences, unknown fields, trailing
+bytes, model-selected permissions, or approximate edits are accepted. The model
+may request another listed source slice when the current evidence is incomplete;
+Epoch performs at most three context expansions and never lets the model invent
+a path. Source iteration also recognizes exactly
+`EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` as a safe refusal after expansion is
+exhausted. Framed and raw direct-CLI transcripts use the same line-boundary
+packet extractor, so ordinary prose cannot enter the source codec.
 The direct llama.cpp transport normalizer prefers patch, legacy proposal, and
 context-request headers in that order before the insufficient marker, then
 extracts exactly through the matching line-framed `end_proposal` or
@@ -526,6 +525,21 @@ carrying only a bounded deterministic host diagnostic and the same reviewed
 evidence. No correction stages bytes, changes paths, bypasses review, or expands
 authority. Sharing a newly reviewed context resets the prior request's correction
 and diagnostic-recheck state.
+
+OpenAI-compatible source workloads request `reasoning_effort: none` and append
+the Qwen `/no_think` directive so a hidden reasoning channel cannot replace the
+visible reply. Context selection and source-edit calls carry strict JSON schemas;
+the transport accepts only their bounded fields and deterministically converts
+them into the same `EPOCH_SOURCE_CONTEXT_REQUEST_V1` and
+`EPOCH_SOURCE_PATCH_PROPOSAL_V1` packets consumed by the trusted host. The model
+therefore does not have to reproduce fragile line-protocol punctuation, while
+the schema adapter grants no path, permission, apply, or execution authority.
+The transport honors the declared 600-second source timeout rather than the
+ordinary short chat timeout. One transport, API, hidden-reasoning, malformed-
+schema, or empty-content failure is retried with an explicit final-answer
+request; cancellation remains immediate and is never retried. While either
+attempt is pending, AI Controls displays an animated local-model activity bar,
+the selected model, and elapsed time.
 
 
 Every operation requires reviewed path context and one exact search block that
