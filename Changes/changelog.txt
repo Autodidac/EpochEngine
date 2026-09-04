@@ -1,5 +1,24 @@
 ## [Unreleased] - v0.89.35
 
+- Remove the objective-word-overlap rejection exposed by the operator's "find
+  and fix a bug" run. Broad requests no longer have to repeat a specific word in
+  proposal metadata. Exact-source, unique-search, no-op and ownership checks
+  remain; this is not a claim that a source-quality check proves correctness.
+- Stop forcing reasoning_effort=none or Qwen /no_think on OpenAI-compatible
+  requests; the selected provider keeps its configured reasoning mode. Response
+  schemas remain explicit and recovery still requests a final answer.
+- Allow source-edit structured responses to request context without edits.
+  Complete twelve-file reselections replace the previous working set instead of
+  silently losing newly requested paths at capacity. Direct context requests and
+  insufficient-evidence retries share one bounded budget. Failed source loading
+  preserves the terminal diagnostic rather than reporting a rebuild.
+- Windows Debug/Release builds and aggregate contracts pass, including adaptive
+  response normalization, mixed-action refusal, malformed/oversized requests,
+  reselection budgets, broad-objective acceptance and continued no-op rejection.
+  The operator's failed session produced no admitted edits/build; its selected
+  sandbox files were byte-identical to the recorded preimages. No successful
+  end-to-end model candidate, new Linux proof, or public release is claimed.
+
 - Separate local-model queued, waiting and stopping presentation; bind activity
   and Cancel to the source workload instead of any project-chat request. Cancel
   clears queued source dispatch, discards late replies even before a campaign

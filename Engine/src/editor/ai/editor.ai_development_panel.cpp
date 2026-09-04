@@ -1391,6 +1391,7 @@ namespace epochengine::editor_ai_development_panel
         std::string source_baseline_evidence{};
         std::string source_path_catalog_evidence{};
         std::size_t source_context_expansions{};
+        bool source_context_reselection_pending{};
         std::string source_context_evidence_objective{};
         std::vector<std::string> pending_source_context_systems{};
         std::vector<std::string> pending_source_context_paths{};
@@ -1529,6 +1530,7 @@ namespace epochengine::editor_ai_development_panel
             source_baseline_evidence.clear();
             source_path_catalog_evidence.clear();
             source_context_expansions = 0u;
+            source_context_reselection_pending = false;
             source_repair_attempts = 0u;
             source_context_evidence_objective.clear();
             model_reply_corrections = 0u;
@@ -2551,9 +2553,10 @@ namespace epochengine::editor_ai_development_panel
                     "\n\nVERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
                     + source_path_catalog_evidence
                     + "END_VERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
-                    "If the reviewed bytes do not prove the repair, request up "
-                    "to twelve additional listed paths with "
-                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Do not guess.";
+                    "If the reviewed bytes do not prove the repair, request a "
+                    "complete next selection of up to twelve listed paths with "
+                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Retain useful current paths; "
+                    "the new selection replaces the old slice. Do not guess.";
             }
             return prompt;
         }
@@ -3889,8 +3892,9 @@ namespace epochengine::editor_ai_development_panel
                     output.model_prompt += path + "\n";
                 output.model_prompt +=
                     "END_ALREADY_REVIEWED_SOURCE_PATHS\n"
-                    "Request only additional listed paths needed to prove the "
-                    "next change.";
+                    "Return the complete next selection of at most twelve "
+                    "listed paths. Retain useful current paths and replace "
+                    "irrelevant ones; the new selection is not appended.";
             }
             if (!model_reply_correction_diagnostic.empty())
             {
@@ -3936,9 +3940,10 @@ namespace epochengine::editor_ai_development_panel
                     "\n\nVERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
                     + source_path_catalog_evidence
                     + "END_VERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
-                    "If the reviewed bytes do not prove the repair, request up "
-                    "to twelve additional listed paths with "
-                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Do not guess.";
+                    "If the reviewed bytes do not prove the repair, request a "
+                    "complete next selection of up to twelve listed paths with "
+                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Retain useful current paths; "
+                    "the new selection replaces the old slice. Do not guess.";
             }
             if (!model_reply_correction_diagnostic.empty())
             {
@@ -4286,6 +4291,28 @@ namespace epochengine::editor_ai_development_panel
                         "a path outside the verified path catalog. No source bytes "
                         "were read or shared.");
                 }
+                if (!campaign_reviewed_paths.empty())
+                {
+                    if (!source_context_reselection_pending)
+                    {
+                        if (source_context_expansions
+                            >= maximum_source_context_expansions)
+                        {
+                            model_request_failed = true;
+                            sandbox_lab_enabled = false;
+                            status_message =
+                                "The source-navigation retry budget is exhausted. "
+                                "No proposed source changes were staged; the last "
+                                "selected sandbox remains available.";
+                            output.status = status_message;
+                            return output;
+                        }
+                        ++source_context_expansions;
+                    }
+                    // An insufficient-evidence response already reserved this
+                    // reselection. Do not charge it again when paths arrive.
+                    source_context_reselection_pending = false;
+                }
                 pending_source_context_systems.clear();
                 pending_source_context_paths = contextRequest.request.paths;
                 pending_source_context_reason =
@@ -4319,11 +4346,12 @@ namespace epochengine::editor_ai_development_panel
                         < maximum_source_context_expansions)
                 {
                     ++source_context_expansions;
+                    source_context_reselection_pending = true;
                     model_reply_corrections = 0u;
                     model_reply_correction_diagnostic.clear();
                     status_message = epochengine::format_text(
                         "The current source slice was insufficient. The AI is "
-                        "choosing additional verified source automatically "
+                        "revising its verified source selection automatically "
                         "(expansion {} of {}).",
                         source_context_expansions,
                         maximum_source_context_expansions);
@@ -4335,6 +4363,8 @@ namespace epochengine::editor_ai_development_panel
                     "The model could not form a grounded change from this source "
                     "after exhausting automatic context expansion. No source was "
                     "staged; refine the request or choose another model.";
+                model_request_failed = true;
+                sandbox_lab_enabled = false;
                 output.status = status_message;
                 return output;
             }
@@ -4505,6 +4535,7 @@ namespace epochengine::editor_ai_development_panel
         state.source_context_evidence = catalog.evidence;
         state.source_path_catalog_evidence = catalog.evidence;
         state.source_context_expansions = 0u;
+        state.source_context_reselection_pending = false;
         state.source_context_evidence_objective =
             state.development_objective;
         state.active_domain = input.domain;
@@ -6125,6 +6156,42 @@ namespace epochengine::editor_ai_development_panel
         }
 
         Panel packetCorrection{};
+        constexpr std::string_view revisedSelection =
+            "EPOCH_SOURCE_CONTEXT_REQUEST_V1\n"
+            "reason: Inspect context ownership\npath_count: 1\n"
+            "path: Engine/src/renderers/opengl/opengl.context.cpp\nend_request\n";
+        (void)expandingContextState.stage_source_reply(
+            diagnosticInsufficientInput, revisedSelection, logical_time_now());
+        if (expandingContextState.source_context_expansions != 1u
+            || expandingContextState.source_context_reselection_pending
+            || expandingContextState.pending_source_context_paths
+                != std::vector<std::string>{
+                    "Engine/src/renderers/opengl/opengl.context.cpp"})
+            return false;
+        // A full prior working set must not suppress a new selection. Direct
+        // context packets spend the same budget as insufficient-evidence retries.
+        expandingContextState.campaign_reviewed_paths.clear();
+        for (std::size_t index = 0u; index < maximum_source_context_paths; ++index)
+            expandingContextState.campaign_reviewed_paths.push_back(
+                "Engine/src/ai/ai.prior_" + std::to_string(index) + ".cpp");
+        for (std::size_t expected = 2u;
+             expected <= Implementation::maximum_source_context_expansions; ++expected)
+        {
+            (void)expandingContextState.stage_source_reply(
+                diagnosticInsufficientInput, revisedSelection, logical_time_now());
+            if (expandingContextState.source_context_expansions != expected
+                || expandingContextState.pending_source_context_paths.size() != 1u
+                || expandingContextState.model_request_failed)
+                return false;
+        }
+        const auto navigationExhausted = expandingContextState.stage_source_reply(
+            diagnosticInsufficientInput, revisedSelection, logical_time_now());
+        if (!expandingContext.sandbox_session_failed()
+            || navigationExhausted.action != HostAction::none
+            || !expandingContextState.pending_source_context_paths.empty()
+            || navigationExhausted.status.find("retry budget is exhausted") == std::string::npos)
+            return false;
+
         auto& packetCorrectionState = *packetCorrection.implementation_;
         packetCorrectionState.development_objective =
             "Repair the exact parser implementation.";
@@ -6888,20 +6955,11 @@ namespace epochengine::editor_ai_development_panel
                     }
                     if (!state.pending_source_context_paths.empty())
                     {
+                        // The model supplies the complete next working set.
+                        // Appending would silently discard new paths at the
+                        // twelve-file ceiling and replay the same evidence.
                         std::vector<std::string> expandedPaths =
-                            state.campaign_reviewed_paths;
-                        for (const auto& path :
-                             state.pending_source_context_paths)
-                        {
-                            if (expandedPaths.size()
-                                >= maximum_source_context_paths)
-                                break;
-                            if (std::ranges::find(expandedPaths, path)
-                                == expandedPaths.end())
-                            {
-                                expandedPaths.push_back(path);
-                            }
-                        }
+                            state.pending_source_context_paths;
                         const auto campaignSnapshot =
                             state.campaign_orchestrator->snapshot();
                         state.capture_campaign_result(
@@ -6911,9 +6969,9 @@ namespace epochengine::editor_ai_development_panel
                                     campaignSnapshot,
                                     "expand-source-context",
                                     now),
-                                "The model requested additional verified source; "
+                                "The model requested a revised source selection; "
                                 "the incomplete campaign is being replaced by a "
-                                "fresh sandbox campaign with the expanded scope."));
+                                "fresh sandbox campaign with the selected scope."));
                         const std::string objective =
                             state.development_objective;
                         const std::string sourceRoot = state.source_root;
@@ -6925,6 +6983,8 @@ namespace epochengine::editor_ai_development_panel
                             state.source_path_catalog_evidence;
                         const std::size_t expansionCount =
                             state.source_context_expansions;
+                        const std::string selectionReason =
+                            state.pending_source_context_reason;
                         const auto provider = state.campaign_provider;
                         const auto priorEvidence =
                             std::move(staged.campaign_evidence);
@@ -6942,7 +7002,7 @@ namespace epochengine::editor_ai_development_panel
                         state.pending_source_context_paths =
                             std::move(expandedPaths);
                         state.pending_source_context_reason =
-                            "AI-requested expansion of the verified source slice.";
+                            selectionReason;
                         state.pending_source_context_objective = objective;
                         RenderResult expanded =
                             share_requested_source_context(input);
@@ -6950,8 +7010,14 @@ namespace epochengine::editor_ai_development_panel
                             expanded.campaign_evidence.begin(),
                             priorEvidence.begin(),
                             priorEvidence.end());
+                        if (expanded.action == HostAction::none)
+                        {
+                            state.model_request_failed = true;
+                            state.sandbox_lab_enabled = false;
+                            return expanded;
+                        }
                         state.status_message = epochengine::format_text(
-                            "The AI expanded its source context to {} verified "
+                            "The AI revised its source context to {} verified "
                             "file(s). Candidate Lab is rebuilding the isolated "
                             "campaign automatically.",
                             state.campaign_reviewed_paths.size());

@@ -18,9 +18,8 @@ results.
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished.
-- Baseline checkpoint before the current activity/context repair:
-  `0710bbc14ed85df3ef97399724505aa2a9dc25a1`, tree
-  `9f379f12c46cdb779862233e4b666b4da9efea38`.
+- Baseline checkpoint before adaptive context/quality repair:
+  `7d1b8f88a7b902e86fb37f37c2bb7dc232c3f6a8`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34.
 - Public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -34,9 +33,33 @@ The current combined candidate is build-proven on Windows Debug and Release. Bot
 build-safe aggregate engine contract runs pass, including
 `ai.openai_source_iteration_request`, `ai.development_proposal_codec`, and
 `ai.development_panel`; source naming passes for 581 files. The exact current
-Release editor is 12,263,936 bytes
+Release editor is 12,272,640 bytes
 with SHA-256
-`e1326be046d505569f1805bff433833f9c9bffcd2f9d72b25d2736be5738a3fb`.
+`c10e155945acd7ff1037c0f09005959a724fbda1b546cb8f45b8f7b08a3c44a0`.
+
+The operator's September 4 19:03-19:10 session selected the EpochGui text-control
+header, implementation and tests for "find and fix a bug". Its terminal checkpoint
+records zero admitted source operations, candidates and validation records. All
+three sandbox files match their admitted preimage hashes. The 921-file sandbox
+was a source copy, not a built candidate: 919 files matched the checkout at audit
+time, and the other two differed only by agent edits made after materialization.
+The rejected proposal itself is not retained in that checkpoint, so its code
+quality was not established by this audit. The sandbox and receipts are preserved.
+
+The photographed rejection was an objective-word-overlap heuristic, not an
+exact-source or compiler failure. That heuristic is removed; ordinary, broad and
+non-English objectives no longer need matching title/rationale vocabulary. Exact
+reviewed bytes, unique search, no-op, ownership and build checks remain. The Qwen
+server warning also exposed unsupported forced reasoning-off input. Requests now
+leave the provider's reasoning mode unchanged, including recovery requests.
+
+The source-edit JSON response can now explicitly request context instead of
+being forced to emit edits. Each reselection supplies the complete next working
+set of at most twelve files; it replaces rather than silently overflows the old
+set. Direct requests and insufficient-evidence retries share the three-attempt
+navigation budget, and failed loading retains its real error instead of a false
+"rebuilding" status. Debug and Release aggregate contracts pass on these repairs;
+the exact refreshed binary has not yet completed a live model-to-candidate run.
 
 The September 4 Astra pass exercised the real Qwen HTTP route. One test first
 reported a refused local endpoint; after the operator restarted Qwen3.8-27B,
@@ -113,7 +136,8 @@ performed the requested ownership transition, exited, and left no editor child.
   and UTF-8-safe excerpts of at most 16 KiB for larger sources. Whole-file
   identity size is not charged as outbound excerpt size.
 - OpenAI-compatible source requests use strict JSON schemas for path selection
-  and edit operations. Epoch converts the validated JSON into its existing exact
+  and edit/context actions. A context action cannot contain edits; its complete
+  next source selection still passes the normal catalog gate. Epoch converts the validated JSON into its existing exact
   review packet before normal grounding and apply checks.
 - Exact search blocks must match the reviewed source uniquely. No-op,
   destructive, invented, placeholder, ownership-removing, or unrelated edits
@@ -123,7 +147,9 @@ performed the requested ownership transition, exited, and left no editor child.
   a non-streaming HTTP request. Native visibility remains an eye-test gate.
 - Transport/API/empty-content failures retry once. Invalid source selection and
   proposal packets receive at most two host-diagnosed corrections. Insufficient
-  evidence may expand the selected source slice within the 12-path ceiling.
+  evidence may revise the selected source slice within the 12-path ceiling and
+  shared three-attempt navigation budget. Provider reasoning defaults are not
+  overridden to none/off.
 - A selected candidate advances only the disposable sandbox lineage. Live
   source promotion remains a separate explicit authority and is not part of the
   Candidate Lab loop.

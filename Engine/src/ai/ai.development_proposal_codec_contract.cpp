@@ -392,6 +392,15 @@ namespace epochengine::ai::development_proposal_codec
             {
                 return false;
             }
+            for (const std::string_view objective : {
+                    "find and fix a bug", "make it better", "improve",
+                    "Resolve an incorrect condition", "修正してください"})
+            {
+                if (!validate_quality(valid, objective, evidence))
+                    return false;
+            }
+            if (validate_quality(valid, {}, evidence))
+                return false;
 
             Proposal noOp = valid;
             noOp.changes[0u].replacement_bytes = original;
@@ -400,6 +409,8 @@ namespace epochengine::ai::development_proposal_codec
             {
                 return false;
             }
+            if (validate_quality(noOp, "find and fix a bug", evidence))
+                return false;
 
             Proposal moduleInclude = valid;
             moduleInclude.changes[0u].replacement_bytes =

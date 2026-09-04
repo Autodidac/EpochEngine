@@ -300,8 +300,8 @@ AI-assisted development follows one fail-closed sequence:
    complete counted evidence up to 48 KiB when it fits, otherwise one UTF-8-safe
    excerpt of at most 16 KiB. The exact evidence bytes—not only names
    and hashes—are included in the proposal request. If more evidence is needed,
-   the model may request more catalog-listed paths; the host performs at most
-   three bounded expansions. The model may otherwise return exactly
+   the model may request a revised complete working set of catalog-listed paths;
+   the host performs at most three bounded reselections. The model may otherwise return exactly
    `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` or one strict
    `EPOCH_SOURCE_PATCH_PROPOSAL_V1` exact-block packet. The separately reported
    file/byte count describes the complete disposable build workspace copied
@@ -526,8 +526,12 @@ The second request includes the selected counted `FILE_CONTENT` or
 protocol, not a command language: no Markdown fences, unknown fields, trailing
 bytes, model-selected permissions, or approximate edits are accepted. The model
 may request another listed source slice when the current evidence is incomplete;
-Epoch performs at most three context expansions and never lets the model invent
-a path. Source iteration also recognizes exactly
+Epoch performs at most three context reselections and never lets the model invent
+a path. Each request is the complete next set of at most twelve paths, not an
+append-only list: relevant old paths may be retained and irrelevant ones replaced.
+Direct context requests and insufficient-evidence retries share that budget; an
+already-reserved retry is not charged twice when its selected paths arrive.
+Source iteration also recognizes exactly
 `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` as a safe refusal after expansion is
 exhausted. Framed and raw direct-CLI transcripts use the same line-boundary
 packet extractor, so ordinary prose cannot enter the source codec.
@@ -544,14 +548,23 @@ evidence. No correction stages bytes, changes paths, bypasses review, or expands
 authority. Sharing a newly reviewed context resets the prior request's correction
 and diagnostic-recheck state.
 
-OpenAI-compatible source workloads request `reasoning_effort: none` and append
-the Qwen `/no_think` directive so a hidden reasoning channel cannot replace the
-visible reply. Context selection and source-edit calls carry strict JSON schemas;
+OpenAI-compatible workloads leave the selected provider's reasoning mode unchanged.
+They do not send an unsupported `reasoning_effort: none`/off override or a Qwen
+`/no_think` directive. Context selection and source-edit calls carry strict JSON schemas;
 the transport accepts only their bounded fields and deterministically converts
 them into the same `EPOCH_SOURCE_CONTEXT_REQUEST_V1` and
 `EPOCH_SOURCE_PATCH_PROPOSAL_V1` packets consumed by the trusted host. The model
 therefore does not have to reproduce fragile line-protocol punctuation, while
 the schema adapter grants no path, permission, apply, or execution authority.
+The source-edit schema accepts mutually exclusive `patch` and `context` actions.
+Patch requires nonempty title/rationale/operations and empty reason/paths. Context
+requires a reason and one to twelve paths, with no operations or edit metadata;
+it passes through the existing context codec/catalog gate before reading files.
+Legacy exact patch JSON remains readable. Unknown or duplicated fields and mixed
+read/edit responses are rejected. Proposal metadata does not have to repeat words
+from the operator's objective: lexical overlap does not prove relevance or safety.
+Exact-byte grounding, ownership checks, actual validation and operator candidate
+choice remain separate requirements.
 The transport honors the declared 600-second source timeout rather than the
 ordinary short chat timeout. One transport, API, hidden-reasoning, malformed-
 schema, or empty-content failure is retried with an explicit final-answer

@@ -1913,9 +1913,9 @@ namespace epochengine::ai
 
         [[nodiscard]] static StructuredSourceReply structured_source_reply_for(
             std::string_view input,
-            bool suppressReasoning) noexcept
+            bool structuredSource) noexcept
         {
-            if (!suppressReasoning)
+            if (!structuredSource)
                 return StructuredSourceReply::none;
             if (input.find("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
                 != std::string_view::npos)
@@ -1939,7 +1939,7 @@ namespace epochengine::ai
             }
             if (shape == StructuredSourceReply::patch)
             {
-                return R"json({"type":"json_schema","json_schema":{"name":"epoch_source_patch","strict":true,"schema":{"type":"object","additionalProperties":false,"required":["title","rationale","operations"],"properties":{"title":{"type":"string","minLength":1,"maxLength":160},"rationale":{"type":"string","minLength":1,"maxLength":1024},"operations":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"object","additionalProperties":false,"required":["path","summary","search","replacement"],"properties":{"path":{"type":"string","minLength":1,"maxLength":1024},"summary":{"type":"string","minLength":1,"maxLength":512},"search":{"type":"string","minLength":1,"maxLength":32768},"replacement":{"type":"string","maxLength":32768}}}}}}}})json";
+                return R"json({"type":"json_schema","json_schema":{"name":"epoch_source_patch","strict":true,"schema":{"type":"object","additionalProperties":false,"required":["action","title","rationale","operations","reason","paths"],"properties":{"action":{"type":"string","enum":["patch","context"]},"title":{"type":"string","maxLength":160},"rationale":{"type":"string","maxLength":1024},"reason":{"type":"string","maxLength":512},"paths":{"type":"array","maxItems":12,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":1024}},"operations":{"type":"array","maxItems":4,"items":{"type":"object","additionalProperties":false,"required":["path","summary","search","replacement"],"properties":{"path":{"type":"string","minLength":1,"maxLength":1024},"summary":{"type":"string","minLength":1,"maxLength":512},"search":{"type":"string","minLength":1,"maxLength":32768},"replacement":{"type":"string","maxLength":32768}}}}}}}})json";
             }
             return {};
         }
@@ -2098,8 +2098,10 @@ namespace epochengine::ai
             StructuredJsonCursor& cursor,
             std::vector<StructuredPatchOperation>& operations)
         {
-            if (!cursor.consume('[') || cursor.consume(']'))
+            if (!cursor.consume('['))
                 return false;
+            if (cursor.consume(']'))
+                return true;
             for (;;)
             {
                 if (operations.size() >= 4u)
@@ -2239,6 +2241,12 @@ namespace epochengine::ai
             std::string title{};
             std::string rationale{};
             std::vector<StructuredPatchOperation> operations{};
+            std::string action{};
+            std::string reason{};
+            std::vector<std::string> paths{};
+            bool actionSeen{};
+            bool reasonSeen{};
+            bool pathsSeen{};
             bool titleSeen{};
             bool rationaleSeen{};
             bool operationsSeen{};
@@ -2247,7 +2255,29 @@ namespace epochengine::ai
                 const auto key = cursor.string();
                 if (!key || !cursor.consume(':'))
                     return {};
-                if (*key == "title" && !titleSeen)
+                if (*key == "action" && !actionSeen)
+                {
+                    const auto value = cursor.string();
+                    if (!value || (*value != "patch" && *value != "context"))
+                        return {};
+                    action = *value;
+                    actionSeen = true;
+                }
+                else if (*key == "reason" && !reasonSeen)
+                {
+                    auto value = cursor.string();
+                    if (!value)
+                        return {};
+                    reason = one_line_metadata(std::move(*value), 512u);
+                    reasonSeen = true;
+                }
+                else if (*key == "paths" && !pathsSeen)
+                {
+                    if (!parse_string_array(cursor, paths, 12u))
+                        return {};
+                    pathsSeen = true;
+                }
+                else if (*key == "title" && !titleSeen)
                 {
                     auto value = cursor.string();
                     if (!value)
@@ -2278,12 +2308,36 @@ namespace epochengine::ai
                 if (!cursor.consume(','))
                     return {};
             }
-            if (!cursor.complete() || !titleSeen || title.empty()
-                || !rationaleSeen || rationale.empty() || !operationsSeen
-                || operations.empty())
+            if (!cursor.complete() || !titleSeen || !rationaleSeen
+                || !operationsSeen
+                || (actionSeen && (!reasonSeen || !pathsSeen))
+                || (!actionSeen && (reasonSeen || pathsSeen)))
             {
                 return {};
             }
+
+            if (action == "context")
+            {
+                // A read request is never also a source mutation. The regular
+                // context codec and catalog gate still validate every path.
+                if (reason.empty() || paths.empty() || !operations.empty()
+                    || !title.empty() || !rationale.empty())
+                    return {};
+                std::string request = "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nreason: "
+                    + reason + "\npath_count: " + std::to_string(paths.size()) + "\n";
+                for (const auto& path : paths)
+                {
+                    if (path.empty() || path.size() > 1024u
+                        || path.find_first_of("\r\n\0", 0u, 3u) != std::string::npos)
+                        return {};
+                    request += "path: " + path + "\n";
+                }
+                request += "end_request\n";
+                return request;
+            }
+            if (title.empty() || rationale.empty() || operations.empty()
+                || !reason.empty() || !paths.empty())
+                return {};
 
             std::string packet = "EPOCH_SOURCE_PATCH_PROPOSAL_V1\ntitle: ";
             packet += title;
@@ -2342,7 +2396,7 @@ namespace epochengine::ai
             std::string_view input,
             std::size_t maximumTokens,
             bool recoveryRequest,
-            bool suppressReasoning)
+            bool structuredSource)
         {
             std::string requestInput{input};
             if (recoveryRequest)
@@ -2351,11 +2405,21 @@ namespace epochengine::ai
                     "Return only the final assistant answer. Do not expose analysis, reasoning, debug text, or drafting notes.\n"
                     "Original request:\n" + requestInput;
             }
-            if (contains_text(lowercase_ascii(model), "qwen"))
-                requestInput += "\n/no_think";
-
             const StructuredSourceReply sourceReply =
-                structured_source_reply_for(input, suppressReasoning);
+                structured_source_reply_for(input, structuredSource);
+
+            if (sourceReply == StructuredSourceReply::patch)
+            {
+                requestInput +=
+                    "\nStructured response: choose action=patch for grounded edits, "
+                    "with a nonempty title, rationale and operations; leave reason "
+                    "empty and paths empty. If more source is needed, choose "
+                    "action=context with reason and the complete next selection "
+                    "of at most twelve catalog-listed paths (retain useful current "
+                    "paths); leave title/rationale empty and operations empty. "
+                    "A context request does not apply edits. Never invent code "
+                    "because the current excerpt is insufficient.";
+            }
 
             std::string body;
             body.reserve(288u + systemPrompt.size() + requestInput.size());
@@ -2367,8 +2431,9 @@ namespace epochengine::ai
             body += "{\"role\":\"user\",\"content\":\""
                 + json_escape(requestInput) + "\"}";
             body += "],";
-            if (suppressReasoning)
-                body += "\"reasoning_effort\":\"none\",";
+            // Response shape and model reasoning are separate capabilities.
+            // Do not force a reasoning enum or model-specific prompt switch:
+            // local providers may reject "none"/"off" (including current Qwen).
             body += "\"max_tokens\":" + std::to_string(maximumTokens) + ",";
             if (sourceReply != StructuredSourceReply::none)
             {
@@ -2388,15 +2453,15 @@ namespace epochengine::ai
             const std::vector<std::pair<std::string, std::string>>& headers,
             std::size_t maximumTokens,
             std::uint32_t timeoutSeconds,
-            bool suppressReasoning)
+            bool structuredSource)
         {
             const StructuredSourceReply sourceReply =
-                structured_source_reply_for(input, suppressReasoning);
+                structured_source_reply_for(input, structuredSource);
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
                 const std::string body = openai_chat_request_body(
                     model, system_prompt, input, maximumTokens, recoveryRequest,
-                    suppressReasoning);
+                    structuredSource);
 #if defined(_WIN32)
                 const std::string resp = winhttp_post_json(
                     endpoint_full, body, headers, timeoutSeconds);
@@ -2492,7 +2557,7 @@ namespace epochengine::ai
                         lastFailure =
                             has_hidden_reasoning_without_visible_content(rawResponse)
                             ? std::string{
-                                "Local model returned hidden reasoning without visible assistant content. Epoch retried with reasoning disabled but received no final answer."}
+                                "Local model returned reasoning without final assistant content. Epoch retried with an explicit final-answer request but received no final answer."}
                             : std::string{
                                 "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response."};
                     }
@@ -3855,12 +3920,55 @@ namespace epochengine::ai
             R"json({"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Inspect the selected transport"})json");
         const std::string patchPacket = normalize_structured_patch_reply(
             R"json({"operations":[{"replacement":"int value = 2;","search":"int value = 1;","summary":"Change the reviewed value","path":"Engine/src/ai/example.cpp"}],"rationale":"Repair the reviewed value","title":"Repair value"})json");
-        return sourceBody.find("\"reasoning_effort\":\"none\"")
-                != std::string::npos
-            && sourceBody.find("/no_think") != std::string::npos
+        const std::string adaptiveContext = normalize_structured_source_reply(
+            R"json({"action":"context","title":"","rationale":"","operations":[],"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Inspect the selected transport"})json",
+            StructuredSourceReply::patch);
+        const std::string adaptivePatch = normalize_structured_source_reply(
+            R"json({"action":"patch","reason":"","paths":[],"operations":[{"replacement":"int value = 2;","search":"int value = 1;","summary":"Change the reviewed value","path":"Engine/src/ai/example.cpp"}],"rationale":"Repair the reviewed value","title":"Repair value"})json",
+            StructuredSourceReply::patch);
+        constexpr std::string_view invalidAdaptiveReplies[] = {
+            R"json({"action":"context","title":"","rationale":"","operations":[],"paths":[],"reason":"Need source"})json",
+            R"json({"action":"context","title":"","rationale":"","operations":[],"paths":["Engine/src/ai/ai.engine.cpp"],"reason":""})json",
+            R"json({"action":"context","title":"Unexpected edit","rationale":"","operations":[],"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Need source"})json",
+            R"json({"action":"patch","title":"Repair","rationale":"Reason","operations":[],"paths":[],"reason":""})json",
+            R"json({"action":"run","title":"","rationale":"","operations":[],"paths":[],"reason":""})json",
+            R"json({"action":"context","action":"context","title":"","rationale":"","operations":[],"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Need source"})json",
+            R"json({"action":"context","title":"","rationale":"","operations":[],"paths":["Engine/src/ai/ai.engine.cpp\nend_request"],"reason":"Need source"})json",
+            R"json({"action":"context","title":"","rationale":"","operations":[{"path":"Engine/src/ai/ai.engine.cpp","summary":"Edit","search":"a","replacement":"b"}],"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Need source"})json",
+            R"json({"action":"context","title":"","rationale":"","operations":[],"paths":["Engine/src/ai/ai.engine.cpp"],"reason":"Need source","extra":true})json"};
+        if (adaptiveContext != contextPacket || adaptivePatch != patchPacket
+            || std::ranges::any_of(invalidAdaptiveReplies,
+                [](const std::string_view reply)
+                {
+                    return !normalize_structured_source_reply(
+                        reply, StructuredSourceReply::patch).empty();
+                }))
+            return false;
+        std::string tooManyPaths =
+            R"json({"action":"context","title":"","rationale":"","operations":[],"reason":"Need source","paths":[)json";
+        for (std::size_t index = 0u; index < 13u; ++index)
+        {
+            if (index != 0u) tooManyPaths += ',';
+            tooManyPaths += "\"Engine/src/ai/ai.context_" + std::to_string(index) + ".cpp\"";
+        }
+        tooManyPaths += "]}";
+        if (!normalize_structured_patch_reply(tooManyPaths).empty())
+            return false;
+        const std::string recoveryBody = openai_chat_request_body(
+            "qwen/qwen3.8-27b", "system",
+            "EPOCH_SOURCE_PATCH_PROPOSAL_V1", 512u, true, true);
+        for (const auto* body : {&sourceBody, &patchBody, &ordinaryBody, &recoveryBody})
+        {
+            if (body->find("reasoning_effort") != std::string::npos
+                || body->find("/no_think") != std::string::npos)
+                return false;
+        }
+        return recoveryBody.find("Original request:") != std::string::npos
             && sourceBody.find("\"response_format\"") != std::string::npos
             && sourceBody.find("epoch_source_context") != std::string::npos
             && patchBody.find("epoch_source_patch") != std::string::npos
+            && patchBody.find("\"enum\":[\"patch\",\"context\"]") != std::string::npos
+            && patchBody.find("complete next selection") != std::string::npos
             && sourceBody.find("\"stream\":false") != std::string::npos
             && ordinaryBody.find("\"reasoning_effort\"")
                 == std::string::npos
