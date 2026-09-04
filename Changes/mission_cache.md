@@ -37,6 +37,9 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   receipts, chat, and goals must never overwrite or leak into one another.
 - Model output does not certify builds, tests, screenshots, security, or release
   readiness. The host owns every compiler/test/process receipt and exact digest.
+- Disposable directories and PID supervision are not OS security isolation.
+  Candidate execution needs a proved filesystem/network boundary before the
+  product can claim arbitrary generated code cannot affect source or projects.
 
 ## Editor Control Plane
 

@@ -23,7 +23,8 @@ export namespace epochengine::ai::iteration_campaign
         std::uint32_t maximum_source_operations{32u};
         std::uint32_t maximum_repairs_per_candidate{3u};
         std::uint32_t maximum_changes_per_candidate{4u};
-        std::uint32_t maximum_curated_files{6u};
+        std::uint32_t maximum_curated_files{
+            static_cast<std::uint32_t>(iteration_session::kMaximumCuratedFiles)};
         std::uint64_t maximum_context_bytes{184u * 1024u};
         std::uint64_t maximum_candidate_bytes{1024u * 1024u};
         std::uint64_t maximum_file_bytes{16u * 1024u * 1024u};

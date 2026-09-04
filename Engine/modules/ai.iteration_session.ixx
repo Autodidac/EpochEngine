@@ -17,6 +17,9 @@ export import ai.iteration_loop;
 
 export namespace epochengine::ai::iteration_session
 {
+    inline constexpr std::size_t kMaximumCuratedFiles = 12u;
+    inline constexpr std::uint64_t kMaximumCuratedFileBytes = 8u * 1024u * 1024u;
+
     enum class SourceAuthorityKind : std::uint8_t
     {
         unavailable,

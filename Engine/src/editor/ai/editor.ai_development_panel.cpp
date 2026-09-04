@@ -81,6 +81,77 @@ namespace epochengine::editor_ai_development_panel
             48u * 1024u;
         constexpr std::size_t maximum_source_excerpt_bytes =
             16u * 1024u;
+        constexpr std::size_t maximum_source_context_paths =
+            ai::iteration_session::kMaximumCuratedFiles;
+        constexpr std::size_t maximum_source_file_read_bytes =
+            ai::iteration_session::kMaximumCuratedFileBytes;
+
+        [[nodiscard]] std::string unwrap_model_protocol_packet(
+            const std::string_view reply)
+        {
+            struct Packet final
+            {
+                std::string_view header{};
+                std::string_view terminator{};
+            };
+            constexpr std::array packets{
+                Packet{"EPOCH_SOURCE_CONTEXT_REQUEST_V1", "end_request"},
+                Packet{"EPOCH_SOURCE_PATCH_PROPOSAL_V1", "end_proposal"},
+                Packet{"EPOCH_SOURCE_PROPOSAL_V1", "end_proposal"}};
+
+            std::size_t bestBegin = std::string_view::npos;
+            const Packet* selected{};
+            std::size_t headerCount{};
+            const auto exactLine = [&](std::size_t at, std::string_view word)
+            {
+                const auto end = at + word.size();
+                return (at == 0u || reply[at - 1u] == '\n')
+                    && (end == reply.size() || reply[end] == '\n'
+                        || (reply[end] == '\r'
+                            && (end + 1u == reply.size() || reply[end + 1u] == '\n')));
+            };
+            for (const auto& packet : packets)
+            {
+                std::size_t begin = reply.find(packet.header);
+                while (begin != std::string_view::npos)
+                {
+                    if (exactLine(begin, packet.header))
+                    {
+                        ++headerCount;
+                        if (begin < bestBegin)
+                        {
+                            bestBegin = begin;
+                            selected = &packet;
+                        }
+                    }
+                    begin = reply.find(packet.header, begin + 1u);
+                }
+            }
+            if (!selected || headerCount != 1u)
+                return std::string{reply};
+
+            const std::size_t terminatorBegin = reply.rfind(
+                selected->terminator);
+            if (terminatorBegin == std::string_view::npos
+                || terminatorBegin < bestBegin + selected->header.size()
+                || !exactLine(terminatorBegin, selected->terminator))
+            {
+                return std::string{reply};
+            }
+            const std::size_t packetEnd = terminatorBegin
+                + selected->terminator.size();
+            if (bestBegin == 0u
+                && std::ranges::all_of(
+                    reply.substr(packetEnd),
+                    [](const char value)
+                    {
+                        return value == '\r' || value == '\n';
+                    }))
+            {
+                return std::string{reply};
+            }
+            return std::string{reply.substr(bestBegin, packetEnd - bestBegin)};
+        }
 
         struct SourceContextLoadResult final
         {
@@ -730,7 +801,7 @@ namespace epochengine::editor_ai_development_panel
             std::size_t scannedFiles{};
             constexpr std::size_t maximumScannedFiles = 8'192u;
             constexpr std::uintmax_t maximumCandidateBytes =
-                maximum_source_context_evidence_bytes;
+                maximum_source_file_read_bytes;
             constexpr int exactObjectivePathScore = 1'000'000;
             for (const auto& scanRoot : scanRoots)
             {
@@ -895,12 +966,40 @@ namespace epochengine::editor_ai_development_panel
                     "The reviewed source root or path list is unavailable.";
                 return result;
             }
+            if (relativePaths.size() > maximum_source_context_paths)
+            {
+                result.status = "Source context is limited to 12 files per request.";
+                return result;
+            }
             if (baseEvidence.size() > maximum_source_context_evidence_bytes)
             {
                 result.status =
                     "The host architecture evidence already exceeds the bounded context budget.";
                 return result;
             }
+
+            std::size_t envelopeBytes = baseEvidence.size() + 1u;
+            for (const auto& path : relativePaths)
+            {
+                if (path.size() > 1024u)
+                {
+                    result.status = "The reviewed source path exceeds its length limit.";
+                    return result;
+                }
+                envelopeBytes += 8u * path.size() + 256u;
+            }
+            if (envelopeBytes >= maximum_source_context_evidence_bytes
+                || (maximum_source_context_evidence_bytes - envelopeBytes)
+                        / relativePaths.size() < 1024u)
+            {
+                result.status = "The context envelope leaves insufficient room for source excerpts.";
+                return result;
+            }
+            const std::size_t perFileBudget =
+                (maximum_source_context_evidence_bytes - envelopeBytes)
+                / relativePaths.size();
+            const std::size_t excerptBudget =
+                (std::min)(maximum_source_excerpt_bytes, perFileBudget);
 
             std::error_code error{};
             const std::filesystem::path root = std::filesystem::weakly_canonical(
@@ -986,10 +1085,10 @@ namespace epochengine::editor_ai_development_panel
 
                 error.clear();
                 const auto fileSize = std::filesystem::file_size(resolved, error);
-                if (error || fileSize > maximum_source_context_evidence_bytes)
+                if (error || fileSize > maximum_source_file_read_bytes)
                 {
                     result.status =
-                        "The reviewed source file exceeds the bounded evidence budget: "
+                        "The reviewed source file exceeds the 8 MiB local read limit: "
                         + relativeText + ".";
                     return result;
                 }
@@ -1015,7 +1114,7 @@ namespace epochengine::editor_ai_development_panel
                 std::string_view sharedBytes{bytes};
                 std::size_t excerptOffset{};
                 bool excerpted{};
-                if (bytes.size() > maximum_full_source_context_bytes)
+                if (bytes.size() > (std::min)(maximum_full_source_context_bytes, perFileBudget))
                 {
                     const std::string loweredBytes = lower_ascii(bytes);
                     const std::vector<std::string> terms =
@@ -1033,8 +1132,8 @@ namespace epochengine::editor_ai_development_panel
                         strongestTermBytes = term.size();
                     }
 
-                    excerptOffset = anchor > maximum_source_excerpt_bytes / 2u
-                        ? anchor - maximum_source_excerpt_bytes / 2u
+                    excerptOffset = anchor > excerptBudget / 2u
+                        ? anchor - excerptBudget / 2u
                         : 0u;
                     if (excerptOffset > 0u)
                     {
@@ -1058,11 +1157,11 @@ namespace epochengine::editor_ai_development_panel
                     }
                     std::size_t excerptEnd = (std::min)(
                         bytes.size(),
-                        excerptOffset + maximum_source_excerpt_bytes);
+                        excerptOffset + excerptBudget);
                     if (excerptEnd < bytes.size())
                     {
                         const std::size_t endingNewline =
-                            bytes.rfind('\n', excerptEnd);
+                            bytes.rfind('\n', excerptEnd - 1u);
                         if (endingNewline != std::string::npos
                             && endingNewline >= excerptOffset
                             && excerptEnd - (endingNewline + 1u) <= 1024u)
@@ -1342,6 +1441,8 @@ namespace epochengine::editor_ai_development_panel
         std::string status_message{
             "No guarded AI development proposal is active."};
         Domain active_domain{Domain::tooling};
+        bool model_request_cancelled{};
+        bool model_request_failed{};
 
         void reset_controller(
             std::string requestedWorkspace,
@@ -4082,6 +4183,7 @@ namespace epochengine::editor_ai_development_panel
             status_message = std::move(rejection);
             if (model_reply_corrections >= maximum_model_reply_corrections)
             {
+                model_request_failed = true;
                 status_message +=
                     " The bounded source-selection correction limit is exhausted; "
                     "choose another model or revise the objective.";
@@ -4124,9 +4226,12 @@ namespace epochengine::editor_ai_development_panel
                 output.status = status_message;
                 return output;
             }
-            if (model_transport_failure_reply(reply))
+            const std::string normalizedReply =
+                unwrap_model_protocol_packet(reply);
+            const std::string_view boundedReply{normalizedReply};
+            if (model_transport_failure_reply(boundedReply))
             {
-                status_message = std::string{reply};
+                status_message = std::string{boundedReply};
                 output.status = status_message;
                 return output;
             }
@@ -4146,7 +4251,9 @@ namespace epochengine::editor_ai_development_panel
                 : ai::development_proposal_codec::SourceArea::project;
             const auto contextRequest =
                 ai::development_proposal_codec::decode_context_request(
-                    reply, area);
+                    boundedReply,
+                    area,
+                    maximum_source_context_paths);
             if (contextRequest.recognized)
             {
                 pending_source_context_systems.clear();
@@ -4194,7 +4301,7 @@ namespace epochengine::editor_ai_development_panel
                 output.status = status_message;
                 return output;
             }
-            if (reply == "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1")
+            if (boundedReply == "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1")
             {
                 if (const auto target =
                         unique_explicit_replacement_target(
@@ -4243,7 +4350,7 @@ namespace epochengine::editor_ai_development_panel
                     "source proposal. No source bytes were read or shared.");
             }
             const auto decoded =
-                ai::development_proposal_codec::decode(reply);
+                ai::development_proposal_codec::decode(boundedReply);
             if (!decoded)
             {
                 return queue_model_reply_correction(decoded.status);
@@ -4268,7 +4375,7 @@ namespace epochengine::editor_ai_development_panel
             }
 
             const auto result = controller->propose_model_reply(
-                reply,
+                boundedReply,
                 engineSource
                     ? editor_ai_development::OperationKind::engine_source_edit
                     : editor_ai_development::OperationKind::project_source_edit,
@@ -4279,7 +4386,7 @@ namespace epochengine::editor_ai_development_panel
                 if (iteration_session)
                 {
                     const auto staged = iteration_session->stage_candidate(
-                        iteration_session->identity(), reply);
+                        iteration_session->identity(), boundedReply);
                     if (!staged)
                     {
                         status_message = staged.status;
@@ -4289,7 +4396,7 @@ namespace epochengine::editor_ai_development_panel
                 }
                 active_domain = input.domain;
                 const auto snapshot = controller->snapshot();
-                source_candidate_raw_reply.assign(reply);
+                source_candidate_raw_reply.assign(boundedReply);
                 source_candidate_operations = snapshot.operations;
                 source_candidate_kind = engineSource
                     ? editor_ai_development::OperationKind::engine_source_edit
@@ -4325,11 +4432,347 @@ namespace epochengine::editor_ai_development_panel
     Panel::Panel(Panel&&) noexcept = default;
     Panel& Panel::operator=(Panel&&) noexcept = default;
 
+    ModelActivityView describe_model_activity(const Input& input)
+    {
+        ModelActivityView view{};
+        view.visible = input.local_model_running || input.local_model_queued;
+        if (!view.visible)
+            return view;
+        view.can_cancel = !input.local_model_cancelling;
+        view.label = input.local_model_cancelling ? "Stopping local model"
+            : input.local_model_running ? "Local model working"
+            : "Local model queued";
+        view.detail = input.local_model_cancelling
+            ? "Cancellation requested. Waiting for the request worker to finish; no reply will be applied."
+            : input.local_model_running
+                ? "Request active; waiting for the model response. Token progress is not available. You can keep using the editor."
+                : "Waiting to send this self-coding request. No model response is running yet.";
+        if (input.local_model_running)
+        {
+            const auto seconds = input.local_model_elapsed_ms / 1'000u;
+            view.elapsed = epochengine::format_text(
+                "{}:{:02}", seconds / 60u, seconds % 60u);
+        }
+        view.animation_phase = static_cast<float>(
+            input.local_model_elapsed_ms % 1'600u) / 1'600.0f;
+        return view;
+    }
+
+    RenderResult Panel::begin_source_iteration(
+        const Input& input,
+        std::string objective)
+    {
+        RenderResult output{};
+        if (!implementation_)
+        {
+            output.status = "Guarded development panel is unavailable.";
+            return output;
+        }
+        auto& state = *implementation_;
+        if (input.local_model_running || input.local_model_queued)
+        {
+            output.status = "A self-coding request is already active. Wait for it or cancel before starting another.";
+            return output;
+        }
+        state.model_request_cancelled = false;
+        state.model_request_failed = false;
+        (void)state.ensure(
+            input.workspace_id,
+            input.source_snapshot_root,
+            input.workspace_root);
+        state.development_objective = std::move(objective);
+        if (state.development_objective.empty())
+        {
+            state.status_message =
+                "Describe the improvement or problem you want the Engine to solve.";
+            output.status = state.status_message;
+            return output;
+        }
+
+        const SourcePathCatalog catalog = build_source_path_catalog(
+            state.source_root,
+            input.domain);
+        if (!catalog.accepted)
+        {
+            state.status_message = catalog.status;
+            output.status = state.status_message;
+            return output;
+        }
+        state.pending_source_context_systems.clear();
+        state.pending_source_context_paths.clear();
+        state.pending_source_context_reason.clear();
+        state.pending_source_context_objective.clear();
+        state.source_context_evidence = catalog.evidence;
+        state.source_path_catalog_evidence = catalog.evidence;
+        state.source_context_expansions = 0u;
+        state.source_context_evidence_objective =
+            state.development_objective;
+        state.active_domain = input.domain;
+        state.sandbox_lab_enabled = true;
+        if (state.sandbox_parent_root.empty())
+            state.sandbox_parent_root = state.source_root;
+        state.status_message = epochengine::format_text(
+            "Asking the selected model to choose up to {} source files from {} "
+            "verified path names. No source-file bytes have been read or sent.",
+            maximum_source_context_paths,
+            catalog.path_count);
+        return state.source_context_model_request();
+    }
+
+    bool Panel::has_reviewed_plan() const
+    {
+        if (!implementation_ || !implementation_->campaign_orchestrator
+            || !implementation_->campaign_scheduler
+            || !implementation_->campaign_supervisor
+            || implementation_->campaign_plan_review.empty())
+        {
+            return false;
+        }
+        return implementation_->campaign_scheduler->snapshot().phase
+                == ai::iteration_campaign_scheduler::Phase::
+                    awaiting_human_review
+            && implementation_->campaign_orchestrator->snapshot().phase
+                == ai::self_iteration_orchestrator::Phase::
+                    awaiting_curated_evidence;
+    }
+
+    RenderResult Panel::approve_latest_plan()
+    {
+        RenderResult output{};
+        if (!has_reviewed_plan())
+            return output;
+
+        auto& state = *implementation_;
+        const std::uint64_t now = logical_time_now().value;
+        auto approved = state.submit_supervisor(
+            ai::iteration_supervisor_control::CommandKind::approve,
+            now);
+        const bool accepted = static_cast<bool>(approved);
+        state.capture_supervisor_result(output, std::move(approved));
+        if (!accepted)
+            return output;
+
+        RenderResult continued{};
+        if (!state.continue_approved_plan(continued, now + 1u))
+            return continued;
+        continued.campaign_evidence.insert(
+            continued.campaign_evidence.begin(),
+            output.campaign_evidence.begin(),
+            output.campaign_evidence.end());
+        return continued;
+    }
+
+    bool Panel::sandbox_session_failed() const
+    {
+        if (implementation_ && (implementation_->model_request_cancelled
+            || implementation_->model_request_failed))
+            return true;
+        if (!implementation_ || !implementation_->campaign_orchestrator)
+            return false;
+        const auto phase = implementation_->campaign_orchestrator->snapshot().phase;
+        return phase == ai::self_iteration_orchestrator::Phase::rejected
+            || phase == ai::self_iteration_orchestrator::Phase::cancelled
+            || phase == ai::self_iteration_orchestrator::Phase::blocked;
+    }
+
+    std::string Panel::session_status() const
+    {
+        return implementation_ ? implementation_->status_message
+                               : std::string{"Guarded development panel is unavailable."};
+    }
+
+    RenderResult Panel::select_candidate_preview(
+        const Input& input,
+        const CandidateDecision decision)
+    {
+        RenderResult output{};
+        if (!implementation_ || !implementation_->candidate_preview_ready
+            || decision == CandidateDecision::none)
+        {
+            output.status = "No validated candidate comparison is ready to choose.";
+            return output;
+        }
+        auto& state = *implementation_;
+        const bool chooseCandidate = decision == CandidateDecision::choose_candidate;
+        const bool stopLab = decision == CandidateDecision::stop_lab;
+        const std::string nextParent = chooseCandidate
+            ? state.workspace_root : state.sandbox_parent_root;
+        output.candidate_decision = stopLab
+            ? CandidateDecision::stop_lab
+            : (chooseCandidate
+                ? CandidateDecision::choose_candidate
+                : CandidateDecision::keep_current);
+        output.retire_candidate_preview = !chooseCandidate;
+        if (!stopLab)
+        {
+            state.sandbox_lab_checkpoints.push_back(
+                epochengine::format_text(
+                    "Iteration {}: {}",
+                    state.sandbox_lab_iteration,
+                    chooseCandidate
+                        ? "candidate selected; its validated sandbox is the new parent"
+                        : "candidate rejected; current sandbox parent retained"));
+        }
+        state.candidate_preview_ready = false;
+        state.candidate_preview_pending = false;
+        state.candidate_preview_process_id = 0u;
+        state.candidate_preview_window_id = 0u;
+        if (stopLab)
+        {
+            state.sandbox_lab_enabled = false;
+            state.status_message =
+                "Candidate Lab stopped. Live source and projects were never modified.";
+            output.status = state.status_message;
+            return output;
+        }
+
+        state.sandbox_parent_root = nextParent;
+        ++state.sandbox_lab_iteration;
+        const std::string objective = state.development_objective;
+        const std::vector<std::string> reviewedPaths =
+            state.campaign_reviewed_paths;
+        const auto provider = state.campaign_provider;
+        state.reset_controller(
+            input.workspace_id,
+            nextParent,
+            input.workspace_root);
+        state.sandbox_lab_enabled = true;
+        state.sandbox_parent_root = nextParent;
+        state.development_objective = objective;
+        state.campaign_provider = provider;
+        state.active_domain = input.domain;
+        if (reviewedPaths.empty())
+        {
+            const SourcePathCatalog catalog =
+                build_source_path_catalog(nextParent, input.domain);
+            if (!catalog.accepted)
+            {
+                state.status_message = catalog.status;
+                output.status = state.status_message;
+                return output;
+            }
+            state.source_context_evidence = catalog.evidence;
+            state.source_context_evidence_objective = objective;
+            state.status_message =
+                "The prior source slice is unavailable. Asking the selected model to choose from the new sandbox head.";
+            RenderResult next = state.source_context_model_request();
+            next.candidate_decision = output.candidate_decision;
+            next.retire_candidate_preview =
+                output.retire_candidate_preview;
+            return next;
+        }
+        state.pending_source_context_systems.clear();
+        const SourcePathCatalog nextCatalog =
+            build_source_path_catalog(nextParent, input.domain);
+        if (!nextCatalog.accepted)
+        {
+            state.status_message = nextCatalog.status;
+            output.status = state.status_message;
+            return output;
+        }
+        state.source_path_catalog_evidence =
+            nextCatalog.evidence;
+        state.pending_source_context_paths = reviewedPaths;
+        state.pending_source_context_reason =
+            "Continuing the model-selected source slice from the previous candidate.";
+        state.pending_source_context_objective = objective;
+        RenderResult next = share_requested_source_context(input);
+        next.candidate_decision = output.candidate_decision;
+        next.retire_candidate_preview =
+            output.retire_candidate_preview;
+        next.status = epochengine::format_text(
+            "{} is now the sandbox parent. Iteration {} is materializing from only those selected bytes.",
+            chooseCandidate ? "The candidate" : "The current head",
+            state.sandbox_lab_iteration);
+        state.status_message = next.status;
+        return next;
+    }
+
     bool Panel::run_contract()
     {
+        Input activityInput{};
+        if (describe_model_activity(activityInput).visible)
+            return false;
+        activityInput.local_model_queued = true;
+        const auto queued = describe_model_activity(activityInput);
+        if (!queued.visible || !queued.can_cancel || !queued.elapsed.empty()
+            || queued.label != "Local model queued")
+            return false;
+        activityInput.local_model_running = true;
+        activityInput.local_model_elapsed_ms = 61'234u;
+        const auto working = describe_model_activity(activityInput);
+        if (!working.visible || !working.can_cancel || working.elapsed != "1:01"
+            || working.label != "Local model working"
+            || working.animation_phase < 0.0f || working.animation_phase >= 1.0f)
+            return false;
+        activityInput.local_model_cancelling = true;
+        const auto stopping = describe_model_activity(activityInput);
+        if (!stopping.visible || stopping.can_cancel
+            || stopping.label != "Stopping local model")
+            return false;
+        activityInput.local_model_running = false;
+        activityInput.local_model_queued = false;
+        if (describe_model_activity(activityInput).visible)
+            return false;
+        Panel cancelledBeforePlan{};
+        (void)cancelledBeforePlan.cancel_active_campaign("Stop source selection");
+        if (!cancelledBeforePlan.sandbox_session_failed())
+            return false;
         using ControlPhase =
             ai::iteration_supervisor_control::ControlPhase;
         using SchedulerPhase = ai::iteration_campaign_scheduler::Phase;
+        const std::string strictContextPacket =
+            "EPOCH_SOURCE_CONTEXT_REQUEST_V1\n"
+            "reason: inspect the exact self-coding controller\n"
+            "path_count: 1\n"
+            "path: Engine/src/editor/editor.application.cpp\n"
+            "end_request\n";
+        if (unwrap_model_protocol_packet(strictContextPacket)
+            != strictContextPacket)
+        {
+            return false;
+        }
+        const std::string wrappedContextPacket =
+            "I found the relevant source.\n```text\n"
+            + strictContextPacket + "```\n";
+        if (unwrap_model_protocol_packet(wrappedContextPacket)
+            != strictContextPacket.substr(0u, strictContextPacket.size() - 1u))
+        {
+            return false;
+        }
+        const std::string malformedWrapper = "Packet:\n"
+            + strictContextPacket.substr(0u, strictContextPacket.size() - 1u)
+            + "_extra\n";
+        const std::string ambiguousWrapper = "Packets:\n"
+            + strictContextPacket + strictContextPacket;
+        if (unwrap_model_protocol_packet(malformedWrapper) != malformedWrapper
+            || unwrap_model_protocol_packet(ambiguousWrapper) != ambiguousWrapper
+            || !ai::development_proposal_codec::decode_context_request(
+                unwrap_model_protocol_packet(wrappedContextPacket),
+                ai::development_proposal_codec::SourceArea::engine))
+            return false;
+        Input lateReply{};
+        lateReply.latest_raw_model_reply = strictContextPacket;
+        if (cancelledBeforePlan.stage_latest_model_proposal(lateReply).action != HostAction::none
+            || cancelledBeforePlan.select_candidate_preview(
+                lateReply, CandidateDecision::choose_candidate).candidate_decision
+                    != CandidateDecision::none)
+            return false;
+        const std::string strictProposalPacket =
+            "EPOCH_SOURCE_PATCH_PROPOSAL_V1\n"
+            "title: Improve the working indicator\n"
+            "rationale: Keep local model progress visible\n"
+            "lifetime_seconds: 900\n"
+            "operation_count: 0\n"
+            "end_proposal\n";
+        if (unwrap_model_protocol_packet(
+                "Proposed packet follows.\n" + strictProposalPacket
+                + "Explanation after the packet.\n")
+            != strictProposalPacket.substr(
+                0u, strictProposalPacket.size() - 1u))
+        {
+            return false;
+        }
         Panel proposalPromptPanel{};
         auto& proposalPromptState =
             *proposalPromptPanel.implementation_;
@@ -4642,7 +5085,7 @@ namespace epochengine::editor_ai_development_panel
             std::string aiImplementation{
                 "namespace epochengine::ai { int ai_development_panel = 1; "
                 "int direct_runtime = 1; }\n"};
-            aiImplementation.resize(132u * 1024u, ' ');
+            aiImplementation.resize(2u * 1024u * 1024u, ' ');
             constexpr std::string_view transcriptOwner{
                 "bool normalize_direct_llama_cpp_transcript = true;"};
             aiImplementation.replace(
@@ -4854,6 +5297,26 @@ namespace epochengine::editor_ai_development_panel
             {
                 return false;
             }
+
+            std::vector<std::string> twelvePaths{};
+            for (std::size_t index = 0u; index < maximum_source_context_paths; ++index)
+            {
+                const auto path = "Engine/src/editor/editor.context_"
+                    + std::to_string(index) + ".cpp";
+                if (!writeFixtureSource(path, std::string(32u * 1024u, ' ')))
+                    return false;
+                twelvePaths.push_back(path);
+            }
+            const auto twelveLoaded = load_reviewed_source_context(
+                fixture.path.generic_string(), twelvePaths, {}, "read source");
+            if (!twelveLoaded.accepted || twelveLoaded.file_count != 12u
+                || twelveLoaded.evidence.size() > maximum_source_context_evidence_bytes
+                || twelveLoaded.reviewed_slices.size() != 12u)
+                return false;
+            twelvePaths.push_back(reviewedPath);
+            if (load_reviewed_source_context(
+                    fixture.path.generic_string(), twelvePaths, {}, "read source").accepted)
+                return false;
 
             localOpenInput.source_snapshot_root =
                 fixture.path.generic_string();
@@ -5317,6 +5780,13 @@ namespace epochengine::editor_ai_development_panel
             {
                 return false;
             }
+            const auto stopped = candidatePreview.select_candidate_preview(
+                Input{}, CandidateDecision::stop_lab);
+            if (stopped.candidate_decision != CandidateDecision::stop_lab
+                || !stopped.retire_candidate_preview
+                || previewState.candidate_preview_ready
+                || previewState.sandbox_lab_enabled)
+                return false;
         }
 
         auto& acceptedState = *accepted.implementation_;
@@ -5853,63 +6323,32 @@ namespace epochengine::editor_ai_development_panel
 
         const auto askModelToFindSource = [&]()
         {
-            RenderResult request{};
-            if (state.development_objective.empty())
-            {
-                state.status_message =
-                    "Describe the improvement or problem you want the Engine to solve.";
-                request.status = state.status_message;
-                return request;
-            }
-            const SourcePathCatalog catalog = build_source_path_catalog(
-                state.source_root,
-                input.domain);
-            if (!catalog.accepted)
-            {
-                state.status_message = catalog.status;
-                request.status = state.status_message;
-                return request;
-            }
-            state.pending_source_context_systems.clear();
-            state.pending_source_context_paths.clear();
-            state.pending_source_context_reason.clear();
-            state.pending_source_context_objective.clear();
-            state.source_context_evidence = catalog.evidence;
-            state.source_path_catalog_evidence = catalog.evidence;
-            state.source_context_expansions = 0u;
-            state.source_context_evidence_objective =
-                state.development_objective;
-            state.active_domain = input.domain;
-            state.sandbox_lab_enabled = true;
-            if (state.sandbox_parent_root.empty())
-                state.sandbox_parent_root = state.source_root;
-            state.status_message = epochengine::format_text(
-                "Asking the selected model to choose a bounded source slice from {} path names. No source-file bytes have been read or sent.",
-                catalog.path_count);
-            return state.source_context_model_request();
+            return begin_source_iteration(
+                input,
+                state.development_objective);
         };
 
         gui::label("Engine Self-Coding");
-        if (input.local_model_running)
+        const auto activity = describe_model_activity(input);
+        if (activity.visible)
         {
-            const std::uint64_t elapsedSeconds =
-                input.local_model_elapsed_ms / 1'000u;
-            const std::string elapsed = epochengine::format_text(
-                "{}:{:02}", elapsedSeconds / 60u, elapsedSeconds % 60u);
             gui::progress_bar(gui::ProgressBarOptions{
-                .label = "Local model working",
-                .status = elapsed,
+                .label = activity.label,
+                .status = activity.elapsed,
                 .value = 0.0f,
                 .size = {width, 22.0f},
                 .show_percent = false,
                 .activity = true,
-                .activity_phase = static_cast<float>(
-                    input.local_model_elapsed_ms % 1'600u) / 1'600.0f});
-            gui::wrapped_label(
-                "The selected model is still working. Epoch will continue the "
-                "sandbox session when its response arrives; Stop Session can "
-                "cancel the active request.",
-                width);
+                .activity_phase = activity.animation_phase});
+            gui::wrapped_label(activity.detail, width);
+            if (activity.can_cancel
+                && gui::button("Cancel Self-Coding Request", {width, 30.0f}))
+            {
+                output.action = HostAction::cancel_model_source_request;
+                output.status =
+                    "Cancellation requested for the active local-model response.";
+                return output;
+            }
         }
         if (input.domain != Domain::tooling)
         {
@@ -5931,7 +6370,7 @@ namespace epochengine::editor_ai_development_panel
                     "Example: Make this workflow clearer and stop showing blank action buttons.",
                     width);
             }
-            if (snapshot.phase
+            if (!activity.visible && snapshot.phase
                     == editor_ai_development::ControllerPhase::ready
                 && state.pending_source_context_paths.empty()
                 && state.campaign_reviewed_paths.empty()
@@ -6069,99 +6508,11 @@ namespace epochengine::editor_ai_development_panel
                     if (const auto choice = gui::inline_button_row(
                             choices, 32.0f, 5.0f))
                     {
-                        const bool chooseCandidate = *choice == 1u;
-                        const bool stopLab = *choice == 2u;
-                        const std::string nextParent = chooseCandidate
-                            ? state.workspace_root : state.sandbox_parent_root;
-                        output.candidate_decision = stopLab
-                            ? CandidateDecision::stop_lab
-                            : (chooseCandidate
-                                ? CandidateDecision::choose_candidate
+                        return select_candidate_preview(
+                            input,
+                            *choice == 2u ? CandidateDecision::stop_lab
+                                : *choice == 1u ? CandidateDecision::choose_candidate
                                 : CandidateDecision::keep_current);
-                        output.retire_candidate_preview = !chooseCandidate;
-                        if (!stopLab)
-                        {
-                            state.sandbox_lab_checkpoints.push_back(
-                                epochengine::format_text(
-                                    "Iteration {}: {}",
-                                    state.sandbox_lab_iteration,
-                                    chooseCandidate
-                                        ? "candidate selected; its validated sandbox is the new parent"
-                                        : "candidate rejected; current sandbox parent retained"));
-                        }
-                        state.candidate_preview_ready = false;
-                        state.candidate_preview_pending = false;
-                        state.candidate_preview_process_id = 0u;
-                        state.candidate_preview_window_id = 0u;
-                        if (stopLab)
-                        {
-                            state.sandbox_lab_enabled = false;
-                            state.status_message =
-                                "Candidate Lab stopped. Live source and projects were never modified.";
-                            output.status = state.status_message;
-                            return output;
-                        }
-
-                        state.sandbox_parent_root = nextParent;
-                        ++state.sandbox_lab_iteration;
-                        const std::string objective = state.development_objective;
-                        const std::vector<std::string> reviewedPaths =
-                            state.campaign_reviewed_paths;
-                        const auto provider = state.campaign_provider;
-                        state.reset_controller(
-                            input.workspace_id,
-                            nextParent,
-                            input.workspace_root);
-                        state.sandbox_lab_enabled = true;
-                        state.sandbox_parent_root = nextParent;
-                        state.development_objective = objective;
-                        state.campaign_provider = provider;
-                        state.active_domain = input.domain;
-                        if (reviewedPaths.empty())
-                        {
-                            const SourcePathCatalog catalog =
-                                build_source_path_catalog(nextParent, input.domain);
-                            if (!catalog.accepted)
-                            {
-                                state.status_message = catalog.status;
-                                output.status = state.status_message;
-                                return output;
-                            }
-                            state.source_context_evidence = catalog.evidence;
-                            state.source_context_evidence_objective = objective;
-                            state.status_message =
-                                "The prior source slice is unavailable. Asking the selected model to choose from the new sandbox head.";
-                            RenderResult next = state.source_context_model_request();
-                            next.candidate_decision = output.candidate_decision;
-                            next.retire_candidate_preview =
-                                output.retire_candidate_preview;
-                            return next;
-                        }
-                        state.pending_source_context_systems.clear();
-                        const SourcePathCatalog nextCatalog =
-                            build_source_path_catalog(nextParent, input.domain);
-                        if (!nextCatalog.accepted)
-                        {
-                            state.status_message = nextCatalog.status;
-                            output.status = state.status_message;
-                            return output;
-                        }
-                        state.source_path_catalog_evidence =
-                            nextCatalog.evidence;
-                        state.pending_source_context_paths = reviewedPaths;
-                        state.pending_source_context_reason =
-                            "Continuing the model-selected source slice from the previous candidate.";
-                        state.pending_source_context_objective = objective;
-                        RenderResult next = share_requested_source_context(input);
-                        next.candidate_decision = output.candidate_decision;
-                        next.retire_candidate_preview =
-                            output.retire_candidate_preview;
-                        next.status = epochengine::format_text(
-                            "{} is now the sandbox parent. Iteration {} is materializing from only those selected bytes.",
-                            chooseCandidate ? "The candidate" : "The current head",
-                            state.sandbox_lab_iteration);
-                        state.status_message = next.status;
-                        return next;
                     }
                 }
             }
@@ -6399,11 +6750,18 @@ namespace epochengine::editor_ai_development_panel
         }
 
         auto& state = *implementation_;
+        if (state.model_request_cancelled)
+        {
+            output.status = "Discarded a response from the cancelled self-coding session.";
+            return output;
+        }
         auto& controller = state.ensure(
             input.workspace_id,
             input.source_snapshot_root,
             input.workspace_root);
-        if (input.latest_raw_model_reply.empty())
+        const std::string admittedReply = unwrap_model_protocol_packet(
+            input.latest_raw_model_reply);
+        if (admittedReply.empty())
         {
             state.status_message =
                 "No local-model source proposal is available to validate.";
@@ -6426,11 +6784,11 @@ namespace epochengine::editor_ai_development_panel
                         == ai::iteration_campaign_scheduler::Phase::
                             awaiting_transport_response)
                 {
-                    state.campaign_plan_review = input.latest_raw_model_reply;
+                    state.campaign_plan_review = admittedReply;
                     if (state.sandbox_lab_enabled)
-                        state.sandbox_lab_plan = input.latest_raw_model_reply;
+                        state.sandbox_lab_plan = admittedReply;
                     state.campaign_plan_review_digest =
-                        Implementation::digest_text(input.latest_raw_model_reply);
+                        Implementation::digest_text(admittedReply);
                     const auto before = state.campaign_scheduler->snapshot()
                         .generation;
                     auto completed = state.campaign_scheduler->complete_response(
@@ -6443,7 +6801,7 @@ namespace epochengine::editor_ai_development_panel
                                 pending.expected_state_sha256(),
                             .transition_id = pending.transition_id(),
                             .now_unix_seconds = now,
-                            .content = input.latest_raw_model_reply,
+                            .content = admittedReply,
                             .evidence_sha256 =
                                 state.campaign_plan_review_digest,
                             .summary =
@@ -6502,7 +6860,7 @@ namespace epochengine::editor_ai_development_panel
                     output,
                     state.campaign_orchestrator->record_plan(
                         state.campaign_receipt(pending, now),
-                        input.latest_raw_model_reply,
+                        admittedReply,
                         "Selected provider returned the bounded campaign plan."));
                 return output;
             }
@@ -6518,7 +6876,7 @@ namespace epochengine::editor_ai_development_panel
                 }
                 RenderResult staged = state.stage_source_reply(
                     input,
-                    input.latest_raw_model_reply,
+                    admittedReply,
                     logical_time_now());
                 if (controller.snapshot().phase
                     != editor_ai_development::ControllerPhase::proposed)
@@ -6535,7 +6893,8 @@ namespace epochengine::editor_ai_development_panel
                         for (const auto& path :
                              state.pending_source_context_paths)
                         {
-                            if (expandedPaths.size() >= 32u)
+                            if (expandedPaths.size()
+                                >= maximum_source_context_paths)
                                 break;
                             if (std::ranges::find(expandedPaths, path)
                                 == expandedPaths.end())
@@ -6634,7 +6993,7 @@ namespace epochengine::editor_ai_development_panel
                     staged,
                     state.campaign_orchestrator->record_proposal(
                         state.campaign_receipt(pending, now),
-                        input.latest_raw_model_reply,
+                        admittedReply,
                         "Guarded proposal codec admitted the exact reviewed source packet."));
                 if (state.sandbox_lab_enabled
                     && state.campaign_orchestrator->snapshot().phase
@@ -6658,11 +7017,16 @@ namespace epochengine::editor_ai_development_panel
 
         output = state.stage_source_reply(
             input,
-            input.latest_raw_model_reply,
+            admittedReply,
             logical_time_now());
         if (!state.pending_source_context_paths.empty())
         {
             RenderResult shared = share_requested_source_context(input);
+            if (shared.action == HostAction::none)
+            {
+                state.model_request_failed = true;
+                state.sandbox_lab_enabled = false;
+            }
             shared.campaign_evidence.insert(
                 shared.campaign_evidence.begin(),
                 "AI selected "
@@ -8021,30 +8385,33 @@ namespace epochengine::editor_ai_development_panel
     RenderResult Panel::cancel_active_campaign(std::string reason)
     {
         RenderResult output{};
-        if (!implementation_ || !implementation_->campaign_orchestrator)
+        if (!implementation_)
         {
-            output.status = "No self-iteration campaign is active.";
+            output.status = "No self-coding session exists.";
             return output;
         }
         auto& state = *implementation_;
-        const auto snapshot = state.campaign_orchestrator->snapshot();
         if (reason.empty())
             reason = "The operator cancelled the active model request.";
-        state.capture_campaign_result(
-            output,
-            state.campaign_orchestrator->cancel(
-                state.campaign_action(
-                    snapshot,
-                    "transport-cancel",
-                    logical_time_now().value),
-                reason));
+        if (state.campaign_orchestrator)
+        {
+            const auto snapshot = state.campaign_orchestrator->snapshot();
+            state.capture_campaign_result(
+                output,
+                state.campaign_orchestrator->cancel(
+                    state.campaign_action(snapshot, "transport-cancel", logical_time_now().value),
+                    reason));
+        }
+        state.model_request_cancelled = true;
+        state.pending_source_context_paths.clear();
+        state.pending_source_context_objective.clear();
+        state.model_reply_correction_diagnostic.clear();
         state.campaign_pending_operation.reset();
         state.campaign_pending_response.clear();
         state.campaign_pending_response_digest.clear();
         state.sandbox_lab_enabled = false;
         state.status_message =
-            "The local MCP request and self-iteration session were stopped. "
-            "Live source and projects were not changed.";
+            "Self-coding cancelled. Any in-flight response will be discarded; no further iteration is queued. Live source and projects are unchanged.";
         output.status = state.status_message;
         output.campaign_evidence.push_back(state.status_message);
         return output;

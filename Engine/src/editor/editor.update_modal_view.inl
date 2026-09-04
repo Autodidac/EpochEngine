@@ -415,26 +415,20 @@
         // Enables deterministic smoke coverage of GUI-only updater actions.
         if (!editor.automationConsumed)
         {
-            if (editor.automationCommand != EditorAutomationCommand::None
-                && !try_claim_editor_automation_command(editor.automationCommand))
-            {
-                editor.automationConsumed = true;
-            }
-
             switch (editor.automationCommand)
             {
             case EditorAutomationCommand::SmartUpdate:
-                if (editor.automationConsumed)
-                    break;
                 editor.automationConsumed = true;
+                if (!try_claim_editor_automation_command(editor.automationCommand))
+                    break;
                 push_editor_log(editor, "[command] Auto command triggered: smart update.");
                 append_editor_automation_trace("triggered smart-update");
                 start_editor_update_install(editor);
                 break;
             case EditorAutomationCommand::SourceUpdate:
-                if (editor.automationConsumed)
-                    break;
                 editor.automationConsumed = true;
+                if (!try_claim_editor_automation_command(editor.automationCommand))
+                    break;
                 push_editor_log(editor, "[command] Auto command triggered: project source code download.");
                 append_editor_automation_trace("triggered source-update");
                 start_editor_project_source_code_download(editor);
@@ -442,6 +436,7 @@
             case EditorAutomationCommand::AssetsInteractionProof:
             case EditorAutomationCommand::CandidateLabSmokeChoose:
             case EditorAutomationCommand::CandidateLabSmokeKeep:
+            case EditorAutomationCommand::SelfCodingLocalSmoke:
                 break;
             case EditorAutomationCommand::None:
                 break;

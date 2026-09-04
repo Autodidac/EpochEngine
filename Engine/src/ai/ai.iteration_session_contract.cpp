@@ -66,6 +66,30 @@ namespace epochengine::ai::iteration_session
             if (!inspected.accepted || inspected.files.size() != 1u)
                 return false;
 
+            std::vector<std::string> twelvePaths{};
+            for (std::size_t index = 0u; index < kMaximumCuratedFiles; ++index)
+            {
+                const auto path = "Engine/src/ai/ai.context_"
+                    + std::to_string(index) + ".cpp";
+                std::ofstream{fixture.root / path, std::ios::binary}
+                    << "namespace epochengine::ai { int context = 1; }\n";
+                twelvePaths.push_back(path);
+            }
+            const auto twelve = inspect_curated_files(source, twelvePaths);
+            IterationSession twelveSession{};
+            if (!twelve.accepted || twelve.files.size() != kMaximumCuratedFiles
+                || !twelveSession.configure(SessionConfiguration{
+                    .objective = "Inspect a model-selected twelve-file source context.",
+                    .model_name = "Qwen3.8-27B",
+                    .source = source,
+                    .curated_files = twelve.files,
+                    .policy = CandidatePolicy::manual_each_candidate,
+                    .maximum_repair_attempts = 2u}))
+                return false;
+            twelvePaths.push_back("Engine/src/ai/ai.contract.cpp");
+            if (inspect_curated_files(source, twelvePaths).accepted)
+                return false;
+
             IterationSession session{};
             auto forged = inspected.files;
             forged.front().byte_count += 1u;

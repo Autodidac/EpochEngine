@@ -128,6 +128,8 @@ export namespace epochengine::editor_ai_development_panel
         std::string selected_endpoint{};
         std::string selected_transport{};
         bool local_model_running{};
+        bool local_model_queued{};
+        bool local_model_cancelling{};
         std::uint64_t local_model_elapsed_ms{};
         bool external_mcp_available{};
         std::string external_mcp_status{};
@@ -138,6 +140,18 @@ export namespace epochengine::editor_ai_development_panel
         bool tool_source_ready{};
         bool execution_pending{};
     };
+
+    struct ModelActivityView final
+    {
+        bool visible{};
+        bool can_cancel{};
+        std::string label{};
+        std::string detail{};
+        std::string elapsed{};
+        float animation_phase{};
+    };
+
+    [[nodiscard]] ModelActivityView describe_model_activity(const Input& input);
 
     struct RenderResult final
     {
@@ -174,6 +188,15 @@ export namespace epochengine::editor_ai_development_panel
         Panel& operator=(Panel&&) noexcept;
 
         [[nodiscard]] static bool run_contract();
+        [[nodiscard]] RenderResult begin_source_iteration(
+            const Input& input,
+            std::string objective);
+        [[nodiscard]] bool has_reviewed_plan() const;
+        [[nodiscard]] RenderResult approve_latest_plan();
+        [[nodiscard]] bool sandbox_session_failed() const;
+        [[nodiscard]] std::string session_status() const;
+        [[nodiscard]] RenderResult select_candidate_preview(
+            const Input& input, CandidateDecision decision);
         [[nodiscard]] RenderResult render(const Input& input);
         [[nodiscard]] RenderResult stage_latest_model_proposal(
             const Input& input);

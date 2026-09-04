@@ -169,21 +169,17 @@ namespace epochengine::ai::mcp_campaign
         [[nodiscard]] bool valid_curated_files(
             const std::vector<iteration_session::CuratedFile>& files)
         {
-            if (files.empty() || files.size() > 6u)
+            if (files.empty() || files.size() > iteration_session::kMaximumCuratedFiles)
                 return false;
-            std::uint64_t total{};
             std::vector<std::string> paths{};
             for (const auto& file : files)
             {
                 if (!safe_relative_path(file.relative_path)
                     || !lowercase_hex(file.sha256, 64u)
-                    || file.byte_count > 16u * 1024u * 1024u
-                    || file.byte_count > 184u * 1024u
-                    || total > 184u * 1024u - file.byte_count
+                    || file.byte_count > iteration_session::kMaximumCuratedFileBytes
                     || std::find(paths.begin(), paths.end(), file.relative_path)
                         != paths.end())
                     return false;
-                total += file.byte_count;
                 paths.push_back(file.relative_path);
             }
             return true;

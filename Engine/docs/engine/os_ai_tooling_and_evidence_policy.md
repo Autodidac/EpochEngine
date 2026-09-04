@@ -293,9 +293,12 @@ AI-assisted development follows one fail-closed sequence:
    uniqueness, and count. The exact admitted path list is recorded in Detailed
    Session Activity. Unknown fields, invented paths, traversal, and paths outside
    the catalog fail before any source read.
-3. The host automatically opens only the validated paths inside Candidate Lab
-   and sends complete counted evidence through 48 KiB or one UTF-8-safe 16 KiB
-   excerpt for a larger reviewed file. The exact evidence bytes—not only names
+3. The host automatically opens only the validated paths inside Candidate Lab.
+   Local full-file reads/hashes allow at most 8 MiB per selected file; those
+   identities are not outbound model context. The combined context stays within
+   184 KiB including metadata. Each file receives a fair share of that budget:
+   complete counted evidence up to 48 KiB when it fits, otherwise one UTF-8-safe
+   excerpt of at most 16 KiB. The exact evidence bytes—not only names
    and hashes—are included in the proposal request. If more evidence is needed,
    the model may request more catalog-listed paths; the host performs at most
    three bounded expansions. The model may otherwise return exactly
@@ -353,16 +356,21 @@ its candidate sandbox root; the context record also binds source, executable,
 validation, and capture digests. Candidate A and Candidate B never share a
 writable root or process handle.
 
-The comparison surface may show A and B in succession or side by side and offers
-exactly three outcomes: select A, select B, or reject both. Selection records a
-reviewed sandbox checkpoint and stops both preview children. The selected
-candidate becomes the next generation's sandbox head: new A/B worktrees branch
-from those selected sandbox bytes, compile into distinct executables, and return
-as new preview contexts for another explicit comparison. Rejecting both retains
-the previous sandbox head. Selection does not copy bytes to live source, replace
-the running editor, promote a candidate, approve a new model request, or grant
+The comparison surface presents the current editor and a candidate in the bottom
+context grid. Keep Current retires the challenger; Choose Candidate retires the
+prior sandbox child and retains the chosen child as the next sandbox parent;
+Stop Lab retires both. The buttons and native regression harness use the same
+panel transition. The next iteration materializes from the selected sandbox
+bytes and retains the mission plan. Selection does not copy bytes to live source,
+replace the parent editor, promote a candidate, or grant
 Git, updater, release, package, network, listener, or server authority. Automated
 live-source replacement is deliberately not part of this milestone.
+
+This is currently application-level transaction isolation plus process lifecycle
+supervision, not an OS security sandbox. Windows candidates inherit the launching
+user's token and environment. A Job Object owns retirement but does not restrict
+filesystem or network access. Adversarial candidate-execution containment remains
+unproved; source/path contract tests must not be presented as that proof.
 
 The platform child-process snapshot exposes both `platform_process_id` and
 `platform_window_id`; hidden/headless children report no visible window. The

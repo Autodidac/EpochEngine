@@ -183,7 +183,8 @@ namespace epochengine
             SourceUpdate,
             AssetsInteractionProof,
             CandidateLabSmokeChoose,
-            CandidateLabSmokeKeep
+            CandidateLabSmokeKeep,
+            SelfCodingLocalSmoke
         };
 
         enum class EditorUpdateState : unsigned char
@@ -532,6 +533,8 @@ namespace epochengine
             std::uint64_t completionGeneration{};
             std::shared_ptr<AiChatRequestState> pending{};
             std::chrono::steady_clock::time_point requestStartedAt{};
+            epochengine::ai::InferenceWorkload pendingWorkload{
+                epochengine::ai::InferenceWorkload::chat};
             std::jthread worker{};
 
             AiChat()
@@ -559,6 +562,7 @@ namespace epochengine
                     latestRawReply.clear();
                     pendingPrompt.clear();
                     pending.reset();
+                    append_status("Request cancelled. Its response was discarded.");
                     return;
                 }
 
@@ -586,6 +590,18 @@ namespace epochengine
                 if (worker.joinable())
                     worker.join();
                 pending.reset();
+            }
+
+            [[nodiscard]] bool source_request_running() const noexcept
+            {
+                return pending && pendingWorkload
+                    == epochengine::ai::InferenceWorkload::source_iteration;
+            }
+
+            [[nodiscard]] bool source_request_cancelling() const noexcept
+            {
+                return source_request_running()
+                    && pending->cancelled.load(std::memory_order_acquire);
             }
 
             [[nodiscard]] bool cancel_pending(bool cancelTransport = false)
@@ -651,6 +667,7 @@ namespace epochengine
                 pendingPrompt = displayText;
 
                 pending = std::make_shared<AiChatRequestState>();
+                pendingWorkload = workload;
                 requestStartedAt = std::chrono::steady_clock::now();
                 if (worker.joinable())
                     worker.join();
@@ -1213,6 +1230,12 @@ namespace epochengine
             EditorAutomationCommand automationCommand{ EditorAutomationCommand::None };
             bool automationConsumed{ false };
             std::uint8_t candidateLabSmokePhase{};
+            std::uint8_t selfCodingSmokePhase{};
+            std::uint8_t selfCodingSmokeWarmupFrames{};
+            std::chrono::steady_clock::time_point selfCodingSmokeStartedAt{};
+            bool selfCodingWorkingIndicatorObserved{};
+            std::uint64_t selfCodingLastHeartbeatSecond{};
+            std::string selfCodingLastStatus{};
             SystemsSurfaceState systems{};
             std::unique_ptr<editor_tasks::Scheduler> taskScheduler{};
             AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Engine };
@@ -3708,39 +3731,40 @@ namespace epochengine
                 return EditorAutomationCommand::None;
 #endif
 
-            const auto consume = []() noexcept
+            const auto consume = [](
+                const EditorAutomationCommand command) noexcept
                 {
 #if defined(_WIN32)
                     (void)_putenv_s("EPOCH_EDITOR_AUTO_COMMAND", "");
 #else
                     (void)::unsetenv("EPOCH_EDITOR_AUTO_COMMAND");
 #endif
+                    return command;
                 };
 
             if (value == "smart-update")
             {
-                consume();
-                return EditorAutomationCommand::SmartUpdate;
+                return consume(EditorAutomationCommand::SmartUpdate);
             }
             if (value == "source-update")
             {
-                consume();
-                return EditorAutomationCommand::SourceUpdate;
+                return consume(EditorAutomationCommand::SourceUpdate);
             }
             if (value == "assets-interaction-proof")
             {
-                consume();
-                return EditorAutomationCommand::AssetsInteractionProof;
+                return consume(EditorAutomationCommand::AssetsInteractionProof);
             }
             if (value == "candidate-lab-smoke-choose")
             {
-                consume();
-                return EditorAutomationCommand::CandidateLabSmokeChoose;
+                return consume(EditorAutomationCommand::CandidateLabSmokeChoose);
             }
             if (value == "candidate-lab-smoke-keep")
             {
-                consume();
-                return EditorAutomationCommand::CandidateLabSmokeKeep;
+                return consume(EditorAutomationCommand::CandidateLabSmokeKeep);
+            }
+            if (value == "self-coding-local-smoke")
+            {
+                return consume(EditorAutomationCommand::SelfCodingLocalSmoke);
             }
 
             return EditorAutomationCommand::None;
@@ -3753,6 +3777,24 @@ namespace epochengine
                 return;
 
             trace << message << '\n';
+        }
+
+        [[nodiscard]] std::string read_editor_automation_text(
+            const char* const name) noexcept
+        {
+#if defined(_WIN32)
+            char* raw = nullptr;
+            std::size_t rawSize = 0u;
+            if (_dupenv_s(&raw, &rawSize, name) != 0 || raw == nullptr)
+                return {};
+            std::string value{raw, rawSize > 0u ? rawSize - 1u : 0u};
+            std::free(raw);
+            return value;
+#else
+            if (const char* const raw = std::getenv(name))
+                return std::string{raw};
+            return {};
+#endif
         }
 
         [[nodiscard]] std::string read_requested_editor_project_id() noexcept
@@ -20861,6 +20903,26 @@ namespace epochengine
                     it->second.autoUpdateCheckQueued = false;
                     push_editor_log(it->second, "[candidate-lab] Native PID/context comparison smoke armed.");
                 }
+                else if (it->second.automationCommand
+                    == EditorAutomationCommand::SelfCodingLocalSmoke)
+                {
+                    it->second.autoUpdateCheckQueued = false;
+                    it->second.mainSurface = EditorMainSurface::AISandbox;
+                    it->second.workspaceTab = EditorWorkspaceTab::AI;
+                    it->second.aiWorkspaceDomain = AiWorkspaceDomain::Control;
+                    it->second.showInspector = true;
+                    it->second.showAiChat = true;
+                    const auto aiControlsIndex =
+                        tool_pane_index(EditorToolPane::AiControls);
+                    it->second.toolPaneOpen[aiControlsIndex] = true;
+                    it->second.toolPaneDockRegions[aiControlsIndex] =
+                        EditorToolDockRegion::Right;
+                    it->second.activeRightPaneRoute = "pane.ai_controls";
+                    it->second.selfCodingSmokeWarmupFrames = 5u;
+                    push_editor_log(
+                        it->second,
+                        "[self-coding-smoke] Plain-language local-model Candidate Lab smoke armed.");
+                }
             }
             return it->second;
         }
@@ -23371,6 +23433,18 @@ namespace epochengine
                 cancel_model_source_request:
             {
                 auto& mcp = editor.aiLocalMcp;
+                const bool cancelledLocalModel =
+                    chat.source_request_running() && chat.cancel_pending(true);
+                const bool cancelledQueuedSource = editor.aiDeferredRequestKind
+                    == AiDeferredRequestKind::SourceIteration;
+                if (cancelledQueuedSource)
+                {
+                    editor.aiDeferredPrompt.clear();
+                    editor.aiDeferredDisplay.clear();
+                    editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                    editor.aiDeferredDispatchQueued = false;
+                    editor.showAiModelConsentModal = false;
+                }
                 if (mcp.process.valid())
                 {
                     (void)platform::child_process::stop(
@@ -23382,25 +23456,29 @@ namespace epochengine
                 mcp.process = {};
                 mcp.awaitingResponse = false;
                 editor.aiSourceAwaitingReply = false;
-                mcp.status = epochengine::format_text(
-                    "Stopped local MCP bridge PID {} after {} ms. Live source "
-                    "and projects were not changed.",
-                    mcp.bridgeProcessId,
-                    mcp.elapsedMs);
+                mcp.status = cancelledLocalModel
+                    ? "Stopping the self-coding model request; its response will be discarded."
+                    : cancelledQueuedSource
+                    ? "Cancelled the queued self-coding request before dispatch."
+                    : epochengine::format_text(
+                        "Stopped local MCP bridge PID {} after {} ms. Live source "
+                        "and projects were not changed.",
+                        mcp.bridgeProcessId,
+                        mcp.elapsedMs);
                 std::error_code cleanupError{};
                 std::filesystem::remove(mcp.promptPath, cleanupError);
                 cleanupError.clear();
                 std::filesystem::remove(mcp.responsePath, cleanupError);
                 const auto cancelled = editor.aiDevelopmentPanel
                     ? editor.aiDevelopmentPanel->cancel_active_campaign(
-                        "The operator stopped the local MCP transport request.")
+                        "The operator cancelled the self-coding request.")
                     : editor_ai_development_panel::RenderResult{};
                 chat.append_status(mcp.status);
                 push_ai_development_log(
-                    editor, "[local-mcp] " + mcp.status);
+                    editor, "[self-coding] " + mcp.status);
                 if (!cancelled.status.empty())
                     push_ai_development_log(
-                        editor, "[local-mcp] " + cancelled.status);
+                        editor, "[self-coding] " + cancelled.status);
                 break;
             }
             case editor_ai_development_panel::HostAction::
@@ -29832,9 +29910,11 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
-                    .local_model_running = editor.aiSourceAwaitingReply
-                        && chat.pending,
-                    .local_model_elapsed_ms = editor.aiSourceAwaitingReply
+                    .local_model_running = chat.source_request_running(),
+                    .local_model_queued = editor.aiDeferredRequestKind
+                        == AiDeferredRequestKind::SourceIteration,
+                    .local_model_cancelling = chat.source_request_cancelling(),
+                    .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
@@ -29856,6 +29936,244 @@ namespace epochengine
                         || editor.aiSourceBuildPending.has_value()
                         || editor.aiSourceTestPending.has_value()};
             apply_verified_ai_source_authority(guardedInput);
+            if (!editor.automationConsumed
+                && editor.automationCommand
+                    == EditorAutomationCommand::SelfCodingLocalSmoke)
+            {
+                const auto finishSelfCodingSmoke = [&] (
+                    const bool passed,
+                    const std::string_view detail)
+                {
+                    append_editor_automation_trace(epochengine::format_text(
+                        "SELF_CODING_LOCAL_SMOKE {} {}",
+                        passed ? "PASS" : "FAIL",
+                        detail));
+                    editor_ai_development_panel::RenderResult stop{};
+                    (void)editor.aiDevelopmentPanel->cancel_active_campaign(
+                        "The bounded native test has finished.");
+                    stop.candidate_decision =
+                        editor_ai_development_panel::CandidateDecision::stop_lab;
+                    dispatch_ai_development_action(stop);
+                    editor.automationConsumed = true;
+                    result.command = EditorCommand::Exit;
+                    result.command_argument = passed
+                        ? "self_coding_local_smoke_pass"
+                        : "self_coding_local_smoke_fail";
+                    result.scene_input_captured = true;
+                };
+
+                if (editor.selfCodingSmokePhase == 0u
+                    && editor.selfCodingSmokeWarmupFrames > 0u)
+                {
+                    --editor.selfCodingSmokeWarmupFrames;
+                }
+                else if (editor.selfCodingSmokePhase == 0u)
+                {
+                    const auto models =
+                        epochengine::ai::refresh_detected_models();
+                    std::string model = read_editor_automation_text(
+                        "EPOCH_EDITOR_SELF_CODING_MODEL");
+                    const bool explicitModel = !model.empty();
+                    if (model.empty())
+                        model = epochengine::ai::active_model_name();
+                    if (!explicitModel && !model_inventory_contains(models, model))
+                        model = suggest_discovered_ai_model(models);
+                    if (model.empty()
+                        || !model_inventory_contains(models, model)
+                        || !epochengine::ai::select_active_model(model))
+                    {
+                        finishSelfCodingSmoke(
+                            false,
+                            "no selectable local model was reported by the configured endpoint");
+                    }
+                    else
+                    {
+                        guardedInput.selected_model = model;
+                        std::string objective = read_editor_automation_text(
+                            "EPOCH_EDITOR_SELF_CODING_OBJECTIVE");
+                        if (objective.empty())
+                        {
+                            objective =
+                                "Make the Engine self-coding experience clearly "
+                                "show when the local model is working and let the "
+                                "user stop it without interrupting the rest of the editor.";
+                        }
+                        const auto started = editor.aiDevelopmentPanel
+                            ->begin_source_iteration(
+                                guardedInput,
+                                objective);
+                        if (started.action
+                            != editor_ai_development_panel::HostAction::
+                                request_model_source_proposal)
+                        {
+                            finishSelfCodingSmoke(
+                                false,
+                                started.status.empty()
+                                    ? std::string_view{
+                                        "plain-language source selection did not start"}
+                                    : std::string_view{started.status});
+                        }
+                        else
+                        {
+                            append_editor_automation_trace(
+                                epochengine::format_text(
+                                    "SELF_CODING_LOCAL_SMOKE BEGIN model={} objective={}",
+                                    model,
+                                    objective));
+                            dispatch_ai_development_action(started);
+                            editor.selfCodingSmokePhase = 1u;
+                            editor.selfCodingSmokeStartedAt =
+                                std::chrono::steady_clock::now();
+                        }
+                    }
+                }
+                else
+                {
+                    guardedInput.selected_model =
+                        epochengine::ai::active_model_name();
+                    const auto smokeElapsed = std::chrono::duration_cast<
+                        std::chrono::seconds>(
+                            std::chrono::steady_clock::now()
+                            - editor.selfCodingSmokeStartedAt);
+                    const std::uint64_t smokeSecond = smokeElapsed.count() <= 0
+                        ? 0u
+                        : static_cast<std::uint64_t>(smokeElapsed.count());
+                    const auto smokeStatus = editor.aiDevelopmentPanel->session_status();
+                    if (smokeStatus != editor.selfCodingLastStatus)
+                    {
+                        editor.selfCodingLastStatus = smokeStatus;
+                        append_editor_automation_trace(
+                            "SELF_CODING_LOCAL_SMOKE STATUS " + smokeStatus);
+                    }
+                    if (smokeSecond >= editor.selfCodingLastHeartbeatSecond + 5u)
+                    {
+                        editor.selfCodingLastHeartbeatSecond = smokeSecond;
+                        append_editor_automation_trace(
+                            epochengine::format_text(
+                                "SELF_CODING_LOCAL_SMOKE STATE second={} pending={} source_wait={} deferred={} execution={} completion_generation={} requested_generation={}",
+                                smokeSecond,
+                                static_cast<bool>(chat.pending),
+                                editor.aiSourceAwaitingReply,
+                                static_cast<unsigned>(editor.aiDeferredRequestKind),
+                                guardedInput.execution_pending,
+                                chat.completionGeneration,
+                                editor.aiSourceRequestedGeneration));
+                    }
+                    if (!editor.selfCodingWorkingIndicatorObserved
+                        && chat.pending
+                        && chat.elapsed_milliseconds() >= 1'000u)
+                    {
+                        editor.selfCodingWorkingIndicatorObserved = true;
+                        append_editor_automation_trace(
+                            epochengine::format_text(
+                                "SELF_CODING_LOCAL_SMOKE WORKING controller_state=active elapsed_ms={}",
+                                chat.elapsed_milliseconds()));
+                    }
+                    if (editor.selfCodingSmokePhase <= 2u
+                        && editor.aiDevelopmentPanel->has_reviewed_plan())
+                    {
+                        append_editor_automation_trace(
+                            "SELF_CODING_LOCAL_SMOKE PLAN_REVIEWED approving exact returned plan");
+                        const auto approved = editor.aiDevelopmentPanel
+                            ->approve_latest_plan();
+                        if (approved.action
+                            != editor_ai_development_panel::HostAction::
+                                request_model_source_proposal)
+                        {
+                            finishSelfCodingSmoke(
+                                false,
+                                approved.status.empty()
+                                    ? std::string_view{
+                                        "reviewed plan did not advance to a proposal request"}
+                                    : std::string_view{approved.status});
+                        }
+                        else
+                        {
+                            dispatch_ai_development_action(approved);
+                            editor.selfCodingSmokePhase = 2u;
+                        }
+                    }
+
+                    if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase == 2u
+                        && editor.aiCandidatePreviewReported)
+                    {
+                        if (!editor.aiCandidateChallengerSnapshot
+                            || editor.aiCandidateChallengerSnapshot
+                                ->platform_process_id == 0u
+                            || editor.aiCandidateChallengerSnapshot
+                                ->platform_window_id == 0u)
+                        {
+                            finishSelfCodingSmoke(
+                                false,
+                                "validated candidate did not reach the bottom context grid");
+                        }
+                        else
+                        {
+                            append_editor_automation_trace(
+                                epochengine::format_text(
+                                    "SELF_CODING_LOCAL_SMOKE CANDIDATE pid={} window={}",
+                                    editor.aiCandidateChallengerSnapshot
+                                        ->platform_process_id,
+                                    editor.aiCandidateChallengerSnapshot
+                                        ->platform_window_id));
+                            const auto keep = editor.aiDevelopmentPanel
+                                ->select_candidate_preview(guardedInput,
+                                    editor_ai_development_panel::CandidateDecision::keep_current);
+                            if (keep.candidate_decision
+                                != editor_ai_development_panel::CandidateDecision::keep_current
+                                || keep.action != editor_ai_development_panel::HostAction::materialize_source_workspace)
+                            {
+                                finishSelfCodingSmoke(false,
+                                    "The production Keep Current action did not preserve and materialize the next sandbox parent.");
+                            }
+                            else
+                            {
+                                append_editor_automation_trace(
+                                    "SELF_CODING_LOCAL_SMOKE SUCCESSION " + keep.status);
+                                dispatch_ai_development_action(keep);
+                                editor.selfCodingSmokePhase = 3u;
+                            }
+                        }
+                    }
+                    else if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase == 3u
+                        && !editor.aiSourceWorkspacePending
+                        && !chat.pending
+                        && editor.aiCandidateRetiringProcesses.empty()
+                        && !editor.aiCandidateCurrentProcess.valid()
+                        && !editor.aiCandidateChallengerProcess.valid())
+                    {
+                        finishSelfCodingSmoke(
+                            editor.selfCodingWorkingIndicatorObserved,
+                            "Model workflow, validated candidate PID/context, production Keep Current, next sandbox materialization and process retirement completed. Activity controller checked; native pixels require separate eye evidence.");
+                    }
+                    else if (!editor.automationConsumed
+                        && editor.aiDevelopmentPanel->sandbox_session_failed()
+                        && !chat.pending)
+                    {
+                        finishSelfCodingSmoke(
+                            false,
+                            editor.aiDevelopmentPanel->session_status());
+                    }
+                    else if (!editor.automationConsumed
+                        && std::chrono::steady_clock::now()
+                                - editor.selfCodingSmokeStartedAt
+                            >= std::chrono::minutes{45})
+                    {
+                        editor_ai_development_panel::RenderResult cancel{};
+                        cancel.action = editor_ai_development_panel::HostAction::
+                            cancel_model_source_request;
+                        dispatch_ai_development_action(cancel);
+                        cancel.action = editor_ai_development_panel::HostAction::
+                            cancel_source_task;
+                        dispatch_ai_development_action(cancel);
+                        finishSelfCodingSmoke(
+                            false,
+                            "45-minute bounded workflow timeout; model and sandbox tasks were cancelled");
+                    }
+                }
+            }
             if (editor.aiSourceAwaitingReply
                 && !chat.pending
                 && chat.completionGeneration
@@ -34933,9 +35251,11 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
-                    .local_model_running = editor.aiSourceAwaitingReply
-                        && chat.pending,
-                    .local_model_elapsed_ms = editor.aiSourceAwaitingReply
+                    .local_model_running = chat.source_request_running(),
+                    .local_model_queued = editor.aiDeferredRequestKind
+                        == AiDeferredRequestKind::SourceIteration,
+                    .local_model_cancelling = chat.source_request_cancelling(),
+                    .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
@@ -35009,9 +35329,11 @@ namespace epochengine
                     .selected_transport = std::string{
                         epochengine::ai::local_inference_transport_name(
                             epochengine::ai::current_local_inference_transport())},
-                    .local_model_running = editor.aiSourceAwaitingReply
-                        && chat.pending,
-                    .local_model_elapsed_ms = editor.aiSourceAwaitingReply
+                    .local_model_running = chat.source_request_running(),
+                    .local_model_queued = editor.aiDeferredRequestKind
+                        == AiDeferredRequestKind::SourceIteration,
+                    .local_model_cancelling = chat.source_request_cancelling(),
+                    .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,

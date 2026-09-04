@@ -18,9 +18,9 @@ results.
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished.
-- Baseline checkpoint before the current supervisor integration:
-  `94381ad7c8275f500cd89541b2d7f6017c4d58db`, tree
-  `14ea4396c755104bb434d6c203ed014db71620bc`.
+- Baseline checkpoint before the current activity/context repair:
+  `0710bbc14ed85df3ef97399724505aa2a9dc25a1`, tree
+  `9f379f12c46cdb779862233e4b666b4da9efea38`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34.
 - Public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -34,9 +34,29 @@ The current combined candidate is build-proven on Windows Debug and Release. Bot
 build-safe aggregate engine contract runs pass, including
 `ai.openai_source_iteration_request`, `ai.development_proposal_codec`, and
 `ai.development_panel`; source naming passes for 581 files. The exact current
-Release editor is 12,234,240 bytes
+Release editor is 12,263,936 bytes
 with SHA-256
-`271539725ca68fe1b4f57c9f9e91753397d2f694ecc25664fb5ee374d3c8cf06`.
+`e1326be046d505569f1805bff433833f9c9bffcd2f9d72b25d2736be5738a3fb`.
+
+The September 4 Astra pass exercised the real Qwen HTTP route. One test first
+reported a refused local endpoint; after the operator restarted Qwen3.8-27B,
+model responses reached source selection. The run then exposed a whole-file
+size check that rejected the editor's own 377 KiB controller before excerpting.
+That defect, the downstream six-versus-twelve-file mismatch, and the updater
+handler's repeated consumption of the self-coding automation command are fixed.
+Windows Debug and Release aggregate contracts pass on the resulting source,
+including 2 MiB file identity/excerpt coverage, twelve-file admission, thirteen-
+file refusal, bounded combined context, cancellation and late-reply checks.
+No real model-produced patch, sandbox build, or candidate preview completed in
+this pass. Earlier native Keep/Choose and Linux evidence below belongs to the
+earlier checkpoint, not this newly changed binary.
+
+Native screen inspection failed because the Windows tool helper could not
+initialize. The proposed next real-model test is the missing privacy-conscious
+Copy Session Summary action, not the already-implemented activity indicator.
+Its exact native run was denied by runtime approval review and awaits operator
+approval. No editor test PID remains. The shared WSL lane is reserved by
+SandHybrid until a fresh WSL_CLEAR handoff.
 
 The inbound supervisor integration builds in Windows Debug and its focused
 contract now passes inside the aggregate suite. The contract covers canonical
@@ -69,7 +89,12 @@ performed the requested ownership transition, exited, and left no editor child.
    packet, build, and validation failures may retry within their existing
    bounded budgets; cancellation and unsafe/off-catalog path requests fail
    immediately.
-4. Only after the exact candidate passes those gates, stage immutable Windows
+4. Establish and adversarially test the candidate execution boundary. The
+   current Windows child launch inherits the user's OS identity/environment;
+   Job Object ownership guarantees lifecycle supervision, not filesystem or
+   network confinement. Host transaction containment is not proof that arbitrary
+   compiled candidate code cannot access live source or other projects.
+5. Only after the exact candidate passes those gates, stage immutable Windows
    and Linux packages, exact-file validation receipts and sidecars, then hand the
    single reviewed publication set to the Epoch Site task. Do not alter the
    current v0.89.34 public authority until both platforms and rollback evidence
@@ -83,14 +108,19 @@ performed the requested ownership transition, exited, and left no editor child.
   off-catalog paths before reading or sending bytes.
 - Only the selected exact UTF-8 source evidence enters the request. The proposal
   stage receives those bytes, not merely filenames or hashes.
+- Whole-file hashing/local reads are capped at 8 MiB per selected file. Model
+  evidence remains capped at 184 KiB in aggregate, with fair per-file budgets
+  and UTF-8-safe excerpts of at most 16 KiB for larger sources. Whole-file
+  identity size is not charged as outbound excerpt size.
 - OpenAI-compatible source requests use strict JSON schemas for path selection
   and edit operations. Epoch converts the validated JSON into its existing exact
   review packet before normal grounding and apply checks.
 - Exact search blocks must match the reviewed source uniquely. No-op,
   destructive, invented, placeholder, ownership-removing, or unrelated edits
   are rejected before sandbox staging.
-- Source workloads have a visible animated `Local model working` state, elapsed
-  time, and cancellation guidance for the entire pending request.
+- Source workloads expose queued, working/waiting, and stopping states, elapsed
+  time, and a source-scoped Cancel action. They do not claim token progress from
+  a non-streaming HTTP request. Native visibility remains an eye-test gate.
 - Transport/API/empty-content failures retry once. Invalid source selection and
   proposal packets receive at most two host-diagnosed corrections. Insufficient
   evidence may expand the selected source slice within the 12-path ceiling.

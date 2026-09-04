@@ -1,5 +1,28 @@
 ## [Unreleased] - v0.89.35
 
+- Separate local-model queued, waiting and stopping presentation; bind activity
+  and Cancel to the source workload instead of any project-chat request. Cancel
+  clears queued source dispatch, discards late replies even before a campaign
+  exists, and keeps the worker's stopping state until actual completion.
+- Fix the observed self-coding source-loader failure: local full-file identity
+  reads allow up to 8 MiB while outbound source evidence remains bounded to
+  184 KiB, including metadata and fair per-file excerpts. Align source session,
+  campaign and MCP identity validation with twelve selected files; do not
+  confuse complete preimage byte counts with model excerpt byte counts.
+- Restrict updater automation claims to updater commands. The native local-model
+  rig now survives subsequent frames, uses the explicitly named model, reports
+  actual controller state rather than claiming pixels, and shares the real
+  Keep/Choose/Stop transition with the buttons. It waits for retiring processes
+  before reporting lifecycle success. Exact-line packet extraction rejects
+  ambiguous/malformed wrappers and preserves admitted byte/digest binding.
+- Windows Debug and Release builds and aggregate engine contracts pass;
+  source naming passes for 581 files. Added twelve/thirteen-file, 2 MiB source,
+  combined excerpt budget, activity/cancellation, late-reply and Stop Lab cases.
+  The real Qwen run reached source selection and exposed the repaired loader
+  defect; no completed model-authored candidate or native pixel proof is claimed.
+  Live runtime/source remains v0.89.34. Candidate process OS confinement remains
+  an explicit unresolved security gate, separate from host transaction safety.
+
 - Make Candidate Lab Choose/Keep smoke automation explicit in the editor
   dispatcher. The commands bypass the unrelated update-modal actions and remain
   owned by the native PID/context comparison loop; this removes the managed-

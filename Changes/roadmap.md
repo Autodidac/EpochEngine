@@ -46,6 +46,9 @@ high-tier effects cannot displace this product loop.
 - [ ] Prove selected source and request bytes cannot escape the reviewed
   12-path ceiling, cross candidate/project boundaries, overwrite live source,
   or enter project-assistant chat/session state.
+- [ ] Enforce and test the candidate process's filesystem/network boundary.
+  The current inherited OS identity plus Job Object is lifecycle supervision,
+  not security confinement for arbitrary compiled candidate code.
 - [ ] Prove transport, schema, proposal, build, and test failures retry only
   within their bounded budgets and preserve the last useful sandbox checkpoint.
 - [ ] Prove Keep/Choose retires every losing child/worker, persists exactly one

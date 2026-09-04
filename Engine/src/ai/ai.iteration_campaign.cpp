@@ -249,16 +249,15 @@ namespace epochengine::ai::iteration_campaign
                 || report.status.size() > 4096u)
                 return false;
 
-            std::uint64_t context_bytes{};
             for (const auto& file : report.session.curated_files)
             {
+                // Whole-file identities bind local preimages. Outbound excerpt
+                // bytes are bounded separately by the reviewed context bundle.
                 if (file.relative_path.empty() || file.relative_path.size() > 512u
                     || !lowercase_hex(file.sha256, 64u)
                     || file.byte_count > report.budgets.maximum_file_bytes
-                    || file.byte_count > report.budgets.maximum_context_bytes
-                    || context_bytes > report.budgets.maximum_context_bytes - file.byte_count)
+                    || file.byte_count > iteration_session::kMaximumCuratedFileBytes)
                     return false;
-                context_bytes += file.byte_count;
             }
             return true;
         }

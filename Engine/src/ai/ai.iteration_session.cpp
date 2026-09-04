@@ -58,6 +58,10 @@ namespace epochengine::ai::iteration_session
             const std::filesystem::path& path,
             std::uint64_t& byte_count)
         {
+            std::error_code sizeError{};
+            const auto size = std::filesystem::file_size(path, sizeError);
+            if (sizeError || size > kMaximumCuratedFileBytes)
+                return {};
             std::ifstream input{path, std::ios::binary};
             if (!input)
                 return {};
@@ -70,6 +74,9 @@ namespace epochengine::ai::iteration_session
                 const auto count = input.gcount();
                 if (count > 0)
                 {
+                    if (static_cast<std::uint64_t>(count)
+                        > kMaximumCuratedFileBytes - byte_count)
+                        return {};
                     hasher.update(std::string_view{
                         buffer.data(), static_cast<std::size_t>(count)});
                     byte_count += static_cast<std::uint64_t>(count);
@@ -207,9 +214,9 @@ namespace epochengine::ai::iteration_session
             result.status = "Source inspection requires one verified absolute source authority.";
             return result;
         }
-        if (relative_paths.empty() || relative_paths.size() > 6u)
+        if (relative_paths.empty() || relative_paths.size() > kMaximumCuratedFiles)
         {
-            result.status = "Curated source inspection requires one to six reviewed files.";
+            result.status = "Curated source inspection requires one to twelve reviewed files.";
             return result;
         }
 
@@ -273,7 +280,7 @@ namespace epochengine::ai::iteration_session
             || configuration.model_name.empty() || configuration.model_name.size() > 256u
             || !valid_source_authority(configuration.source)
             || configuration.curated_files.empty()
-            || configuration.curated_files.size() > 6u
+            || configuration.curated_files.size() > kMaximumCuratedFiles
             || configuration.maximum_repair_attempts == 0u
             || configuration.maximum_repair_attempts > 10u)
         {

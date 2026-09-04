@@ -29,7 +29,8 @@ namespace epochengine::ai::iteration_campaign
         std::error_code ec{};
         fs::create_directories(project / "Source", ec);
         std::ofstream{project / "Source/main.cpp", std::ios::binary}
-            << "int epoch_campaign_contract() { return 31; }\n";
+            << "int epoch_campaign_contract() { return 31; }\n"
+            << std::string(2u * 1024u * 1024u, ' ');
 
         const SourceAuthority authority{
             .target_kind = IterationTargetKind::project_source,
@@ -53,6 +54,9 @@ namespace epochengine::ai::iteration_campaign
                 .created_at_unix_seconds = 2'000'000'000u}, session)
             : CampaignResult{};
         if (!begun
+            || begun.report.session.curated_files.front().byte_count
+                <= begun.report.budgets.maximum_context_bytes
+            || begun.report.budgets.maximum_curated_files != 12u
             || begun.report.session.source.target_kind
                 != IterationTargetKind::project_source
             || begun.report.budgets.maximum_workspace_files != 2048u
