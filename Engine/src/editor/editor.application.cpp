@@ -1311,6 +1311,7 @@ namespace epochengine
                 aiCandidateRetiringProcesses{};
             std::uint32_t aiCandidatePreviewGeneration{};
             bool aiCandidatePreviewReported{};
+            std::chrono::steady_clock::time_point aiCandidatePreviewStartedAt{};
             std::optional<std::future<EditorScriptBuildResult>> aiGuardedHarnessPending{};
             std::string aiGuardedHarnessBefore{};
         };
@@ -23359,6 +23360,8 @@ namespace epochengine
                 editor.aiCandidatePreviewGeneration =
                     action.workspace_generation;
                 editor.aiCandidatePreviewReported = false;
+                editor.aiCandidatePreviewStartedAt =
+                    std::chrono::steady_clock::now();
                 push_ai_development_log(
                     editor,
                     "[candidate-lab] Started the validated candidate process; waiting for its native window before bottom-grid admission.");
@@ -23939,6 +23942,38 @@ namespace epochengine
                 editor.aiCandidateChallengerProcess = {};
                 editor.aiCandidateChallengerSnapshot.reset();
                 editor.aiCandidatePreviewReported = true;
+                editor.aiCandidatePreviewStartedAt = {};
+                return;
+            }
+            constexpr auto candidateAdmissionTimeout =
+                std::chrono::seconds{45};
+            if (editor.aiCandidatePreviewStartedAt
+                    != std::chrono::steady_clock::time_point{}
+                && std::chrono::steady_clock::now()
+                        - editor.aiCandidatePreviewStartedAt
+                    >= candidateAdmissionTimeout)
+            {
+                if (editor.aiDevelopmentPanel)
+                {
+                    const auto failed = editor.aiDevelopmentPanel
+                        ->complete_candidate_preview(
+                            editor.aiCandidatePreviewGeneration,
+                            false,
+                            observed->platform_process_id,
+                            observed->platform_window_id,
+                            "Candidate window was not admitted to the bottom context grid within 45 seconds. The candidate was retired; retry preview after checking the parent context.");
+                    push_ai_development_log(
+                        editor, "[candidate-lab] " + failed.status);
+                }
+                (void)platform::child_process::stop(
+                    editor.aiCandidateChallengerProcess,
+                    platform::child_process::StopMode::force);
+                editor.aiCandidateRetiringProcesses.push_back(
+                    editor.aiCandidateChallengerProcess);
+                editor.aiCandidateChallengerProcess = {};
+                editor.aiCandidateChallengerSnapshot.reset();
+                editor.aiCandidatePreviewReported = true;
+                editor.aiCandidatePreviewStartedAt = {};
                 return;
             }
             if (editor.aiCandidatePreviewReported
@@ -23959,6 +23994,7 @@ namespace epochengine
                 return;
 
             editor.aiCandidatePreviewReported = true;
+            editor.aiCandidatePreviewStartedAt = {};
             if (editor.aiDevelopmentPanel)
             {
                 const auto completed = editor.aiDevelopmentPanel

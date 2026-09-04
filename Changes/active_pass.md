@@ -34,9 +34,9 @@ The current combined candidate is build-proven on Windows Debug and Release. Bot
 build-safe aggregate engine contract runs pass, including
 `ai.openai_source_iteration_request`, `ai.development_proposal_codec`, and
 `ai.development_panel`; source naming passes for 581 files. The exact current
-Release editor is 12,232,192 bytes
+Release editor is 12,234,240 bytes
 with SHA-256
-`c5dc1b9000672bd8ef1aa171716cf1436c21d820798014bc6d1abc466abd202b`.
+`271539725ca68fe1b4f57c9f9e91753397d2f694ecc25664fb5ee374d3c8cf06`.
 
 The inbound supervisor integration builds in Windows Debug and its focused
 contract now passes inside the aggregate suite. The contract covers canonical
@@ -47,7 +47,13 @@ stale/cross-session refusal. Windows Debug and Release aggregate proofs pass,
 Windows Release HeadlessCI passes, and the managed-Clang 22.1.8 Release engine
 links with all 52 CTests passing. Candidate Lab Choose/Keep automation is
 explicitly owned by the comparison dispatcher instead of falling through the
-unrelated update-modal command switch.
+unrelated update-modal command switch. A native Keep smoke then exposed a
+nonterminal bottom-grid admission wait; candidate admission now has a 45-second
+deadline that reports the exact failure and retires the challenger instead of
+leaving parent and child editors running forever. Exact Release
+`--editor` automation then passed both native bottom-grid admission paths:
+Keep Current and Choose Candidate each admitted a distinct challenger PID/window,
+performed the requested ownership transition, exited, and left no editor child.
 
 ## Remaining Work
 

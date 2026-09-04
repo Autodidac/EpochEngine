@@ -3,7 +3,10 @@
 - Make Candidate Lab Choose/Keep smoke automation explicit in the editor
   dispatcher. The commands bypass the unrelated update-modal actions and remain
   owned by the native PID/context comparison loop; this removes the managed-
-  Clang incomplete-switch warning without changing update behavior.
+  Clang incomplete-switch warning without changing update behavior. Bound
+  candidate bottom-grid admission to 45 seconds; a candidate that cannot be
+  admitted now produces a terminal retryable failure and is retired instead of
+  leaving both editor PIDs alive indefinitely.
 - Admit the previously held transport-neutral MCP supervisor surface into the
   Engine build and aggregate contract. Its canonical JSON-RPC allowlist exposes
   bounded campaign/curated-evidence queries and explicit supervisor transitions
@@ -134,11 +137,13 @@
   and aggregate build-safe contracts pass; Windows Release HeadlessCI passes;
   standalone EpochGui passes 10/10 and EpochEngineExtensions passes 2/2.
   Managed Clang 22.1.8 links the full Linux Release engine and all 52 CTests
-  pass. The exact Windows Release editor is 12,232,192 bytes with SHA-256
-  `c5dc1b9000672bd8ef1aa171716cf1436c21d820798014bc6d1abc466abd202b`;
+  pass. The exact Windows Release editor is 12,234,240 bytes with SHA-256
+  `271539725ca68fe1b4f57c9f9e91753397d2f694ecc25664fb5ee374d3c8cf06`;
   the Linux Release engine is 28,617,688 bytes with SHA-256
-  `0aa48255ef296ba9ba1ae70a985765e124a20e40c64fd37d8b3816a0b5fa3279`.
-  No GUI/GPU launch or publication is claimed.
+  `ab0f9a0cc2a3385cb8c04f6cd4cbd7870be2b8b4a4dba2b37529e9654cc7489c`.
+  Exact Release `--editor` Candidate Lab Choose and Keep native GUI/PID smokes
+  both pass bottom-grid admission, ownership transition, exit, and orphan-
+  process checks. No manual pixel-quality acceptance or publication is claimed.
 
 ## [0.89.34] - 2026-08-29
 
