@@ -440,6 +440,8 @@
                 start_editor_project_source_code_download(editor);
                 break;
             case EditorAutomationCommand::AssetsInteractionProof:
+            case EditorAutomationCommand::CandidateLabSmokeChoose:
+            case EditorAutomationCommand::CandidateLabSmokeKeep:
                 break;
             case EditorAutomationCommand::None:
                 break;

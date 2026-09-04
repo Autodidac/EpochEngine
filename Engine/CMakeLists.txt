@@ -392,6 +392,9 @@ set(EPOCH_SOURCES
     src/ai/ai.iteration_campaign_scheduler_contract.cpp
     src/ai/ai.iteration_supervisor_control.cpp
     src/ai/ai.iteration_supervisor_control_contract.cpp
+    src/ai/ai.mcp_supervisor_adapter.cpp
+    src/ai/ai.mcp_supervisor_adapter_checkpoint.cpp
+    src/ai/ai.mcp_supervisor_adapter_contract.cpp
     src/ai/ai.mcp_campaign.cpp
     src/ai/ai.mcp_campaign_contract.cpp
     src/ai/ai.mcp_child_host.cpp

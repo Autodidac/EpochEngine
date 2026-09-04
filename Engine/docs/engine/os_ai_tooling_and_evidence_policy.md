@@ -180,6 +180,14 @@ The durable orchestration pipeline is now source- and contract-complete:
 - `ai.curated_context_bundle` (`c8e1fdb8`) accepts only host-supplied
   reviewed bytes, emits bounded evidence metadata/chunks, and never scans or
   reads paths.
+- `ai.mcp_supervisor_adapter` exposes the supervisor's caller-fed inbound
+  control surface as a canonical JSON-RPC allowlist. It provides read-only
+  campaign and curated-evidence queries plus explicit
+  pause/resume/cancel/retry/approve/reject requests. Every request is bound to
+  adapter, session, actor, campaign, project, curated session, host generations,
+  state digests, time, replay state, and an operator-approved call boundary.
+  Its checkpoint is size-bounded, canonical, integrity-checked, and refuses
+  cross-session or stale restoration.
 - deterministic source proposal and staging are owned by `2daec382` and
   `a39ea309`; the editor's exact sealed-review surface is `60ce0032`.
 - deterministic local-build admission receipts are emitted by `148fffa0` and
@@ -197,13 +205,15 @@ comparison. This does not approve live-source mutation, promotion, Git, upload,
 publication, listener, server, or release. Complete model responses remain
 visible in AI Chat when the operational preview is truncated.
 
-`ai.mcp_supervisor_adapter` is not part of the registered pipeline yet. Its
-five local files implement a caller-fed canonical JSON-RPC allowlist and replay
-checkpoint, but registration, build proof, and publication are pending fresh
-approval. It must not be described as available MCP transport or editor
-behavior. Candidate Lab uses the registered guarded controller, exact-copy
-disposable workspace, validation adapters, and child-process supervisor; it
-does not depend on or silently activate those five files.
+`ai.mcp_supervisor_adapter` is registered in the Engine source/build graph and
+the build-safe aggregate contract. It remains a transport-neutral protocol
+surface, not an implicitly running server: it opens no socket, pipe, process,
+listener, or model endpoint and cannot read files or source bytes. The host must
+inject the current supervisor query/submit gateways and optional curated bundle.
+All authority-bearing command flags for source writes, arbitrary reads, model
+launch, promotion, release, servers, and listeners remain false. A future stable
+transport may carry these canonical request/response bytes, but transport does
+not acquire supervisor or live-source authority by doing so.
 
 - `ai.project_profile` strictly decodes generated-project choices for disabled,
   Epoch-local, shared, or external MCP operation. It preserves
@@ -318,19 +328,16 @@ start is never reusable authority.
 `editor.ai_development_controller` composes this sequence, serializes execution
 entry, maps production calls to trusted monotonic time, and refuses public
 source-completion evidence unless its internal transaction executor produced it
-inside the selected iteration root. AI Controls accepts an observable outcome or
-symptom in ordinary language. A deterministic host resolver maps that objective
-to owned source systems and ranks only existing C++ source paths; the operator
-reviews the resolved systems and exact paths before any file is read or any
-excerpt can leave the host. The resolver must not require the operator to know a
-subsystem, filename, or symbol, and it must stop without sending bytes when a
-request is too vague or no supported source system can be resolved. AI Controls
-then owns context approval or rejection and read-only inspection of the selected
-model, endpoint, sandbox, next required action, and evidence. After context is
-explicitly shared, proposal-specific plan review, sandbox approval, or rejection
-authority stays attached to the resulting AI Chat response. Changing the
-objective invalidates reviewed source evidence before another request can be
-staged. Advanced controls are read-only evidence. No action
+inside the selected iteration root. AI Controls accepts the desired result in
+ordinary language. The host first sends only a verified names-only catalog of
+existing C++ paths; the selected model chooses a coherent slice of at most 12
+paths, and the host revalidates that exact list before opening any file. The
+operator does not need to name a subsystem, filename, symbol, diagnostic code,
+or protocol token. AI Controls owns read-only inspection of the selected model,
+endpoint, admitted paths, sandbox, current phase, elapsed work, retries, next
+action, and evidence. Changing the objective invalidates the admitted source
+evidence before another request can be staged. Advanced controls are read-only
+evidence. No action
 automatically promotes sandbox bytes into live source: a verified candidate
 requires distinct `Stage Live Promotion` and `Approve Live Promotion` actions.
 No chat/build/tool result becomes an automatic live-source change or training
@@ -359,8 +366,11 @@ live-source replacement is deliberately not part of this milestone.
 
 The platform child-process snapshot exposes both `platform_process_id` and
 `platform_window_id`; hidden/headless children report no visible window. The
-remaining implementation gate is the editor-owned custom-context registry,
-capture lifecycle, A/B evidence UI, and explicit teardown/selection contract.
+editor-owned custom-context registry, capture lifecycle, Candidate Lab evidence
+UI, and explicit teardown/selection contract are implemented. The remaining
+acceptance gate is one real local-model session through candidate build, visible
+preview, selection, losing-process teardown, and continuation from the selected
+sandbox head.
 
 The visible workflow states its I/O boundary before the first send: reviewed
 UTF-8 C++ excerpts and the objective are the only model input; model output is a

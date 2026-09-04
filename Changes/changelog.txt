@@ -1,5 +1,26 @@
-## [Unreleased] - v0.89.35 Package Manager layout hotfix
+## [Unreleased] - v0.89.35
 
+- Make Candidate Lab Choose/Keep smoke automation explicit in the editor
+  dispatcher. The commands bypass the unrelated update-modal actions and remain
+  owned by the native PID/context comparison loop; this removes the managed-
+  Clang incomplete-switch warning without changing update behavior.
+- Admit the previously held transport-neutral MCP supervisor surface into the
+  Engine build and aggregate contract. Its canonical JSON-RPC allowlist exposes
+  bounded campaign/curated-evidence queries and explicit supervisor transitions
+  through injected host gateways; it opens no server, listener, model, or file
+  transport and grants no source, promotion, Git, release, or Site authority.
+  Replay, byte budgets, stale host/adapter state, host rejection, curated bundle
+  integrity and source-byte non-exposure, plus checkpoint round-trip, tamper,
+  truncation, trailing-data, cross-session, stale, and noncanonical restoration
+  are contract-covered. The newly compiled contract also corrected its fixture
+  to bind a one-line reviewed range to exactly one line of source bytes.
+- Retire completed mission chronology from the live planning surfaces. The
+  1,710-line stale active gate, 860-line mixed-status roadmap, and 1,195-line
+  mission cache are replaced by one exact v0.89.35 self-coding acceptance gate,
+  an unfinished-work-only product schedule, and durable unresolved operator
+  intent. Historical implementation/proof remains in this changelog and Git
+  history. AGENTS.md now states the actual v0.89.35 local candidate,
+  v0.89.34 public Windows/Linux authority, and v0.89.30 macOS authority.
 - Repair the real local-model self-coding path: plain-language objectives now
   drive an internal, catalog-validated source selection of up to 12 files;
   current models' safe compact path lists normalize into the strict host
@@ -109,12 +130,15 @@
 - Correct the embedded EpochGui numeric v0.89.30 identity and the Extensions
   contract. Tiered Terrain is proven buildable local source but does not claim
   an installable payload before immutable Site admission.
-- Validation: source naming 581/581; Debug and Release EpochEditor builds and
-  aggregate build-safe contracts pass; standalone EpochGui passes 10/10 and
-  EpochEngineExtensions passes 2/2. Managed Clang 22.1.8 also links the full
-  Linux Release engine after registering the EpochGui docking implementation
-  in the embedded CMake target; its direct-tab module CTest and aggregate
-  engine contract pass. No GUI/GPU launch or publication is claimed.
+- Validation: source naming 581/581; serial Debug and Release EpochEditor builds
+  and aggregate build-safe contracts pass; Windows Release HeadlessCI passes;
+  standalone EpochGui passes 10/10 and EpochEngineExtensions passes 2/2.
+  Managed Clang 22.1.8 links the full Linux Release engine and all 52 CTests
+  pass. The exact Windows Release editor is 12,232,192 bytes with SHA-256
+  `c5dc1b9000672bd8ef1aa171716cf1436c21d820798014bc6d1abc466abd202b`;
+  the Linux Release engine is 28,617,688 bytes with SHA-256
+  `0aa48255ef296ba9ba1ae70a985765e124a20e40c64fd37d8b3816a0b5fa3279`.
+  No GUI/GPU launch or publication is claimed.
 
 ## [0.89.34] - 2026-08-29
 

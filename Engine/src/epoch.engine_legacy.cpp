@@ -190,6 +190,7 @@ import ai.mcp_campaign;
 import ai.mcp_child_host;
 import ai.self_iteration_orchestrator;
 import ai.mcp_orchestrator_bridge;
+import ai.mcp_supervisor_adapter;
 import ai.source_patch_bundle;
 import ai.source_patch_stager;
 import ai.iteration_patch_adapter;
@@ -2876,6 +2877,15 @@ namespace epochengine::core
         check(
             "ai.mcp_orchestrator_bridge",
             epochengine::ai::mcp_orchestrator_bridge::run_contract());
+        const auto mcpSupervisorAdapterContract =
+            epochengine::ai::mcp_supervisor_adapter::run_contract();
+        check(
+            std::string{ "ai.mcp_supervisor_adapter." }
+                + std::string{
+                    epochengine::ai::mcp_supervisor_adapter::contract_failure_name(
+                        mcpSupervisorAdapterContract)},
+            mcpSupervisorAdapterContract
+                == epochengine::ai::mcp_supervisor_adapter::ContractFailure::none);
         check(
             "ai.source_patch_bundle",
             epochengine::ai::source_patch_bundle::run_contract());

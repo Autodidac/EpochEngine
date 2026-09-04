@@ -85,10 +85,10 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- `v0.89.33` is the current development source and the published
-  Windows/Linux packaged-runtime authority on Site v55. macOS packaged
-  authority remains `v0.89.30` and is not claimed by this release pass.
-  Preserve `v0.89.30`, `v0.89.29`, `v0.89.28`, `v0.89.27`, and `v0.89.06` as
+- `v0.89.35` is the current local development source and remains unpublished.
+  The public Windows/Linux packaged-runtime and authenticated-source authority
+  is `v0.89.34`; macOS packaged authority remains `v0.89.30`. Preserve
+  `v0.89.34`, `v0.89.33`, `v0.89.30`, `v0.89.29`, `v0.89.28`, `v0.89.27`, and `v0.89.06` as
   immutable release history and preserve
   `multicontext-base-stable` at
   `ad6c416d930b348a61bc37ceb7d4522742be084a`. Do not mutate verified release
