@@ -1,5 +1,31 @@
 ## [Unreleased] - v0.89.35
 
+- Synchronize Windows supervised retirement with the actual parent and observed
+  descendant process handles. Treat exit code 259 as an exit after the parent
+  signals; retain the Job Object/exclusive group across asynchronous termination
+  until accounting is empty and captured members signal. Preserve failed
+  observation ownership instead of reporting a clean stop from zero accounting.
+  Console regressions reproduced both the exit-code failure and a real gap
+  between zero job accounting and descendant signalling, then passed ten
+  repeated normal-exit/cancel/timeout retirement runs with a real grandchild.
+  Requery departed/recycled snapshot PIDs within two retries instead of falsely
+  pinning an empty group; the repeated fixture includes short-lived descendants.
+- Close Linux inherited descriptors before exec except stdio and the CLOEXEC
+  setup-error channel, including sparse descriptors above a lowered soft limit.
+  Require available/permitted close_range support; fail before exec otherwise.
+  Preserve fork/setup errno and complete interrupted/partial setup reporting.
+  Native Linux Clang 22.1.8 Release component build and console CTest pass; the
+  regression covers execv/execve, parent-handle preservation, stdin/capture and
+  ENOEXEC reporting. Other POSIX descriptor policy remains unchanged.
+- September 5 lifecycle checkpoint: Windows Debug/Release editor and Release
+  HeadlessCI builds, both explicitly waited build-safe aggregates and all eight
+  SoftwareBase/component CTests pass; source naming passes for 590 files.
+  Exact Release editor: 12,617,728 bytes, SHA-256
+  30f33e84230d0a79fa5dca8f5529d070abd50be4d5d42bd78a52b38271abc1c7.
+  No native editor/Qwen comparison run or OS filesystem/network confinement is
+  claimed. The two-build Candidate Lab, phase-specific execution boundary and
+  release gates remain open; source/runtime authority and stable refs unchanged.
+
 - Give each editor model request an owned stop token through admission, serial
   waiting, retries and transport. Context Close cancels only that context;
   whole-engine cancellation targets captured service epochs, and later requests

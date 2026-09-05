@@ -384,6 +384,29 @@ stdio setup before exec; the Engine's Linux candidate compiler remains
 unconnected. See [Windows environment blocks](https://learn.microsoft.com/en-us/windows/win32/procthread/changing-environment-variables)
 and [process creation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw).
 
+Linux supervised launches now close every descriptor above stderr except the
+CLOEXEC setup-error writer before exec, including sparse descriptors above a
+lowered descriptor limit. This requires the Linux `close_range` syscall
+(kernel 5.9 or later and matching build headers); missing or denied support
+fails before execution, without an incomplete close-limit fallback. The setup
+channel handles interrupted/partial transfers and preserves the original errno.
+Other POSIX platforms retain their existing descriptor behavior. This closes
+an inherited-capability leak; it does not deny new file opens, sockets or IPC.
+
+Windows retirement uses a signalled process handle, not the `STILL_ACTIVE`
+numeric exit code, to determine parent exit. Before job termination it captures
+bounded, verified member handles. The exclusive group remains owned until the
+parent signals, job accounting is empty and observed member handles signal;
+zero accounting alone was observed before a descendant handle signalled.
+Missing observation evidence remains a retirement error even after a stop was
+requested. Departed/recycled snapshot PIDs require a fresh complete job-list
+confirmation, with at most two retries while still listed; other failures are
+not treated as ordinary exits. This is lifecycle synchronization, not an adversarial OS boundary or
+a proof against every concurrent process-creation race. The console regressions
+exercise exit code 259 and a real grandchild during normal exit, cancellation and
+timeout. See [process termination](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)
+and [job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information).
+
 Candidate Lab uses workspace-local `cache/process/` temp, profile and package
 paths; it copies only the three validated ProgramFiles install-root values, not
 host PATH, proxy/model credentials, automation flags or user-profile settings.
@@ -393,6 +416,18 @@ host-owned across Choose. MSBuild disables automatic response files and node
 reuse. These paths are preferences, not permission enforcement: Windows APIs or
 arbitrary candidate code can still access resources allowed by the inherited
 token until an actual OS execution boundary is implemented and tested.
+
+The remaining execution-boundary implementation must separate compiler writes
+from validated preview inputs: compiler source/build/temp may be writable only
+inside that generation; preview code, DLLs and assets must be immutable, with
+separate writable runtime state. Host receipts, permits and lineage records
+cannot live inside child-write grants. A Windows AppContainer/LPAC adapter is a
+candidate implementation, not currently active policy. It must prove the real
+token before resume, deny network/loopback capabilities, preserve per-generation
+identity and explicitly qualify compiler dependencies and interactive HWND
+hosting. Do not grant broad user-profile/live-source access to make a failed
+compatibility test pass. Linux also still needs a real filesystem/network/IPC
+execution boundary; descriptor cleanup is only one prerequisite.
 
 Windows foreign-window admission verifies a live supervised PID/window and an
 exact native attachment lease: parent, styles, client-slot geometry and an

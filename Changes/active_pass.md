@@ -27,8 +27,8 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished. Starting commit for this
-  request-scoped model cancellation pass:
-  `bb6c5a5b89469c2f8a4e87ff696891715a1f3e4e`.
+  descendant-retirement and inherited-descriptor pass:
+  `3eb3dde9e3e6062350ebc0c6b1237ebe90649777`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34;
   public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -47,31 +47,21 @@ sandbox lineage, a returned successor plan/proposal, and complete owned worker
 and child retirement. A successor plan alone is no longer a successful test.
 Source/build evidence for this rig does not replace running it with Qwen.
 
-The September 5 request-cancellation checkpoint passes Windows Debug/Release
-editor builds, Release HeadlessCI build, explicitly waited Debug/Release
-aggregate contracts (exit 0), and all eight SoftwareBase/component CTests.
-The opt-in renderer-free HTTP probe builds through both MSBuild and CMake.
-Its Linux Clang 22.1.8 Release component build also passes; this does not claim a
-full Linux editor build or runtime run. Exact Windows Release editor is
-12,608,512 bytes, SHA-256
+The September 5 lifecycle checkpoint passes Windows Debug/Release editor builds,
+Release HeadlessCI build, both explicitly waited build-safe aggregates (exit 0),
+all eight SoftwareBase/component CTests and ten repeated Windows descendant
+retirement runs. The Linux Clang 22.1.8 Release child-process component builds
+and its console descriptor-inheritance CTest passes. Exact Windows Release
+editor is 12,617,728 bytes, SHA-256
+`30f33e84230d0a79fa5dca8f5529d070abd50be4d5d42bd78a52b38271abc1c7`.
+These are component/lifecycle proofs, not native comparison or OS confinement.
+Existing duplicate-logger warnings remain. Completed implementation and the
+earlier genuine Qwen cancellation/response result are recorded in
+`Changes/changelog.txt`; retain the existing local
+`x64/Release/logs/ai-transport-probe-20260905-*` evidence without relabelling it
+as a new self-coding run. The earlier transport checkpoint's Release editor was
+12,608,512 bytes with SHA-256
 `0922f7d3e8aa46784ec94096dee708006b9df31f9be85fbe6c1a00674ec8d346`.
-These checks include request ownership, queued cancellation, stale-response
-discard, callback byte decoding and retirement-failure precedence; they do not
-replace real-model or native comparison evidence. Existing duplicate-logger
-warnings remain.
-
-The genuine HTTP probe exposed a headers-only stall in the combined optional-body
-Windows send path. Explicit header completion followed by bounded body writes
-now reaches receive and cancels request A in less than one millisecond, with
-confirmed handle retirement. Request B dispatches independently of A's stopped
-token. The first run's 90-second probe deadline expired too early. After aligning
-that watchdog with the production chat timeout plus its one allowed retry,
-request B returned the exact visible canary after about 98 seconds and the probe
-passed (exit 0), without a retry. Independent curl streaming had already shown
-slow model activity. This proves request cancellation and a subsequent real
-response, not server-side generation stop or completed self-coding.
-Preserve the local probe logs under
-`x64/Release/logs/ai-transport-probe-20260905-*`; do not publish them as release proof.
 
 The child-launch environment/stdin and native-attachment source repairs do not
 create an OS security boundary. Candidate
@@ -113,6 +103,11 @@ the narrow HTTP component compile passed and the lane was released again.
    Job Object ownership guarantees lifecycle supervision, not filesystem or
    network confinement. Host transaction containment is not proof that arbitrary
    compiled candidate code cannot access live source or other projects.
+   Separate writable compiler scratch/source from immutable validated preview
+   code and generation-local runtime state; keep host receipts outside child
+   grants. Qualify actual Windows token/network policy and compiler/embedded-HWND
+   compatibility before claiming an AppContainer boundary. Linux descriptor
+   cleanup is implemented, but filesystem/network/IPC confinement is not.
 5. Only after the exact candidate passes those gates, stage immutable Windows
    and Linux packages, exact-file validation receipts and sidecars, then hand the
    single reviewed publication set to the Epoch Site task. Do not alter the

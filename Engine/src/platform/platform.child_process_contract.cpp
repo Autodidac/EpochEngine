@@ -23,6 +23,12 @@
 #endif
 #include <Windows.h>
 #include <winioctl.h>
+#elif defined(__linux__)
+#include <cerrno>
+#include <fcntl.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 import platform.child_process;
@@ -290,6 +296,176 @@ namespace
     }
 }
 
+#if defined(__linux__)
+namespace
+{
+    constexpr std::string_view descriptor_stdout = "epoch-linux-stdout-captured\n";
+    constexpr std::string_view descriptor_stderr = "epoch-linux-stderr-captured\n";
+
+    struct InheritableDescriptorFixture final
+    {
+        int channel[2]{-1, -1};
+        int high{-1};
+        struct stat identity{};
+
+        ~InheritableDescriptorFixture() noexcept
+        {
+            if (high >= 0) (void)::close(high);
+            for (const auto descriptor : channel)
+                if (descriptor >= 0) (void)::close(descriptor);
+        }
+
+        [[nodiscard]] bool prepare()
+        {
+            if (::pipe(channel) != 0) return false;
+            high = ::fcntl(channel[0], F_DUPFD, 128);
+            if (high < 0 || ::fstat(channel[0], &identity) != 0) return false;
+            // F_DUPFD deliberately does not set CLOEXEC. The low pipe ends and
+            // sparse high duplicate straddle the launcher's setup channel.
+            for (const int descriptor : {channel[0], channel[1], high})
+                if (descriptor <= STDERR_FILENO || ::fcntl(descriptor, F_GETFD) != 0)
+                    return false;
+            return true;
+        }
+    };
+
+    struct DescriptorLimitFixture final
+    {
+        struct rlimit original{};
+        bool changed{};
+
+        ~DescriptorLimitFixture() noexcept
+        {
+            if (changed) (void)::setrlimit(RLIMIT_NOFILE, &original);
+        }
+
+        [[nodiscard]] bool lower_below(int descriptor)
+        {
+            if (::getrlimit(RLIMIT_NOFILE, &original) != 0
+                || descriptor < 128 || original.rlim_cur <= 128u)
+                return false;
+            auto lowered = original;
+            lowered.rlim_cur = 128u;
+            changed = ::setrlimit(RLIMIT_NOFILE, &lowered) == 0;
+            return changed;
+        }
+
+        [[nodiscard]] bool restore() noexcept
+        {
+            if (changed && ::setrlimit(RLIMIT_NOFILE, &original) != 0) return false;
+            changed = false;
+            return true;
+        }
+    };
+
+    [[nodiscard]] int run_descriptor_inheritance_child(char** arguments)
+    {
+        const auto device = std::stoull(arguments[5]);
+        const auto inode = std::stoull(arguments[6]);
+        for (int index = 2; index != 5; ++index)
+        {
+            struct stat observed{};
+            if (::fstat(std::stoi(arguments[index]), &observed) == 0)
+            {
+                // A loader may reuse a now-free number. Only an inherited
+                // reference to the exact parent pipe is the leak under test.
+                if (static_cast<std::uint64_t>(observed.st_dev) == device
+                    && static_cast<std::uint64_t>(observed.st_ino) == inode)
+                    return 71;
+            }
+            else if (errno != EBADF) return 72;
+        }
+        char input{};
+        if (::read(STDIN_FILENO, &input, 1u) != 0) return 73;
+        const auto write_all = [](int descriptor, std::string_view bytes)
+        {
+            while (!bytes.empty())
+            {
+                const auto written = ::write(descriptor, bytes.data(), bytes.size());
+                if (written < 0 && errno == EINTR) continue;
+                if (written <= 0) return false;
+                bytes.remove_prefix(static_cast<std::size_t>(written));
+            }
+            return true;
+        };
+        return write_all(STDOUT_FILENO, descriptor_stdout)
+            && write_all(STDERR_FILENO, descriptor_stderr) ? 17 : 74;
+    }
+
+    [[nodiscard]] bool descriptor_inheritance_contract(
+        const std::filesystem::path& self, const ExecutableIdentityFixture& fixture)
+    {
+        InheritableDescriptorFixture inherited{};
+        if (!inherited.prepare()) return false;
+        for (const bool explicitEnvironment : {false, true})
+        {
+            child_process::LaunchRequest request{};
+            request.executable = self;
+            request.working_directory = self.parent_path();
+            request.correlation_key = explicitEnvironment
+                ? "contract:linux-fds-execve" : "contract:linux-fds-execv";
+            request.window_mode = child_process::WindowMode::hidden;
+            request.merged_output_path = fixture.root / (explicitEnvironment
+                ? "linux-fds-execve.log" : "linux-fds-execv.log");
+            request.arguments = {"--epoch-descriptor-inheritance-contract",
+                std::to_string(inherited.channel[0]), std::to_string(inherited.channel[1]),
+                std::to_string(inherited.high),
+                std::to_string(static_cast<std::uint64_t>(inherited.identity.st_dev)),
+                std::to_string(static_cast<std::uint64_t>(inherited.identity.st_ino))};
+            if (explicitEnvironment) request.environment.emplace();
+            request.disconnect_standard_input = explicitEnvironment;
+            DescriptorLimitFixture limit{};
+            // The second child inherits a limit below an already-open FD.
+            // Iterating only to sysconf(_SC_OPEN_MAX) would miss that FD.
+            if (explicitEnvironment && !limit.lower_below(inherited.high)) return false;
+            const auto launched = child_process::launch_or_focus(request);
+            const bool restored = limit.restore();
+            if (launched.code != child_process::LaunchCode::started) return false;
+            const auto completed = child_process::wait(launched.handle, {}, 5'000'000'000ull);
+            if (!completed || !completed.process || completed.process->active())
+            {
+                (void)child_process::stop(launched.handle, child_process::StopMode::force);
+                (void)child_process::wait(launched.handle, {}, 5'000'000'000ull);
+                (void)child_process::release(launched.handle);
+                return false;
+            }
+            const bool released = child_process::release(launched.handle);
+            if (!restored || !released || !completed.process->exit_code_valid
+                || completed.process->exit_code != 17
+                || completed.process->environment_replaced != explicitEnvironment
+                || completed.process->standard_input_disconnected != explicitEnvironment)
+                return false;
+            std::ifstream output{request.merged_output_path, std::ios::binary};
+            const std::string bytes{std::istreambuf_iterator<char>{output},
+                std::istreambuf_iterator<char>{}};
+            if (bytes != std::string{descriptor_stdout} + std::string{descriptor_stderr})
+                return false;
+            for (const int descriptor : {inherited.channel[0], inherited.channel[1], inherited.high})
+                if (::fcntl(descriptor, F_GETFD) != 0) return false;
+        }
+
+        // A failed exec after descriptor cleanup must still reach the parent
+        // through the retained CLOEXEC writer, with its original errno.
+        const auto invalidImage = fixture.root / "linux-invalid-executable.bin";
+        if (!fixture.write("linux-invalid-executable.bin", "not an executable\n")
+            || ::chmod(invalidImage.c_str(), 0700) != 0) return false;
+        child_process::LaunchRequest invalid{};
+        invalid.executable = invalidImage;
+        invalid.working_directory = fixture.root;
+        invalid.correlation_key = "contract:linux-exec-errno";
+        invalid.window_mode = child_process::WindowMode::hidden;
+        const auto rejected = child_process::launch_or_focus(invalid);
+        const auto failed = child_process::snapshot(rejected.handle);
+        const bool released = child_process::release(rejected.handle);
+        return rejected.code == child_process::LaunchCode::spawn_failed
+            && rejected.message == "exec failed with errno " + std::to_string(ENOEXEC) + "."
+            && failed && failed->state == child_process::ProcessState::failed
+            && !failed->active() && failed->platform_process_id == 0u && released
+            && child_process::metrics().active_processes == 0u;
+    }
+}
+#endif
+
 #if defined(_WIN32)
 namespace
 {
@@ -357,6 +533,192 @@ namespace
             return value != INVALID_HANDLE_VALUE && value != nullptr;
         }
     };
+
+    // Console-only descendant fixture. A real inherited Job Object must own
+    // the grandchild even when this immediate child exits normally first.
+    [[nodiscard]] int run_retirement_parent(const std::filesystem::path& root, bool churn)
+    {
+        if (!root.is_absolute()
+            || !root.filename().string().starts_with("epoch-child-retirement-"))
+            return 150;
+        std::wstring self(32'768u, L'\0');
+        const DWORD length = ::GetModuleFileNameW(nullptr, self.data(),
+            static_cast<DWORD>(self.size()));
+        if (length == 0u || length >= self.size()) return 151;
+        self.resize(length);
+        std::wstring command = L"\"" + self
+            + L"\" --epoch-child-contract 30000 0";
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process{};
+        if (!::CreateProcessW(self.c_str(), command.data(), nullptr, nullptr,
+                FALSE, CREATE_NO_WINDOW, nullptr, root.c_str(), &startup, &process))
+            return 152;
+        ContractHandle descendant{process.hProcess};
+        ContractHandle thread{process.hThread};
+        BOOL inJob{};
+        if (!::IsProcessInJob(descendant.value, nullptr, &inJob) || !inJob)
+        {
+            (void)::TerminateProcess(descendant.value, 153u);
+            (void)::WaitForSingleObject(descendant.value, 5'000u);
+            return 153;
+        }
+        {
+            std::ofstream record{root / "descendant.pid", std::ios::binary};
+            record << process.dwProcessId << '\n';
+            record.close();
+            if (!record) return 154;
+        }
+        if (churn)
+        {
+            // Exercise real membership snapshots while short-lived sibling
+            // processes finish. A vanished PID must not pin an empty group.
+            for (unsigned index = 0u; index < 32u; ++index)
+            {
+                std::wstring transientCommand = L"\"" + self
+                    + L"\" --epoch-child-contract " + std::to_wstring(index % 3u) + L" 0";
+                PROCESS_INFORMATION transient{};
+                if (!::CreateProcessW(self.c_str(), transientCommand.data(), nullptr, nullptr,
+                        FALSE, CREATE_NO_WINDOW, nullptr, root.c_str(), &startup, &transient))
+                    return 156;
+                ContractHandle transientProcess{transient.hProcess};
+                ContractHandle transientThread{transient.hThread};
+            }
+        }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            std::error_code error{};
+            if (std::filesystem::exists(root / "parent.exit", error) && !error)
+                return 37;
+            std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        }
+        return 155;
+    }
+
+    struct OwnedContractProcess final
+    {
+        child_process::ProcessHandle handle{};
+        ~OwnedContractProcess() noexcept
+        {
+            if (!handle.valid()) return;
+            std::stop_source stop{};
+            (void)stop.request_stop();
+            (void)child_process::wait(handle, stop.get_token(), 5'000'000'000ull);
+            (void)child_process::release(handle);
+        }
+    };
+
+    [[nodiscard]] bool exit_code_259_contract(const std::filesystem::path& self)
+    {
+        child_process::LaunchRequest request{};
+        request.executable = self;
+        request.working_directory = self.parent_path();
+        request.arguments = {"--epoch-child-contract", "20", "259"};
+        request.correlation_key = "contract:actual-exit-259";
+        request.window_mode = child_process::WindowMode::hidden;
+        const auto launch = child_process::launch_or_focus(request);
+        if (launch.code != child_process::LaunchCode::started) return false;
+        OwnedContractProcess owner{launch.handle};
+        const auto result = child_process::wait(launch.handle, {}, 2'000'000'000ull);
+        return result.code == child_process::WaitCode::exited && result.process
+            && !result.process->active() && result.process->exit_code_valid
+            && result.process->exit_code == 259;
+    }
+
+    [[nodiscard]] bool descendant_retirement_contract(
+        const std::filesystem::path& self, std::string_view mode)
+    {
+        ExecutableIdentityFixture fixture{};
+        if (!fixture.prepare("epoch-child-retirement-")) return false;
+        fixture.preserve_evidence = true;
+        const auto fail = [&](std::string_view detail)
+        {
+            (void)fixture.write("retirement.evidence.txt",
+                "mode=" + std::string{mode} + "\nresult=FAIL\ndetail=" + std::string{detail} + "\n");
+            return false;
+        };
+        child_process::LaunchRequest request{};
+        request.executable = self;
+        request.working_directory = fixture.root;
+        request.arguments = {"--epoch-retirement-parent", fixture.root.string()};
+        if (mode == "natural_churn") request.arguments.emplace_back("churn");
+        request.correlation_key = "contract:descendant-retirement-" + std::string{mode};
+        request.exclusive_group = "contract:descendant-retirement";
+        request.window_mode = child_process::WindowMode::hidden;
+        const auto launch = child_process::launch_or_focus(request);
+        if (launch.code != child_process::LaunchCode::started) return fail(launch.message);
+        OwnedContractProcess owner{launch.handle};
+        const auto running = child_process::snapshot(launch.handle);
+        if (!running || !running->active()) return fail("Parent is not active after launch.");
+        ContractHandle parent{::OpenProcess(SYNCHRONIZE, FALSE,
+            static_cast<DWORD>(running->platform_process_id))};
+        if (!parent.valid()) return fail("Parent observation handle could not be opened.");
+
+        DWORD descendantId{};
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            std::ifstream record{fixture.root / "descendant.pid", std::ios::binary};
+            if (record >> descendantId && descendantId != 0u) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        }
+        if (descendantId == 0u) return fail("Descendant identity was not reported.");
+        ContractHandle descendant{::OpenProcess(SYNCHRONIZE, FALSE, descendantId)};
+        if (!descendant.valid()
+            || ::WaitForSingleObject(descendant.value, 0u) != WAIT_TIMEOUT)
+            return fail("Descendant observation handle is not live.");
+
+        std::stop_source cancellation{};
+        const bool natural = mode == "natural" || mode == "natural_churn";
+        if (natural)
+        {
+            if (!fixture.write("parent.exit", "exit")
+                || ::WaitForSingleObject(parent.value, 3'000u) != WAIT_OBJECT_0
+                || ::WaitForSingleObject(descendant.value, 0u) != WAIT_TIMEOUT)
+                return fail("Parent exit/descendant liveness preconditions did not hold.");
+            // The immediate process is dead but its descendant is not. The
+            // first poll must retain ownership, not release the job and claim
+            // completion from the parent's exit code alone.
+            const auto retiring = child_process::snapshot(launch.handle);
+            if (!retiring || !retiring->active() || retiring->exit_code_valid)
+                return fail("First parent-exit poll lost retirement ownership: "
+                    + (retiring ? retiring->message : std::string{"no snapshot"}));
+        }
+        else if (mode == "cancel") (void)cancellation.request_stop();
+        else if (mode != "timeout") return fail("Unknown retirement fixture mode.");
+
+        const auto result = child_process::wait(launch.handle, cancellation.get_token(),
+            mode == "timeout" ? 20'000'000ull : 5'000'000'000ull);
+        const auto expected = natural ? child_process::WaitCode::exited
+            : (mode == "cancel" ? child_process::WaitCode::cancelled
+                : child_process::WaitCode::timed_out);
+        const DWORD parentWait = ::WaitForSingleObject(parent.value, 0u);
+        const DWORD descendantWait = ::WaitForSingleObject(descendant.value, 0u);
+        const bool groupActive = child_process::active_in_group(request.exclusive_group).has_value();
+        const bool success = result.code == expected && result.process && !result.process->active()
+            && result.process->exit_code_valid
+            && (!natural || result.process->exit_code == 37)
+            && parentWait == WAIT_OBJECT_0 && descendantWait == WAIT_OBJECT_0 && !groupActive;
+        if (!success) return fail("Terminal retirement check failed: " + result.message
+            + "; wait=" + std::string{child_process::wait_code_name(result.code)}
+            + "; exit=" + (result.process ? std::to_string(result.process->exit_code) : "missing")
+            + "; parent_wait=" + std::to_string(parentWait)
+            + "; descendant_wait=" + std::to_string(descendantWait)
+            + "; group_active=" + std::to_string(groupActive));
+        fixture.preserve_evidence = false;
+        return true;
+    }
+
+    [[nodiscard]] int run_retirement_contracts(const std::filesystem::path& self)
+    {
+        if (!exit_code_259_contract(self)) return 60;
+        if (!descendant_retirement_contract(self, "natural")) return 61;
+        if (!descendant_retirement_contract(self, "cancel")) return 62;
+        if (!descendant_retirement_contract(self, "timeout")) return 63;
+        if (!descendant_retirement_contract(self, "natural_churn")) return 64;
+        return 0;
+    }
 
     [[nodiscard]] bool identity_lock_contract(ExecutableIdentityFixture& fixture)
     {
@@ -913,6 +1275,12 @@ int main(int argc, char** argv)
 {
     namespace child_process = epochengine::platform::child_process;
 
+#if defined(__linux__)
+    if (argc == 7
+        && std::string_view{argv[1]} == "--epoch-descriptor-inheritance-contract")
+        return run_descriptor_inheritance_child(argv);
+#endif
+
     if (argc >= 2 && std::string_view{argv[1]} == "--epoch-msbuild-environment-contract")
     {
 #if defined(_WIN32)
@@ -923,6 +1291,11 @@ int main(int argc, char** argv)
     }
 
 #if defined(_WIN32)
+    if (argc == 2 && std::string_view{argv[1]} == "--epoch-retirement-contract-only")
+        return run_retirement_contracts(std::filesystem::absolute(argv[0]));
+    if ((argc == 3 || (argc == 4 && std::string_view{argv[3]} == "churn"))
+        && std::string_view{argv[1]} == "--epoch-retirement-parent")
+        return run_retirement_parent(std::filesystem::path{argv[2]}, argc == 4);
     if (argc == 4
         && std::string_view{argv[1]} == "--epoch-execution-input-contract")
     {
@@ -1148,8 +1521,13 @@ int main(int argc, char** argv)
 #endif
     std::filesystem::remove(outputPath, outputError);
     if (!child_process::release(second.handle)) return 14;
+#if defined(__linux__)
+    if (!descriptor_inheritance_contract(self, identityFixture)) return 29;
+#endif
 #if defined(_WIN32)
     if (!execution_input_contract(self, identityFixture)) return 27;
+    if (const int retirement = run_retirement_contracts(self); retirement != 0)
+        return retirement;
 #endif
     return 0;
 }

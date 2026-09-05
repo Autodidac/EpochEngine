@@ -3,6 +3,7 @@ module;
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
@@ -14,6 +15,7 @@ module;
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -31,6 +33,9 @@ module;
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/syscall.h>
+#endif
 #endif
 
 module platform.child_process;
@@ -216,6 +221,36 @@ namespace epochengine::platform::child_process
         }
 #endif
 
+#if defined(_WIN32)
+        struct RetirementMember final
+        {
+            DWORD process_id{};
+            HANDLE process{};
+
+            RetirementMember(DWORD id, HANDLE handle) noexcept
+                : process_id{id}, process{handle} {}
+            RetirementMember(const RetirementMember&) = delete;
+            RetirementMember& operator=(const RetirementMember&) = delete;
+            RetirementMember(RetirementMember&& other) noexcept
+                : process_id{std::exchange(other.process_id, 0u)},
+                  process{std::exchange(other.process, nullptr)} {}
+            RetirementMember& operator=(RetirementMember&& other) noexcept
+            {
+                if (this != &other)
+                {
+                    if (process != nullptr) (void)::CloseHandle(process);
+                    process_id = std::exchange(other.process_id, 0u);
+                    process = std::exchange(other.process, nullptr);
+                }
+                return *this;
+            }
+            ~RetirementMember() noexcept
+            {
+                if (process != nullptr) (void)::CloseHandle(process);
+            }
+        };
+#endif
+
         struct ProcessSlot final
         {
             bool occupied{};
@@ -240,6 +275,9 @@ namespace epochengine::platform::child_process
             HANDLE process{};
             HANDLE job{};
             DWORD process_id{};
+            bool job_retirement_requested{};
+            DWORD retirement_observation_error{};
+            std::vector<RetirementMember> retirement_members{};
             // Discovery is top-level only, but an admitted preview may later
             // become a child window. Retain and revalidate native identity;
             // the context host separately owns its attachment/property lease.
@@ -356,6 +394,7 @@ namespace epochengine::platform::child_process
             if (terminal == ProcessState::exited)
                 ++value.metrics.exits;
 #if defined(_WIN32)
+            slot.retirement_members.clear();
             if (slot.process != nullptr)
             {
                 ::CloseHandle(slot.process);
@@ -373,6 +412,131 @@ namespace epochengine::platform::child_process
         }
 
 #if defined(_WIN32)
+        // Job accounting can reach zero before the member process objects
+        // become signalled. Hold real member handles across TerminateJobObject
+        // so group succession also waits for that final lifecycle evidence.
+        [[nodiscard]] DWORD observe_retirement_members(ProcessSlot& slot) noexcept
+        {
+            constexpr std::size_t maximum_retirement_members = 4096u;
+            struct ProcessIdBuffer final
+            {
+                DWORD assigned{};
+                DWORD count{};
+                std::array<ULONG_PTR, maximum_retirement_members> ids{};
+            };
+            static_assert(offsetof(ProcessIdBuffer, ids)
+                == offsetof(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList));
+            if (slot.job == nullptr) return ERROR_INVALID_HANDLE;
+            try
+            {
+                const auto queryMembers = [&slot](ProcessIdBuffer& result) -> DWORD
+                {
+                    if (::QueryInformationJobObject(slot.job, JobObjectBasicProcessIdList,
+                            &result, static_cast<DWORD>(sizeof(result)), nullptr) == FALSE)
+                        return ::GetLastError();
+                    if (result.assigned > result.ids.size()
+                        || result.count > result.ids.size()
+                        || result.count != result.assigned)
+                        return ERROR_MORE_DATA;
+                    return ERROR_SUCCESS;
+                };
+                ProcessIdBuffer members{};
+                if (const DWORD queried = queryMembers(members); queried != ERROR_SUCCESS)
+                    return queried;
+                for (DWORD index = 0u; index < members.count; ++index)
+                {
+                    const ULONG_PTR rawId = members.ids[index];
+                    if (rawId == 0u || rawId > (std::numeric_limits<DWORD>::max)())
+                        return ERROR_INVALID_DATA;
+                    const DWORD id = static_cast<DWORD>(rawId);
+                    if (id == slot.process_id
+                        || std::ranges::any_of(slot.retirement_members,
+                            [id](const RetirementMember& member)
+                            { return member.process_id == id; }))
+                        continue;
+                    for (unsigned retry = 0u; ; ++retry)
+                    {
+                        RetirementMember member{id, ::OpenProcess(
+                            SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE, id)};
+                        DWORD identityChanged{};
+                        if (member.process == nullptr)
+                        {
+                            identityChanged = ::GetLastError();
+                            if (identityChanged != ERROR_INVALID_PARAMETER)
+                                return identityChanged;
+                        }
+                        else
+                        {
+                            BOOL inJob{};
+                            if (::IsProcessInJob(member.process, slot.job, &inJob) == FALSE)
+                                return ::GetLastError();
+                            if (inJob == FALSE) identityChanged = ERROR_INVALID_DATA;
+                        }
+                        if (identityChanged != ERROR_SUCCESS)
+                        {
+                            // Snapshot IDs can disappear or be recycled before
+                            // OpenProcess. Require a fresh complete job list to
+                            // confirm departure; never wait on a nonmember handle
+                            // or treat access/query errors as an ordinary exit.
+                            ProcessIdBuffer current{};
+                            if (const DWORD queried = queryMembers(current); queried != ERROR_SUCCESS)
+                                return queried;
+                            const std::span<const ULONG_PTR> currentIds{
+                                current.ids.data(), current.count};
+                            if (std::ranges::find(currentIds, rawId) == currentIds.end())
+                                break;
+                            if (retry >= 2u) return identityChanged;
+                            continue;
+                        }
+                        const DWORD signalled = ::WaitForSingleObject(member.process, 0u);
+                        if (signalled == WAIT_OBJECT_0) break;
+                        if (signalled != WAIT_TIMEOUT)
+                            return signalled == WAIT_FAILED ? ::GetLastError() : ERROR_INVALID_DATA;
+                        if (slot.retirement_members.size() >= maximum_retirement_members)
+                            return ERROR_MORE_DATA;
+                        slot.retirement_members.emplace_back(std::move(member));
+                        break;
+                    }
+                }
+                return ERROR_SUCCESS;
+            }
+            catch (...)
+            {
+                return ERROR_NOT_ENOUGH_MEMORY;
+            }
+        }
+
+        [[nodiscard]] DWORD settle_retirement_members(ProcessSlot& slot) noexcept
+        {
+            DWORD failure{};
+            std::erase_if(slot.retirement_members, [&failure](const RetirementMember& member)
+            {
+                const DWORD signalled = ::WaitForSingleObject(member.process, 0u);
+                if (signalled != WAIT_OBJECT_0 && signalled != WAIT_TIMEOUT
+                    && failure == ERROR_SUCCESS)
+                    failure = signalled == WAIT_FAILED ? ::GetLastError() : ERROR_INVALID_DATA;
+                return signalled == WAIT_OBJECT_0;
+            });
+            return failure;
+        }
+
+        [[nodiscard]] DWORD request_job_retirement(ProcessSlot& slot) noexcept
+        {
+            const DWORD observed = observe_retirement_members(slot);
+            if (observed != ERROR_SUCCESS && slot.retirement_observation_error == ERROR_SUCCESS)
+                slot.retirement_observation_error = observed;
+            // An observation failure must not prevent cancellation. Preserve
+            // the missing evidence even if subsequent accounting becomes zero.
+            const BOOL terminated = slot.job != nullptr
+                ? ::TerminateJobObject(slot.job, 1u)
+                : (slot.process != nullptr ? ::TerminateProcess(slot.process, 1u) : FALSE);
+            if (terminated == FALSE)
+                return slot.job == nullptr && slot.process == nullptr
+                    ? ERROR_INVALID_HANDLE : ::GetLastError();
+            slot.job_retirement_requested = slot.job != nullptr;
+            return ERROR_SUCCESS;
+        }
+
         struct CapturedStartupResources final
         {
             CapturedStartupResources() = default;
@@ -929,14 +1093,31 @@ namespace epochengine::platform::child_process
                 }
             }
 
+            struct SetupFailure final
+            {
+                int error{};
+                int descriptor_cleanup{};
+            };
             const pid_t child = ::fork();
+            const int forkFailure = child < 0 ? errno : 0;
             if (child == 0)
             {
                 (void)::close(errorPipe[0]);
-                const auto failSetup = [&](int failure)
+                const auto failSetup = [&](int failure, bool descriptorCleanup = false,
+                                           int exitCode = 126)
                 {
-                    (void)::write(errorPipe[1], &failure, sizeof(failure));
-                    ::_exit(126);
+                    const SetupFailure report{failure, descriptorCleanup ? 1 : 0};
+                    const auto* bytes = reinterpret_cast<const char*>(&report);
+                    std::size_t offset{};
+                    while (offset < sizeof(report))
+                    {
+                        const auto written = ::write(errorPipe[1], bytes + offset,
+                            sizeof(report) - offset);
+                        if (written < 0 && errno == EINTR) continue;
+                        if (written <= 0) break;
+                        offset += static_cast<std::size_t>(written);
+                    }
+                    ::_exit(exitCode);
                 };
                 const auto redirect = [&](int descriptor, int target)
                 {
@@ -961,19 +1142,34 @@ namespace epochengine::platform::child_process
                     if (outputFile > STDERR_FILENO)
                         (void)::close(outputFile);
                 }
+#if defined(__linux__)
+                // fork owns a private descriptor table. Retain only stdio and
+                // the CLOEXEC setup writer; sparse descriptors above a lowered
+                // RLIMIT_NOFILE must not survive either execv or execve.
+                // Direct syscalls avoid allocator/stdio/directory-walk state
+                // inherited from other threads. Unsupported or denied cleanup
+                // is a launch failure, never an incomplete close-loop fallback.
+#if defined(SYS_close_range)
+                const auto setupWriter = static_cast<unsigned int>(errorPipe[1]);
+                if (setupWriter > static_cast<unsigned int>(STDERR_FILENO) + 1u
+                    && ::syscall(SYS_close_range,
+                        static_cast<unsigned int>(STDERR_FILENO) + 1u,
+                        setupWriter - 1u, 0u) < 0)
+                    failSetup(errno, true);
+                if (::syscall(SYS_close_range, setupWriter + 1u,
+                        std::numeric_limits<unsigned int>::max(), 0u) < 0)
+                    failSetup(errno, true);
+#else
+                failSetup(ENOSYS, true);
+#endif
+#endif
                 if (::chdir(request.working_directory.c_str()) != 0)
-                {
-                    const int failure = errno;
-                    (void)::write(errorPipe[1], &failure, sizeof(failure));
-                    ::_exit(126);
-                }
+                    failSetup(errno);
                 if (request.environment)
                     ::execve(slot.executable.c_str(), arguments.data(), environmentPointers.data());
                 else
                     ::execv(slot.executable.c_str(), arguments.data());
-                const int failure = errno;
-                (void)::write(errorPipe[1], &failure, sizeof(failure));
-                ::_exit(127);
+                failSetup(errno, false, 127);
             }
 
             (void)::close(errorPipe[1]);
@@ -983,24 +1179,41 @@ namespace epochengine::platform::child_process
                 (void)::close(outputFile);
             if (child < 0)
             {
-                const int failure = errno;
                 (void)::close(errorPipe[0]);
-                error = "fork failed with errno " + std::to_string(failure) + ".";
+                error = "fork failed with errno " + std::to_string(forkFailure) + ".";
                 return false;
             }
 
-            int childFailure{};
-            ssize_t received{};
-            do
+            SetupFailure childFailure{};
+            std::size_t received{};
+            int readFailure{};
+            while (received < sizeof(childFailure))
             {
-                received = ::read(errorPipe[0], &childFailure, sizeof(childFailure));
-            } while (received < 0 && errno == EINTR);
+                const auto count = ::read(errorPipe[0],
+                    reinterpret_cast<char*>(&childFailure) + received,
+                    sizeof(childFailure) - received);
+                if (count < 0 && errno == EINTR) continue;
+                if (count < 0) readFailure = errno;
+                if (count <= 0) break;
+                received += static_cast<std::size_t>(count);
+            }
             (void)::close(errorPipe[0]);
-            if (received > 0)
+            if (readFailure != 0 || (received != 0u && received != sizeof(childFailure)))
             {
-                int status{};
-                (void)::waitpid(child, &status, 0);
-                error = "exec failed with errno " + std::to_string(childFailure) + ".";
+                (void)::kill(child, SIGKILL);
+                while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR) {}
+                error = "Process setup channel failed before exec admission: errno "
+                    + std::to_string(readFailure != 0 ? readFailure : EIO) + ".";
+                return false;
+            }
+            if (received != 0u)
+            {
+                while (::waitpid(child, nullptr, 0) < 0 && errno == EINTR) {}
+                error = childFailure.descriptor_cleanup != 0
+                    ? "Linux inherited-descriptor cleanup failed with errno "
+                        + std::to_string(childFailure.error)
+                        + ". close_range support and permission are required."
+                    : "exec failed with errno " + std::to_string(childFailure.error) + ".";
                 return false;
             }
 
@@ -1018,38 +1231,100 @@ namespace epochengine::platform::child_process
                 if (!slot.occupied || !active(slot.state))
                     continue;
 #if defined(_WIN32)
-                if (slot.process == nullptr)
+                const auto retainOwnership = [&](std::string message)
                 {
-                    finish_slot(
-                        value,
-                        slot,
-                        ProcessState::failed,
-                        0,
-                        false,
-                        "Native process handle was lost.");
+                    const bool changed = slot.state != ProcessState::stop_requested
+                        || slot.message != message;
+                    slot.state = ProcessState::stop_requested;
+                    slot.focus_pending = false;
+                    slot.focus_deadline_ns = 0u;
+                    slot.message = std::move(message);
+                    if (changed) revise(value);
+                };
+                // A status-query failure is not retirement evidence. Retain
+                // the process/job lease so release and group succession cannot
+                // forget an unobserved child tree.
+                if (slot.process == nullptr || slot.job == nullptr)
+                {
+                    retainOwnership("Native process/job handle is unavailable; retirement is unverified.");
                     continue;
                 }
-                DWORD code{};
-                if (::GetExitCodeProcess(slot.process, &code) == FALSE)
+                const DWORD signalled = ::WaitForSingleObject(slot.process, 0u);
+                if (signalled != WAIT_OBJECT_0 && signalled != WAIT_TIMEOUT)
                 {
-                    finish_slot(
-                        value,
-                        slot,
-                        ProcessState::failed,
-                        0,
-                        false,
-                        "GetExitCodeProcess failed.");
+                    retainOwnership("Process exit could not be observed; retirement is unverified (Win32 "
+                        + std::to_string(static_cast<unsigned long>(::GetLastError())) + ").");
                     continue;
                 }
-                if (code != STILL_ACTIVE)
+                if (signalled == WAIT_TIMEOUT && slot.job_retirement_requested)
                 {
+                    const DWORD observed = observe_retirement_members(slot);
+                    const DWORD settled = settle_retirement_members(slot);
+                    if (slot.retirement_observation_error == ERROR_SUCCESS)
+                        slot.retirement_observation_error = observed != ERROR_SUCCESS
+                            ? observed : settled;
+                    retainOwnership(slot.retirement_observation_error == ERROR_SUCCESS
+                        ? "Retiring owned process tree."
+                        : "Process-tree member retirement is unverified; ownership is retained (Win32 "
+                            + std::to_string(static_cast<unsigned long>(slot.retirement_observation_error)) + ").");
+                    continue;
+                }
+                if (signalled == WAIT_OBJECT_0)
+                {
+                    // 259 is also a possible application exit code. The
+                    // signalled process handle, not STILL_ACTIVE, owns liveness.
+                    DWORD code{};
+                    if (::GetExitCodeProcess(slot.process, &code) == FALSE)
+                    {
+                        retainOwnership("Process exit code could not be read; retirement is unverified.");
+                        continue;
+                    }
+                    if (!slot.job_retirement_requested)
+                    {
+                        const DWORD stopped = request_job_retirement(slot);
+                        if (stopped != ERROR_SUCCESS)
+                        {
+                            retainOwnership("Descendant stop failed; process-tree ownership is retained (Win32 "
+                                + std::to_string(static_cast<unsigned long>(stopped)) + ").");
+                            continue;
+                        }
+                        retainOwnership("Retiring remaining process-tree descendants.");
+                        continue;
+                    }
+                    const DWORD observed = observe_retirement_members(slot);
+                    const DWORD settled = settle_retirement_members(slot);
+                    if (slot.retirement_observation_error == ERROR_SUCCESS)
+                        slot.retirement_observation_error = observed != ERROR_SUCCESS
+                            ? observed : settled;
+                    if (slot.retirement_observation_error != ERROR_SUCCESS)
+                    {
+                        retainOwnership("Process-tree member retirement is unverified; ownership is retained (Win32 "
+                            + std::to_string(static_cast<unsigned long>(slot.retirement_observation_error)) + ").");
+                        continue;
+                    }
+                    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
+                    if (::QueryInformationJobObject(slot.job,
+                            JobObjectBasicAccountingInformation, &accounting,
+                            sizeof(accounting), nullptr) == FALSE)
+                    {
+                        retainOwnership("Process-tree exit could not be observed; retirement is unverified (Win32 "
+                            + std::to_string(static_cast<unsigned long>(::GetLastError())) + ").");
+                        continue;
+                    }
+                    if (accounting.ActiveProcesses != 0u || !slot.retirement_members.empty())
+                    {
+                        // Zero job accounting alone is not synchronization.
+                        // Retained member handles must also become signalled.
+                        retainOwnership("Retiring remaining process-tree descendants.");
+                        continue;
+                    }
                     finish_slot(
                         value,
                         slot,
                         ProcessState::exited,
                         static_cast<std::int32_t>(code),
                         true,
-                        "Process exited.");
+                        "Process exited; owned job is empty and observed descendants are signalled.");
                     continue;
                 }
                 if (slot.focus_pending)
@@ -1729,18 +2004,21 @@ namespace epochengine::platform::child_process
 #if defined(_WIN32)
         if (mode == StopMode::force)
         {
-            const BOOL terminated = slot->job != nullptr
-                ? ::TerminateJobObject(slot->job, 1u)
-                : (slot->process != nullptr
-                    ? ::TerminateProcess(slot->process, 1u)
-                    : FALSE);
-            if (terminated == FALSE)
+            const DWORD stopped = request_job_retirement(*slot);
+            slot->state = ProcessState::stop_requested;
+            slot->focus_pending = false;
+            slot->focus_deadline_ns = 0u;
+            if (stopped != ERROR_SUCCESS)
             {
+                slot->message = "Forced process stop failed; ownership is retained (Win32 "
+                    + std::to_string(static_cast<unsigned long>(stopped)) + ").";
                 revise(value);
                 return StopCode::failed;
             }
-            slot->state = ProcessState::stop_requested;
-            slot->message = "Forced process stop requested.";
+            slot->message = slot->retirement_observation_error == ERROR_SUCCESS
+                ? "Forced process stop requested."
+                : "Forced process stop requested; member retirement is unverified (Win32 "
+                    + std::to_string(static_cast<unsigned long>(slot->retirement_observation_error)) + ").";
             revise(value);
             return StopCode::forced;
         }
