@@ -399,7 +399,10 @@ bounded, verified member handles. The exclusive group remains owned until the
 parent signals, job accounting is empty and observed member handles signal;
 zero accounting alone was observed before a descendant handle signalled.
 Missing observation evidence remains a retirement error even after a stop was
-requested. Departed/recycled snapshot PIDs require a fresh complete job-list
+requested. A short/incomplete native job list receives at most two rechecks with
+a short yield; partial IDs are never accepted as a complete snapshot. Persistent
+failure records the native error and assigned/returned counts without dropping
+ownership. Departed/recycled snapshot PIDs require a fresh complete job-list
 confirmation, with at most two retries while still listed; other failures are
 not treated as ordinary exits. This is lifecycle synchronization, not an adversarial OS boundary or
 a proof against every concurrent process-creation race. The console regressions
@@ -417,15 +420,66 @@ reuse. These paths are preferences, not permission enforcement: Windows APIs or
 arbitrary candidate code can still access resources allowed by the inherited
 token until an actual OS execution boundary is implemented and tested.
 
+The source materializer always excludes the owned checkout-local runtime tree
+`Engine/examples/EpochEditor/workspace`, including explicit-file includes.
+Initial materialization, repair and chosen-parent succession use this same
+component-aware exclusion. Model exchanges, tool traces and staged runtime
+research are not compiler inputs. Unrelated source directories named
+`workspace`, and the distinct `workspace_sources` neighbor, remain admissible.
+Synthetic transaction tests verify retained chosen source, unchanged host and
+candidate traces, exact file/byte counts and the manifest digest. This prevents
+an unintended local copy; it is not a claim that real private bytes were observed
+or sent to a model.
+
+The optional Windows `WorkspaceIsolation` launch policy now provides a
+backend-owned restricted-process primitive, not yet Candidate Lab integration.
+It requires exact executable identity, explicit environment, disconnected stdin
+and captured output. A fresh random per-launch AppContainer identity receives
+zero capabilities and opts out of ALL_APPLICATION_PACKAGES access. At most 16
+disjoint read-only/writable roots must be proper descendants of one host-owned
+generation; local canonical paths, ancestors and bounded existing descendants
+are pinned while permissions change. Admission refuses reparse points, aliases,
+hardlinked files and absent/invalid DACLs before any inherited grant is applied.
+The caller must establish actual generation ownership; a pathname cannot do so.
+
+The suspended child's real token must match its fresh identity, zero capabilities,
+low integrity and no elevation/UIAccess before resume. If Windows rejects the
+LPAC token-information class with invalid-parameter, in-memory `AccessCheck`
+tests must deny ALL_APPLICATION_PACKAGES and permit ALL_RESTRICTED_APPLICATION_PACKAGES;
+an unavailable flag is never accepted as proof. Other query failures stop launch.
+Read-only trees receive read/execute; writable trees receive modify, not
+permission/ownership editing. Captured output is an intentional inherited write
+handle and untrusted diagnostic data, never a host receipt or permission grant.
+
+Native process/job ownership is retained across failed admission and exceptions.
+Only observed whole-tree retirement permits fresh-SID grant/profile removal;
+incomplete cleanup retains the supervisor slot and exclusive group. Retirement
+accepts an internal hardlink set only when every link is accounted for under the
+same grant mode, pins/rechecks identities and revokes once per identity. Missing,
+cross-mode or redirected links fail cleanup rather than editing an outside ACL.
+Normal teardown does not prove recovery after abrupt parent termination; no
+destructor silently revokes permissions while a child might still run.
+
+The explicitly invoked console-only `--epoch-isolation-contract-only` probe
+copies its own component executable into synthetic fixture roots. It does not
+launch the editor, render, infer, serve or run a generated project. September 5
+evidence passes token verification, file-access/refusal, writable scratch,
+internal hardlink retirement, prior-DACL restoration and owned process cleanup.
+The strict network subcheck remains failed: `WSAStartup` returns 10107 before
+socket creation, not an observed access-denied connection. No request bytes are
+sent. The probe preserves this failure alongside independent passing results;
+zero capabilities alone are not relabelled as an exercised network test.
+Unsupported platforms reject explicit isolation, never fall back to an ordinary
+token. Existing launches without this policy retain their previous behavior.
+
 The remaining execution-boundary implementation must separate compiler writes
 from validated preview inputs: compiler source/build/temp may be writable only
 inside that generation; preview code, DLLs and assets must be immutable, with
 separate writable runtime state. Host receipts, permits and lineage records
-cannot live inside child-write grants. A Windows AppContainer/LPAC adapter is a
-candidate implementation, not currently active policy. It must prove the real
-token before resume, deny network/loopback capabilities, preserve per-generation
-identity and explicitly qualify compiler dependencies and interactive HWND
-hosting. Do not grant broad user-profile/live-source access to make a failed
+cannot live inside child-write grants. The Windows AppContainer/LPAC component
+above is not currently active Candidate Lab policy. Its remaining qualification
+must exercise network/IPC denial, compiler dependencies and interactive HWND
+hosting, and recover abandoned identity leases safely. Do not grant broad user-profile/live-source access to make a failed
 compatibility test pass. Linux also still needs a real filesystem/network/IPC
 execution boundary; descriptor cleanup is only one prerequisite.
 

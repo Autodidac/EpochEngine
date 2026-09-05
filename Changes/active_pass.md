@@ -27,8 +27,8 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished. Starting commit for this
-  descendant-retirement and inherited-descriptor pass:
-  `3eb3dde9e3e6062350ebc0c6b1237ebe90649777`.
+  restricted-child and runtime-data exclusion pass:
+  `0fd7b377b89e52e97729dc460d031da89ead183f`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34;
   public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -47,26 +47,29 @@ sandbox lineage, a returned successor plan/proposal, and complete owned worker
 and child retirement. A successor plan alone is no longer a successful test.
 Source/build evidence for this rig does not replace running it with Qwen.
 
-The September 5 lifecycle checkpoint passes Windows Debug/Release editor builds,
-Release HeadlessCI build, both explicitly waited build-safe aggregates (exit 0),
-all eight SoftwareBase/component CTests and ten repeated Windows descendant
-retirement runs. The Linux Clang 22.1.8 Release child-process component builds
-and its console descriptor-inheritance CTest passes. Exact Windows Release
-editor is 12,617,728 bytes, SHA-256
-`30f33e84230d0a79fa5dca8f5529d070abd50be4d5d42bd78a52b38271abc1c7`.
-These are component/lifecycle proofs, not native comparison or OS confinement.
-Existing duplicate-logger warnings remain. Completed implementation and the
-earlier genuine Qwen cancellation/response result are recorded in
-`Changes/changelog.txt`; retain the existing local
-`x64/Release/logs/ai-transport-probe-20260905-*` evidence without relabelling it
-as a new self-coding run. The earlier transport checkpoint's Release editor was
-12,608,512 bytes with SHA-256
-`0922f7d3e8aa46784ec94096dee708006b9df31f9be85fbe6c1a00674ec8d346`.
+The restricted-child component has actual Windows console evidence: a fresh
+zero-capability LPAC token is verified before resume; synthetic read-only code,
+writable scratch, outside-file refusal, hardlink cleanup, prior-DACL restoration
+and process/profile retirement pass. Null-DACL, hardlinked and reparse input
+trees are refused before execution. The strict network subcheck does NOT pass:
+Winsock startup returns 10107 before a socket is created, so connection denial
+was not exercised. Its failed fixture and independent passing subchecks remain
+in the executable's temporary `epoch-workspace-isolation-*` evidence directories.
+Do not widen permissions merely to turn this result green.
 
-The child-launch environment/stdin and native-attachment source repairs do not
-create an OS security boundary. Candidate
-compiler/test/preview processes still use the launching user's token; no
-AppContainer, filesystem ACL confinement or network denial has been established.
+This optional platform primitive is NOT wired into Candidate Lab compiler,
+test or preview launches. Those launches still use the launching user's token.
+Phase-specific grants, compiler dependencies, interactive HWND compatibility,
+network/IPC qualification and abrupt-host-exit lease recovery remain open.
+Completed source/build evidence and the earlier genuine Qwen transport result
+belong in `Changes/changelog.txt`; none proves the full two-build workflow.
+
+Current checkpoint checks: Windows Debug/Release editor and Release HeadlessCI
+builds, both build-safe aggregates, nine Windows component CTests, 100 repeated
+full child-process CTests and the two Linux Clang Release process/materializer
+component tests pass. The final Release editor is 12,660,224 bytes, SHA-256
+`7f1f251e041c4c3ab2b1594d0b78ad3746f69381513e8cf0acd1665729b39f46`.
+The strict network probe remains a failure, independently of these passing tests.
 
 The operator explicitly approved the visible Release/Qwen/build/comparison run
 on September 5, but the execution tool rejected the subsequent ordinary visible
@@ -97,8 +100,8 @@ the narrow HTTP component compile passed and the lane was released again.
    packet, build, and validation failures may retry within their existing
    bounded budgets; cancellation and unsafe/off-catalog path requests fail
    immediately.
-4. Establish and adversarially test the candidate execution boundary. The
-   current Windows child launch retains the user's OS identity while replacing
+4. Finish and adversarially test the candidate execution boundary. The
+   current Candidate Lab launch retains the user's OS identity while replacing
    ambient environment variables and disconnecting host stdin;
    Job Object ownership guarantees lifecycle supervision, not filesystem or
    network confinement. Host transaction containment is not proof that arbitrary
@@ -106,8 +109,11 @@ the narrow HTTP component compile passed and the lane was released again.
    Separate writable compiler scratch/source from immutable validated preview
    code and generation-local runtime state; keep host receipts outside child
    grants. Qualify actual Windows token/network policy and compiler/embedded-HWND
-   compatibility before claiming an AppContainer boundary. Linux descriptor
-   cleanup is implemented, but filesystem/network/IPC confinement is not.
+   compatibility before admitting the optional restricted-child primitive to
+   Candidate Lab. Preserve the current Winsock 10107 compatibility failure as
+   uncompleted network evidence. Qualify crash recovery for persisted identity
+   grants; normal retirement alone does not prove abrupt-parent cleanup. Linux
+   descriptor cleanup is implemented, but filesystem/network/IPC confinement is not.
 5. Only after the exact candidate passes those gates, stage immutable Windows
    and Linux packages, exact-file validation receipts and sidecars, then hand the
    single reviewed publication set to the Epoch Site task. Do not alter the

@@ -123,6 +123,20 @@ export namespace epochengine::platform::child_process
             const EnvironmentVariable&, const EnvironmentVariable&) noexcept = default;
     };
 
+    // Explicit OS policy, distinct from environment hygiene or image hashing.
+    // Grants are disjoint directory trees below one host-owned generation.
+    // Windows uses a fresh capability-free LPAC; unsupported platforms reject
+    // the request rather than silently launching under the ordinary user token.
+    struct WorkspaceIsolation final
+    {
+        std::filesystem::path owned_root{};
+        std::vector<std::filesystem::path> read_only{};
+        std::vector<std::filesystem::path> writable{};
+
+        [[nodiscard]] friend bool operator==(
+            const WorkspaceIsolation&, const WorkspaceIsolation&) noexcept = default;
+    };
+
     struct LaunchRequest final
     {
         std::filesystem::path executable{};
@@ -142,6 +156,7 @@ export namespace epochengine::platform::child_process
         // Requires captured output. Use a fresh NUL stdin, never a duplicate
         // of the host's already-authorized input handle.
         bool disconnect_standard_input{};
+        std::optional<WorkspaceIsolation> isolation{};
     };
 
     struct LaunchResult final
@@ -180,6 +195,10 @@ export namespace epochengine::platform::child_process
         std::optional<ExecutableIdentity> verified_executable{};
         bool environment_replaced{};
         bool standard_input_disconnected{};
+        // Set only after inspecting the suspended child's actual token.
+        bool restricted_token_verified{};
+        // Includes removal of this launch's grants/profile after process exit.
+        bool isolation_retired{};
 
         [[nodiscard]] constexpr bool active() const noexcept
         {

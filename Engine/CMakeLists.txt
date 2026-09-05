@@ -297,6 +297,9 @@ if(BUILD_TESTING)
         epoch_apply_cxx_dialect(epoch_platform_child_process_contract)
         epoch_apply_warnings(epoch_platform_child_process_contract)
         epoch_apply_sanitizers(epoch_platform_child_process_contract)
+        if(WIN32)
+            target_link_libraries(epoch_platform_child_process_contract PRIVATE userenv advapi32 bcrypt ws2_32)
+        endif()
         add_test(
             NAME epoch_platform_child_process_contract
             COMMAND epoch_platform_child_process_contract
@@ -316,6 +319,25 @@ if(BUILD_TESTING)
         epoch_apply_sanitizers(epoch_editor_candidate_artifact_contract)
         add_test(NAME epoch_editor_candidate_artifact_contract
             COMMAND epoch_editor_candidate_artifact_contract)
+
+        # Filesystem transactions/materialization use synthetic fixtures only;
+        # keep this regression available without configuring renderer targets.
+        add_executable(epoch_ai_development_executor_contract
+            src/ai/ai.development_executor.cpp
+            src/ai/ai.development_executor_contract.cpp)
+        target_sources(epoch_ai_development_executor_contract PRIVATE
+            FILE_SET epoch_ai_development_executor_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.development_guard.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.development_executor.ixx)
+        epoch_apply_cxx_dialect(epoch_ai_development_executor_contract)
+        epoch_apply_warnings(epoch_ai_development_executor_contract)
+        epoch_apply_sanitizers(epoch_ai_development_executor_contract)
+        add_test(NAME epoch_ai_development_executor_contract
+            COMMAND epoch_ai_development_executor_contract)
     endif()
 endif()
 
@@ -2494,27 +2516,6 @@ if(BUILD_TESTING)
     )
 
 
-    add_executable(epoch_ai_development_executor_contract
-        src/ai/ai.development_executor.cpp
-        src/ai/ai.development_executor_contract.cpp
-    )
-    target_sources(epoch_ai_development_executor_contract PRIVATE
-        FILE_SET epoch_ai_development_executor_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_guard.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_executor.ixx
-    )
-    epoch_apply_cxx_dialect(epoch_ai_development_executor_contract)
-    epoch_apply_warnings(epoch_ai_development_executor_contract)
-    epoch_apply_sanitizers(epoch_ai_development_executor_contract)
-    add_test(
-        NAME epoch_ai_development_executor_contract
-        COMMAND epoch_ai_development_executor_contract
-    )
-
     add_executable(epoch_ai_development_proposal_codec_contract
         src/ai/ai.development_proposal_codec.cpp
         src/ai/ai.development_proposal_codec_contract.cpp
@@ -2596,6 +2597,9 @@ if(BUILD_TESTING)
     epoch_apply_cxx_dialect(epoch_script_compiler_contract)
     epoch_apply_warnings(epoch_script_compiler_contract)
     epoch_apply_sanitizers(epoch_script_compiler_contract)
+    if(WIN32)
+        target_link_libraries(epoch_script_compiler_contract PRIVATE userenv advapi32 bcrypt)
+    endif()
     add_test(
         NAME epoch_script_compiler_contract
         COMMAND epoch_script_compiler_contract ${CMAKE_CURRENT_BINARY_DIR}
@@ -2834,7 +2838,7 @@ target_compile_definitions(epoch PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(epoch PRIVATE comdlg32 ncrypt)
+    target_link_libraries(epoch PRIVATE comdlg32 ncrypt userenv advapi32 bcrypt)
 endif()
 
 if(WIN32 AND EPOCH_DIRECTX_ACTIVE)

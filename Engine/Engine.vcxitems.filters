@@ -1206,6 +1206,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.child_isolation.hpp">
+      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+    </ClInclude>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process.cpp">
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </ClCompile>

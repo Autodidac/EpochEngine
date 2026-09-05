@@ -21,7 +21,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#include <winsock2.h>
 #include <Windows.h>
+#include <aclapi.h>
+#include <sddl.h>
 #include <winioctl.h>
 #elif defined(__linux__)
 #include <cerrno>
@@ -175,6 +178,41 @@ namespace
         request.disconnect_standard_input = true;
         return child_process::launch_or_focus(request).code
             == child_process::LaunchCode::invalid_request;
+    }
+
+    [[nodiscard]] bool isolation_request_contract(const std::filesystem::path& self)
+    {
+        child_process::LaunchRequest request{};
+        request.executable = self;
+        request.correlation_key = "contract:invalid-isolation";
+        request.isolation.emplace();
+        const auto before = child_process::metrics().launches;
+        const auto rejected = child_process::launch_or_focus(request);
+        if (rejected.code != child_process::LaunchCode::invalid_request
+            || child_process::metrics().launches != before) return false;
+#if !defined(_WIN32)
+        return rejected.message.find("unsupported on this platform") != std::string::npos;
+#else
+        // No profile or permission changes: each malformed policy is refused
+        // by the pure request validator before native process preparation.
+        request.environment.emplace();
+        request.disconnect_standard_input = true;
+        request.merged_output_path = self.parent_path() / "never-created.log";
+        request.expected_executable = child_process::inspect_executable(self);
+        if (!request.expected_executable) return false;
+        for (unsigned variation = 0u; variation < 4u; ++variation)
+        {
+            request.isolation = child_process::WorkspaceIsolation{self.parent_path(),
+                {self.parent_path() / "code"}, {self.parent_path() / "scratch"}};
+            if (variation == 0u) request.isolation->owned_root = "relative";
+            if (variation == 1u) request.isolation->read_only.clear();
+            if (variation == 2u) request.isolation->writable.clear();
+            if (variation == 3u) request.isolation->writable.resize(17u, self.parent_path() / "scratch");
+            if (child_process::launch_or_focus(request).code != child_process::LaunchCode::invalid_request)
+                return false;
+        }
+        return child_process::metrics().launches == before;
+#endif
     }
 
     [[nodiscard]] bool create_fixture_directory_link(
@@ -701,6 +739,7 @@ namespace
             && (!natural || result.process->exit_code == 37)
             && parentWait == WAIT_OBJECT_0 && descendantWait == WAIT_OBJECT_0 && !groupActive;
         if (!success) return fail("Terminal retirement check failed: " + result.message
+            + "; process=" + (result.process ? result.process->message : "missing")
             + "; wait=" + std::string{child_process::wait_code_name(result.code)}
             + "; exit=" + (result.process ? std::to_string(result.process->exit_code) : "missing")
             + "; parent_wait=" + std::to_string(parentWait)
@@ -717,6 +756,252 @@ namespace
         if (!descendant_retirement_contract(self, "cancel")) return 62;
         if (!descendant_retirement_contract(self, "timeout")) return 63;
         if (!descendant_retirement_contract(self, "natural_churn")) return 64;
+        return 0;
+    }
+
+    // This opt-in probe launches only a copy of this console component, with
+    // literal synthetic fixtures. It never launches an editor, GPU context,
+    // model request, server/listener, or generated project.
+    [[nodiscard]] int run_isolation_child(char** argv)
+    {
+        const auto code = std::filesystem::path{argv[2]};
+        const auto scratch = std::filesystem::path{argv[3]};
+        const auto outside = std::filesystem::path{argv[4]};
+        const auto readable = [&](const std::filesystem::path& path)
+        {
+            ContractHandle file{::CreateFileW(path.c_str(), GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            if (!file.valid()) return false;
+            char bytes[64]{};
+            DWORD count{};
+            return ::ReadFile(file.value, bytes, sizeof(bytes), &count, nullptr) != FALSE
+                && std::string_view{bytes, count} == "immutable-input";
+        };
+        const auto denied = [&](const std::filesystem::path& path, DWORD access)
+        {
+            ContractHandle file{::CreateFileW(path.c_str(), access,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            return !file.valid() && ::GetLastError() == ERROR_ACCESS_DENIED;
+        };
+        if (!readable(code / "input.txt")) return 151;
+        if (!denied(code / "input.txt", GENERIC_WRITE)
+            || !denied(code / "input.txt", WRITE_DAC | WRITE_OWNER)) return 152;
+        if (!denied(outside, GENERIC_READ) || !denied(outside, GENERIC_WRITE)
+            || !denied(outside, WRITE_DAC | WRITE_OWNER)) return 153;
+        {
+            ContractHandle file{::CreateFileW((scratch / "result.txt").c_str(),
+                GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            DWORD written{};
+            constexpr std::string_view marker = "owned-scratch-only";
+            if (!file.valid() || ::WriteFile(file.value, marker.data(),
+                    static_cast<DWORD>(marker.size()), &written, nullptr) == FALSE
+                || written != marker.size()) return 154;
+        }
+        if (::CreateHardLinkW((scratch / "result-alias.txt").c_str(),
+                (scratch / "result.txt").c_str(), nullptr) == FALSE) return 158;
+        // Connect only to the already operator-approved local model endpoint;
+        // send no bytes. A refused/absent server is NOT network-policy proof.
+        WSADATA sockets{};
+        const int socketStartup = ::WSAStartup(MAKEWORD(2, 2), &sockets);
+        if (socketStartup != 0)
+        {
+            const std::string diagnostic = "file-access-checks=passed\nwinsock-startup-error="
+                + std::to_string(socketStartup) + "\nconnection-denial-check=not-exercised\n";
+            DWORD written{};
+            (void)::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), diagnostic.data(),
+                static_cast<DWORD>(diagnostic.size()), &written, nullptr);
+            return 155;
+        }
+        const SOCKET connection = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (connection == INVALID_SOCKET)
+        {
+            const int failure = ::WSAGetLastError();
+            (void)::WSACleanup();
+            return failure == WSAEACCES ? 0 : 156;
+        }
+        u_long nonblocking = 1u;
+        const bool modeReady = ::ioctlsocket(connection, FIONBIO, &nonblocking) == 0;
+        sockaddr_in endpoint{};
+        endpoint.sin_family = AF_INET;
+        endpoint.sin_port = ::htons(1234u);
+        endpoint.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
+        const int connected = modeReady
+            ? ::connect(connection, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)) : 0;
+        int failure = connected == SOCKET_ERROR ? ::WSAGetLastError() : 0;
+        if (failure == WSAEWOULDBLOCK)
+        {
+            fd_set writable{}, failed{};
+            FD_ZERO(&writable); FD_SET(connection, &writable);
+            FD_ZERO(&failed); FD_SET(connection, &failed);
+            timeval deadline{3, 0};
+            if (::select(0, nullptr, &writable, &failed, &deadline) > 0)
+            {
+                int size = sizeof(failure);
+                if (::getsockopt(connection, SOL_SOCKET, SO_ERROR,
+                        reinterpret_cast<char*>(&failure), &size) != 0)
+                    failure = ::WSAGetLastError();
+            }
+        }
+        (void)::closesocket(connection);
+        (void)::WSACleanup();
+        return failure == WSAEACCES ? 0 : 157;
+    }
+
+    [[nodiscard]] std::optional<std::wstring> file_dacl(const std::filesystem::path& path)
+    {
+        PSECURITY_DESCRIPTOR descriptor{};
+        PACL acl{};
+        if (::GetNamedSecurityInfoW(path.c_str(), SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION, nullptr, nullptr, &acl, nullptr, &descriptor) != ERROR_SUCCESS)
+            return std::nullopt;
+        LPWSTR encoded{};
+        const bool converted = ::ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor, SDDL_REVISION_1, DACL_SECURITY_INFORMATION, &encoded, nullptr) != FALSE;
+        std::optional<std::wstring> result{};
+        if (converted) result = encoded;
+        if (encoded) (void)::LocalFree(encoded);
+        if (descriptor) (void)::LocalFree(descriptor);
+        return result;
+    }
+
+    [[nodiscard]] int run_isolation_contract(const std::filesystem::path& self)
+    {
+        ExecutableIdentityFixture fixture{};
+        fixture.preserve_evidence = true;
+        if (!fixture.prepare("epoch-workspace-isolation-")) return 140;
+        const auto fail = [&](int code, const std::string& message)
+        {
+            (void)fixture.write("isolation.evidence.txt", message);
+            return code;
+        };
+        const auto root = fixture.root / "generation";
+        const auto code = root / "code";
+        const auto scratch = root / "scratch";
+        std::error_code error{};
+        std::filesystem::create_directories(code, error);
+        if (error) return fail(141, "Cannot create code fixture.");
+        std::filesystem::create_directory(scratch, error);
+        if (error) return fail(141, "Cannot create scratch fixture.");
+        const auto executable = code / "probe.exe";
+        std::filesystem::copy_file(self, executable, std::filesystem::copy_options::none, error);
+        if (error || !fixture.write("generation/code/input.txt", "immutable-input")
+            || !fixture.write("outside.txt", "host-private-fixture"))
+            return fail(141, "Cannot create synthetic files.");
+        const auto beforeCode = file_dacl(code);
+        const auto beforeInput = file_dacl(code / "input.txt");
+        const auto beforeScratch = file_dacl(scratch);
+        if (!beforeCode || !beforeInput || !beforeScratch) return fail(142, "Cannot inspect fixture ACLs.");
+        child_process::LaunchRequest request{};
+        request.executable = executable;
+        request.working_directory = scratch;
+        request.merged_output_path = fixture.root / "child.log";
+        request.arguments = {"--epoch-isolation-child", code.string(), scratch.string(),
+            (fixture.root / "outside.txt").string()};
+        request.window_mode = child_process::WindowMode::hidden;
+        request.correlation_key = "contract:workspace-isolation";
+        request.exclusive_group = request.correlation_key;
+        request.expected_executable = child_process::inspect_executable(executable);
+        request.environment = child_process::prepare_workspace_environment(scratch);
+        request.disconnect_standard_input = true;
+        request.isolation = child_process::WorkspaceIsolation{root, {code}, {scratch}};
+        if (!request.environment || !request.expected_executable) return fail(142, "Cannot prepare request.");
+        const auto refusedBeforeExecution = [&](std::string_view diagnostic)
+        {
+            const auto refused = child_process::launch_or_focus(request);
+            OwnedContractProcess owner{refused.handle};
+            const auto state = child_process::snapshot(refused.handle);
+            const bool released = child_process::release(refused.handle);
+            if (released) owner.handle = {};
+            return refused.code == child_process::LaunchCode::spawn_failed
+                && refused.message.find(diagnostic) != std::string::npos
+                && state && !state->active() && state->platform_process_id == 0u
+                && released && !child_process::active_in_group(request.exclusive_group)
+                && file_dacl(code) == beforeCode && file_dacl(code / "input.txt") == beforeInput
+                && file_dacl(scratch) == beforeScratch;
+        };
+        // Admission must discover a null descendant DACL before the first
+        // inheritable root grant can rewrite it. This canary is fixture-only.
+        const auto nullDaclPath = code / "null-dacl-canary.txt";
+        auto nullDaclName = nullDaclPath.wstring();
+        if (!fixture.write("generation/code/null-dacl-canary.txt", "synthetic-null-dacl")
+            || ::SetNamedSecurityInfoW(nullDaclName.data(), SE_FILE_OBJECT,
+                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
+            return fail(148, "Cannot prepare null-DACL admission canary.");
+        const auto nullDacl = file_dacl(nullDaclPath);
+        if (!nullDacl || !refusedBeforeExecution("absent or invalid DACL")
+            || file_dacl(nullDaclPath) != nullDacl)
+            return fail(148, "Null-DACL refusal changed permissions or reached execution.");
+        if (!std::filesystem::remove(nullDaclPath, error) || error)
+            return fail(148, "Cannot retire null-DACL canary.");
+
+        const auto outsideAlias = fixture.root / "outside-alias.txt";
+        if (::CreateHardLinkW(outsideAlias.c_str(), (code / "input.txt").c_str(), nullptr) == FALSE
+            || !refusedBeforeExecution("hard-linked"))
+            return fail(149, "Hardlinked admission was not refused before execution.");
+        if (!std::filesystem::remove(outsideAlias, error) || error)
+            return fail(149, "Cannot retire hardlink canary.");
+
+        const auto detour = fixture.root / "detour";
+        const auto junction = scratch / "redirected";
+        if (!std::filesystem::create_directory(detour, error) || error
+            || !create_fixture_directory_link(junction, detour)
+            || !refusedBeforeExecution("reparse"))
+            return fail(150, "Reparse admission was not refused before execution.");
+        if (!std::filesystem::remove(junction, error) || error)
+            return fail(150, "Cannot retire junction canary.");
+        const auto launch = child_process::launch_or_focus(request);
+        OwnedContractProcess owner{launch.handle};
+        if (!launch)
+        {
+            if (launch.handle.valid())
+            {
+                (void)child_process::wait(launch.handle, {}, 10'000'000'000ull);
+                (void)child_process::release(launch.handle);
+            }
+            return fail(143, "Restricted console launch failed: " + launch.message);
+        }
+        const auto result = child_process::wait(launch.handle, {}, 15'000'000'000ull);
+        const bool released = child_process::release(launch.handle);
+        if (released) owner.handle = {};
+        const auto read = [](const std::filesystem::path& path)
+        {
+            std::ifstream input{path, std::ios::binary};
+            return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+        };
+        // Record host-side preservation and retirement even when a later
+        // child subcheck fails. A Winsock initialization failure must not hide
+        // these independent results or be mistaken for connection denial.
+        const bool dataPreserved = read(scratch / "result.txt") == "owned-scratch-only"
+            && read(scratch / "result-alias.txt") == "owned-scratch-only"
+            && read(code / "input.txt") == "immutable-input"
+            && read(fixture.root / "outside.txt") == "host-private-fixture";
+        const bool daclRestored = file_dacl(code) == beforeCode
+            && file_dacl(code / "input.txt") == beforeInput
+            && file_dacl(scratch) == beforeScratch;
+        const bool groupRetired = !child_process::active_in_group(request.exclusive_group);
+        const bool tokenVerified = result.process && result.process->restricted_token_verified;
+        const bool isolationRetired = result.process && result.process->isolation_retired;
+        const bool childPassed = result && result.process && result.process->exit_code_valid
+            && result.process->exit_code == 0;
+        const std::string evidence = "process=" + result.message
+            + "\nnull_dacl_admission_refused=1\nhardlink_admission_refused=1\nreparse_admission_refused=1"
+            + "\nchild_exit=" + (result.process && result.process->exit_code_valid
+                ? std::to_string(result.process->exit_code) : "missing")
+            + "\nrestricted_token_verified=" + std::to_string(tokenVerified)
+            + "\nisolation_retired=" + std::to_string(isolationRetired)
+            + "\nhandle_released=" + std::to_string(released)
+            + "\ndata_preserved=" + std::to_string(dataPreserved)
+            + "\nprior_dacl_restored=" + std::to_string(daclRestored)
+            + "\nprocess_group_retired=" + std::to_string(groupRetired) + "\n";
+        if (!dataPreserved) return fail(145, evidence);
+        if (!daclRestored) return fail(146, evidence);
+        if (!groupRetired) return fail(147, evidence);
+        if (!childPassed || !tokenVerified || !isolationRetired || !released)
+            return fail(144, evidence);
+        fixture.preserve_evidence = false;
         return 0;
     }
 
@@ -912,8 +1197,10 @@ namespace
             return 90;
         const HANDLE forbidden = reinterpret_cast<HANDLE>(
             static_cast<std::uintptr_t>(std::stoull(sentinelText)));
-        if (::SetEvent(forbidden) != FALSE)
-            return 91;
+        // Handle values are process-relative and may be reused by child
+        // startup. The parent checks its actual event object after exit;
+        // signalling a different child-local event is not an inherited leak.
+        (void)::SetEvent(forbidden);
 
         std::string input(capture_input.size(), '\0');
         DWORD received{};
@@ -966,7 +1253,9 @@ namespace
 
         const HANDLE forbidden = reinterpret_cast<HANDLE>(
             static_cast<std::uintptr_t>(std::stoull(sentinelText)));
-        if (::SetEvent(forbidden) != FALSE) return 107;
+        // Only the parent's sentinel state proves object inheritance. A
+        // successful call on a recycled child-local handle is not that proof.
+        (void)::SetEvent(forbidden);
         const HANDLE input = ::GetStdHandle(STD_INPUT_HANDLE);
         char byte{};
         DWORD received{};
@@ -984,8 +1273,18 @@ namespace
     }
 
     [[nodiscard]] bool execution_input_contract(
-        const std::filesystem::path& self, const ExecutableIdentityFixture& fixture)
+        const std::filesystem::path& self, ExecutableIdentityFixture& fixture)
     {
+        const auto fail = [&](std::string detail)
+        {
+            fixture.preserve_evidence = true;
+            detail = "execution-input: " + detail + "\n";
+            (void)fixture.write("execution-input.evidence.txt", detail);
+            DWORD written{};
+            (void)::WriteFile(::GetStdHandle(STD_ERROR_HANDLE), detail.data(),
+                static_cast<DWORD>(detail.size()), &written, nullptr);
+            return false;
+        };
         child_process::LaunchRequest held{};
         held.executable = self;
         held.working_directory = fixture.root;
@@ -997,11 +1296,11 @@ namespace
         held.environment = std::vector<child_process::EnvironmentVariable>{
             {"FIRST", "one"}, {"SECOND", "two"}};
         const auto live = child_process::launch_or_focus(held);
-        if (live.code != child_process::LaunchCode::started) return false;
+        if (live.code != child_process::LaunchCode::started) return fail("binding launch: " + live.message);
         const auto duplicate = child_process::launch_or_focus(held);
         bool bindingsValid = duplicate.code == child_process::LaunchCode::focused_existing
             && duplicate.handle == live.handle;
-        for (unsigned change = 0u; change < 5u; ++change)
+        for (unsigned change = 0u; change < 11u; ++change)
         {
             auto different = held;
             if (change == 0u) different.environment->front().value = "changed";
@@ -1009,7 +1308,13 @@ namespace
             else if (change == 2u)
                 std::swap(different.environment->front(), different.environment->back());
             else if (change == 3u) different.environment.reset();
-            else different.disconnect_standard_input = false;
+            else if (change == 4u) different.disconnect_standard_input = false;
+            else if (change == 5u) different.arguments.back() = "1";
+            else if (change == 6u) different.working_directory = self.parent_path();
+            else if (change == 7u) different.merged_output_path = fixture.root / "different.log";
+            else if (change == 8u) different.append_output = true;
+            else if (change == 9u) different.window_mode = child_process::WindowMode::normal;
+            else different.exclusive_group = "contract:other-group";
             const auto refused = child_process::launch_or_focus(different);
             bindingsValid = bindingsValid
                 && refused.code == child_process::LaunchCode::invalid_request
@@ -1021,12 +1326,13 @@ namespace
             live.handle, cancellation.get_token(), 5'000'000'000ull);
         if (!child_process::release(live.handle) || !bindingsValid
             || stopped.code != child_process::WaitCode::cancelled)
-            return false;
+            return fail("binding/cancel: bindings=" + std::to_string(bindingsValid)
+                + " wait=" + std::string{child_process::wait_code_name(stopped.code)} + " " + stopped.message);
 
         for (const std::string mode : {"replaced", "empty"})
         {
             CaptureInheritanceFixture capture{};
-            if (!capture.prepare()) return false;
+            if (!capture.prepare()) return fail(mode + ": capture preparation");
             child_process::LaunchRequest request{};
             request.executable = self;
             request.working_directory = fixture.root;
@@ -1045,7 +1351,7 @@ namespace
             }
             const auto launched = child_process::launch_or_focus(request);
             capture.restore_input();
-            if (launched.code != child_process::LaunchCode::started) return false;
+            if (launched.code != child_process::LaunchCode::started) return fail(mode + ": " + launched.message);
             const auto result = child_process::wait(launched.handle, {}, 5'000'000'000ull);
             const bool success = result && result.process
                 && result.process->exit_code_valid && result.process->exit_code == 27
@@ -1053,17 +1359,22 @@ namespace
                 && result.process->standard_input_disconnected;
             if (!success)
                 (void)child_process::stop(launched.handle, child_process::StopMode::force);
-            if (!child_process::release(launched.handle) || !success) return false;
+            if (!child_process::release(launched.handle) || !success)
+                return fail(mode + ": completion=" + result.message + " exit="
+                    + (result.process && result.process->exit_code_valid
+                        ? std::to_string(result.process->exit_code) : "unknown")
+                    + " host_sentinel_wait=" + std::to_string(::WaitForSingleObject(capture.sentinel, 0u)));
             DWORD available{};
             if (::PeekNamedPipe(capture.input_read, nullptr, 0u, nullptr,
                     &available, nullptr) == FALSE
                 || available != capture_input.size()
                 || ::WaitForSingleObject(capture.sentinel, 0u) != WAIT_TIMEOUT)
-                return false;
+                return fail(mode + ": host sentinel/input changed; available=" + std::to_string(available));
             std::ifstream output{request.merged_output_path, std::ios::binary};
             const std::string bytes{std::istreambuf_iterator<char>{output},
                 std::istreambuf_iterator<char>{}};
-            if (bytes != "epoch-private-input-contract-passed\n") return false;
+            if (bytes != "epoch-private-input-contract-passed\n")
+                return fail(mode + ": captured marker differs; bytes=" + std::to_string(bytes.size()));
         }
         return true;
     }
@@ -1271,7 +1582,7 @@ int wmain(int argc, wchar_t** argv)
 }
 #endif
 
-int main(int argc, char** argv)
+static int run_contract_entry(int argc, char** argv)
 {
     namespace child_process = epochengine::platform::child_process;
 
@@ -1291,6 +1602,17 @@ int main(int argc, char** argv)
     }
 
 #if defined(_WIN32)
+    if (argc == 2 && std::string_view{argv[1]} == "--epoch-input-contract-only")
+    {
+        ExecutableIdentityFixture fixture{};
+        PrivateEnvironmentFixture environment{};
+        if (!fixture.prepare("epoch-execution-input-") || !environment.prepare()) return 26;
+        return execution_input_contract(std::filesystem::absolute(argv[0]), fixture) ? 0 : 27;
+    }
+    if (argc == 2 && std::string_view{argv[1]} == "--epoch-isolation-contract-only")
+        return run_isolation_contract(std::filesystem::absolute(argv[0]));
+    if (argc == 5 && std::string_view{argv[1]} == "--epoch-isolation-child")
+        return run_isolation_child(argv);
     if (argc == 2 && std::string_view{argv[1]} == "--epoch-retirement-contract-only")
         return run_retirement_contracts(std::filesystem::absolute(argv[0]));
     if ((argc == 3 || (argc == 4 && std::string_view{argv[3]} == "churn"))
@@ -1330,6 +1652,8 @@ int main(int argc, char** argv)
     const std::filesystem::path self = std::filesystem::absolute(argv[0]);
     if (!environment_validation_contract(self))
         return 24;
+    if (!isolation_request_contract(self))
+        return 25;
     ExecutableIdentityFixture identityFixture{};
     if (!inspect_identity_contract(identityFixture))
         return 18;
@@ -1530,5 +1854,32 @@ int main(int argc, char** argv)
         return retirement;
 #endif
     return 0;
+}
+
+int main(int argc, char** argv)
+{
+    const int result = run_contract_entry(argc, argv);
+    // Preserve the exact failing checkpoint in CTest output. Child fixtures
+    // deliberately return nonzero sentinels and must keep their capture bytes.
+    if (result != 0 && (argc == 1 || (argc == 2
+            && (std::string_view{argv[1]} == "--epoch-input-contract-only"
+                || std::string_view{argv[1]} == "--epoch-retirement-contract-only"))))
+    {
+        namespace child_process = epochengine::platform::child_process;
+        std::string diagnostic = "platform.child_process contract exit=" + std::to_string(result) + "\n";
+        for (const auto& process : child_process::snapshots())
+            diagnostic += process.correlation_key + " | "
+                + std::string{child_process::process_state_name(process.state)}
+                + " | exit=" + (process.exit_code_valid ? std::to_string(process.exit_code) : "unknown")
+                + " | " + process.message + "\n";
+#if defined(_WIN32)
+        DWORD written{};
+        (void)::WriteFile(::GetStdHandle(STD_ERROR_HANDLE), diagnostic.data(),
+            static_cast<DWORD>(diagnostic.size()), &written, nullptr);
+#elif defined(__linux__)
+        (void)::write(STDERR_FILENO, diagnostic.data(), diagnostic.size());
+#endif
+    }
+    return result;
 }
 #endif

@@ -70,6 +70,26 @@ namespace epochengine::ai::development_executor
 #endif
         }
 
+        [[nodiscard]] bool owned_runtime_workspace_path(const fs::path& relative)
+        {
+            // core.path owns this checkout-local runtime workspace. It can
+            // contain conversation/tool traces and staged research, not source
+            // inputs. Apply the exclusion here to initial copies, repairs and
+            // chosen-parent succession alike, even without caller exclusions.
+            // An unrelated source component named "workspace" remains valid.
+            constexpr std::string_view components[]{
+                "Engine", "examples", "EpochEditor", "workspace"};
+            auto component = relative.begin();
+            for (const auto expected : components)
+            {
+                if (component == relative.end()
+                    || !same_path_identity(component->generic_string(), expected))
+                    return false;
+                ++component;
+            }
+            return true;
+        }
+
         [[nodiscard]] bool valid_limits(
             const TransactionLimits& limits) noexcept
         {
@@ -1178,6 +1198,8 @@ namespace epochengine::ai::development_executor
 
             const auto excluded_path = [&](const fs::path& relative)
             {
+                if (owned_runtime_workspace_path(relative))
+                    return true;
                 for (const fs::path& component : relative)
                 {
                     const std::string text = component.generic_string();

@@ -521,6 +521,105 @@ namespace epochengine::ai::development_executor
                 && read(source / "Engine/src/ai/ai.worker.cpp")
                     == implementation;
         }
+
+        [[nodiscard]] bool runtime_workspace_exclusion_contract()
+        {
+            TemporaryWorkspace fixture{};
+            if (fixture.root.empty()) return false;
+            const auto source = fixture.root / "runtime-source";
+            const auto candidate = fixture.root / "runtime-candidate";
+            const auto repair = fixture.root / "runtime-repair";
+            const auto successor = fixture.root / "runtime-successor";
+            const auto refused = fixture.root / "runtime-refused";
+            const fs::path runtime{"Engine/examples/EpochEditor/workspace"};
+            const fs::path implementationPath{"Engine/src/ai.worker.cpp"};
+            const fs::path legitimatePath{"Engine/src/workspace/core.document.cpp"};
+            const fs::path nearPath{
+                "Engine/examples/EpochEditor/workspace_sources/core.document.cpp"};
+            std::error_code error{};
+            for (const auto& directory : {source / runtime,
+                    source / legitimatePath.parent_path(), source / nearPath.parent_path(),
+                    candidate, repair, successor, refused})
+            {
+                fs::create_directories(directory, error);
+                if (error) return false;
+            }
+            constexpr std::string_view solution{"runtime-exclusion-solution"};
+            constexpr std::string_view implementation{"source-before-choice"};
+            constexpr std::string_view chosen{"source-after-choice"};
+            constexpr std::string_view legitimate{"legitimate-workspace-source"};
+            constexpr std::string_view nearby{"legitimate-prefix-neighbor"};
+            // Synthetic fixture bytes only; no real conversation is inspected.
+            constexpr std::string_view conversation{"synthetic-conversation-canary"};
+            constexpr std::string_view trace{"synthetic-tool-trace-canary"};
+            if (!write(source / "Engine.sln", solution)
+                || !write(source / implementationPath, implementation)
+                || !write(source / legitimatePath, legitimate)
+                || !write(source / nearPath, nearby)
+                || !write(source / runtime / "model_exchange.jsonl", conversation)
+                || !write(source / runtime / "tool_trace.jsonl", trace))
+                return false;
+
+            const SourceWorkspaceMaterializer materializer{};
+            WorkspaceRequest request{
+                .source_root = source.generic_string(),
+                .workspace_root = candidate.generic_string(),
+                .include_paths = {"Engine.sln", "Engine"}};
+            const auto verify = [&](const WorkspaceResult& result, const fs::path& root,
+                                    std::string_view expectedImplementation)
+            {
+                error.clear();
+                return result && result.file_count == 4u
+                    && result.total_bytes == solution.size() + expectedImplementation.size()
+                        + legitimate.size() + nearby.size()
+                    && result.evidence_digest == digest(result.evidence_manifest)
+                    && result.evidence_manifest.find(runtime.generic_string() + "/")
+                        == std::string::npos
+                    && result.evidence_manifest.find(conversation) == std::string::npos
+                    && result.evidence_manifest.find(trace) == std::string::npos
+                    && read(root / "Engine.sln") == solution
+                    && read(root / implementationPath) == expectedImplementation
+                    && read(root / legitimatePath) == legitimate
+                    && read(root / nearPath) == nearby
+                    && !fs::exists(root / runtime, error) && !error;
+            };
+            if (!verify(materializer.materialize(request), candidate, implementation))
+                return false;
+            // Repair uses a fresh destination but the same production copier.
+            request.workspace_root = repair.generic_string();
+            if (!verify(materializer.materialize(request), repair, implementation))
+                return false;
+
+            // Explicitly naming a runtime file cannot bypass the owned exclusion.
+            auto direct = request;
+            direct.workspace_root = refused.generic_string();
+            direct.include_paths = {(runtime / "model_exchange.jsonl").generic_string()};
+            if (materializer.materialize(direct).code != WorkspaceCode::invalid_request
+                || !fs::is_empty(refused, error) || error)
+                return false;
+#if defined(_WIN32)
+            direct.include_paths = {
+                "Engine/Examples/EPOCHEDITOR/WORKSPACE/tool_trace.jsonl"};
+            if (materializer.materialize(direct).code != WorkspaceCode::invalid_request)
+                return false;
+#endif
+
+            // A chosen preview may write its own runtime conversation. The next
+            // generation keeps the selected source change, never that activity.
+            fs::create_directories(candidate / runtime, error);
+            if (error || !write(candidate / implementationPath, chosen)
+                || !write(candidate / runtime / "model_exchange.jsonl", conversation)
+                || !write(candidate / runtime / "tool_trace.jsonl", trace))
+                return false;
+            request.source_root = candidate.generic_string();
+            request.workspace_root = successor.generic_string();
+            return verify(materializer.materialize(request), successor, chosen)
+                && read(source / implementationPath) == implementation
+                && read(source / runtime / "model_exchange.jsonl") == conversation
+                && read(source / runtime / "tool_trace.jsonl") == trace
+                && read(candidate / runtime / "model_exchange.jsonl") == conversation
+                && read(candidate / runtime / "tool_trace.jsonl") == trace;
+        }
     }
 
     [[nodiscard]] int contract_failure_code()
@@ -531,6 +630,7 @@ namespace epochengine::ai::development_executor
         if (!stale_preimage_contract()) return 4;
         if (!malformed_request_contract()) return 5;
         if (!workspace_materializer_contract()) return 6;
+        if (!runtime_workspace_exclusion_contract()) return 7;
         return 0;
     }
 
@@ -540,7 +640,7 @@ namespace epochengine::ai::development_executor
     }
 }
 
-int main()
+extern "C++" int main()
 {
     return epochengine::ai::development_executor::contract_failure_code();
 }

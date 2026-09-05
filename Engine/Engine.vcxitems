@@ -16,7 +16,7 @@
       <ForcedIncludeFiles>compare;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);ncrypt.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);ncrypt.lib;userenv.lib;advapi32.lib;bcrypt.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseSfml)'=='true' And '$(VcpkgUseStatic)'!='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseDirectX)'=='true'">%(AdditionalDependencies);d3d11.lib;dxgi.lib;d3dcompiler.lib</AdditionalDependencies>
@@ -54,6 +54,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.api_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.common.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform.framework.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.child_isolation.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.main.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\context.passive_scoring.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core.context_backends.hpp" />

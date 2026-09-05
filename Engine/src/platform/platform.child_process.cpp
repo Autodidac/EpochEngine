@@ -9,6 +9,7 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
@@ -26,6 +27,7 @@ module;
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include "platform.child_isolation.hpp"
 #else
 #include <cerrno>
 #include <csignal>
@@ -254,12 +256,21 @@ namespace epochengine::platform::child_process
         struct ProcessSlot final
         {
             bool occupied{};
+            bool active_counted{};
+            bool failed_launch{};
             std::uint32_t generation{};
             ProcessState state{ProcessState::idle};
             std::filesystem::path executable{};
             std::optional<ExecutableIdentity> verified_executable{};
             std::optional<std::vector<EnvironmentVariable>> environment{};
             bool disconnect_standard_input{};
+            std::optional<WorkspaceIsolation> isolation{};
+            std::vector<std::string> arguments{};
+            std::filesystem::path requested_working_directory{};
+            std::filesystem::path requested_output_path{};
+            bool append_output{};
+            bool restricted_token_verified{};
+            bool isolation_retired{};
             std::string correlation_key{};
             std::string exclusive_group{};
             std::string display_name{};
@@ -275,9 +286,15 @@ namespace epochengine::platform::child_process
             HANDLE process{};
             HANDLE job{};
             DWORD process_id{};
+            bool job_assigned{};
             bool job_retirement_requested{};
             DWORD retirement_observation_error{};
+            DWORD retirement_query_assigned{};
+            DWORD retirement_query_returned{};
+            DWORD retirement_query_native_error{};
             std::vector<RetirementMember> retirement_members{};
+            std::unique_ptr<native_isolation::Lease> isolation_lease{};
+            bool isolation_cleanup_pending{};
             // Discovery is top-level only, but an admitted preview may later
             // become a child window. Retain and revalidate native identity;
             // the context host separately owns its attachment/property lease.
@@ -382,8 +399,9 @@ namespace epochengine::platform::child_process
             bool exitCodeValid,
             std::string message)
         {
-            if (active(slot.state) && value.metrics.active_processes > 0u)
+            if (slot.active_counted && value.metrics.active_processes > 0u)
                 --value.metrics.active_processes;
+            slot.active_counted = false;
             slot.state = terminal;
             slot.finished_tick_ns = now_ns();
             slot.exit_code = exitCode;
@@ -431,14 +449,38 @@ namespace epochengine::platform::child_process
             {
                 const auto queryMembers = [&slot](ProcessIdBuffer& result) -> DWORD
                 {
-                    if (::QueryInformationJobObject(slot.job, JobObjectBasicProcessIdList,
-                            &result, static_cast<DWORD>(sizeof(result)), nullptr) == FALSE)
-                        return ::GetLastError();
-                    if (result.assigned > result.ids.size()
-                        || result.count > result.ids.size()
-                        || result.count != result.assigned)
-                        return ERROR_MORE_DATA;
-                    return ERROR_SUCCESS;
+                    // Membership can change during the native enumeration.
+                    // Retry a short/incomplete list before recording an
+                    // irreversible observation failure; never consume partial
+                    // IDs or clear a previously failed retirement observation.
+                    for (unsigned retry = 0u; retry != 3u; ++retry)
+                    {
+                        // Yield between retries: a successful native call was
+                        // observed reporting assigned=21/returned=20 while
+                        // terminated members were still leaving the job. Three
+                        // immediate queries can all see that same transition.
+                        if (retry != 0u)
+                            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+                        result = {};
+                        const BOOL queried = ::QueryInformationJobObject(slot.job,
+                            JobObjectBasicProcessIdList, &result,
+                            static_cast<DWORD>(sizeof(result)), nullptr);
+                        const DWORD failure = queried ? ERROR_SUCCESS : ::GetLastError();
+                        if (failure != ERROR_SUCCESS || result.count != result.assigned
+                            || result.assigned > result.ids.size())
+                        {
+                            slot.retirement_query_assigned = result.assigned;
+                            slot.retirement_query_returned = result.count;
+                            slot.retirement_query_native_error = failure;
+                        }
+                        if (failure != ERROR_SUCCESS && failure != ERROR_MORE_DATA)
+                            return failure;
+                        if (result.assigned > result.ids.size() || result.count > result.ids.size())
+                            return ERROR_MORE_DATA;
+                        if (failure == ERROR_SUCCESS && result.count == result.assigned)
+                            return ERROR_SUCCESS;
+                    }
+                    return ERROR_MORE_DATA;
                 };
                 ProcessIdBuffer members{};
                 if (const DWORD queried = queryMembers(members); queried != ERROR_SUCCESS)
@@ -522,6 +564,12 @@ namespace epochengine::platform::child_process
 
         [[nodiscard]] DWORD request_job_retirement(ProcessSlot& slot) noexcept
         {
+            // A failed job assignment leaves an owned, never-resumed root PID,
+            // not a member of our job. Stopping the empty job cannot retire it.
+            if (!slot.job_assigned)
+                return slot.process == nullptr ? ERROR_INVALID_HANDLE
+                    : (::TerminateProcess(slot.process, 1u) != FALSE
+                        ? ERROR_SUCCESS : ::GetLastError());
             const DWORD observed = observe_retirement_members(slot);
             if (observed != ERROR_SUCCESS && slot.retirement_observation_error == ERROR_SUCCESS)
                 slot.retirement_observation_error = observed;
@@ -536,6 +584,23 @@ namespace epochengine::platform::child_process
             slot.job_retirement_requested = slot.job != nullptr;
             return ERROR_SUCCESS;
         }
+
+        struct ScopedNativeHandle final
+        {
+            HANDLE value{};
+            explicit ScopedNativeHandle(HANDLE handle) noexcept : value(handle) {}
+            ScopedNativeHandle(const ScopedNativeHandle&) = delete;
+            ScopedNativeHandle& operator=(const ScopedNativeHandle&) = delete;
+            ~ScopedNativeHandle() noexcept
+            {
+                if (value != nullptr && value != INVALID_HANDLE_VALUE)
+                    (void)::CloseHandle(value);
+            }
+            [[nodiscard]] HANDLE release() noexcept
+            {
+                return std::exchange(value, nullptr);
+            }
+        };
 
         struct CapturedStartupResources final
         {
@@ -739,6 +804,13 @@ namespace epochengine::platform::child_process
             const LaunchRequest& request,
             std::string& error)
         {
+            if (request.isolation)
+            {
+                slot.isolation_lease = std::make_unique<native_isolation::Lease>();
+                if (!slot.isolation_lease->prepare(request.isolation->owned_root,
+                        request.isolation->read_only, request.isolation->writable, error))
+                    return false;
+            }
             // A non-null, separately owned block replaces the environment;
             // never set/unset the host process environment to prepare a child.
             std::vector<wchar_t> environmentBlock{};
@@ -789,8 +861,8 @@ namespace epochengine::platform::child_process
                 commandLine += quote_windows_argument(argument);
             }
 
-            HANDLE job = ::CreateJobObjectW(nullptr, nullptr);
-            if (job == nullptr)
+            ScopedNativeHandle job{::CreateJobObjectW(nullptr, nullptr)};
+            if (job.value == nullptr)
             {
                 error = "CreateJobObjectW failed with error "
                     + std::to_string(static_cast<unsigned long>(::GetLastError()))
@@ -801,13 +873,12 @@ namespace epochengine::platform::child_process
             limits.BasicLimitInformation.LimitFlags =
                 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
             if (::SetInformationJobObject(
-                    job,
+                    job.value,
                     JobObjectExtendedLimitInformation,
                     &limits,
                     sizeof(limits)) == FALSE)
             {
                 const DWORD failure = ::GetLastError();
-                ::CloseHandle(job);
                 error = "SetInformationJobObject failed with error "
                     + std::to_string(static_cast<unsigned long>(failure)) + ".";
                 return false;
@@ -820,6 +891,8 @@ namespace epochengine::platform::child_process
                 ? SW_HIDE
                 : SW_SHOWNORMAL;
             CapturedStartupResources captured{};
+            const DWORD attributeCount = request.isolation ? 3u : 1u;
+            DWORD applicationPackagesPolicy = PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT;
             std::array<HANDLE, 2u> inheritedHandles{};
             if (!request.merged_output_path.empty())
             {
@@ -837,7 +910,6 @@ namespace epochengine::platform::child_process
                 if (captured.output == INVALID_HANDLE_VALUE)
                 {
                     const DWORD failure = ::GetLastError();
-                    ::CloseHandle(job);
                     error = "Output capture could not be opened: Win32 error "
                         + std::to_string(static_cast<unsigned long>(failure)) + ".";
                     return false;
@@ -848,7 +920,6 @@ namespace epochengine::platform::child_process
                     if (::SetFilePointerEx(captured.output, end, nullptr, FILE_END) == FALSE)
                     {
                         const DWORD failure = ::GetLastError();
-                        ::CloseHandle(job);
                         error = "Output capture could not seek to the end: Win32 error "
                             + std::to_string(static_cast<unsigned long>(failure)) + ".";
                         return false;
@@ -873,7 +944,6 @@ namespace epochengine::platform::child_process
                     || captured.input == nullptr)
                 {
                     const DWORD failure = ::GetLastError();
-                    ::CloseHandle(job);
                     error = "Captured process stdin could not be prepared: Win32 error "
                         + std::to_string(static_cast<unsigned long>(failure)) + ".";
                     return false;
@@ -881,12 +951,11 @@ namespace epochengine::platform::child_process
 
                 SIZE_T attributeBytes{};
                 const BOOL measured = ::InitializeProcThreadAttributeList(
-                    nullptr, 1u, 0u, &attributeBytes);
+                    nullptr, attributeCount, 0u, &attributeBytes);
                 const DWORD measureFailure = ::GetLastError();
                 if (measured != FALSE || attributeBytes == 0u
                     || measureFailure != ERROR_INSUFFICIENT_BUFFER)
                 {
-                    ::CloseHandle(job);
                     error = "Captured process handle list could not be sized: Win32 error "
                         + std::to_string(static_cast<unsigned long>(measureFailure)) + ".";
                     return false;
@@ -895,15 +964,13 @@ namespace epochengine::platform::child_process
                     ::HeapAlloc(::GetProcessHeap(), 0u, attributeBytes));
                 if (captured.attributes == nullptr)
                 {
-                    ::CloseHandle(job);
                     error = "Captured process handle list allocation failed.";
                     return false;
                 }
                 if (::InitializeProcThreadAttributeList(
-                        captured.attributes, 1u, 0u, &attributeBytes) == FALSE)
+                        captured.attributes, attributeCount, 0u, &attributeBytes) == FALSE)
                 {
                     const DWORD failure = ::GetLastError();
-                    ::CloseHandle(job);
                     error = "Captured process handle list initialization failed: Win32 error "
                         + std::to_string(static_cast<unsigned long>(failure)) + ".";
                     return false;
@@ -916,7 +983,6 @@ namespace epochengine::platform::child_process
                         nullptr, nullptr) == FALSE)
                 {
                     const DWORD failure = ::GetLastError();
-                    ::CloseHandle(job);
                     error = "Captured process handle allowlist failed: Win32 error "
                         + std::to_string(static_cast<unsigned long>(failure)) + ".";
                     return false;
@@ -929,6 +995,21 @@ namespace epochengine::platform::child_process
                 startup.StartupInfo.hStdOutput = captured.output;
                 startup.StartupInfo.hStdError = captured.output;
                 startup.lpAttributeList = captured.attributes;
+                if (slot.isolation_lease
+                    && (::UpdateProcThreadAttribute(captured.attributes, 0u,
+                            PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES,
+                            slot.isolation_lease->capabilities(), sizeof(SECURITY_CAPABILITIES),
+                            nullptr, nullptr) == FALSE
+                        || ::UpdateProcThreadAttribute(captured.attributes, 0u,
+                            PROC_THREAD_ATTRIBUTE_ALL_APPLICATION_PACKAGES_POLICY,
+                            &applicationPackagesPolicy, sizeof(applicationPackagesPolicy),
+                            nullptr, nullptr) == FALSE))
+                {
+                    const DWORD failure = ::GetLastError();
+                    error = "Restricted process attributes failed: Win32 "
+                        + std::to_string(failure) + ".";
+                    return false;
+                }
             }
             PROCESS_INFORMATION process{};
             DWORD flags = CREATE_SUSPENDED;
@@ -943,7 +1024,7 @@ namespace epochengine::platform::child_process
                 commandLine.data(),
                 nullptr,
                 nullptr,
-                captured.attributes_initialized,
+                !request.merged_output_path.empty(),
                 flags,
                 request.environment ? environmentBlock.data() : nullptr,
                 working.empty() ? nullptr : working.c_str(),
@@ -952,39 +1033,36 @@ namespace epochengine::platform::child_process
             if (created == FALSE)
             {
                 const DWORD failure = ::GetLastError();
-                ::CloseHandle(job);
                 error = "CreateProcessW failed with error "
                     + std::to_string(static_cast<unsigned long>(failure)) + ".";
                 return false;
             }
 
-            if (::AssignProcessToJobObject(job, process.hProcess) == FALSE)
+            // Publish native ownership before any verification or diagnostic
+            // can allocate. The reservation failure path stops this exact PID
+            // and retains its lease until native retirement is observed.
+            ScopedNativeHandle initialThread{process.hThread};
+            slot.process = process.hProcess;
+            slot.job = job.release();
+            slot.process_id = process.dwProcessId;
+            if (::AssignProcessToJobObject(slot.job, slot.process) == FALSE)
             {
                 const DWORD failure = ::GetLastError();
-                (void)::TerminateProcess(process.hProcess, 1u);
-                ::CloseHandle(process.hThread);
-                ::CloseHandle(process.hProcess);
-                ::CloseHandle(job);
                 error = "AssignProcessToJobObject failed with error "
                     + std::to_string(static_cast<unsigned long>(failure)) + ".";
                 return false;
             }
-            if (::ResumeThread(process.hThread) == static_cast<DWORD>(-1))
+            slot.job_assigned = true;
+            if (slot.isolation_lease && !slot.isolation_lease->verify(slot.process, error))
+                return false;
+            slot.restricted_token_verified = slot.isolation_lease != nullptr;
+            if (::ResumeThread(initialThread.value) == static_cast<DWORD>(-1))
             {
                 const DWORD failure = ::GetLastError();
-                (void)::TerminateJobObject(job, 1u);
-                ::CloseHandle(process.hThread);
-                ::CloseHandle(process.hProcess);
-                ::CloseHandle(job);
                 error = "ResumeThread failed with error "
                     + std::to_string(static_cast<unsigned long>(failure)) + ".";
                 return false;
             }
-
-            ::CloseHandle(process.hThread);
-            slot.process = process.hProcess;
-            slot.job = job;
-            slot.process_id = process.dwProcessId;
             if (request.window_mode == WindowMode::normal)
             {
                 (void)::AllowSetForegroundWindow(process.dwProcessId);
@@ -1223,6 +1301,86 @@ namespace epochengine::platform::child_process
         }
 #endif
 
+        void count_active_slot(SupervisorStorage& value, ProcessSlot& slot) noexcept
+        {
+            if (slot.active_counted) return;
+            slot.active_counted = true;
+            ++value.metrics.active_processes;
+            value.metrics.peak_active_processes = (std::max)(
+                value.metrics.peak_active_processes, value.metrics.active_processes);
+        }
+
+        // Called while the supervisor lock is still held, including stack
+        // unwinding. Losing a diagnostic allocation must not lose native or
+        // security-grant ownership, nor make an unsettled slot reusable.
+        void fail_reserved_launch(SupervisorStorage& value, ProcessSlot& slot) noexcept
+        {
+            if (!slot.failed_launch) ++value.metrics.launch_failures;
+            slot.failed_launch = true;
+            slot.state = ProcessState::failed;
+            slot.focus_pending = false;
+            slot.focus_deadline_ns = 0u;
+#if defined(_WIN32)
+            if (slot.process != nullptr || slot.isolation_lease)
+            {
+                slot.state = ProcessState::stop_requested;
+                count_active_slot(value, slot);
+                if (slot.process != nullptr)
+                {
+                    (void)request_job_retirement(slot);
+                }
+                else
+                {
+                    slot.isolation_cleanup_pending = true;
+                    try
+                    {
+                        std::string cleanupError{};
+                        if (slot.isolation_lease->retire(cleanupError))
+                        {
+                            slot.isolation_retired = true;
+                            slot.isolation_lease.reset();
+                            slot.isolation_cleanup_pending = false;
+                            slot.state = ProcessState::failed;
+                        }
+                        else if (!cleanupError.empty())
+                            slot.message += " Restricted cleanup retained: " + cleanupError;
+                    }
+                    catch (...) { /* The pending lease remains owned. */ }
+                }
+            }
+#else
+            if (slot.process_id > 0)
+            {
+                slot.state = ProcessState::stop_requested;
+                count_active_slot(value, slot);
+                (void)::kill(-slot.process_id, SIGKILL);
+                (void)::kill(slot.process_id, SIGKILL);
+            }
+#endif
+            if (!active(slot.state))
+            {
+                if (slot.active_counted && value.metrics.active_processes > 0u)
+                    --value.metrics.active_processes;
+                slot.active_counted = false;
+                slot.finished_tick_ns = now_ns();
+            }
+            revise(value);
+        }
+
+        struct LaunchReservation final
+        {
+            SupervisorStorage& value;
+            ProcessSlot& slot;
+            bool armed{true};
+            ~LaunchReservation() noexcept
+            {
+                if (!armed || !active(slot.state)) return;
+                try { slot.message = "Process launch failed during host preparation."; }
+                catch (...) {}
+                fail_reserved_launch(value, slot);
+            }
+        };
+
         void poll_locked(SupervisorStorage& value)
         {
             const std::uint64_t tick = now_ns();
@@ -1241,6 +1399,20 @@ namespace epochengine::platform::child_process
                     slot.message = std::move(message);
                     if (changed) revise(value);
                 };
+                if (slot.isolation_cleanup_pending && slot.process == nullptr)
+                {
+                    std::string cleanupError{};
+                    if (!slot.isolation_lease || slot.isolation_lease->retire(cleanupError))
+                    {
+                        slot.isolation_retired = slot.isolation_lease != nullptr;
+                        slot.isolation_lease.reset();
+                        slot.isolation_cleanup_pending = false;
+                        finish_slot(value, slot, ProcessState::failed, 0, false,
+                            "Process launch failed; restricted identity and grants retired.");
+                    }
+                    else retainOwnership("Restricted launch cleanup is pending: " + cleanupError);
+                    continue;
+                }
                 // A status-query failure is not retirement evidence. Retain
                 // the process/job lease so release and group succession cannot
                 // forget an unobserved child tree.
@@ -1256,6 +1428,42 @@ namespace epochengine::platform::child_process
                         + std::to_string(static_cast<unsigned long>(::GetLastError())) + ").");
                     continue;
                 }
+                if (!slot.job_assigned)
+                {
+                    // CreateProcess succeeded but job admission did not. This
+                    // root was never resumed, so no child code or descendants
+                    // ran; still require its actual process object to signal.
+                    if (signalled != WAIT_OBJECT_0)
+                    {
+                        (void)request_job_retirement(slot);
+                        retainOwnership("Retiring rejected suspended process before releasing its isolation lease.");
+                        continue;
+                    }
+                    DWORD code{};
+                    const bool codeValid = ::GetExitCodeProcess(slot.process, &code) != FALSE;
+                    if (slot.isolation_lease)
+                    {
+                        std::string cleanupError{};
+                        if (!slot.isolation_lease->retire(cleanupError))
+                        {
+                            retainOwnership("Rejected process exited; restricted cleanup is pending: " + cleanupError);
+                            continue;
+                        }
+                        slot.isolation_retired = true;
+                        slot.isolation_lease.reset();
+                    }
+                    finish_slot(value, slot, ProcessState::failed,
+                        static_cast<std::int32_t>(code), codeValid,
+                        "Rejected suspended process exited; native and isolation ownership retired.");
+                    continue;
+                }
+                if (signalled == WAIT_TIMEOUT && slot.failed_launch
+                    && !slot.job_retirement_requested)
+                {
+                    (void)request_job_retirement(slot);
+                    retainOwnership("Retiring rejected process tree before releasing its isolation lease.");
+                    continue;
+                }
                 if (signalled == WAIT_TIMEOUT && slot.job_retirement_requested)
                 {
                     const DWORD observed = observe_retirement_members(slot);
@@ -1266,7 +1474,10 @@ namespace epochengine::platform::child_process
                     retainOwnership(slot.retirement_observation_error == ERROR_SUCCESS
                         ? "Retiring owned process tree."
                         : "Process-tree member retirement is unverified; ownership is retained (Win32 "
-                            + std::to_string(static_cast<unsigned long>(slot.retirement_observation_error)) + ").");
+                            + std::to_string(static_cast<unsigned long>(slot.retirement_observation_error))
+                            + "; assigned=" + std::to_string(slot.retirement_query_assigned)
+                            + "; returned=" + std::to_string(slot.retirement_query_returned)
+                            + "; query_error=" + std::to_string(slot.retirement_query_native_error) + ").");
                     continue;
                 }
                 if (signalled == WAIT_OBJECT_0)
@@ -1299,7 +1510,10 @@ namespace epochengine::platform::child_process
                     if (slot.retirement_observation_error != ERROR_SUCCESS)
                     {
                         retainOwnership("Process-tree member retirement is unverified; ownership is retained (Win32 "
-                            + std::to_string(static_cast<unsigned long>(slot.retirement_observation_error)) + ").");
+                            + std::to_string(static_cast<unsigned long>(slot.retirement_observation_error))
+                            + "; assigned=" + std::to_string(slot.retirement_query_assigned)
+                            + "; returned=" + std::to_string(slot.retirement_query_returned)
+                            + "; query_error=" + std::to_string(slot.retirement_query_native_error) + ").");
                         continue;
                     }
                     JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
@@ -1318,10 +1532,21 @@ namespace epochengine::platform::child_process
                         retainOwnership("Retiring remaining process-tree descendants.");
                         continue;
                     }
+                    if (slot.isolation_lease)
+                    {
+                        std::string cleanupError{};
+                        if (!slot.isolation_lease->retire(cleanupError))
+                        {
+                            retainOwnership("Process tree exited; restricted identity cleanup is pending: " + cleanupError);
+                            continue;
+                        }
+                        slot.isolation_retired = true;
+                        slot.isolation_lease.reset();
+                    }
                     finish_slot(
                         value,
                         slot,
-                        ProcessState::exited,
+                        slot.failed_launch ? ProcessState::failed : ProcessState::exited,
                         static_cast<std::int32_t>(code),
                         true,
                         "Process exited; owned job is empty and observed descendants are signalled.");
@@ -1437,6 +1662,22 @@ namespace epochengine::platform::child_process
                 return "Merged output path exceeds the byte bound.";
             if (request.disconnect_standard_input && request.merged_output_path.empty())
                 return "Disconnected standard input requires explicit captured output.";
+            if (request.isolation)
+            {
+#if !defined(_WIN32)
+                return "Workspace OS isolation is unsupported on this platform; ordinary-token fallback is forbidden.";
+#else
+                if (!request.environment || !request.disconnect_standard_input
+                    || !request.expected_executable || request.merged_output_path.empty())
+                    return "Workspace isolation requires explicit environment, disconnected stdin, captured output and exact executable identity.";
+                if (!valid_executable_path(request.isolation->owned_root)
+                    || !request.isolation->owned_root.is_absolute()
+                    || request.isolation->read_only.empty()
+                    || request.isolation->writable.empty()
+                    || request.isolation->read_only.size() + request.isolation->writable.size() > 16u)
+                    return "Workspace isolation requires a bounded absolute owned generation and explicit read-only/writable trees.";
+#endif
+            }
             if (request.environment)
             {
                 if (request.environment->size() > 128u)
@@ -1518,7 +1759,9 @@ namespace epochengine::platform::child_process
                 .message = slot.message,
                 .verified_executable = slot.verified_executable,
                 .environment_replaced = slot.started_tick_ns != 0u && slot.environment.has_value(),
-                .standard_input_disconnected = slot.started_tick_ns != 0u && slot.disconnect_standard_input};
+                .standard_input_disconnected = slot.started_tick_ns != 0u && slot.disconnect_standard_input,
+                .restricted_token_verified = slot.restricted_token_verified,
+                .isolation_retired = slot.isolation_retired};
         }
     }
 
@@ -1728,6 +1971,7 @@ namespace epochengine::platform::child_process
     LaunchResult launch_or_focus(const LaunchRequest& request) noexcept
     {
         SupervisorStorage& value = storage();
+        ProcessHandle reservedHandle{};
         try
         {
             std::scoped_lock lock{value.mutex};
@@ -1784,12 +2028,23 @@ namespace epochengine::platform::child_process
                     if (slot.executable != resolvedExecutable
                         || slot.verified_executable != request.expected_executable
                         || slot.environment != request.environment
-                        || slot.disconnect_standard_input != request.disconnect_standard_input)
+                        || slot.disconnect_standard_input != request.disconnect_standard_input
+                        || slot.isolation != request.isolation
+                        || slot.arguments != request.arguments
+                        || slot.requested_working_directory != request.working_directory
+                        || slot.requested_output_path != request.merged_output_path
+                        || slot.append_output != request.append_output
+                        || slot.window_mode != request.window_mode
+                        || slot.exclusive_group != request.exclusive_group)
                     {
                         ++value.metrics.launch_failures;
                         return {.code = LaunchCode::invalid_request,
-                            .message = "The correlation key is already bound to a different executable path, artifact identity, environment, or input boundary."};
+                            .message = "The correlation key is already bound to different executable path, artifact identity, arguments, working/output, environment, window, group, or isolation settings."};
                     }
+                    if (slot.failed_launch)
+                        return {.code = LaunchCode::active_group_busy,
+                            .handle = handle_for(value, slot),
+                            .message = "The matching failed launch still owns retirement or isolation cleanup."};
                     ++value.metrics.focus_requests;
                     const FocusCode focused = focus_slot(slot);
                     if (focused == FocusCode::focused)
@@ -1850,12 +2105,19 @@ namespace epochengine::platform::child_process
             slot->occupied = true;
             slot->generation = generation;
             slot->state = ProcessState::starting;
+            reservedHandle = handle_for(value, *slot);
+            LaunchReservation reservation{value, *slot};
             slot->correlation_key = request.correlation_key;
             slot->exclusive_group = request.exclusive_group;
             slot->display_name = request.display_name;
             slot->window_mode = request.window_mode;
             slot->environment = request.environment;
             slot->disconnect_standard_input = request.disconnect_standard_input;
+            slot->isolation = request.isolation;
+            slot->arguments = request.arguments;
+            slot->requested_working_directory = request.working_directory;
+            slot->requested_output_path = request.merged_output_path;
+            slot->append_output = request.append_output;
 
             slot->executable = std::move(resolvedExecutable);
             if (error || slot->executable.empty()
@@ -1929,48 +2191,55 @@ namespace epochengine::platform::child_process
                 }
             }
 
+            // Prepare every allocating success value before child execution.
+            // After ResumeThread only no-throw ownership/state moves remain.
+            auto verifiedExecutable = request.expected_executable;
+            std::string startedMessage{"Process started."};
+            LaunchResult startedResult{
+                .code = LaunchCode::started,
+                .handle = reservedHandle,
+                .message = startedMessage};
             std::string spawnError{};
             if (!spawn_process(*slot, resolved, spawnError))
             {
-                slot->state = ProcessState::failed;
                 slot->message = std::move(spawnError);
-                ++value.metrics.launch_failures;
-                revise(value);
+                fail_reserved_launch(value, *slot);
+                reservation.armed = false;
                 return {
                     .code = LaunchCode::spawn_failed,
                     .handle = handle_for(value, *slot),
                     .message = slot->message};
             }
 
-            slot->verified_executable = request.expected_executable;
+            slot->verified_executable = std::move(verifiedExecutable);
             slot->state = ProcessState::running;
             slot->started_tick_ns = now_ns();
-            slot->message = "Process started.";
+            slot->message = std::move(startedMessage);
             ++value.metrics.launches;
-            ++value.metrics.active_processes;
-            value.metrics.peak_active_processes = (std::max)(
-                value.metrics.peak_active_processes,
-                value.metrics.active_processes);
+            count_active_slot(value, *slot);
             revise(value);
-            return {
-                .code = LaunchCode::started,
-                .handle = handle_for(value, *slot),
-                .focus = slot->focus_pending
-                    ? FocusCode::pending
-                    : FocusCode::unsupported,
-                .message = slot->message};
+            startedResult.focus = slot->focus_pending
+                ? FocusCode::pending : FocusCode::unsupported;
+            reservation.armed = false;
+            return startedResult;
         }
         catch (const std::exception& error)
         {
-            return {
+            LaunchResult failed{
                 .code = LaunchCode::spawn_failed,
-                .message = error.what()};
+                .handle = reservedHandle};
+            try { failed.message = error.what(); }
+            catch (...) {}
+            return failed;
         }
         catch (...)
         {
-            return {
+            LaunchResult failed{
                 .code = LaunchCode::spawn_failed,
-                .message = "Unknown process launch failure."};
+                .handle = reservedHandle};
+            try { failed.message = "Unknown process launch failure."; }
+            catch (...) {}
+            return failed;
         }
     }
 

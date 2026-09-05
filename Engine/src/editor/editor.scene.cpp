@@ -2928,7 +2928,7 @@ namespace
 
     [[nodiscard]] static constexpr std::string_view generated_child_project_link_dependencies() noexcept
     {
-        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)";
+        return "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)";
     }
 
     [[nodiscard]] static bool repair_generated_project_gui_acceptance(
@@ -3050,6 +3050,9 @@ namespace
                 projectText.insert(groupEndPosition, epochGuiProjectReference);
             }
             replace_all(projectText, "StaticLib1.lib", "EpochEngine.lib");
+            replace_all(projectText,
+                "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)",
+                generated_child_project_link_dependencies());
             replace_all(
                 projectText,
                 "EpochEngine.lib;%(AdditionalDependencies)",
@@ -4106,7 +4109,7 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "  </ItemDefinitionGroup>\n"
@@ -4129,7 +4132,7 @@ namespace
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
             "      <AdditionalLibraryDirectories>$(EpochRepoRoot)x64\\$(Configuration)\\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
-            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
+            "      <AdditionalDependencies>raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
             "  </ItemDefinitionGroup>\n"

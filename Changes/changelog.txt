@@ -1,5 +1,58 @@
 ## [Unreleased] - v0.89.35
 
+- Exclude the owned Engine/examples/EpochEditor/workspace runtime tree from
+  source materialization, repairs and chosen-parent succession, including
+  explicit includes and Windows case variants. Synthetic tests retain chosen
+  source changes and legitimate workspace-named source directories while
+  excluding model exchanges/tool traces and preserving both host/candidate
+  canaries. Move the dependency-light executor contract into the renderer-free
+  CMake test lane so this transaction behavior is exercised directly.
+- Add an optional Windows LPAC child policy with fresh zero-capability identity,
+  bounded disjoint read-only/writable owned-root grants, pinned path identity,
+  preflight DACL/reparse/hardlink checks and suspended-token verification before
+  resume. Qualify LPAC access-check semantics when the native token flag query
+  is unavailable. Retain failed-launch PID/job/lease ownership across exceptions;
+  only observed process-tree retirement removes grants and the fresh profile.
+  Internal hardlinks require complete same-mode accounting before revocation.
+  Correlation reuse now binds arguments, working/output paths, append mode,
+  window/group policy and isolation as well as artifact/environment identity.
+- The explicitly requested console isolation probe passes real token, file
+  access/refusal, writable scratch, internal hardlink cleanup, prior-DACL
+  restoration and process/profile retirement checks. Null-DACL, hardlinked and
+  reparse admission fail before execution without changing prior permissions.
+  Network qualification remains FAILED: WSAStartup returns 10107 before socket
+  creation; no connection-denial proof or request bytes. Failed synthetic
+  fixtures retain independent subcheck evidence. No broad permissions are added.
+  This primitive is not yet wired into Candidate Lab; compiler/preview phase
+  policy, native UI compatibility and abrupt-parent lease recovery remain open.
+- Bind Windows isolation libraries on actual editor and generated-project link
+  targets, including existing generated-project repair, not only the static
+  engine shared-items definition. CMake component/full-engine owners match.
+- Correct inherited-event tests to verify the actual parent sentinel object.
+  A reproduced child exit 107 had an untouched parent event (WAIT_TIMEOUT):
+  Windows reused the numeric handle for an unrelated child-local event. Child
+  SetEvent success alone is not inheritance proof; the parent event/input checks
+  remain mandatory. Contract failures now retain named checkpoints and process
+  state rather than empty CTest failure output.
+- Requery an incomplete Windows job process list at most twice with a short
+  yield. Real churn reproduced a successful native query with 21 assigned but
+  only 20 returned IDs; three immediate queries could observe the same exit
+  transition and permanently retain an already-stopped group. Partial lists
+  remain unusable and persistent/query/identity errors still retain ownership.
+  Diagnostics preserve the native result and both counts. After the yielded
+  recheck repair the full child-process CTest passes 100 consecutive runs;
+  focused input checks pass 500 runs and focused retirement checks pass 200.
+- September 5 restricted-child/data-copy checkpoint: Windows Debug/Release
+  editor and Release HeadlessCI builds, both explicitly waited build-safe
+  aggregates, all nine SoftwareBase/component CTests and both Linux Clang
+  22.1.8 Release child-process/materializer component CTests pass. Source naming
+  passes for 591 files. Existing duplicate-logger/optimization warnings remain.
+  Exact Windows Release editor: 12,660,224 bytes, SHA-256
+  7f1f251e041c4c3ab2b1594d0b78ad3746f69381513e8cf0acd1665729b39f46.
+  Strict network probe remains failed as above. No native editor/Qwen two-build
+  comparison, full Linux editor, immutable release package or active Candidate
+  Lab confinement is claimed; public v0.89.34 and stable refs remain unchanged.
+
 - Synchronize Windows supervised retirement with the actual parent and observed
   descendant process handles. Treat exit code 259 as an exit after the parent
   signals; retain the Job Object/exclusive group across asynchronous termination
