@@ -7,6 +7,15 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 
 ## Engine Self-Coding
 
+- September 5 priority: prove the actual Qwen self-coding loop before expanding
+  unrelated editor/context features. A compiler failure feeds its real diagnostic
+  back into the next bounded repair automatically; preparing a workspace or
+  waiting for another hidden/manual action is not iteration success.
+- Consider optional host-brokered web research when documentation could resolve
+  a model's uncertainty. Show the query, sources and result to the operator;
+  do not send private source, paths, logs or credentials in search requests.
+  Web content is untrusted reference material, never execution authority. This
+  remains unimplemented and must not delay proving the core local build loop.
 - Accept ordinary-language objectives like a normal agentic coding assistant.
   Do not require the operator to name an internal system, source path, symbol,
   error code, or protocol token.

@@ -1,5 +1,8 @@
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -7,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -16,17 +20,262 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include <winioctl.h>
 #endif
 
 import platform.child_process;
 
 #if defined(EPOCH_PLATFORM_CHILD_PROCESS_CONTRACT_MAIN)
+namespace
+{
+    namespace child_process = epochengine::platform::child_process;
+
+    struct ExecutableIdentityFixture final
+    {
+        std::filesystem::path root{};
+
+        ~ExecutableIdentityFixture() noexcept
+        {
+            if (!root.empty())
+            {
+                std::error_code error{};
+                std::filesystem::remove_all(root, error);
+            }
+        }
+
+        [[nodiscard]] bool prepare()
+        {
+            std::error_code error{};
+            const auto temporary = std::filesystem::temp_directory_path(error);
+            if (error) return false;
+            const auto token = std::chrono::steady_clock::now().time_since_epoch().count();
+            for (unsigned attempt = 0u; attempt < 16u; ++attempt)
+            {
+                const auto candidate = temporary / ("epoch-child-identity-"
+                    + std::to_string(token) + "-" + std::to_string(attempt));
+                if (std::filesystem::create_directory(candidate, error))
+                {
+                    root = candidate;
+                    return true;
+                }
+                if (error) return false;
+            }
+            return false;
+        }
+
+        [[nodiscard]] bool write(std::string_view name, std::string_view bytes) const
+        {
+            std::ofstream output{root / name, std::ios::binary | std::ios::trunc};
+            output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+            output.close();
+            return static_cast<bool>(output);
+        }
+    };
+
+    [[nodiscard]] bool inspect_identity_contract(ExecutableIdentityFixture& fixture)
+    {
+        const child_process::ExecutableIdentity abc{3u,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"};
+        if (!abc.valid() || child_process::ExecutableIdentity{}.valid()
+            || child_process::ExecutableIdentity{0u, abc.sha256}.valid()
+            || child_process::ExecutableIdentity{512u * 1024u * 1024u + 1u, abc.sha256}.valid()
+            || !child_process::ExecutableIdentity{512u * 1024u * 1024u, abc.sha256}.valid()
+            || child_process::ExecutableIdentity{3u, std::string(64u, '0')}.valid()
+            || child_process::ExecutableIdentity{3u, std::string(64u, 'A')}.valid()
+            || child_process::ExecutableIdentity{3u, std::string(64u, 'g')}.valid()
+            || child_process::ExecutableIdentity{3u, std::string(63u, 'a')}.valid()
+            || !fixture.prepare()
+            || !fixture.write("image.bin", "abc") || !fixture.write("empty.bin", {}))
+            return false;
+        const auto image = fixture.root / "image.bin";
+        if (child_process::inspect_executable(image) != abc
+            || child_process::inspect_executable({})
+            || child_process::inspect_executable(fixture.root)
+            || child_process::inspect_executable(fixture.root / "missing.bin")
+            || child_process::inspect_executable(fixture.root / "empty.bin"))
+            return false;
+        child_process::LaunchRequest rejected{};
+        rejected.executable = image;
+        rejected.correlation_key = "contract:identity-refusal";
+        rejected.window_mode = child_process::WindowMode::hidden;
+        rejected.expected_executable = abc;
+#if !defined(_WIN32)
+        const auto unsupported = child_process::launch_or_focus(rejected);
+        if (unsupported.code != child_process::LaunchCode::invalid_request
+            || unsupported.message.find("unsupported on this platform") == std::string::npos)
+            return false;
+#endif
+        rejected.expected_executable->size_bytes = 4u;
+        if (child_process::launch_or_focus(rejected).code
+                != child_process::LaunchCode::invalid_request)
+            return false;
+        rejected.expected_executable = abc;
+        rejected.expected_executable->sha256.front() = '0';
+        if (child_process::launch_or_focus(rejected).code
+                != child_process::LaunchCode::invalid_request)
+            return false;
+        rejected.expected_executable = abc;
+        if (!fixture.write("image.bin", "ab"))
+            return false;
+        const auto truncated = child_process::inspect_executable(image);
+        if (!truncated || truncated->size_bytes != 2u || *truncated == abc
+            || child_process::launch_or_focus(rejected).code
+                != child_process::LaunchCode::invalid_request)
+            return false;
+        std::error_code linkError{};
+        std::filesystem::create_symlink(image, fixture.root / "linked.bin", linkError);
+        if (!linkError && child_process::inspect_executable(fixture.root / "linked.bin"))
+            return false;
+        return true;
+    }
+}
+
 #if defined(_WIN32)
 namespace
 {
     constexpr std::string_view capture_input = "epoch-stdin-sentinel";
     constexpr std::string_view capture_stdout = "epoch-stdout-captured\n";
     constexpr std::string_view capture_stderr = "epoch-stderr-captured\n";
+
+    struct ContractHandle final
+    {
+        HANDLE value{INVALID_HANDLE_VALUE};
+        ~ContractHandle() noexcept
+        {
+            if (value != INVALID_HANDLE_VALUE && value != nullptr)
+                (void)::CloseHandle(value);
+        }
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return value != INVALID_HANDLE_VALUE && value != nullptr;
+        }
+    };
+
+    [[nodiscard]] bool identity_lock_contract(ExecutableIdentityFixture& fixture)
+    {
+        const auto directory = fixture.root / "locked";
+        const auto target = fixture.root / "target";
+        const auto image = directory / "image.bin";
+        const auto replacement = fixture.root / "replacement.bin";
+        std::error_code error{};
+        if (!std::filesystem::create_directory(directory, error) || error
+            || !std::filesystem::create_directory(target, error) || error
+            || !fixture.write("replacement.bin", "replacement"))
+            return false;
+        {
+            std::ofstream output{image, std::ios::binary};
+            const std::string block(64u * 1024u, 'x');
+            for (unsigned index = 0u; index < 512u; ++index)
+                output.write(block.data(), static_cast<std::streamsize>(block.size()));
+            output.close();
+            if (!output) return false;
+        }
+
+        const auto imageName = image.wstring();
+        std::vector<std::byte> renameBytes(
+            offsetof(FILE_RENAME_INFO, FileName) + (imageName.size() + 1u) * sizeof(wchar_t));
+        auto* rename = reinterpret_cast<FILE_RENAME_INFO*>(renameBytes.data());
+        // FileRenameInfoEx flags from the documented FILE_RENAME_INFORMATION
+        // contract; these names are WDK-only in some desktop SDK versions.
+        constexpr DWORD replaceIfExists = 0x00000001u;
+        constexpr DWORD posixSemantics = 0x00000002u;
+        const DWORD renameFlags = replaceIfExists | posixSemantics;
+        // Flags overlays ReplaceIfExists in the Windows 10 FileRenameInfoEx ABI.
+        std::memcpy(rename, &renameFlags, sizeof(renameFlags));
+        rename->FileNameLength = static_cast<DWORD>(imageName.size() * sizeof(wchar_t));
+        std::memcpy(rename->FileName, imageName.c_str(), (imageName.size() + 1u) * sizeof(wchar_t));
+        ContractHandle replacementHandle{::CreateFileW(replacement.c_str(), DELETE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        if (!replacementHandle.valid()) return false;
+
+        struct MountPointHeader final
+        {
+            DWORD tag{};
+            WORD data_length{};
+            WORD reserved{};
+            WORD substitute_offset{};
+            WORD substitute_length{};
+            WORD print_offset{};
+            WORD print_length{};
+        };
+        static_assert(sizeof(MountPointHeader) == 16u);
+        const auto printName = target.wstring();
+        const auto substituteName = L"\\??\\" + printName;
+        const std::size_t substituteBytes = (substituteName.size() + 1u) * sizeof(wchar_t);
+        const std::size_t printBytes = (printName.size() + 1u) * sizeof(wchar_t);
+        MountPointHeader reparseHeader{
+            .tag = IO_REPARSE_TAG_MOUNT_POINT,
+            .data_length = static_cast<WORD>(8u + substituteBytes + printBytes),
+            .substitute_length = static_cast<WORD>(substituteBytes - sizeof(wchar_t)),
+            .print_offset = static_cast<WORD>(substituteBytes),
+            .print_length = static_cast<WORD>(printBytes - sizeof(wchar_t))};
+        std::vector<std::byte> reparse(sizeof(reparseHeader) + substituteBytes + printBytes);
+        std::memcpy(reparse.data(), &reparseHeader, sizeof(reparseHeader));
+        std::memcpy(reparse.data() + sizeof(reparseHeader), substituteName.c_str(), substituteBytes);
+        std::memcpy(reparse.data() + sizeof(reparseHeader) + substituteBytes, printName.c_str(), printBytes);
+
+        std::atomic_bool finished{};
+        std::optional<child_process::ExecutableIdentity> observed{};
+        std::jthread inspector{[&]
+        {
+            observed = child_process::inspect_executable(image);
+            finished.store(true, std::memory_order_release);
+        }};
+        bool locked{};
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+        while (!finished.load(std::memory_order_acquire)
+            && std::chrono::steady_clock::now() < deadline)
+        {
+            // A failed write-open is evidence the actual production image
+            // lock is held. No test-only callback changes production behavior.
+            std::this_thread::sleep_for(std::chrono::milliseconds{2});
+            ContractHandle probe{::CreateFileW(image.c_str(), GENERIC_WRITE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            if (!probe.valid() && ::GetLastError() == ERROR_SHARING_VIOLATION)
+            {
+                locked = true;
+                break;
+            }
+        }
+        if (!locked || finished.load(std::memory_order_acquire))
+            return false;
+
+        ContractHandle truncate{::CreateFileW(image.c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, TRUNCATE_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        const DWORD truncateError = truncate.valid() ? ERROR_SUCCESS : ::GetLastError();
+        const bool renamed = ::MoveFileExW(directory.c_str(),
+            (fixture.root / "renamed").c_str(), 0u) != FALSE;
+        const DWORD renameError = renamed ? ERROR_SUCCESS : ::GetLastError();
+        ContractHandle attributes{::CreateFileW(directory.c_str(), FILE_WRITE_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr)};
+        DWORD returned{};
+        const bool retagged = attributes.valid()
+            && ::DeviceIoControl(attributes.value, FSCTL_SET_REPARSE_POINT,
+                reparse.data(), static_cast<DWORD>(reparse.size()), nullptr, 0u,
+                &returned, nullptr) != FALSE;
+        const DWORD reparseError = retagged ? ERROR_SUCCESS : ::GetLastError();
+        const bool replaced = ::SetFileInformationByHandle(replacementHandle.value,
+            FileRenameInfoEx, rename, static_cast<DWORD>(renameBytes.size())) != FALSE;
+        const DWORD replaceError = replaced ? ERROR_SUCCESS : ::GetLastError();
+        ContractHandle finalProbe{::CreateFileW(image.c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        const DWORD finalProbeError = finalProbe.valid() ? ERROR_SUCCESS : ::GetLastError();
+        const bool lockSpannedChecks = !finalProbe.valid()
+            && finalProbeError == ERROR_SHARING_VIOLATION
+            && !finished.load(std::memory_order_acquire);
+        inspector.join();
+        return lockSpannedChecks && observed && observed->size_bytes == 32u * 1024u * 1024u
+            && !truncate.valid() && truncateError == ERROR_SHARING_VIOLATION
+            && !renamed && (renameError == ERROR_SHARING_VIOLATION || renameError == ERROR_ACCESS_DENIED)
+            && attributes.valid() && !retagged && reparseError == ERROR_DIR_NOT_EMPTY
+            && !replaced && (replaceError == ERROR_SHARING_VIOLATION || replaceError == ERROR_ACCESS_DENIED);
+    }
 
     struct CaptureInheritanceFixture final
     {
@@ -151,6 +400,16 @@ int main(int argc, char** argv)
     }
 
     const std::filesystem::path self = std::filesystem::absolute(argv[0]);
+    ExecutableIdentityFixture identityFixture{};
+    if (!inspect_identity_contract(identityFixture))
+        return 18;
+    const auto selfIdentity = child_process::inspect_executable(self);
+    if (!selfIdentity || !selfIdentity->valid())
+        return 19;
+#if defined(_WIN32)
+    if (!identity_lock_contract(identityFixture))
+        return 23;
+#endif
     child_process::LaunchRequest first{};
     first.executable = self;
     first.working_directory = self.parent_path();
@@ -159,6 +418,9 @@ int main(int argc, char** argv)
     first.exclusive_group = "contract:exclusive";
     first.display_name = "Child Process Contract";
     first.window_mode = child_process::WindowMode::hidden;
+#if defined(_WIN32)
+    first.expected_executable = selfIdentity;
+#endif
 
     const child_process::LaunchResult launched =
         child_process::launch_or_focus(first);
@@ -171,7 +433,8 @@ int main(int argc, char** argv)
     if (!running || !running->active()
         || running->correlation_key != first.correlation_key
         || running->platform_process_id == 0u
-        || running->platform_window_id != 0u)
+        || running->platform_window_id != 0u
+        || running->verified_executable != first.expected_executable)
     {
         return 4;
     }
@@ -183,6 +446,25 @@ int main(int argc, char** argv)
     {
         return 5;
     }
+
+    child_process::LaunchRequest wrongCorrelation = first;
+    wrongCorrelation.executable = identityFixture.root / self.filename();
+    std::error_code identityError{};
+    if (!std::filesystem::copy_file(self, wrongCorrelation.executable,
+            std::filesystem::copy_options::none, identityError) || identityError)
+        return 20;
+    const auto wrongPath = child_process::launch_or_focus(wrongCorrelation);
+    if (wrongPath.code != child_process::LaunchCode::invalid_request
+        || wrongPath.message.find("correlation key") == std::string::npos)
+        return 21;
+#if defined(_WIN32)
+    wrongCorrelation = first;
+    wrongCorrelation.expected_executable.reset();
+    const auto weakenedIdentity = child_process::launch_or_focus(wrongCorrelation);
+    if (weakenedIdentity.code != child_process::LaunchCode::invalid_request
+        || weakenedIdentity.message.find("artifact identity") == std::string::npos)
+        return 22;
+#endif
 
     child_process::LaunchRequest competing = first;
     competing.correlation_key = "contract:competing";
@@ -224,6 +506,8 @@ int main(int argc, char** argv)
     }
 
     child_process::LaunchRequest natural = first;
+    // Keep ordinary captured launches on their original, unverified path.
+    natural.expected_executable.reset();
     natural.arguments = {"--epoch-child-contract", "20", "17"};
     natural.correlation_key = "contract:natural";
     const std::filesystem::path outputPath =

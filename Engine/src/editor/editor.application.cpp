@@ -52,6 +52,7 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <future>
 #include <initializer_list>
 #include <iterator>
@@ -122,6 +123,7 @@ import ai.engine;
 import ai.model_install;
 import ai.development_executor;
 import editor.ai_development_panel;
+import editor.candidate_artifact;
 import systems.registry;
 import editor.task_scheduler;
 import editor.systems_panel;
@@ -218,12 +220,19 @@ namespace epochengine
             SourceIteration
         };
 
-        enum class AiSourceValidationLane : unsigned char
+        namespace candidate_artifacts = epochengine::editor::candidate_artifact;
+        using AiSourceValidationLane = candidate_artifacts::Lane;
+
+        struct AiSourceTaskResult final
         {
-            DebugEditor = 0,
-            ReleaseEditor,
-            HeadlessCi,
-            FullValidation
+            bool succeeded{};
+            std::string summary{};
+            std::string output_path{};
+            std::string log_path{};
+            bool cancelled{};
+            std::optional<candidate_artifacts::Binding> artifact{};
+            platform::child_process::ExecutableIdentity before_identity{};
+            platform::child_process::ExecutableIdentity after_identity{};
         };
 
         enum class EditorLayoutDrag : unsigned char
@@ -669,32 +678,54 @@ namespace epochengine
                 pending = std::make_shared<AiChatRequestState>();
                 pendingWorkload = workload;
                 requestStartedAt = std::chrono::steady_clock::now();
-                if (worker.joinable())
-                    worker.join();
-                worker = std::jthread(
-                    [request = pending,
-                     t = std::move(text),
-                     workload]() mutable
-                    {
-                        try
+                try
+                {
+                    if (worker.joinable())
+                        worker.join();
+                    worker = std::jthread(
+                        [request = pending,
+                         t = std::move(text),
+                         workload]() mutable
                         {
-                            epochengine::systems::threading::ScopedThreadActivity
-                                threadActivity{};
-                            request->reply =
-                                epochengine::ai::send_to_engine_ai(t, workload);
-                        }
-                        catch (const std::exception& e)
-                        {
-                            request->error = e.what();
-                        }
-                        catch (...)
-                        {
-                            request->error =
-                                "The local-model request failed with an unknown error.";
-                        }
-                        request->ready.store(
-                            true, std::memory_order_release);
-                    });
+                            try
+                            {
+                                epochengine::systems::threading::ScopedThreadActivity
+                                    threadActivity{};
+                                request->reply =
+                                    epochengine::ai::send_to_engine_ai(t, workload);
+                            }
+                            catch (const std::exception& e)
+                            {
+                                request->error = e.what();
+                            }
+                            catch (...)
+                            {
+                                request->error =
+                                    "The local-model request failed with an unknown error.";
+                            }
+                            request->ready.store(
+                                true, std::memory_order_release);
+                        });
+                }
+                catch (const std::exception& exception)
+                {
+                    // The earlier busy guard guarantees this is only the
+                    // newly allocated request, never an existing operation.
+                    pending.reset();
+                    pendingPrompt.clear();
+                    requestStartedAt = {};
+                    append_status(std::string{"The local-model worker could not start: "}
+                        + exception.what());
+                    return false;
+                }
+                catch (...)
+                {
+                    pending.reset();
+                    pendingPrompt.clear();
+                    requestStartedAt = {};
+                    append_status("The local-model worker could not start because of an unknown scheduling failure.");
+                    return false;
+                }
                 return true;
             }
         private:
@@ -1318,20 +1349,28 @@ namespace epochengine
             editor_tasks::CancellationTicket
                 aiSourceWorkspaceCancellation{};
             std::uint32_t aiSourceWorkspaceGeneration{};
-            std::optional<std::future<EditorProjectBuildResult>>
+            std::uint64_t aiSourceWorkspaceArtifactEpoch{};
+            std::optional<std::future<AiSourceTaskResult>>
                 aiSourceBuildPending{};
             editor_tasks::CancellationTicket
                 aiSourceBuildCancellation{};
             std::uint32_t aiSourceBuildGeneration{};
+            std::uint64_t aiSourceBuildArtifactEpoch{};
             AiSourceValidationLane aiSourceBuildLane{
                 AiSourceValidationLane::DebugEditor};
-            std::optional<std::future<EditorProjectBuildResult>>
+            std::optional<std::future<AiSourceTaskResult>>
                 aiSourceTestPending{};
             editor_tasks::CancellationTicket
                 aiSourceTestCancellation{};
             std::uint32_t aiSourceTestGeneration{};
+            std::uint64_t aiSourceTestArtifactEpoch{};
             AiSourceValidationLane aiSourceTestLane{
                 AiSourceValidationLane::DebugEditor};
+            candidate_artifacts::Ledger aiSourceArtifacts{};
+            std::uint64_t aiSourceArtifactEpoch{1u};
+            // Host compiler dependencies survive sandbox parent selection.
+            // This is never populated from a model/panel action source root.
+            std::filesystem::path aiSourceHostDependencyRoot{};
             platform::child_process::ProcessHandle
                 aiCandidateCurrentProcess{};
             std::optional<platform::child_process::ProcessSnapshot>
@@ -1343,11 +1382,22 @@ namespace epochengine
             std::vector<platform::child_process::ProcessHandle>
                 aiCandidateRetiringProcesses{};
             std::uint32_t aiCandidatePreviewGeneration{};
+            std::uint64_t aiCandidatePreviewArtifactEpoch{};
+            std::optional<candidate_artifacts::Binding> aiCandidatePreviewArtifact{};
             bool aiCandidatePreviewReported{};
             std::chrono::steady_clock::time_point aiCandidatePreviewStartedAt{};
             std::optional<std::future<EditorScriptBuildResult>> aiGuardedHarnessPending{};
             std::string aiGuardedHarnessBefore{};
         };
+
+        void invalidate_ai_source_artifacts(EditorState& editor)
+        {
+            editor.aiSourceArtifacts.invalidate();
+            editor.aiCandidatePreviewArtifact.reset();
+            ++editor.aiSourceArtifactEpoch;
+            if (editor.aiSourceArtifactEpoch == 0u)
+                ++editor.aiSourceArtifactEpoch;
+        }
 
         [[nodiscard]] editor_tasks::Scheduler&
         editor_task_scheduler(EditorState& editor)
@@ -11600,18 +11650,96 @@ namespace epochengine
             return bytes;
         }
 
-        [[nodiscard]] EditorProjectBuildResult build_ai_source_workspace(
+        // The identity must name the owned path, not a redirected output that
+        // happens to have the same filename. Check each component before
+        // canonicalization, since canonicalization alone erases link evidence.
+        [[nodiscard]] std::optional<std::filesystem::path>
+            ai_source_owned_path(const std::filesystem::path& requested)
+        {
+            if (requested.empty() || !requested.is_absolute())
+                return std::nullopt;
+            for (const auto& component : requested.relative_path())
+            {
+                if (component == "." || component == "..")
+                    return std::nullopt;
+            }
+            std::filesystem::path inspected = requested.root_path();
+            std::error_code error{};
+            for (const auto& component : requested.relative_path())
+            {
+                inspected /= component;
+                const auto status = std::filesystem::symlink_status(inspected, error);
+                if (error || !std::filesystem::exists(status)
+                    || std::filesystem::is_symlink(status))
+                    return std::nullopt;
+            }
+            const auto canonical = std::filesystem::canonical(requested, error);
+            if (error || canonical.empty() || canonical != requested.lexically_normal())
+                return std::nullopt;
+            return canonical;
+        }
+
+        [[nodiscard]] std::optional<std::filesystem::path>
+            ai_source_owned_executable(
+                const std::string_view workspaceRoot,
+                const AiSourceValidationLane lane)
+        {
+            const auto workspace = ai_source_owned_path(
+                std::filesystem::path{workspaceRoot});
+            if (!workspace)
+                return std::nullopt;
+            const auto relative = std::filesystem::path{
+                candidate_artifacts::relative_executable(lane)};
+            if (relative.empty())
+                return std::nullopt;
+            const auto executable = ai_source_owned_path(*workspace / relative);
+            if (!executable || executable->lexically_relative(*workspace) != relative)
+                return std::nullopt;
+            return executable;
+        }
+
+        [[nodiscard]] bool ai_source_same_executable(
+            const std::filesystem::path& expected,
+            const std::filesystem::path& observed)
+        {
+            std::error_code error{};
+            return std::filesystem::equivalent(expected, observed, error) && !error;
+        }
+
+        [[nodiscard]] std::optional<std::filesystem::path>
+            ai_source_host_dependency_root()
+        {
+            const auto checkout = core::path::find_epoch_repo_root(
+                core::path::executable_dir());
+            const auto authority = updater::resolve_verified_source_authority(checkout);
+            if (!authority.verified)
+                return std::nullopt;
+            const auto root = ai_source_owned_path(
+                authority.root / "Engine" / "vcpkg_installed");
+            std::error_code error{};
+            if (!root || !std::filesystem::is_directory(*root, error) || error)
+                return std::nullopt;
+            return root;
+        }
+
+        [[nodiscard]] AiSourceTaskResult build_ai_source_workspace(
             std::string sourceRoot,
             std::string workspaceRoot,
+            std::filesystem::path hostDependencyRoot,
             std::stop_token cancellation,
-            AiSourceValidationLane lane)
+            AiSourceValidationLane lane,
+            const std::uint32_t generation,
+            const std::uint64_t buildTicket)
         {
-            EditorProjectBuildResult result{};
+            AiSourceTaskResult result{};
 #if !defined(_WIN32)
             (void)sourceRoot;
             (void)workspaceRoot;
+            (void)hostDependencyRoot;
             (void)lane;
             (void)cancellation;
+            (void)generation;
+            (void)buildTicket;
             result.summary =
                 "The Linux guarded source compiler adapter is not connected.";
             return result;
@@ -11621,7 +11749,8 @@ namespace epochengine
             std::filesystem::path source{std::move(sourceRoot)};
             std::filesystem::path workspace{std::move(workspaceRoot)};
             if (source.empty() || workspace.empty()
-                || !source.is_absolute() || !workspace.is_absolute())
+                || !source.is_absolute() || !workspace.is_absolute()
+                || generation == 0u || buildTicket == 0u)
             {
                 result.summary =
                     "Sandbox compilation requires distinct absolute source and workspace roots.";
@@ -11636,14 +11765,14 @@ namespace epochengine
                     "The live source root could not be resolved for sandbox compilation.";
                 return result;
             }
-            error.clear();
-            workspace = std::filesystem::weakly_canonical(workspace, error);
-            if (error || workspace.empty() || source == workspace)
+            const auto ownedWorkspace = ai_source_owned_path(workspace);
+            if (!ownedWorkspace || source == *ownedWorkspace)
             {
                 result.summary =
                     "The disposable source workspace could not be resolved independently of live source.";
                 return result;
             }
+            workspace = *ownedWorkspace;
             error.clear();
             const auto workspaceStatus =
                 std::filesystem::symlink_status(workspace, error);
@@ -11656,8 +11785,37 @@ namespace epochengine
             }
 
             const std::filesystem::path solution = workspace / "Engine.sln";
-            const std::filesystem::path dependencyRoot =
-                source / "Engine" / "vcpkg_installed";
+            const auto dependencyRoot = ai_source_owned_path(hostDependencyRoot);
+            const auto dependencyRelative = dependencyRoot
+                ? dependencyRoot->lexically_relative(workspace)
+                : std::filesystem::path{};
+            if (!dependencyRoot || *dependencyRoot == workspace
+                || (!dependencyRelative.empty() && !dependencyRelative.is_absolute()
+                    && *dependencyRelative.begin() != ".."))
+            {
+                result.summary =
+                    "The host-owned dependency cache must remain outside the writable sandbox.";
+                return result;
+            }
+            // Match the existing x64 MSBuild profile, including its installed
+            // nested-triplet compatibility. Both include/link and DLL-copy
+            // properties must use this host path, not the chosen sandbox.
+            const std::filesystem::path directTriplet = *dependencyRoot / "x64-windows";
+            const std::filesystem::path nestedTriplet = directTriplet / "x64-windows";
+            std::filesystem::path dependencyTriplet = directTriplet;
+            error.clear();
+            if (!std::filesystem::is_directory(directTriplet / "include", error) || error)
+                dependencyTriplet = nestedTriplet;
+            const auto ownedTriplet = ai_source_owned_path(dependencyTriplet);
+            error.clear();
+            if (!ownedTriplet
+                || !std::filesystem::is_directory(*ownedTriplet / "include", error)
+                || error)
+            {
+                result.summary =
+                    "The read-only host x64-windows dependency triplet is unavailable.";
+                return result;
+            }
             const std::string configuration = release ? "Release" : "Debug";
             const std::string configurationLower = headless
                 ? "headless_ci"
@@ -11683,10 +11841,10 @@ namespace epochengine
                 return result;
             }
             error.clear();
-            if (!std::filesystem::is_directory(dependencyRoot, error) || error)
+            if (!std::filesystem::is_directory(*dependencyRoot, error) || error)
             {
                 result.summary =
-                    "The read-only live dependency cache is unavailable.";
+                    "The read-only host dependency cache is unavailable.";
                 return result;
             }
             error.clear();
@@ -11720,7 +11878,10 @@ namespace epochengine
                 "/p:VcpkgManifestRoot="
                     + (workspace / "Engine").generic_string() + "/",
                 "/p:VcpkgInstalledDir="
-                    + dependencyRoot.generic_string() + "/",
+                    + dependencyRoot->generic_string() + "/",
+                "/p:VcpkgTriplet=x64-windows",
+                "/p:EpochVcpkgInstallRoot="
+                    + ownedTriplet->generic_string() + "/",
                 "/p:UseMultiToolTask=false",
                 "/p:BuildInParallel=false",
                 "/m:1",
@@ -11783,6 +11944,29 @@ namespace epochengine
                 && outputExists;
             if (result.succeeded)
             {
+                const auto ownedOutput = ai_source_owned_executable(
+                    workspace.generic_string(), lane);
+                const auto identity = ownedOutput
+                    ? platform::child_process::inspect_executable(*ownedOutput)
+                    : std::nullopt;
+                if (!identity || !identity->valid())
+                {
+                    result.succeeded = false;
+                    result.summary =
+                        "The compiler exited successfully, but its sandbox output identity could not be verified.";
+                    return result;
+                }
+                result.artifact = candidate_artifacts::Binding{
+                    .workspace_root = workspace.generic_string(),
+                    .generation = generation,
+                    .lane = lane,
+                    .executable_path = ownedOutput->generic_string(),
+                    .identity = *identity,
+                    .build_ticket = buildTicket};
+                result.output_path = ownedOutput->generic_string();
+            }
+            if (result.succeeded)
+            {
                 result.summary = epochengine::format_text(
                     "The host compiler accepted the disposable {} target.",
                     targetLabel);
@@ -11812,32 +11996,36 @@ namespace epochengine
 #endif
         }
 
-        [[nodiscard]] EditorProjectBuildResult test_ai_source_workspace(
-            std::string workspaceRoot,
-            std::stop_token cancellation,
-            AiSourceValidationLane lane)
+        [[nodiscard]] AiSourceTaskResult test_ai_source_workspace(
+            candidate_artifacts::Binding artifact,
+            std::stop_token cancellation)
         {
-            EditorProjectBuildResult result{};
+            AiSourceTaskResult result{};
+            result.artifact = artifact;
+            const AiSourceValidationLane lane = artifact.lane;
             const bool fullValidation =
                 lane == AiSourceValidationLane::FullValidation;
             const bool release = lane == AiSourceValidationLane::ReleaseEditor
                 || fullValidation;
             const bool headless = lane == AiSourceValidationLane::HeadlessCi;
-            std::filesystem::path workspace{std::move(workspaceRoot)};
-            if (workspace.empty() || !workspace.is_absolute())
+            std::filesystem::path workspace{artifact.workspace_root};
+            if (workspace.empty() || !workspace.is_absolute()
+                || artifact.generation == 0u || artifact.build_ticket == 0u
+                || !artifact.identity.valid())
             {
                 result.summary =
                     "The guarded source test requires an absolute disposable workspace root.";
                 return result;
             }
             std::error_code error{};
-            workspace = std::filesystem::weakly_canonical(workspace, error);
-            if (error || workspace.empty())
+            const auto ownedWorkspace = ai_source_owned_path(workspace);
+            if (!ownedWorkspace || ownedWorkspace->generic_string() != artifact.workspace_root)
             {
                 result.summary =
                     "The disposable workspace could not be resolved for contract testing.";
                 return result;
             }
+            workspace = *ownedWorkspace;
             error.clear();
             const auto workspaceStatus =
                 std::filesystem::symlink_status(workspace, error);
@@ -11879,6 +12067,19 @@ namespace epochengine
                 return result;
             }
 
+            const auto ownedOutput = ai_source_owned_executable(artifact.workspace_root, lane);
+            const auto beforeIdentity = ownedOutput
+                ? platform::child_process::inspect_executable(*ownedOutput)
+                : std::nullopt;
+            if (!ownedOutput || ownedOutput->generic_string() != artifact.executable_path
+                || !beforeIdentity || *beforeIdentity != artifact.identity)
+            {
+                result.summary =
+                    "Sandbox validation refused an executable that no longer matches its accepted build identity.";
+                return result;
+            }
+            result.before_identity = *beforeIdentity;
+
             platform::child_process::LaunchRequest request{};
             request.executable = executable;
             request.working_directory = executable.parent_path();
@@ -11897,6 +12098,7 @@ namespace epochengine
             request.display_name = "Epoch guarded " + testLabel;
             request.window_mode =
                 platform::child_process::WindowMode::hidden;
+            request.expected_executable = artifact.identity;
             const auto launched =
                 platform::child_process::launch_or_focus(request);
             if (launched.code
@@ -11933,6 +12135,22 @@ namespace epochengine
             }
 
             result.succeeded = waited.process->exit_code == 0;
+            const auto afterOutput = ai_source_owned_executable(artifact.workspace_root, lane);
+            const auto afterIdentity = afterOutput
+                ? platform::child_process::inspect_executable(*afterOutput)
+                : std::nullopt;
+            if (afterIdentity)
+                result.after_identity = *afterIdentity;
+            if (!afterOutput || afterOutput->generic_string() != artifact.executable_path
+                || !afterIdentity || *afterIdentity != artifact.identity
+                || !waited.process->verified_executable
+                || *waited.process->verified_executable != artifact.identity)
+            {
+                result.succeeded = false;
+                result.summary =
+                    "Sandbox validation refused changed executable bytes or missing host launch identity evidence.";
+                return result;
+            }
             result.summary = result.succeeded
                 ? epochengine::format_text(
                     "The {} accepted the disposable source workspace.",
@@ -22822,7 +23040,33 @@ namespace epochengine
             return std::pair{submitted, waitingForConsent};
         };
 
-        auto dispatch_ai_development_action = [&](
+        const auto rejectSourceDispatch = [&](const std::string& status)
+        {
+            invalidate_ai_source_artifacts(editor);
+            editor.aiSourceAwaitingReply = false;
+            editor.aiSourceRequestedGeneration = chat.completionGeneration;
+            if (editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration)
+            {
+                editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                editor.aiDeferredDispatchQueued = false;
+                editor.aiDeferredPrompt.clear();
+                editor.aiDeferredDisplay.clear();
+                editor.showAiModelConsentModal = false;
+            }
+            push_ai_development_log(editor, "[ai] " + status);
+            chat.append_status(status);
+            if (editor.aiDevelopmentPanel)
+            {
+                const auto cancelled =
+                    editor.aiDevelopmentPanel->cancel_active_campaign(status);
+                push_ai_development_log(
+                    editor, "[self-coding] " + cancelled.status);
+            }
+        };
+
+        std::function<void(const editor_ai_development_panel::RenderResult&)>
+            dispatch_ai_development_action;
+        dispatch_ai_development_action = [&](
             const editor_ai_development_panel::RenderResult& action)
         {
             const auto retireCandidate = [&editor](
@@ -22850,6 +23094,8 @@ namespace epochengine
             };
             using CandidateDecision =
                 editor_ai_development_panel::CandidateDecision;
+            if (action.candidate_decision != CandidateDecision::none)
+                invalidate_ai_source_artifacts(editor);
             if (action.candidate_decision == CandidateDecision::keep_current)
             {
                 retireCandidate(
@@ -23039,9 +23285,8 @@ namespace epochengine
                     || action.workspace_root.empty()
                     || action.include_paths.empty())
                 {
-                    push_ai_development_log(
-                        editor,
-                        "[ai] Disposable workspace request rejected because its roots or include set are empty.");
+                    rejectSourceDispatch(
+                        "Disposable workspace request rejected because its roots or include set are empty. No retry can authorize a missing source boundary.");
                     return;
                 }
                 if (editor.aiSourceWorkspacePending)
@@ -23051,6 +23296,7 @@ namespace epochengine
                         "[ai] A disposable source workspace is already being materialized.");
                     return;
                 }
+                invalidate_ai_source_artifacts(editor);
 
                 if (editor.automationCommand
                         == EditorAutomationCommand::SelfCodingLocalSmoke
@@ -23063,29 +23309,64 @@ namespace epochengine
                     .workspace_root = action.workspace_root,
                     .include_paths = action.include_paths,
                     .excluded_components = action.excluded_components};
-                auto submission = schedule_editor_cancellable_task(
-                    editor,
-                    "AI Source Workspace",
-                    [request = std::move(request)](
-                        std::stop_token token) mutable
-                    {
-                        request.cancellation_requested = [token]
+                try
+                {
+                    auto submission = schedule_editor_cancellable_task(
+                        editor,
+                        "AI Source Workspace",
+                        [request = std::move(request)](
+                            std::stop_token token) mutable
                         {
-                            return token.stop_requested();
-                        };
-                        const epochengine::ai::development_executor::
-                            SourceWorkspaceMaterializer materializer{};
-                        return materializer.materialize(request);
-                    });
-                editor.aiSourceWorkspacePending.emplace(
-                    std::move(submission.completion));
-                editor.aiSourceWorkspaceCancellation =
-                    submission.cancellation;
-                editor.aiSourceWorkspaceGeneration =
-                    action.workspace_generation;
-                push_ai_development_log(
-                    editor,
-                    "[ai] Queued exact-copy disposable source workspace materialization.");
+                            request.cancellation_requested = [token]
+                            {
+                                return token.stop_requested();
+                            };
+                            const epochengine::ai::development_executor::
+                                SourceWorkspaceMaterializer materializer{};
+                            return materializer.materialize(request);
+                        });
+                    editor.aiSourceWorkspacePending.emplace(
+                        std::move(submission.completion));
+                    editor.aiSourceWorkspaceCancellation =
+                        submission.cancellation;
+                    editor.aiSourceWorkspaceGeneration =
+                        action.workspace_generation;
+                    editor.aiSourceWorkspaceArtifactEpoch = editor.aiSourceArtifactEpoch;
+                    push_ai_development_log(
+                        editor,
+                        "[ai] Queued exact-copy disposable source workspace materialization.");
+                }
+                catch (const std::exception& exception)
+                {
+                    invalidate_ai_source_artifacts(editor);
+                    const std::string status = std::string{
+                        "Disposable source workspace could not be scheduled: "}
+                        + exception.what();
+                    push_ai_development_log(editor, "[ai] " + status);
+                    if (editor.aiDevelopmentPanel)
+                    {
+                        const auto completed = editor.aiDevelopmentPanel
+                            ->complete_source_workspace(action.workspace_generation,
+                                false, status, 0u, 0u);
+                        chat.append_status(completed.status);
+                        dispatch_ai_development_action(completed);
+                    }
+                }
+                catch (...)
+                {
+                    invalidate_ai_source_artifacts(editor);
+                    const std::string status =
+                        "Disposable source workspace could not be scheduled because of an unknown scheduler failure.";
+                    push_ai_development_log(editor, "[ai] " + status);
+                    if (editor.aiDevelopmentPanel)
+                    {
+                        const auto completed = editor.aiDevelopmentPanel
+                            ->complete_source_workspace(action.workspace_generation,
+                                false, status, 0u, 0u);
+                        chat.append_status(completed.status);
+                        dispatch_ai_development_action(completed);
+                    }
+                }
                 break;
             }
             case editor_ai_development_panel::HostAction::
@@ -23129,14 +23410,8 @@ namespace epochengine
                 if (action.source_root.empty()
                     || action.workspace_root.empty())
                 {
-                    const std::string status =
-                        "Sandbox compiler dispatch was rejected because its roots are empty.";
-                    push_ai_development_log(editor, "[ai] " + status);
-                    if (editor.aiDevelopmentPanel)
-                    {
-                        const auto completed = completeSourceBuild(false, status);
-                        chat.append_status(completed.status);
-                    }
+                    rejectSourceDispatch(
+                        "Sandbox compiler dispatch was rejected because its roots are empty. No compiler was launched.");
                     break;
                 }
                 if (editor.aiSourceBuildPending)
@@ -23147,6 +23422,40 @@ namespace epochengine
                     break;
                 }
 
+                const auto workspace = ai_source_owned_path(
+                    std::filesystem::path{action.workspace_root});
+                if (lane == AiSourceValidationLane::DebugEditor)
+                {
+                    invalidate_ai_source_artifacts(editor);
+                    if (workspace)
+                        (void)editor.aiSourceArtifacts.reset(
+                            workspace->generic_string(), action.workspace_generation);
+                }
+                const auto buildTicket = workspace
+                    ? editor.aiSourceArtifacts.begin_build(lane) : 0u;
+                if (!workspace || buildTicket == 0u)
+                {
+                    rejectSourceDispatch(
+                        "Sandbox compiler dispatch has no current owned artifact generation or required predecessor evidence. The session was retired without a compiler launch.");
+                    break;
+                }
+
+                if (editor.aiSourceHostDependencyRoot.empty())
+                {
+                    const auto dependencyRoot = ai_source_host_dependency_root();
+                    if (!dependencyRoot)
+                    {
+                        rejectSourceDispatch(
+                            "The original verified host source has no available compiler dependency cache. The sandbox cannot substitute its own dependency location.");
+                        break;
+                    }
+                    editor.aiSourceHostDependencyRoot = *dependencyRoot;
+                    push_ai_development_log(editor,
+                        "[ai] Bound read-only host compiler dependencies: "
+                            + dependencyRoot->generic_string()
+                            + "; retained independently of sandbox Keep/Choose succession.");
+                }
+
                 try
                 {
                     auto submission = schedule_editor_cancellable_task(
@@ -23155,14 +23464,17 @@ namespace epochengine
                             : (release ? "AI Source Release Compiler"
                                 : "AI Source Debug Compiler"),
                         [sourceRoot = action.source_root,
-                         workspaceRoot = action.workspace_root,
-                         lane](std::stop_token token) mutable
+                         workspaceRoot = workspace->generic_string(),
+                         hostDependencyRoot = editor.aiSourceHostDependencyRoot,
+                         lane, generation = action.workspace_generation,
+                         buildTicket](std::stop_token token) mutable
                         {
                             return build_ai_source_workspace(
                                 std::move(sourceRoot),
                                 std::move(workspaceRoot),
+                                std::move(hostDependencyRoot),
                                 token,
-                                lane);
+                                lane, generation, buildTicket);
                         });
                     editor.aiSourceBuildPending.emplace(
                         std::move(submission.completion));
@@ -23171,6 +23483,7 @@ namespace epochengine
                     editor.aiSourceBuildLane = lane;
                     editor.aiSourceBuildGeneration =
                         action.workspace_generation;
+                    editor.aiSourceBuildArtifactEpoch = editor.aiSourceArtifactEpoch;
                     push_ai_development_log(
                         editor,
                         headless
@@ -23181,6 +23494,7 @@ namespace epochengine
                 }
                 catch (const std::exception& exception)
                 {
+                    invalidate_ai_source_artifacts(editor);
                     const std::string status =
                         std::string{
                             "The guarded source compiler could not be scheduled: "}
@@ -23190,10 +23504,12 @@ namespace epochengine
                     {
                         const auto completed = completeSourceBuild(false, status);
                         chat.append_status(completed.status);
+                        dispatch_ai_development_action(completed);
                     }
                 }
                 catch (...)
                 {
+                    invalidate_ai_source_artifacts(editor);
                     const std::string status =
                         "The guarded source compiler could not be scheduled because of an unknown scheduler failure.";
                     push_ai_development_log(editor, "[ai] " + status);
@@ -23201,6 +23517,7 @@ namespace epochengine
                     {
                         const auto completed = completeSourceBuild(false, status);
                         chat.append_status(completed.status);
+                        dispatch_ai_development_action(completed);
                     }
                 }
                 break;
@@ -23258,14 +23575,8 @@ namespace epochengine
                     };
                 if (action.workspace_root.empty())
                 {
-                    const std::string status =
-                        "Sandbox contract-test dispatch was rejected because its workspace root is empty.";
-                    push_ai_development_log(editor, "[ai] " + status);
-                    if (editor.aiDevelopmentPanel)
-                    {
-                        const auto completed = completeSourceTest(false, status);
-                        chat.append_status(completed.status);
-                    }
+                    rejectSourceDispatch(
+                        "Sandbox contract-test dispatch was rejected because its workspace root is empty. No test was launched.");
                     break;
                 }
                 if (editor.aiSourceTestPending)
@@ -23273,6 +23584,18 @@ namespace epochengine
                     push_ai_development_log(
                         editor,
                         "[ai] A guarded source contract test is already running.");
+                    break;
+                }
+                const auto workspace = ai_source_owned_path(
+                    std::filesystem::path{action.workspace_root});
+                const auto artifact = workspace
+                    ? editor.aiSourceArtifacts.for_test(workspace->generic_string(),
+                        action.workspace_generation, lane)
+                    : std::nullopt;
+                if (!artifact)
+                {
+                    rejectSourceDispatch(
+                        "Sandbox validation dispatch has no exact current-generation compiler artifact. The session was retired without a test launch.");
                     break;
                 }
                 try
@@ -23283,13 +23606,11 @@ namespace epochengine
                             : (headless ? "AI Source HeadlessCI Run"
                                 : (release ? "AI Source Release Contract Test"
                                     : "AI Source Debug Contract Test")),
-                        [workspaceRoot = action.workspace_root, lane](
+                        [artifact = *artifact](
                             std::stop_token token) mutable
                         {
                             return test_ai_source_workspace(
-                                std::move(workspaceRoot),
-                                token,
-                                lane);
+                                std::move(artifact), token);
                         });
                     editor.aiSourceTestPending.emplace(
                         std::move(submission.completion));
@@ -23298,6 +23619,7 @@ namespace epochengine
                         submission.cancellation;
                     editor.aiSourceTestGeneration =
                         action.workspace_generation;
+                    editor.aiSourceTestArtifactEpoch = editor.aiSourceArtifactEpoch;
                     push_ai_development_log(
                         editor,
                         fullValidation
@@ -23310,6 +23632,7 @@ namespace epochengine
                 }
                 catch (const std::exception& exception)
                 {
+                    invalidate_ai_source_artifacts(editor);
                     const std::string status =
                         std::string{
                             "The guarded source contract test could not be scheduled: "}
@@ -23319,10 +23642,12 @@ namespace epochengine
                     {
                         const auto completed = completeSourceTest(false, status);
                         chat.append_status(completed.status);
+                        dispatch_ai_development_action(completed);
                     }
                 }
                 catch (...)
                 {
+                    invalidate_ai_source_artifacts(editor);
                     const std::string status =
                         "The guarded source contract test could not be scheduled because of an unknown scheduler failure.";
                     push_ai_development_log(editor, "[ai] " + status);
@@ -23330,6 +23655,7 @@ namespace epochengine
                     {
                         const auto completed = completeSourceTest(false, status);
                         chat.append_status(completed.status);
+                        dispatch_ai_development_action(completed);
                     }
                 }
                 break;
@@ -23337,6 +23663,15 @@ namespace epochengine
             case editor_ai_development_panel::HostAction::
                 cancel_source_task:
             {
+                invalidate_ai_source_artifacts(editor);
+                if (editor.aiDevelopmentPanel)
+                {
+                    const auto cancelled =
+                        editor.aiDevelopmentPanel->cancel_active_campaign(
+                            "The operator cancelled the running sandbox task.");
+                    push_ai_development_log(
+                        editor, "[self-coding] " + cancelled.status);
+                }
                 bool requested{};
                 if (editor.aiSourceWorkspaceCancellation.valid())
                 {
@@ -23368,6 +23703,9 @@ namespace epochengine
             {
                 if (action.workspace_root.empty())
                 {
+                    invalidate_ai_source_artifacts(editor);
+                    editor.aiCandidatePreviewReported = true;
+                    editor.aiCandidatePreviewStartedAt = {};
                     if (editor.aiDevelopmentPanel)
                     {
                         const auto failed = editor.aiDevelopmentPanel
@@ -23387,23 +23725,36 @@ namespace epochengine
                         "[candidate-lab] A challenger is already running; duplicate launch refused.");
                     break;
                 }
-                const std::filesystem::path workspace =
-                    resolve_editor_path(action.workspace_root);
-                const std::filesystem::path executable =
-                    workspace / "x64/Release/EpochEditor.exe";
-                std::error_code candidateError{};
-                if (!std::filesystem::is_regular_file(
-                        executable, candidateError) || candidateError)
+                const auto ownedWorkspace = ai_source_owned_path(
+                    std::filesystem::path{action.workspace_root});
+                const auto artifact = ownedWorkspace
+                    ? editor.aiSourceArtifacts.for_preview(ownedWorkspace->generic_string(),
+                        action.workspace_generation)
+                    : std::nullopt;
+                const auto ownedExecutable = artifact
+                    ? ai_source_owned_executable(artifact->workspace_root, artifact->lane)
+                    : std::nullopt;
+                const auto identity = ownedExecutable
+                    ? platform::child_process::inspect_executable(*ownedExecutable)
+                    : std::nullopt;
+                if (!artifact || !ownedExecutable
+                    || ownedExecutable->generic_string() != artifact->executable_path
+                    || !identity || *identity != artifact->identity)
                 {
+                    invalidate_ai_source_artifacts(editor);
+                    editor.aiCandidatePreviewReported = true;
+                    editor.aiCandidatePreviewStartedAt = {};
                     const auto failed = editor.aiDevelopmentPanel
                         ->complete_candidate_preview(
                             action.workspace_generation,
                             false, 0u, 0u,
-                            "Validated candidate executable is missing from x64/Release.");
+                            "Candidate preview refused missing, stale, redirected, or changed executable validation evidence.");
                     push_ai_development_log(
                         editor, "[candidate-lab] " + failed.status);
                     break;
                 }
+                const auto& workspace = *ownedWorkspace;
+                const auto& executable = *ownedExecutable;
                 platform::child_process::LaunchRequest request{};
                 request.executable = executable;
                 request.working_directory = executable.parent_path();
@@ -23411,17 +23762,24 @@ namespace epochengine
                     / "logs/candidate-preview.log";
                 request.arguments = {"--editor"};
                 request.correlation_key = epochengine::format_text(
-                    "epoch.ai.candidate.{}", action.workspace_generation);
-                request.exclusive_group = request.correlation_key;
+                    "epoch.ai.candidate.{}.{}.{}", action.workspace_generation,
+                    core::sha256::hex(core::sha256::hash(artifact->workspace_root)),
+                    artifact->identity.sha256);
+                request.exclusive_group = "epoch.ai.candidate."
+                    + core::sha256::hex(core::sha256::hash(request.correlation_key));
                 request.display_name = epochengine::format_text(
                     "Epoch Sandbox Candidate {}",
                     action.workspace_generation);
                 request.window_mode =
                     platform::child_process::WindowMode::normal;
+                request.expected_executable = artifact->identity;
                 const auto launched =
                     platform::child_process::launch_or_focus(request);
-                if (!launched)
+                if (launched.code != platform::child_process::LaunchCode::started)
                 {
+                    invalidate_ai_source_artifacts(editor);
+                    editor.aiCandidatePreviewReported = true;
+                    editor.aiCandidatePreviewStartedAt = {};
                     const auto failed = editor.aiDevelopmentPanel
                         ->complete_candidate_preview(
                             action.workspace_generation,
@@ -23432,6 +23790,24 @@ namespace epochengine
                         editor, "[candidate-lab] " + failed.status);
                     break;
                 }
+                const auto launchedSnapshot = platform::child_process::snapshot(launched.handle);
+                if (!launchedSnapshot || !launchedSnapshot->verified_executable
+                    || *launchedSnapshot->verified_executable != artifact->identity
+                    || !ai_source_same_executable(artifact->executable_path,
+                        launchedSnapshot->executable))
+                {
+                    (void)platform::child_process::stop(launched.handle,
+                        platform::child_process::StopMode::force);
+                    editor.aiCandidateRetiringProcesses.push_back(launched.handle);
+                    invalidate_ai_source_artifacts(editor);
+                    editor.aiCandidatePreviewReported = true;
+                    editor.aiCandidatePreviewStartedAt = {};
+                    const auto failed = editor.aiDevelopmentPanel->complete_candidate_preview(
+                        action.workspace_generation, false, 0u, 0u,
+                        "Candidate process did not return the exact host-verified executable identity; retirement requested.");
+                    push_ai_development_log(editor, "[candidate-lab] " + failed.status);
+                    break;
+                }
                 editor.aiCandidateChallengerProcess = launched.handle;
                 if (editor.automationCommand
                     == EditorAutomationCommand::SelfCodingLocalSmoke)
@@ -23439,21 +23815,24 @@ namespace epochengine
                     editor.selfCodingSmokeCandidateRoot =
                         workspace.generic_string();
                 }
-                editor.aiCandidateChallengerSnapshot =
-                    platform::child_process::snapshot(launched.handle);
+                editor.aiCandidateChallengerSnapshot = launchedSnapshot;
                 editor.aiCandidatePreviewGeneration =
                     action.workspace_generation;
+                editor.aiCandidatePreviewArtifactEpoch = editor.aiSourceArtifactEpoch;
+                editor.aiCandidatePreviewArtifact = artifact;
                 editor.aiCandidatePreviewReported = false;
                 editor.aiCandidatePreviewStartedAt =
                     std::chrono::steady_clock::now();
                 push_ai_development_log(
                     editor,
-                    "[candidate-lab] Started the validated candidate process; waiting for its native window before bottom-grid admission.");
+                    "[candidate-lab] Started the exact validated candidate process; waiting for its native window before bottom-grid admission. HOST_EXECUTABLE_EVIDENCE "
+                        + candidate_artifacts::canonical_evidence(*artifact));
                 break;
             }
             case editor_ai_development_panel::HostAction::
                 cancel_model_source_request:
             {
+                invalidate_ai_source_artifacts(editor);
                 auto& mcp = editor.aiLocalMcp;
                 const bool cancelledLocalModel =
                     chat.source_request_running() && chat.cancel_pending(true);
@@ -23505,8 +23884,29 @@ namespace epochengine
             }
             case editor_ai_development_panel::HostAction::
                 request_model_source_proposal:
+            {
+                const auto existingMcp = editor.aiLocalMcp.process.valid()
+                    ? platform::child_process::snapshot(editor.aiLocalMcp.process)
+                    : std::nullopt;
+                if (chat.source_request_running()
+                    || editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration
+                    || editor.aiLocalMcp.awaitingResponse
+                    || (existingMcp && existingMcp->active()))
+                {
+                    push_ai_development_log(editor,
+                        "[ai] Another model request is already owned by the host; the duplicate dispatch was ignored and the existing operation remains active.");
+                    break;
+                }
+                if (chat.pending
+                    || editor.aiDeferredRequestKind != AiDeferredRequestKind::None)
+                {
+                    rejectSourceDispatch(
+                        "Self-coding could not start while another project-assistant request owns the local model. That request is unchanged; wait for it to finish, then start self-coding again.");
+                    break;
+                }
                 if (!action.model_prompt.empty())
                 {
+                    invalidate_ai_source_artifacts(editor);
                     if (editor.automationCommand
                             == EditorAutomationCommand::SelfCodingLocalSmoke
                         && action.model_prompt.starts_with(
@@ -23550,21 +23950,15 @@ namespace epochengine
                         == editor_ai_development_panel::ModelTransport::external_mcp)
                     {
                         auto& mcp = editor.aiLocalMcp;
-                        const auto active = mcp.process.valid()
-                            ? platform::child_process::snapshot(mcp.process)
-                            : std::nullopt;
-                        if (active && active->active())
+                        const auto rejectMcpDispatch = [&](const std::string& status)
                         {
-                            const auto rejected = editor.aiDevelopmentPanel
-                                ? editor.aiDevelopmentPanel->report_model_dispatch(
-                                    editor_ai_development_panel::ModelDispatchState::rejected,
-                                    "local stdio MCP",
-                                    "request already running")
-                                : editor_ai_development_panel::RenderResult{};
-                            push_ai_development_log(
-                                editor, "[local-mcp] " + rejected.status);
-                            break;
-                        }
+                            mcp.status = status;
+                            mcp.awaitingResponse = false;
+                            mcp.bridgeProcessId = 0u;
+                            mcp.startedTickNs = 0u;
+                            mcp.elapsedMs = 0u;
+                            rejectSourceDispatch(status);
+                        };
 
                         std::filesystem::path sandboxRoot{};
                         std::string refusal{};
@@ -23576,15 +23970,8 @@ namespace epochengine
                         {
                             if (refusal.empty())
                                 refusal = "The local stdio MCP bridge is not installed in this build.";
-                            const auto rejected = editor.aiDevelopmentPanel
-                                ? editor.aiDevelopmentPanel->report_model_dispatch(
-                                    editor_ai_development_panel::ModelDispatchState::rejected,
-                                    "local stdio MCP",
-                                    refusal)
-                                : editor_ai_development_panel::RenderResult{};
-                            mcp.status = refusal;
-                            push_ai_development_log(
-                                editor, "[local-mcp] " + rejected.status);
+                            rejectMcpDispatch(
+                                "Local MCP dispatch was rejected before launch: " + refusal);
                             break;
                         }
 
@@ -23608,15 +23995,8 @@ namespace epochengine
                         if (!write_local_mcp_prompt(
                                 mcp.promptPath, action.model_prompt, refusal))
                         {
-                            const auto rejected = editor.aiDevelopmentPanel
-                                ? editor.aiDevelopmentPanel->report_model_dispatch(
-                                    editor_ai_development_panel::ModelDispatchState::rejected,
-                                    "local stdio MCP",
-                                    refusal)
-                                : editor_ai_development_panel::RenderResult{};
-                            mcp.status = refusal;
-                            push_ai_development_log(
-                                editor, "[local-mcp] " + rejected.status);
+                            rejectMcpDispatch(
+                                "Local MCP prompt dispatch failed before launch: " + refusal);
                             break;
                         }
 
@@ -23648,18 +24028,14 @@ namespace epochengine
                             platform::child_process::WindowMode::hidden;
                         const auto launched =
                             platform::child_process::launch_or_focus(request);
-                        if (!launched)
+                        if (launched.code != platform::child_process::LaunchCode::started)
                         {
-                            mcp.status = "Local MCP bridge did not start: "
-                                + launched.message;
-                            const auto rejected = editor.aiDevelopmentPanel
-                                ? editor.aiDevelopmentPanel->report_model_dispatch(
-                                    editor_ai_development_panel::ModelDispatchState::rejected,
-                                    "local stdio MCP",
-                                    mcp.status)
-                                : editor_ai_development_panel::RenderResult{};
-                            push_ai_development_log(
-                                editor, "[local-mcp] " + rejected.status);
+                            // A supervisor may return another active operation;
+                            // it did not execute this prompt and is never adopted
+                            // or stopped on behalf of this rejected request.
+                            rejectMcpDispatch(
+                                "Local MCP bridge did not start this request: "
+                                    + launched.message);
                             break;
                         }
 
@@ -23715,8 +24091,26 @@ namespace epochengine
                         push_ai_development_log(
                             editor, "[ai] " + staged.status);
                     }
+                    else if (!queued && !waitingForConsent)
+                    {
+                        if (chat.pending
+                            || editor.aiDeferredRequestKind != AiDeferredRequestKind::None)
+                        {
+                            push_ai_development_log(editor,
+                                "[ai] The existing local-model request was retained; no duplicate source request was sent.");
+                        }
+                        else
+                        {
+                            rejectSourceDispatch(
+                                "The host could not queue the local-model source request or stage confirmation. No model request was sent.");
+                        }
+                    }
                 }
+                else
+                    rejectSourceDispatch(
+                        "The host rejected an empty self-coding model request before dispatch.");
                 break;
+            }
             case editor_ai_development_panel::HostAction::
                 execute_tool_harness:
             case editor_ai_development_panel::HostAction::none:
@@ -23823,6 +24217,8 @@ namespace epochengine
 
             const std::uint32_t generation =
                 editor.aiSourceWorkspaceGeneration;
+            const bool currentArtifactEpoch = editor.aiSourceWorkspaceArtifactEpoch
+                == editor.aiSourceArtifactEpoch;
             bool succeeded{};
             bool materializationReceiptValid{};
             std::string status{};
@@ -23860,6 +24256,12 @@ namespace epochengine
             }
             editor.aiSourceWorkspacePending.reset();
             editor.aiSourceWorkspaceCancellation = {};
+            if (!currentArtifactEpoch)
+            {
+                push_ai_development_log(editor,
+                    "[ai] Discarded workspace completion from a retired artifact request epoch.");
+                return;
+            }
             if (editor.automationCommand
                     == EditorAutomationCommand::SelfCodingLocalSmoke
                 && editor.selfCodingSmokePhase == 3u
@@ -23903,15 +24305,33 @@ namespace epochengine
             const std::uint32_t generation =
                 editor.aiSourceBuildGeneration;
             const AiSourceValidationLane lane = editor.aiSourceBuildLane;
+            const bool currentArtifactEpoch = editor.aiSourceBuildArtifactEpoch
+                == editor.aiSourceArtifactEpoch;
             bool succeeded{};
             std::string status{};
             try
             {
                 const auto build = editor.aiSourceBuildPending->get();
-                succeeded = build.succeeded;
                 status = build.summary;
                 if (!build.log_path.empty())
                     status += " Log: " + build.log_path;
+                if (currentArtifactEpoch)
+                {
+                    succeeded = build.succeeded && build.artifact
+                        && build.artifact->generation == generation
+                        && build.artifact->lane == lane
+                        && editor.aiSourceArtifacts.accept_build(*build.artifact);
+                    if (succeeded)
+                    {
+                        status += "\nHOST_EXECUTABLE_EVIDENCE "
+                            + candidate_artifacts::canonical_evidence(*build.artifact);
+                    }
+                    else if (build.succeeded)
+                    {
+                        status = "Compiler completion did not bind the current sandbox artifact ticket. "
+                            + status;
+                    }
+                }
             }
             catch (const editor_tasks::TaskCancelled&)
             {
@@ -23933,6 +24353,15 @@ namespace epochengine
             editor.aiSourceBuildPending.reset();
             editor.aiSourceBuildCancellation = {};
             editor.aiSourceBuildLane = AiSourceValidationLane::DebugEditor;
+
+            if (!currentArtifactEpoch)
+            {
+                push_ai_development_log(editor,
+                    "[ai] Discarded compiler completion from a retired artifact request epoch.");
+                return;
+            }
+            if (!succeeded)
+                invalidate_ai_source_artifacts(editor);
 
             if (!editor.aiDevelopmentPanel)
                 return;
@@ -23972,15 +24401,34 @@ namespace epochengine
             const std::uint32_t generation =
                 editor.aiSourceTestGeneration;
             const AiSourceValidationLane lane = editor.aiSourceTestLane;
+            const bool currentArtifactEpoch = editor.aiSourceTestArtifactEpoch
+                == editor.aiSourceArtifactEpoch;
             bool succeeded{};
             std::string status{};
             try
             {
                 const auto test = editor.aiSourceTestPending->get();
-                succeeded = test.succeeded;
                 status = test.summary;
                 if (!test.log_path.empty())
                     status += " Log: " + test.log_path;
+                if (currentArtifactEpoch)
+                {
+                    succeeded = test.artifact
+                        && test.artifact->generation == generation
+                        && test.artifact->lane == lane
+                        && editor.aiSourceArtifacts.accept_test(*test.artifact,
+                            test.before_identity, test.after_identity, test.succeeded);
+                    if (succeeded)
+                    {
+                        status += "\nHOST_EXECUTABLE_EVIDENCE "
+                            + candidate_artifacts::canonical_evidence(*test.artifact);
+                    }
+                    else if (test.succeeded)
+                    {
+                        status = "Validation completion did not bind the current unchanged sandbox artifact. "
+                            + status;
+                    }
+                }
             }
             catch (const editor_tasks::TaskCancelled&)
             {
@@ -24002,6 +24450,14 @@ namespace epochengine
             editor.aiSourceTestPending.reset();
             editor.aiSourceTestCancellation = {};
             editor.aiSourceTestLane = AiSourceValidationLane::DebugEditor;
+            if (!currentArtifactEpoch)
+            {
+                push_ai_development_log(editor,
+                    "[ai] Discarded validation completion from a retired artifact request epoch.");
+                return;
+            }
+            if (!succeeded)
+                invalidate_ai_source_artifacts(editor);
             if (!editor.aiDevelopmentPanel)
                 return;
             const auto completed = [&]()
@@ -24083,6 +24539,8 @@ namespace epochengine
             const auto& observed = editor.aiCandidateChallengerSnapshot;
             if (!observed || !observed->active())
             {
+                if (editor.aiCandidatePreviewArtifactEpoch == editor.aiSourceArtifactEpoch)
+                    invalidate_ai_source_artifacts(editor);
                 if (!editor.aiCandidatePreviewReported
                     && editor.aiDevelopmentPanel)
                 {
@@ -24104,6 +24562,35 @@ namespace epochengine
                 editor.aiCandidatePreviewStartedAt = {};
                 return;
             }
+            if (!editor.aiCandidatePreviewArtifact
+                || editor.aiCandidatePreviewArtifact->generation != editor.aiCandidatePreviewGeneration
+                || !observed->verified_executable
+                || *observed->verified_executable != editor.aiCandidatePreviewArtifact->identity
+                || !ai_source_same_executable(editor.aiCandidatePreviewArtifact->executable_path,
+                    observed->executable))
+            {
+                if (auto* manager = core::GetActiveMultiContextManager();
+                    manager && observed->platform_window_id != 0u)
+                    manager->RemoveExternalProcessWindow(observed->platform_window_id);
+                if (editor.aiDevelopmentPanel && !editor.aiCandidatePreviewReported)
+                {
+                    const auto failed = editor.aiDevelopmentPanel->complete_candidate_preview(
+                        editor.aiCandidatePreviewGeneration, false,
+                        observed->platform_process_id, observed->platform_window_id,
+                        "Candidate context admission lost its exact validated executable authorization.");
+                    push_ai_development_log(editor, "[candidate-lab] " + failed.status);
+                }
+                (void)platform::child_process::stop(editor.aiCandidateChallengerProcess,
+                    platform::child_process::StopMode::force);
+                editor.aiCandidateRetiringProcesses.push_back(editor.aiCandidateChallengerProcess);
+                editor.aiCandidateChallengerProcess = {};
+                editor.aiCandidateChallengerSnapshot.reset();
+                editor.aiCandidatePreviewReported = true;
+                editor.aiCandidatePreviewStartedAt = {};
+                if (editor.aiCandidatePreviewArtifactEpoch == editor.aiSourceArtifactEpoch)
+                    invalidate_ai_source_artifacts(editor);
+                return;
+            }
             constexpr auto candidateAdmissionTimeout =
                 std::chrono::seconds{45};
             if (editor.aiCandidatePreviewStartedAt
@@ -24112,6 +24599,8 @@ namespace epochengine
                         - editor.aiCandidatePreviewStartedAt
                     >= candidateAdmissionTimeout)
             {
+                if (editor.aiCandidatePreviewArtifactEpoch == editor.aiSourceArtifactEpoch)
+                    invalidate_ai_source_artifacts(editor);
                 if (editor.aiDevelopmentPanel)
                 {
                     const auto failed = editor.aiDevelopmentPanel
@@ -24490,7 +24979,7 @@ namespace epochengine
                 editor.aiAuthoringPlanForGoal = false;
                 editor.aiAuthoringStatus = submitted
                     ? "Host started the guarded source request worker. Scene authoring is inactive while it waits for the selected model endpoint."
-                    : "The local model is busy; the waiting source request was not sent.";
+                    : "The host rejected the queued source request before starting a local-model worker.";
                 chat.append_status(editor.aiAuthoringStatus);
                 if (editor.aiDevelopmentPanel)
                 {
@@ -24508,6 +24997,8 @@ namespace epochengine
                     push_ai_development_log(
                         editor, "[ai] " + dispatch.status);
                 }
+                if (!submitted)
+                    rejectSourceDispatch(editor.aiAuthoringStatus);
             }
             else if (submitted)
             {

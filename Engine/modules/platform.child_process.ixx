@@ -90,6 +90,30 @@ export namespace epochengine::platform::child_process
         failed
     };
 
+    struct ExecutableIdentity final
+    {
+        std::uint64_t size_bytes{};
+        std::string sha256{};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            if (size_bytes == 0u || size_bytes > 512u * 1024u * 1024u
+                || sha256.size() != 64u)
+                return false;
+            bool nonzero{};
+            for (const char ch : sha256)
+            {
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f')))
+                    return false;
+                nonzero = nonzero || ch != '0';
+            }
+            return nonzero;
+        }
+
+        [[nodiscard]] friend bool operator==(
+            const ExecutableIdentity&, const ExecutableIdentity&) noexcept = default;
+    };
+
     struct LaunchRequest final
     {
         std::filesystem::path executable{};
@@ -101,6 +125,8 @@ export namespace epochengine::platform::child_process
         std::string display_name{};
         WindowMode window_mode{WindowMode::normal};
         bool append_output{};
+        // Artifact integrity only; this grants no filesystem/network confinement.
+        std::optional<ExecutableIdentity> expected_executable{};
     };
 
     struct LaunchResult final
@@ -136,6 +162,7 @@ export namespace epochengine::platform::child_process
         bool focus_pending{};
         bool stop_supported{};
         std::string message{};
+        std::optional<ExecutableIdentity> verified_executable{};
 
         [[nodiscard]] constexpr bool active() const noexcept
         {
@@ -176,6 +203,8 @@ export namespace epochengine::platform::child_process
     [[nodiscard]] std::string_view stop_code_name(StopCode code) noexcept;
     [[nodiscard]] std::string_view wait_code_name(WaitCode code) noexcept;
 
+    [[nodiscard]] std::optional<ExecutableIdentity> inspect_executable(
+        const std::filesystem::path& executable) noexcept;
     [[nodiscard]] LaunchResult launch_or_focus(const LaunchRequest& request) noexcept;
     [[nodiscard]] FocusCode focus(ProcessHandle handle) noexcept;
     [[nodiscard]] StopCode stop(ProcessHandle handle, StopMode mode) noexcept;

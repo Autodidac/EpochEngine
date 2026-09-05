@@ -1,5 +1,43 @@
 ## [Unreleased] - v0.89.35
 
+- Repair automatic compiler/test recovery: successful repair materialization
+  queues the next exact proposal through the production controller, without a
+  hidden Generate Proposed Changes click. Preserve the path catalog, navigation
+  budget, and bounded failed-proposal/compiler diagnostics across fresh repair
+  workspaces. Diagnostic references are not valid replacement preimages; the
+  next proposal still targets the exact unchanged baseline.
+- Bind sandbox build, test and preview to host-observed executable size/SHA-256,
+  workspace, generation and a non-recycled build ticket. Recheck the executable
+  before/after testing and before PID/context admission; cancel and stale task
+  completions cannot restore validation or candidate-choice state.
+- Windows verified launches hash a locked image and recheck the pinned directory
+  chain before process start; correlation reuse cannot downgrade the required
+  identity. Keep preview process groups within their actual length bound. These
+  checks authenticate the executable only, not its DLLs/assets or OS isolation.
+- Keep original host compiler dependency authority independent of Keep/Choose
+  sandbox succession. Override both MSBuild dependency properties; dependency
+  install/bootstrap remain disabled. Scheduler failures propagate their bounded
+  repair action instead of leaving the UI pending; invalid source/artifact
+  authority terminates without fabricating compiler evidence.
+- Reject known transport-failure text and empty/whitespace replies before plan
+  recording. An automatic session may resend its same outstanding authorized
+  plan request once; exhausted or cancelled requests stop without approving a
+  failure message, inventing a proposal, or changing the accepted plan.
+- Retire fatal pre-dispatch model failures explicitly. A duplicate source
+  request keeps its existing worker; a project-assistant-owned model request is
+  not cancelled by a new self-coding request. Failed worker construction cannot
+  leave a new pending request permanently marked as working.
+- Final September 5 recovery checkpoint passes Windows Debug/Release editor
+  builds and explicitly waited aggregate contracts (exit 0), Release HeadlessCI
+  build, and all eight SoftwareBase/identity/admission CTests. The real non-GPU
+  child-process identity contract also passes ten repeated runs; naming passes
+  for 590 files. Exact Release editor: 12,439,552 bytes, SHA-256
+  1470bd4d5282ed0c185a2b08df742b087532f5d5c1d34301df68b48f8e1dd1ab.
+  Existing optimization-override/duplicate-logger warnings remain. The approved
+  native Qwen/preview run was tool-blocked before startup: no model-to-build,
+  second sandbox compile, new Linux/pixel evidence, OS-confinement proof or
+  publication is claimed. The checkpoint remains held and unpublished.
+
 - Add model-directed source navigation by validated line and literal-query
   selectors within the existing twelve-file/184 KiB context budget. Missing
   regions receive bounded correction; unsafe paths still fail before reads.
@@ -29,8 +67,9 @@
 - Windows Debug/Release editor builds and aggregate contracts pass; Release
   HeadlessCI builds, four focused software/admission CTests and the separate
   captured-child contract pass. Source naming passes for 588 files. The current
-  Qwen native test launch was blocked before startup and remains pending explicit
-  reapproval. No new model-to-candidate success, Linux/pixel proof, public release,
+  Qwen native test launch was blocked before startup at that checkpoint. The
+  operator subsequently approved it, but a new visible launch was still denied
+  by the execution tool. No new model-to-candidate success, Linux/pixel proof, public release,
   stable-base advancement or OS confinement is claimed by this checkpoint.
 
 - Remove the objective-word-overlap rejection exposed by the operator's "find

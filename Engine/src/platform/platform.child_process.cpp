@@ -6,9 +6,11 @@ module;
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -33,11 +35,186 @@ module;
 
 module platform.child_process;
 
+import core.sha256;
+
 namespace epochengine::platform::child_process
 {
     namespace
     {
         using Clock = std::chrono::steady_clock;
+        constexpr std::uint64_t maximum_executable_bytes = 512u * 1024u * 1024u;
+
+        [[nodiscard]] bool valid_executable_path(const std::filesystem::path& path)
+        {
+            const auto& native = path.native();
+            return !native.empty() && native.size() <= 32'767u
+                && native.find(std::filesystem::path::value_type{})
+                    == std::filesystem::path::string_type::npos;
+        }
+
+#if defined(_WIN32)
+        // The image and each directory component stay non-inheritable and
+        // deny replacement until CreateProcess/ResumeThread have completed.
+        // These short-lived file locks are not a candidate execution sandbox.
+        struct ExecutableReadLock final
+        {
+            HANDLE image{INVALID_HANDLE_VALUE};
+            std::array<HANDLE, 128u> directories{};
+            std::size_t directory_count{};
+            std::filesystem::path canonical_path{};
+            std::optional<ExecutableIdentity> identity{};
+
+            ExecutableReadLock() = default;
+            ExecutableReadLock(const ExecutableReadLock&) = delete;
+            ExecutableReadLock& operator=(const ExecutableReadLock&) = delete;
+
+            ~ExecutableReadLock() noexcept
+            {
+                if (image != INVALID_HANDLE_VALUE)
+                    (void)::CloseHandle(image);
+                while (directory_count != 0u)
+                    (void)::CloseHandle(directories[--directory_count]);
+            }
+
+            [[nodiscard]] bool lock_directory(const std::filesystem::path& path)
+            {
+                if (directory_count == directories.size())
+                    return false;
+                const HANDLE handle = ::CreateFileW(path.c_str(),
+                    FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+                if (handle == INVALID_HANDLE_VALUE)
+                    return false;
+                directories[directory_count++] = handle;
+                BY_HANDLE_FILE_INFORMATION information{};
+                return ::GetFileType(handle) == FILE_TYPE_DISK
+                    && ::GetFileInformationByHandle(handle, &information) != FALSE
+                    && (information.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0u
+                    && (information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0u;
+            }
+
+            [[nodiscard]] bool open(const std::filesystem::path& path)
+            {
+                if (!valid_executable_path(path))
+                    return false;
+                std::error_code error{};
+                const auto absolute = std::filesystem::absolute(path, error).lexically_normal();
+                if (error || !absolute.is_absolute() || absolute.filename().empty())
+                    return false;
+
+                // Lock root-to-leaf before opening the image, so a renamed
+                // ancestor cannot redirect the subsequent path-based OS launch.
+                auto directory = absolute.root_path();
+                if (!lock_directory(directory))
+                    return false;
+                for (const auto& component : absolute.parent_path().relative_path())
+                {
+                    directory /= component;
+                    if (!lock_directory(directory))
+                        return false;
+                }
+                image = ::CreateFileW(absolute.c_str(), GENERIC_READ,
+                    FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                    FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+                if (image == INVALID_HANDLE_VALUE || ::GetFileType(image) != FILE_TYPE_DISK)
+                    return false;
+                BY_HANDLE_FILE_INFORMATION information{};
+                if (::GetFileInformationByHandle(image, &information) == FALSE
+                    || (information.dwFileAttributes
+                        & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0u)
+                    return false;
+                // Attribute writes are not excluded by Win32 sharing flags.
+                // Recheck after the entire chain is pinned: each ordinary
+                // directory now contains its next no-delete child, and cannot
+                // become the empty directory required for a new reparse point.
+                for (std::size_t index = 0u; index < directory_count; ++index)
+                {
+                    BY_HANDLE_FILE_INFORMATION directoryInformation{};
+                    if (::GetFileType(directories[index]) != FILE_TYPE_DISK
+                        || ::GetFileInformationByHandle(
+                            directories[index], &directoryInformation) == FALSE
+                        || (directoryInformation.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0u
+                        || (directoryInformation.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u)
+                        return false;
+                }
+                const std::uint64_t size = (static_cast<std::uint64_t>(
+                    information.nFileSizeHigh) << 32u) | information.nFileSizeLow;
+                if (size == 0u || size > maximum_executable_bytes)
+                    return false;
+
+                std::wstring finalPath(32'768u, L'\0');
+                const DWORD pathLength = ::GetFinalPathNameByHandleW(image,
+                    finalPath.data(), static_cast<DWORD>(finalPath.size()),
+                    FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+                if (pathLength == 0u || pathLength >= finalPath.size())
+                    return false;
+                finalPath.resize(pathLength);
+                if (finalPath.starts_with(L"\\\\?\\UNC\\"))
+                    finalPath = L"\\\\" + finalPath.substr(8u);
+                else if (finalPath.starts_with(L"\\\\?\\"))
+                    finalPath.erase(0u, 4u);
+                canonical_path = std::filesystem::path{finalPath}.lexically_normal();
+                if (!canonical_path.is_absolute())
+                    return false;
+
+                core::sha256::Hasher hasher{};
+                std::array<std::uint8_t, 64u * 1024u> buffer{};
+                std::uint64_t consumed{};
+                while (consumed < size)
+                {
+                    const DWORD wanted = static_cast<DWORD>((std::min)(
+                        size - consumed, static_cast<std::uint64_t>(buffer.size())));
+                    DWORD received{};
+                    if (::ReadFile(image, buffer.data(), wanted, &received, nullptr) == FALSE
+                        || received == 0u || received > wanted)
+                        return false;
+                    hasher.update(std::span<const std::uint8_t>{buffer.data(), received});
+                    consumed += received;
+                }
+                DWORD extra{};
+                if (::ReadFile(image, buffer.data(), 1u, &extra, nullptr) == FALSE || extra != 0u)
+                    return false;
+                identity = ExecutableIdentity{size, core::sha256::hex(hasher.finish())};
+                return identity->valid();
+            }
+        };
+#else
+        [[nodiscard]] std::optional<ExecutableIdentity> inspect_regular_executable(
+            const std::filesystem::path& path)
+        {
+            if (!valid_executable_path(path))
+                return std::nullopt;
+            std::error_code error{};
+            if (!std::filesystem::is_regular_file(std::filesystem::symlink_status(path, error))
+                || error)
+                return std::nullopt;
+            const auto size = std::filesystem::file_size(path, error);
+            if (error || size == 0u || size > maximum_executable_bytes)
+                return std::nullopt;
+            std::ifstream input{path, std::ios::binary};
+            if (!input)
+                return std::nullopt;
+            core::sha256::Hasher hasher{};
+            std::array<char, 64u * 1024u> buffer{};
+            std::uint64_t consumed{};
+            while (consumed < size)
+            {
+                const auto wanted = static_cast<std::streamsize>((std::min)(
+                    size - consumed, static_cast<std::uint64_t>(buffer.size())));
+                input.read(buffer.data(), wanted);
+                if (input.gcount() != wanted)
+                    return std::nullopt;
+                hasher.update(std::string_view{buffer.data(), static_cast<std::size_t>(wanted)});
+                consumed += static_cast<std::uint64_t>(wanted);
+            }
+            if (input.peek() != std::char_traits<char>::eof() || input.bad()
+                || std::filesystem::file_size(path, error) != size || error)
+                return std::nullopt;
+            ExecutableIdentity result{size, core::sha256::hex(hasher.finish())};
+            return result.valid() ? std::optional{std::move(result)} : std::nullopt;
+        }
+#endif
 
         struct ProcessSlot final
         {
@@ -45,6 +222,7 @@ namespace epochengine::platform::child_process
             std::uint32_t generation{};
             ProcessState state{ProcessState::idle};
             std::filesystem::path executable{};
+            std::optional<ExecutableIdentity> verified_executable{};
             std::string correlation_key{};
             std::string exclusive_group{};
             std::string display_name{};
@@ -815,6 +993,14 @@ namespace epochengine::platform::child_process
         {
             if (request.executable.empty())
                 return "Executable path is empty.";
+            if (!valid_executable_path(request.executable))
+                return "Executable path is invalid or exceeds its bound.";
+            if (request.expected_executable && !request.expected_executable->valid())
+                return "Expected executable identity is invalid.";
+#if !defined(_WIN32)
+            if (request.expected_executable)
+                return "Required executable identity launch is unsupported on this platform; atomic image enforcement is unavailable.";
+#endif
             if (!valid_text(request.correlation_key, 256u, false))
                 return "Correlation key is empty or too large.";
             if (!valid_text(request.exclusive_group, 128u, true))
@@ -874,7 +1060,8 @@ namespace epochengine::platform::child_process
 #endif
                 .focus_pending = slot.focus_pending,
                 .stop_supported = true,
-                .message = slot.message};
+                .message = slot.message,
+                .verified_executable = slot.verified_executable};
         }
     }
 
@@ -947,6 +1134,28 @@ namespace epochengine::platform::child_process
         return "Unknown";
     }
 
+    std::optional<ExecutableIdentity> inspect_executable(
+        const std::filesystem::path& executable) noexcept
+    {
+        try
+        {
+#if defined(_WIN32)
+            ExecutableReadLock locked{};
+            if (!locked.open(executable))
+                return std::nullopt;
+            return locked.identity;
+#else
+            // Inspection is informational here. It is never substituted for
+            // an atomic expected-identity launch on platforms without one.
+            return inspect_regular_executable(executable);
+#endif
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+    }
+
     LaunchResult launch_or_focus(const LaunchRequest& request) noexcept
     {
         SupervisorStorage& value = storage();
@@ -964,12 +1173,52 @@ namespace epochengine::platform::child_process
             }
             poll_locked(value);
 
+            std::error_code error{};
+            std::filesystem::path resolvedExecutable{};
+#if defined(_WIN32)
+            ExecutableReadLock executableLock{};
+            if (request.expected_executable)
+            {
+                if (!executableLock.open(request.executable))
+                {
+                    ++value.metrics.launch_failures;
+                    return {.code = LaunchCode::invalid_request,
+                        .message = "Executable identity could not be read under a non-reparse, no-write/delete image and namespace lock."};
+                }
+                if (executableLock.identity != request.expected_executable)
+                {
+                    ++value.metrics.launch_failures;
+                    return {.code = LaunchCode::invalid_request,
+                        .message = "Executable size or SHA-256 differs from the required artifact identity."};
+                }
+                resolvedExecutable = executableLock.canonical_path;
+            }
+            else
+#endif
+            {
+                resolvedExecutable = std::filesystem::weakly_canonical(
+                    std::filesystem::absolute(request.executable, error), error);
+                if (error || resolvedExecutable.empty())
+                {
+                    ++value.metrics.launch_failures;
+                    return {.code = LaunchCode::invalid_request,
+                        .message = "Executable path could not be resolved."};
+                }
+            }
+
             for (ProcessSlot& slot : value.slots)
             {
                 if (!slot.occupied || !active(slot.state))
                     continue;
                 if (slot.correlation_key == request.correlation_key)
                 {
+                    if (slot.executable != resolvedExecutable
+                        || slot.verified_executable != request.expected_executable)
+                    {
+                        ++value.metrics.launch_failures;
+                        return {.code = LaunchCode::invalid_request,
+                            .message = "The correlation key is already bound to a different executable path or artifact identity."};
+                    }
                     ++value.metrics.focus_requests;
                     const FocusCode focused = focus_slot(slot);
                     if (focused == FocusCode::focused)
@@ -1035,10 +1284,7 @@ namespace epochengine::platform::child_process
             slot->display_name = request.display_name;
             slot->window_mode = request.window_mode;
 
-            std::error_code error{};
-            slot->executable = std::filesystem::weakly_canonical(
-                std::filesystem::absolute(request.executable, error),
-                error);
+            slot->executable = std::move(resolvedExecutable);
             if (error || slot->executable.empty()
                 || !std::filesystem::is_regular_file(slot->executable, error)
                 || error)
@@ -1123,6 +1369,7 @@ namespace epochengine::platform::child_process
                     .message = slot->message};
             }
 
+            slot->verified_executable = request.expected_executable;
             slot->state = ProcessState::running;
             slot->started_tick_ns = now_ns();
             slot->message = "Process started.";

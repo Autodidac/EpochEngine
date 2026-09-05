@@ -27,8 +27,8 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished.
-- Starting checkpoint for this software-base/context-navigation pass:
-  `ec90d982159846fe6ad3a9fda6036b5723a6b277`.
+- Starting checkpoint for the recovery/artifact-identity repair pass:
+  `aa54f9886d6f7853bf294f4d3d2132134694cf83`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34.
 - Public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -38,11 +38,27 @@ missions, not reasons to label incomplete self-coding or context behavior comple
   supervisor seam. It opens no listener or process and grants no model,
   filesystem, live-source, promotion, Git, release, or Site authority.
 
-September 5 refreshed proof: Windows Debug and Release editor builds and both
+September 5 recovery/artifact-identity checkpoint: final Windows Debug and
+Release editor builds pass; both explicitly waited build-safe aggregate runs
+return exit 0 (`engine_contract_self_test.result=pass`). Release HeadlessCI
+builds. All eight Release SoftwareBase/identity/admission CTests pass, including
+the candidate-artifact ledger and real non-GPU child-process identity contract;
+the latter also passed ten consecutive repeat runs. Source naming passes for
+590 files and diff checks pass. Exact final Release `EpochEditor.exe` is
+12,439,552 bytes, SHA-256
+`1470bd4d5282ed0c185a2b08df742b087532f5d5c1d34301df68b48f8e1dd1ab`.
+The final aggregate completed at 08:23 EDT; no EpochEditor process remained.
+Known pre-existing optimization-override and duplicate-logger linker warnings
+remain. No real model request, candidate preview, second sandbox compile,
+Linux validation, release staging or OS-confinement proof is claimed for this
+repair checkpoint. Its native run is still tool-blocked despite operator
+approval; the remaining gates below stay open.
+
+Previous `aa54f988` proof (not the current repair binary): Windows Debug and Release editor builds and both
 build-safe aggregate engine contract runs pass, including
 `ai.openai_source_iteration_request`, `ai.development_proposal_codec`, and
 `ai.development_panel`. Release HeadlessCI builds; source naming passes for
-588 files and diff checks pass. The exact current Release editor is 12,347,392
+588 files and diff checks pass. That exact Release editor is 12,347,392
 bytes, SHA-256
 `4b112154a81776e8ada20d425033b58299c6b762c50e4eeac740c48e9fb15e99`.
 
@@ -115,8 +131,11 @@ now repaired and covered by the real Win32 contract. The proposed Qwen test is
 the missing privacy-conscious Copy Session Summary action, not the already-
 implemented activity indicator. A new exact Release/Qwen/Choose harness launch
 was denied by the execution tool before startup; no model request was sent.
-The operator has been asked to approve that exact run. Do not route around the
-denial with a different tool or relabel contracts as model/native-preview proof.
+The operator explicitly approved the visible editor/Qwen/build/comparison run
+on September 5. A subsequent ordinary visible Release editor launch was still
+rejected by the execution tool before process startup. Approval is no longer
+missing; native execution remains tool-blocked. Do not route around that denial
+with a different tool or relabel contracts as model/native-preview proof.
 The shared WSL lane was released to the EpochSimEngine task for its own serial
 gate; wait for its new clear handoff before beginning an Epoch Linux build.
 
@@ -144,6 +163,8 @@ performed the requested ownership transition, exited, and left no editor child.
    validation, candidate PID/context admission, and Keep/Choose. Record the
    actual request, selected paths, retries, build receipts, process retirement,
    and sandbox lineage without recording hidden reasoning or unrelated source.
+   Continue through a second actual sandbox compile after Choose: a successor
+   plan alone does not prove retained compiler dependencies or repeatability.
 2. Eye-test the exact Release build for the working indicator, elapsed time,
    cancellation, readable actions at narrow/high-zoom layouts, Candidate Lab
    comparison, and unambiguous Keep Current / Choose Candidate behavior.

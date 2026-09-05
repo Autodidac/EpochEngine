@@ -287,6 +287,7 @@ if(BUILD_TESTING)
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.child_process.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
         )
         target_compile_definitions(
             epoch_platform_child_process_contract
@@ -299,6 +300,21 @@ if(BUILD_TESTING)
             NAME epoch_platform_child_process_contract
             COMMAND epoch_platform_child_process_contract
         )
+
+        add_executable(epoch_editor_candidate_artifact_contract
+            src/editor/ai/editor.candidate_artifact_contract.cpp)
+        target_sources(epoch_editor_candidate_artifact_contract PRIVATE
+            FILE_SET candidate_artifact_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.child_process.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor.candidate_artifact.ixx
+        )
+        epoch_apply_cxx_dialect(epoch_editor_candidate_artifact_contract)
+        epoch_apply_warnings(epoch_editor_candidate_artifact_contract)
+        epoch_apply_sanitizers(epoch_editor_candidate_artifact_contract)
+        add_test(NAME epoch_editor_candidate_artifact_contract
+            COMMAND epoch_editor_candidate_artifact_contract)
     endif()
 endif()
 
@@ -2510,6 +2526,7 @@ if(BUILD_TESTING)
                 ${EPOCH_MODULE_DIR}/core.path.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/platform.child_process.ixx
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
                 ${EPOCH_MODULE_DIR}/scripting.compiler.ixx
     )
     target_include_directories(epoch_script_compiler_contract PRIVATE

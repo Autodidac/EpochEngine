@@ -751,6 +751,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\task_graph\authoring.task_graph_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_controller.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_panel.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.candidate_artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.task_scheduler.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_panel.ixx" />
