@@ -6,6 +6,7 @@ module;
 
 #include <string>
 #include <string_view>
+#include <initializer_list>
 
 module ai.development_proposal_codec;
 
@@ -167,7 +168,8 @@ namespace epochengine::ai::development_proposal_codec
                 || decoded.request.paths[0u]
                     != "Engine/src/ai/ai.development_proposal_codec.cpp"
                 || decoded.request.paths[1u]
-                    != "Engine/modules/ai.development_proposal_codec.ixx")
+                    != "Engine/modules/ai.development_proposal_codec.ixx"
+                || !decoded.request.reads.empty())
             {
                 return false;
             }
@@ -257,6 +259,79 @@ namespace epochengine::ai::development_proposal_codec
                 valid_context_request() + "trailing\n",
                 SourceArea::engine).code == DecodeCode::trailing_data;
         }
+        [[nodiscard]] bool context_read_contract()
+        {
+            constexpr std::string_view firstPath{
+                "Engine/src/ai/ai.development_proposal_codec.cpp"};
+            constexpr std::string_view secondPath{
+                "Engine/modules/ai.development_proposal_codec.ixx"};
+            const std::string prefix =
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1\npath_count: 2\npath: "
+                + std::string{firstPath} + "\n";
+            const auto selected = decode_context_request(prefix
+                + "first_line: 120\nquery:   literal \xc3\xa9 symbol  \npath: "
+                + std::string{secondPath} + "\nquery: ContextRead\nend_request\n",
+                SourceArea::engine);
+            if (!selected || selected.request.reads.size() != 2u
+                || selected.request.reads[0u].path != firstPath
+                || selected.request.reads[0u].first_line != 120u
+                || selected.request.reads[0u].query != "  literal \xc3\xa9 symbol  "
+                || selected.request.reads[1u].path != secondPath
+                || selected.request.reads[1u].first_line != 0u
+                || selected.request.reads[1u].query != "ContextRead")
+                return false;
+
+            const std::string single = "EPOCH_SOURCE_CONTEXT_REQUEST_V1\npath: "
+                + std::string{firstPath} + "\n";
+            for (const auto line : {"0", "1", "1000000"})
+            {
+                const auto bounds = decode_context_request(single
+                    + "first_line: " + line + "\nquery: \nend_request\n",
+                    SourceArea::engine);
+                if (!bounds || bounds.request.reads.size() != 1u
+                    || !bounds.request.reads.front().query.empty())
+                    return false;
+            }
+            constexpr std::string_view invalidFields[] = {
+                "first_line: -1\n", "first_line: +1\n", "first_line: 1.5\n",
+                "first_line: 1000001\n", "first_line: 999999999999999999999999\n",
+                "first_line: \n", "first_line: 1\nfirst_line: 2\n",
+                "query: first\nquery: second\n", "query: bad\rquery\n",
+                "query: valid\nunknown: invalid\n"};
+            for (const auto fields : invalidFields)
+            {
+                if (decode_context_request(single + std::string{fields}
+                        + "end_request\n", SourceArea::engine))
+                    return false;
+            }
+            if (decode_context_request(single + "query: " + std::string(257u, 'x')
+                    + "\nend_request\n", SourceArea::engine)
+                || decode_context_request(single + "query: "
+                    + std::string{"bad\0query", 9u} + "\nend_request\n",
+                    SourceArea::engine)
+                || decode_context_request(
+                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nfirst_line: 1\npath: "
+                    + std::string{firstPath} + "\n", SourceArea::engine)
+                || decode_context_request(
+                    "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nquery: orphan\npath: "
+                    + std::string{firstPath} + "\n", SourceArea::engine))
+                return false;
+
+            std::string complete = "EPOCH_SOURCE_CONTEXT_REQUEST_V1\n";
+            for (std::size_t index = 0u; index < 12u; ++index)
+            {
+                complete += "path: Engine/src/ai/ai.read_" + std::to_string(index)
+                    + ".cpp\nfirst_line: " + std::to_string(index + 1u)
+                    + "\nquery: bounded\n";
+            }
+            const auto maximum = decode_context_request(complete, SourceArea::engine);
+            return maximum && maximum.request.paths.size() == 12u
+                && maximum.request.reads.size() == 12u
+                && !decode_context_request(complete
+                    + "path: Engine/src/ai/ai.read_12.cpp\nquery: extra\n",
+                    SourceArea::engine);
+        }
+
         [[nodiscard]] bool context_text_contract()
         {
             const std::string invalidUtf8{
@@ -296,6 +371,9 @@ namespace epochengine::ai::development_proposal_codec
                 && context.find("fix bugs") != std::string::npos
                 && context.find(evidence) != std::string::npos
                 && context.find("up to twelve") != std::string::npos
+                && context.find("first_line: N") != std::string::npos
+                && context.find("query: text") != std::string::npos
+                && engine.find("another region of the same file") != std::string::npos
                 && context.find("does not add source-file bytes")
                     != std::string::npos
                 && context.find("EPOCH_SOURCE_PROPOSAL_V1") == std::string::npos
@@ -487,6 +565,7 @@ namespace epochengine::ai::development_proposal_codec
             if (!strict_envelope_contract()) return 2;
             if (!path_and_operation_contract()) return 3;
             if (!strict_context_request_contract()) return 4;
+            if (!context_read_contract()) return 9;
             if (!context_text_contract()) return 5;
             if (!protocol_prompt_contract()) return 6;
             if (!proposal_quality_contract()) return 7;

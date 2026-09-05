@@ -188,6 +188,32 @@ namespace epochengine::platform::child_process
         }
 
 #if defined(_WIN32)
+        struct CapturedStartupResources final
+        {
+            CapturedStartupResources() = default;
+            CapturedStartupResources(const CapturedStartupResources&) = delete;
+            CapturedStartupResources& operator=(const CapturedStartupResources&) = delete;
+
+            HANDLE input{INVALID_HANDLE_VALUE};
+            HANDLE output{INVALID_HANDLE_VALUE};
+            LPPROC_THREAD_ATTRIBUTE_LIST attributes{};
+            bool attributes_initialized{};
+
+            ~CapturedStartupResources() noexcept
+            {
+                if (attributes != nullptr)
+                {
+                    if (attributes_initialized)
+                        ::DeleteProcThreadAttributeList(attributes);
+                    (void)::HeapFree(::GetProcessHeap(), 0u, attributes);
+                }
+                if (input != INVALID_HANDLE_VALUE && input != nullptr)
+                    (void)::CloseHandle(input);
+                if (output != INVALID_HANDLE_VALUE && output != nullptr)
+                    (void)::CloseHandle(output);
+            }
+        };
+
         struct WindowSearch final
         {
             DWORD process_id{};
@@ -381,19 +407,20 @@ namespace epochengine::platform::child_process
                 return false;
             }
 
-            STARTUPINFOW startup{};
-            startup.cb = sizeof(startup);
-            startup.dwFlags = STARTF_USESHOWWINDOW;
-            startup.wShowWindow = request.window_mode == WindowMode::hidden
+            STARTUPINFOEXW startup{};
+            startup.StartupInfo.cb = sizeof(STARTUPINFOW);
+            startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
+            startup.StartupInfo.wShowWindow = request.window_mode == WindowMode::hidden
                 ? SW_HIDE
                 : SW_SHOWNORMAL;
-            HANDLE outputFile = INVALID_HANDLE_VALUE;
+            CapturedStartupResources captured{};
+            std::array<HANDLE, 2u> inheritedHandles{};
             if (!request.merged_output_path.empty())
             {
                 SECURITY_ATTRIBUTES security{};
                 security.nLength = sizeof(security);
                 security.bInheritHandle = TRUE;
-                outputFile = ::CreateFileW(
+                captured.output = ::CreateFileW(
                     request.merged_output_path.c_str(),
                     GENERIC_WRITE,
                     FILE_SHARE_READ,
@@ -401,7 +428,7 @@ namespace epochengine::platform::child_process
                     request.append_output ? OPEN_ALWAYS : CREATE_ALWAYS,
                     FILE_ATTRIBUTE_NORMAL,
                     nullptr);
-                if (outputFile == INVALID_HANDLE_VALUE)
+                if (captured.output == INVALID_HANDLE_VALUE)
                 {
                     const DWORD failure = ::GetLastError();
                     ::CloseHandle(job);
@@ -412,39 +439,108 @@ namespace epochengine::platform::child_process
                 if (request.append_output)
                 {
                     LARGE_INTEGER end{};
-                    if (::SetFilePointerEx(outputFile, end, nullptr, FILE_END) == FALSE)
+                    if (::SetFilePointerEx(captured.output, end, nullptr, FILE_END) == FALSE)
                     {
                         const DWORD failure = ::GetLastError();
-                        ::CloseHandle(outputFile);
                         ::CloseHandle(job);
                         error = "Output capture could not seek to the end: Win32 error "
                             + std::to_string(static_cast<unsigned long>(failure)) + ".";
                         return false;
                     }
                 }
-                startup.dwFlags |= STARTF_USESTDHANDLES;
-                startup.hStdInput = ::GetStdHandle(STD_INPUT_HANDLE);
-                startup.hStdOutput = outputFile;
-                startup.hStdError = outputFile;
+                const HANDLE parentInput = ::GetStdHandle(STD_INPUT_HANDLE);
+                if (parentInput == nullptr || parentInput == INVALID_HANDLE_VALUE)
+                {
+                    captured.input = ::CreateFileW(
+                        L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                }
+                else if (::DuplicateHandle(
+                        ::GetCurrentProcess(), parentInput,
+                        ::GetCurrentProcess(), &captured.input,
+                        0u, TRUE, DUPLICATE_SAME_ACCESS) == FALSE)
+                {
+                    captured.input = INVALID_HANDLE_VALUE;
+                }
+                if (captured.input == INVALID_HANDLE_VALUE
+                    || captured.input == nullptr)
+                {
+                    const DWORD failure = ::GetLastError();
+                    ::CloseHandle(job);
+                    error = "Captured process stdin could not be prepared: Win32 error "
+                        + std::to_string(static_cast<unsigned long>(failure)) + ".";
+                    return false;
+                }
+
+                SIZE_T attributeBytes{};
+                const BOOL measured = ::InitializeProcThreadAttributeList(
+                    nullptr, 1u, 0u, &attributeBytes);
+                const DWORD measureFailure = ::GetLastError();
+                if (measured != FALSE || attributeBytes == 0u
+                    || measureFailure != ERROR_INSUFFICIENT_BUFFER)
+                {
+                    ::CloseHandle(job);
+                    error = "Captured process handle list could not be sized: Win32 error "
+                        + std::to_string(static_cast<unsigned long>(measureFailure)) + ".";
+                    return false;
+                }
+                captured.attributes = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+                    ::HeapAlloc(::GetProcessHeap(), 0u, attributeBytes));
+                if (captured.attributes == nullptr)
+                {
+                    ::CloseHandle(job);
+                    error = "Captured process handle list allocation failed.";
+                    return false;
+                }
+                if (::InitializeProcThreadAttributeList(
+                        captured.attributes, 1u, 0u, &attributeBytes) == FALSE)
+                {
+                    const DWORD failure = ::GetLastError();
+                    ::CloseHandle(job);
+                    error = "Captured process handle list initialization failed: Win32 error "
+                        + std::to_string(static_cast<unsigned long>(failure)) + ".";
+                    return false;
+                }
+                captured.attributes_initialized = true;
+                inheritedHandles = {captured.input, captured.output};
+                if (::UpdateProcThreadAttribute(
+                        captured.attributes, 0u, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                        inheritedHandles.data(), inheritedHandles.size() * sizeof(HANDLE),
+                        nullptr, nullptr) == FALSE)
+                {
+                    const DWORD failure = ::GetLastError();
+                    ::CloseHandle(job);
+                    error = "Captured process handle allowlist failed: Win32 error "
+                        + std::to_string(static_cast<unsigned long>(failure)) + ".";
+                    return false;
+                }
+                // TRUE inheritance is required by HANDLE_LIST, but only these
+                // standard-stream handles are admitted, never unrelated handles.
+                startup.StartupInfo.cb = sizeof(startup);
+                startup.StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+                startup.StartupInfo.hStdInput = captured.input;
+                startup.StartupInfo.hStdOutput = captured.output;
+                startup.StartupInfo.hStdError = captured.output;
+                startup.lpAttributeList = captured.attributes;
             }
             PROCESS_INFORMATION process{};
             DWORD flags = CREATE_SUSPENDED;
             if (request.window_mode == WindowMode::hidden)
                 flags |= CREATE_NO_WINDOW;
+            if (captured.attributes_initialized)
+                flags |= EXTENDED_STARTUPINFO_PRESENT;
             const std::wstring working = request.working_directory.wstring();
             const BOOL created = ::CreateProcessW(
                 slot.executable.c_str(),
                 commandLine.data(),
                 nullptr,
                 nullptr,
-                outputFile != INVALID_HANDLE_VALUE,
+                captured.attributes_initialized,
                 flags,
                 nullptr,
                 working.empty() ? nullptr : working.c_str(),
-                &startup,
+                &startup.StartupInfo,
                 &process);
-            if (outputFile != INVALID_HANDLE_VALUE)
-                ::CloseHandle(outputFile);
             if (created == FALSE)
             {
                 const DWORD failure = ::GetLastError();

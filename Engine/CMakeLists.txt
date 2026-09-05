@@ -16,6 +16,7 @@ option(EPOCH_STRICT_WARNINGS "Enable stricter compiler warnings for Epoch target
 option(EPOCH_WARNINGS_AS_ERRORS "Treat warnings as errors when strict warnings are enabled." OFF)
 option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible compilers." OFF)
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+option(EPOCH_SOFTWARE_BASE_ONLY "Configure the editor-free CLI/native-window software base without engine or renderer targets." OFF)
 option(EPOCH_BUILD_STATIC_RUNTIME "Build Epoch as a reusable static runtime for generated child applications." OFF)
 option(EPOCH_ENABLE_AUTHORING_PLATFORM "Gate the shared Epoch authoring-document and editor foundation as implementation units land." ON)
 option(EPOCH_ENABLE_TEXTURE_EDITOR "Gate texture painting, compositing, and texture-node authoring implementation units." ON)
@@ -299,6 +300,99 @@ if(BUILD_TESTING)
             COMMAND epoch_platform_child_process_contract
         )
     endif()
+endif()
+
+if(EPOCH_SOFTWARE_BASE_ONLY AND NOT EPOCH_CONFIGURES_MODULE_TARGETS)
+    message(FATAL_ERROR "The software base uses a small C++23 module closure; use MSVC or Clang with Ninja/Visual Studio.")
+endif()
+
+if(EPOCH_CONFIGURES_MODULE_TARGETS)
+    # This target deliberately does not link epoch, epoch_gui, the legacy entry,
+    # renderer adapters, editor/project services, updater, AI, or child processes.
+    add_library(epoch_software_base STATIC
+        src/epoch/epoch.software_application.cpp
+        src/platform/platform.window.cpp
+        src/core.log.cpp
+        src/core.time.cpp
+    )
+    add_library(Epoch::SoftwareBase ALIAS epoch_software_base)
+    target_sources(epoch_software_base PUBLIC
+        FILE_SET software_base_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.error.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.type.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.admission.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.window.ixx
+    )
+    target_include_directories(epoch_software_base PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    target_include_directories(epoch_software_base PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    if(WIN32)
+        target_link_libraries(epoch_software_base PRIVATE user32)
+    endif()
+    find_package(Threads REQUIRED)
+    target_link_libraries(epoch_software_base PRIVATE Threads::Threads)
+    epoch_apply_cxx_dialect(epoch_software_base)
+    epoch_apply_warnings(epoch_software_base)
+    epoch_apply_sanitizers(epoch_software_base)
+
+    add_executable(epoch_software_app examples/SoftwareBase/epoch.software_main.cpp)
+    target_link_libraries(epoch_software_app PRIVATE Epoch::SoftwareBase)
+    set_target_properties(epoch_software_app PROPERTIES OUTPUT_NAME EpochSoftware)
+    epoch_apply_cxx_dialect(epoch_software_app)
+    epoch_apply_warnings(epoch_software_app)
+    epoch_apply_sanitizers(epoch_software_app)
+
+    if(WIN32)
+        # Native windows require an explicit operator run. Do not register this
+        # executable with CTest or include it in the default build target.
+        add_executable(epoch_platform_window_native_contract EXCLUDE_FROM_ALL
+            src/platform/platform.window_native_contract.cpp)
+        target_link_libraries(epoch_platform_window_native_contract PRIVATE Epoch::SoftwareBase)
+        epoch_apply_cxx_dialect(epoch_platform_window_native_contract)
+        epoch_apply_warnings(epoch_platform_window_native_contract)
+        epoch_apply_sanitizers(epoch_platform_window_native_contract)
+    endif()
+
+    if(BUILD_TESTING)
+        add_executable(epoch_software_application_contract
+            src/epoch/epoch.software_application_contract.cpp)
+        target_link_libraries(epoch_software_application_contract PRIVATE Epoch::SoftwareBase)
+        epoch_apply_cxx_dialect(epoch_software_application_contract)
+        epoch_apply_warnings(epoch_software_application_contract)
+        epoch_apply_sanitizers(epoch_software_application_contract)
+        add_test(NAME epoch_software_application_contract COMMAND epoch_software_application_contract)
+        add_test(NAME epoch_software_cli_smoke COMMAND epoch_software_app --profile cli --ticks 3)
+        set_tests_properties(epoch_software_cli_smoke PROPERTIES
+            PASS_REGULAR_EXPRESSION "software_application.result=pass profile=cli ticks=3 window_created=0")
+        add_test(NAME epoch_software_invalid_profile COMMAND epoch_software_app --profile editor)
+        set_tests_properties(epoch_software_invalid_profile PROPERTIES WILL_FAIL TRUE)
+
+        add_executable(epoch_context_admission_contract
+            src/renderers/core/context.admission_contract.cpp)
+        target_sources(epoch_context_admission_contract PRIVATE
+            FILE_SET context_admission_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.type.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.admission.ixx
+        )
+        epoch_apply_cxx_dialect(epoch_context_admission_contract)
+        epoch_apply_warnings(epoch_context_admission_contract)
+        epoch_apply_sanitizers(epoch_context_admission_contract)
+        add_test(NAME epoch_context_admission_contract COMMAND epoch_context_admission_contract)
+    endif()
+endif()
+
+if(EPOCH_SOFTWARE_BASE_ONLY)
+    message(STATUS "Software base only: editor, renderer, GUI, updater, project and AI targets are excluded.")
+    return()
 endif()
 
 if(EPOCH_CI_HEADLESS_ONLY)

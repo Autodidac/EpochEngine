@@ -790,7 +790,15 @@ namespace epochengine::ai::development_proposal_codec
         prompt += root;
         prompt +=
             ", use forward slashes, remain in the selected source area, and "
-            "name an existing C++ source, header, or module interface. Do not "
+            "name an existing C++ source, header, or module interface. This is "
+            "the complete next working set, not a list appended to previous paths. "
+            "To inspect another region of a selected file, optionally follow "
+            "its path line immediately with first_line: N and/or query: text. "
+            "N is a one-based line from 1 through 1000000; zero selects the "
+            "automatic window. The query is an exact literal of at most 256 UTF-8 "
+            "bytes without CR, LF, or NUL, searched beginning at first_line when "
+            "nonzero. Omit selectors when no specific region is needed. Changing "
+            "a window does not change path admission or the evidence budget. Do not "
             "request build, run, network, dependency, Git, release, deletion, "
             "or write authority.";
         return prompt;
@@ -886,6 +894,8 @@ namespace epochengine::ai::development_proposal_codec
         result.request.paths.reserve(declaredCount.value_or(maximumPaths));
         std::size_t lastLine = first->number;
         bool terminated{};
+        bool firstLineSeen{};
+        bool querySeen{};
         while (line)
         {
             lastLine = line->number;
@@ -901,6 +911,50 @@ namespace epochengine::ai::development_proposal_codec
                     return result;
                 }
                 break;
+            }
+
+            const auto firstLine = field_value(line->text, "first_line: ");
+            const auto query = field_value(line->text, "query: ");
+            if (firstLine || query)
+            {
+                if (result.request.paths.empty()
+                    || (firstLine && firstLineSeen) || (query && querySeen))
+                {
+                    result.code = DecodeCode::invalid_field;
+                    result.line = line->number;
+                    result.status =
+                        "A source-read selector is orphaned or repeated.";
+                    return result;
+                }
+                const auto parsedLine = firstLine
+                    ? parse_count(*firstLine) : std::optional<std::size_t>{0u};
+                if (!parsedLine || *parsedLine > 1'000'000u
+                    || (query && (query->size() > 256u
+                        || query->find_first_of("\r\n\0", 0u, 3u)
+                            != std::string_view::npos)))
+                {
+                    result.code = DecodeCode::invalid_field;
+                    result.line = line->number;
+                    result.status =
+                        "The source-read line or literal query is invalid.";
+                    return result;
+                }
+                if (!firstLineSeen && !querySeen)
+                    result.request.reads.push_back(
+                        ContextRead{result.request.paths.back(), 0u, {}});
+                auto& read = result.request.reads.back();
+                if (firstLine)
+                {
+                    read.first_line = static_cast<std::uint32_t>(*parsedLine);
+                    firstLineSeen = true;
+                }
+                if (query)
+                {
+                    read.query.assign(*query);
+                    querySeen = true;
+                }
+                line = reader.next();
+                continue;
             }
 
             std::optional<std::string_view> path =
@@ -943,6 +997,8 @@ namespace epochengine::ai::development_proposal_codec
                 return result;
             }
             result.request.paths.emplace_back(*path);
+            firstLineSeen = false;
+            querySeen = false;
             line = reader.next();
         }
 
@@ -1441,7 +1497,13 @@ namespace epochengine::ai::development_proposal_codec
             "path catalog is supplied after this protocol and the current bytes do "
             "not prove a repair, return EPOCH_SOURCE_CONTEXT_REQUEST_V1 with the "
             "complete next selection of at most twelve listed paths, retaining "
-            "useful current paths and replacing irrelevant ones. Do not guess. Never invent a "
+            "useful current paths and replacing irrelevant ones. You may request "
+            "another region of the same file: immediately after its path line, "
+            "add first_line: N (one-based, 0 for automatic, maximum 1000000) "
+            "and/or query: literal text (maximum 256 UTF-8 bytes, no CR/LF/NUL). "
+            "The literal search begins at the requested line when nonzero. "
+            "These read selectors only navigate admitted source; they do not "
+            "increase the source/evidence budget or grant new authority. Do not guess. Never invent a "
             "symbol, service, include, module, namespace, "
             "API, or build result. Identify the objective-specific owner only "
             "from trusted evidence. An existing file requires an exact "

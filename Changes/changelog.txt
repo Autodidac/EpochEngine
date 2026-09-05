@@ -1,5 +1,38 @@
 ## [Unreleased] - v0.89.35
 
+- Add model-directed source navigation by validated line and literal-query
+  selectors within the existing twelve-file/184 KiB context budget. Missing
+  regions receive bounded correction; unsafe paths still fail before reads.
+  Keep line metadata outside the exact counted excerpt payload so directed
+  reads remain valid proposal evidence. Retain selectors through the sandbox
+  successor and clear them on cancellation or authority/domain changes.
+- Strengthen the real-model test rig to require an actual Keep/Choose ownership
+  transition, a distinct successor sandbox, a returned successor plan, and
+  retired preview processes before success. The rig changes are build/contract
+  proven, not evidence that the live model has completed the workflow.
+- Restrict captured Windows child-process inheritance to explicitly prepared
+  standard-stream handles. A synthetic native contract verifies stdin/output
+  behavior and refusal of an unrelated inheritable handle. This does not change
+  the child's OS identity or establish filesystem/network confinement.
+- Add the editor-free Epoch::SoftwareBase CLI/Win32-window foundation using
+  existing application callbacks, logging, time and platform.window. Add shared
+  context.admission profile/identity/readiness contracts without replacing the
+  fragile live renderer/multicontext owners. GUI/render/input profiles and
+  generated-template integration remain follow-up work, not claimed features.
+- Repair native default window-text initialization and owned multi-window
+  destruction. Add a separately invoked real hidden-window contract for title,
+  UTF-8 text, client resize, deferred close, and complete handle retirement.
+  Detach each platform notification batch before callbacks; synchronous resize
+  waits for the next pump, and retired windows receive no pending notification.
+  Real callback-resize/no-duplicate/destruction regressions pass on Windows.
+  Keep native tests outside automatic CTest and do not equate them with pixels.
+- Windows Debug/Release editor builds and aggregate contracts pass; Release
+  HeadlessCI builds, four focused software/admission CTests and the separate
+  captured-child contract pass. Source naming passes for 588 files. The current
+  Qwen native test launch was blocked before startup and remains pending explicit
+  reapproval. No new model-to-candidate success, Linux/pixel proof, public release,
+  stable-base advancement or OS confinement is claimed by this checkpoint.
+
 - Remove the objective-word-overlap rejection exposed by the operator's "find
   and fix a bug" run. Broad requests no longer have to repeat a specific word in
   proposal metadata. Exact-source, unique-search, no-op and ownership checks

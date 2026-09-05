@@ -15,11 +15,20 @@ symbol, or diagnostic code. It also does not grant the model authority over live
 source, projects, Git, releases, Site state, listeners, permits, or validation
 results.
 
+September 5 scope/ordering: the operator authorized full native self-iteration
+and engine testing with the local model, and publication through the Site task
+after all build/runtime/visual/safety gates pass. Before broad context expansion,
+refresh the explicitly confirmed `multicontext-base-stable` software baseline
+against current Engine profiles, without an additional worktree. Preserve the
+original checkpoint in history. The platform/context/CLI template architecture,
+floating guide readability and gradual EpochPlatformEngine extraction are durable
+missions, not reasons to label incomplete self-coding or context behavior complete.
+
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished.
-- Baseline checkpoint before adaptive context/quality repair:
-  `7d1b8f88a7b902e86fb37f37c2bb7dc232c3f6a8`.
+- Starting checkpoint for this software-base/context-navigation pass:
+  `ec90d982159846fe6ad3a9fda6036b5723a6b277`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34.
 - Public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -29,13 +38,39 @@ results.
   supervisor seam. It opens no listener or process and grants no model,
   filesystem, live-source, promotion, Git, release, or Site authority.
 
-The current combined candidate is build-proven on Windows Debug and Release. Both
+September 5 refreshed proof: Windows Debug and Release editor builds and both
 build-safe aggregate engine contract runs pass, including
 `ai.openai_source_iteration_request`, `ai.development_proposal_codec`, and
-`ai.development_panel`; source naming passes for 581 files. The exact current
-Release editor is 12,272,640 bytes
-with SHA-256
-`c10e155945acd7ff1037c0f09005959a724fbda1b546cb8f45b8f7b08a3c44a0`.
+`ai.development_panel`. Release HeadlessCI builds; source naming passes for
+588 files and diff checks pass. The exact current Release editor is 12,347,392
+bytes, SHA-256
+`4b112154a81776e8ada20d425033b58299c6b762c50e4eeac740c48e9fb15e99`.
+
+Directed context requests now carry validated line/literal-query selectors,
+including a different region of the same file. The aggregate fixture covers
+directed excerpt admission through plan/proposal/staging and validation, bounded
+missing-region recovery, exact counted evidence, and selector reset/lineage.
+The enhanced native rig requires one actual Keep/Choose decision, successor
+materialization and a returned successor plan; it deliberately stops before
+the second proposal/build and is not an unrestricted iteration-loop proof.
+
+The editor-free `Epoch::SoftwareBase` and shared `context.admission` first layer
+build in Release; four focused SoftwareBase/admission CTests pass. The explicit
+hidden Win32 contract passes native title/UTF-8, client resize, callback-driven
+resize deferral, no duplicate/stale delivery after destruction, deferred close,
+multi-window retirement and reconstruction. It uses no renderer or GPU. Exact
+`EpochSoftware.exe`: 68,096 bytes, SHA-256
+`127426bd9d6d02358b0cf8aa71ac909f45a84375a35387a2e219635aa7f3846d`.
+Exact native contract: 48,640 bytes, SHA-256
+`64f985894851257c76d566801df87d1b98e00c8f2bac49d2158489a6bc7978b1`.
+The captured-child handle-allowlist contract passes separately (1/1); it does
+not prove filesystem/network isolation. GUI/input/rendered application profiles
+and migration of the existing multicontext owners remain unimplemented here.
+
+The missing local `multicontext-base-stable` label was restored at original
+`ad6c416d930b348a61bc37ceb7d4522742be084a`, without another worktree. It has not
+been advanced: the complete claimed profile/native integration gate still owns
+that explicitly authorized update.
 
 The operator's September 4 19:03-19:10 session selected the EpochGui text-control
 header, implementation and tests for "find and fix a bug". Its terminal checkpoint
@@ -74,12 +109,16 @@ No real model-produced patch, sandbox build, or candidate preview completed in
 this pass. Earlier native Keep/Choose and Linux evidence below belongs to the
 earlier checkpoint, not this newly changed binary.
 
-Native screen inspection failed because the Windows tool helper could not
-initialize. The proposed next real-model test is the missing privacy-conscious
-Copy Session Summary action, not the already-implemented activity indicator.
-Its exact native run was denied by runtime approval review and awaits operator
-approval. No editor test PID remains. The shared WSL lane is reserved by
-SandHybrid until a fresh WSL_CLEAR handoff.
+The earlier screen-helper initialization failure is historical: native screen
+inspection worked on September 5 and found the SoftwareBase blank-caption defect
+now repaired and covered by the real Win32 contract. The proposed Qwen test is
+the missing privacy-conscious Copy Session Summary action, not the already-
+implemented activity indicator. A new exact Release/Qwen/Choose harness launch
+was denied by the execution tool before startup; no model request was sent.
+The operator has been asked to approve that exact run. Do not route around the
+denial with a different tool or relabel contracts as model/native-preview proof.
+The shared WSL lane was released to the EpochSimEngine task for its own serial
+gate; wait for its new clear handoff before beginning an Epoch Linux build.
 
 The inbound supervisor integration builds in Windows Debug and its focused
 contract now passes inside the aggregate suite. The contract covers canonical
@@ -176,8 +215,9 @@ performed the requested ownership transition, exited, and left no editor child.
   presentation behavior unless a separately proved renderer mission requires a
   change.
 - Preserve public v0.89.34 runtime/source objects and all immutable rollback
-  releases. Do not rewrite historical tags, packages, manifests, sidecars, or
-  `multicontext-base-stable`.
+  releases. Do not rewrite historical tags, packages, manifests or sidecars.
+  Advance `multicontext-base-stable` only under the operator's explicit update
+  request and the proven-profile gate, retaining its original checkpoint.
 - Do not stage generated builds, caches, logs, captures, local projects,
   temporary model exchange data, or unrelated operator files.
 - Do not publish a release or Site update from partial source/build evidence.

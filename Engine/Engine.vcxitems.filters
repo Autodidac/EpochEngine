@@ -551,6 +551,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx">
       <Filter>Module Files\epochengine\core\context</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.admission.ixx">
+      <Filter>Module Files\epochengine\core\context</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\noop.context.ixx">
       <Filter>Module Files\epochengine\core\context\backends\noop</Filter>
     </ClCompile>

@@ -147,10 +147,18 @@ export namespace epochengine::ai::development_proposal_codec
         }
     };
 
+    struct ContextRead final
+    {
+        std::string path{};
+        std::uint32_t first_line{};
+        std::string query{};
+    };
+
     struct ContextRequest final
     {
         std::string reason{};
         std::vector<std::string> paths{};
+        std::vector<ContextRead> reads{};
     };
 
     struct ContextRequestDecodeResult final

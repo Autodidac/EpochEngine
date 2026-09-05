@@ -1236,6 +1236,16 @@ namespace epochengine
             bool selfCodingWorkingIndicatorObserved{};
             std::uint64_t selfCodingLastHeartbeatSecond{};
             std::string selfCodingLastStatus{};
+            bool selfCodingSmokeChooseCandidate{};
+            std::string selfCodingSmokeBaselineRoot{};
+            std::string selfCodingSmokeCandidateRoot{};
+            std::string selfCodingSmokeSuccessorRoot{};
+            std::uint32_t selfCodingSmokeSuccessorGeneration{};
+            std::uint64_t selfCodingSmokeChosenProcessId{};
+            bool selfCodingSmokeSuccessorMaterialized{};
+            bool selfCodingSmokeSuccessorMaterializationFailed{};
+            bool selfCodingSmokeSuccessorPlanRequested{};
+            bool selfCodingSmokeSuccessorPlanReviewed{};
             SystemsSurfaceState systems{};
             std::unique_ptr<editor_tasks::Scheduler> taskScheduler{};
             AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Engine };
@@ -23042,6 +23052,12 @@ namespace epochengine
                     return;
                 }
 
+                if (editor.automationCommand
+                        == EditorAutomationCommand::SelfCodingLocalSmoke
+                    && editor.selfCodingSmokeBaselineRoot.empty())
+                {
+                    editor.selfCodingSmokeBaselineRoot = action.source_root;
+                }
                 epochengine::ai::development_executor::WorkspaceRequest request{
                     .source_root = action.source_root,
                     .workspace_root = action.workspace_root,
@@ -23417,6 +23433,12 @@ namespace epochengine
                     break;
                 }
                 editor.aiCandidateChallengerProcess = launched.handle;
+                if (editor.automationCommand
+                    == EditorAutomationCommand::SelfCodingLocalSmoke)
+                {
+                    editor.selfCodingSmokeCandidateRoot =
+                        workspace.generic_string();
+                }
                 editor.aiCandidateChallengerSnapshot =
                     platform::child_process::snapshot(launched.handle);
                 editor.aiCandidatePreviewGeneration =
@@ -23485,6 +23507,45 @@ namespace epochengine
                 request_model_source_proposal:
                 if (!action.model_prompt.empty())
                 {
+                    if (editor.automationCommand
+                            == EditorAutomationCommand::SelfCodingLocalSmoke
+                        && action.model_prompt.starts_with(
+                            "EPOCH_SELF_ITERATION_PROPOSAL_V2"))
+                    {
+                        if (editor.selfCodingSmokePhase == 1u)
+                        {
+                            // Candidate Lab can approve its recorded plan in the
+                            // same controller transition that emits this request.
+                            editor.selfCodingSmokePhase = 2u;
+                            append_editor_automation_trace(
+                                "SELF_CODING_LOCAL_SMOKE PLAN_RECORDED production controller advanced to the exact proposal request");
+                        }
+                        else if (editor.selfCodingSmokePhase == 3u
+                            && editor.selfCodingSmokeSuccessorMaterialized
+                            && editor.selfCodingSmokeSuccessorPlanRequested)
+                        {
+                            editor.selfCodingSmokeSuccessorPlanReviewed = true;
+                            append_editor_automation_trace(
+                                "SELF_CODING_LOCAL_SMOKE SUCCESSOR_PLAN_RECORDED production controller resumed its plan; bounded test pauses before the next edit request");
+                            return;
+                        }
+                    }
+                    if (editor.automationCommand
+                            == EditorAutomationCommand::SelfCodingLocalSmoke
+                        && editor.selfCodingSmokePhase == 3u
+                        && editor.selfCodingSmokeSuccessorMaterialized
+                        && action.model_prompt.starts_with(
+                            "EPOCH_SELF_ITERATION_PLAN_V2")
+                        && action.model_prompt.find("PERSISTED_SANDBOX_PLAN\n")
+                            != std::string::npos
+                        && action.model_prompt.find(
+                            "COMPLETED_SELECTION_CHECKPOINTS\n")
+                            != std::string::npos)
+                    {
+                        editor.selfCodingSmokeSuccessorPlanRequested = true;
+                        append_editor_automation_trace(
+                            "SELF_CODING_LOCAL_SMOKE SUCCESSOR_PLAN requesting continuation of the saved plan and choice checkpoint");
+                    }
                     if (action.model_transport
                         == editor_ai_development_panel::ModelTransport::external_mcp)
                     {
@@ -23763,6 +23824,7 @@ namespace epochengine
             const std::uint32_t generation =
                 editor.aiSourceWorkspaceGeneration;
             bool succeeded{};
+            bool materializationReceiptValid{};
             std::string status{};
             std::size_t fileCount{};
             std::uint64_t totalBytes{};
@@ -23774,6 +23836,10 @@ namespace epochengine
                 status = workspace.status;
                 fileCount = workspace.file_count;
                 totalBytes = workspace.total_bytes;
+                materializationReceiptValid = succeeded
+                    && workspace.evidence_digest.valid()
+                    && !workspace.evidence_manifest.empty()
+                    && fileCount > 0u && totalBytes > 0u;
             }
             catch (const editor_tasks::TaskCancelled&)
             {
@@ -23794,6 +23860,21 @@ namespace epochengine
             }
             editor.aiSourceWorkspacePending.reset();
             editor.aiSourceWorkspaceCancellation = {};
+            if (editor.automationCommand
+                    == EditorAutomationCommand::SelfCodingLocalSmoke
+                && editor.selfCodingSmokePhase == 3u
+                && generation == editor.selfCodingSmokeSuccessorGeneration)
+            {
+                editor.selfCodingSmokeSuccessorMaterialized =
+                    materializationReceiptValid;
+                editor.selfCodingSmokeSuccessorMaterializationFailed =
+                    !materializationReceiptValid;
+                append_editor_automation_trace(epochengine::format_text(
+                    "SELF_CODING_LOCAL_SMOKE SUCCESSOR_MATERIALIZATION {} generation={} files={} bytes={} root={}",
+                    materializationReceiptValid ? "PASS" : "FAIL",
+                    generation, fileCount, totalBytes,
+                    editor.selfCodingSmokeSuccessorRoot));
+            }
 
             if (!editor.aiDevelopmentPanel)
                 return;
@@ -29969,6 +30050,9 @@ namespace epochengine
                 }
                 else if (editor.selfCodingSmokePhase == 0u)
                 {
+                    const std::string choice = read_editor_automation_text(
+                        "EPOCH_EDITOR_SELF_CODING_CHOICE");
+                    editor.selfCodingSmokeChooseCandidate = choice == "choose";
                     const auto models =
                         epochengine::ai::refresh_detected_models();
                     std::string model = read_editor_automation_text(
@@ -29978,7 +30062,12 @@ namespace epochengine
                         model = epochengine::ai::active_model_name();
                     if (!explicitModel && !model_inventory_contains(models, model))
                         model = suggest_discovered_ai_model(models);
-                    if (model.empty()
+                    if (!choice.empty() && choice != "keep" && choice != "choose")
+                    {
+                        finishSelfCodingSmoke(false,
+                            "EPOCH_EDITOR_SELF_CODING_CHOICE must be keep or choose.");
+                    }
+                    else if (model.empty()
                         || !model_inventory_contains(models, model)
                         || !epochengine::ai::select_active_model(model))
                     {
@@ -30017,8 +30106,9 @@ namespace epochengine
                         {
                             append_editor_automation_trace(
                                 epochengine::format_text(
-                                    "SELF_CODING_LOCAL_SMOKE BEGIN model={} objective={}",
+                                    "SELF_CODING_LOCAL_SMOKE BEGIN model={} choice={} objective={}",
                                     model,
+                                    editor.selfCodingSmokeChooseCandidate ? "choose" : "keep",
                                     objective));
                             dispatch_ai_development_action(started);
                             editor.selfCodingSmokePhase = 1u;
@@ -30117,38 +30207,119 @@ namespace epochengine
                                         ->platform_process_id,
                                     editor.aiCandidateChallengerSnapshot
                                         ->platform_window_id));
-                            const auto keep = editor.aiDevelopmentPanel
+                            const auto decision = editor.selfCodingSmokeChooseCandidate
+                                ? editor_ai_development_panel::CandidateDecision::choose_candidate
+                                : editor_ai_development_panel::CandidateDecision::keep_current;
+                            const std::string expectedParent =
+                                editor.selfCodingSmokeChooseCandidate
+                                    ? editor.selfCodingSmokeCandidateRoot
+                                    : editor.selfCodingSmokeBaselineRoot;
+                            const auto candidateProcessId = editor.aiCandidateChallengerSnapshot
+                                ->platform_process_id;
+                            const auto successor = editor.aiDevelopmentPanel
                                 ->select_candidate_preview(guardedInput,
-                                    editor_ai_development_panel::CandidateDecision::keep_current);
-                            if (keep.candidate_decision
-                                != editor_ai_development_panel::CandidateDecision::keep_current
-                                || keep.action != editor_ai_development_panel::HostAction::materialize_source_workspace)
+                                    decision);
+                            const bool lineageMatches = !expectedParent.empty()
+                                && !successor.source_root.empty()
+                                && !successor.workspace_root.empty()
+                                && successor.workspace_generation != 0u
+                                && resolve_editor_path(successor.source_root)
+                                    == resolve_editor_path(expectedParent)
+                                && resolve_editor_path(successor.workspace_root)
+                                    != resolve_editor_path(expectedParent)
+                                && resolve_editor_path(successor.workspace_root)
+                                    != resolve_editor_path(editor.selfCodingSmokeCandidateRoot);
+                            if (successor.candidate_decision != decision
+                                || successor.action != editor_ai_development_panel::HostAction::materialize_source_workspace
+                                || !lineageMatches)
                             {
                                 finishSelfCodingSmoke(false,
-                                    "The production Keep Current action did not preserve and materialize the next sandbox parent.");
+                                    "The production comparison choice did not request a fresh sandbox from exactly the chosen parent.");
                             }
                             else
                             {
                                 append_editor_automation_trace(
-                                    "SELF_CODING_LOCAL_SMOKE SUCCESSION " + keep.status);
-                                dispatch_ai_development_action(keep);
+                                    epochengine::format_text(
+                                        "SELF_CODING_LOCAL_SMOKE SUCCESSION choice={} parent={} next={} generation={}",
+                                        editor.selfCodingSmokeChooseCandidate ? "choose" : "keep",
+                                        successor.source_root, successor.workspace_root,
+                                        successor.workspace_generation));
+                                editor.selfCodingSmokeSuccessorRoot = successor.workspace_root;
+                                editor.selfCodingSmokeSuccessorGeneration = successor.workspace_generation;
+                                editor.selfCodingSmokeChosenProcessId =
+                                    editor.selfCodingSmokeChooseCandidate ? candidateProcessId : 0u;
+                                editor.selfCodingSmokeSuccessorMaterialized = false;
+                                editor.selfCodingSmokeSuccessorMaterializationFailed = false;
+                                editor.selfCodingSmokeSuccessorPlanRequested = false;
+                                editor.selfCodingSmokeSuccessorPlanReviewed = false;
                                 editor.selfCodingSmokePhase = 3u;
+                                dispatch_ai_development_action(successor);
+                                if (!editor.aiSourceWorkspacePending
+                                    || editor.aiSourceWorkspaceGeneration
+                                        != editor.selfCodingSmokeSuccessorGeneration)
+                                {
+                                    editor.selfCodingSmokeSuccessorMaterializationFailed = true;
+                                }
                             }
                         }
                     }
                     else if (!editor.automationConsumed
                         && editor.selfCodingSmokePhase == 3u
+                        && editor.selfCodingSmokeSuccessorMaterializationFailed)
+                    {
+                        finishSelfCodingSmoke(false,
+                            "The chosen parent was not successfully materialized with an exact-copy receipt; idle workers are not completion proof.");
+                    }
+                    else if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase == 3u
+                        && editor.selfCodingSmokeSuccessorMaterialized
+                        && editor.selfCodingSmokeSuccessorPlanRequested
+                        && (editor.selfCodingSmokeSuccessorPlanReviewed
+                            || editor.aiDevelopmentPanel->has_reviewed_plan())
+                        && !editor.aiSourceWorkspacePending
+                        && !chat.pending
+                        && editor.aiCandidateRetiringProcesses.empty()
+                        && !editor.aiCandidateChallengerProcess.valid())
+                    {
+                        const bool chosenProcessMatches =
+                            editor.selfCodingSmokeChooseCandidate
+                                ? editor.aiCandidateCurrentProcess.valid()
+                                    && editor.aiCandidateCurrentSnapshot
+                                    && editor.aiCandidateCurrentSnapshot->active()
+                                    && editor.aiCandidateCurrentSnapshot->platform_process_id
+                                        == editor.selfCodingSmokeChosenProcessId
+                                : !editor.aiCandidateCurrentProcess.valid();
+                        if (!chosenProcessMatches)
+                        {
+                            finishSelfCodingSmoke(false,
+                                "The comparison choice did not retain exactly the selected running candidate identity.");
+                        }
+                        else
+                        {
+                            append_editor_automation_trace(
+                                "SELF_CODING_LOCAL_SMOKE SUCCESSOR_PLAN_REVIEWED next plan received after verified materialization; stopping the bounded lab");
+                            (void)editor.aiDevelopmentPanel->cancel_active_campaign(
+                                "The bounded native test has verified the next saved-plan continuation.");
+                            editor_ai_development_panel::RenderResult stop{};
+                            stop.candidate_decision =
+                                editor_ai_development_panel::CandidateDecision::stop_lab;
+                            dispatch_ai_development_action(stop);
+                            editor.selfCodingSmokePhase = 4u;
+                        }
+                    }
+                    else if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase == 4u
                         && !editor.aiSourceWorkspacePending
                         && !chat.pending
                         && editor.aiCandidateRetiringProcesses.empty()
                         && !editor.aiCandidateCurrentProcess.valid()
                         && !editor.aiCandidateChallengerProcess.valid())
                     {
-                        finishSelfCodingSmoke(
-                            editor.selfCodingWorkingIndicatorObserved,
-                            "Model workflow, validated candidate PID/context, production Keep Current, next sandbox materialization and process retirement completed. Activity controller checked; native pixels require separate eye evidence.");
+                        finishSelfCodingSmoke(editor.selfCodingWorkingIndicatorObserved,
+                            "Model workflow, validated candidate PID/context, requested Keep/Choose, exact next-parent materialization, saved-plan continuation and process retirement completed. Activity controller checked; native pixels require separate eye evidence.");
                     }
                     else if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase != 4u
                         && editor.aiDevelopmentPanel->sandbox_session_failed()
                         && !chat.pending)
                     {

@@ -7,9 +7,10 @@ operator intent is `Changes/mission_cache.md`.
 
 ## Product Mission
 
-Ship a complete, usable baseline 2D project loop while continuing to turn the
-editor and its sandboxed AI development workflow into a reliable production
-control plane. The acceptance project must support:
+Ship reusable non-editor software foundations (CLI, platform-window and GUI
+applications) alongside a complete baseline 2D project loop. The editor and its
+sandboxed AI workflow are development tools, not required runtime dependencies
+of generated software. The 2D acceptance project must support:
 
 - authoring and reopening one tile-based map;
 - controlling, animating, and colliding one actor;
@@ -22,6 +23,11 @@ control plane. The acceptance project must support:
 Advanced 3D, networking, planetary simulation, persistent autonomous AI, and
 high-tier effects cannot displace this product loop.
 
+Before broad context expansion, refresh and prove the stable software/context
+base against the current Engine. The September 5 operator authorization permits
+updating `multicontext-base-stable` after that evidence; preserve the original
+checkpoint in history and use this worktree rather than multiplying copies.
+
 ## Current Release State
 
 - Local source and Windows/Linux build authorities declare v0.89.35.
@@ -30,8 +36,9 @@ high-tier effects cannot displace this product loop.
 - The next release may advance only one exact committed tree after Windows and
   managed-Clang Linux production evidence, immutable packages, receipts,
   sidecars, rollback checks, and one reviewed Site activation.
-- Historical runtime/source objects and `multicontext-base-stable` remain
-  immutable. GitHub is not a release authority and currently rejects pushes
+- Historical runtime/source objects remain immutable; stable-base advancement
+  follows the explicit operator authorization and acceptance gate above.
+  GitHub is not a release authority and currently rejects pushes
   because the account is suspended.
 
 ## P0 — Self-Coding Candidate Lab
@@ -63,6 +70,23 @@ high-tier effects cannot displace this product loop.
 
 Exit gate: one operator-understandable session completes with truthful evidence,
 no blank/dead actions, no orphan processes, and no live-source/project mutation.
+
+## P0 — Stable Software Base Before Context Expansion
+
+- [ ] Audit Engine/runtime/editor dependencies and prove minimal CLI,
+  platform-window and GUI software profiles against current source.
+- [ ] Generate, build, run, stop, and rebuild those editor-free templates;
+  document exact capability and artifact boundaries, then advance the stable
+  base branch to the proven checkpoint without creating another full copy.
+- [ ] Design the shared typed context contract around each backend's actual
+  lifetime, threading, input, timing, presentation and ownership constraints.
+- [ ] Plan incremental EpochPlatformEngine extraction with explicit consumers
+  and compatibility tests; no blanket class replacement or duplicated platform code.
+- [ ] Prove floating placement guards and readable guide labels for docked,
+  floating, borrowed and separately supervised context windows before migration.
+
+Exit gate: current reusable software bases work without the editor, and every
+context migration has an explicit backend-specific proof plan.
 
 ## P1 — Editor And 2D/UI Usability
 

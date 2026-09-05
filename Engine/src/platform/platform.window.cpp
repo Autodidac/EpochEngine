@@ -80,12 +80,15 @@ namespace epochengine::platform
 
             ~Win32WindowSystem() noexcept override
             {
-                for (const auto& [hwnd, _] : windows_)
+                while (!windows_.empty())
                 {
+                    // DestroyWindow synchronously delivers WM_DESTROY, which
+                    // also removes this handle. Retire the iterator first.
+                    const HWND hwnd = windows_.begin()->first;
+                    windows_.erase(windows_.begin());
                     if (::IsWindow(hwnd))
                         ::DestroyWindow(hwnd);
                 }
-                windows_.clear();
 
                 if (class_atom_ != 0)
                     ::UnregisterClassW(class_name(), instance_);
@@ -162,10 +165,17 @@ namespace epochengine::platform
                     return;
                 }
 
-                for (const auto& e : events_)
-                    handler(e);
-
-                events_.clear();
+                // A callback can synchronously create WM_SIZE/WM_CLOSE
+                // notifications. Deliver only this detached batch; callbacks
+                // append to events_ for the next pump, without invalidating it.
+                std::vector<WindowEvent> batch{};
+                batch.swap(events_);
+                for (const auto& event : batch)
+                {
+                    // A previous callback may have destroyed its window.
+                    if (windows_.contains(reinterpret_cast<HWND>(event.handle.value)))
+                        handler(event);
+                }
             }
 
             void request_close(WindowHandle handle) noexcept override
@@ -230,18 +240,31 @@ namespace epochengine::platform
 
                 if (msg == WM_NCCREATE)
                 {
-                    auto* create = reinterpret_cast<CREATESTRUCTW*>(lparam);
+                    const auto* create = reinterpret_cast<const CREATESTRUCTW*>(lparam);
+                    if (!create || !create->lpCreateParams)
+                        return FALSE;
                     self = static_cast<Win32WindowSystem*>(create->lpCreateParams);
-                    ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
-                    return TRUE;
+                    ::SetLastError(ERROR_SUCCESS);
+                    const LONG_PTR previous = ::SetWindowLongPtrW(
+                        hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+                    if (previous == 0 && ::GetLastError() != ERROR_SUCCESS)
+                        return FALSE;
+                    // Storing the owner is not the default nonclient setup:
+                    // DefWindowProc must still initialize window text/chrome.
+                    return ::DefWindowProcW(hwnd, msg, wparam, lparam);
+                }
+
+                if (msg == WM_NCDESTROY)
+                {
+                    ::SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+                    return ::DefWindowProcW(hwnd, msg, wparam, lparam);
                 }
 
                 switch (msg)
                 {
                 case WM_CREATE:
                 {
-                    // Intentionally empty.
-                    // Editor UI is rendered via the engine GUI (software/raylib/opengl/vulkan contexts).
+                    // Application content is separate from native window setup.
                     return 0;
                 }
 
@@ -331,10 +354,15 @@ namespace epochengine::platform
                     return;
                 }
 
-                for (const auto& e : events_)
-                    handler(e);
-
-                events_.clear();
+                std::vector<WindowEvent> batch{};
+                batch.swap(events_);
+                for (const auto& event : batch)
+                {
+                    const auto alive = std::find_if(windows_.begin(), windows_.end(),
+                        [&](WindowHandle handle) { return handle.value == event.handle.value; });
+                    if (alive != windows_.end())
+                        handler(event);
+                }
             }
 
             void request_close(WindowHandle handle) noexcept override

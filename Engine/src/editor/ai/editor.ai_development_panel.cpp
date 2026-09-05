@@ -16,6 +16,7 @@ module;
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -35,6 +36,7 @@ import ai.mcp_orchestrator_bridge;
 import ai.self_iteration_orchestrator;
 import editor.ai_development_controller;
 import gui.engine;
+import core.logger;
 import core.sha256;
 import updater.config;
 
@@ -164,6 +166,7 @@ namespace epochengine::editor_ai_development_panel
             };
 
             bool accepted{};
+            bool retryable_selection{};
             std::size_t file_count{};
             std::size_t source_bytes{};
             std::string evidence{};
@@ -957,7 +960,8 @@ namespace epochengine::editor_ai_development_panel
             std::string_view sourceRoot,
             const std::vector<std::string>& relativePaths,
             std::string_view baseEvidence,
-            std::string_view objective)
+            std::string_view objective,
+            const std::vector<ai::development_proposal_codec::ContextRead>& reads = {})
         {
             SourceContextLoadResult result{};
             if (sourceRoot.empty() || relativePaths.empty())
@@ -970,6 +974,26 @@ namespace epochengine::editor_ai_development_panel
             {
                 result.status = "Source context is limited to 12 files per request.";
                 return result;
+            }
+            if (reads.size() > relativePaths.size())
+            {
+                result.status = "Source read selectors exceed the reviewed path count.";
+                return result;
+            }
+            for (std::size_t index = 0u; index < reads.size(); ++index)
+            {
+                const auto& read = reads[index];
+                if (std::ranges::find(relativePaths, read.path) == relativePaths.end()
+                    || read.first_line > 1'000'000u || read.query.size() > 256u
+                    || read.query.find_first_of("\r\n") != std::string::npos
+                    || read.query.find('\0') != std::string::npos
+                    || !ai::development_proposal_codec::valid_context_text(read.query)
+                    || std::ranges::any_of(reads.begin(), reads.begin() + index,
+                        [&](const auto& prior) { return prior.path == read.path; }))
+                {
+                    result.status = "Source read selectors must uniquely name reviewed paths with bounded UTF-8 queries and line numbers.";
+                    return result;
+                }
             }
             if (baseEvidence.size() > maximum_source_context_evidence_bytes)
             {
@@ -986,7 +1010,7 @@ namespace epochengine::editor_ai_development_panel
                     result.status = "The reviewed source path exceeds its length limit.";
                     return result;
                 }
-                envelopeBytes += 8u * path.size() + 256u;
+                envelopeBytes += 10u * path.size() + 384u;
             }
             if (envelopeBytes >= maximum_source_context_evidence_bytes
                 || (maximum_source_context_evidence_bytes - envelopeBytes)
@@ -1114,27 +1138,65 @@ namespace epochengine::editor_ai_development_panel
                 std::string_view sharedBytes{bytes};
                 std::size_t excerptOffset{};
                 bool excerpted{};
-                if (bytes.size() > (std::min)(maximum_full_source_context_bytes, perFileBudget))
+                const auto selector = std::ranges::find(
+                    reads, relativeText, &ai::development_proposal_codec::ContextRead::path);
+                const bool directed = selector != reads.end()
+                    && (selector->first_line != 0u || !selector->query.empty());
+                std::size_t requestedOffset{};
+                std::size_t directedAnchor{};
+                if (directed)
                 {
-                    const std::string loweredBytes = lower_ascii(bytes);
-                    const std::vector<std::string> terms =
-                        source_context_terms(objective);
-                    std::size_t anchor{};
-                    std::size_t strongestTermBytes{};
-                    for (const auto& term : terms)
+                    for (std::uint32_t line = 1u; line < selector->first_line; ++line)
                     {
-                        if (term.size() <= strongestTermBytes)
-                            continue;
-                        const std::size_t occurrence = loweredBytes.find(term);
-                        if (occurrence == std::string::npos)
-                            continue;
-                        anchor = occurrence;
-                        strongestTermBytes = term.size();
+                        const auto newline = bytes.find('\n', requestedOffset);
+                        if (newline == std::string::npos || newline + 1u >= bytes.size())
+                        {
+                            result.retryable_selection = true;
+                            result.status = epochengine::format_text(
+                                "Requested line {} is outside {} ({} lines). Choose an existing line or a literal query in the same file.",
+                                selector->first_line, relativeText, reviewed_line_count(bytes));
+                            return result;
+                        }
+                        requestedOffset = newline + 1u;
+                    }
+                    directedAnchor = requestedOffset;
+                    if (!selector->query.empty())
+                    {
+                        directedAnchor = bytes.find(selector->query, requestedOffset);
+                        if (directedAnchor == std::string::npos)
+                        {
+                            result.retryable_selection = true;
+                            result.status = epochengine::format_text(
+                                "Literal query was not found in {} from line {}. Request a different line or query; no source changes were applied.",
+                                relativeText, (std::max)(1u, selector->first_line));
+                            return result;
+                        }
+                    }
+                }
+                if (directed || bytes.size() > (std::min)(maximum_full_source_context_bytes, perFileBudget))
+                {
+                    std::size_t anchor = directedAnchor;
+                    if (!directed)
+                    {
+                        const std::string loweredBytes = lower_ascii(bytes);
+                        const auto terms = source_context_terms(objective);
+                        std::size_t strongestTermBytes{};
+                        for (const auto& term : terms)
+                        {
+                            if (term.size() <= strongestTermBytes)
+                                continue;
+                            const auto occurrence = loweredBytes.find(term);
+                            if (occurrence == std::string::npos)
+                                continue;
+                            anchor = occurrence;
+                            strongestTermBytes = term.size();
+                        }
                     }
 
-                    excerptOffset = anchor > excerptBudget / 2u
-                        ? anchor - excerptBudget / 2u
-                        : 0u;
+                    excerptOffset = directed && selector->query.empty()
+                        ? requestedOffset
+                        : (std::max)(requestedOffset, anchor > excerptBudget / 2u
+                            ? anchor - excerptBudget / 2u : 0u);
                     if (excerptOffset > 0u)
                     {
                         const std::size_t precedingNewline =
@@ -1178,6 +1240,34 @@ namespace epochengine::editor_ai_development_panel
                             }
                         }
                     }
+                    if (directed && !selector->query.empty()
+                        && (excerptOffset > directedAnchor
+                            || excerptEnd < directedAnchor + selector->query.size()))
+                    {
+                        // Whole-line rounding can discard the requested match
+                        // when the evidence envelope leaves a small window.
+                        // Recenter without line rounding; the query is at most
+                        // 256 bytes and every admitted window is at least 1024.
+                        excerptOffset = (std::max)(requestedOffset,
+                            directedAnchor > excerptBudget / 2u
+                                ? directedAnchor - excerptBudget / 2u : 0u);
+                        while (excerptOffset > requestedOffset
+                            && (static_cast<unsigned char>(bytes[excerptOffset])
+                                & 0xc0u) == 0x80u)
+                        {
+                            --excerptOffset;
+                        }
+                        excerptEnd = (std::min)(bytes.size(), excerptOffset + excerptBudget);
+                        if (excerptEnd < bytes.size())
+                        {
+                            while (excerptEnd > excerptOffset
+                                && (static_cast<unsigned char>(bytes[excerptEnd])
+                                    & 0xc0u) == 0x80u)
+                            {
+                                --excerptEnd;
+                            }
+                        }
+                    }
                     sharedBytes = std::string_view{bytes}.substr(
                         excerptOffset,
                         excerptEnd - excerptOffset);
@@ -1185,6 +1275,8 @@ namespace epochengine::editor_ai_development_panel
                 }
 
                 std::string block{};
+                const std::uint32_t firstLine = reviewed_first_line(bytes, excerptOffset);
+                const std::uint32_t lineCount = reviewed_line_count(sharedBytes);
                 if (excerpted)
                 {
                     block =
@@ -1192,6 +1284,13 @@ namespace epochengine::editor_ai_development_panel
                         + std::to_string(bytes.size()) + "\n"
                         + "FILE_EXCERPT_OFFSET " + relativeText + " "
                         + std::to_string(excerptOffset) + "\n"
+                        + "FILE_EXCERPT_LINES " + relativeText + " "
+                        + std::to_string(firstLine) + " "
+                        + std::to_string(firstLine + lineCount - (lineCount != 0u ? 1u : 0u)) + "\n"
+                        + "FILE_TOTAL_LINES " + relativeText + " "
+                        + std::to_string(reviewed_line_count(bytes)) + "\n"
+                        // Keep the counted-byte header adjacent to BEGIN;
+                        // the proposal codec validates that exact envelope.
                         + "FILE_EXCERPT_SIZE " + relativeText + " "
                         + std::to_string(sharedBytes.size()) + "\n"
                         + "FILE_EXCERPT_BEGIN " + relativeText + "\n";
@@ -1224,9 +1323,6 @@ namespace epochengine::editor_ai_development_panel
                         "The reviewed source range is empty: " + relativeText + ".";
                     return result;
                 }
-                const std::uint32_t firstLine = reviewed_first_line(
-                    bytes, excerptOffset);
-                const std::uint32_t lineCount = reviewed_line_count(sharedBytes);
                 result.reviewed_slices.push_back(
                     SourceContextLoadResult::ReviewedSlice{
                         .relative_path = relativeText,
@@ -1372,6 +1468,7 @@ namespace epochengine::editor_ai_development_panel
         std::vector<ai::curated_context_bundle::EntryEvidence>
             campaign_reviewed_evidence{};
         std::vector<std::string> campaign_reviewed_paths{};
+        std::vector<ai::development_proposal_codec::ContextRead> campaign_reviewed_reads{};
         std::optional<ai::source_patch_proposal::SealedProposal>
             source_patch_review{};
         SourcePatchReviewBinding source_patch_review_binding{};
@@ -1395,6 +1492,7 @@ namespace epochengine::editor_ai_development_panel
         std::string source_context_evidence_objective{};
         std::vector<std::string> pending_source_context_systems{};
         std::vector<std::string> pending_source_context_paths{};
+        std::vector<ai::development_proposal_codec::ContextRead> pending_source_context_reads{};
         std::string pending_source_context_reason{};
         std::string pending_source_context_objective{};
         std::string source_candidate_raw_reply{};
@@ -1472,6 +1570,7 @@ namespace epochengine::editor_ai_development_panel
                 campaign_bundle_binding_digest.clear();
                 campaign_reviewed_evidence.clear();
                 campaign_reviewed_paths.clear();
+                campaign_reviewed_reads.clear();
                 campaign_transition_generation = 0u;
                 campaign_control_generation = 0u;
             }
@@ -1538,6 +1637,7 @@ namespace epochengine::editor_ai_development_panel
             model_reply_correction_diagnostic.clear();
             pending_source_context_systems.clear();
             pending_source_context_paths.clear();
+            pending_source_context_reads.clear();
             pending_source_context_reason.clear();
             pending_source_context_objective.clear();
             if (!sandbox_base_root.empty())
@@ -3173,6 +3273,7 @@ namespace epochengine::editor_ai_development_panel
                         campaign_bundle_binding_digest.clear();
                         campaign_reviewed_evidence.clear();
                         campaign_reviewed_paths.clear();
+                        campaign_reviewed_reads.clear();
                     }
                     status_message = std::string{"Selected "}
                         + std::string{campaign_provider_name(campaign_provider)}
@@ -3900,8 +4001,8 @@ namespace epochengine::editor_ai_development_panel
             {
                 output.model_prompt +=
                     "\n\nEPOCH_SOURCE_CONTEXT_CORRECTION_V1\n"
-                    "The previous source selection was rejected before any "
-                    "source bytes were read or sent. Return a fresh bounded "
+                    "The previous source selection was rejected. No edits "
+                    "were staged and rejected source evidence was not sent. Return a fresh bounded "
                     "context request.\nCORRECTION_ATTEMPT ";
                 output.model_prompt +=
                     std::to_string(model_reply_corrections);
@@ -3943,7 +4044,9 @@ namespace epochengine::editor_ai_development_panel
                     "If the reviewed bytes do not prove the repair, request a "
                     "complete next selection of up to twelve listed paths with "
                     "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Retain useful current paths; "
-                    "the new selection replaces the old slice. Do not guess.";
+                    "the new selection replaces the old slice. For another region "
+                    "of the same file, request first_line or a literal query. "
+                    "FILE_EXCERPT_LINES and FILE_TOTAL_LINES describe the current window. Do not guess.";
             }
             if (!model_reply_correction_diagnostic.empty())
             {
@@ -4263,6 +4366,7 @@ namespace epochengine::editor_ai_development_panel
             {
                 pending_source_context_systems.clear();
                 pending_source_context_paths.clear();
+                pending_source_context_reads.clear();
                 pending_source_context_reason.clear();
                 pending_source_context_objective.clear();
                 if (!contextRequest)
@@ -4315,6 +4419,7 @@ namespace epochengine::editor_ai_development_panel
                 }
                 pending_source_context_systems.clear();
                 pending_source_context_paths = contextRequest.request.paths;
+                pending_source_context_reads = contextRequest.request.reads;
                 pending_source_context_reason =
                     "Model request: " + contextRequest.request.reason;
                 pending_source_context_objective = development_objective;
@@ -4530,6 +4635,7 @@ namespace epochengine::editor_ai_development_panel
         }
         state.pending_source_context_systems.clear();
         state.pending_source_context_paths.clear();
+        state.pending_source_context_reads.clear();
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();
         state.source_context_evidence = catalog.evidence;
@@ -4662,6 +4768,7 @@ namespace epochengine::editor_ai_development_panel
         const std::string objective = state.development_objective;
         const std::vector<std::string> reviewedPaths =
             state.campaign_reviewed_paths;
+        const auto reviewedReads = state.campaign_reviewed_reads;
         const auto provider = state.campaign_provider;
         state.reset_controller(
             input.workspace_id,
@@ -4704,6 +4811,7 @@ namespace epochengine::editor_ai_development_panel
         state.source_path_catalog_evidence =
             nextCatalog.evidence;
         state.pending_source_context_paths = reviewedPaths;
+        state.pending_source_context_reads = reviewedReads;
         state.pending_source_context_reason =
             "Continuing the model-selected source slice from the previous candidate.";
         state.pending_source_context_objective = objective;
@@ -4711,6 +4819,14 @@ namespace epochengine::editor_ai_development_panel
         next.candidate_decision = output.candidate_decision;
         next.retire_candidate_preview =
             output.retire_candidate_preview;
+        if (next.action != HostAction::materialize_source_workspace)
+        {
+            // A missing/stale requested region can ask the model to navigate
+            // again. Preserve that real action/status; never claim a copy began.
+            if (next.action == HostAction::none)
+                state.model_request_failed = true;
+            return next;
+        }
         next.status = epochengine::format_text(
             "{} is now the sandbox parent. Iteration {} is materializing from only those selected bytes.",
             chooseCandidate ? "The candidate" : "The current head",
@@ -4721,6 +4837,19 @@ namespace epochengine::editor_ai_development_panel
 
     bool Panel::run_contract()
     {
+        struct ContractTrace final
+        {
+            std::string_view stage{"activity and session ownership"};
+            bool passed{};
+            ~ContractTrace()
+            {
+                if (!passed)
+                    logger::get("Engine.Editor.SelfTest").log(
+                        logger::LogLevel::Error,
+                        std::string{"ai.development_panel.contract.stage="} + std::string{stage},
+                        std::source_location::current());
+            }
+        } trace{};
         Input activityInput{};
         if (describe_model_activity(activityInput).visible)
             return false;
@@ -5329,6 +5458,116 @@ namespace epochengine::editor_ai_development_panel
                 return false;
             }
 
+            // Same-path navigation must disclose the requested region, not the
+            // same host-selected excerpt again. Keep exact lines and UTF-8 bytes.
+            trace.stage = "model-directed source windows";
+            const std::string navigationPath = "Engine/src/editor/editor.navigation_contract.cpp";
+            std::string navigationSource{};
+            for (std::uint32_t line = 1u; line <= 1'200u; ++line)
+            {
+                navigationSource += "// " + std::to_string(line) + std::string(96u, ' ');
+                if (line == 100u || line == 900u)
+                    navigationSource += "navigation_target_\xc3\xa9";
+                navigationSource += '\n';
+            }
+            if (!writeFixtureSource(navigationPath, navigationSource))
+                return false;
+            using ContextRead = ai::development_proposal_codec::ContextRead;
+            const auto automaticRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, "make it better");
+            const auto lineRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, "make it better",
+                {ContextRead{.path = navigationPath, .first_line = 900u}});
+            const auto queryRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, "make it better",
+                {ContextRead{.path = navigationPath, .first_line = 500u,
+                    .query = "navigation_target_\xc3\xa9"}});
+            if (!automaticRead.accepted || !lineRead.accepted || !queryRead.accepted
+                || lineRead.source_bytes > maximum_source_excerpt_bytes
+                || queryRead.source_bytes > maximum_source_excerpt_bytes
+                || lineRead.reviewed_slices.front().first_line != 900u
+                || lineRead.evidence == automaticRead.evidence
+                || queryRead.reviewed_slices.front().first_line < 500u
+                || queryRead.reviewed_slices.front().last_line < 900u
+                || queryRead.evidence.find("navigation_target_\xc3\xa9") == std::string::npos
+                || queryRead.evidence.find("FILE_TOTAL_LINES " + navigationPath + " 1200\n") == std::string::npos
+                || !ai::development_proposal_codec::valid_context_text(queryRead.evidence)
+                || queryRead.evidence.size() > maximum_source_context_evidence_bytes
+                || readFixtureSource(fixture.path / navigationPath) != navigationSource)
+                return false;
+            trace.stage = "source-window range failures";
+            const auto missingLine = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .first_line = 1'201u}});
+            const auto missingQuery = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .query = "missing_symbol"}});
+            if (missingLine.accepted || !missingLine.retryable_selection
+                || missingQuery.accepted || !missingQuery.retryable_selection
+                || missingLine.status.find("1200 lines") == std::string::npos)
+                return false;
+            trace.stage = "unsafe source-window selectors";
+            const std::vector<std::vector<ContextRead>> unsafeSelectors{
+                {{.path = "../outside.cpp", .first_line = 1u}},
+                {{.path = "Engine/src/editor/editor.secret_canary.cpp", .first_line = 1u}},
+                {{.path = navigationPath, .first_line = 1'000'001u}},
+                {{.path = navigationPath, .query = std::string(257u, 'x')}},
+                {{.path = navigationPath, .query = "line\nbreak"}},
+                {{.path = navigationPath, .query = std::string{"x\0y", 3u}}},
+                {{.path = navigationPath}, {.path = navigationPath}}};
+            for (const auto& selectors : unsafeSelectors)
+            {
+                const auto refused = load_reviewed_source_context(
+                    fixture.path.generic_string(), {navigationPath}, {}, {}, selectors);
+                if (refused.accepted || refused.retryable_selection
+                    || !refused.evidence.empty())
+                    return false;
+            }
+
+            // A legal 1024-byte budget must still include the literal match
+            // after line-boundary rounding, even on unusually long source lines.
+            const std::string narrowPath = "Engine/src/editor/editor.narrow_window_contract.cpp";
+            const std::string narrowQuery = "navigation_target_\xc3\xa9";
+            const std::string narrowSource = std::string(100u, 'a') + '\n'
+                + std::string(1'399u, 'b') + narrowQuery
+                + std::string(2'200u, 'c') + '\n';
+            if (!writeFixtureSource(narrowPath, narrowSource))
+                return false;
+            const std::size_t narrowEnvelope = 1u + 10u * narrowPath.size() + 384u;
+            const std::string narrowBaseEvidence(
+                maximum_source_context_evidence_bytes - narrowEnvelope - 1'024u, ' ');
+            const auto narrowRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {narrowPath}, narrowBaseEvidence, {},
+                {ContextRead{.path = narrowPath, .first_line = 2u, .query = narrowQuery}});
+            if (!narrowRead.accepted || narrowRead.reviewed_slices.size() != 1u
+                || narrowRead.source_bytes > 1'024u
+                || narrowRead.reviewed_slices.front().first_line != 2u
+                || narrowRead.reviewed_slices.front().exact_bytes.find(narrowQuery)
+                    == std::string::npos
+                || !ai::development_proposal_codec::valid_context_text(narrowRead.evidence)
+                || narrowRead.evidence.size() > maximum_source_context_evidence_bytes
+                || readFixtureSource(fixture.path / narrowPath) != narrowSource)
+                return false;
+
+            Panel selectionReset{};
+            auto& selectionResetState = *selectionReset.implementation_;
+            for (const bool cancel : {false, true})
+            {
+                selectionResetState.pending_source_context_paths = {navigationPath};
+                selectionResetState.pending_source_context_reads = {
+                    ContextRead{.path = navigationPath, .first_line = 900u}};
+                selectionResetState.pending_source_context_objective = "read selected source";
+                if (cancel)
+                    (void)selectionReset.cancel_active_campaign("Contract cancellation");
+                else
+                    (void)selectionReset.reject_requested_source_context();
+                if (selectionReset.has_pending_source_context()
+                    || !selectionResetState.pending_source_context_reads.empty()
+                    || !selectionResetState.pending_source_context_objective.empty())
+                    return false;
+            }
+
+            trace.stage = "twelve-file source-window budget";
             std::vector<std::string> twelvePaths{};
             for (std::size_t index = 0u; index < maximum_source_context_paths; ++index)
             {
@@ -5370,6 +5609,40 @@ namespace epochengine::editor_ai_development_panel
             localOpenInput.architecture_evidence =
                 "PATH " + reviewedPath + "\n";
 
+            trace.stage = "automatic source-window recovery";
+            Panel regionRecovery{};
+            auto& recoveryState = *regionRecovery.implementation_;
+            (void)recoveryState.ensure(localOpenInput.workspace_id,
+                localOpenInput.source_snapshot_root, localOpenInput.workspace_root);
+            recoveryState.active_domain = localOpenInput.domain;
+            recoveryState.development_objective = localOpenInput.development_objective;
+            recoveryState.source_path_catalog_evidence = localOpenInput.architecture_evidence;
+            for (std::size_t attempt = 1u; attempt <= 3u; ++attempt)
+            {
+                recoveryState.pending_source_context_paths = {reviewedPath};
+                recoveryState.pending_source_context_reads = {
+                    ContextRead{.path = reviewedPath, .query = "nonexistent_literal"}};
+                recoveryState.pending_source_context_objective = localOpenInput.development_objective;
+                const auto recovered = regionRecovery.share_requested_source_context(localOpenInput);
+                if (attempt <= 2u)
+                {
+                    if (recovered.action != HostAction::request_model_source_proposal
+                        || recovered.model_prompt.find("Literal query was not found") == std::string::npos
+                        || recovered.model_prompt.find("first_line") == std::string::npos
+                        || recoveryState.model_reply_corrections != attempt
+                        || recoveryState.model_request_failed)
+                        return false;
+                }
+                else if (recovered.action != HostAction::none
+                    || !recoveryState.model_request_failed)
+                    return false;
+                if (!recoveryState.pending_source_context_paths.empty()
+                    || !recoveryState.pending_source_context_reads.empty()
+                    || recoveryState.source_workspace_pending)
+                    return false;
+            }
+
+            trace.stage = "curated source-window handoff";
             auto& localOpenState = *localOpen.implementation_;
             (void)localOpenState.ensure(
                 localOpenInput.workspace_id,
@@ -5378,6 +5651,8 @@ namespace epochengine::editor_ai_development_panel
             localOpenState.development_objective =
                 localOpenInput.development_objective;
             localOpenState.pending_source_context_paths = {reviewedPath};
+            localOpenState.pending_source_context_reads = {
+                ContextRead{.path = reviewedPath, .first_line = 1u}};
             localOpenState.pending_source_context_objective =
                 localOpenInput.development_objective;
 
@@ -5397,6 +5672,9 @@ namespace epochengine::editor_ai_development_panel
                 || localOpenState.campaign_reviewed_evidence.size() != 1u
                 || localOpenState.campaign_reviewed_paths
                     != std::vector<std::string>{reviewedPath}
+                || localOpenState.campaign_reviewed_reads.size() != 1u
+                || localOpenState.campaign_reviewed_reads.front().first_line != 1u
+                || !localOpenState.pending_source_context_reads.empty()
                 || localOpenState.campaign_reviewed_evidence.front()
                     .project_relative_path != reviewedPath
                 || localOpenState.source_context_evidence.empty())
@@ -5409,6 +5687,7 @@ namespace epochengine::editor_ai_development_panel
                 fixtureError);
             if (fixtureError)
                 return false;
+            trace.stage = "campaign materialization and reviewed plan";
             const RenderResult workspaceCompleted =
                 localOpen.complete_source_workspace(
                     opened.workspace_generation,
@@ -5426,6 +5705,7 @@ namespace epochengine::editor_ai_development_panel
             }
 
             const std::uint64_t campaignNow = logical_time_now().value;
+            trace.stage = "campaign configuration";
             std::string campaignRefusal{};
             const auto campaignConfiguration =
                 localOpenState.prepare_campaign_configuration(
@@ -5433,6 +5713,7 @@ namespace epochengine::editor_ai_development_panel
             if (!campaignConfiguration || !campaignRefusal.empty())
                 return false;
             localOpenState.campaign_configuration = *campaignConfiguration;
+            trace.stage = "campaign begin and control";
             localOpenState.campaign_orchestrator = std::make_unique<
                 ai::self_iteration_orchestrator::Orchestrator>();
             RenderResult campaignStarted{};
@@ -5462,6 +5743,7 @@ namespace epochengine::editor_ai_development_panel
                 return false;
             }
             RenderResult planSent{};
+            trace.stage = "campaign plan dispatch";
             if (!localOpenState.send_staged_campaign_plan(
                     planSent, campaignNow)
                 || planSent.action
@@ -5489,6 +5771,7 @@ namespace epochengine::editor_ai_development_panel
             }
 
             Input planResponseInput = localOpenInput;
+            trace.stage = "campaign plan response";
             planResponseInput.latest_raw_model_reply =
                 "1. Inspect Engine/src/editor/editor.reviewed_contract.cpp. "
                 "2. Propose one bounded edit in editor.reviewed_contract.cpp. "
@@ -5526,6 +5809,7 @@ namespace epochengine::editor_ai_development_panel
             }
 
             RenderResult proposalRequested{};
+            trace.stage = "campaign proposal dispatch";
             if (!localOpenState.continue_approved_plan(
                     proposalRequested, campaignNow + 2u)
                 || proposalRequested.action
@@ -5563,6 +5847,7 @@ namespace epochengine::editor_ai_development_panel
             }
 
             Input proposalResponseInput = localOpenInput;
+            trace.stage = "campaign proposal response";
             proposalResponseInput.latest_raw_model_reply =
                 "EPOCH_SOURCE_PATCH_PROPOSAL_V1\n"
                 "title: Change reviewed editor source value\n"
@@ -5593,12 +5878,19 @@ namespace epochengine::editor_ai_development_panel
                 || !localOpenState.campaign_candidate_ready(
                     campaignCandidateEvidence))
             {
+                logger::get("Engine.Editor.SelfTest").log(
+                    logger::LogLevel::Error,
+                    "ai.development_panel.contract.proposal=" + proposalReviewed.status
+                        + " candidate=" + campaignCandidateEvidence
+                        + " diagnostic=" + localOpenState.model_reply_correction_diagnostic,
+                    std::source_location::current());
                 return false;
             }
 
             const RenderResult stagedCampaign =
                 localOpenState.approve_campaign_candidate_and_queue_build(
                     campaignNow + 3u);
+            trace.stage = "campaign candidate sandbox staging";
             if (stagedCampaign.action
                     != HostAction::compile_source_workspace
                 || !localOpenState.source_build_pending
@@ -5626,6 +5918,7 @@ namespace epochengine::editor_ai_development_panel
             }
 
             const std::uint32_t failedGeneration = localOpenState.generation;
+            trace.stage = "campaign failed build repair";
             const std::string failedWorkspace = localOpenState.workspace_root;
             const RenderResult campaignFailedBuild =
                 localOpen.complete_source_build(
@@ -5820,6 +6113,7 @@ namespace epochengine::editor_ai_development_panel
                 return false;
         }
 
+        trace.stage = "validation and candidate lifecycle";
         auto& acceptedState = *accepted.implementation_;
         acceptedState.generation = 17u;
         acceptedState.source_root = "C:/epoch/live";
@@ -6218,7 +6512,8 @@ namespace epochengine::editor_ai_development_panel
         const RenderResult correctionExhausted =
             packetCorrectionState.stage_source_reply(
                 packetInput, "malformed again", logical_time_now());
-        return correctionOne.action
+        trace.stage = "source-packet correction budgets";
+        trace.passed = correctionOne.action
                 == HostAction::request_model_source_proposal
             && correctionTwo.action
                 == HostAction::request_model_source_proposal
@@ -6230,6 +6525,7 @@ namespace epochengine::editor_ai_development_panel
                 != std::string::npos
             && correctionExhausted.status.find("limit is exhausted")
                 != std::string::npos;
+        return trace.passed;
     }
 
     void Panel::reset(std::string workspaceId)
@@ -6380,6 +6676,7 @@ namespace epochengine::editor_ai_development_panel
             state.source_context_evidence_objective.clear();
             state.pending_source_context_systems.clear();
             state.pending_source_context_paths.clear();
+            state.pending_source_context_reads.clear();
             state.pending_source_context_reason.clear();
             state.pending_source_context_objective.clear();
             state.status_message =
@@ -6960,6 +7257,7 @@ namespace epochengine::editor_ai_development_panel
                         // twelve-file ceiling and replay the same evidence.
                         std::vector<std::string> expandedPaths =
                             state.pending_source_context_paths;
+                        auto expandedReads = state.pending_source_context_reads;
                         const auto campaignSnapshot =
                             state.campaign_orchestrator->snapshot();
                         state.capture_campaign_result(
@@ -6983,6 +7281,7 @@ namespace epochengine::editor_ai_development_panel
                             state.source_path_catalog_evidence;
                         const std::size_t expansionCount =
                             state.source_context_expansions;
+                        const auto priorCorrections = state.model_reply_corrections;
                         const std::string selectionReason =
                             state.pending_source_context_reason;
                         const auto provider = state.campaign_provider;
@@ -6999,8 +7298,10 @@ namespace epochengine::editor_ai_development_panel
                         state.active_domain = input.domain;
                         state.source_path_catalog_evidence = pathCatalog;
                         state.source_context_expansions = expansionCount;
+                        state.model_reply_corrections = priorCorrections;
                         state.pending_source_context_paths =
                             std::move(expandedPaths);
+                        state.pending_source_context_reads = std::move(expandedReads);
                         state.pending_source_context_reason =
                             selectionReason;
                         state.pending_source_context_objective = objective;
@@ -7016,6 +7317,8 @@ namespace epochengine::editor_ai_development_panel
                             state.sandbox_lab_enabled = false;
                             return expanded;
                         }
+                        if (expanded.action != HostAction::materialize_source_workspace)
+                            return expanded;
                         state.status_message = epochengine::format_text(
                             "The AI revised its source context to {} verified "
                             "file(s). Candidate Lab is rebuilding the isolated "
@@ -7041,6 +7344,7 @@ namespace epochengine::editor_ai_development_panel
                     state.campaign_plan_review.clear();
                     state.campaign_plan_review_digest.clear();
                     state.campaign_reviewed_paths.clear();
+                    state.campaign_reviewed_reads.clear();
                     state.campaign_reviewed_evidence.clear();
                     state.campaign_scope_digest.clear();
                     state.campaign_request_digest.clear();
@@ -7162,10 +7466,19 @@ namespace epochengine::editor_ai_development_panel
             state.source_root,
             sharedSourcePaths,
             input.architecture_evidence,
-            state.development_objective);
+            state.development_objective,
+            state.pending_source_context_reads);
         state.status_message = loaded.status;
         if (!loaded.accepted)
         {
+            if (loaded.retryable_selection)
+            {
+                state.pending_source_context_paths.clear();
+                state.pending_source_context_reads.clear();
+                state.pending_source_context_reason.clear();
+                state.pending_source_context_objective.clear();
+                return state.queue_source_context_reply_correction(loaded.status);
+            }
             output.status = state.status_message;
             return output;
         }
@@ -7209,6 +7522,7 @@ namespace epochengine::editor_ai_development_panel
         for (const auto& evidence : state.campaign_reviewed_evidence)
             state.campaign_reviewed_paths.push_back(
                 evidence.project_relative_path);
+        state.campaign_reviewed_reads = state.pending_source_context_reads;
         output.campaign_evidence.push_back(
             "Curated bundle SHA-256: " + state.campaign_scope_digest);
         output.campaign_evidence.push_back(
@@ -7269,6 +7583,7 @@ namespace epochengine::editor_ai_development_panel
             state.development_objective;
         state.pending_source_context_systems.clear();
         state.pending_source_context_paths.clear();
+        state.pending_source_context_reads.clear();
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();
         state.active_domain = input.domain;
@@ -7381,6 +7696,7 @@ namespace epochengine::editor_ai_development_panel
         auto& state = *implementation_;
         state.pending_source_context_systems.clear();
         state.pending_source_context_paths.clear();
+        state.pending_source_context_reads.clear();
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();
         state.status_message =
@@ -8470,6 +8786,7 @@ namespace epochengine::editor_ai_development_panel
         }
         state.model_request_cancelled = true;
         state.pending_source_context_paths.clear();
+        state.pending_source_context_reads.clear();
         state.pending_source_context_objective.clear();
         state.model_reply_correction_diagnostic.clear();
         state.campaign_pending_operation.reset();

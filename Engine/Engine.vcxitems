@@ -184,6 +184,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.control.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.multiplexer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.admission.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.window.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\directx.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">

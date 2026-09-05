@@ -75,6 +75,37 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   unless testing finds a regression. Prioritize unfinished interface and AI
   workflows elsewhere.
 
+## Software Base And Platform Architecture
+
+- Epoch produces software as well as games. Audit the whole dependency and
+  project structure for reusable CLI, native platform-window, and GUI software
+  templates: the selected Engine capabilities without the editor, editor host,
+  development caches, or model weights as runtime dependencies.
+- The operator confirmed on September 5 that `multicontext-base-stable` is the
+  basic software/context baseline and explicitly requested that it be updated
+  to match the current Engine. Preserve its original `ad6c416d930b348a61bc37ceb7d4522742be084a`
+  checkpoint in history; advance the branch only to a reviewed, build-tested
+  editor-free baseline. A branch does not require another full worktree/copy.
+- Establish that current stable base and prove CLI/platform-window template
+  generation, build, run, exit, and rapid rebuild before broad context feature
+  expansion. Keep incomplete self-coding work out of stable-base claims.
+- Gradually form EpochPlatformEngine as the reusable platform/context/window/
+  input foundation with clear Engine/runtime/editor consumers. Review boundaries
+  before extraction, migrate incrementally, and avoid duplicate implementations,
+  a wholesale rename, or breaking existing generated projects.
+- Design one typed public context contract over backend-owned implementations.
+  Inventory each context's real needs before changing the fragile multicontext
+  system: native/process ownership, borrowed versus owned windows, thread and
+  current-context affinity, resource lifetime, input/focus, timing, presentation,
+  suspend/restore, replacement, and shutdown. Do not assume backend interchangeability.
+- Improve floating placements and guide/ghost controls across all supported
+  host kinds. Preserve the accepted colors while making labels readable and
+  responsive; distinguish docking, direct-tab insertion, resizing, dragging,
+  input capture, and external-PID context attachment.
+- The operator's tiered OpenGL example may inform design by read-only study.
+  Do not copy its source, API assumptions, frame ordering, or tutorial material
+  into Epoch. Production behavior must be proved against Epoch's own contracts.
+
 ## Playable 2D Product
 
 - Deliver the full map → actor → animation → collision → audio → GUI →
@@ -147,6 +178,9 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   before Site admission. Native interaction/pixels remain separate evidence.
 - The Site task stores protected source/runtime objects and signed admission;
   it does not compile Epoch and must not activate partial platform evidence.
+- September 5 authorization: publish the next release through the Site-owning
+  task only after its build, runtime, visual, and safety checks pass. This is not
+  authorization to publish current partial evidence or promote AI sandbox source.
 - Preserve immutable older runtime/source/package objects for rollback while
   current public cards show only the accepted current release.
 - Every meaningful known-good source tranche gets one rollbackable commit.
