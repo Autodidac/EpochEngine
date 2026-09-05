@@ -27,8 +27,8 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished. Starting commit for this
-  restricted-child and runtime-data exclusion pass:
-  `0fd7b377b89e52e97729dc460d031da89ead183f`.
+  exact-candidate validation and launch-ownership pass:
+  `d99f8b5056e893adc7b1810d5bb3bb958fe4b645`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34;
   public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -64,12 +64,9 @@ network/IPC qualification and abrupt-host-exit lease recovery remain open.
 Completed source/build evidence and the earlier genuine Qwen transport result
 belong in `Changes/changelog.txt`; none proves the full two-build workflow.
 
-Current checkpoint checks: Windows Debug/Release editor and Release HeadlessCI
-builds, both build-safe aggregates, nine Windows component CTests, 100 repeated
-full child-process CTests and the two Linux Clang Release process/materializer
-component tests pass. The final Release editor is 12,660,224 bytes, SHA-256
-`7f1f251e041c4c3ab2b1594d0b78ad3746f69381513e8cf0acd1665729b39f46`.
-The strict network probe remains a failure, independently of these passing tests.
+Exact checkpoint build identities and completed regression evidence belong in
+`Changes/changelog.txt`. The strict network probe remains a failure,
+independently of passing source/build/component checks.
 
 The operator explicitly approved the visible Release/Qwen/build/comparison run
 on September 5, but the execution tool rejected the subsequent ordinary visible
@@ -114,6 +111,10 @@ the narrow HTTP component compile passed and the lane was released again.
    uncompleted network evidence. Qualify crash recovery for persisted identity
    grants; normal retirement alone does not prove abrupt-parent cleanup. Linux
    descriptor cleanup is implemented, but filesystem/network/IPC confinement is not.
+   The existing root-level solution, source/output-local runtime writes and
+   `.epoch/local_mcp` receipts do not fit disjoint immutable/writable grants.
+   Bind actual consumers to separate phase roots and qualify an owned immutable
+   MSBuild/VC/SDK/vcpkg dependency closure before enabling restricted launches.
 5. Only after the exact candidate passes those gates, stage immutable Windows
    and Linux packages, exact-file validation receipts and sidecars, then hand the
    single reviewed publication set to the Epoch Site task. Do not alter the

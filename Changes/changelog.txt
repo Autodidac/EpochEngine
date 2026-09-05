@@ -1,5 +1,39 @@
 ## [Unreleased] - v0.89.35
 
+- Bind HeadlessCI's explicit root argument to exactly that candidate directory.
+  A missing/invalid control contract no longer falls back to a valid parent
+  checkout, and candidate validation does not depend on Changes/roadmap.md.
+  Preserve no-argument developer discovery using the actual required control
+  file. Reproduce the original false pass with the prior Release binary and a
+  synthetic missing candidate; its log proves it read the ancestor instead.
+  The repaired Windows CMake/MSVC and Linux Clang binaries pass six explicit
+  console cases covering missing/invalid nested inputs, valid candidates without
+  docs, relative roots and developer discovery, with exact logged roots and
+  unchanged input hashes. The opt-in driver retains transcripts; ordinary
+  builds and CTest do not implicitly run the new driver.
+- Make child-launch ownership explicit: fresh reservations remain owned on
+  invalid/spawn-failed launches, whereas focused/busy handles are borrowed.
+  Candidate Lab compiler/test workers retain their handle independently of the
+  future result, before any diagnostic allocation; completion and context
+  teardown recover it even after exceptions or stale artifact epochs. Refuse
+  build/test artifact acceptance while retirement is pending. Adopt preview
+  handles before identity checks, and retain failed ones through the existing
+  retirement pump. Only successful release or typed stale evidence permits
+  dropping ownership, not an ambiguous missing snapshot.
+- September 5 exact-root/ownership checkpoint: Windows Debug/Release editor and
+  Release HeadlessCI builds, both explicitly waited build-safe aggregates, nine
+  Windows component CTests, 20 repeated full child-process contracts and two
+  Linux Clang Release component CTests pass. Existing duplicate-logger and
+  optimization-override warnings remain. The new ownership tests cover reserved/unreserved invalid input,
+  native malformed-image spawn failure, release and borrowed focus/busy handles.
+  Source naming passes for 591 files; diff checks pass. Final Release editor is
+  12,666,880 bytes, SHA-256
+  bf06031091c2dcfa34067922a079475198a8eed63abf126b43ca65168496c9fa.
+  HeadlessCI is 304,640 bytes, SHA-256
+  30f891b891ca2e8fd396b7342a40c7995f0c5004b749a4151b89c621606bf561.
+  This is not native GUI/Qwen two-build proof or Candidate Lab OS confinement.
+  No release archive, source/runtime authority, stable ref or Site state changed.
+
 - Exclude the owned Engine/examples/EpochEditor/workspace runtime tree from
   source materialization, repairs and chosen-parent succession, including
   explicit includes and Windows case variants. Synthetic tests retain chosen

@@ -233,7 +233,45 @@ namespace epochengine
             std::optional<candidate_artifacts::Binding> artifact{};
             platform::child_process::ExecutableIdentity before_identity{};
             platform::child_process::ExecutableIdentity after_identity{};
+            // A failed launch/wait cannot yield accepted artifact evidence while
+            // retirement remains pending. The independently shared worker handle
+            // owns cleanup even if this result is replaced by an exception.
+            platform::child_process::ProcessHandle retiring_process{};
         };
+
+        [[nodiscard]] bool release_ai_source_task_process(
+            AiSourceTaskResult& result,
+            platform::child_process::ProcessHandle& handle)
+        {
+            if (platform::child_process::release(handle))
+            {
+                handle = {};
+                return true;
+            }
+            const auto stopped = platform::child_process::stop(
+                handle, platform::child_process::StopMode::force);
+            if (stopped == platform::child_process::StopCode::stale_handle)
+            {
+                handle = {};
+                return true;
+            }
+            result.retiring_process = handle;
+            result.succeeded = false;
+            return false;
+        }
+
+        void retire_failed_ai_source_launch(
+            AiSourceTaskResult& result,
+            const platform::child_process::LaunchResult& launched,
+            platform::child_process::ProcessHandle& ownedProcess)
+        {
+            // A busy group/focused-existing result belongs to another request.
+            // Never terminate it while cleaning up this rejected launch.
+            if (!launched.owns_new_process())
+                return;
+            if (!release_ai_source_task_process(result, ownedProcess))
+                result.summary += " Native retirement is pending; its handle remains owned.";
+        }
 
         enum class EditorLayoutDrag : unsigned char
         {
@@ -1413,6 +1451,10 @@ namespace epochengine
             std::uint64_t aiSourceWorkspaceArtifactEpoch{};
             std::optional<std::future<AiSourceTaskResult>>
                 aiSourceBuildPending{};
+            // Allocated before dispatch, written only by that worker, read by
+            // the editor only after future readiness/join. Unlike the future's
+            // value, this ownership survives a task that exits by exception.
+            std::shared_ptr<platform::child_process::ProcessHandle> aiSourceBuildProcess{};
             editor_tasks::CancellationTicket
                 aiSourceBuildCancellation{};
             std::uint32_t aiSourceBuildGeneration{};
@@ -1421,6 +1463,7 @@ namespace epochengine
                 AiSourceValidationLane::DebugEditor};
             std::optional<std::future<AiSourceTaskResult>>
                 aiSourceTestPending{};
+            std::shared_ptr<platform::child_process::ProcessHandle> aiSourceTestProcess{};
             editor_tasks::CancellationTicket
                 aiSourceTestCancellation{};
             std::uint32_t aiSourceTestGeneration{};
@@ -11824,7 +11867,8 @@ namespace epochengine
             std::stop_token cancellation,
             AiSourceValidationLane lane,
             const std::uint32_t generation,
-            const std::uint64_t buildTicket)
+            const std::uint64_t buildTicket,
+            platform::child_process::ProcessHandle& ownedProcess)
         {
             AiSourceTaskResult result{};
 #if !defined(_WIN32)
@@ -11835,6 +11879,7 @@ namespace epochengine
             (void)cancellation;
             (void)generation;
             (void)buildTicket;
+            (void)ownedProcess;
             result.summary =
                 "The Linux guarded source compiler adapter is not connected.";
             return result;
@@ -12015,12 +12060,14 @@ namespace epochengine
 
             const auto launched =
                 platform::child_process::launch_or_focus(request);
+            if (launched.owns_new_process()) ownedProcess = launched.handle;
             if (launched.code
                 != platform::child_process::LaunchCode::started)
             {
                 result.summary =
                     "The guarded host compiler did not start: "
                     + launched.message;
+                retire_failed_ai_source_launch(result, launched, ownedProcess);
                 return result;
             }
 
@@ -12028,11 +12075,16 @@ namespace epochengine
                 30ull * 60ull * 1'000'000'000ull;
             const auto waited = platform::child_process::wait(
                 launched.handle, cancellation, timeoutNs);
-            (void)platform::child_process::release(launched.handle);
             result.log_path = msbuildLog.generic_string();
             result.output_path = expectedOutput.generic_string();
             result.cancelled =
                 waited.code == platform::child_process::WaitCode::cancelled;
+            if (!release_ai_source_task_process(result, ownedProcess))
+            {
+                result.summary = "The sandbox compiler has not retired completely; no build evidence was accepted. "
+                    + waited.message;
+                return result;
+            }
             if (result.cancelled)
             {
                 result.summary =
@@ -12114,7 +12166,8 @@ namespace epochengine
 
         [[nodiscard]] AiSourceTaskResult test_ai_source_workspace(
             candidate_artifacts::Binding artifact,
-            std::stop_token cancellation)
+            std::stop_token cancellation,
+            platform::child_process::ProcessHandle& ownedProcess)
         {
             AiSourceTaskResult result{};
             result.artifact = artifact;
@@ -12230,11 +12283,13 @@ namespace epochengine
             }
             const auto launched =
                 platform::child_process::launch_or_focus(request);
+            if (launched.owns_new_process()) ownedProcess = launched.handle;
             if (launched.code
                 != platform::child_process::LaunchCode::started)
             {
                 result.summary = "The " + guardLabel + " did not start: "
                     + launched.message;
+                retire_failed_ai_source_launch(result, launched, ownedProcess);
                 return result;
             }
 
@@ -12243,11 +12298,16 @@ namespace epochengine
                 * 60ull * 1'000'000'000ull;
             const auto waited = platform::child_process::wait(
                 launched.handle, cancellation, timeoutNs);
-            (void)platform::child_process::release(launched.handle);
             result.output_path = executable.generic_string();
             result.log_path = logPath.generic_string();
             result.cancelled =
                 waited.code == platform::child_process::WaitCode::cancelled;
+            if (!release_ai_source_task_process(result, ownedProcess))
+            {
+                result.summary = "The sandbox test has not retired completely; no validation evidence was accepted. "
+                    + waited.message;
+                return result;
+            }
             if (result.cancelled)
             {
                 result.summary = "The " + guardLabel + " was cancelled.";
@@ -21337,6 +21397,37 @@ namespace epochengine
             // alive until all worker closures have returned.
             editor.taskScheduler.reset();
 
+            // Closing a context can bypass its normal completion pump. Recover
+            // retained compiler/test handles after the workers have joined, not
+            // only from futures whose artifact epoch is still current.
+            const auto collectRetirement = [&](auto& pending, auto& ownership)
+            {
+                // Transfer before consuming the future, which can rethrow a
+                // worker exception after a process was already launched.
+                if (ownership && ownership->valid())
+                {
+                    editor.aiCandidateRetiringProcesses.push_back(*ownership);
+                    ownership.reset();
+                }
+                if (!pending) return;
+                try
+                {
+                    (void)pending->get();
+                }
+                catch (const std::exception& exception)
+                {
+                    append_editor_automation_trace(
+                        std::string{"[ai-session] Source task ended during teardown: "} + exception.what());
+                }
+                catch (...)
+                {
+                    append_editor_automation_trace("[ai-session] Source task ended during teardown with an unknown failure.");
+                }
+                pending.reset();
+            };
+            collectRetirement(editor.aiSourceBuildPending, editor.aiSourceBuildProcess);
+            collectRetirement(editor.aiSourceTestPending, editor.aiSourceTestProcess);
+
             std::erase_if(editor.aiCandidateRetiringProcesses,
                 [](const platform::child_process::ProcessHandle handle)
                 {
@@ -23853,6 +23944,7 @@ namespace epochengine
 
                 try
                 {
+                    editor.aiSourceBuildProcess = std::make_shared<platform::child_process::ProcessHandle>();
                     auto submission = schedule_editor_cancellable_task(
                         editor,
                         headless ? "AI Source HeadlessCI Compiler"
@@ -23862,14 +23954,14 @@ namespace epochengine
                          workspaceRoot = workspace->generic_string(),
                          hostDependencyRoot = editor.aiSourceHostDependencyRoot,
                          lane, generation = action.workspace_generation,
-                         buildTicket](std::stop_token token) mutable
+                         buildTicket, ownership = editor.aiSourceBuildProcess](std::stop_token token) mutable
                         {
                             return build_ai_source_workspace(
                                 std::move(sourceRoot),
                                 std::move(workspaceRoot),
                                 std::move(hostDependencyRoot),
                                 token,
-                                lane, generation, buildTicket);
+                                lane, generation, buildTicket, *ownership);
                         });
                     editor.aiSourceBuildPending.emplace(
                         std::move(submission.completion));
@@ -23995,17 +24087,18 @@ namespace epochengine
                 }
                 try
                 {
+                    editor.aiSourceTestProcess = std::make_shared<platform::child_process::ProcessHandle>();
                     auto submission = schedule_editor_cancellable_task(
                         editor,
                         fullValidation ? "AI Source Full Validation"
                             : (headless ? "AI Source HeadlessCI Run"
                                 : (release ? "AI Source Release Contract Test"
                                     : "AI Source Debug Contract Test")),
-                        [artifact = *artifact](
+                        [artifact = *artifact, ownership = editor.aiSourceTestProcess](
                             std::stop_token token) mutable
                         {
                             return test_ai_source_workspace(
-                                std::move(artifact), token);
+                                std::move(artifact), token, *ownership);
                         });
                     editor.aiSourceTestPending.emplace(
                         std::move(submission.completion));
@@ -24153,6 +24246,9 @@ namespace epochengine
                 }
                 const auto& workspace = *ownedWorkspace;
                 const auto& executable = *ownedExecutable;
+                // A fresh failed launch can already own native cleanup. Keep
+                // its transfer allocation-free after launch or identity failure.
+                editor.aiCandidateRetiringProcesses.reserve(editor.aiCandidateRetiringProcesses.size() + 1u);
                 platform::child_process::LaunchRequest request{};
                 request.executable = executable;
                 request.working_directory = executable.parent_path();
@@ -24188,6 +24284,12 @@ namespace epochengine
                     platform::child_process::launch_or_focus(request);
                 if (launched.code != platform::child_process::LaunchCode::started)
                 {
+                    if (launched.owns_new_process())
+                    {
+                        (void)platform::child_process::stop(launched.handle,
+                            platform::child_process::StopMode::force);
+                        editor.aiCandidateRetiringProcesses.push_back(launched.handle);
+                    }
                     invalidate_ai_source_artifacts(editor);
                     editor.aiCandidatePreviewReported = true;
                     editor.aiCandidatePreviewStartedAt = {};
@@ -24201,6 +24303,9 @@ namespace epochengine
                         editor, "[candidate-lab] " + failed.status);
                     break;
                 }
+                // Adopt before path/snapshot validation can allocate or throw.
+                // Context teardown and the normal pump must always see this PID.
+                editor.aiCandidateChallengerProcess = launched.handle;
                 const auto launchedSnapshot = platform::child_process::snapshot(launched.handle);
                 if (!launchedSnapshot || !launchedSnapshot->verified_executable
                     || !launchedSnapshot->environment_replaced
@@ -24212,6 +24317,7 @@ namespace epochengine
                     (void)platform::child_process::stop(launched.handle,
                         platform::child_process::StopMode::force);
                     editor.aiCandidateRetiringProcesses.push_back(launched.handle);
+                    editor.aiCandidateChallengerProcess = {};
                     invalidate_ai_source_artifacts(editor);
                     editor.aiCandidatePreviewReported = true;
                     editor.aiCandidatePreviewStartedAt = {};
@@ -24221,7 +24327,6 @@ namespace epochengine
                     push_ai_development_log(editor, "[candidate-lab] " + failed.status);
                     break;
                 }
-                editor.aiCandidateChallengerProcess = launched.handle;
                 if (editor.automationCommand
                     == EditorAutomationCommand::SelfCodingLocalSmoke)
                 {
@@ -24728,6 +24833,15 @@ namespace epochengine
             const AiSourceValidationLane lane = editor.aiSourceBuildLane;
             const bool currentArtifactEpoch = editor.aiSourceBuildArtifactEpoch
                 == editor.aiSourceArtifactEpoch;
+            if (editor.aiSourceBuildProcess && editor.aiSourceBuildProcess->valid())
+            {
+                // The ready future synchronizes its worker's ownership write.
+                // Transfer before get(), which may rethrow the worker's failure.
+                editor.aiCandidateRetiringProcesses.push_back(*editor.aiSourceBuildProcess);
+                (void)platform::child_process::stop(*editor.aiSourceBuildProcess,
+                    platform::child_process::StopMode::force);
+            }
+            editor.aiSourceBuildProcess.reset();
             bool succeeded{};
             std::string status{};
             try
@@ -24738,7 +24852,7 @@ namespace epochengine
                     status += " Log: " + build.log_path;
                 if (currentArtifactEpoch)
                 {
-                    succeeded = build.succeeded && build.artifact
+                    succeeded = !build.retiring_process.valid() && build.succeeded && build.artifact
                         && build.artifact->generation == generation
                         && build.artifact->lane == lane
                         && editor.aiSourceArtifacts.accept_build(*build.artifact);
@@ -24839,6 +24953,13 @@ namespace epochengine
             const AiSourceValidationLane lane = editor.aiSourceTestLane;
             const bool currentArtifactEpoch = editor.aiSourceTestArtifactEpoch
                 == editor.aiSourceArtifactEpoch;
+            if (editor.aiSourceTestProcess && editor.aiSourceTestProcess->valid())
+            {
+                editor.aiCandidateRetiringProcesses.push_back(*editor.aiSourceTestProcess);
+                (void)platform::child_process::stop(*editor.aiSourceTestProcess,
+                    platform::child_process::StopMode::force);
+            }
+            editor.aiSourceTestProcess.reset();
             bool succeeded{};
             std::string status{};
             try
@@ -24849,7 +24970,7 @@ namespace epochengine
                     status += " Log: " + test.log_path;
                 if (currentArtifactEpoch)
                 {
-                    succeeded = test.artifact
+                    succeeded = !test.retiring_process.valid() && test.artifact
                         && test.artifact->generation == generation
                         && test.artifact->lane == lane
                         && editor.aiSourceArtifacts.accept_test(*test.artifact,
@@ -24950,10 +25071,13 @@ namespace epochengine
                 {
                     const auto observed =
                         platform::child_process::snapshot(handle);
-                    if (observed && observed->active())
+                    if (!observed)
+                        return platform::child_process::stop(handle,
+                            platform::child_process::StopMode::force)
+                            == platform::child_process::StopCode::stale_handle;
+                    if (observed->active())
                         return false;
-                    (void)platform::child_process::release(handle);
-                    return true;
+                    return platform::child_process::release(handle);
                 });
             if (editor.aiCandidateCurrentProcess.valid())
             {

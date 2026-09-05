@@ -166,6 +166,18 @@ export namespace epochengine::platform::child_process
         FocusCode focus{FocusCode::unsupported};
         std::string message{};
 
+        // A fresh reservation transfers cleanup responsibility even when the
+        // launch fails: it may still own a process tree or security lease and
+        // must be settled before release. Focused/busy results only borrow an
+        // existing owner's handle; they do not authorize stopping or releasing it.
+        [[nodiscard]] constexpr bool owns_new_process() const noexcept
+        {
+            return handle.valid()
+                && (code == LaunchCode::started
+                    || code == LaunchCode::spawn_failed
+                    || code == LaunchCode::invalid_request);
+        }
+
         [[nodiscard]] explicit operator bool() const noexcept
         {
             return code == LaunchCode::started

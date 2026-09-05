@@ -634,6 +634,13 @@ execution.
   snapshot/serializer checks, then exits before project-profile builds, child
   runtimes, updater work, OS-AI gates, or renderer startup. Use this as the safe
   fast contract check when GUI/runtime validation is not explicitly approved.
+- `HeadlessCI <candidate-directory>` validates that exact directory. Missing or
+  invalid `Engine/ai/control/continuous_build_loop.json` fails there; it never
+  climbs to a live parent checkout or requires `Changes/roadmap.md`. Omitting the
+  argument retains developer root discovery using the actual control contract.
+  The explicit CMake target `epoch_headless_explicit_root_contract` runs six
+  renderer-free console regressions against synthetic nested roots and retains
+  their logs/hashes. It is not part of ordinary builds or automatic CTest runs.
 - `--engine-validation-self-test` first runs the pure engine contract lane for
   Forest Factory, package registry/model-gate, timeline streaming-save, input
   profile, and scene snapshot/serializer behavior, then runs every registered

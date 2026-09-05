@@ -410,6 +410,17 @@ exercise exit code 259 and a real grandchild during normal exit, cancellation an
 timeout. See [process termination](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess)
 and [job accounting](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_accounting_information).
 
+Launch failure is not necessarily the absence of a process. The platform
+`LaunchResult::owns_new_process()` distinguishes fresh reservations (including
+failed native/security admission) from borrowed focused/busy handles. Candidate
+Lab records an owned build/test handle independently of the worker's future
+before diagnostic allocation. A throwing worker, stale artifact epoch or context
+Close still transfers that handle to retirement; no pending retirement is
+accepted as build/test evidence. Preview failure uses the same retirement pump
+without stopping another request's borrowed handle. A missing snapshot alone is
+not stale proof: only successful release or the supervisor's typed stale result
+ends ownership. These contracts do not grant OS execution confinement.
+
 Candidate Lab uses workspace-local `cache/process/` temp, profile and package
 paths; it copies only the three validated ProgramFiles install-root values, not
 host PATH, proxy/model credentials, automation flags or user-profile settings.
@@ -482,6 +493,16 @@ must exercise network/IPC denial, compiler dependencies and interactive HWND
 hosting, and recover abandoned identity leases safely. Do not grant broad user-profile/live-source access to make a failed
 compatibility test pass. Linux also still needs a real filesystem/network/IPC
 execution boundary; descriptor cleanup is only one prerequisite.
+
+The current source layout is not yet a valid phase grant layout: `Engine.sln`
+lives at the generation root, intermediates/output are its siblings of `Engine`,
+and runtime writes still occur below both source and executable directories.
+Before enabling the policy, move those consumers to distinct owned phase roots
+and relocate `.epoch/local_mcp` control/receipt files outside child grants.
+Installed MSBuild/VC/SDK and vcpkg dependencies are outside the generation and
+cannot be admitted by the existing owned-descendant grant API. Their immutable
+dependency closure and discovery paths must be qualified explicitly; copying
+only MSBuild.exe or broadly granting the host profile is not sufficient.
 
 Windows foreign-window admission verifies a live supervised PID/window and an
 exact native attachment lease: parent, styles, client-slot geometry and an

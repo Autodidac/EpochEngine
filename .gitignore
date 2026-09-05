@@ -80,6 +80,7 @@ Engine/docs/api/
 
 *.cmake
 !Engine/cmake/triplets/x64-linux-epoch.cmake
+!Engine/cmake/epoch_headless_explicit_root_contract.cmake
 *.bin
 
 project_snapshot.zip

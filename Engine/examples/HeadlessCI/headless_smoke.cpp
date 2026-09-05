@@ -7,6 +7,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -97,20 +98,36 @@ namespace
 
     bool IsRepoRoot(const std::filesystem::path& candidate)
     {
-        return std::filesystem::exists(candidate / "Engine" / "ai" / "control" / "continuous_build_loop.json")
-            && std::filesystem::exists(candidate / "Changes" / "roadmap.md");
+        std::error_code error;
+        return std::filesystem::is_regular_file(
+            candidate / "Engine" / "ai" / "control" / "continuous_build_loop.json",
+            error) && !error;
     }
 
-    std::filesystem::path ResolveRepoRoot(std::filesystem::path start)
+    std::optional<std::filesystem::path> ResolveRepoRoot(
+        std::filesystem::path start, bool explicitRoot)
     {
         std::error_code ec;
         if (start.empty())
+        {
+            if (explicitRoot)
+                return std::nullopt;
             start = std::filesystem::current_path(ec);
+            if (ec)
+                return std::nullopt;
+        }
 
-        if (std::filesystem::is_regular_file(start, ec))
-            start = start.parent_path();
+        start = std::filesystem::absolute(start, ec).lexically_normal();
+        if (ec || !std::filesystem::is_directory(start, ec) || ec)
+            return std::nullopt;
 
-        for (auto candidate = std::filesystem::absolute(start, ec);
+        // An explicit candidate is the test boundary, not a discovery hint.
+        // Missing/invalid contract bytes must fail in that directory; an outer
+        // checkout must never provide replacement evidence for this candidate.
+        if (explicitRoot)
+            return start;
+
+        for (auto candidate = start;
             !candidate.empty();
             candidate = candidate.parent_path())
         {
@@ -121,7 +138,7 @@ namespace
                 break;
         }
 
-        return start;
+        return std::nullopt;
     }
 
     bool OptionalPathProbe(const std::filesystem::path& repoRoot)
@@ -191,11 +208,24 @@ int main(int argc, char** argv)
     const int queued = host.queue_model_load(host.user_data, "MiniSponza",
         host.project_model_asset);
 
-    const auto repoRoot = ResolveRepoRoot((argc > 1 && argv && argv[1])
-        ? std::filesystem::path(argv[1])
-        : std::filesystem::current_path());
-    OptionalPathProbe(repoRoot);
-    const bool controlContractReady = RequiredControlContractProbe(repoRoot);
+    if (argc > 2 || (argc > 1 && (!argv || !argv[1] || argv[1][0] == '\0')))
+    {
+        LogError("HeadlessCI accepts at most one nonempty explicit candidate directory.");
+        return 2;
+    }
+    const bool explicitRoot = argc > 1;
+    const auto repoRoot = ResolveRepoRoot(
+        explicitRoot ? std::filesystem::path(argv[1]) : std::filesystem::path{},
+        explicitRoot);
+    if (!repoRoot)
+    {
+        LogError(explicitRoot
+            ? "Explicit candidate root is not an accessible directory; ancestor fallback is forbidden."
+            : "No developer root containing the required AI control contract was found.");
+        return 2;
+    }
+    OptionalPathProbe(*repoRoot);
+    const bool controlContractReady = RequiredControlContractProbe(*repoRoot);
 
     if (!state.logged || !state.queuedModel || queued != 1 || !controlContractReady)
     {

@@ -41,6 +41,25 @@ namespace
 {
     namespace child_process = epochengine::platform::child_process;
 
+    [[nodiscard]] bool launch_result_ownership_contract()
+    {
+        using child_process::LaunchCode;
+        for (const auto code : {LaunchCode::started, LaunchCode::focused_existing,
+                LaunchCode::active_group_busy, LaunchCode::invalid_request,
+                LaunchCode::capacity_exhausted, LaunchCode::spawn_failed})
+        {
+            child_process::LaunchResult result{.code = code};
+            if (result.owns_new_process()) return false;
+            result.handle = {.slot = 0u, .generation = 1u};
+            const bool owns = code == LaunchCode::started || code == LaunchCode::spawn_failed
+                || code == LaunchCode::invalid_request;
+            if (result.owns_new_process() != owns
+                || static_cast<bool>(result) != (code == LaunchCode::started
+                    || code == LaunchCode::focused_existing)) return false;
+        }
+        return !child_process::LaunchResult{}.owns_new_process();
+    }
+
     struct ExecutableIdentityFixture final
     {
         std::filesystem::path root{};
@@ -178,6 +197,29 @@ namespace
         request.disconnect_standard_input = true;
         return child_process::launch_or_focus(request).code
             == child_process::LaunchCode::invalid_request;
+    }
+
+    [[nodiscard]] bool failed_launch_ownership_contract(const ExecutableIdentityFixture& fixture)
+    {
+        // The identity fixture contains ordinary data, never executable code.
+        // Native spawn/exec refusal still returns an owned reservation that the
+        // caller must settle and release, independently of launch success.
+        child_process::LaunchRequest request{};
+        request.executable = fixture.root / "image.bin";
+        request.working_directory = fixture.root;
+        request.correlation_key = "contract:failed-launch-ownership";
+        request.window_mode = child_process::WindowMode::hidden;
+        const auto rejected = child_process::launch_or_focus(request);
+        if (!rejected.handle.valid()) return false;
+        const auto settled = child_process::wait(rejected.handle, {}, 5'000'000'000ull);
+        const bool released = child_process::release(rejected.handle);
+        return rejected.code == child_process::LaunchCode::spawn_failed
+            && rejected.owns_new_process() && !static_cast<bool>(rejected)
+            && settled.code == child_process::WaitCode::failed && settled.process
+            && settled.process->state == child_process::ProcessState::failed
+            && !settled.process->active() && released
+            && !child_process::snapshot(rejected.handle)
+            && child_process::metrics().active_processes == 0u;
     }
 
     [[nodiscard]] bool isolation_request_contract(const std::filesystem::path& self)
@@ -1640,11 +1682,20 @@ static int run_contract_entry(int argc, char** argv)
     if (argc < 1 || argv[0] == nullptr)
         return 1;
 
+    if (!launch_result_ownership_contract()) return 30;
+    const auto unreserved = child_process::launch_or_focus({});
+    if (unreserved.code != child_process::LaunchCode::invalid_request
+        || unreserved.handle.valid() || unreserved.owns_new_process()) return 31;
     child_process::LaunchRequest invalid{};
     invalid.executable = "missing-child-process-contract-executable";
     invalid.correlation_key = "invalid";
-    if (child_process::launch_or_focus(invalid).code
-        != child_process::LaunchCode::invalid_request)
+    const auto reservedInvalid = child_process::launch_or_focus(invalid);
+    const auto invalidSnapshot = child_process::snapshot(reservedInvalid.handle);
+    const bool invalidReleased = child_process::release(reservedInvalid.handle);
+    if (reservedInvalid.code != child_process::LaunchCode::invalid_request
+        || !reservedInvalid.owns_new_process() || !invalidSnapshot
+        || invalidSnapshot->active() || invalidSnapshot->state != child_process::ProcessState::failed
+        || !invalidReleased || child_process::snapshot(reservedInvalid.handle))
     {
         return 2;
     }
@@ -1657,6 +1708,7 @@ static int run_contract_entry(int argc, char** argv)
     ExecutableIdentityFixture identityFixture{};
     if (!inspect_identity_contract(identityFixture))
         return 18;
+    if (!failed_launch_ownership_contract(identityFixture)) return 32;
     const auto selfIdentity = child_process::inspect_executable(self);
     if (!selfIdentity || !selfIdentity->valid())
         return 19;
@@ -1679,7 +1731,7 @@ static int run_contract_entry(int argc, char** argv)
     const child_process::LaunchResult launched =
         child_process::launch_or_focus(first);
     if (launched.code != child_process::LaunchCode::started
-        || !launched.handle.valid())
+        || !launched.owns_new_process())
     {
         return 3;
     }
@@ -1697,7 +1749,7 @@ static int run_contract_entry(int argc, char** argv)
     const child_process::LaunchResult duplicate =
         child_process::launch_or_focus(first);
     if (duplicate.code != child_process::LaunchCode::focused_existing
-        || duplicate.handle != launched.handle)
+        || duplicate.handle != launched.handle || duplicate.owns_new_process())
     {
         return 5;
     }
@@ -1713,6 +1765,7 @@ static int run_contract_entry(int argc, char** argv)
         else changedInputs.environment.emplace();
         const auto refused = child_process::launch_or_focus(changedInputs);
         if (refused.code != child_process::LaunchCode::invalid_request
+            || refused.owns_new_process() || refused.handle.valid()
             || refused.message.find("correlation") == std::string::npos)
             return 25;
     }
@@ -1725,6 +1778,7 @@ static int run_contract_entry(int argc, char** argv)
         return 20;
     const auto wrongPath = child_process::launch_or_focus(wrongCorrelation);
     if (wrongPath.code != child_process::LaunchCode::invalid_request
+        || wrongPath.owns_new_process() || wrongPath.handle.valid()
         || wrongPath.message.find("correlation key") == std::string::npos)
         return 21;
 #if defined(_WIN32)
@@ -1732,6 +1786,7 @@ static int run_contract_entry(int argc, char** argv)
     wrongCorrelation.expected_executable.reset();
     const auto weakenedIdentity = child_process::launch_or_focus(wrongCorrelation);
     if (weakenedIdentity.code != child_process::LaunchCode::invalid_request
+        || weakenedIdentity.owns_new_process() || weakenedIdentity.handle.valid()
         || weakenedIdentity.message.find("artifact identity") == std::string::npos)
         return 22;
 #endif
@@ -1741,7 +1796,7 @@ static int run_contract_entry(int argc, char** argv)
     const child_process::LaunchResult busy =
         child_process::launch_or_focus(competing);
     if (busy.code != child_process::LaunchCode::active_group_busy
-        || busy.handle != launched.handle)
+        || busy.handle != launched.handle || busy.owns_new_process())
     {
         return 6;
     }
@@ -1800,7 +1855,7 @@ static int run_contract_entry(int argc, char** argv)
 #if defined(_WIN32)
     capture.restore_input();
 #endif
-    if (!second || !second.handle.valid()
+    if (!second || !second.owns_new_process()
         || second.handle == launched.handle)
     {
         return 10;

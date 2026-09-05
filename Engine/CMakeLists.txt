@@ -246,6 +246,16 @@ epoch_apply_cxx_dialect(epoch_ci_headless)
 epoch_apply_warnings(epoch_ci_headless)
 epoch_apply_sanitizers(epoch_ci_headless)
 
+# Explicit opt-in console proof; never part of ALL, CTest, or a post-build step.
+add_custom_target(epoch_headless_explicit_root_contract
+    COMMAND ${CMAKE_COMMAND}
+        -DEPOCH_RUN_HEADLESS_ROOT_CONTRACT=ON
+        "-DEPOCH_HEADLESS_EXECUTABLE=$<TARGET_FILE:epoch_ci_headless>"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/epoch_headless_explicit_root_contract.cmake"
+    DEPENDS epoch_ci_headless
+    VERBATIM
+)
+
 include(CTest)
 if(BUILD_TESTING)
     add_test(
