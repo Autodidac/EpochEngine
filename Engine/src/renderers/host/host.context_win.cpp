@@ -53,6 +53,7 @@
 #   pragma comment(lib, "dwmapi.lib")
 
 #   include <algorithm>
+#   include <atomic>
 #   include <chrono>
 #   include <cstdint>
 #   include <format>
@@ -284,6 +285,262 @@ namespace
     constexpr std::string_view kLogSys = "Context.Multiplexer.Win";
     constexpr COLORREF kParentBackgroundColor = RGB(0x1C, 0x1F, 0x26);
     constexpr auto kRenderThreadStartupStepDelay = std::chrono::milliseconds(250);
+
+    constexpr wchar_t kExternalAttachmentProp[] = L"Epoch.ExternalProcessAttachment.v1";
+    constexpr LONG_PTR kExternalFrameStyles = WS_POPUP | WS_OVERLAPPEDWINDOW | WS_MAXIMIZE | WS_MINIMIZE;
+    constexpr LONG_PTR kExternalFrameExStyles = WS_EX_APPWINDOW | WS_EX_TOOLWINDOW
+        | WS_EX_TOPMOST | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME;
+    std::atomic<std::uintptr_t> g_externalAttachmentCookie{};
+
+    [[nodiscard]] std::uintptr_t next_external_attachment_cookie() noexcept
+    {
+        auto current = g_externalAttachmentCookie.load(std::memory_order_relaxed);
+        for (;;)
+        {
+            // Exhaustion is a refusal, never wraparound/reuse of a prior cookie.
+            if (current == ~std::uintptr_t{0}) return 0;
+            const auto next = current + 1;
+            if (g_externalAttachmentCookie.compare_exchange_weak(
+                    current, next, std::memory_order_relaxed))
+                return next;
+        }
+    }
+
+    [[nodiscard]] constexpr bool external_docked_styles(
+        LONG_PTR style, LONG_PTR exStyle) noexcept
+    {
+        return (style & WS_CHILD) != 0 && (style & kExternalFrameStyles) == 0
+            && (exStyle & kExternalFrameExStyles) == 0
+            && (exStyle & WS_EX_NOPARENTNOTIFY) != 0;
+    }
+    static_assert(external_docked_styles(WS_CHILD, WS_EX_NOPARENTNOTIFY));
+    static_assert(!external_docked_styles(WS_CHILD | WS_POPUP, WS_EX_NOPARENTNOTIFY));
+    static_assert(!external_docked_styles(WS_CHILD | WS_CAPTION, WS_EX_NOPARENTNOTIFY));
+    static_assert(!external_docked_styles(WS_CHILD | WS_MAXIMIZE, WS_EX_NOPARENTNOTIFY));
+    static_assert(!external_docked_styles(WS_CHILD, WS_EX_NOPARENTNOTIFY | WS_EX_APPWINDOW));
+
+    // This host owns an attachment lease, never the foreign window or renderer.
+    // A retained process handle pins the process incarnation. The opaque HWND
+    // cookie detects ordinary destruction/reuse without exposing a host address
+    // or handle capability. A child can read/modify its window properties: this
+    // is lifecycle correlation, not trusted identity or an isolation boundary.
+    // No subclass callback/function pointer is installed in the other process.
+    struct ExternalWindowAttachment final
+    {
+        HWND hwnd{};
+        HWND parent{};
+        HWND originalOwner{};
+        HANDLE process{};
+        DWORD processId{};
+        DWORD threadId{};
+        std::uintptr_t cookie{};
+        LONG_PTR originalStyle{};
+        LONG_PTR originalExStyle{};
+        RECT originalRect{};
+        RECT admittedSlot{};
+        WINDOWPLACEMENT originalPlacement{ sizeof(WINDOWPLACEMENT) };
+        bool propertyOwned{};
+        bool nativeChanged{};
+        bool slotVerified{};
+
+        ExternalWindowAttachment() = default;
+        ExternalWindowAttachment(const ExternalWindowAttachment&) = delete;
+        ExternalWindowAttachment& operator=(const ExternalWindowAttachment&) = delete;
+        ~ExternalWindowAttachment()
+        {
+            restore();
+            if (process) ::CloseHandle(process);
+        }
+
+        [[nodiscard]] bool same_window() const noexcept
+        {
+            DWORD observedPid{};
+            return process && ::WaitForSingleObject(process, 0) == WAIT_TIMEOUT
+                && ::GetProcessId(process) == processId
+                && ::GetWindowThreadProcessId(hwnd, &observedPid) == threadId
+                && observedPid == processId && threadId != 0
+                && (!propertyOwned || ::GetPropW(hwnd, kExternalAttachmentProp)
+                    == reinterpret_cast<HANDLE>(cookie));
+        }
+
+        [[nodiscard]] bool write_long(int index, LONG_PTR value) const noexcept
+        {
+            if (!same_window()) return false;
+            ::SetLastError(ERROR_SUCCESS);
+            const LONG_PTR previous = ::SetWindowLongPtrW(hwnd, index, value);
+            return (previous != 0 || ::GetLastError() == ERROR_SUCCESS)
+                && same_window() && ::GetWindowLongPtrW(hwnd, index) == value;
+        }
+
+        [[nodiscard]] bool attached() const noexcept
+        {
+            RECT client{};
+            return propertyOwned && same_window() && ::IsWindow(parent)
+                && ::GetParent(hwnd) == parent
+                && external_docked_styles(::GetWindowLongPtrW(hwnd, GWL_STYLE),
+                    ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE))
+                && ::GetClientRect(hwnd, &client)
+                && client.right > client.left && client.bottom > client.top;
+        }
+
+        [[nodiscard]] bool place(int x, int y, int width, int height) noexcept
+        {
+            slotVerified = false;
+            if (!attached() || x < 0 || y < 0 || width <= 0 || height <= 0)
+                return false;
+            RECT parentClient{};
+            if (!::GetClientRect(parent, &parentClient)
+                || x > parentClient.right - width || y > parentClient.bottom - height)
+                return false;
+            if (!::SetWindowPos(hwnd, nullptr, x, y, width, height,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW)
+                || !attached())
+                return false;
+            RECT client{}, outer{};
+            POINT origin{};
+            if (!::GetClientRect(hwnd, &client) || !::GetWindowRect(hwnd, &outer)
+                || !::ClientToScreen(parent, &origin))
+                return false;
+            // Child chrome is removed: both the client area and native bounds
+            // must agree with the admitted slot, not merely be nonzero.
+            slotVerified = client.right - client.left == width && client.bottom - client.top == height
+                && outer.left == origin.x + x && outer.top == origin.y + y
+                && outer.right - outer.left == width && outer.bottom - outer.top == height
+                && attached();
+            if (slotVerified) admittedSlot = { x, y, x + width, y + height };
+            return slotVerified;
+        }
+
+        [[nodiscard]] bool placement_current() const noexcept
+        {
+            RECT client{}, outer{};
+            POINT origin{};
+            return slotVerified && attached()
+                && ::GetClientRect(hwnd, &client) && ::GetWindowRect(hwnd, &outer)
+                && ::ClientToScreen(parent, &origin)
+                && client.right - client.left == admittedSlot.right - admittedSlot.left
+                && client.bottom - client.top == admittedSlot.bottom - admittedSlot.top
+                && outer.left == origin.x + admittedSlot.left
+                && outer.top == origin.y + admittedSlot.top
+                && outer.right == origin.x + admittedSlot.right
+                && outer.bottom == origin.y + admittedSlot.bottom && attached();
+        }
+
+        [[nodiscard]] bool attach(HWND candidate, HWND host, DWORD pid) noexcept
+        {
+            hwnd = candidate;
+            parent = host;
+            processId = pid;
+            DWORD observedPid{};
+            threadId = ::GetWindowThreadProcessId(hwnd, &observedPid);
+            if (threadId == 0 || observedPid != pid || pid == ::GetCurrentProcessId())
+                return false;
+            process = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, FALSE, pid);
+            if (!same_window() || ::GetPropW(hwnd, kExternalAttachmentProp))
+                return false;
+            originalStyle = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+            originalExStyle = ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            originalOwner = ::GetWindow(hwnd, GW_OWNER);
+            // The child-process supervisor enumerates unowned top-level HWNDs.
+            // Do not steal a child or dialog from another ownership hierarchy.
+            if ((originalStyle & WS_CHILD) != 0 || originalOwner != nullptr
+                || !::GetWindowRect(hwnd, &originalRect)
+                || !::GetWindowPlacement(hwnd, &originalPlacement))
+                return false;
+            RECT hostClient{};
+            if (!::GetClientRect(parent, &hostClient)
+                || hostClient.right <= 0 || hostClient.bottom <= 0 || !same_window())
+                return false;
+            cookie = next_external_attachment_cookie();
+            if (cookie == 0 || !::SetPropW(hwnd, kExternalAttachmentProp, reinterpret_cast<HANDLE>(cookie)))
+                return false;
+            propertyOwned = true;
+            if (!same_window()) return false;
+            nativeChanged = true;
+            if (!write_long(GWL_STYLE, (originalStyle & ~kExternalFrameStyles) | WS_CHILD)
+                || !write_long(GWL_EXSTYLE,
+                    (originalExStyle & ~kExternalFrameExStyles) | WS_EX_NOPARENTNOTIFY))
+                return false;
+            if (!same_window()) return false;
+            ::SetLastError(ERROR_SUCCESS);
+            const HWND previousParent = ::SetParent(hwnd, parent);
+            if ((!previousParent && ::GetLastError() != ERROR_SUCCESS)
+                || !attached())
+                return false;
+            return place(0, 0, hostClient.right, hostClient.bottom);
+        }
+
+        void restore() noexcept
+        {
+            if (!propertyOwned) return;
+            // A lost/replaced property or exited process is not permission to
+            // touch a newly reused HWND, including removing another lease.
+            if (same_window())
+            {
+                bool restored = true;
+                if (nativeChanged)
+                {
+                    restored = write_long(GWL_STYLE, originalStyle);
+                    restored = write_long(GWL_EXSTYLE, originalExStyle) && restored;
+                    if (same_window())
+                    {
+                        ::SetLastError(ERROR_SUCCESS);
+                        const HWND previousParent = ::SetParent(hwnd, nullptr);
+                        restored = (previousParent || ::GetLastError() == ERROR_SUCCESS) && restored;
+                        restored = write_long(GWLP_HWNDPARENT,
+                            reinterpret_cast<LONG_PTR>(originalOwner)) && restored;
+                        if (same_window())
+                        {
+                            restored = ::SetWindowPos(hwnd, nullptr, originalRect.left, originalRect.top,
+                                originalRect.right - originalRect.left, originalRect.bottom - originalRect.top,
+                                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED) && restored;
+                            restored = same_window() && ::SetWindowPlacement(hwnd, &originalPlacement) && restored;
+                            RECT restoredRect{};
+                            restored = same_window()
+                                && ::GetWindowLongPtrW(hwnd, GWL_STYLE) == originalStyle
+                                && ::GetWindowLongPtrW(hwnd, GWL_EXSTYLE) == originalExStyle
+                                && ::GetWindow(hwnd, GW_OWNER) == originalOwner
+                                && ::GetWindowRect(hwnd, &restoredRect)
+                                && ::EqualRect(&restoredRect, &originalRect) && restored;
+                        }
+                    }
+                    if (!restored)
+                        epochengine::logger::get(kLogSys).log(
+                            epochengine::logger::LogLevel::WARN,
+                            "Foreign context detach could not restore every native window attribute; process ownership remains external.");
+                }
+                if (same_window())
+                    (void)::RemovePropW(hwnd, kExternalAttachmentProp);
+            }
+            propertyOwned = false;
+        }
+    };
+
+    std::mutex g_externalAttachmentsMutex;
+    std::unordered_map<const epochengine::core::WindowData*,
+        std::shared_ptr<ExternalWindowAttachment>> g_externalAttachments;
+
+    [[nodiscard]] std::shared_ptr<ExternalWindowAttachment> external_attachment(
+        const epochengine::core::WindowData* window)
+    {
+        std::scoped_lock lock(g_externalAttachmentsMutex);
+        const auto found = g_externalAttachments.find(window);
+        return found == g_externalAttachments.end() ? nullptr : found->second;
+    }
+
+    [[nodiscard]] bool release_external_attachment(const epochengine::core::WindowData* window)
+    {
+        std::shared_ptr<ExternalWindowAttachment> attachment;
+        {
+            std::scoped_lock lock(g_externalAttachmentsMutex);
+            const auto found = g_externalAttachments.find(window);
+            if (found == g_externalAttachments.end()) return false;
+            attachment = std::move(found->second);
+            g_externalAttachments.erase(found);
+        }
+        attachment->restore();
+        return true;
+    }
 
     [[nodiscard]] inline HBRUSH parent_background_brush() noexcept
     {
@@ -958,6 +1215,8 @@ namespace
     [[nodiscard]] inline bool backend_window_exposable(
         const epochengine::core::WindowData* window) noexcept
     {
+        if (const auto attachment = external_attachment(window))
+            return window->backend_ready() && attachment->attached();
         return window
             && window->backend_ready()
             && window->successfulFrameGeneration.load(std::memory_order_acquire) > 0u;
@@ -2080,6 +2339,17 @@ namespace
 
         window->ownerThreadCommandQueue.clear();
         window->commandQueue.clear();
+
+        if (release_external_attachment(window.get()))
+        {
+            // The child process owns this HWND/DC/renderer. Retiring only the
+            // host lease must not call DestroyWindow on a foreign or reused HWND.
+            window->set_backend_lifecycle(epochengine::core::BackendLifecycleState::stopped);
+            window->host_hwnd = nullptr;
+            window->hwnd = nullptr;
+            window->hwndChild = nullptr;
+            return;
+        }
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         if (window->ownsNativeGlContext && window->glContext)
@@ -3826,33 +4096,42 @@ namespace epochengine::core
         if (!running.load(std::memory_order_acquire)
             || !parent || ::IsWindow(parent) == FALSE
             || !hwnd || ::IsWindow(hwnd) == FALSE
-            || processId == 0u || route.empty())
+            || processId == 0u || processId > MAXDWORD || route.empty()
+            || uiThreadId == 0 || ::GetCurrentThreadId() != uiThreadId)
         {
             return false;
         }
 
-        DWORD observedProcessId{};
+        DWORD observedProcessId{}, hostProcessId{};
+        const DWORD ownerThreadId = ::GetWindowThreadProcessId(parent, &hostProcessId);
         (void)::GetWindowThreadProcessId(hwnd, &observedProcessId);
         if (observedProcessId == 0u
-            || static_cast<std::uint64_t>(observedProcessId) != processId)
+            || static_cast<std::uint64_t>(observedProcessId) != processId
+            || hostProcessId != ::GetCurrentProcessId() || ownerThreadId != uiThreadId)
         {
             return false;
         }
 
         {
             std::scoped_lock lock(windowsMutex);
-            if (std::ranges::any_of(
+            const auto existing = std::ranges::find_if(
                     windows,
                     [hwnd](const std::unique_ptr<WindowData>& window)
                     {
                         return matches_window_handle(window.get(), hwnd);
-                    }))
+                    });
+            if (existing != windows.end())
             {
-                return true;
+                const auto attachment = external_attachment(existing->get());
+                return attachment && attachment->processId == observedProcessId
+                    && attachment->parent == parent && (*existing)->guiRoute == route
+                    && (*existing)->backend_ready() && attachment->placement_current();
             }
         }
 
-        MakeDockable(hwnd, parent);
+        auto attachment = std::make_shared<ExternalWindowAttachment>();
+        if (!attachment->attach(hwnd, parent, observedProcessId))
+            return false;
         auto window = std::make_unique<WindowData>(
             hwnd, nullptr, nullptr, false, ContextType::Custom);
         window->running.store(true, std::memory_order_release);
@@ -3863,22 +4142,78 @@ namespace epochengine::core
             static_cast<std::uint8_t>(dockTarget),
             std::memory_order_release);
         window->set_backend_lifecycle(BackendLifecycleState::ready);
-        window->successfulFrameGeneration.store(1u, std::memory_order_release);
-        window->firstPresentComplete.store(true, std::memory_order_release);
+        // Native attachment is not render/present evidence. The external
+        // process owns its frame loop; these counters deliberately remain zero.
+        WindowData* admittedWindow = window.get();
+        try
         {
-            std::scoped_lock lock(windowsMutex);
+            std::scoped_lock lock(windowsMutex, g_externalAttachmentsMutex);
+            windows.reserve(windows.size() + 1);
+            g_externalAttachments.emplace(admittedWindow, attachment);
+            // Capacity is reserved and unique_ptr movement is noexcept: a
+            // foreign HWND is never published without its ownership record.
             windows.emplace_back(std::move(window));
         }
+        catch (...)
+        {
+            return false; // The unpublished lease restores its native state.
+        }
         ArrangeDockedWindowsGrid();
-        return true;
+        {
+            std::scoped_lock lock(windowsMutex);
+            const auto retained = std::ranges::find_if(windows,
+                [admittedWindow](const auto& item) { return item.get() == admittedWindow; });
+            if (retained != windows.end() && (*retained)->backend_ready() && attachment->placement_current())
+                return true;
+        }
+        RemoveWindow(hwnd);
+        return false;
+    }
+
+    bool MultiContextManager::IsExternalProcessWindowAttached(
+        const std::uintptr_t nativeWindow,
+        const std::uint64_t processId,
+        const std::string_view route) const noexcept
+    {
+        const HWND hwnd = reinterpret_cast<HWND>(nativeWindow);
+        if (!running.load(std::memory_order_acquire) || !hwnd || !parent
+            || processId == 0 || processId > MAXDWORD || route.empty())
+            return false;
+        DWORD hostProcessId{};
+        if (::GetWindowThreadProcessId(parent, &hostProcessId) != uiThreadId
+            || uiThreadId == 0 || hostProcessId != ::GetCurrentProcessId())
+            return false;
+        std::scoped_lock lock(windowsMutex);
+        for (const auto& window : windows)
+        {
+            if (!window || window->hwnd != hwnd || window->guiRoute != route)
+                continue;
+            const auto attachment = external_attachment(window.get());
+            return attachment && attachment->hwnd == hwnd
+                && attachment->parent == parent && attachment->processId == processId
+                && window->running.load(std::memory_order_acquire)
+                && !window->should_close.load(std::memory_order_acquire)
+                && window->backend_ready() && attachment->placement_current();
+        }
+        return false;
     }
 
     void MultiContextManager::RemoveExternalProcessWindow(
         const std::uintptr_t nativeWindow)
     {
         const HWND hwnd = reinterpret_cast<HWND>(nativeWindow);
-        if (hwnd)
-            RemoveWindow(hwnd);
+        if (!hwnd) return;
+        {
+            std::scoped_lock lock(windowsMutex);
+            const auto found = std::ranges::find_if(windows,
+                [hwnd](const std::unique_ptr<WindowData>& window)
+                {
+                    const auto attachment = external_attachment(window.get());
+                    return attachment && attachment->hwnd == hwnd;
+                });
+            if (found == windows.end()) return;
+        }
+        RemoveWindow(hwnd);
     }
 
     void MultiContextManager::HandleResize(HWND hwnd, int width, int height)
@@ -4255,6 +4590,9 @@ namespace epochengine::core
             dockedWindows,
             [this](WindowData* win)
             {
+                if (const auto attachment = external_attachment(win);
+                    attachment && !attachment->attached())
+                    return true;
                 const HWND liveHwnd = dock_slot_handle(win, parent);
                 return !liveHwnd || ::IsWindow(liveHwnd) == FALSE;
             });
@@ -4355,6 +4693,20 @@ namespace epochengine::core
             ::ClientToScreen(parent, &slotScreen);
 
             WindowData& win = *dockedWindows[i];
+            if (const auto attachment = external_attachment(&win))
+            {
+                // Foreign placement has no local render callback or command
+                // queue. Verify synchronous native geometry and publish only
+                // dimensions; never synthesize a rendered frame generation.
+                if (attachment->place(slotX, slotY, cw, ch))
+                    win.set_size(cw, ch);
+                else
+                {
+                    win.set_backend_lifecycle(BackendLifecycleState::failed);
+                    win.running.store(false, std::memory_order_release);
+                }
+                continue;
+            }
             if (!backend_window_exposable(&win))
             {
                 if (win.hwndChild && ::IsWindow(win.hwndChild) != FALSE)
@@ -5042,6 +5394,18 @@ namespace epochengine::core
                 {
                     if (!win)
                         continue;
+
+                    if (external_attachment(win.get()))
+                    {
+                        // The supervisor owns the candidate process lifetime;
+                        // this manager owns only its native attachment lease.
+                        // Do not post WM_CLOSE to a foreign numeric HWND that
+                        // may have died/reused since registration. Editor
+                        // teardown retires the supervised process by handle.
+                        win->running = false;
+                        win->set_should_close(true);
+                        continue;
+                    }
 
                     HWND closeTarget = nullptr;
                     if (win->host_hwnd

@@ -367,10 +367,52 @@ Git, updater, release, package, network, listener, or server authority. Automate
 live-source replacement is deliberately not part of this milestone.
 
 This is currently application-level transaction isolation plus process lifecycle
-supervision, not an OS security sandbox. Windows candidates inherit the launching
-user's token and environment. A Job Object owns retirement but does not restrict
-filesystem or network access. Adversarial candidate-execution containment remains
-unproved; source/path contract tests must not be presented as that proof.
+supervision, not an OS security sandbox. Windows candidates still use the
+launching user's token. Candidate Lab compiler, test and preview launches now
+replace the ambient environment and disconnect host stdin. A Job Object owns
+retirement but does not restrict filesystem or network access. Adversarial
+candidate-execution containment remains unproved; source/path or environment
+contract tests must not be presented as that proof.
+
+The platform launcher distinguishes legacy environment inheritance from an
+explicit allowlist, including an explicitly empty environment. It rejects
+duplicate names, invalid UTF-8/NUL data and oversized blocks, and never logs the
+values or changes the host environment while preparing a child. Windows supplies
+a sorted Unicode block and dedicated NUL stdin through its existing handle
+allowlist. POSIX prepares the explicit execve vector before fork and checks
+stdio setup before exec; the Engine's Linux candidate compiler remains
+unconnected. See [Windows environment blocks](https://learn.microsoft.com/en-us/windows/win32/procthread/changing-environment-variables)
+and [process creation](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw).
+
+Candidate Lab uses workspace-local `cache/process/` temp, profile and package
+paths; it copies only the three validated ProgramFiles install-root values, not
+host PATH, proxy/model credentials, automation flags or user-profile settings.
+OS system paths and fixed noninteractive tool settings complete the allowlist.
+Compiler discovery and the original read-only dependency authority remain
+host-owned across Choose. MSBuild disables automatic response files and node
+reuse. These paths are preferences, not permission enforcement: Windows APIs or
+arbitrary candidate code can still access resources allowed by the inherited
+token until an actual OS execution boundary is implemented and tested.
+
+Windows foreign-window admission verifies a live supervised PID/window and an
+exact native attachment lease: parent, styles, client-slot geometry and an
+opaque registration cookie. It does not install a callback in the foreign
+process, publish a host pointer, destroy a foreign window, or turn attachment
+into fabricated renderer frame evidence. The application retains admitted
+identity independently of top-level discovery and removes the registration on
+retirement, including after a crash or destroyed window. Native DPI, attachment,
+input, detachment and pixel behavior still require the exact-build eye test.
+
+Editor teardown detaches state from storage before joining work, cancels its
+source task tickets before the scheduler drains, and retires supervised previews
+and owned MCP workers by process handle. Whole-session shutdown requests stop
+for every extracted context before joining any scheduler. Generic parent Close
+does not post to raw foreign HWNDs.
+Final process liveness and supervisor release determine retirement; an OS stop
+failure retains the supervisor slot and reports unresolved ownership. Per-context
+HTTP cleanup discards its response but does not use global cancellation that
+could interrupt another context. Its join can therefore wait for transport
+completion; prompt per-request transport interruption remains unfinished.
 
 The platform child-process snapshot exposes both `platform_process_id` and
 `platform_window_id`; hidden/headless children report no visible window. The
@@ -378,13 +420,21 @@ editor-owned custom-context registry, capture lifecycle, Candidate Lab evidence
 UI, and explicit teardown/selection contract are implemented. The remaining
 acceptance gate is one real local-model session through candidate build, visible
 preview, selection, losing-process teardown, and continuation from the selected
-sandbox head.
+sandbox head. The explicit `self-coding-local-smoke` rig now requires a nonblank
+`EPOCH_EDITOR_SELF_CODING_OBJECTIVE` naming genuinely unfinished work. It tests
+two actual accepted compiles and candidate admissions, with Choose by default
+(`EPOCH_EDITOR_SELF_CODING_CHOICE=keep` is a separate comparison test). It cannot
+pass merely because a successor plan arrived. Neither a default already-built
+feature nor a synthetic validation record is a model-to-build success.
 
-The visible workflow states its I/O boundary before the first send: reviewed
-UTF-8 C++ excerpts and the objective are the only model input; model output is a
-strict plan or exact source proposal; all writes target the generation-owned
-disposable session root. Project roots and live engine source remain separate
-and read-only. Contract fixtures reject absolute paths, traversal, non-source
+The visible workflow states its I/O boundary before the first send: the
+objective, path-only catalog, selected UTF-8 C++ excerpts and bounded recovery
+diagnostics form the model workload. Model output is a plan, validated context
+request or exact source proposal. Host-mediated source writes target the
+generation-owned disposable session root; project roots and live engine source
+remain separate and read-only to that transaction executor. This does not confer
+the still-missing OS boundary on compiled children. Contract fixtures reject
+absolute paths, traversal, non-source
 files, unreviewed canary content, stale revisions, and cross-root mutation, and
 prove that sandbox repair leaves the live source preimage byte-identical.
 
@@ -426,13 +476,18 @@ workspace. The host runs hidden direct MSBuild Debug and Release compiler passes
 and a separate build-safe engine-contract child from each editor output.
 Successful evidence from those four actors queues a distinct HeadlessCI Debug
 build and asset-light run against the same disposable workspace. After those six
-actors pass, the UI exposes a separate `Run Full Validation` decision. Visible
-operator approval runs the Release editor's `--engine-validation-self-test`,
+actors pass, the manual workflow exposes a separate `Run Full Validation`
+decision. An already-started Candidate Lab session queues that validation
+automatically within its approved disposable-workspace scope. Both paths run
+the Release editor's `--engine-validation-self-test`,
 covering aggregate contracts, registered project profiles, generated-child
 self-tests, and the AI gate. Failure in any actor may feed bounded verified
 diagnostics into at most three fresh-generation repair proposals. Each changed
-repair has a new digest and waits for exact operator approval; cancellation and
-stale completions are rejected. Only all seven evidence completions for the
+repair has a new digest. The manual workflow waits for exact operator approval;
+Candidate Lab automatically requests the next proposal after successful fresh
+repair materialization and continues the authorized sandbox validation sequence.
+Neither mode grants live-source promotion. Cancellation and stale completions
+are rejected. Only all seven evidence completions for the
 current generation create a verified promotion candidate; that candidate does
 not itself write live source.
 

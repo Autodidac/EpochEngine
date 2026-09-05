@@ -223,6 +223,8 @@ namespace epochengine::platform::child_process
             ProcessState state{ProcessState::idle};
             std::filesystem::path executable{};
             std::optional<ExecutableIdentity> verified_executable{};
+            std::optional<std::vector<EnvironmentVariable>> environment{};
+            bool disconnect_standard_input{};
             std::string correlation_key{};
             std::string exclusive_group{};
             std::string display_name{};
@@ -238,6 +240,11 @@ namespace epochengine::platform::child_process
             HANDLE process{};
             HANDLE job{};
             DWORD process_id{};
+            // Discovery is top-level only, but an admitted preview may later
+            // become a child window. Retain and revalidate native identity;
+            // the context host separately owns its attachment/property lease.
+            mutable HWND observed_window{};
+            mutable DWORD observed_window_thread{};
 #else
             pid_t process_id{-1};
 #endif
@@ -430,14 +437,33 @@ namespace epochengine::platform::child_process
         }
 
         [[nodiscard]] std::uint64_t process_window_id(
-            const DWORD processId) noexcept
+            const ProcessSlot& slot) noexcept
         {
-            if (processId == 0u)
+            if (!active(slot.state) || slot.window_mode == WindowMode::hidden
+                || !slot.process || slot.process_id == 0u
+                || ::WaitForSingleObject(slot.process, 0u) != WAIT_TIMEOUT
+                || ::GetProcessId(slot.process) != slot.process_id)
                 return 0u;
-            WindowSearch search{.process_id = processId};
+            if (slot.observed_window)
+            {
+                DWORD pid{};
+                const DWORD thread = ::GetWindowThreadProcessId(slot.observed_window, &pid);
+                if (::IsWindow(slot.observed_window) && pid == slot.process_id
+                    && thread != 0u && thread == slot.observed_window_thread)
+                    return static_cast<std::uint64_t>(
+                        reinterpret_cast<std::uintptr_t>(slot.observed_window));
+                slot.observed_window = nullptr;
+                slot.observed_window_thread = 0u;
+            }
+            WindowSearch search{.process_id = slot.process_id};
             (void)::EnumWindows(
                 find_process_window,
                 reinterpret_cast<LPARAM>(&search));
+            DWORD pid{};
+            const DWORD thread = ::GetWindowThreadProcessId(search.window, &pid);
+            if (!search.window || thread == 0u || pid != slot.process_id) return 0u;
+            slot.observed_window = search.window;
+            slot.observed_window_thread = thread;
             return static_cast<std::uint64_t>(
                 reinterpret_cast<std::uintptr_t>(search.window));
         }
@@ -449,8 +475,8 @@ namespace epochengine::platform::child_process
             if (slot.window_mode == WindowMode::hidden)
                 return FocusCode::unsupported;
 
-            WindowSearch search{.process_id = slot.process_id};
-            (void)::EnumWindows(find_process_window, reinterpret_cast<LPARAM>(&search));
+            WindowSearch search{.process_id = slot.process_id,
+                .window = reinterpret_cast<HWND>(static_cast<std::uintptr_t>(process_window_id(slot)))};
             if (search.window == nullptr)
             {
                 slot.focus_pending = true;
@@ -459,6 +485,14 @@ namespace epochengine::platform::child_process
                 return FocusCode::pending;
             }
 
+            // Docked foreign HWND focus belongs to the parent context host.
+            // Never try to turn its child HWND into a top-level foreground.
+            if ((::GetWindowLongPtrW(search.window, GWL_STYLE) & WS_CHILD) != 0)
+            {
+                slot.focus_pending = false;
+                slot.focus_deadline_ns = 0u;
+                return FocusCode::unsupported;
+            }
             (void)::ShowWindow(search.window, SW_SHOWNORMAL);
             (void)::BringWindowToTop(search.window);
             const bool foreground = ::SetForegroundWindow(search.window) != FALSE;
@@ -541,6 +575,36 @@ namespace epochengine::platform::child_process
             const LaunchRequest& request,
             std::string& error)
         {
+            // A non-null, separately owned block replaces the environment;
+            // never set/unset the host process environment to prepare a child.
+            std::vector<wchar_t> environmentBlock{};
+            if (request.environment)
+            {
+                auto variables = *request.environment;
+                const auto folded = [](std::string_view name)
+                {
+                    std::string result{name};
+                    for (char& ch : result)
+                        if (ch >= 'a' && ch <= 'z') ch = static_cast<char>(ch - 'a' + 'A');
+                    return result;
+                };
+                std::ranges::sort(variables, {}, [&](const EnvironmentVariable& variable)
+                    { return folded(variable.name); });
+                for (const auto& variable : variables)
+                {
+                    const auto wide = utf8_to_wide(variable.name + "=" + variable.value);
+                    if (!wide || environmentBlock.size() + wide->size() + 2u > 32'767u)
+                    {
+                        error = "Explicit process environment is not valid bounded UTF-8/UTF-16.";
+                        return false;
+                    }
+                    environmentBlock.insert(environmentBlock.end(), wide->begin(), wide->end());
+                    environmentBlock.push_back(L'\0');
+                }
+                if (environmentBlock.empty()) environmentBlock.push_back(L'\0');
+                environmentBlock.push_back(L'\0');
+            }
+
             std::vector<std::wstring> arguments{};
             arguments.reserve(request.arguments.size());
             for (const std::string& argument : request.arguments)
@@ -627,7 +691,8 @@ namespace epochengine::platform::child_process
                     }
                 }
                 const HANDLE parentInput = ::GetStdHandle(STD_INPUT_HANDLE);
-                if (parentInput == nullptr || parentInput == INVALID_HANDLE_VALUE)
+                if (request.disconnect_standard_input
+                    || parentInput == nullptr || parentInput == INVALID_HANDLE_VALUE)
                 {
                     captured.input = ::CreateFileW(
                         L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
@@ -703,6 +768,7 @@ namespace epochengine::platform::child_process
             }
             PROCESS_INFORMATION process{};
             DWORD flags = CREATE_SUSPENDED;
+            if (request.environment) flags |= CREATE_UNICODE_ENVIRONMENT;
             if (request.window_mode == WindowMode::hidden)
                 flags |= CREATE_NO_WINDOW;
             if (captured.attributes_initialized)
@@ -715,7 +781,7 @@ namespace epochengine::platform::child_process
                 nullptr,
                 captured.attributes_initialized,
                 flags,
-                nullptr,
+                request.environment ? environmentBlock.data() : nullptr,
                 working.empty() ? nullptr : working.c_str(),
                 &startup.StartupInfo,
                 &process);
@@ -787,17 +853,62 @@ namespace epochengine::platform::child_process
                 arguments.push_back(argument.data());
             arguments.push_back(nullptr);
 
+            // Build allocations before fork; execve receives only the explicit
+            // allowlist. The legacy execv path remains unchanged when absent.
+            std::vector<std::string> environmentStorage{};
+            std::vector<char*> environmentPointers{};
+            if (request.environment)
+            {
+                environmentStorage.reserve(request.environment->size());
+                for (const auto& variable : *request.environment)
+                    environmentStorage.push_back(variable.name + "=" + variable.value);
+                environmentPointers.reserve(environmentStorage.size() + 1u);
+                for (auto& variable : environmentStorage)
+                    environmentPointers.push_back(variable.data());
+                environmentPointers.push_back(nullptr);
+            }
+
             int errorPipe[2]{-1, -1};
             if (::pipe(errorPipe) != 0)
             {
                 error = "pipe failed with errno " + std::to_string(errno) + ".";
                 return false;
             }
-            (void)::fcntl(errorPipe[1], F_SETFD, FD_CLOEXEC);
+            // Keep the handshake outside stdio even when the caller entered
+            // with closed standard descriptors. A later dup2 must not replace
+            // the only path that can report a failed input/environment setup.
+            const auto reserveDescriptor = [](int& descriptor)
+            {
+                if (descriptor > STDERR_FILENO) return true;
+                const int replacement = ::fcntl(descriptor, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+                if (replacement < 0) return false;
+                (void)::close(descriptor);
+                descriptor = replacement;
+                return true;
+            };
+            if (!reserveDescriptor(errorPipe[0]) || !reserveDescriptor(errorPipe[1])
+                || ::fcntl(errorPipe[1], F_SETFD, FD_CLOEXEC) < 0)
+            {
+                const int failure = errno;
+                (void)::close(errorPipe[0]);
+                (void)::close(errorPipe[1]);
+                error = "Process setup channel could not be protected: errno "
+                    + std::to_string(failure) + ".";
+                return false;
+            }
 
             int nullFile = -1;
-            if (request.window_mode == WindowMode::hidden)
+            if (request.window_mode == WindowMode::hidden || request.disconnect_standard_input)
                 nullFile = ::open("/dev/null", O_RDWR);
+            if (request.disconnect_standard_input && nullFile < 0)
+            {
+                const int failure = errno;
+                (void)::close(errorPipe[0]);
+                (void)::close(errorPipe[1]);
+                error = "Dedicated process stdin could not be opened: errno "
+                    + std::to_string(failure) + ".";
+                return false;
+            }
             int outputFile = -1;
             if (!request.merged_output_path.empty())
             {
@@ -822,22 +933,31 @@ namespace epochengine::platform::child_process
             if (child == 0)
             {
                 (void)::close(errorPipe[0]);
-                (void)::setpgid(0, 0);
+                const auto failSetup = [&](int failure)
+                {
+                    (void)::write(errorPipe[1], &failure, sizeof(failure));
+                    ::_exit(126);
+                };
+                const auto redirect = [&](int descriptor, int target)
+                {
+                    if (::dup2(descriptor, target) < 0) failSetup(errno);
+                };
+                if (::setpgid(0, 0) < 0) failSetup(errno);
                 if (nullFile >= 0)
                 {
-                    (void)::dup2(nullFile, STDIN_FILENO);
+                    redirect(nullFile, STDIN_FILENO);
                     if (outputFile < 0)
                     {
-                        (void)::dup2(nullFile, STDOUT_FILENO);
-                        (void)::dup2(nullFile, STDERR_FILENO);
+                        redirect(nullFile, STDOUT_FILENO);
+                        redirect(nullFile, STDERR_FILENO);
                     }
                     if (nullFile > STDERR_FILENO)
                         (void)::close(nullFile);
                 }
                 if (outputFile >= 0)
                 {
-                    (void)::dup2(outputFile, STDOUT_FILENO);
-                    (void)::dup2(outputFile, STDERR_FILENO);
+                    redirect(outputFile, STDOUT_FILENO);
+                    redirect(outputFile, STDERR_FILENO);
                     if (outputFile > STDERR_FILENO)
                         (void)::close(outputFile);
                 }
@@ -847,7 +967,10 @@ namespace epochengine::platform::child_process
                     (void)::write(errorPipe[1], &failure, sizeof(failure));
                     ::_exit(126);
                 }
-                ::execv(slot.executable.c_str(), arguments.data());
+                if (request.environment)
+                    ::execve(slot.executable.c_str(), arguments.data(), environmentPointers.data());
+                else
+                    ::execv(slot.executable.c_str(), arguments.data());
                 const int failure = errno;
                 (void)::write(errorPipe[1], &failure, sizeof(failure));
                 ::_exit(127);
@@ -988,6 +1111,32 @@ namespace epochengine::platform::child_process
                 && text.find('\0') == std::string_view::npos;
         }
 
+        [[nodiscard]] bool valid_environment_utf8(std::string_view text) noexcept
+        {
+            std::uint32_t code{}, minimum{};
+            unsigned remaining{};
+            for (const unsigned char ch : text)
+            {
+                if (remaining != 0u)
+                {
+                    if ((ch & 0xc0u) != 0x80u) return false;
+                    code = (code << 6u) | (ch & 0x3fu);
+                    if (--remaining == 0u
+                        && (code < minimum || code > 0x10ffffu
+                            || (code >= 0xd800u && code <= 0xdfffu))) return false;
+                }
+                else if (ch <= 0x7fu) continue;
+                else if (ch >= 0xc2u && ch <= 0xdfu)
+                { code = ch & 0x1fu; remaining = 1u; minimum = 0x80u; }
+                else if (ch >= 0xe0u && ch <= 0xefu)
+                { code = ch & 0x0fu; remaining = 2u; minimum = 0x800u; }
+                else if (ch >= 0xf0u && ch <= 0xf4u)
+                { code = ch & 0x07u; remaining = 3u; minimum = 0x10000u; }
+                else return false;
+            }
+            return remaining == 0u;
+        }
+
         [[nodiscard]] std::optional<std::string> validate_request(
             const LaunchRequest& request)
         {
@@ -1011,6 +1160,37 @@ namespace epochengine::platform::child_process
                 return "Process argument count exceeds the bound.";
             if (request.merged_output_path.generic_string().size() > 4096u)
                 return "Merged output path exceeds the byte bound.";
+            if (request.disconnect_standard_input && request.merged_output_path.empty())
+                return "Disconnected standard input requires explicit captured output.";
+            if (request.environment)
+            {
+                if (request.environment->size() > 128u)
+                    return "Explicit process environment exceeds the entry bound.";
+                std::vector<std::string> names{};
+                std::size_t environmentBytes{1u};
+                for (const auto& variable : *request.environment)
+                {
+                    if (variable.name.empty() || variable.name.size() > 128u
+                        || !valid_text(variable.value, 32'767u, true)
+                        || !valid_environment_utf8(variable.value))
+                        return "Explicit process environment contains an invalid or oversized entry.";
+                    std::string name{};
+                    name.reserve(variable.name.size());
+                    for (const unsigned char ch : variable.name)
+                    {
+                        if (ch <= 0x20u || ch >= 0x7fu || ch == '=')
+                            return "Explicit process environment contains an invalid name.";
+                        name.push_back(ch >= 'a' && ch <= 'z'
+                            ? static_cast<char>(ch - 'a' + 'A') : static_cast<char>(ch));
+                    }
+                    if (std::ranges::find(names, name) != names.end())
+                        return "Explicit process environment contains duplicate names.";
+                    names.emplace_back(std::move(name));
+                    environmentBytes += variable.name.size() + variable.value.size() + 2u;
+                    if (environmentBytes > 64u * 1024u)
+                        return "Explicit process environment exceeds the total byte bound.";
+                }
+            }
             std::size_t total{};
             for (const std::string& argument : request.arguments)
             {
@@ -1035,7 +1215,7 @@ namespace epochengine::platform::child_process
                 .state = slot.state,
 #if defined(_WIN32)
                 .platform_process_id = static_cast<std::uint64_t>(slot.process_id),
-                .platform_window_id = process_window_id(slot.process_id),
+                .platform_window_id = process_window_id(slot),
 #else
                 .platform_process_id = slot.process_id > 0
                     ? static_cast<std::uint64_t>(slot.process_id)
@@ -1061,7 +1241,9 @@ namespace epochengine::platform::child_process
                 .focus_pending = slot.focus_pending,
                 .stop_supported = true,
                 .message = slot.message,
-                .verified_executable = slot.verified_executable};
+                .verified_executable = slot.verified_executable,
+                .environment_replaced = slot.started_tick_ns != 0u && slot.environment.has_value(),
+                .standard_input_disconnected = slot.started_tick_ns != 0u && slot.disconnect_standard_input};
         }
     }
 
@@ -1156,6 +1338,118 @@ namespace epochengine::platform::child_process
         }
     }
 
+    std::optional<std::vector<EnvironmentVariable>> prepare_workspace_environment(
+        const std::filesystem::path& workspace) noexcept
+    {
+        try
+        {
+            if (!valid_executable_path(workspace) || !workspace.is_absolute()
+                || workspace == workspace.root_path()) return std::nullopt;
+            for (const auto& component : workspace)
+                if (component == "." || component == "..") return std::nullopt;
+            const auto ownedDirectory = [](const std::filesystem::path& path)
+            {
+                std::error_code error{};
+                const auto status = std::filesystem::symlink_status(path, error);
+                if (error || !std::filesystem::is_directory(status)
+                    || std::filesystem::is_symlink(status)) return false;
+#if defined(_WIN32)
+                const DWORD attributes = ::GetFileAttributesW(path.c_str());
+                if (attributes == INVALID_FILE_ATTRIBUTES
+                    || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u) return false;
+#endif
+                return true;
+            };
+            auto current = workspace.root_path();
+            if (!ownedDirectory(current)) return std::nullopt;
+            for (const auto& component : workspace.relative_path())
+            {
+                current /= component;
+                if (!ownedDirectory(current)) return std::nullopt;
+            }
+            // Only descendants of the already admitted disposable root are
+            // created. Never redirect the host's profile or mutate host env.
+            const auto base = workspace / "cache" / "process";
+            const auto profile = base / "profile";
+            const auto temporary = base / "temp";
+            const auto local = profile / "AppData" / "Local";
+            const auto roaming = profile / "AppData" / "Roaming";
+            const auto packages = base / "packages";
+            for (const auto& directory : {temporary, local, roaming, packages})
+            {
+                current = workspace;
+                for (const auto& component : directory.lexically_relative(workspace))
+                {
+                    current /= component;
+                    std::error_code error{};
+                    const bool exists = std::filesystem::exists(current, error);
+                    if (error) return std::nullopt;
+                    if (!exists && !std::filesystem::create_directory(current, error))
+                        return std::nullopt;
+                    if (error || !ownedDirectory(current)) return std::nullopt;
+                }
+            }
+            const auto utf8 = [](const std::filesystem::path& path)
+            {
+                const auto bytes = path.u8string();
+                return std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+            };
+            std::vector<EnvironmentVariable> variables{
+                {"TEMP", utf8(temporary)}, {"TMP", utf8(temporary)},
+                {"TMPDIR", utf8(temporary)}, {"HOME", utf8(profile)},
+                {"USERPROFILE", utf8(profile)}, {"APPDATA", utf8(roaming)},
+                {"LOCALAPPDATA", utf8(local)}, {"NUGET_PACKAGES", utf8(packages)},
+                {"DOTNET_CLI_HOME", utf8(profile)},
+                {"DOTNET_CLI_TELEMETRY_OPTOUT", "1"},
+                {"DOTNET_SKIP_FIRST_TIME_EXPERIENCE", "1"},
+                {"DOTNET_NOLOGO", "1"}, {"MSBUILDDISABLENODEREUSE", "1"}};
+#if defined(_WIN32)
+            std::array<wchar_t, 32'768u> windowsBuffer{}, systemBuffer{};
+            const UINT windowsSize = ::GetSystemWindowsDirectoryW(windowsBuffer.data(),
+                static_cast<UINT>(windowsBuffer.size()));
+            const UINT systemSize = ::GetSystemDirectoryW(systemBuffer.data(),
+                static_cast<UINT>(systemBuffer.size()));
+            if (windowsSize == 0u || windowsSize >= windowsBuffer.size()
+                || systemSize == 0u || systemSize >= systemBuffer.size()) return std::nullopt;
+            const std::filesystem::path windows{std::wstring{windowsBuffer.data(), windowsSize}};
+            const std::filesystem::path system{std::wstring{systemBuffer.data(), systemSize}};
+            variables.push_back({"SystemRoot", utf8(windows)});
+            variables.push_back({"WINDIR", utf8(windows)});
+            variables.push_back({"SystemDrive", utf8(windows.root_name())});
+            variables.push_back({"COMSPEC", utf8(system / "cmd.exe")});
+            variables.push_back({"PATH", utf8(system)});
+            variables.push_back({"HOMEDRIVE", utf8(profile.root_name())});
+            variables.push_back({"HOMEPATH", utf8(profile.root_directory() / profile.relative_path())});
+            // These three OS install-root variables are the only inherited
+            // entries. No PATH, proxy, model token, user profile or tool option
+            // is copied. They allow MSBuild's installed SDK discovery.
+            for (const auto& name : {L"ProgramFiles", L"ProgramFiles(x86)", L"ProgramW6432"})
+            {
+                std::array<wchar_t, 32'768u> buffer{};
+                const DWORD size = ::GetEnvironmentVariableW(name, buffer.data(),
+                    static_cast<DWORD>(buffer.size()));
+                if (size == 0u) continue;
+                if (size >= buffer.size()) return std::nullopt;
+                const std::filesystem::path path{std::wstring{buffer.data(), size}};
+                if (!path.is_absolute() || !ownedDirectory(path)) return std::nullopt;
+                variables.push_back({utf8(std::filesystem::path{name}), utf8(path)});
+            }
+#else
+            variables.push_back({"PATH", "/usr/bin:/bin"});
+            variables.push_back({"LANG", "C.UTF-8"});
+            variables.push_back({"XDG_CACHE_HOME", utf8(base)});
+            variables.push_back({"XDG_CONFIG_HOME", utf8(profile)});
+#endif
+            LaunchRequest validation{};
+            validation.executable = workspace / "environment-validation";
+            validation.correlation_key = "environment-validation";
+            validation.environment = variables;
+            if (validate_request(validation)) return std::nullopt;
+            return variables;
+        }
+        catch (...) { return std::nullopt; }
+    }
+
     LaunchResult launch_or_focus(const LaunchRequest& request) noexcept
     {
         SupervisorStorage& value = storage();
@@ -1213,11 +1507,13 @@ namespace epochengine::platform::child_process
                 if (slot.correlation_key == request.correlation_key)
                 {
                     if (slot.executable != resolvedExecutable
-                        || slot.verified_executable != request.expected_executable)
+                        || slot.verified_executable != request.expected_executable
+                        || slot.environment != request.environment
+                        || slot.disconnect_standard_input != request.disconnect_standard_input)
                     {
                         ++value.metrics.launch_failures;
                         return {.code = LaunchCode::invalid_request,
-                            .message = "The correlation key is already bound to a different executable path or artifact identity."};
+                            .message = "The correlation key is already bound to a different executable path, artifact identity, environment, or input boundary."};
                     }
                     ++value.metrics.focus_requests;
                     const FocusCode focused = focus_slot(slot);
@@ -1283,6 +1579,8 @@ namespace epochengine::platform::child_process
             slot->exclusive_group = request.exclusive_group;
             slot->display_name = request.display_name;
             slot->window_mode = request.window_mode;
+            slot->environment = request.environment;
+            slot->disconnect_standard_input = request.disconnect_standard_input;
 
             slot->executable = std::move(resolvedExecutable);
             if (error || slot->executable.empty()

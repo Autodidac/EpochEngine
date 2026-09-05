@@ -6,10 +6,12 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -33,17 +35,18 @@ namespace
     struct ExecutableIdentityFixture final
     {
         std::filesystem::path root{};
+        bool preserve_evidence{};
 
         ~ExecutableIdentityFixture() noexcept
         {
-            if (!root.empty())
+            if (!root.empty() && !preserve_evidence)
             {
                 std::error_code error{};
                 std::filesystem::remove_all(root, error);
             }
         }
 
-        [[nodiscard]] bool prepare()
+        [[nodiscard]] bool prepare(std::string_view prefix = "epoch-child-identity-")
         {
             std::error_code error{};
             const auto temporary = std::filesystem::temp_directory_path(error);
@@ -51,7 +54,7 @@ namespace
             const auto token = std::chrono::steady_clock::now().time_since_epoch().count();
             for (unsigned attempt = 0u; attempt < 16u; ++attempt)
             {
-                const auto candidate = temporary / ("epoch-child-identity-"
+                const auto candidate = temporary / (std::string{prefix}
                     + std::to_string(token) + "-" + std::to_string(attempt));
                 if (std::filesystem::create_directory(candidate, error))
                 {
@@ -128,6 +131,163 @@ namespace
             return false;
         return true;
     }
+
+    [[nodiscard]] bool environment_validation_contract(const std::filesystem::path& self)
+    {
+        using child_process::EnvironmentVariable;
+        child_process::LaunchRequest request{};
+        request.executable = self;
+        request.correlation_key = "contract:invalid-environment";
+        request.window_mode = child_process::WindowMode::hidden;
+        const auto rejected = [&](std::vector<EnvironmentVariable> entries)
+        {
+            request.environment = std::move(entries);
+            return child_process::launch_or_focus(request).code
+                == child_process::LaunchCode::invalid_request;
+        };
+        for (const auto& name : std::vector<std::string>{
+                {}, std::string(129u, 'a'), "has=name", "has space", "has\tspace",
+                "has\nline", std::string{"bad\0name", 8u}, std::string(1u, '\x7f'),
+                "nonascii_\xc3\xa9"})
+        {
+            if (!rejected({{name, "value"}})) return false;
+        }
+        if (!rejected({{"Duplicate", "one"}, {"duplicate", "two"}})
+            || !rejected({{"same", "one"}, {"same", "two"}})
+            || !rejected({{"VALUE", std::string{"safe\0hidden", 11u}}})
+            || !rejected({{"VALUE", std::string(32768u, 'v')}})
+            || !rejected({{"VALUE", "invalid_\xc0\xaf"}})
+            || !rejected({{"A", std::string(32767u, 'a')},
+                          {"B", std::string(32767u, 'b')},
+                          {"C", std::string(32767u, 'c')}}))
+            return false;
+        std::vector<EnvironmentVariable> excessive{};
+        for (unsigned index = 0u; index < 129u; ++index)
+            excessive.push_back({"ENTRY_" + std::to_string(index), "v"});
+        if (!rejected(std::move(excessive))) return false;
+        request.environment.reset();
+        request.disconnect_standard_input = true;
+        return child_process::launch_or_focus(request).code
+            == child_process::LaunchCode::invalid_request;
+    }
+
+    [[nodiscard]] bool create_fixture_directory_link(
+        const std::filesystem::path& link, const std::filesystem::path& target)
+    {
+#if defined(_WIN32)
+        std::error_code error{};
+        if (!std::filesystem::create_directory(link, error) || error) return false;
+        struct MountPointHeader final
+        {
+            DWORD tag{};
+            WORD data_length{};
+            WORD reserved{};
+            WORD substitute_offset{};
+            WORD substitute_length{};
+            WORD print_offset{};
+            WORD print_length{};
+        };
+        static_assert(sizeof(MountPointHeader) == 16u);
+        const auto printName = target.wstring();
+        const auto substituteName = L"\\??\\" + printName;
+        const auto substituteBytes = (substituteName.size() + 1u) * sizeof(wchar_t);
+        const auto printBytes = (printName.size() + 1u) * sizeof(wchar_t);
+        if (substituteBytes + printBytes + 8u > 16u * 1024u) return false;
+        MountPointHeader header{
+            .tag = IO_REPARSE_TAG_MOUNT_POINT,
+            .data_length = static_cast<WORD>(8u + substituteBytes + printBytes),
+            .substitute_length = static_cast<WORD>(substituteBytes - sizeof(wchar_t)),
+            .print_offset = static_cast<WORD>(substituteBytes),
+            .print_length = static_cast<WORD>(printBytes - sizeof(wchar_t))};
+        std::vector<std::byte> data(sizeof(header) + substituteBytes + printBytes);
+        std::memcpy(data.data(), &header, sizeof(header));
+        std::memcpy(data.data() + sizeof(header), substituteName.c_str(), substituteBytes);
+        std::memcpy(data.data() + sizeof(header) + substituteBytes,
+            printName.c_str(), printBytes);
+        const HANDLE handle = ::CreateFileW(link.c_str(), GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            nullptr, OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (handle == INVALID_HANDLE_VALUE) return false;
+        DWORD returned{};
+        const bool created = ::DeviceIoControl(handle, FSCTL_SET_REPARSE_POINT,
+            data.data(), static_cast<DWORD>(data.size()), nullptr, 0u,
+            &returned, nullptr) != FALSE;
+        (void)::CloseHandle(handle);
+        return created;
+#else
+        std::error_code error{};
+        std::filesystem::create_directory_symlink(target, link, error);
+        return !error;
+#endif
+    }
+
+    [[nodiscard]] bool workspace_environment_contract(const ExecutableIdentityFixture& fixture)
+    {
+        std::error_code error{};
+        const auto first = fixture.root / "environment-first";
+        const auto second = fixture.root / "environment-second";
+        const auto outside = fixture.root / "environment-outside";
+        const auto poisoned = fixture.root / "environment-poisoned";
+        for (const auto& root : {first, second, outside, poisoned})
+            if (!std::filesystem::create_directory(root, error) || error) return false;
+        if (child_process::prepare_workspace_environment({})
+            || child_process::prepare_workspace_environment("relative")
+            || child_process::prepare_workspace_environment(fixture.root.root_path())
+            || child_process::prepare_workspace_environment(fixture.root / "missing-workspace")
+            || child_process::prepare_workspace_environment(fixture.root / "image.bin"))
+            return false;
+        const auto firstEnvironment = child_process::prepare_workspace_environment(first);
+        const auto secondEnvironment = child_process::prepare_workspace_environment(second);
+        if (!firstEnvironment || !secondEnvironment
+            || *firstEnvironment == *secondEnvironment) return false;
+        const auto utf8 = [](const std::filesystem::path& path)
+        {
+            const auto bytes = path.u8string();
+            return std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+        };
+        const auto verify = [&](const auto& environment, const std::filesystem::path& root)
+        {
+            const auto lookup = [&](std::string_view name) -> std::optional<std::string>
+            {
+                for (const auto& entry : environment)
+                    if (entry.name == name) return entry.value;
+                return std::nullopt;
+            };
+            if (lookup("EPOCH_CHILD_PRIVATE_SENTINEL")) return false;
+            const auto process = root / "cache" / "process";
+            const std::vector<std::pair<std::string, std::filesystem::path>> expected{
+                {"TEMP", process / "temp"}, {"TMP", process / "temp"},
+                {"TMPDIR", process / "temp"}, {"HOME", process / "profile"},
+                {"USERPROFILE", process / "profile"},
+                {"APPDATA", process / "profile" / "AppData" / "Roaming"},
+                {"LOCALAPPDATA", process / "profile" / "AppData" / "Local"},
+                {"DOTNET_CLI_HOME", process / "profile"},
+                {"NUGET_PACKAGES", process / "packages"}};
+            for (const auto& [name, path] : expected)
+                if (lookup(name) != utf8(path) || !std::filesystem::is_directory(path, error)
+                    || error) return false;
+            return true;
+        };
+        if (!verify(*firstEnvironment, first) || !verify(*secondEnvironment, second)
+            || child_process::prepare_workspace_environment(first) != firstEnvironment)
+            return false;
+
+        // Links point only into this owned fixture. The factory must refuse
+        // before creating a process cache through either redirected root.
+        const auto linkedRoot = fixture.root / "environment-root-link";
+        const auto linkedCache = poisoned / "cache";
+        if (!create_fixture_directory_link(linkedRoot, outside)
+            || !create_fixture_directory_link(linkedCache, outside)) return false;
+        const bool rejected = !child_process::prepare_workspace_environment(linkedRoot)
+            && !child_process::prepare_workspace_environment(poisoned)
+            && !std::filesystem::exists(outside / "cache", error) && !error
+            && !std::filesystem::exists(outside / "process", error) && !error;
+        if (!std::filesystem::remove(linkedRoot, error) || error
+            || !std::filesystem::remove(linkedCache, error) || error)
+            return false;
+        return rejected;
+    }
 }
 
 #if defined(_WIN32)
@@ -136,6 +296,53 @@ namespace
     constexpr std::string_view capture_input = "epoch-stdin-sentinel";
     constexpr std::string_view capture_stdout = "epoch-stdout-captured\n";
     constexpr std::string_view capture_stderr = "epoch-stderr-captured\n";
+    constexpr std::wstring_view private_environment_name = L"EPOCH_CHILD_PRIVATE_SENTINEL";
+    constexpr std::wstring_view private_environment_value = L"synthetic-host-only-value";
+    constexpr std::wstring_view explicit_environment_name = L"EPOCH_CHILD_EXPLICIT_UTF8";
+    constexpr std::wstring_view empty_environment_name = L"EPOCH_CHILD_EXPLICIT_EMPTY";
+
+    [[nodiscard]] bool lookup_environment(
+        std::wstring_view name, std::optional<std::wstring>& value)
+    {
+        value.reset();
+        const auto block = ::GetEnvironmentStringsW();
+        if (!block) return false;
+        for (const wchar_t* cursor = block; *cursor != L'\0';)
+        {
+            const std::wstring_view entry{cursor};
+            const auto separator = entry.find(L'=');
+            if (separator != std::wstring_view::npos
+                && entry.substr(0u, separator) == name)
+            {
+                value = entry.substr(separator + 1u);
+                break;
+            }
+            cursor += entry.size() + 1u;
+        }
+        (void)::FreeEnvironmentStringsW(block);
+        return true;
+    }
+
+    struct PrivateEnvironmentFixture final
+    {
+        std::optional<std::wstring> previous{};
+        bool changed{};
+
+        [[nodiscard]] bool prepare()
+        {
+            if (!lookup_environment(private_environment_name, previous)) return false;
+            changed = ::SetEnvironmentVariableW(private_environment_name.data(),
+                private_environment_value.data()) != FALSE;
+            return changed;
+        }
+
+        ~PrivateEnvironmentFixture() noexcept
+        {
+            if (changed)
+                (void)::SetEnvironmentVariableW(private_environment_name.data(),
+                    previous ? previous->c_str() : nullptr);
+        }
+    };
 
     struct ContractHandle final
     {
@@ -337,6 +544,10 @@ namespace
 
     [[nodiscard]] int run_capture_inheritance_child(const char* sentinelText)
     {
+        std::optional<std::wstring> inherited{};
+        if (!lookup_environment(private_environment_name, inherited)
+            || inherited != private_environment_value)
+            return 90;
         const HANDLE forbidden = reinterpret_cast<HANDLE>(
             static_cast<std::uintptr_t>(std::stoull(sentinelText)));
         if (::SetEvent(forbidden) != FALSE)
@@ -365,6 +576,336 @@ namespace
         }
         return 17;
     }
+
+    [[nodiscard]] int run_execution_input_child(
+        std::string_view mode, const char* sentinelText)
+    {
+        std::optional<std::wstring> value{};
+        if (!lookup_environment(private_environment_name, value) || value)
+            return 101;
+        if (mode == "replaced")
+        {
+            if (!lookup_environment(explicit_environment_name, value)
+                || value != L"Gr\u00fc\u00dfe \u96ea")
+                return 102;
+            if (!lookup_environment(empty_environment_name, value)
+                || !value || !value->empty())
+                return 103;
+        }
+        else if (mode == "empty")
+        {
+            const auto block = ::GetEnvironmentStringsW();
+            if (!block) return 104;
+            const bool empty = *block == L'\0';
+            (void)::FreeEnvironmentStringsW(block);
+            if (!empty) return 105;
+        }
+        else return 106;
+
+        const HANDLE forbidden = reinterpret_cast<HANDLE>(
+            static_cast<std::uintptr_t>(std::stoull(sentinelText)));
+        if (::SetEvent(forbidden) != FALSE) return 107;
+        const HANDLE input = ::GetStdHandle(STD_INPUT_HANDLE);
+        char byte{};
+        DWORD received{};
+        if (::GetFileType(input) != FILE_TYPE_CHAR
+            || ::ReadFile(input, &byte, 1u, &received, nullptr) == FALSE
+            || received != 0u)
+            return 108;
+        constexpr std::string_view marker = "epoch-private-input-contract-passed\n";
+        DWORD written{};
+        if (::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), marker.data(),
+                static_cast<DWORD>(marker.size()), &written, nullptr) == FALSE
+            || written != marker.size())
+            return 109;
+        return 27;
+    }
+
+    [[nodiscard]] bool execution_input_contract(
+        const std::filesystem::path& self, const ExecutableIdentityFixture& fixture)
+    {
+        child_process::LaunchRequest held{};
+        held.executable = self;
+        held.working_directory = fixture.root;
+        held.merged_output_path = fixture.root / "input-binding.log";
+        held.arguments = {"--epoch-child-contract", "30000", "0"};
+        held.correlation_key = "contract:explicit-input-binding";
+        held.window_mode = child_process::WindowMode::hidden;
+        held.disconnect_standard_input = true;
+        held.environment = std::vector<child_process::EnvironmentVariable>{
+            {"FIRST", "one"}, {"SECOND", "two"}};
+        const auto live = child_process::launch_or_focus(held);
+        if (live.code != child_process::LaunchCode::started) return false;
+        const auto duplicate = child_process::launch_or_focus(held);
+        bool bindingsValid = duplicate.code == child_process::LaunchCode::focused_existing
+            && duplicate.handle == live.handle;
+        for (unsigned change = 0u; change < 5u; ++change)
+        {
+            auto different = held;
+            if (change == 0u) different.environment->front().value = "changed";
+            else if (change == 1u) different.environment->front().name = "OTHER";
+            else if (change == 2u)
+                std::swap(different.environment->front(), different.environment->back());
+            else if (change == 3u) different.environment.reset();
+            else different.disconnect_standard_input = false;
+            const auto refused = child_process::launch_or_focus(different);
+            bindingsValid = bindingsValid
+                && refused.code == child_process::LaunchCode::invalid_request
+                && refused.message.find("correlation") != std::string::npos;
+        }
+        std::stop_source cancellation{};
+        (void)cancellation.request_stop();
+        const auto stopped = child_process::wait(
+            live.handle, cancellation.get_token(), 5'000'000'000ull);
+        if (!child_process::release(live.handle) || !bindingsValid
+            || stopped.code != child_process::WaitCode::cancelled)
+            return false;
+
+        for (const std::string mode : {"replaced", "empty"})
+        {
+            CaptureInheritanceFixture capture{};
+            if (!capture.prepare()) return false;
+            child_process::LaunchRequest request{};
+            request.executable = self;
+            request.working_directory = fixture.root;
+            request.merged_output_path = fixture.root / (mode + ".log");
+            request.arguments = {"--epoch-execution-input-contract", mode,
+                std::to_string(reinterpret_cast<std::uintptr_t>(capture.sentinel))};
+            request.correlation_key = "contract:execution-input-" + mode;
+            request.window_mode = child_process::WindowMode::hidden;
+            request.disconnect_standard_input = true;
+            request.environment.emplace();
+            if (mode == "replaced")
+            {
+                request.environment->push_back({"EPOCH_CHILD_EXPLICIT_UTF8",
+                    "Gr\xc3\xbc\xc3\x9f" "e \xe9\x9b\xaa"});
+                request.environment->push_back({"EPOCH_CHILD_EXPLICIT_EMPTY", {}});
+            }
+            const auto launched = child_process::launch_or_focus(request);
+            capture.restore_input();
+            if (launched.code != child_process::LaunchCode::started) return false;
+            const auto result = child_process::wait(launched.handle, {}, 5'000'000'000ull);
+            const bool success = result && result.process
+                && result.process->exit_code_valid && result.process->exit_code == 27
+                && result.process->environment_replaced
+                && result.process->standard_input_disconnected;
+            if (!success)
+                (void)child_process::stop(launched.handle, child_process::StopMode::force);
+            if (!child_process::release(launched.handle) || !success) return false;
+            DWORD available{};
+            if (::PeekNamedPipe(capture.input_read, nullptr, 0u, nullptr,
+                    &available, nullptr) == FALSE
+                || available != capture_input.size()
+                || ::WaitForSingleObject(capture.sentinel, 0u) != WAIT_TIMEOUT)
+                return false;
+            std::ifstream output{request.merged_output_path, std::ios::binary};
+            const std::string bytes{std::istreambuf_iterator<char>{output},
+                std::istreambuf_iterator<char>{}};
+            if (bytes != "epoch-private-input-contract-passed\n") return false;
+        }
+        return true;
+    }
+
+    // Explicitly invoked compatibility proof, never part of the default CTest
+    // path. It compiles only these fresh fixture literals, not Engine source.
+    [[nodiscard]] int run_msbuild_environment_contract(
+        const std::filesystem::path& msbuild) noexcept
+    {
+        ExecutableIdentityFixture fixture{};
+        fixture.preserve_evidence = true;
+        try
+        {
+            if (!msbuild.is_absolute()
+                || ::CompareStringOrdinal(msbuild.filename().c_str(), -1,
+                    L"MSBuild.exe", -1, TRUE) != CSTR_EQUAL)
+                return 80;
+            if (!fixture.prepare("epoch-msbuild-environment-")) return 81;
+            const auto utf8 = [](const std::filesystem::path& path)
+            {
+                const auto bytes = path.u8string();
+                return std::string{reinterpret_cast<const char*>(bytes.data()), bytes.size()};
+            };
+            const auto record = [&](std::string_view text)
+            {
+                std::ofstream output{fixture.root / "contract.evidence.txt",
+                    std::ios::binary | std::ios::app};
+                output.write(text.data(), static_cast<std::streamsize>(text.size()));
+                output.put('\n');
+                output.close();
+                return static_cast<bool>(output);
+            };
+            const auto fail = [&](int code, std::string_view detail)
+            {
+                (void)record("result=FAIL\ncode=" + std::to_string(code)
+                    + "\ndetail=" + std::string{detail});
+                return code;
+            };
+            if (!record("schema=epoch-msbuild-environment-contract/v1\nscope=tiny-v143-x64-sdk10-console-only\nfixture="
+                    + utf8(fixture.root) + "\nmsbuild=" + utf8(msbuild))) return 82;
+            const auto compilerIdentity = child_process::inspect_executable(msbuild);
+            if (!compilerIdentity) return fail(83, "Exact MSBuild image identity could not be inspected.");
+
+            constexpr std::string_view project = R"epoch(<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{71668213-B69B-49A8-B431-55AA9B549308}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword><RootNamespace>EpochEnvironmentContract</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir>$(MSBuildThisFileDirectory)bin\</OutDir><IntDir>$(MSBuildThisFileDirectory)obj\</IntDir>
+    <TargetName>epoch_env_probe</TargetName><VcpkgEnabled>false</VcpkgEnabled>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><WarningLevel>Level4</WarningLevel><Optimization>Disabled</Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader><RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpp20</LanguageStandard><MultiProcessorCompilation>false</MultiProcessorCompilation>
+    </ClCompile>
+    <Link><SubSystem>Console</SubSystem><GenerateDebugInformation>false</GenerateDebugInformation></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup><ClCompile Include="epoch.env_probe.cpp" /></ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="ReportEpochEnvironmentToolchain" BeforeTargets="ClCompile">
+    <Message Text="Epoch environment contract: toolset=$(PlatformToolset), platform=$(Platform), SDK=$(WindowsTargetPlatformVersion)" Importance="High" />
+  </Target>
+</Project>
+)epoch";
+            constexpr std::string_view source = R"epoch(#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#include <cwchar>
+
+static bool matches_environment(const wchar_t* name, const wchar_t* expected)
+{
+    wchar_t value[32768]{};
+    const DWORD length = ::GetEnvironmentVariableW(name, value, 32768);
+    return length > 0 && length < 32768 && std::wcscmp(value, expected) == 0;
+}
+
+int wmain(int argc, wchar_t** argv)
+{
+    if (argc != 3 || !matches_environment(L"USERPROFILE", argv[1])
+        || !matches_environment(L"TEMP", argv[2])) return 101;
+    wchar_t private_value[64]{};
+    ::SetLastError(ERROR_SUCCESS);
+    if (::GetEnvironmentVariableW(L"EPOCH_CHILD_PRIVATE_SENTINEL", private_value, 64) != 0
+        || ::GetLastError() != ERROR_ENVVAR_NOT_FOUND) return 102;
+    const HANDLE input = ::GetStdHandle(STD_INPUT_HANDLE);
+    char byte{};
+    DWORD received{};
+    if (::GetFileType(input) != FILE_TYPE_CHAR
+        || !::ReadFile(input, &byte, 1, &received, nullptr) || received != 0) return 103;
+    return 42;
+}
+)epoch";
+            if (!fixture.write("epoch.env_probe.vcxproj", project)
+                || !fixture.write("epoch.env_probe.cpp", source))
+                return fail(84, "Fresh compiler fixture source could not be written.");
+            PrivateEnvironmentFixture privateEnvironment{};
+            if (!privateEnvironment.prepare()) return fail(85, "Private synthetic environment sentinel was unavailable.");
+            const auto environment = child_process::prepare_workspace_environment(fixture.root);
+            if (!environment) return fail(86, "Workspace-local execution environment could not be prepared.");
+
+            struct OwnedContractChild final
+            {
+                child_process::ProcessHandle handle{};
+                ~OwnedContractChild() noexcept
+                {
+                    if (!handle.valid()) return;
+                    std::stop_source cancellation{};
+                    (void)cancellation.request_stop();
+                    (void)child_process::wait(handle, cancellation.get_token(), 5'000'000'000ull);
+                    (void)child_process::release(handle);
+                }
+            };
+            const auto run = [&](const child_process::LaunchRequest& request,
+                std::uint64_t timeout, std::int32_t expectedExit, std::string_view stage)
+            {
+                const auto launched = child_process::launch_or_focus(request);
+                OwnedContractChild owned{launched.handle};
+                if (!record(std::string{stage} + ".launch="
+                        + std::string{child_process::launch_code_name(launched.code)})) return false;
+                if (launched.code != child_process::LaunchCode::started) return false;
+                const auto waited = child_process::wait(launched.handle, {}, timeout);
+                const auto& process = waited.process;
+                const bool actualExit = waited && process && !process->active()
+                    && process->exit_code_valid && process->exit_code == expectedExit
+                    && process->verified_executable == request.expected_executable
+                    && process->environment_replaced && process->standard_input_disconnected;
+                if (!record(std::string{stage} + ".wait="
+                        + std::string{child_process::wait_code_name(waited.code)}
+                        + "\n" + std::string{stage} + ".exit="
+                        + (process && process->exit_code_valid ? std::to_string(process->exit_code) : "unavailable")
+                        + "\n" + std::string{stage} + ".verified=" + (actualExit ? "true" : "false"))) return false;
+                if (!actualExit) return false;
+                if (!child_process::release(launched.handle)) return false;
+                owned.handle = {};
+                return true;
+            };
+            child_process::LaunchRequest compile{};
+            compile.executable = msbuild;
+            compile.working_directory = fixture.root;
+            compile.merged_output_path = fixture.root / "msbuild.log";
+            compile.arguments = {"epoch.env_probe.vcxproj", "/t:Build", "/noautorsp", "/nr:false", "/m:1",
+                "/nologo", "/v:minimal", "/p:Configuration=Release", "/p:Platform=x64",
+                "/p:PlatformToolset=v143", "/p:VcpkgEnabled=false",
+                "/p:VcpkgEnableManifest=false", "/p:ImportDirectoryBuildProps=false", "/p:ImportDirectoryBuildTargets=false"};
+            compile.correlation_key = "contract:msbuild-environment:compile";
+            compile.exclusive_group = "contract:msbuild-environment";
+            compile.window_mode = child_process::WindowMode::hidden;
+            compile.expected_executable = compilerIdentity;
+            compile.environment = environment;
+            compile.disconnect_standard_input = true;
+            if (!record("compiler.bytes=" + std::to_string(compilerIdentity->size_bytes)
+                    + "\ncompiler.sha256=" + compilerIdentity->sha256 + "\ncompiler.timeout_seconds=180"))
+                return fail(87, "Compiler identity evidence could not be written.");
+            if (!run(compile, 180'000'000'000ull, 0, "compiler"))
+                return fail(88, "Real MSBuild compile did not complete successfully; inspect msbuild.log.");
+            const auto executable = fixture.root / "bin" / "epoch_env_probe.exe";
+            const auto builtIdentity = child_process::inspect_executable(executable);
+            if (!builtIdentity) return fail(89, "Fresh compiler output is missing or cannot be identity-bound.");
+            if (!record("probe.bytes=" + std::to_string(builtIdentity->size_bytes)
+                    + "\nprobe.sha256=" + builtIdentity->sha256))
+                return fail(90, "Compiled helper identity evidence could not be written.");
+            child_process::LaunchRequest probe{};
+            probe.executable = executable;
+            probe.working_directory = fixture.root;
+            probe.merged_output_path = fixture.root / "probe.log";
+            probe.arguments = {utf8(fixture.root / "cache" / "process" / "profile"),
+                utf8(fixture.root / "cache" / "process" / "temp")};
+            probe.correlation_key = "contract:msbuild-environment:probe";
+            probe.exclusive_group = compile.exclusive_group;
+            probe.window_mode = child_process::WindowMode::hidden;
+            probe.expected_executable = builtIdentity;
+            probe.environment = environment;
+            probe.disconnect_standard_input = true;
+            if (!run(probe, 10'000'000'000ull, 42, "probe"))
+                return fail(91, "Compiled console helper failed its isolated-input/environment check.");
+            if (child_process::metrics().active_processes != 0u)
+                return fail(92, "Test-owned child retirement is incomplete.");
+            return record("result=PASS\nretired=true\nlimitations=not-full-engine-build-or-OS-confinement-proof") ? 0 : 93;
+        }
+        catch (...)
+        {
+            try
+            {
+                if (!fixture.root.empty())
+                    (void)fixture.write("contract.exception.txt", "Unexpected compatibility-contract failure; all existing fixture evidence is retained.\n");
+            }
+            catch (...) {}
+            return 94;
+        }
+    }
 }
 #endif
 
@@ -372,7 +913,21 @@ int main(int argc, char** argv)
 {
     namespace child_process = epochengine::platform::child_process;
 
+    if (argc >= 2 && std::string_view{argv[1]} == "--epoch-msbuild-environment-contract")
+    {
 #if defined(_WIN32)
+        return argc == 3 ? run_msbuild_environment_contract(std::filesystem::path{argv[2]}) : 80;
+#else
+        return 80;
+#endif
+    }
+
+#if defined(_WIN32)
+    if (argc == 4
+        && std::string_view{argv[1]} == "--epoch-execution-input-contract")
+    {
+        return run_execution_input_child(argv[2], argv[3]);
+    }
     if (argc == 3
         && std::string_view{argv[1]} == "--epoch-capture-inheritance-contract")
     {
@@ -400,6 +955,8 @@ int main(int argc, char** argv)
     }
 
     const std::filesystem::path self = std::filesystem::absolute(argv[0]);
+    if (!environment_validation_contract(self))
+        return 24;
     ExecutableIdentityFixture identityFixture{};
     if (!inspect_identity_contract(identityFixture))
         return 18;
@@ -434,7 +991,8 @@ int main(int argc, char** argv)
         || running->correlation_key != first.correlation_key
         || running->platform_process_id == 0u
         || running->platform_window_id != 0u
-        || running->verified_executable != first.expected_executable)
+        || running->verified_executable != first.expected_executable
+        || running->environment_replaced || running->standard_input_disconnected)
     {
         return 4;
     }
@@ -445,6 +1003,21 @@ int main(int argc, char** argv)
         || duplicate.handle != launched.handle)
     {
         return 5;
+    }
+
+    for (const bool disconnect : {false, true})
+    {
+        auto changedInputs = first;
+        if (disconnect)
+        {
+            changedInputs.disconnect_standard_input = true;
+            changedInputs.merged_output_path = identityFixture.root / "not-launched.log";
+        }
+        else changedInputs.environment.emplace();
+        const auto refused = child_process::launch_or_focus(changedInputs);
+        if (refused.code != child_process::LaunchCode::invalid_request
+            || refused.message.find("correlation") == std::string::npos)
+            return 25;
     }
 
     child_process::LaunchRequest wrongCorrelation = first;
@@ -516,12 +1089,15 @@ int main(int argc, char** argv)
     std::filesystem::remove(outputPath, outputError);
     natural.merged_output_path = outputPath;
 #if defined(_WIN32)
+    PrivateEnvironmentFixture environment{};
+    if (!environment.prepare()) return 26;
     CaptureInheritanceFixture capture{};
     if (!capture.prepare())
         return 15;
     natural.arguments = {"--epoch-capture-inheritance-contract",
         std::to_string(reinterpret_cast<std::uintptr_t>(capture.sentinel))};
 #endif
+    if (!workspace_environment_contract(identityFixture)) return 28;
     const child_process::LaunchResult second =
         child_process::launch_or_focus(natural);
 #if defined(_WIN32)
@@ -539,7 +1115,9 @@ int main(int argc, char** argv)
     if (!completed || !completed.process
         || completed.process->state != child_process::ProcessState::exited
         || !completed.process->exit_code_valid
-        || completed.process->exit_code != 17)
+        || completed.process->exit_code != 17
+        || completed.process->environment_replaced
+        || completed.process->standard_input_disconnected)
     {
         return 11;
     }
@@ -569,6 +1147,10 @@ int main(int argc, char** argv)
     }
 #endif
     std::filesystem::remove(outputPath, outputError);
-    return child_process::release(second.handle) ? 0 : 14;
+    if (!child_process::release(second.handle)) return 14;
+#if defined(_WIN32)
+    if (!execution_input_contract(self, identityFixture)) return 27;
+#endif
+    return 0;
 }
 #endif

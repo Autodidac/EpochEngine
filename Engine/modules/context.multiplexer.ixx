@@ -196,6 +196,12 @@ namespace epochengine::core
             std::uint64_t process_id,
             std::string route,
             RoutedPanelDockTarget dock_target);
+        // Re-observe an existing native attachment; never create/reparent a
+        // window or infer rendered pixels from a live process/window identity.
+        [[nodiscard]] bool IsExternalProcessWindowAttached(
+            std::uintptr_t native_window,
+            std::uint64_t process_id,
+            std::string_view route) const noexcept;
         void RemoveExternalProcessWindow(std::uintptr_t native_window);
 
         void RemoveWindow(HWND hwnd);
@@ -293,6 +299,8 @@ namespace epochengine::core
             std::uint64_t,
             std::string,
             RoutedPanelDockTarget) { return false; }
+        [[nodiscard]] bool IsExternalProcessWindowAttached(
+            std::uintptr_t, std::uint64_t, std::string_view) const noexcept { return false; }
         void RemoveExternalProcessWindow(std::uintptr_t) {}
 
         void RemoveWindow(HWND hwnd);
@@ -384,6 +392,8 @@ namespace epochengine::core
             std::uint64_t,
             std::string,
             RoutedPanelDockTarget) { return false; }
+        [[nodiscard]] bool IsExternalProcessWindowAttached(
+            std::uintptr_t, std::uint64_t, std::string_view) const noexcept { return false; }
         void RemoveExternalProcessWindow(std::uintptr_t) {}
         void RemoveWindow(HWND) {}
         void CleanupFinishedWindows() {}

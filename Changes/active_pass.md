@@ -26,135 +26,50 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 
 ## Current Checkpoint
 
-- Source version: v0.89.35, local and unpublished.
-- Starting checkpoint for the recovery/artifact-identity repair pass:
-  `aa54f9886d6f7853bf294f4d3d2132134694cf83`.
-- Public Windows/Linux runtime and private-source discovery remain v0.89.34.
-- Public macOS packaged authority remains v0.89.30.
+- Source version: v0.89.35, local and unpublished. Starting commit for this
+  process-input/attachment/succession pass:
+  `3cbe07dad67f55e900514f01b7a37bbcee160090`.
+- Public Windows/Linux runtime and private-source discovery remain v0.89.34;
+  public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
   `account suspended`; the Epoch Site remains the protected publication path.
-- The previously untracked `ai.mcp_supervisor_*` implementation has been
-  reviewed and admitted into this pass as the transport-neutral inbound
-  supervisor seam. It opens no listener or process and grants no model,
-  filesystem, live-source, promotion, Git, release, or Site authority.
+- Original `multicontext-base-stable`
+  `ad6c416d930b348a61bc37ceb7d4522742be084a` remains preserved. Its restored
+  branch label has not advanced; the proven-profile gate still owns that update.
+- Completed implementation/checkpoint history belongs in
+  `Changes/changelog.txt` and Git, not this live acceptance queue.
 
-September 5 recovery/artifact-identity checkpoint: final Windows Debug and
-Release editor builds pass; both explicitly waited build-safe aggregate runs
-return exit 0 (`engine_contract_self_test.result=pass`). Release HeadlessCI
-builds. All eight Release SoftwareBase/identity/admission CTests pass, including
-the candidate-artifact ledger and real non-GPU child-process identity contract;
-the latter also passed ten consecutive repeat runs. Source naming passes for
-590 files and diff checks pass. Exact final Release `EpochEditor.exe` is
-12,439,552 bytes, SHA-256
-`1470bd4d5282ed0c185a2b08df742b087532f5d5c1d34301df68b48f8e1dd1ab`.
-The final aggregate completed at 08:23 EDT; no EpochEditor process remained.
-Known pre-existing optimization-override and duplicate-logger linker warnings
-remain. No real model request, candidate preview, second sandbox compile,
-Linux validation, release staging or OS-confinement proof is claimed for this
-repair checkpoint. Its native run is still tool-blocked despite operator
-approval; the remaining gates below stay open.
+The current real-model rig requires an explicit, genuinely unfinished
+`EPOCH_EDITOR_SELF_CODING_OBJECTIVE`. Its default comparison decision is
+Choose; an explicit Keep remains testable. Success requires two actual accepted
+Release compiles and separately identified candidate windows, retained chosen
+sandbox lineage, a returned successor plan/proposal, and complete owned worker
+and child retirement. A successor plan alone is no longer a successful test.
+Source/build evidence for this rig does not replace running it with Qwen.
 
-Previous `aa54f988` proof (not the current repair binary): Windows Debug and Release editor builds and both
-build-safe aggregate engine contract runs pass, including
-`ai.openai_source_iteration_request`, `ai.development_proposal_codec`, and
-`ai.development_panel`. Release HeadlessCI builds; source naming passes for
-588 files and diff checks pass. That exact Release editor is 12,347,392
-bytes, SHA-256
-`4b112154a81776e8ada20d425033b58299c6b762c50e4eeac740c48e9fb15e99`.
+The September 5 process-input/attachment checkpoint passes Windows Debug and
+Release editor builds, Release HeadlessCI build, explicitly waited Debug and
+Release aggregate contracts (exit 0), all eight SoftwareBase/component CTests,
+ten repeated child-process contracts, and source naming for 590 files. A real
+tiny v143/x64/Windows-SDK MSBuild fixture compiles with exit 0 and runs its
+environment/stdin canary with the expected exit 42, then retires its owned job.
+That fixture is not a full sandbox Engine-build compatibility claim. Exact
+Release editor: 12,514,304 bytes, SHA-256
+`d351bbaffc67309e638717918a586dba80fa6c33000e47db987edff8c695210c`.
+Existing optimization-override and duplicate-logger warnings remain.
 
-Directed context requests now carry validated line/literal-query selectors,
-including a different region of the same file. The aggregate fixture covers
-directed excerpt admission through plan/proposal/staging and validation, bounded
-missing-region recovery, exact counted evidence, and selector reset/lineage.
-The enhanced native rig requires one actual Keep/Choose decision, successor
-materialization and a returned successor plan; it deliberately stops before
-the second proposal/build and is not an unrestricted iteration-loop proof.
+The child-launch environment/stdin and native-attachment source repairs do not
+create an OS security boundary. Candidate
+compiler/test/preview processes still use the launching user's token; no
+AppContainer, filesystem ACL confinement or network denial has been established.
 
-The editor-free `Epoch::SoftwareBase` and shared `context.admission` first layer
-build in Release; four focused SoftwareBase/admission CTests pass. The explicit
-hidden Win32 contract passes native title/UTF-8, client resize, callback-driven
-resize deferral, no duplicate/stale delivery after destruction, deferred close,
-multi-window retirement and reconstruction. It uses no renderer or GPU. Exact
-`EpochSoftware.exe`: 68,096 bytes, SHA-256
-`127426bd9d6d02358b0cf8aa71ac909f45a84375a35387a2e219635aa7f3846d`.
-Exact native contract: 48,640 bytes, SHA-256
-`64f985894851257c76d566801df87d1b98e00c8f2bac49d2158489a6bc7978b1`.
-The captured-child handle-allowlist contract passes separately (1/1); it does
-not prove filesystem/network isolation. GUI/input/rendered application profiles
-and migration of the existing multicontext owners remain unimplemented here.
-
-The missing local `multicontext-base-stable` label was restored at original
-`ad6c416d930b348a61bc37ceb7d4522742be084a`, without another worktree. It has not
-been advanced: the complete claimed profile/native integration gate still owns
-that explicitly authorized update.
-
-The operator's September 4 19:03-19:10 session selected the EpochGui text-control
-header, implementation and tests for "find and fix a bug". Its terminal checkpoint
-records zero admitted source operations, candidates and validation records. All
-three sandbox files match their admitted preimage hashes. The 921-file sandbox
-was a source copy, not a built candidate: 919 files matched the checkout at audit
-time, and the other two differed only by agent edits made after materialization.
-The rejected proposal itself is not retained in that checkpoint, so its code
-quality was not established by this audit. The sandbox and receipts are preserved.
-
-The photographed rejection was an objective-word-overlap heuristic, not an
-exact-source or compiler failure. That heuristic is removed; ordinary, broad and
-non-English objectives no longer need matching title/rationale vocabulary. Exact
-reviewed bytes, unique search, no-op, ownership and build checks remain. The Qwen
-server warning also exposed unsupported forced reasoning-off input. Requests now
-leave the provider's reasoning mode unchanged, including recovery requests.
-
-The source-edit JSON response can now explicitly request context instead of
-being forced to emit edits. Each reselection supplies the complete next working
-set of at most twelve files; it replaces rather than silently overflows the old
-set. Direct requests and insufficient-evidence retries share the three-attempt
-navigation budget, and failed loading retains its real error instead of a false
-"rebuilding" status. Debug and Release aggregate contracts pass on these repairs;
-the exact refreshed binary has not yet completed a live model-to-candidate run.
-
-The September 4 Astra pass exercised the real Qwen HTTP route. One test first
-reported a refused local endpoint; after the operator restarted Qwen3.8-27B,
-model responses reached source selection. The run then exposed a whole-file
-size check that rejected the editor's own 377 KiB controller before excerpting.
-That defect, the downstream six-versus-twelve-file mismatch, and the updater
-handler's repeated consumption of the self-coding automation command are fixed.
-Windows Debug and Release aggregate contracts pass on the resulting source,
-including 2 MiB file identity/excerpt coverage, twelve-file admission, thirteen-
-file refusal, bounded combined context, cancellation and late-reply checks.
-No real model-produced patch, sandbox build, or candidate preview completed in
-this pass. Earlier native Keep/Choose and Linux evidence below belongs to the
-earlier checkpoint, not this newly changed binary.
-
-The earlier screen-helper initialization failure is historical: native screen
-inspection worked on September 5 and found the SoftwareBase blank-caption defect
-now repaired and covered by the real Win32 contract. The proposed Qwen test is
-the missing privacy-conscious Copy Session Summary action, not the already-
-implemented activity indicator. A new exact Release/Qwen/Choose harness launch
-was denied by the execution tool before startup; no model request was sent.
-The operator explicitly approved the visible editor/Qwen/build/comparison run
-on September 5. A subsequent ordinary visible Release editor launch was still
-rejected by the execution tool before process startup. Approval is no longer
-missing; native execution remains tool-blocked. Do not route around that denial
-with a different tool or relabel contracts as model/native-preview proof.
-The shared WSL lane was released to the EpochSimEngine task for its own serial
-gate; wait for its new clear handoff before beginning an Epoch Linux build.
-
-The inbound supervisor integration builds in Windows Debug and its focused
-contract now passes inside the aggregate suite. The contract covers canonical
-request parsing, method and authority allowlists, current host generations and
-digests, replay and byte budgets, curated-evidence binding without source-byte
-exposure, host rejection, checkpoint round-trip/integrity/canonicality, and
-stale/cross-session refusal. Windows Debug and Release aggregate proofs pass,
-Windows Release HeadlessCI passes, and the managed-Clang 22.1.8 Release engine
-links with all 52 CTests passing. Candidate Lab Choose/Keep automation is
-explicitly owned by the comparison dispatcher instead of falling through the
-unrelated update-modal command switch. A native Keep smoke then exposed a
-nonterminal bottom-grid admission wait; candidate admission now has a 45-second
-deadline that reports the exact failure and retires the challenger instead of
-leaving parent and child editors running forever. Exact Release
-`--editor` automation then passed both native bottom-grid admission paths:
-Keep Current and Choose Candidate each admitted a distinct challenger PID/window,
-performed the requested ownership transition, exited, and left no editor child.
+The operator explicitly approved the visible Release/Qwen/build/comparison run
+on September 5, but the execution tool rejected the subsequent ordinary visible
+editor launch before startup. Approval is no longer missing; native execution
+remains tool-blocked. Do not route around that denial with a different tool or
+relabel component contracts as model/native-preview proof. The shared WSL lane
+was released to the EpochSimEngine task for its own serial gate; wait for a new
+clear handoff before beginning an Epoch Linux build.
 
 ## Remaining Work
 
@@ -168,12 +83,17 @@ performed the requested ownership transition, exited, and left no editor child.
 2. Eye-test the exact Release build for the working indicator, elapsed time,
    cancellation, readable actions at narrow/high-zoom layouts, Candidate Lab
    comparison, and unambiguous Keep Current / Choose Candidate behavior.
+   Include context/session Close while model or compiler work is pending.
+   Per-context HTTP cancellation currently discards the response and joins the
+   worker without globally cancelling another context's request; this can wait
+   for transport completion. Request-scoped interruption remains unfinished.
 3. Repair any failure found by that end-to-end run. Transport, API, schema,
    packet, build, and validation failures may retry within their existing
    bounded budgets; cancellation and unsafe/off-catalog path requests fail
    immediately.
 4. Establish and adversarially test the candidate execution boundary. The
-   current Windows child launch inherits the user's OS identity/environment;
+   current Windows child launch retains the user's OS identity while replacing
+   ambient environment variables and disconnecting host stdin;
    Job Object ownership guarantees lifecycle supervision, not filesystem or
    network confinement. Host transaction containment is not proof that arbitrary
    compiled candidate code cannot access live source or other projects.

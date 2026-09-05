@@ -691,8 +691,13 @@ namespace epochengine
                             {
                                 epochengine::systems::threading::ScopedThreadActivity
                                     threadActivity{};
-                                request->reply =
-                                    epochengine::ai::send_to_engine_ai(t, workload);
+                                // A queued worker may first run after its
+                                // context closed. Do not send an already
+                                // cancelled request; in-flight interruption
+                                // still needs request-scoped transport support.
+                                if (!request->cancelled.load(std::memory_order_acquire))
+                                    request->reply =
+                                        epochengine::ai::send_to_engine_ai(t, workload);
                             }
                             catch (const std::exception& e)
                             {
@@ -1270,13 +1275,21 @@ namespace epochengine
             bool selfCodingSmokeChooseCandidate{};
             std::string selfCodingSmokeBaselineRoot{};
             std::string selfCodingSmokeCandidateRoot{};
+            std::string selfCodingSmokeSelectedParentRoot{};
             std::string selfCodingSmokeSuccessorRoot{};
             std::uint32_t selfCodingSmokeSuccessorGeneration{};
+            std::uint64_t selfCodingSmokeFirstCandidateProcessId{};
             std::uint64_t selfCodingSmokeChosenProcessId{};
+            std::optional<candidate_artifacts::Binding> selfCodingSmokeFirstCandidateArtifact{};
+            std::optional<candidate_artifacts::Binding> selfCodingSmokeSuccessorBuildArtifact{};
             bool selfCodingSmokeSuccessorMaterialized{};
             bool selfCodingSmokeSuccessorMaterializationFailed{};
             bool selfCodingSmokeSuccessorPlanRequested{};
             bool selfCodingSmokeSuccessorPlanReviewed{};
+            bool selfCodingSmokeSuccessorPreviewRequested{};
+            bool selfCodingSmokeOutcomePassed{};
+            std::string selfCodingSmokeOutcomeDetail{};
+            std::chrono::steady_clock::time_point selfCodingSmokeRetirementStartedAt{};
             SystemsSurfaceState systems{};
             std::unique_ptr<editor_tasks::Scheduler> taskScheduler{};
             AiWorkspaceDomain aiWorkspaceDomain{ AiWorkspaceDomain::Engine };
@@ -1375,10 +1388,14 @@ namespace epochengine
                 aiCandidateCurrentProcess{};
             std::optional<platform::child_process::ProcessSnapshot>
                 aiCandidateCurrentSnapshot{};
+            std::uint64_t aiCandidateCurrentAdmittedProcessId{};
+            std::uintptr_t aiCandidateCurrentAdmittedWindow{};
             platform::child_process::ProcessHandle
                 aiCandidateChallengerProcess{};
             std::optional<platform::child_process::ProcessSnapshot>
                 aiCandidateChallengerSnapshot{};
+            std::uint64_t aiCandidateChallengerAdmittedProcessId{};
+            std::uintptr_t aiCandidateChallengerAdmittedWindow{};
             std::vector<platform::child_process::ProcessHandle>
                 aiCandidateRetiringProcesses{};
             std::uint32_t aiCandidatePreviewGeneration{};
@@ -1397,6 +1414,36 @@ namespace epochengine
             ++editor.aiSourceArtifactEpoch;
             if (editor.aiSourceArtifactEpoch == 0u)
                 ++editor.aiSourceArtifactEpoch;
+        }
+
+        [[nodiscard]] bool ai_candidate_attachment_is_live(
+            std::uint64_t processId, std::uintptr_t nativeWindow) noexcept
+        {
+            const auto* manager = core::GetActiveMultiContextManager();
+            return manager && processId != 0u && nativeWindow != 0u
+                && manager->IsExternalProcessWindowAttached(nativeWindow, processId,
+                    "candidate_preview.challenger");
+        }
+
+        void retire_ai_candidate(EditorState& editor,
+            platform::child_process::ProcessHandle& handle,
+            std::optional<platform::child_process::ProcessSnapshot>& snapshot,
+            std::uint64_t& admittedProcessId, std::uintptr_t& admittedWindow)
+        {
+            // Retain admission identity independently of discovery snapshots:
+            // reparenting or process death must never hide the lease to remove.
+            if (admittedWindow != 0u)
+                if (auto* manager = core::GetActiveMultiContextManager())
+                    manager->RemoveExternalProcessWindow(admittedWindow);
+            admittedProcessId = 0u;
+            admittedWindow = 0u;
+            if (handle.valid())
+            {
+                (void)platform::child_process::stop(handle, platform::child_process::StopMode::force);
+                editor.aiCandidateRetiringProcesses.push_back(handle);
+            }
+            handle = {};
+            snapshot.reset();
         }
 
         [[nodiscard]] editor_tasks::Scheduler&
@@ -11887,6 +11934,7 @@ namespace epochengine
                 "/m:1",
                 "/nr:false",
                 "/nologo",
+                "/noautorsp",
                 "/fl",
                 "/flp:logfile=" + msbuildLog.string()
                     + ";verbosity=normal"};
@@ -11899,6 +11947,23 @@ namespace epochengine
                 "Epoch guarded " + targetLabel + " source compiler";
             request.window_mode =
                 platform::child_process::WindowMode::hidden;
+
+            request.environment = platform::child_process::prepare_workspace_environment(workspace);
+            request.disconnect_standard_input = true;
+            request.expected_executable = platform::child_process::inspect_executable(*msbuild);
+            if (!request.environment || !request.expected_executable)
+            {
+                result.summary =
+                    "The sandbox compiler could not prepare its private environment or verify its host executable.";
+                return result;
+            }
+
+            if (cancellation.stop_requested())
+            {
+                result.cancelled = true;
+                result.summary = "The sandbox compiler was cancelled before process launch.";
+                return result;
+            }
 
             const auto launched =
                 platform::child_process::launch_or_focus(request);
@@ -11928,7 +11993,10 @@ namespace epochengine
             }
             if (waited.code
                 != platform::child_process::WaitCode::exited
-                || !waited.process || !waited.process->exit_code_valid)
+                || !waited.process || !waited.process->exit_code_valid
+                || !waited.process->environment_replaced
+                || !waited.process->standard_input_disconnected
+                || waited.process->verified_executable != request.expected_executable)
             {
                 result.summary =
                     "The guarded sandbox compiler did not produce trusted exit evidence: "
@@ -12099,6 +12167,19 @@ namespace epochengine
             request.window_mode =
                 platform::child_process::WindowMode::hidden;
             request.expected_executable = artifact.identity;
+            request.environment = platform::child_process::prepare_workspace_environment(workspace);
+            request.disconnect_standard_input = true;
+            if (!request.environment)
+            {
+                result.summary = "The sandbox test could not prepare its private process environment.";
+                return result;
+            }
+            if (cancellation.stop_requested())
+            {
+                result.cancelled = true;
+                result.summary = "The sandbox test was cancelled before process launch.";
+                return result;
+            }
             const auto launched =
                 platform::child_process::launch_or_focus(request);
             if (launched.code
@@ -12126,7 +12207,9 @@ namespace epochengine
             }
             if (waited.code
                 != platform::child_process::WaitCode::exited
-                || !waited.process || !waited.process->exit_code_valid)
+                || !waited.process || !waited.process->exit_code_valid
+                || !waited.process->environment_replaced
+                || !waited.process->standard_input_disconnected)
             {
                 result.summary = "The " + guardLabel
                     + " did not produce trusted exit evidence: "
@@ -21157,15 +21240,117 @@ namespace epochengine
 
     } // namespace
 
+    namespace
+    {
+        // The caller has detached this state from both storage maps. No UI
+        // pump can dispatch a completed task into another preview while its
+        // owned scheduler drains, and no storage lock spans a join or the
+        // manager's owner-thread-routed attachment removal.
+        void request_editor_source_session_stop(EditorState& editor)
+        {
+            editor.aiSourceAwaitingReply = false;
+            editor.aiLocalMcp.awaitingResponse = false;
+            if (editor.taskScheduler)
+            {
+                for (const auto ticket : {
+                    editor.aiSourceWorkspaceCancellation,
+                    editor.aiSourceBuildCancellation,
+                    editor.aiSourceTestCancellation})
+                {
+                    if (ticket.valid())
+                        (void)editor.taskScheduler->cancel(ticket);
+                }
+            }
+
+            // Request every preview's stop before joining other owned tasks:
+            // an unrelated long-running project task must not keep it alive.
+            retire_ai_candidate(editor, editor.aiCandidateCurrentProcess,
+                editor.aiCandidateCurrentSnapshot,
+                editor.aiCandidateCurrentAdmittedProcessId,
+                editor.aiCandidateCurrentAdmittedWindow);
+            retire_ai_candidate(editor, editor.aiCandidateChallengerProcess,
+                editor.aiCandidateChallengerSnapshot,
+                editor.aiCandidateChallengerAdmittedProcessId,
+                editor.aiCandidateChallengerAdmittedWindow);
+            if (editor.aiLocalMcp.process.valid())
+            {
+                editor.aiCandidateRetiringProcesses.push_back(editor.aiLocalMcp.process);
+                editor.aiLocalMcp.process = {};
+            }
+            for (const auto handle : editor.aiCandidateRetiringProcesses)
+                (void)platform::child_process::stop(
+                    handle, platform::child_process::StopMode::force);
+        }
+
+        void finish_editor_source_session_retirement(EditorState& editor)
+        {
+            // TaskGraph destruction drains rather than cancels. Its source
+            // tickets must receive cancellation first; the state/futures stay
+            // alive until all worker closures have returned.
+            editor.taskScheduler.reset();
+
+            std::erase_if(editor.aiCandidateRetiringProcesses,
+                [](const platform::child_process::ProcessHandle handle)
+                {
+                    constexpr std::uint64_t settlementNs = 5'000'000'000ull;
+                    for (std::uint32_t attempt = 0u; attempt < 2u; ++attempt)
+                    {
+                        const auto before = platform::child_process::snapshot(handle);
+                        if (!before || before->active())
+                        {
+                            (void)platform::child_process::stop(
+                                handle, platform::child_process::StopMode::force);
+                            (void)platform::child_process::wait(handle, {}, settlementNs);
+                        }
+                        // A timeout can still have successfully stopped the
+                        // job. Only final liveness and release prove retirement.
+                        const auto after = platform::child_process::snapshot(handle);
+                        if ((!after || !after->active())
+                            && platform::child_process::release(handle))
+                            return true;
+                    }
+                    append_editor_automation_trace(epochengine::format_text(
+                        "[ai-session] Session teardown could not retire supervisor slot {} generation {}; its supervisor ownership is retained, not released.",
+                        handle.slot, handle.generation));
+                    return false;
+                });
+        }
+
+        void retire_detached_chat(const std::shared_ptr<AiChat>& chat)
+        {
+            if (!chat)
+                return;
+            // Transport cancellation is currently global, not request-scoped.
+            // Discard this chat's response without cancelling another context's
+            // request. Whole-system shutdown cancels that transport separately.
+            (void)chat->cancel_pending(false);
+            if (chat->worker.joinable())
+                chat->worker.join();
+        }
+    }
+
     void cleanup_chat_context(const core::Context* ctx)
     {
         if (!ctx) return;
 
         auto& chatStorage = chat_storage();
         auto& editorStorage = editor_storage();
-        std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
-        chatStorage.chats.erase(ctx);
-        editorStorage.states.erase(ctx);
+        decltype(chatStorage.chats)::node_type retiredChat{};
+        decltype(editorStorage.states)::node_type retiredState{};
+        {
+            std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
+            retiredChat = chatStorage.chats.extract(ctx);
+            retiredState = editorStorage.states.extract(ctx);
+        }
+        if (!retiredChat.empty() && retiredChat.mapped())
+            (void)retiredChat.mapped()->cancel_pending(false);
+        if (!retiredState.empty())
+        {
+            request_editor_source_session_stop(retiredState.mapped());
+            finish_editor_source_session_retirement(retiredState.mapped());
+        }
+        if (!retiredChat.empty())
+            retire_detached_chat(retiredChat.mapped());
         (void)epochengine::canvas2d::scene_content::retire(ctx);
         epochengine::previewgrid::cleanup_context(ctx);
     }
@@ -21175,26 +21360,48 @@ namespace epochengine
         epochengine::ai::cancel_engine_ai_request();
         auto& chatStorage = chat_storage();
         auto& editorStorage = editor_storage();
-        std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
-
-        for (const auto& [ctx, state] : editorStorage.states)
+        decltype(chatStorage.chats) retiredChats{};
+        decltype(editorStorage.states) retiredStates{};
+        bool shutdownAi{};
         {
-            (void)state;
+            std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
+            retiredChats.swap(chatStorage.chats);
+            retiredStates.swap(editorStorage.states);
+            editorStorage.detachedPaneRoutes.clear();
+            editorStorage.paneRedockRequests.clear();
+            editorStorage.detachedPaneProjection = {};
+            editorStorage.passiveContextScores = {};
+            shutdownAi = chatStorage.bot_initialized;
+            chatStorage.bot_initialized = false;
+        }
+
+        for (const auto& [ctx, chat] : retiredChats)
+        {
+            (void)ctx;
+            if (chat)
+                (void)chat->cancel_pending(false);
+        }
+        for (auto& [ctx, state] : retiredStates)
+        {
+            (void)ctx;
+            request_editor_source_session_stop(state);
+        }
+        // Stop every context before joining any scheduler: a slow unrelated
+        // task must not leave later contexts launching work or running previews.
+        for (auto& [ctx, state] : retiredStates)
+        {
+            finish_editor_source_session_retirement(state);
             (void)epochengine::canvas2d::scene_content::retire(ctx);
             epochengine::previewgrid::cleanup_context(ctx);
         }
-        chatStorage.chats.clear();
-        editorStorage.states.clear();
-        editorStorage.detachedPaneRoutes.clear();
-        editorStorage.paneRedockRequests.clear();
-        editorStorage.detachedPaneProjection = {};
-        editorStorage.passiveContextScores = {};
-
-        if (chatStorage.bot_initialized)
+        for (const auto& [ctx, chat] : retiredChats)
         {
-            epochengine::ai::shutdown_engine_ai();
-            chatStorage.bot_initialized = false;
+            (void)ctx;
+            retire_detached_chat(chat);
         }
+
+        if (shutdownAi)
+            epochengine::ai::shutdown_engine_ai();
     }
 
     void editor_mark_context_panel_detached(std::string_view route_id, bool detached)
@@ -23069,60 +23276,65 @@ namespace epochengine
         dispatch_ai_development_action = [&](
             const editor_ai_development_panel::RenderResult& action)
         {
-            const auto retireCandidate = [&editor](
-                platform::child_process::ProcessHandle& handle,
-                std::optional<platform::child_process::ProcessSnapshot>& snapshot)
-            {
-                if (snapshot && snapshot->platform_window_id != 0u)
-                {
-                    if (auto* manager =
-                            core::GetActiveMultiContextManager())
-                    {
-                        manager->RemoveExternalProcessWindow(
-                            snapshot->platform_window_id);
-                    }
-                }
-                if (handle.valid())
-                {
-                    (void)platform::child_process::stop(
-                        handle,
-                        platform::child_process::StopMode::force);
-                    editor.aiCandidateRetiringProcesses.push_back(handle);
-                }
-                handle = {};
-                snapshot.reset();
-            };
             using CandidateDecision =
                 editor_ai_development_panel::CandidateDecision;
+            if (action.candidate_decision == CandidateDecision::choose_candidate
+                && (!editor.aiCandidateChallengerProcess.valid()
+                    || !editor.aiCandidateChallengerSnapshot
+                    || !editor.aiCandidateChallengerSnapshot->active()
+                    || editor.aiCandidateChallengerSnapshot->platform_process_id
+                        != editor.aiCandidateChallengerAdmittedProcessId
+                    || !ai_candidate_attachment_is_live(editor.aiCandidateChallengerAdmittedProcessId,
+                        editor.aiCandidateChallengerAdmittedWindow)))
+            {
+                retire_ai_candidate(editor, editor.aiCandidateChallengerProcess,
+                    editor.aiCandidateChallengerSnapshot, editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow);
+                rejectSourceDispatch(
+                    "Choose Candidate was refused because the exact admitted process/context is no longer live. The existing current candidate was not replaced and no successor build was started.");
+                return;
+            }
             if (action.candidate_decision != CandidateDecision::none)
                 invalidate_ai_source_artifacts(editor);
             if (action.candidate_decision == CandidateDecision::keep_current)
             {
-                retireCandidate(
+                retire_ai_candidate(editor,
                     editor.aiCandidateChallengerProcess,
-                    editor.aiCandidateChallengerSnapshot);
+                    editor.aiCandidateChallengerSnapshot,
+                    editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow);
             }
             else if (action.candidate_decision
                 == CandidateDecision::choose_candidate)
             {
-                retireCandidate(
+                retire_ai_candidate(editor,
                     editor.aiCandidateCurrentProcess,
-                    editor.aiCandidateCurrentSnapshot);
+                    editor.aiCandidateCurrentSnapshot,
+                    editor.aiCandidateCurrentAdmittedProcessId,
+                    editor.aiCandidateCurrentAdmittedWindow);
                 editor.aiCandidateCurrentProcess =
                     editor.aiCandidateChallengerProcess;
                 editor.aiCandidateCurrentSnapshot =
                     editor.aiCandidateChallengerSnapshot;
+                editor.aiCandidateCurrentAdmittedProcessId = editor.aiCandidateChallengerAdmittedProcessId;
+                editor.aiCandidateCurrentAdmittedWindow = editor.aiCandidateChallengerAdmittedWindow;
                 editor.aiCandidateChallengerProcess = {};
                 editor.aiCandidateChallengerSnapshot.reset();
+                editor.aiCandidateChallengerAdmittedProcessId = 0u;
+                editor.aiCandidateChallengerAdmittedWindow = 0u;
             }
             else if (action.candidate_decision == CandidateDecision::stop_lab)
             {
-                retireCandidate(
+                retire_ai_candidate(editor,
                     editor.aiCandidateChallengerProcess,
-                    editor.aiCandidateChallengerSnapshot);
-                retireCandidate(
+                    editor.aiCandidateChallengerSnapshot,
+                    editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow);
+                retire_ai_candidate(editor,
                     editor.aiCandidateCurrentProcess,
-                    editor.aiCandidateCurrentSnapshot);
+                    editor.aiCandidateCurrentSnapshot,
+                    editor.aiCandidateCurrentAdmittedProcessId,
+                    editor.aiCandidateCurrentAdmittedWindow);
             }
             if (action.reveal_source_patch_workbench
                 && !action.source_patch_relative_path.empty())
@@ -23303,6 +23515,30 @@ namespace epochengine
                     && editor.selfCodingSmokeBaselineRoot.empty())
                 {
                     editor.selfCodingSmokeBaselineRoot = action.source_root;
+                }
+                if (editor.automationCommand == EditorAutomationCommand::SelfCodingLocalSmoke
+                    && editor.selfCodingSmokePhase == 3u)
+                {
+                    // Repairs and context reselection may create another fresh
+                    // workspace, but may never change the chosen iteration parent.
+                    const bool sameParent = !editor.selfCodingSmokeSelectedParentRoot.empty()
+                        && resolve_editor_path(action.source_root)
+                            == resolve_editor_path(editor.selfCodingSmokeSelectedParentRoot)
+                        && resolve_editor_path(action.workspace_root)
+                            != resolve_editor_path(editor.selfCodingSmokeSelectedParentRoot);
+                    editor.selfCodingSmokeSuccessorMaterializationFailed =
+                        editor.selfCodingSmokeSuccessorMaterializationFailed || !sameParent;
+                    editor.selfCodingSmokeSuccessorMaterialized = false;
+                    editor.selfCodingSmokeSuccessorBuildArtifact.reset();
+                    editor.selfCodingSmokeSuccessorPreviewRequested = false;
+                    if (sameParent)
+                    {
+                        editor.selfCodingSmokeSuccessorRoot = action.workspace_root;
+                        editor.selfCodingSmokeSuccessorGeneration = action.workspace_generation;
+                    }
+                    append_editor_automation_trace(epochengine::format_text(
+                        "SELF_CODING_LOCAL_SMOKE SUCCESSOR_REQUEST parent_match={} parent={} next={} generation={}",
+                        sameParent, action.source_root, action.workspace_root, action.workspace_generation));
                 }
                 epochengine::ai::development_executor::WorkspaceRequest request{
                     .source_root = action.source_root,
@@ -23701,6 +23937,9 @@ namespace epochengine
             case editor_ai_development_panel::HostAction::
                 launch_source_candidate_preview:
             {
+                if (editor.automationCommand == EditorAutomationCommand::SelfCodingLocalSmoke
+                    && editor.selfCodingSmokePhase == 3u)
+                    editor.selfCodingSmokeSuccessorPreviewRequested = true;
                 if (action.workspace_root.empty())
                 {
                     invalidate_ai_source_artifacts(editor);
@@ -23773,6 +24012,19 @@ namespace epochengine
                 request.window_mode =
                     platform::child_process::WindowMode::normal;
                 request.expected_executable = artifact->identity;
+                request.environment = platform::child_process::prepare_workspace_environment(workspace);
+                request.disconnect_standard_input = true;
+                if (!request.environment)
+                {
+                    invalidate_ai_source_artifacts(editor);
+                    editor.aiCandidatePreviewReported = true;
+                    editor.aiCandidatePreviewStartedAt = {};
+                    const auto failed = editor.aiDevelopmentPanel->complete_candidate_preview(
+                        action.workspace_generation, false, 0u, 0u,
+                        "Candidate preview could not prepare its private process environment.");
+                    push_ai_development_log(editor, "[candidate-lab] " + failed.status);
+                    break;
+                }
                 const auto launched =
                     platform::child_process::launch_or_focus(request);
                 if (launched.code != platform::child_process::LaunchCode::started)
@@ -23792,6 +24044,8 @@ namespace epochengine
                 }
                 const auto launchedSnapshot = platform::child_process::snapshot(launched.handle);
                 if (!launchedSnapshot || !launchedSnapshot->verified_executable
+                    || !launchedSnapshot->environment_replaced
+                    || !launchedSnapshot->standard_input_disconnected
                     || *launchedSnapshot->verified_executable != artifact->identity
                     || !ai_source_same_executable(artifact->executable_path,
                         launchedSnapshot->executable))
@@ -23904,6 +24158,15 @@ namespace epochengine
                         "Self-coding could not start while another project-assistant request owns the local model. That request is unchanged; wait for it to finish, then start self-coding again.");
                     break;
                 }
+                if (editor.automationCommand == EditorAutomationCommand::SelfCodingLocalSmoke
+                    && (action.model_transport != editor_ai_development_panel::ModelTransport::local_inference
+                        || epochengine::ai::current_local_inference_transport()
+                            != epochengine::ai::LocalInferenceTransport::OpenAiCompatible))
+                {
+                    rejectSourceDispatch(
+                        "The native local-model rig cannot substitute a different transport during its two-candidate run.");
+                    break;
+                }
                 if (!action.model_prompt.empty())
                 {
                     invalidate_ai_source_artifacts(editor);
@@ -23926,8 +24189,7 @@ namespace epochengine
                         {
                             editor.selfCodingSmokeSuccessorPlanReviewed = true;
                             append_editor_automation_trace(
-                                "SELF_CODING_LOCAL_SMOKE SUCCESSOR_PLAN_RECORDED production controller resumed its plan; bounded test pauses before the next edit request");
-                            return;
+                                "SELF_CODING_LOCAL_SMOKE SUCCESSOR_PLAN_RECORDED production controller resumed its plan; dispatching the real second proposal");
                         }
                     }
                     if (editor.automationCommand
@@ -24267,10 +24529,10 @@ namespace epochengine
                 && editor.selfCodingSmokePhase == 3u
                 && generation == editor.selfCodingSmokeSuccessorGeneration)
             {
-                editor.selfCodingSmokeSuccessorMaterialized =
-                    materializationReceiptValid;
                 editor.selfCodingSmokeSuccessorMaterializationFailed =
-                    !materializationReceiptValid;
+                    editor.selfCodingSmokeSuccessorMaterializationFailed || !materializationReceiptValid;
+                editor.selfCodingSmokeSuccessorMaterialized = materializationReceiptValid
+                    && !editor.selfCodingSmokeSuccessorMaterializationFailed;
                 append_editor_automation_trace(epochengine::format_text(
                     "SELF_CODING_LOCAL_SMOKE SUCCESSOR_MATERIALIZATION {} generation={} files={} bytes={} root={}",
                     materializationReceiptValid ? "PASS" : "FAIL",
@@ -24325,6 +24587,21 @@ namespace epochengine
                     {
                         status += "\nHOST_EXECUTABLE_EVIDENCE "
                             + candidate_artifacts::canonical_evidence(*build.artifact);
+                        if (editor.automationCommand == EditorAutomationCommand::SelfCodingLocalSmoke
+                            && editor.selfCodingSmokePhase == 3u
+                            && editor.selfCodingSmokeSuccessorMaterialized
+                            && lane == AiSourceValidationLane::ReleaseEditor
+                            && generation == editor.selfCodingSmokeSuccessorGeneration
+                            && resolve_editor_path(build.artifact->workspace_root)
+                                == resolve_editor_path(editor.selfCodingSmokeSuccessorRoot))
+                        {
+                            // Observation only: the production ledger above has
+                            // already accepted this real compiler completion.
+                            editor.selfCodingSmokeSuccessorBuildArtifact = *build.artifact;
+                            append_editor_automation_trace(
+                                "SELF_CODING_LOCAL_SMOKE SECOND_COMPILE "
+                                + candidate_artifacts::canonical_evidence(*build.artifact));
+                        }
                     }
                     else if (build.succeeded)
                     {
@@ -24492,6 +24769,21 @@ namespace epochengine
 
         auto reconcile_ai_candidate_preview = [&]()
         {
+            const auto failAdmittedComparison = [&](const std::string& detail)
+            {
+                editor_ai_development_panel::RenderResult cancel{};
+                cancel.action = editor_ai_development_panel::HostAction::cancel_model_source_request;
+                dispatch_ai_development_action(cancel);
+                cancel.action = editor_ai_development_panel::HostAction::cancel_source_task;
+                dispatch_ai_development_action(cancel);
+                cancel.action = editor_ai_development_panel::HostAction::none;
+                cancel.candidate_decision = editor_ai_development_panel::CandidateDecision::stop_lab;
+                dispatch_ai_development_action(cancel);
+                editor.aiCandidatePreviewReported = true;
+                editor.aiCandidatePreviewStartedAt = {};
+                chat.append_status(detail);
+                push_ai_development_log(editor, "[candidate-lab] " + detail);
+            };
             platform::child_process::poll();
             std::erase_if(
                 editor.aiCandidateRetiringProcesses,
@@ -24510,35 +24802,43 @@ namespace epochengine
                     platform::child_process::snapshot(
                         editor.aiCandidateCurrentProcess);
                 if (!editor.aiCandidateCurrentSnapshot
-                    || !editor.aiCandidateCurrentSnapshot->active())
+                    || !editor.aiCandidateCurrentSnapshot->active()
+                    || editor.aiCandidateCurrentSnapshot->platform_process_id
+                        != editor.aiCandidateCurrentAdmittedProcessId
+                    || !ai_candidate_attachment_is_live(editor.aiCandidateCurrentAdmittedProcessId,
+                        editor.aiCandidateCurrentAdmittedWindow))
                 {
-                    if (editor.aiCandidateCurrentSnapshot
-                        && editor.aiCandidateCurrentSnapshot
-                            ->platform_window_id != 0u)
-                    {
-                        if (auto* manager =
-                                core::GetActiveMultiContextManager())
-                        {
-                            manager->RemoveExternalProcessWindow(
-                                editor.aiCandidateCurrentSnapshot
-                                    ->platform_window_id);
-                        }
-                    }
-                    (void)platform::child_process::release(
-                        editor.aiCandidateCurrentProcess);
-                    editor.aiCandidateCurrentProcess = {};
-                    editor.aiCandidateCurrentSnapshot.reset();
+                    failAdmittedComparison(
+                        "The selected candidate lost its supervised process or exact bottom-grid attachment. Comparison and iteration were stopped; sandbox files remain available, and no context was silently reattached.");
+                    return;
                 }
+            }
+            else if (editor.aiCandidateCurrentAdmittedWindow != 0u)
+            {
+                failAdmittedComparison(
+                    "The selected candidate lost its supervised process handle. Its recorded context lease was retired and comparison was cancelled.");
+                return;
             }
 
             if (!editor.aiCandidateChallengerProcess.valid())
+            {
+                if (editor.aiCandidateChallengerAdmittedWindow != 0u)
+                    failAdmittedComparison(
+                        "The candidate lost its supervised process handle. Its recorded context lease was retired and comparison was cancelled.");
                 return;
+            }
             editor.aiCandidateChallengerSnapshot =
                 platform::child_process::snapshot(
                     editor.aiCandidateChallengerProcess);
             const auto& observed = editor.aiCandidateChallengerSnapshot;
             if (!observed || !observed->active())
             {
+                if (editor.aiCandidateChallengerAdmittedWindow != 0u)
+                {
+                    failAdmittedComparison(
+                        "The admitted candidate process exited. Its recorded context lease was retired and the comparison was cancelled; it is no longer available to choose.");
+                    return;
+                }
                 if (editor.aiCandidatePreviewArtifactEpoch == editor.aiSourceArtifactEpoch)
                     invalidate_ai_source_artifacts(editor);
                 if (!editor.aiCandidatePreviewReported
@@ -24554,12 +24854,20 @@ namespace epochengine
                     push_ai_development_log(
                         editor, "[candidate-lab] " + failed.status);
                 }
-                (void)platform::child_process::release(
-                    editor.aiCandidateChallengerProcess);
-                editor.aiCandidateChallengerProcess = {};
-                editor.aiCandidateChallengerSnapshot.reset();
+                retire_ai_candidate(editor, editor.aiCandidateChallengerProcess,
+                    editor.aiCandidateChallengerSnapshot, editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow);
                 editor.aiCandidatePreviewReported = true;
                 editor.aiCandidatePreviewStartedAt = {};
+                return;
+            }
+            if (editor.aiCandidateChallengerAdmittedWindow != 0u
+                && (observed->platform_process_id != editor.aiCandidateChallengerAdmittedProcessId
+                    || !ai_candidate_attachment_is_live(editor.aiCandidateChallengerAdmittedProcessId,
+                        editor.aiCandidateChallengerAdmittedWindow)))
+            {
+                failAdmittedComparison(
+                    "The admitted candidate lost its exact bottom-grid attachment. Comparison and iteration were cancelled; the recorded lease was removed without destroying a foreign window.");
                 return;
             }
             if (!editor.aiCandidatePreviewArtifact
@@ -24569,9 +24877,12 @@ namespace epochengine
                 || !ai_source_same_executable(editor.aiCandidatePreviewArtifact->executable_path,
                     observed->executable))
             {
-                if (auto* manager = core::GetActiveMultiContextManager();
-                    manager && observed->platform_window_id != 0u)
-                    manager->RemoveExternalProcessWindow(observed->platform_window_id);
+                if (editor.aiCandidateChallengerAdmittedWindow != 0u)
+                {
+                    failAdmittedComparison(
+                        "The admitted candidate lost its validated executable authorization. Comparison and iteration were cancelled and the recorded context lease was retired.");
+                    return;
+                }
                 if (editor.aiDevelopmentPanel && !editor.aiCandidatePreviewReported)
                 {
                     const auto failed = editor.aiDevelopmentPanel->complete_candidate_preview(
@@ -24580,11 +24891,9 @@ namespace epochengine
                         "Candidate context admission lost its exact validated executable authorization.");
                     push_ai_development_log(editor, "[candidate-lab] " + failed.status);
                 }
-                (void)platform::child_process::stop(editor.aiCandidateChallengerProcess,
-                    platform::child_process::StopMode::force);
-                editor.aiCandidateRetiringProcesses.push_back(editor.aiCandidateChallengerProcess);
-                editor.aiCandidateChallengerProcess = {};
-                editor.aiCandidateChallengerSnapshot.reset();
+                retire_ai_candidate(editor, editor.aiCandidateChallengerProcess,
+                    editor.aiCandidateChallengerSnapshot, editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow);
                 editor.aiCandidatePreviewReported = true;
                 editor.aiCandidatePreviewStartedAt = {};
                 if (editor.aiCandidatePreviewArtifactEpoch == editor.aiSourceArtifactEpoch)
@@ -24613,13 +24922,9 @@ namespace epochengine
                     push_ai_development_log(
                         editor, "[candidate-lab] " + failed.status);
                 }
-                (void)platform::child_process::stop(
-                    editor.aiCandidateChallengerProcess,
-                    platform::child_process::StopMode::force);
-                editor.aiCandidateRetiringProcesses.push_back(
-                    editor.aiCandidateChallengerProcess);
-                editor.aiCandidateChallengerProcess = {};
-                editor.aiCandidateChallengerSnapshot.reset();
+                retire_ai_candidate(editor, editor.aiCandidateChallengerProcess,
+                    editor.aiCandidateChallengerSnapshot, editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow);
                 editor.aiCandidatePreviewReported = true;
                 editor.aiCandidatePreviewStartedAt = {};
                 return;
@@ -24641,6 +24946,16 @@ namespace epochengine
             if (!admitted)
                 return;
 
+            editor.aiCandidateChallengerAdmittedProcessId = observed->platform_process_id;
+            editor.aiCandidateChallengerAdmittedWindow =
+                static_cast<std::uintptr_t>(observed->platform_window_id);
+            if (!ai_candidate_attachment_is_live(editor.aiCandidateChallengerAdmittedProcessId,
+                    editor.aiCandidateChallengerAdmittedWindow))
+            {
+                failAdmittedComparison(
+                    "Candidate window registration did not retain its exact native attachment. The comparison was cancelled and the recorded lease was removed.");
+                return;
+            }
             editor.aiCandidatePreviewReported = true;
             editor.aiCandidatePreviewStartedAt = {};
             if (editor.aiDevelopmentPanel)
@@ -24711,10 +25026,11 @@ namespace epochengine
                 && editor.aiCandidatePreviewReported)
             {
                 if (!editor.aiCandidateChallengerSnapshot
+                    || !ai_candidate_attachment_is_live(editor.aiCandidateChallengerAdmittedProcessId,
+                        editor.aiCandidateChallengerAdmittedWindow)
                     || editor.aiCandidateChallengerSnapshot
                         ->platform_process_id == 0u
-                    || editor.aiCandidateChallengerSnapshot
-                        ->platform_window_id == 0u)
+                    || editor.aiCandidateChallengerAdmittedWindow == 0u)
                 {
                     finishSmoke(false, "first challenger was not admitted");
                 }
@@ -24725,8 +25041,7 @@ namespace epochengine
                             "CANDIDATE_LAB_SMOKE ADMITTED pid={} window={}",
                             editor.aiCandidateChallengerSnapshot
                                 ->platform_process_id,
-                            editor.aiCandidateChallengerSnapshot
-                                ->platform_window_id));
+                            editor.aiCandidateChallengerAdmittedWindow));
                     const bool choosing = editor.automationCommand
                         == EditorAutomationCommand::CandidateLabSmokeChoose;
                     editor_ai_development_panel::RenderResult decision{};
@@ -24738,6 +25053,8 @@ namespace epochengine
                     dispatch_ai_development_action(decision);
                     const bool ownershipPassed = choosing
                         ? editor.aiCandidateCurrentProcess.valid()
+                            && ai_candidate_attachment_is_live(editor.aiCandidateCurrentAdmittedProcessId,
+                                editor.aiCandidateCurrentAdmittedWindow)
                             && !editor.aiCandidateChallengerProcess.valid()
                         : !editor.aiCandidateCurrentProcess.valid()
                             && !editor.aiCandidateChallengerProcess.valid();
@@ -30516,6 +30833,29 @@ namespace epochengine
                     const bool passed,
                     const std::string_view detail)
                 {
+                    if (editor.selfCodingSmokePhase != 4u)
+                    {
+                        editor.selfCodingSmokeOutcomePassed = passed;
+                        editor.selfCodingSmokeOutcomeDetail = detail;
+                        editor.selfCodingSmokeRetirementStartedAt =
+                            std::chrono::steady_clock::now();
+                        editor.selfCodingSmokePhase = 4u;
+                        append_editor_automation_trace(epochengine::format_text(
+                            "SELF_CODING_LOCAL_SMOKE RETIRING outcome={} {}",
+                            passed ? "pass_pending_retirement" : "fail", detail));
+                        editor_ai_development_panel::RenderResult cancel{};
+                        cancel.action = editor_ai_development_panel::HostAction::
+                            cancel_model_source_request;
+                        dispatch_ai_development_action(cancel);
+                        cancel.action = editor_ai_development_panel::HostAction::
+                            cancel_source_task;
+                        dispatch_ai_development_action(cancel);
+                        cancel.action = editor_ai_development_panel::HostAction::none;
+                        cancel.candidate_decision =
+                            editor_ai_development_panel::CandidateDecision::stop_lab;
+                        dispatch_ai_development_action(cancel);
+                        return;
+                    }
                     append_editor_automation_trace(epochengine::format_text(
                         "SELF_CODING_LOCAL_SMOKE {} {}",
                         passed ? "PASS" : "FAIL",
@@ -30541,70 +30881,66 @@ namespace epochengine
                 }
                 else if (editor.selfCodingSmokePhase == 0u)
                 {
+                    const std::string objective = read_editor_automation_text(
+                        "EPOCH_EDITOR_SELF_CODING_OBJECTIVE");
                     const std::string choice = read_editor_automation_text(
                         "EPOCH_EDITOR_SELF_CODING_CHOICE");
-                    editor.selfCodingSmokeChooseCandidate = choice == "choose";
-                    const auto models =
-                        epochengine::ai::refresh_detected_models();
-                    std::string model = read_editor_automation_text(
-                        "EPOCH_EDITOR_SELF_CODING_MODEL");
-                    const bool explicitModel = !model.empty();
-                    if (model.empty())
-                        model = epochengine::ai::active_model_name();
-                    if (!explicitModel && !model_inventory_contains(models, model))
-                        model = suggest_discovered_ai_model(models);
-                    if (!choice.empty() && choice != "keep" && choice != "choose")
+                    editor.selfCodingSmokeChooseCandidate = choice.empty() || choice == "choose";
+                    if (objective.find_first_not_of(" \t\r\n") == std::string::npos)
+                    {
+                        finishSelfCodingSmoke(false,
+                            "Set EPOCH_EDITOR_SELF_CODING_OBJECTIVE to an explicit unfinished, multi-step improvement before running this two-candidate test. No model or sandbox work was started.");
+                    }
+                    else if (!choice.empty() && choice != "keep" && choice != "choose")
                     {
                         finishSelfCodingSmoke(false,
                             "EPOCH_EDITOR_SELF_CODING_CHOICE must be keep or choose.");
                     }
-                    else if (model.empty()
-                        || !model_inventory_contains(models, model)
-                        || !epochengine::ai::select_active_model(model))
+                    else if (epochengine::ai::current_local_inference_transport()
+                        != epochengine::ai::LocalInferenceTransport::OpenAiCompatible)
                     {
-                        finishSelfCodingSmoke(
-                            false,
-                            "no selectable local model was reported by the configured endpoint");
+                        finishSelfCodingSmoke(false,
+                            "The native local-model rig requires the configured OpenAI-compatible HTTP transport; no substitute transport was started.");
                     }
                     else
                     {
-                        guardedInput.selected_model = model;
-                        std::string objective = read_editor_automation_text(
-                            "EPOCH_EDITOR_SELF_CODING_OBJECTIVE");
-                        if (objective.empty())
+                        const auto models = epochengine::ai::refresh_detected_models();
+                        std::string model = read_editor_automation_text(
+                            "EPOCH_EDITOR_SELF_CODING_MODEL");
+                        const bool explicitModel = !model.empty();
+                        if (model.empty())
+                            model = epochengine::ai::active_model_name();
+                        if (!explicitModel && !model_inventory_contains(models, model))
+                            model = suggest_discovered_ai_model(models);
+                        if (model.empty() || !model_inventory_contains(models, model)
+                            || !epochengine::ai::select_active_model(model))
                         {
-                            objective =
-                                "Make the Engine self-coding experience clearly "
-                                "show when the local model is working and let the "
-                                "user stop it without interrupting the rest of the editor.";
-                        }
-                        const auto started = editor.aiDevelopmentPanel
-                            ->begin_source_iteration(
-                                guardedInput,
-                                objective);
-                        if (started.action
-                            != editor_ai_development_panel::HostAction::
-                                request_model_source_proposal)
-                        {
-                            finishSelfCodingSmoke(
-                                false,
-                                started.status.empty()
-                                    ? std::string_view{
-                                        "plain-language source selection did not start"}
-                                    : std::string_view{started.status});
+                            finishSelfCodingSmoke(false,
+                                "no selectable local model was reported by the configured endpoint");
                         }
                         else
                         {
-                            append_editor_automation_trace(
-                                epochengine::format_text(
-                                    "SELF_CODING_LOCAL_SMOKE BEGIN model={} choice={} objective={}",
-                                    model,
-                                    editor.selfCodingSmokeChooseCandidate ? "choose" : "keep",
-                                    objective));
-                            dispatch_ai_development_action(started);
-                            editor.selfCodingSmokePhase = 1u;
-                            editor.selfCodingSmokeStartedAt =
-                                std::chrono::steady_clock::now();
+                            guardedInput.selected_model = model;
+                            const auto started = editor.aiDevelopmentPanel->begin_source_iteration(
+                                guardedInput, objective);
+                            if (started.action != editor_ai_development_panel::HostAction::
+                                    request_model_source_proposal
+                                || started.model_transport != editor_ai_development_panel::ModelTransport::local_inference)
+                            {
+                                finishSelfCodingSmoke(false,
+                                    started.status.empty()
+                                        ? std::string_view{"plain-language local-model source selection did not start"}
+                                        : std::string_view{started.status});
+                            }
+                            else
+                            {
+                                append_editor_automation_trace(epochengine::format_text(
+                                    "SELF_CODING_LOCAL_SMOKE BEGIN model={} choice={} required_candidates=2 timeout_minutes=90 objective={}",
+                                    model, editor.selfCodingSmokeChooseCandidate ? "choose" : "keep", objective));
+                                dispatch_ai_development_action(started);
+                                editor.selfCodingSmokePhase = 1u;
+                                editor.selfCodingSmokeStartedAt = std::chrono::steady_clock::now();
+                            }
                         }
                     }
                 }
@@ -30615,7 +30951,8 @@ namespace epochengine
                     const auto smokeElapsed = std::chrono::duration_cast<
                         std::chrono::seconds>(
                             std::chrono::steady_clock::now()
-                            - editor.selfCodingSmokeStartedAt);
+                            - (editor.selfCodingSmokeStartedAt == std::chrono::steady_clock::time_point{}
+                                ? editor.selfCodingSmokeRetirementStartedAt : editor.selfCodingSmokeStartedAt));
                     const std::uint64_t smokeSecond = smokeElapsed.count() <= 0
                         ? 0u
                         : static_cast<std::uint64_t>(smokeElapsed.count());
@@ -30650,7 +30987,7 @@ namespace epochengine
                                 "SELF_CODING_LOCAL_SMOKE WORKING controller_state=active elapsed_ms={}",
                                 chat.elapsed_milliseconds()));
                     }
-                    if (editor.selfCodingSmokePhase <= 2u
+                    if (editor.selfCodingSmokePhase <= 3u
                         && editor.aiDevelopmentPanel->has_reviewed_plan())
                     {
                         append_editor_automation_trace(
@@ -30671,7 +31008,8 @@ namespace epochengine
                         else
                         {
                             dispatch_ai_development_action(approved);
-                            editor.selfCodingSmokePhase = 2u;
+                            if (editor.selfCodingSmokePhase < 3u)
+                                editor.selfCodingSmokePhase = 2u;
                         }
                     }
 
@@ -30679,11 +31017,20 @@ namespace epochengine
                         && editor.selfCodingSmokePhase == 2u
                         && editor.aiCandidatePreviewReported)
                     {
-                        if (!editor.aiCandidateChallengerSnapshot
+                        if (!editor.aiCandidateChallengerProcess.valid()
+                            || !editor.aiCandidateChallengerSnapshot
+                            || !editor.aiCandidateChallengerSnapshot->active()
+                            || !ai_candidate_attachment_is_live(editor.aiCandidateChallengerAdmittedProcessId,
+                                editor.aiCandidateChallengerAdmittedWindow)
+                            || editor.aiCandidateChallengerSnapshot->platform_process_id
+                                != editor.aiCandidateChallengerAdmittedProcessId
                             || editor.aiCandidateChallengerSnapshot
                                 ->platform_process_id == 0u
-                            || editor.aiCandidateChallengerSnapshot
-                                ->platform_window_id == 0u)
+                            || editor.aiCandidateChallengerAdmittedWindow == 0u
+                            || !editor.aiCandidatePreviewArtifact
+                            || !editor.aiCandidateChallengerSnapshot->verified_executable
+                            || *editor.aiCandidateChallengerSnapshot->verified_executable
+                                != editor.aiCandidatePreviewArtifact->identity)
                         {
                             finishSelfCodingSmoke(
                                 false,
@@ -30696,8 +31043,7 @@ namespace epochengine
                                     "SELF_CODING_LOCAL_SMOKE CANDIDATE pid={} window={}",
                                     editor.aiCandidateChallengerSnapshot
                                         ->platform_process_id,
-                                    editor.aiCandidateChallengerSnapshot
-                                        ->platform_window_id));
+                                    editor.aiCandidateChallengerAdmittedWindow));
                             const auto decision = editor.selfCodingSmokeChooseCandidate
                                 ? editor_ai_development_panel::CandidateDecision::choose_candidate
                                 : editor_ai_development_panel::CandidateDecision::keep_current;
@@ -30736,13 +31082,18 @@ namespace epochengine
                                         successor.source_root, successor.workspace_root,
                                         successor.workspace_generation));
                                 editor.selfCodingSmokeSuccessorRoot = successor.workspace_root;
+                                editor.selfCodingSmokeSelectedParentRoot = expectedParent;
                                 editor.selfCodingSmokeSuccessorGeneration = successor.workspace_generation;
+                                editor.selfCodingSmokeFirstCandidateProcessId = candidateProcessId;
+                                editor.selfCodingSmokeFirstCandidateArtifact = editor.aiCandidatePreviewArtifact;
+                                editor.selfCodingSmokeSuccessorBuildArtifact.reset();
                                 editor.selfCodingSmokeChosenProcessId =
                                     editor.selfCodingSmokeChooseCandidate ? candidateProcessId : 0u;
                                 editor.selfCodingSmokeSuccessorMaterialized = false;
                                 editor.selfCodingSmokeSuccessorMaterializationFailed = false;
                                 editor.selfCodingSmokeSuccessorPlanRequested = false;
                                 editor.selfCodingSmokeSuccessorPlanReviewed = false;
+                                editor.selfCodingSmokeSuccessorPreviewRequested = false;
                                 editor.selfCodingSmokePhase = 3u;
                                 dispatch_ai_development_action(successor);
                                 if (!editor.aiSourceWorkspacePending
@@ -30768,46 +31119,98 @@ namespace epochengine
                         && (editor.selfCodingSmokeSuccessorPlanReviewed
                             || editor.aiDevelopmentPanel->has_reviewed_plan())
                         && !editor.aiSourceWorkspacePending
+                        && !editor.aiSourceBuildPending
+                        && !editor.aiSourceTestPending
                         && !chat.pending
                         && editor.aiCandidateRetiringProcesses.empty()
-                        && !editor.aiCandidateChallengerProcess.valid())
+                        && editor.selfCodingSmokeSuccessorPreviewRequested
+                        && editor.aiCandidatePreviewReported)
                     {
                         const bool chosenProcessMatches =
                             editor.selfCodingSmokeChooseCandidate
                                 ? editor.aiCandidateCurrentProcess.valid()
                                     && editor.aiCandidateCurrentSnapshot
                                     && editor.aiCandidateCurrentSnapshot->active()
+                                    && ai_candidate_attachment_is_live(editor.aiCandidateCurrentAdmittedProcessId,
+                                        editor.aiCandidateCurrentAdmittedWindow)
+                                    && editor.aiCandidateCurrentAdmittedProcessId
+                                        == editor.selfCodingSmokeChosenProcessId
                                     && editor.aiCandidateCurrentSnapshot->platform_process_id
                                         == editor.selfCodingSmokeChosenProcessId
+                                    && editor.selfCodingSmokeFirstCandidateArtifact
+                                    && editor.aiCandidateCurrentSnapshot->verified_executable
+                                    && *editor.aiCandidateCurrentSnapshot->verified_executable
+                                        == editor.selfCodingSmokeFirstCandidateArtifact->identity
                                 : !editor.aiCandidateCurrentProcess.valid();
+                        const auto& secondBuild = editor.selfCodingSmokeSuccessorBuildArtifact;
+                        const bool secondCandidateMatches = secondBuild
+                            && editor.selfCodingSmokeFirstCandidateArtifact
+                            && secondBuild->generation == editor.selfCodingSmokeSuccessorGeneration
+                            && secondBuild->build_ticket
+                                != editor.selfCodingSmokeFirstCandidateArtifact->build_ticket
+                            && resolve_editor_path(secondBuild->workspace_root)
+                                == resolve_editor_path(editor.selfCodingSmokeSuccessorRoot)
+                            && resolve_editor_path(secondBuild->workspace_root)
+                                != resolve_editor_path(editor.selfCodingSmokeSelectedParentRoot)
+                            && editor.aiCandidatePreviewArtifact
+                            && *editor.aiCandidatePreviewArtifact == *secondBuild
+                            && editor.aiCandidatePreviewGeneration == secondBuild->generation
+                            && editor.aiCandidateChallengerProcess.valid()
+                            && editor.aiCandidateChallengerSnapshot
+                            && editor.aiCandidateChallengerSnapshot->active()
+                            && ai_candidate_attachment_is_live(editor.aiCandidateChallengerAdmittedProcessId,
+                                editor.aiCandidateChallengerAdmittedWindow)
+                            && editor.aiCandidateChallengerAdmittedProcessId
+                                == editor.aiCandidateChallengerSnapshot->platform_process_id
+                            && editor.aiCandidateChallengerSnapshot->platform_process_id != 0u
+                            && editor.aiCandidateChallengerSnapshot->platform_process_id
+                                != editor.selfCodingSmokeFirstCandidateProcessId
+                            && editor.aiCandidateChallengerAdmittedWindow != 0u
+                            && editor.aiCandidateChallengerSnapshot->verified_executable
+                            && *editor.aiCandidateChallengerSnapshot->verified_executable
+                                == secondBuild->identity;
                         if (!chosenProcessMatches)
                         {
                             finishSelfCodingSmoke(false,
                                 "The comparison choice did not retain exactly the selected running candidate identity.");
                         }
+                        else if (!secondCandidateMatches)
+                        {
+                            finishSelfCodingSmoke(false,
+                                "The second context did not bind a distinct PID to a new accepted Release compiler artifact from the exact successor sandbox.");
+                        }
                         else
                         {
                             append_editor_automation_trace(
-                                "SELF_CODING_LOCAL_SMOKE SUCCESSOR_PLAN_REVIEWED next plan received after verified materialization; stopping the bounded lab");
-                            (void)editor.aiDevelopmentPanel->cancel_active_campaign(
-                                "The bounded native test has verified the next saved-plan continuation.");
-                            editor_ai_development_panel::RenderResult stop{};
-                            stop.candidate_decision =
-                                editor_ai_development_panel::CandidateDecision::stop_lab;
-                            dispatch_ai_development_action(stop);
-                            editor.selfCodingSmokePhase = 4u;
+                                epochengine::format_text(
+                                    "SELF_CODING_LOCAL_SMOKE SECOND_CANDIDATE pid={} window={} {}",
+                                    editor.aiCandidateChallengerSnapshot->platform_process_id,
+                                    editor.aiCandidateChallengerAdmittedWindow,
+                                    candidate_artifacts::canonical_evidence(*secondBuild)));
+                            finishSelfCodingSmoke(editor.selfCodingWorkingIndicatorObserved,
+                                editor.selfCodingWorkingIndicatorObserved
+                                    ? "Real model proposals, two validated compiler artifacts and distinct candidate PID/grid admissions, requested Keep/Choose and exact successor lineage completed. Activity controller checked; native pixels require separate eye evidence."
+                                    : "Both candidate workflows completed, but the active local-model indication was not observed; activity-control proof is incomplete.");
                         }
                     }
                     else if (!editor.automationConsumed
                         && editor.selfCodingSmokePhase == 4u
                         && !editor.aiSourceWorkspacePending
+                        && !editor.aiSourceBuildPending
+                        && !editor.aiSourceTestPending
                         && !chat.pending
+                        && !editor.aiSourceAwaitingReply
+                        && !editor.aiLocalMcp.awaitingResponse
+                        && !editor.aiLocalMcp.process.valid()
+                        && editor.aiDeferredRequestKind != AiDeferredRequestKind::SourceIteration
                         && editor.aiCandidateRetiringProcesses.empty()
                         && !editor.aiCandidateCurrentProcess.valid()
-                        && !editor.aiCandidateChallengerProcess.valid())
+                        && !editor.aiCandidateChallengerProcess.valid()
+                        && editor.aiCandidateCurrentAdmittedWindow == 0u
+                        && editor.aiCandidateChallengerAdmittedWindow == 0u)
                     {
-                        finishSelfCodingSmoke(editor.selfCodingWorkingIndicatorObserved,
-                            "Model workflow, validated candidate PID/context, requested Keep/Choose, exact next-parent materialization, saved-plan continuation and process retirement completed. Activity controller checked; native pixels require separate eye evidence.");
+                        finishSelfCodingSmoke(editor.selfCodingSmokeOutcomePassed,
+                            editor.selfCodingSmokeOutcomeDetail + " All test-owned model, build and candidate work was retired.");
                     }
                     else if (!editor.automationConsumed
                         && editor.selfCodingSmokePhase != 4u
@@ -30819,9 +31222,19 @@ namespace epochengine
                             editor.aiDevelopmentPanel->session_status());
                     }
                     else if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase == 4u
+                        && std::chrono::steady_clock::now()
+                                - editor.selfCodingSmokeRetirementStartedAt
+                            >= std::chrono::seconds{60})
+                    {
+                        finishSelfCodingSmoke(false,
+                            "Test-owned work did not retire within 60 seconds after cancellation; orphan-free completion is not proven.");
+                    }
+                    else if (!editor.automationConsumed
+                        && editor.selfCodingSmokePhase != 4u
                         && std::chrono::steady_clock::now()
                                 - editor.selfCodingSmokeStartedAt
-                            >= std::chrono::minutes{45})
+                            >= std::chrono::minutes{90})
                     {
                         editor_ai_development_panel::RenderResult cancel{};
                         cancel.action = editor_ai_development_panel::HostAction::
@@ -30832,7 +31245,7 @@ namespace epochengine
                         dispatch_ai_development_action(cancel);
                         finishSelfCodingSmoke(
                             false,
-                            "45-minute bounded workflow timeout; model and sandbox tasks were cancelled");
+                            "90-minute bounded two-candidate workflow timeout; model and sandbox cancellation was requested");
                     }
                 }
             }

@@ -1,5 +1,49 @@
 ## [Unreleased] - v0.89.35
 
+- Replace inherited environment/stdin for Candidate Lab compiler, test and
+  preview processes with bounded explicit environment blocks, executable-local
+  workspace profile/cache/temp roots and disconnected input. Reject malformed,
+  duplicate, oversized or invalid UTF-8 entries and correlation-policy changes;
+  keep legacy launch behavior explicit. Verify compiler identity, disable
+  automatic MSBuild response files and preserve host-owned dependency roots.
+  This is process-input hygiene, not filesystem/network or OS-token confinement.
+- Give foreign candidate windows a host-owned attachment lease with retained
+  PID/thread/window correlation, checked reparenting/styles/grid geometry and
+  reversible native placement. Do not subclass or destroy the foreign window,
+  expose host pointers to it, or fabricate rendered-frame evidence. Retain the
+  admitted HWND independently of top-level enumeration and dead-process
+  snapshots; Choose, live comparison and retirement check the recorded lease.
+  Parent Close no longer posts to a registered foreign HWND by raw handle.
+- Retire owned candidate and MCP processes when an editor context/session closes,
+  rather than relying on whole-process exit. Extract state before joins, cancel
+  source tickets before scheduler draining, stop all contexts before joining any
+  scheduler, and stop compiler/test dispatch at the final cancellation check.
+  An already-cancelled queued chat worker does not send its request.
+  Process liveness and release determine success;
+  unresolved OS retirement retains supervisor ownership and a diagnostic.
+  Per-context HTTP interruption remains response discard plus transport wait,
+  avoiding blanket cancellation of another context's request.
+- Strengthen the explicitly invoked Qwen rig: require a genuinely unfinished
+  operator-provided objective, default to Choose, run an actual second proposal
+  and Release build from the selected sandbox, require two distinct validated
+  candidate processes/attachments, and wait for owned model/compiler/test/child
+  retirement. A successor plan or started worker alone cannot pass this rig.
+- Add executable contract canaries for environment replacement, empty blocks,
+  UTF-8, private-host-variable exclusion, disconnected stdin and workspace path
+  refusal. A separately invoked tiny MSBuild fixture compiles and runs an x64
+  v143/Windows-SDK program under the same prepared environment. It does not
+  replace full sandbox Engine-build or native Qwen/comparison evidence.
+- September 5 process-input/attachment checkpoint: Windows Debug/Release editor
+  and Release HeadlessCI builds pass; explicitly waited Debug/Release aggregate
+  contracts exit 0; all eight SoftwareBase/component CTests and ten repeated
+  child-process contracts pass; source naming passes for 590 files. The separate
+  tiny MSBuild canary passes (compiler exit 0, probe exit 42, owned job retired).
+  Exact Release editor: 12,514,304 bytes, SHA-256
+  d351bbaffc67309e638717918a586dba80fa6c33000e47db987edff8c695210c.
+  Existing optimization-override and duplicate-logger warnings remain. Native
+  Qwen/two-build comparison, OS confinement and new Linux validation remain
+  outstanding; no release/public-source authority or stable branch is advanced.
+
 - Repair automatic compiler/test recovery: successful repair materialization
   queues the next exact proposal through the production controller, without a
   hidden Generate Proposed Changes click. Preserve the path catalog, navigation

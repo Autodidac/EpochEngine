@@ -114,6 +114,15 @@ export namespace epochengine::platform::child_process
             const ExecutableIdentity&, const ExecutableIdentity&) noexcept = default;
     };
 
+    struct EnvironmentVariable final
+    {
+        std::string name{};
+        std::string value{};
+
+        [[nodiscard]] friend bool operator==(
+            const EnvironmentVariable&, const EnvironmentVariable&) noexcept = default;
+    };
+
     struct LaunchRequest final
     {
         std::filesystem::path executable{};
@@ -127,6 +136,12 @@ export namespace epochengine::platform::child_process
         bool append_output{};
         // Artifact integrity only; this grants no filesystem/network confinement.
         std::optional<ExecutableIdentity> expected_executable{};
+        // nullopt preserves legacy inheritance; an engaged empty vector sends
+        // an empty environment. Values are private, not snapshot/log evidence.
+        std::optional<std::vector<EnvironmentVariable>> environment{};
+        // Requires captured output. Use a fresh NUL stdin, never a duplicate
+        // of the host's already-authorized input handle.
+        bool disconnect_standard_input{};
     };
 
     struct LaunchResult final
@@ -163,6 +178,8 @@ export namespace epochengine::platform::child_process
         bool stop_supported{};
         std::string message{};
         std::optional<ExecutableIdentity> verified_executable{};
+        bool environment_replaced{};
+        bool standard_input_disconnected{};
 
         [[nodiscard]] constexpr bool active() const noexcept
         {
@@ -205,6 +222,11 @@ export namespace epochengine::platform::child_process
 
     [[nodiscard]] std::optional<ExecutableIdentity> inspect_executable(
         const std::filesystem::path& executable) noexcept;
+    // Host-only preparation for a disposable workspace. Replaces ambient
+    // credentials/configuration with OS paths and workspace-local temp/profile
+    // directories. This is environment hygiene, not OS access confinement.
+    [[nodiscard]] std::optional<std::vector<EnvironmentVariable>>
+        prepare_workspace_environment(const std::filesystem::path& workspace) noexcept;
     [[nodiscard]] LaunchResult launch_or_focus(const LaunchRequest& request) noexcept;
     [[nodiscard]] FocusCode focus(ProcessHandle handle) noexcept;
     [[nodiscard]] StopCode stop(ProcessHandle handle, StopMode mode) noexcept;
