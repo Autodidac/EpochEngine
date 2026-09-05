@@ -18,6 +18,7 @@ option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible 
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
 option(EPOCH_SOFTWARE_BASE_ONLY "Configure the editor-free CLI/native-window software base without engine or renderer targets." OFF)
 option(EPOCH_BUILD_STATIC_RUNTIME "Build Epoch as a reusable static runtime for generated child applications." OFF)
+option(EPOCH_BUILD_AI_TRANSPORT_CONTRACT "Expose the opt-in console model HTTP transport probe (never runs automatically)." OFF)
 option(EPOCH_ENABLE_AUTHORING_PLATFORM "Gate the shared Epoch authoring-document and editor foundation as implementation units land." ON)
 option(EPOCH_ENABLE_TEXTURE_EDITOR "Gate texture painting, compositing, and texture-node authoring implementation units." ON)
 option(EPOCH_ENABLE_TILEMAP_EDITOR "Gate tile palette, sparse map authoring, and map compilation implementation units." ON)
@@ -406,8 +407,65 @@ if(EPOCH_CONFIGURES_MODULE_TARGETS)
     endif()
 endif()
 
+if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
+    # Compile the same production transport implementation with its explicit
+    # renderer-free module closure. This target never acquires a dependency on
+    # HeadlessCI, the editor entry point, native windows, or renderer probes.
+    # MSVC's companion project instead consumes the existing EpochEngine.lib.
+    add_executable(epoch_ai_transport_contract EXCLUDE_FROM_ALL
+        examples/AiTransportContract/ai.transport_contract.cpp
+        src/ai/ai.engine.cpp
+        src/ai/ai.development_proposal_codec.cpp
+        src/ai/ai.model_install.cpp
+        src/ai/ai.project_profile.cpp
+        src/core.log.cpp
+        src/core.time.cpp
+        src/platform/core.path.cpp
+    )
+    target_sources(epoch_ai_transport_contract PRIVATE
+        FILE_SET epoch_ai_transport_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.engine.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.runtime.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.session.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.voice_session.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.mcp.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.eval.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.development_proposal_codec.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.model_install.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.project_profile.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.path.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx
+    )
+    target_include_directories(epoch_ai_transport_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    target_compile_definitions(epoch_ai_transport_contract PRIVATE ENGINE_STATICLIB=1)
+    find_package(Threads REQUIRED)
+    target_link_libraries(epoch_ai_transport_contract PRIVATE Threads::Threads)
+    if(WIN32)
+        target_link_libraries(epoch_ai_transport_contract PRIVATE winhttp)
+    else()
+        find_package(CURL REQUIRED)
+        target_link_libraries(epoch_ai_transport_contract PRIVATE CURL::libcurl)
+        target_compile_definitions(epoch_ai_transport_contract PRIVATE EPOCH_HAS_CURL=1)
+    endif()
+    set_target_properties(epoch_ai_transport_contract PROPERTIES OUTPUT_NAME EpochAiTransportContract)
+    epoch_apply_cxx_dialect(epoch_ai_transport_contract)
+    epoch_apply_warnings(epoch_ai_transport_contract)
+    epoch_apply_sanitizers(epoch_ai_transport_contract)
+    # Intentionally no add_test(), post-build execution, installation, or
+    # default-build dependency: a model request requires explicit CLI --run.
+endif()
+
 if(EPOCH_SOFTWARE_BASE_ONLY)
-    message(STATUS "Software base only: editor, renderer, GUI, updater, project and AI targets are excluded.")
+    message(STATUS "Software base only: editor, renderer, GUI, updater and project targets are excluded; the separate AI transport probe is opt-in only.")
     return()
 endif()
 

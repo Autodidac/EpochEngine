@@ -643,4 +643,5 @@ namespace epochengine
 
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();
+    export [[nodiscard]] bool editor_ai_request_cancellation_contract() noexcept;
 }

@@ -2839,6 +2839,12 @@ namespace epochengine::core
         check(
             "ai.openai_source_iteration_request",
             epochengine::ai::openai_source_iteration_request_contract());
+        check(
+            "editor.ai_request_cancellation",
+            epochengine::editor_ai_request_cancellation_contract());
+        check(
+            "ai.model_request_cancellation",
+            epochengine::ai::model_request_cancellation_contract());
         check("ai.mcp.tool_protocol", epochengine::ai::run_mcp_contract());
         check(
             "ai.epoch_local_install",

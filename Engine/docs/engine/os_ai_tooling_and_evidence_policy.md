@@ -410,9 +410,65 @@ for every extracted context before joining any scheduler. Generic parent Close
 does not post to raw foreign HWNDs.
 Final process liveness and supervisor release determine retirement; an OS stop
 failure retains the supervisor slot and reports unresolved ownership. Per-context
-HTTP cleanup discards its response but does not use global cancellation that
-could interrupt another context. Its join can therefore wait for transport
-completion; prompt per-request transport interruption remains unfinished.
+HTTP cleanup requests that chat's own stop token, interrupts its serial model
+queue/transport wait, and discards its response. The chat retains its request
+state and joins the worker before declaring retirement. Whole-engine shutdown
+also cancels the captured global request epoch; later requests acquire a fresh
+epoch. An old token or response cannot cancel or overwrite the next iteration.
+
+Windows model POSTs use worker-owned asynchronous WinHTTP operations. Header
+completion and fixed-length body writes are separate operations; each write
+waits for its own completion and validates the reported byte count. A headers-only
+REQUEST_SENT progress notification never admits response receipt. Body and
+response envelopes are bounded at 8 MiB, and the entire exchange shares one
+deadline. Header/timeout configuration failures are fatal rather than ignored.
+Automatic redirects, ambient authentication and cookie handling are disabled
+for model POSTs: the reviewed request is for the selected endpoint only. Stop
+callbacks wake the worker but never close a handle from another thread while
+an initiating API call is running. Request bodies, read buffers and callback
+state survive until the final HANDLE_CLOSING notification. Closure has one
+bounded settlement wait; uncertain retirement retains callback ownership,
+reports a distinct retirement-failed terminal state, and disables further
+Windows HTTP POSTs until the Engine process restarts. This state takes precedence
+over both cancellation and a successful response in the service and editor;
+it cannot be flattened into a clean cancellation or silently retried. This follows
+[WinHTTP's concurrency rules](https://learn.microsoft.com/en-us/windows/win32/winhttp/concurrency-in-winhttp)
+and [handle closure requirements](https://learn.microsoft.com/en-us/windows/win32/api/winhttp/nf-winhttp-winhttpclosehandle).
+libcurl requests use their own stop token through the progress callback;
+cancellation latency depends on curl/resolver progress, not the editor frame
+rate. Direct CLI requests also check the same token and bound their final output
+drain. Neither HTTP cancellation nor CLI process retirement proves that a
+remote server stopped inference or establishes candidate OS confinement.
+
+Payload-free request observation distinguishes queue admission, send, actual
+Windows send completion, response waiting and response receipt. Observers run
+on the requesting worker, outside internal mutexes, never inside the Windows
+callback. The editor copies only the stage into its request-owned atomic state;
+UI rendering reads that state without touching worker output. Its elapsed time
+and animated activity are not token progress. Stop takes precedence over a
+late receiving/completed stage until the worker actually finishes.
+
+The console-only `Engine/examples/AiTransportContract` probe is deliberately
+absent from default builds, CTest, runtime startup and installation. Build its
+MSVC project directly or enable `EPOCH_BUILD_AI_TRANSPORT_CONTRACT=ON` and build
+the CMake `epoch_ai_transport_contract` target. Invocation requires all of
+`--endpoint http://localhost:1234 --model qwen/qwen3.8-27b --run`; without those
+arguments it sends nothing. It uses synthetic prompts only, cancels request A
+after actual send/receive admission, then requires a visible canary from B while
+repeating A's old stop token. It creates no editor, renderer, listener, model
+installation or source-selection session. Its watchdog cancels only its two
+owned requests; if retirement fails, only the probe exits with a failure code.
+Neither a started request nor A's cancellation alone can pass this probe.
+The B watchdog allows both attempts of the production chat timeout, plus a
+small retirement allowance; it must not preempt the normal client budget.
+
+September 5 observed result: the repaired Windows body-write path completed
+upload and A cancellation with confirmed retirement; B uploaded independently
+but missed the initial 90-second probe deadline. With the probe watchdog aligned
+to the actual production timeout/retry budget, B returned its exact visible
+canary after about 98 seconds without a retry; the probe passed with exit 0.
+This is genuine HTTP ownership/cancellation and subsequent-response evidence,
+not native editor/context-close, server-generation-stop or self-coding proof.
 
 The platform child-process snapshot exposes both `platform_process_id` and
 `platform_window_id`; hidden/headless children report no visible window. The

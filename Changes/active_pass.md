@@ -27,8 +27,8 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished. Starting commit for this
-  process-input/attachment/succession pass:
-  `3cbe07dad67f55e900514f01b7a37bbcee160090`.
+  request-scoped model cancellation pass:
+  `bb6c5a5b89469c2f8a4e87ff696891715a1f3e4e`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34;
   public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -47,16 +47,31 @@ sandbox lineage, a returned successor plan/proposal, and complete owned worker
 and child retirement. A successor plan alone is no longer a successful test.
 Source/build evidence for this rig does not replace running it with Qwen.
 
-The September 5 process-input/attachment checkpoint passes Windows Debug and
-Release editor builds, Release HeadlessCI build, explicitly waited Debug and
-Release aggregate contracts (exit 0), all eight SoftwareBase/component CTests,
-ten repeated child-process contracts, and source naming for 590 files. A real
-tiny v143/x64/Windows-SDK MSBuild fixture compiles with exit 0 and runs its
-environment/stdin canary with the expected exit 42, then retires its owned job.
-That fixture is not a full sandbox Engine-build compatibility claim. Exact
-Release editor: 12,514,304 bytes, SHA-256
-`d351bbaffc67309e638717918a586dba80fa6c33000e47db987edff8c695210c`.
-Existing optimization-override and duplicate-logger warnings remain.
+The September 5 request-cancellation checkpoint passes Windows Debug/Release
+editor builds, Release HeadlessCI build, explicitly waited Debug/Release
+aggregate contracts (exit 0), and all eight SoftwareBase/component CTests.
+The opt-in renderer-free HTTP probe builds through both MSBuild and CMake.
+Its Linux Clang 22.1.8 Release component build also passes; this does not claim a
+full Linux editor build or runtime run. Exact Windows Release editor is
+12,608,512 bytes, SHA-256
+`0922f7d3e8aa46784ec94096dee708006b9df31f9be85fbe6c1a00674ec8d346`.
+These checks include request ownership, queued cancellation, stale-response
+discard, callback byte decoding and retirement-failure precedence; they do not
+replace real-model or native comparison evidence. Existing duplicate-logger
+warnings remain.
+
+The genuine HTTP probe exposed a headers-only stall in the combined optional-body
+Windows send path. Explicit header completion followed by bounded body writes
+now reaches receive and cancels request A in less than one millisecond, with
+confirmed handle retirement. Request B dispatches independently of A's stopped
+token. The first run's 90-second probe deadline expired too early. After aligning
+that watchdog with the production chat timeout plus its one allowed retry,
+request B returned the exact visible canary after about 98 seconds and the probe
+passed (exit 0), without a retry. Independent curl streaming had already shown
+slow model activity. This proves request cancellation and a subsequent real
+response, not server-side generation stop or completed self-coding.
+Preserve the local probe logs under
+`x64/Release/logs/ai-transport-probe-20260905-*`; do not publish them as release proof.
 
 The child-launch environment/stdin and native-attachment source repairs do not
 create an OS security boundary. Candidate
@@ -68,8 +83,8 @@ on September 5, but the execution tool rejected the subsequent ordinary visible
 editor launch before startup. Approval is no longer missing; native execution
 remains tool-blocked. Do not route around that denial with a different tool or
 relabel component contracts as model/native-preview proof. The shared WSL lane
-was released to the EpochSimEngine task for its own serial gate; wait for a new
-clear handoff before beginning an Epoch Linux build.
+was released on September 5 after the other task's compiler processes retired;
+the narrow HTTP component compile passed and the lane was released again.
 
 ## Remaining Work
 
@@ -84,9 +99,10 @@ clear handoff before beginning an Epoch Linux build.
    cancellation, readable actions at narrow/high-zoom layouts, Candidate Lab
    comparison, and unambiguous Keep Current / Choose Candidate behavior.
    Include context/session Close while model or compiler work is pending.
-   Per-context HTTP cancellation currently discards the response and joins the
-   worker without globally cancelling another context's request; this can wait
-   for transport completion. Request-scoped interruption remains unfinished.
+   Per-context model requests now carry an owned stop token through queue,
+   retries and transport, with worker-owned asynchronous Windows HTTP closure.
+   Build-safe ownership checks and a separate opt-in HTTP probe must be recorded
+   independently of native context-close/preview eye evidence.
 3. Repair any failure found by that end-to-end run. Transport, API, schema,
    packet, build, and validation failures may retry within their existing
    bounded budgets; cancellation and unsafe/off-catalog path requests fail

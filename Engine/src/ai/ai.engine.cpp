@@ -53,8 +53,11 @@ module;
 #include <atomic>
 #include <array>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <future>
 #include <initializer_list>
 #include <cstdio>
 #include <cstdlib>
@@ -65,6 +68,7 @@ module;
 #include <memory>
 #include <mutex>
 #include <sstream>
+#include <stop_token>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -90,14 +94,145 @@ namespace epochengine::ai
     namespace
     {
         std::recursive_mutex g_aiStateMutex{};
-        std::mutex g_aiRequestMutex{};
-        std::atomic_uint64_t g_aiRequestCancellationGeneration{1u};
-        thread_local std::uint64_t g_aiRequestStartCancellationGeneration{1u};
         std::atomic_uint64_t g_directInferenceOutputSequence{1u};
-#if defined(_WIN32)
-        std::mutex g_activeAiWinHttpMutex{};
-        HINTERNET g_activeAiWinHttpRequest{};
-#endif
+        std::atomic_bool g_modelHttpRetirementUncertain{false};
+        std::atomic_uint64_t g_modelHttpNullContextCallbacks{0u};
+        constexpr std::size_t kMaximumModelHttpEnvelopeBytes = 8u * 1024u * 1024u;
+        constexpr std::string_view kModelRequestCancelled =
+            "Local-model request cancelled before completion.";
+
+        void notify_model_stage(const ModelRequestObserver& observer,
+            ModelRequestStage stage) noexcept
+        {
+            try { if (observer) observer(stage); }
+            catch (...) { /* Observers cannot disrupt request ownership. */ }
+        }
+
+        struct ScopedModelObservation final
+        {
+            const ModelRequestObserver& observer;
+            std::stop_token cancellation;
+            bool succeeded{};
+            bool retirement_failed{};
+            ~ScopedModelObservation()
+            {
+                notify_model_stage(observer, retirement_failed
+                    ? ModelRequestStage::retirement_failed : cancellation.stop_requested()
+                    ? ModelRequestStage::cancelled
+                    : succeeded ? ModelRequestStage::completed : ModelRequestStage::failed);
+            }
+        };
+
+        class ModelTransportRetirementFailure final : public std::runtime_error
+        {
+        public:
+            using std::runtime_error::runtime_error;
+        };
+
+        class GlobalRequestCancellation final
+        {
+        public:
+            [[nodiscard]] std::stop_token capture()
+            {
+                std::scoped_lock lock{mutex_};
+                if (source_.stop_requested())
+                    source_ = std::stop_source{};
+                return source_.get_token();
+            }
+
+            void cancel() noexcept
+            {
+                std::stop_source captured{std::nostopstate};
+                {
+                    std::scoped_lock lock{mutex_};
+                    captured = source_;
+                }
+                // Callbacks may acquire their request's wait mutex; no global
+                // mutex is held while they execute synchronously here.
+                (void)captured.request_stop();
+            }
+
+        private:
+            std::mutex mutex_{};
+            std::stop_source source_{};
+        };
+
+        struct ForwardRequestStop final
+        {
+            std::stop_source destination;
+            void operator()() noexcept { (void)destination.request_stop(); }
+        };
+
+        struct RequestCancellation final
+        {
+            explicit RequestCancellation(std::stop_token local, std::stop_token global)
+                : local_(local, ForwardRequestStop{combined_}),
+                  global_(global, ForwardRequestStop{combined_}) {}
+
+            [[nodiscard]] std::stop_token token() const noexcept
+            { return combined_.get_token(); }
+
+        private:
+            std::stop_source combined_{};
+            std::stop_callback<ForwardRequestStop> local_;
+            std::stop_callback<ForwardRequestStop> global_;
+        };
+
+        class ModelRequestGate final
+        {
+        public:
+            [[nodiscard]] bool acquire(std::stop_token cancellation)
+            {
+                std::unique_lock lock{mutex_};
+                if (!ready_.wait(lock, cancellation, [this] { return !occupied_; })
+                    || cancellation.stop_requested())
+                    return false;
+                occupied_ = true;
+                return true;
+            }
+
+            void release() noexcept
+            {
+                {
+                    std::scoped_lock lock{mutex_};
+                    occupied_ = false;
+                }
+                ready_.notify_all();
+            }
+
+        private:
+            std::mutex mutex_{};
+            std::condition_variable_any ready_{};
+            bool occupied_{};
+        };
+
+        class ScopedModelRequest final
+        {
+        public:
+            ScopedModelRequest(ModelRequestGate& gate, std::stop_token cancellation)
+                : gate_(gate), acquired_(gate.acquire(cancellation)) {}
+            ~ScopedModelRequest() { if (acquired_) gate_.release(); }
+            ScopedModelRequest(const ScopedModelRequest&) = delete;
+            ScopedModelRequest& operator=(const ScopedModelRequest&) = delete;
+            [[nodiscard]] bool acquired() const noexcept { return acquired_; }
+        private:
+            ModelRequestGate& gate_;
+            bool acquired_{};
+        };
+
+        GlobalRequestCancellation g_aiCancellation{};
+        ModelRequestGate g_aiRequestGate{};
+
+        template<class Operation>
+        [[nodiscard]] std::string run_model_transport_attempt(
+            std::stop_token cancellation, Operation&& operation)
+        {
+            if (cancellation.stop_requested())
+                return std::string{kModelRequestCancelled};
+            std::string reply = std::forward<Operation>(operation)();
+            return cancellation.stop_requested()
+                ? std::string{kModelRequestCancelled} : std::move(reply);
+        }
         std::shared_ptr<EngineAiModel> g_engineAi{};
         ProviderMode g_providerMode = ProviderMode::OpenSourceLocal;
         static std::string read_env_var(const char* name)
@@ -990,81 +1125,251 @@ namespace epochengine::ai
             return out;
         }
 
-        [[nodiscard]] static bool register_active_ai_winhttp_request(HINTERNET request)
+        struct AsyncModelHttpState final : std::enable_shared_from_this<AsyncModelHttpState>
         {
-            const std::lock_guard lock{g_activeAiWinHttpMutex};
-            if (g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
-                != g_aiRequestStartCancellationGeneration)
+            std::mutex mutex{};
+            std::condition_variable_any changed{};
+            std::array<char, 16u * 1024u> readBuffer{};
+            std::string requestBody{};
+            HINTERNET session{};
+            HINTERNET connection{};
+            HINTERNET request{};
+            std::shared_ptr<AsyncModelHttpState> callbackLifetime{};
+            DWORD completion{};
+            DWORD error{};
+            DWORD bytesRead{};
+            DWORD bytesWritten{};
+            DWORD lastNotification{};
+            std::uint64_t notificationCount{};
+            std::array<DWORD, 16u> notificationTrace{};
+            std::uint64_t sentBytes{};
+            std::atomic_uint64_t enteredCallbacks{0u};
+            std::atomic_uint64_t returnedCallbacks{0u};
+            std::atomic_uint64_t failedCallbacks{0u};
+            std::atomic<DWORD> lastEnteredStatus{0u};
+            bool callbackRegistered{};
+            bool closing{};
+            bool closed{};
+            bool settlementWaited{};
+
+            ~AsyncModelHttpState()
             {
-                return false;
+                // A registered request keeps itself alive until HANDLE_CLOSING.
+                // Unregistered handles have never begun asynchronous operations.
+                if (request && !callbackRegistered)
+                    (void)WinHttpCloseHandle(request);
+                if (connection)
+                    (void)WinHttpCloseHandle(connection);
+                if (session)
+                    (void)WinHttpCloseHandle(session);
             }
-            g_activeAiWinHttpRequest = request;
-            return true;
-        }
 
-        [[nodiscard]] static bool release_active_ai_winhttp_request(HINTERNET request)
-        {
-            const std::lock_guard lock{g_activeAiWinHttpMutex};
-            if (g_activeAiWinHttpRequest != request)
-                return false;
-            g_activeAiWinHttpRequest = nullptr;
-            return true;
-        }
+            static void CALLBACK callback(HINTERNET, DWORD_PTR context,
+                DWORD status, LPVOID information, DWORD informationSize) noexcept
+            {
+                if (context == 0u)
+                {
+                    g_modelHttpNullContextCallbacks.fetch_add(1u, std::memory_order_relaxed);
+                    return;
+                }
+                auto* const owner = reinterpret_cast<AsyncModelHttpState*>(context);
+                owner->enteredCallbacks.fetch_add(1u, std::memory_order_relaxed);
+                owner->lastEnteredStatus.store(status, std::memory_order_relaxed);
+                try
+                {
+                    // The close notification can wake the owner before this
+                    // callback returns; its own shared lease prevents a dangling
+                    // mutex, condition variable, body or read buffer.
+                    auto state = reinterpret_cast<AsyncModelHttpState*>(context)->shared_from_this();
+                    {
+                        std::scoped_lock lock{state->mutex};
+                        state->lastNotification = status;
+                        if (state->notificationCount < state->notificationTrace.size())
+                            state->notificationTrace[state->notificationCount] = status;
+                        ++state->notificationCount;
+                        if (status == WINHTTP_CALLBACK_STATUS_REQUEST_SENT && information
+                            && informationSize >= sizeof(DWORD))
+                            state->sentBytes += *static_cast<DWORD*>(information);
+                        if (status == WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING)
+                        {
+                            state->closed = true;
+                            state->callbackLifetime.reset();
+                        }
+                        else if (status == WINHTTP_CALLBACK_STATUS_REQUEST_ERROR)
+                        {
+                            state->error = information
+                                && informationSize >= sizeof(WINHTTP_ASYNC_RESULT)
+                                ? static_cast<WINHTTP_ASYNC_RESULT*>(information)->dwError
+                                : ERROR_WINHTTP_INTERNAL_ERROR;
+                        }
+                        else if (status == WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE
+                            || status == WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE
+                            || status == WINHTTP_CALLBACK_STATUS_READ_COMPLETE
+                            || status == WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE)
+                        {
+                            state->completion = status;
+                            if (status == WINHTTP_CALLBACK_STATUS_READ_COMPLETE)
+                                state->bytesRead = informationSize;
+                            if (status == WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE)
+                            {
+                                if (information && informationSize >= sizeof(DWORD))
+                                    state->bytesWritten = *static_cast<DWORD*>(information);
+                                else
+                                    state->error = ERROR_WINHTTP_INTERNAL_ERROR;
+                            }
+                        }
+                    }
+                    state->changed.notify_all();
+                    state->returnedCallbacks.fetch_add(1u, std::memory_order_relaxed);
+                }
+                catch (...)
+                {
+                    // Exceptions must never cross the system callback ABI.
+                    owner->failedCallbacks.fetch_add(1u, std::memory_order_relaxed);
+                }
+            }
 
-        static void close_active_ai_winhttp_request(HINTERNET request)
+            void prepare_operation()
+            {
+                std::scoped_lock lock{mutex};
+                completion = 0u;
+                error = 0u;
+                bytesRead = 0u;
+                bytesWritten = 0u;
+            }
+
+            void wait_operation(DWORD expected, std::stop_token cancellation,
+                std::chrono::steady_clock::time_point deadline)
+            {
+                std::unique_lock lock{mutex};
+                const bool completed = changed.wait_until(lock, cancellation, deadline,
+                    [&] { return completion == expected || error != 0u || closed; });
+                if (cancellation.stop_requested())
+                {
+                    std::string diagnostic = "Model HTTP cancellation during status wait: expected="
+                        + std::to_string(expected) + ", last_callback="
+                        + std::to_string(lastNotification) + ", callbacks="
+                        + std::to_string(notificationCount) + ", completion="
+                        + std::to_string(completion) + ", error=" + std::to_string(error)
+                        + ", entered=" + std::to_string(enteredCallbacks.load())
+                        + ", returned=" + std::to_string(returnedCallbacks.load())
+                        + ", last_entered=" + std::to_string(lastEnteredStatus.load())
+                        + ", failed_callbacks=" + std::to_string(failedCallbacks.load())
+                        + ", null_context=" + std::to_string(g_modelHttpNullContextCallbacks.load())
+                        + ", body_bytes=" + std::to_string(requestBody.size())
+                        + ", sent_bytes=" + std::to_string(sentBytes) + ", trace=";
+                    for (std::size_t index = 0u;
+                        index < (std::min)(notificationCount, notificationTrace.size()); ++index)
+                        diagnostic += std::to_string(notificationTrace[index]) + ":";
+                    lock.unlock();
+                    core::log::info("ai", epochengine::string_view{diagnostic.data(), diagnostic.size()});
+                    throw std::runtime_error("WinHTTP: local-model request cancelled");
+                }
+                if (!completed)
+                    throw std::runtime_error("WinHTTP: local-model request deadline exceeded");
+                if (error != 0u || closed)
+                    throw std::runtime_error("WinHTTP: asynchronous model request failed (error "
+                        + std::to_string(error) + ")");
+            }
+
+            [[nodiscard]] bool close_and_settle() noexcept
+            {
+                if (!callbackRegistered)
+                    return true;
+                HINTERNET toClose{};
+                {
+                    std::scoped_lock lock{mutex};
+                    if (closed)
+                        return true;
+                    if (!closing)
+                    {
+                        closing = true;
+                        toClose = std::exchange(request, nullptr);
+                    }
+                }
+                // Only the request's worker calls this, after each initiating
+                // WinHTTP function has returned. Stop callbacks only wake its
+                // wait; they never close a handle concurrently with an API call.
+                if (toClose && !WinHttpCloseHandle(toClose))
+                    return false;
+                std::unique_lock lock{mutex};
+                if (settlementWaited)
+                    return closed;
+                settlementWaited = true;
+                return changed.wait_for(lock, std::chrono::seconds{5},
+                    [this] { return closed; });
+            }
+        };
+
+        struct ScopedAsyncModelHttp final
         {
-            if (release_active_ai_winhttp_request(request))
-                WinHttpCloseHandle(request);
-        }
+            std::shared_ptr<AsyncModelHttpState> state;
+            ~ScopedAsyncModelHttp()
+            {
+                if (!state->close_and_settle())
+                    core::log::error("ai",
+                        "Model HTTP handle closure did not settle; callback-owned request state remains retained.");
+            }
+        };
 
         static std::string winhttp_post_json(const std::string& url,
             const std::string& body_utf8,
             const std::vector<std::pair<std::string, std::string>>& headers,
-            std::uint32_t timeoutSeconds)
+            std::uint32_t timeoutSeconds,
+            std::stop_token cancellation,
+            const ModelRequestObserver& observer)
         {
+            if (g_modelHttpRetirementUncertain.load(std::memory_order_acquire))
+                throw ModelTransportRetirementFailure(
+                    "Model HTTP retirement was not confirmed. Restart the engine before another HTTP request.");
+            if (cancellation.stop_requested())
+                throw std::runtime_error("WinHTTP: local-model request cancelled before dispatch");
+            if (body_utf8.size() > kMaximumModelHttpEnvelopeBytes)
+                throw std::runtime_error("WinHTTP: model request exceeded the bounded envelope size");
             const auto u = crack_url(url);
-
-            HINTERNET hSession = WinHttpOpen(L"EpochAI/1.0",
+            auto state = std::make_shared<AsyncModelHttpState>();
+            const ScopedAsyncModelHttp cleanup{state};
+            try
+            {
+            state->requestBody = body_utf8;
+            state->session = WinHttpOpen(L"EpochAI/1.0",
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-            if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
-            // Source iterations can legitimately take several minutes on a
-            // local model. Honor the workload's bounded timeout while keeping
-            // connect and send failures responsive; the editor can still
-            // cancel the active WinHTTP request immediately.
+                WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, WINHTTP_FLAG_ASYNC);
+            if (!state->session) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
             const int receiveTimeout =
                 model_http_timeout_milliseconds(timeoutSeconds);
-            (void)WinHttpSetTimeouts(
-                hSession, 10000, 10000, 15000, receiveTimeout);
+            if (!WinHttpSetTimeouts(
+                    state->session, 10000, 10000, 15000, receiveTimeout))
+                throw std::runtime_error("WinHTTP: model request timeouts could not be set");
+            const auto deadline = std::chrono::steady_clock::now()
+                + std::chrono::milliseconds{receiveTimeout};
 
-            HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
-            if (!hConnect)
-            {
-                WinHttpCloseHandle(hSession);
+            state->connection = WinHttpConnect(state->session, u.host.c_str(), u.port, 0);
+            if (!state->connection)
                 throw std::runtime_error("WinHTTP: WinHttpConnect failed");
-            }
 
             DWORD flags = u.secure ? WINHTTP_FLAG_SECURE : 0;
-            HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", u.path.c_str(),
+            state->request = WinHttpOpenRequest(state->connection, L"POST", u.path.c_str(),
                 nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
-            if (!hRequest)
-            {
-                WinHttpCloseHandle(hConnect);
-                WinHttpCloseHandle(hSession);
+            if (!state->request)
                 throw std::runtime_error("WinHTTP: WinHttpOpenRequest failed");
-            }
-
-            if (!register_active_ai_winhttp_request(hRequest))
-            {
-                WinHttpCloseHandle(hRequest);
-                WinHttpCloseHandle(hConnect);
-                WinHttpCloseHandle(hSession);
-                throw std::runtime_error("WinHTTP: local-model request cancelled before dispatch");
-            }
-            const auto closeRequest = [&]() noexcept
-            {
-                close_active_ai_winhttp_request(hRequest);
-            };
+            // A model request belongs to the selected endpoint. Do not replay
+            // its source body to a redirect or negotiate ambient credentials.
+            DWORD disabledFeatures = WINHTTP_DISABLE_REDIRECTS
+                | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_COOKIES;
+            if (!WinHttpSetOption(state->request, WINHTTP_OPTION_DISABLE_FEATURE,
+                    &disabledFeatures, sizeof(disabledFeatures)))
+                throw std::runtime_error("WinHTTP: model endpoint policy could not be set");
+            DWORD_PTR callbackContext = reinterpret_cast<DWORD_PTR>(state.get());
+            if (!WinHttpSetOption(state->request, WINHTTP_OPTION_CONTEXT_VALUE,
+                    &callbackContext, sizeof(callbackContext)))
+                throw std::runtime_error("WinHTTP: request context registration failed");
+            if (WinHttpSetStatusCallback(state->request, AsyncModelHttpState::callback,
+                    WINHTTP_CALLBACK_FLAG_ALL_NOTIFICATIONS, 0u)
+                == WINHTTP_INVALID_STATUS_CALLBACK)
+                throw std::runtime_error("WinHTTP: asynchronous callback registration failed");
+            state->callbackRegistered = true;
+            state->callbackLifetime = state;
 
             // Default headers
             std::wstring hdr = L"Content-Type: application/json\r\nAccept: application/json\r\n";
@@ -1083,63 +1388,101 @@ namespace epochengine::ai
                 hdr += L"\r\n";
             }
 
-            if (!WinHttpAddRequestHeaders(hRequest, hdr.c_str(), (DWORD)hdr.size(),
+            if (!WinHttpAddRequestHeaders(state->request, hdr.c_str(), (DWORD)hdr.size(),
                 WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE))
-            {
-                // continue; not fatal
-            }
+                throw std::runtime_error("WinHTTP: model request headers could not be set");
 
-            BOOL ok = WinHttpSendRequest(hRequest,
+            notify_model_stage(observer, ModelRequestStage::sending);
+            if (cancellation.stop_requested())
+                throw std::runtime_error("WinHTTP: local-model request cancelled before dispatch");
+            state->prepare_operation();
+            BOOL ok = WinHttpSendRequest(state->request,
                 WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                (LPVOID)body_utf8.data(), (DWORD)body_utf8.size(),
-                (DWORD)body_utf8.size(), 0);
+                WINHTTP_NO_REQUEST_DATA, 0u,
+                static_cast<DWORD>(state->requestBody.size()), callbackContext);
 
             if (!ok)
-            {
-                closeRequest();
-                WinHttpCloseHandle(hConnect);
-                WinHttpCloseHandle(hSession);
                 throw std::runtime_error("WinHTTP: WinHttpSendRequest failed");
-            }
-
-            if (!WinHttpReceiveResponse(hRequest, nullptr))
+            state->wait_operation(WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE,
+                cancellation, deadline);
+            // Keep header and body completion distinct. A REQUEST_SENT progress
+            // callback can describe only the headers; it is not body evidence.
+            for (std::size_t offset = 0u; offset < state->requestBody.size();)
             {
-                closeRequest();
-                WinHttpCloseHandle(hConnect);
-                WinHttpCloseHandle(hSession);
-                throw std::runtime_error("WinHTTP: WinHttpReceiveResponse failed");
+                if (cancellation.stop_requested())
+                    throw std::runtime_error("WinHTTP: local-model request cancelled during upload");
+                const DWORD chunk = static_cast<DWORD>((std::min)(
+                    state->requestBody.size() - offset, state->readBuffer.size()));
+                state->prepare_operation();
+                if (!WinHttpWriteData(state->request,
+                        state->requestBody.data() + offset, chunk, nullptr))
+                    throw std::runtime_error("WinHTTP: model request body write failed");
+                state->wait_operation(WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE,
+                    cancellation, deadline);
+                const DWORD written = state->bytesWritten;
+                if (written == 0u || written > chunk)
+                    throw std::runtime_error("WinHTTP: invalid model request body write completion");
+                offset += written;
             }
+            notify_model_stage(observer, ModelRequestStage::request_sent);
 
+            state->prepare_operation();
+            if (cancellation.stop_requested())
+                throw std::runtime_error("WinHTTP: local-model request cancelled");
+            if (!WinHttpReceiveResponse(state->request, nullptr))
+                throw std::runtime_error("WinHTTP: WinHttpReceiveResponse failed");
+            notify_model_stage(observer, ModelRequestStage::awaiting_response);
+            state->wait_operation(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE,
+                cancellation, deadline);
+            DWORD httpStatus{};
+            DWORD httpStatusBytes = sizeof(httpStatus);
+            if (!WinHttpQueryHeaders(state->request,
+                    WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                    WINHTTP_HEADER_NAME_BY_INDEX, &httpStatus, &httpStatusBytes,
+                    WINHTTP_NO_HEADER_INDEX))
+                throw std::runtime_error("WinHTTP: response status could not be read");
+
+            notify_model_stage(observer, ModelRequestStage::receiving);
             std::string resp;
             for (;;)
             {
-                DWORD avail = 0;
-                if (!WinHttpQueryDataAvailable(hRequest, &avail))
-                {
-                    closeRequest();
-                    WinHttpCloseHandle(hConnect);
-                    WinHttpCloseHandle(hSession);
-                    throw std::runtime_error("WinHTTP: WinHttpQueryDataAvailable failed");
-                }
-                if (avail == 0) break;
-
-                std::string buf(avail, '\0');
-                DWORD read = 0;
-                if (!WinHttpReadData(hRequest, buf.data(), avail, &read))
-                {
-                    closeRequest();
-                    WinHttpCloseHandle(hConnect);
-                    WinHttpCloseHandle(hSession);
+                if (cancellation.stop_requested())
+                    throw std::runtime_error("WinHTTP: local-model request cancelled");
+                state->prepare_operation();
+                if (!WinHttpReadData(state->request, state->readBuffer.data(),
+                        static_cast<DWORD>(state->readBuffer.size()), nullptr))
                     throw std::runtime_error("WinHTTP: WinHttpReadData failed");
-                }
-                buf.resize(read);
-                resp += buf;
+                state->wait_operation(WINHTTP_CALLBACK_STATUS_READ_COMPLETE,
+                    cancellation, deadline);
+                const DWORD read = state->bytesRead;
+                if (read == 0u)
+                    break;
+                if (read > state->readBuffer.size()
+                    || resp.size() > kMaximumModelHttpEnvelopeBytes - read)
+                    throw std::runtime_error("WinHTTP: model response exceeded the bounded envelope size");
+                resp.append(state->readBuffer.data(), read);
             }
-
-            closeRequest();
-            WinHttpCloseHandle(hConnect);
-            WinHttpCloseHandle(hSession);
+            if (!state->close_and_settle())
+            {
+                g_modelHttpRetirementUncertain.store(true, std::memory_order_release);
+                throw ModelTransportRetirementFailure("WinHTTP: model request closure did not settle; this request will not be retried");
+            }
+            if (cancellation.stop_requested())
+                throw std::runtime_error("WinHTTP: local-model request cancelled");
+            if (httpStatus < 200u || httpStatus >= 300u)
+                throw std::runtime_error("WinHTTP: HTTP status " + std::to_string(httpStatus));
             return resp;
+            }
+            catch (...)
+            {
+                if (!state->close_and_settle())
+                {
+                    g_modelHttpRetirementUncertain.store(true, std::memory_order_release);
+                    throw ModelTransportRetirementFailure(
+                        "WinHTTP: model request closure did not settle; this request will not be retried and its callback lifetime remains retained");
+                }
+                throw;
+            }
         }
 
         static std::string winhttp_get_json(const std::string& url, const std::vector<std::pair<std::string, std::string>>& headers)
@@ -1245,51 +1588,74 @@ namespace epochengine::ai
 #if !defined(_WIN32) && defined(EPOCH_HAS_CURL)
         static std::size_t curl_write_cb(char* ptr, std::size_t size, std::size_t nmemb, void* userdata)
         {
+            if (size != 0u && nmemb > (std::numeric_limits<std::size_t>::max)() / size)
+                return 0u;
             const std::size_t bytes = size * nmemb;
             if (userdata && ptr && bytes)
             {
                 auto* out = static_cast<std::string*>(userdata);
-                out->append(ptr, bytes);
+                if (bytes > kMaximumModelHttpEnvelopeBytes
+                    || out->size() > kMaximumModelHttpEnvelopeBytes - bytes)
+                    return 0u;
+                try { out->append(ptr, bytes); }
+                catch (...) { return 0u; }
             }
             return bytes;
         }
 
         static int curl_ai_request_progress(
-            void*, curl_off_t, curl_off_t, curl_off_t, curl_off_t)
+            void* context, curl_off_t, curl_off_t, curl_off_t, curl_off_t) noexcept
         {
-            return g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
-                    == g_aiRequestStartCancellationGeneration
-                ? 0
-                : 1;
+            return context && static_cast<std::stop_token*>(context)->stop_requested() ? 1 : 0;
         }
 
         static std::string http_post_json(const std::string& url,
             const std::string& body_utf8,
             const std::vector<std::pair<std::string, std::string>>& headers,
-            std::uint32_t timeoutSeconds)
+            std::uint32_t timeoutSeconds,
+            std::stop_token cancellation,
+            const ModelRequestObserver& observer)
         {
-            CURL* curl = curl_easy_init();
+            if (cancellation.stop_requested())
+                throw std::runtime_error("CURL: local-model request cancelled before dispatch");
+            struct CurlRequestOwner final
+            {
+                CURL* handle{curl_easy_init()};
+                curl_slist* headers{};
+                ~CurlRequestOwner()
+                {
+                    curl_slist_free_all(headers);
+                    if (handle) curl_easy_cleanup(handle);
+                }
+                void append_header(const char* value)
+                {
+                    auto* next = curl_slist_append(headers, value);
+                    if (!next)
+                        throw std::runtime_error("CURL: request header allocation failed");
+                    headers = next;
+                }
+            } owner{};
+            CURL* curl = owner.handle;
             if (!curl)
                 throw std::runtime_error("CURL: curl_easy_init failed");
 
             std::string resp;
-            struct curl_slist* request_headers = nullptr;
-            request_headers = curl_slist_append(request_headers, "Content-Type: application/json");
-            request_headers = curl_slist_append(request_headers, "Accept: application/json");
+            owner.append_header("Content-Type: application/json");
+            owner.append_header("Accept: application/json");
 
             for (const auto& [k, v] : headers)
             {
                 std::string hdr = k;
                 hdr += ": ";
                 hdr += v;
-                request_headers = curl_slist_append(request_headers, hdr.c_str());
+                owner.append_header(hdr.c_str());
             }
 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
             curl_easy_setopt(curl, CURLOPT_POST, 1L);
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_utf8.c_str());
             curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body_utf8.size()));
-            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers);
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, owner.headers);
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
@@ -1301,23 +1667,25 @@ namespace epochengine::ai
                     model_http_timeout_milliseconds(timeoutSeconds)));
             curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
             curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curl_ai_request_progress);
+            curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &cancellation);
 
+            notify_model_stage(observer, ModelRequestStage::sending);
+            if (cancellation.stop_requested())
+                throw std::runtime_error("CURL: local-model request cancelled before dispatch");
             const CURLcode code = curl_easy_perform(curl);
-            if (code != CURLE_OK)
+            if (code != CURLE_OK || cancellation.stop_requested())
             {
-                const std::string err = code == CURLE_ABORTED_BY_CALLBACK
+                const std::string err = cancellation.stop_requested() || code == CURLE_ABORTED_BY_CALLBACK
                     ? "CURL: local-model request cancelled"
                     : std::string("CURL: curl_easy_perform failed: ") + curl_easy_strerror(code);
-                curl_slist_free_all(request_headers);
-                curl_easy_cleanup(curl);
                 throw std::runtime_error(err);
             }
 
+            notify_model_stage(observer, ModelRequestStage::receiving);
+            if (cancellation.stop_requested())
+                throw std::runtime_error("CURL: local-model request cancelled");
             long http_status = 0;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
-
-            curl_slist_free_all(request_headers);
-            curl_easy_cleanup(curl);
 
             if (http_status < 200 || http_status >= 300)
             {
@@ -2593,27 +2961,36 @@ namespace epochengine::ai
             const std::vector<std::pair<std::string, std::string>>& headers,
             std::size_t maximumTokens,
             std::uint32_t timeoutSeconds,
-            bool structuredSource)
+            bool structuredSource,
+            std::stop_token cancellation,
+            const ModelRequestObserver& observer = {})
         {
             const StructuredSourceReply sourceReply =
                 structured_source_reply_for(input, structuredSource);
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
+                if (cancellation.stop_requested())
+                    return std::string{kModelRequestCancelled};
                 const std::string body = openai_chat_request_body(
                     model, system_prompt, input, maximumTokens, recoveryRequest,
                     structuredSource);
+                const std::string resp = run_model_transport_attempt(cancellation, [&]() -> std::string
+                {
 #if defined(_WIN32)
-                const std::string resp = winhttp_post_json(
-                    endpoint_full, body, headers, timeoutSeconds);
+                    return winhttp_post_json(
+                        endpoint_full, body, headers, timeoutSeconds, cancellation, observer);
 #elif defined(EPOCH_HAS_CURL)
-                const std::string resp = http_post_json(
-                    endpoint_full, body, headers, timeoutSeconds);
+                    return http_post_json(
+                        endpoint_full, body, headers, timeoutSeconds, cancellation, observer);
 #else
-                (void)endpoint_full;
-                (void)headers;
-                core::log::error("ai", "Local OpenAI-compatible request failed: no non-Windows HTTP transport is configured (build with libcurl).");
-                return {};
+                    (void)endpoint_full;
+                    (void)headers;
+                    core::log::error("ai", "Local OpenAI-compatible request failed: no non-Windows HTTP transport is configured (build with libcurl).");
+                    return {};
 #endif
+                });
+                if (cancellation.stop_requested())
+                    return std::string{kModelRequestCancelled};
                 if (rawResponse)
                     *rawResponse = resp;
                 std::string parsed = normalize_assistant_text(extract_lmstudio_message_content(resp));
@@ -2666,11 +3043,15 @@ namespace epochengine::ai
             std::string lastFailure{};
             for (std::size_t attempt = 0u; attempt < 2u; ++attempt)
             {
+                if (cancellation.stop_requested())
+                    return std::string{kModelRequestCancelled};
                 try
                 {
                     std::string rawResponse{};
                     std::string reply = request_once(
                         attempt > 0u, &rawResponse);
+                    if (cancellation.stop_requested())
+                        return std::string{kModelRequestCancelled};
                     if (is_promotable_assistant_text(reply))
                         return reply;
 
@@ -2702,8 +3083,17 @@ namespace epochengine::ai
                                 "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response."};
                     }
                 }
+                catch (const ModelTransportRetirementFailure&)
+                {
+                    // A failed close is not an ordinary HTTP failure. Starting
+                    // another request would overlap an unretired operation.
+                    // Preserve the typed failure through cancellation checks.
+                    throw;
+                }
                 catch (const std::exception& ex)
                 {
+                    if (cancellation.stop_requested())
+                        return std::string{kModelRequestCancelled};
                     lastFailure =
                         "Local OpenAI-compatible request failed: ";
                     lastFailure += ex.what();
@@ -2800,9 +3190,15 @@ namespace epochengine::ai
         [[nodiscard]] static ProcessCapture capture_process(
             const std::filesystem::path& executable,
             const std::vector<std::string>& arguments,
-            std::chrono::seconds timeout)
+            std::chrono::seconds timeout,
+            std::stop_token cancellation)
         {
             ProcessCapture capture{};
+            if (cancellation.stop_requested())
+            {
+                capture.cancelled = true;
+                return capture;
+            }
             SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
             HANDLE readPipe = nullptr;
             HANDLE writePipe = nullptr;
@@ -2826,6 +3222,13 @@ namespace epochengine::ai
             startup.hStdError = writePipe;
             startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
             PROCESS_INFORMATION process{};
+            if (cancellation.stop_requested())
+            {
+                CloseHandle(writePipe);
+                CloseHandle(readPipe);
+                capture.cancelled = true;
+                return capture;
+            }
             capture.launched = CreateProcessW(
                 executable.wstring().c_str(), command.data(), nullptr, nullptr, TRUE,
                 CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS, nullptr,
@@ -2846,6 +3249,8 @@ namespace epochengine::ai
                 DWORD available = 0u;
                 while (PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr) && available > 0u)
                 {
+                    if (cancellation.stop_requested() || std::chrono::steady_clock::now() >= deadline)
+                        break;
                     DWORD read = 0u;
                     const DWORD requested = (std::min)(available, static_cast<DWORD>(sizeof(buffer)));
                     if (!ReadFile(readPipe, buffer, requested, &read, nullptr) || read == 0u)
@@ -2853,8 +3258,7 @@ namespace epochengine::ai
                     append_process_output(capture.output, buffer, read);
                 }
                 running = WaitForSingleObject(process.hProcess, 20u) == WAIT_TIMEOUT;
-                if (running && g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
-                    != g_aiRequestStartCancellationGeneration)
+                if (running && cancellation.stop_requested())
                 {
                     capture.cancelled = true;
                     TerminateProcess(process.hProcess, 125u);
@@ -2870,9 +3274,24 @@ namespace epochengine::ai
                 }
             }
 
-            DWORD read = 0u;
-            while (ReadFile(readPipe, buffer, sizeof(buffer), &read, nullptr) && read > 0u)
+            // A descendant may still hold the write end. Never block on EOF
+            // after the owned process exits/cancels; drain only ready bytes.
+            const auto drainDeadline = std::chrono::steady_clock::now()
+                + std::chrono::milliseconds{100};
+            DWORD available = 0u;
+            while (!cancellation.stop_requested()
+                && std::chrono::steady_clock::now() < drainDeadline
+                && PeekNamedPipe(readPipe, nullptr, 0, nullptr, &available, nullptr)
+                && available > 0u)
+            {
+                DWORD read = 0u;
+                if (!ReadFile(readPipe, buffer,
+                        (std::min)(available, static_cast<DWORD>(sizeof(buffer))), &read, nullptr)
+                    || read == 0u)
+                    break;
                 append_process_output(capture.output, buffer, read);
+            }
+            capture.cancelled = capture.cancelled || cancellation.stop_requested();
             DWORD exitCode = 1u;
             GetExitCodeProcess(process.hProcess, &exitCode);
             capture.exit_code = static_cast<int>(exitCode);
@@ -2885,12 +3304,26 @@ namespace epochengine::ai
         [[nodiscard]] static ProcessCapture capture_process(
             const std::filesystem::path& executable,
             const std::vector<std::string>& arguments,
-            std::chrono::seconds timeout)
+            std::chrono::seconds timeout,
+            std::stop_token cancellation)
         {
             ProcessCapture capture{};
+            if (cancellation.stop_requested())
+            {
+                capture.cancelled = true;
+                return capture;
+            }
             int outputPipe[2]{};
             if (pipe(outputPipe) != 0)
                 return capture;
+
+            if (cancellation.stop_requested())
+            {
+                close(outputPipe[0]);
+                close(outputPipe[1]);
+                capture.cancelled = true;
+                return capture;
+            }
 
             const pid_t child = fork();
             if (child < 0)
@@ -2934,6 +3367,8 @@ namespace epochengine::ai
             {
                 for (;;)
                 {
+                    if (cancellation.stop_requested() || std::chrono::steady_clock::now() >= deadline)
+                        break;
                     const ssize_t read = ::read(outputPipe[0], buffer, sizeof(buffer));
                     if (read <= 0)
                         break;
@@ -2942,8 +3377,7 @@ namespace epochengine::ai
 
                 const pid_t waited = waitpid(child, &status, WNOHANG);
                 running = waited == 0;
-                if (running && g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
-                    != g_aiRequestStartCancellationGeneration)
+                if (running && cancellation.stop_requested())
                 {
                     capture.cancelled = true;
                     kill(child, SIGTERM);
@@ -2967,7 +3401,10 @@ namespace epochengine::ai
                     std::this_thread::sleep_for(std::chrono::milliseconds{20});
             }
 
-            for (;;)
+            const auto drainDeadline = std::chrono::steady_clock::now()
+                + std::chrono::milliseconds{100};
+            while (!cancellation.stop_requested()
+                && std::chrono::steady_clock::now() < drainDeadline)
             {
                 const ssize_t read = ::read(outputPipe[0], buffer, sizeof(buffer));
                 if (read <= 0)
@@ -2975,6 +3412,7 @@ namespace epochengine::ai
                 append_process_output(capture.output, buffer, static_cast<std::size_t>(read));
             }
             close(outputPipe[0]);
+            capture.cancelled = capture.cancelled || cancellation.stop_requested();
             capture.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 128;
             return capture;
         }
@@ -3063,8 +3501,12 @@ namespace epochengine::ai
             const EngineAiModel::Config& config,
             std::string_view systemPrompt,
             std::string_view userText,
-            bool allowStrictSourcePacket)
+            bool allowStrictSourcePacket,
+            std::stop_token cancellation,
+            const ModelRequestObserver& observer)
         {
+            if (cancellation.stop_requested())
+                return std::string{kModelRequestCancelled};
             const std::filesystem::path outputRoot =
                 std::filesystem::path{executable_cache_bucket("ai")}
                     / "transient";
@@ -3131,13 +3573,14 @@ namespace epochengine::ai
                 direct_llama_cpp_file_arguments(
                     config, outputPath, systemPromptPath, userPromptPath);
 
+            notify_model_stage(observer, ModelRequestStage::sending);
             ProcessCapture capture = capture_process(
                 std::filesystem::path{config.executable}, arguments,
-                std::chrono::seconds{config.timeout_seconds});
+                std::chrono::seconds{config.timeout_seconds}, cancellation);
+            if (capture.cancelled || cancellation.stop_requested())
+                return std::string{kModelRequestCancelled};
             if (!capture.launched)
                 return "Direct llama.cpp inference could not start. Check the configured llama-cli executable.";
-            if (capture.cancelled)
-                return "Direct llama.cpp inference was cancelled.";
             if (capture.timed_out)
                 return "Direct llama.cpp inference exceeded its time budget and was stopped.";
             if (capture.exit_code != 0)
@@ -3149,6 +3592,9 @@ namespace epochengine::ai
                     + std::to_string(capture.exit_code)
                     + (detail.empty() ? std::string{"."} : std::string{": "} + detail);
             }
+            notify_model_stage(observer, ModelRequestStage::receiving);
+            if (cancellation.stop_requested())
+                return std::string{kModelRequestCancelled};
             const std::string transcript = read_small_text_file(
                 outputPath, kMaximumInferenceOutputBytes);
             const std::string reply = allowStrictSourcePacket
@@ -3164,6 +3610,23 @@ namespace epochengine::ai
             }
             return reply;
         }
+        [[nodiscard]] bool model_reply_is_failure(std::string_view text)
+        {
+            const std::string lower = lowercase_ascii(std::string{text});
+            for (const std::string_view prefix : {
+                "local model api error", "local openai-compatible request failed",
+                "local-model request cancelled", "local model returned hidden reasoning",
+                "local model returned reasoning", "local model returned no decodable assistant text",
+                "direct llama.cpp inference could not", "direct llama.cpp inference exceeded",
+                "direct llama.cpp inference was cancelled", "direct llama.cpp inference failed",
+                "direct llama.cpp inference returned no parseable"})
+            {
+                if (starts_with_text(lower, prefix))
+                    return true;
+            }
+            return false;
+        }
+
         static std::string build_transcript(std::string_view system_prompt, std::string_view user_text)
         {
             // Keep it tight: context kills latency on local models.
@@ -3200,9 +3663,17 @@ namespace epochengine::ai
 
     EngineAiReply EngineAiModel::submit(
         std::string_view user_input,
-        InferenceWorkload workload)
+        InferenceWorkload workload,
+        std::stop_token cancellation,
+        ModelRequestObserver observer)
     {
+        ScopedModelObservation observation{observer, cancellation};
         EngineAiReply out{};
+        if (cancellation.stop_requested())
+        {
+            out.text = kModelRequestCancelled;
+            return out;
+        }
         const InferenceBudget budget = inference_budget(workload);
         if (!budget.valid() || user_input.empty()
             || user_input.size() > budget.maximum_prompt_bytes)
@@ -3250,12 +3721,20 @@ namespace epochengine::ai
         const std::size_t n = std::max<std::size_t>(1, effective.best_of);
 
         // No scorer is active in this lane; first non-empty assistant content wins.
+        try
+        {
         for (std::size_t i = 0; i < n; ++i)
         {
+            if (cancellation.stop_requested())
+            {
+                out.text = kModelRequestCancelled;
+                out.alternatives.clear();
+                return out;
+            }
             std::string txt = effective.backend == "llama_cpp_cli"
                 ? llama_cpp_complete(
                     effective, sys, user_input,
-                    workload == InferenceWorkload::source_iteration)
+                    workload == InferenceWorkload::source_iteration, cancellation, observer)
                 : openai_chat_complete(
                     m_endpoint_full,
                     effective.model,
@@ -3264,7 +3743,14 @@ namespace epochengine::ai
                     {},
                     effective.output_tokens,
                     effective.timeout_seconds,
-                    workload == InferenceWorkload::source_iteration);
+                    workload == InferenceWorkload::source_iteration, cancellation, observer);
+
+            if (cancellation.stop_requested())
+            {
+                out.text = kModelRequestCancelled;
+                out.alternatives.clear();
+                return out;
+            }
 
             if (workload == InferenceWorkload::source_iteration
                 && effective.backend != "llama_cpp_cli")
@@ -3303,6 +3789,23 @@ namespace epochengine::ai
             }
         }
 
+        if (cancellation.stop_requested())
+        {
+            out.text = kModelRequestCancelled;
+            out.alternatives.clear();
+        }
+        }
+        catch (const ModelTransportRetirementFailure& exception)
+        {
+            out.text = std::string{"Local model transport retirement failed: "} + exception.what();
+            out.alternatives.clear();
+            out.transport_retirement_failed = true;
+            observation.retirement_failed = true;
+            core::log::error("ai", epochengine::string_view{out.text.data(), out.text.size()});
+            return out;
+        }
+        observation.succeeded = !out.text.empty() && !model_reply_is_failure(out.text)
+            && is_promotable_assistant_text(out.text);
         return out;
     }
 
@@ -3397,17 +3900,7 @@ namespace epochengine::ai
 
     void cancel_engine_ai_request() noexcept
     {
-        g_aiRequestCancellationGeneration.fetch_add(1u, std::memory_order_acq_rel);
-#if defined(_WIN32)
-        HINTERNET activeRequest{};
-        {
-            const std::lock_guard lock{g_activeAiWinHttpMutex};
-            activeRequest = g_activeAiWinHttpRequest;
-            g_activeAiWinHttpRequest = nullptr;
-        }
-        if (activeRequest)
-            WinHttpCloseHandle(activeRequest);
-#endif
+        g_aiCancellation.cancel();
     }
 
 
@@ -4046,6 +4539,175 @@ namespace epochengine::ai
         return direct_llama_cpp_prompt_file_arguments_contract();
     }
 
+    bool model_request_cancellation_contract()
+    {
+        // Exercise the production admission/cancellation primitives without
+        // selecting a model, opening a transport or starting a child process.
+        const auto cancelled_waiter = [](bool cancelAll)
+        {
+            GlobalRequestCancellation global{};
+            ModelRequestGate gate{};
+            std::stop_source activeStop{};
+            std::stop_source queuedStop{};
+            RequestCancellation active{activeStop.get_token(), global.capture()};
+            RequestCancellation queued{queuedStop.get_token(), global.capture()};
+            std::promise<void> entered{};
+            auto enteredFuture = entered.get_future();
+            std::promise<bool> finished{};
+            auto finishedFuture = finished.get_future();
+            std::jthread waiter{};
+            bool passed{};
+            {
+                const ScopedModelRequest current{gate, active.token()};
+                if (!current.acquired())
+                    return false;
+                waiter = std::jthread([&]
+                {
+                    entered.set_value();
+                    const ScopedModelRequest pending{gate, queued.token()};
+                    finished.set_value(pending.acquired());
+                });
+                const bool started = enteredFuture.wait_for(std::chrono::seconds{1})
+                    == std::future_status::ready;
+                const bool blocked = finishedFuture.wait_for(std::chrono::milliseconds{20})
+                    == std::future_status::timeout;
+                if (cancelAll)
+                    global.cancel();
+                else
+                    (void)queuedStop.request_stop();
+                const bool completedWhileCurrentStillOwned =
+                    finishedFuture.wait_for(std::chrono::seconds{1}) == std::future_status::ready;
+                passed = started && blocked && completedWhileCurrentStillOwned
+                    && !finishedFuture.get()
+                    && queued.token().stop_requested()
+                    && active.token().stop_requested() == cancelAll;
+            }
+            // Release A even when a test fails before joining B, so a failed
+            // cancellation assertion cannot deadlock the contract runner.
+            waiter.join();
+            const auto fresh = global.capture();
+            const ScopedModelRequest next{gate, fresh};
+            return passed && !fresh.stop_requested() && next.acquired();
+        };
+        if (!cancelled_waiter(false) || !cancelled_waiter(true))
+            return false;
+
+        std::stop_source stopped{};
+        (void)stopped.request_stop();
+        ModelRequestGate gate{};
+        const ScopedModelRequest denied{gate, stopped.get_token()};
+        if (denied.acquired()
+            || send_to_engine_ai("cancelled contract request",
+                InferenceWorkload::source_iteration, stopped.get_token())
+                != kModelRequestCancelled)
+            return false;
+
+        std::stop_source attemptStop{};
+        std::uint32_t dispatched{};
+        const std::string lateReply = run_model_transport_attempt(attemptStop.get_token(), [&]
+        {
+            ++dispatched;
+            (void)attemptStop.request_stop();
+            return std::string{"late successful assistant content"};
+        });
+        const std::string retry = run_model_transport_attempt(attemptStop.get_token(), [&]
+        {
+            ++dispatched;
+            return std::string{"must not dispatch"};
+        });
+        if (dispatched != 1u || lateReply != kModelRequestCancelled
+            || retry != kModelRequestCancelled)
+            return false;
+
+        std::vector<ModelRequestStage> stages{};
+        bool wrongThread{};
+        const auto callerThread = std::this_thread::get_id();
+        const ModelRequestObserver observer = [&](ModelRequestStage stage)
+        {
+            wrongThread = wrongThread || std::this_thread::get_id() != callerThread;
+            stages.push_back(stage);
+        };
+        if (send_to_engine_ai("cancelled contract request", InferenceWorkload::source_iteration,
+                stopped.get_token(), observer) != kModelRequestCancelled
+            || stages != std::vector{ModelRequestStage::cancelled} || wrongThread)
+            return false;
+        stages.clear();
+        EngineAiModel direct{EngineAiModel::Config{.backend = "llama_cpp_cli"}};
+        if (direct.submit("cancelled direct request", InferenceWorkload::source_iteration,
+                stopped.get_token(), observer).text != kModelRequestCancelled
+            || stages != std::vector{ModelRequestStage::cancelled} || wrongThread)
+            return false;
+        stages.clear();
+        if (!direct.submit({}, InferenceWorkload::source_iteration, {}, observer).text.empty()
+            || stages != std::vector{ModelRequestStage::failed} || wrongThread)
+            return false;
+        stages.clear();
+        {
+            ScopedModelObservation completed{observer, {}};
+            completed.succeeded = true;
+        }
+        if (stages != std::vector{ModelRequestStage::completed})
+            return false;
+        stages.clear();
+        {
+            ScopedModelObservation uncertain{observer, stopped.get_token()};
+            uncertain.succeeded = true;
+            uncertain.retirement_failed = true;
+        }
+        if (stages != std::vector{ModelRequestStage::retirement_failed})
+            return false;
+        // Observer exceptions never escape into transport/ownership cleanup.
+        notify_model_stage([](ModelRequestStage) { throw std::runtime_error("contract observer"); },
+            ModelRequestStage::failed);
+
+#if defined(_WIN32)
+        // Pure callback decoding: no handles, socket, server or model. Header
+        // progress must not pass the send gate, and asynchronous write bytes
+        // come from the pointed-to DWORD rather than its four-byte ABI size.
+        auto httpState = std::make_shared<AsyncModelHttpState>();
+        const auto callbackContext = reinterpret_cast<DWORD_PTR>(httpState.get());
+        DWORD headerBytes = 189u;
+        AsyncModelHttpState::callback(nullptr, callbackContext,
+            WINHTTP_CALLBACK_STATUS_REQUEST_SENT, &headerBytes, sizeof(headerBytes));
+        if (httpState->completion != 0u || httpState->sentBytes != headerBytes)
+            return false;
+        AsyncModelHttpState::callback(nullptr, callbackContext,
+            WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE, nullptr, 0u);
+        if (httpState->completion != WINHTTP_CALLBACK_STATUS_SENDREQUEST_COMPLETE)
+            return false;
+        httpState->prepare_operation();
+        DWORD bodyBytes = 1819u;
+        AsyncModelHttpState::callback(nullptr, callbackContext,
+            WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE, &bodyBytes, sizeof(bodyBytes));
+        if (httpState->completion != WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE
+            || httpState->bytesWritten != bodyBytes || httpState->error != 0u)
+            return false;
+        httpState->prepare_operation();
+        if (httpState->bytesWritten != 0u || httpState->completion != 0u)
+            return false;
+        AsyncModelHttpState::callback(nullptr, callbackContext,
+            WINHTTP_CALLBACK_STATUS_WRITE_COMPLETE, nullptr, sizeof(DWORD));
+        if (httpState->error != ERROR_WINHTTP_INTERNAL_ERROR)
+            return false;
+        httpState->prepare_operation();
+        AsyncModelHttpState::callback(nullptr, callbackContext,
+            WINHTTP_CALLBACK_STATUS_READ_COMPLETE, httpState->readBuffer.data(), 37u);
+        if (httpState->bytesRead != 37u || httpState->bytesWritten != 0u)
+            return false;
+        httpState->callbackLifetime = httpState;
+        AsyncModelHttpState::callback(nullptr, callbackContext,
+            WINHTTP_CALLBACK_STATUS_HANDLE_CLOSING, nullptr, 0u);
+        if (!httpState->closed || httpState->callbackLifetime)
+            return false;
+#endif
+
+        // A real outer retry entry with a pre-cancelled token cannot construct
+        // or send even its first HTTP payload. The URL is deliberately invalid.
+        return openai_chat_complete("not-a-transport", "contract-model", {},
+            "cancelled contract request", {}, 1u, 1u, false, stopped.get_token())
+            == kModelRequestCancelled;
+    }
+
     bool openai_source_iteration_request_contract()
     {
         const std::string sourceBody = openai_chat_request_body(
@@ -4315,8 +4977,21 @@ namespace epochengine::ai
 
     std::string send_to_engine_ai(
         const std::string& user_text,
-        InferenceWorkload workload)
+        InferenceWorkload workload,
+        std::stop_token cancellation,
+        ModelRequestObserver observer)
     {
+        if (cancellation.stop_requested())
+        {
+            notify_model_stage(observer, ModelRequestStage::cancelled);
+            return std::string{kModelRequestCancelled};
+        }
+        // Capture the global epoch before either service lock. Every queued
+        // request retains that epoch through all attempts; only a later public
+        // request may acquire the next global epoch after shutdown/cancel.
+        RequestCancellation requestStop{cancellation, g_aiCancellation.capture()};
+        cancellation = requestStop.token();
+        ScopedModelObservation observation{observer, cancellation};
         const InferenceBudget budget = inference_budget(workload);
         if (!budget.valid())
             return "The selected local-model workload has an invalid host budget.";
@@ -4324,15 +4999,21 @@ namespace epochengine::ai
         {
             return "The local-model request is empty or exceeds its bounded host prompt budget.";
         }
-
-        const std::uint64_t requestCancellationGeneration =
-            g_aiRequestCancellationGeneration.load(std::memory_order_acquire);
+        notify_model_stage(observer, ModelRequestStage::queued);
 
         std::shared_ptr<EngineAiModel> client;
         std::string selectedModel;
         std::string selectedEndpoint;
         {
-            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+            std::unique_lock<std::recursive_mutex> stateLock{g_aiStateMutex, std::defer_lock};
+            while (!stateLock.try_lock())
+            {
+                if (cancellation.stop_requested())
+                    return std::string{kModelRequestCancelled};
+                std::this_thread::sleep_for(std::chrono::milliseconds{10});
+            }
+            if (cancellation.stop_requested())
+                return std::string{kModelRequestCancelled};
             if (!g_modelUseConfirmedForSession || g_selectedModel.empty())
                 return "No local AI model has been confirmed for this session. Confirm a discovered model before sending a request.";
 
@@ -4347,31 +5028,29 @@ namespace epochengine::ai
 
         EngineAiReply reply{};
         {
-            const std::lock_guard<std::mutex> requestLock{g_aiRequestMutex};
-            if (g_aiRequestCancellationGeneration.load(std::memory_order_acquire)
-                != requestCancellationGeneration)
-            {
-                return "Local-model request cancelled before execution.";
-            }
-            g_aiRequestStartCancellationGeneration = requestCancellationGeneration;
-            reply = client->submit(user_text, workload);
+            const ScopedModelRequest requestPermit{g_aiRequestGate, cancellation};
+            if (!requestPermit.acquired() || cancellation.stop_requested())
+                return std::string{kModelRequestCancelled};
+            reply = client->submit(user_text, workload, cancellation,
+                [&](ModelRequestStage stage)
+                {
+                    // The service owns its terminal notification, after the
+                    // serial permit is released and reply checks have finished.
+                    if (stage != ModelRequestStage::completed
+                        && stage != ModelRequestStage::cancelled
+                        && stage != ModelRequestStage::retirement_failed
+                        && stage != ModelRequestStage::failed)
+                        notify_model_stage(observer, stage);
+                });
         }
-        const std::string loweredReply = lowercase_ascii(reply.text);
-        if (starts_with_text(loweredReply, "local model api error")
-            || starts_with_text(loweredReply,
-                "local openai-compatible request failed")
-            || starts_with_text(loweredReply,
-                "local model returned hidden reasoning")
-            || starts_with_text(loweredReply,
-                "local model returned no decodable assistant text")
-            || starts_with_text(loweredReply,
-                "direct llama.cpp inference could not")
-            || starts_with_text(loweredReply,
-                "direct llama.cpp inference exceeded")
-            || starts_with_text(loweredReply,
-                "direct llama.cpp inference was cancelled")
-            || starts_with_text(loweredReply,
-                "direct llama.cpp inference returned no parseable"))
+        if (reply.transport_retirement_failed)
+        {
+            observation.retirement_failed = true;
+            return reply.text;
+        }
+        if (cancellation.stop_requested())
+            return std::string{kModelRequestCancelled};
+        if (model_reply_is_failure(reply.text))
         {
             return reply.text;
         }
@@ -4384,6 +5063,7 @@ namespace epochengine::ai
             return std::string("No decodable reply from selected local model '") + selectedModel
                 + "' at " + selectedEndpoint
                 + ". Check the endpoint/model selection and retry.";
+        observation.succeeded = true;
         return reply.text;
     }
 }

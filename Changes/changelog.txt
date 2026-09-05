@@ -1,5 +1,33 @@
 ## [Unreleased] - v0.89.35
 
+- Give each editor model request an owned stop token through admission, serial
+  waiting, retries and transport. Context Close cancels only that context;
+  whole-engine cancellation targets captured service epochs, and later requests
+  receive a fresh epoch. Late responses cannot replace a cancelled result.
+- Replace cross-thread Windows HTTP handle interruption with worker-owned async
+  send/write/receive/read completion and retained callback/body/buffer lifetime.
+  Explicit bounded body writes repair the observed headers-only send stall.
+  Verify full-body completion before reporting request sent, reject invalid
+  write counts and oversized envelopes, and disable implicit POST redirects,
+  cookies and ambient authentication. An unconfirmed close remains a distinct
+  error that stops HTTP retries until Engine restart, never a clean cancellation.
+- Show payload-free model transport stages and elapsed request time in AI
+  Controls. The UI distinguishes a running request from proven model generation;
+  Cancel stays pending until the owned worker joins. Add pure cancellation,
+  stale-reply, callback-decoding and retirement-priority regression contracts.
+- Add an explicitly invoked, console-only production HTTP cancellation probe
+  with MSBuild/CMake build entry points and synthetic prompts. It does not run
+  automatically or start the editor, a listener or a model. Real September 5
+  evidence: A uploaded and cancelled with confirmed retirement in under 1 ms;
+  independent B missed the initial 90-second probe watchdog but returned the
+  exact visible canary after about 98 seconds when allowed the production
+  timeout/retry budget. The final live probe passes (exit 0), with no retry;
+  no full model-to-build/native comparison proof is claimed.
+  Windows Debug/Release editor builds, Release HeadlessCI build, both explicitly
+  waited aggregates and all eight SoftwareBase/component CTests pass.
+  The renderer-free HTTP target also compiles/links with Linux Clang 22.1.8;
+  neither a full Linux editor rebuild nor Linux runtime execution is claimed.
+
 - Replace inherited environment/stdin for Candidate Lab compiler, test and
   preview processes with bounded explicit environment blocks, executable-local
   workspace profile/cache/temp roots and disconnected input. Reject malformed,
@@ -21,8 +49,8 @@
   An already-cancelled queued chat worker does not send its request.
   Process liveness and release determine success;
   unresolved OS retirement retains supervisor ownership and a diagnostic.
-  Per-context HTTP interruption remains response discard plus transport wait,
-  avoiding blanket cancellation of another context's request.
+  That checkpoint used response discard plus transport wait; the newer owned
+  cancellation/async transport implementation above supersedes that limitation.
 - Strengthen the explicitly invoked Qwen rig: require a genuinely unfinished
   operator-provided objective, default to Choose, run an actual second proposal
   and Release build from the selected sandbox, require two distinct validated

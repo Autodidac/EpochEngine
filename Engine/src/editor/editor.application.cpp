@@ -528,7 +528,8 @@ namespace epochengine
         {
             std::string reply{};
             std::string error{};
-            std::atomic_bool cancelled{false};
+            std::stop_source cancellation{};
+            std::atomic<ai::ModelRequestStage> stage{ai::ModelRequestStage::queued};
             std::atomic_bool ready{false};
         };
 
@@ -563,7 +564,19 @@ namespace epochengine
                     || !pending->ready.load(std::memory_order_acquire))
                     return;
 
-                if (pending->cancelled.load(std::memory_order_acquire))
+                if (pending->stage.load(std::memory_order_acquire)
+                    == ai::ModelRequestStage::retirement_failed)
+                {
+                    if (worker.joinable())
+                        worker.join();
+                    ++completionGeneration;
+                    latestRawReply.clear();
+                    pendingPrompt.clear();
+                    pending.reset();
+                    append_status("Model request ended, but HTTP handle retirement could not be confirmed. Restart the engine before another HTTP request. No response was applied.");
+                    return;
+                }
+                if (pending->cancellation.stop_requested())
                 {
                     if (worker.joinable())
                         worker.join();
@@ -610,18 +623,46 @@ namespace epochengine
             [[nodiscard]] bool source_request_cancelling() const noexcept
             {
                 return source_request_running()
-                    && pending->cancelled.load(std::memory_order_acquire);
+                    && pending->cancellation.stop_requested();
             }
 
-            [[nodiscard]] bool cancel_pending(bool cancelTransport = false)
+            [[nodiscard]] bool cancel_pending()
             {
                 if (!pending)
                     return false;
-                pending->cancelled.store(true, std::memory_order_release);
+                pending->cancellation.request_stop();
                 pendingPrompt.clear();
-                if (cancelTransport)
-                    epochengine::ai::cancel_engine_ai_request();
                 return true;
+            }
+
+            [[nodiscard]] std::string_view request_activity() const noexcept
+            {
+                if (!pending)
+                    return {};
+                if (pending->cancellation.stop_requested())
+                    return "Stopping this request and waiting for its worker to finish.";
+                switch (pending->stage.load(std::memory_order_acquire))
+                {
+                case ai::ModelRequestStage::queued:
+                    return "Queued for the model connection. No response is available yet.";
+                case ai::ModelRequestStage::sending:
+                    return "Starting the model request.";
+                case ai::ModelRequestStage::request_sent:
+                    return "Request sent. Waiting for the model response.";
+                case ai::ModelRequestStage::awaiting_response:
+                    return "Waiting for the model response. The endpoint does not report token progress.";
+                case ai::ModelRequestStage::receiving:
+                    return "Receiving the model response.";
+                case ai::ModelRequestStage::completed:
+                    return "Response returned. Finishing request cleanup.";
+                case ai::ModelRequestStage::cancelled:
+                    return "Request cancelled. Finishing worker cleanup.";
+                case ai::ModelRequestStage::failed:
+                    return "Request failed. Finishing worker cleanup.";
+                case ai::ModelRequestStage::retirement_failed:
+                    return "HTTP retirement was not confirmed. Restart the engine before another HTTP request.";
+                }
+                return {};
             }
 
             [[nodiscard]] std::uint64_t elapsed_milliseconds() const noexcept
@@ -693,11 +734,18 @@ namespace epochengine
                                     threadActivity{};
                                 // A queued worker may first run after its
                                 // context closed. Do not send an already
-                                // cancelled request; in-flight interruption
-                                // still needs request-scoped transport support.
-                                if (!request->cancelled.load(std::memory_order_acquire))
+                                // cancelled request. The same owned token also
+                                // interrupts queued or in-flight transport work.
+                                if (!request->cancellation.stop_requested())
                                     request->reply =
-                                        epochengine::ai::send_to_engine_ai(t, workload);
+                                        epochengine::ai::send_to_engine_ai(
+                                            t, workload,
+                                            request->cancellation.get_token(),
+                                            [request](ai::ModelRequestStage stage) noexcept
+                                            {
+                                                request->stage.store(stage,
+                                                    std::memory_order_release);
+                                            });
                             }
                             catch (const std::exception& e)
                             {
@@ -21320,12 +21368,123 @@ namespace epochengine
         {
             if (!chat)
                 return;
-            // Transport cancellation is currently global, not request-scoped.
-            // Discard this chat's response without cancelling another context's
-            // request. Whole-system shutdown cancels that transport separately.
-            (void)chat->cancel_pending(false);
+            // Interrupt only this request, including serial-gate waits. Keep
+            // its state alive until the transport worker has actually returned.
+            (void)chat->cancel_pending();
             if (chat->worker.joinable())
                 chat->worker.join();
+        }
+    }
+
+    bool editor_ai_request_cancellation_contract() noexcept
+    {
+        // Exercise the actual chat ownership/pump paths without starting a
+        // model, worker, renderer, or transport. Transport has its own contract.
+        try
+        {
+            AiChat first{};
+            AiChat second{};
+            first.pendingWorkload = ai::InferenceWorkload::source_iteration;
+            second.pendingWorkload = ai::InferenceWorkload::source_iteration;
+            const auto cancelled = std::make_shared<AiChatRequestState>();
+            const auto other = std::make_shared<AiChatRequestState>();
+            first.pending = cancelled;
+            first.pendingPrompt = "first request";
+            first.latestRawReply = "previous response";
+            second.pending = other;
+            second.pendingPrompt = "second request";
+            cancelled->stage.store(ai::ModelRequestStage::awaiting_response,
+                std::memory_order_release);
+            if (first.request_activity().find("Waiting for the model response")
+                    == std::string_view::npos
+                || second.request_activity().find("Queued") == std::string_view::npos)
+                return false;
+            const auto firstToken = cancelled->cancellation.get_token();
+            const auto secondToken = other->cancellation.get_token();
+            if (!first.cancel_pending() || !firstToken.stop_requested()
+                || secondToken.stop_requested() || !first.pendingPrompt.empty()
+                || second.pendingPrompt != "second request"
+                || !first.source_request_cancelling()
+                || second.source_request_cancelling()
+                || first.request_activity().find("Stopping this request")
+                    == std::string_view::npos)
+                return false;
+
+            // A requested stop is not a completed worker. The pending request
+            // must retain ownership until completion is actually published.
+            first.pump();
+            if (first.pending != cancelled || first.completionGeneration != 0u
+                || !first.cancel_pending())
+                return false;
+            cancelled->reply = "cancelled reply canary";
+            cancelled->ready.store(true, std::memory_order_release);
+            first.pump();
+            if (first.pending || first.completionGeneration != 1u
+                || !first.latestRawReply.empty() || first.cancel_pending()
+                || first.source_request_running())
+                return false;
+            for (const auto& line : first.lines)
+                if (line.find("cancelled reply canary") != std::string::npos)
+                    return false;
+
+            // A retained token belongs only to the old request. Neither its
+            // repeated stop nor its stale result may affect the next iteration.
+            const auto successor = std::make_shared<AiChatRequestState>();
+            first.pending = successor;
+            first.pendingPrompt = "successor request";
+            (void)cancelled->cancellation.request_stop();
+            cancelled->reply = "late stale reply canary";
+            first.pump();
+            if (successor->cancellation.stop_requested()
+                || first.pending != successor || first.completionGeneration != 1u
+                || first.pendingPrompt != "successor request")
+                return false;
+
+            other->reply = "other context reply";
+            other->ready.store(true, std::memory_order_release);
+            second.pump();
+            if (second.pending || second.latestRawReply != "other context reply"
+                || second.completionGeneration != 1u
+                || successor->cancellation.stop_requested())
+                return false;
+            successor->reply = "successor reply";
+            successor->ready.store(true, std::memory_order_release);
+            first.pump();
+            if (first.pending || first.latestRawReply != "successor reply"
+                || first.completionGeneration != 2u || !first.pendingPrompt.empty())
+                return false;
+
+            // Cancellation wins even when the response was already published
+            // but the UI had not consumed it yet.
+            first.pending = std::make_shared<AiChatRequestState>();
+            first.pending->reply = "completed but cancelled canary";
+            first.pending->ready.store(true, std::memory_order_release);
+            if (!first.cancel_pending())
+                return false;
+            first.pump();
+            if (first.pending || !first.latestRawReply.empty()
+                || first.completionGeneration != 3u)
+                return false;
+            for (const auto& line : first.lines)
+                if (line.find("late stale reply canary") != std::string::npos
+                    || line.find("completed but cancelled canary") != std::string::npos)
+                    return false;
+            first.pending = std::make_shared<AiChatRequestState>();
+            (void)first.cancel_pending();
+            first.pending->stage.store(ai::ModelRequestStage::retirement_failed,
+                std::memory_order_release);
+            first.pending->reply = "unretired request payload canary";
+            first.pending->ready.store(true, std::memory_order_release);
+            first.pump();
+            if (first.pending || !first.latestRawReply.empty()
+                || first.completionGeneration != 4u
+                || first.lines.back().find("retirement could not be confirmed") == std::string::npos)
+                return false;
+            return true;
+        }
+        catch (...)
+        {
+            return false;
         }
     }
 
@@ -21343,7 +21502,7 @@ namespace epochengine
             retiredState = editorStorage.states.extract(ctx);
         }
         if (!retiredChat.empty() && retiredChat.mapped())
-            (void)retiredChat.mapped()->cancel_pending(false);
+            (void)retiredChat.mapped()->cancel_pending();
         if (!retiredState.empty())
         {
             request_editor_source_session_stop(retiredState.mapped());
@@ -21379,7 +21538,7 @@ namespace epochengine
         {
             (void)ctx;
             if (chat)
-                (void)chat->cancel_pending(false);
+                (void)chat->cancel_pending();
         }
         for (auto& [ctx, state] : retiredStates)
         {
@@ -24089,7 +24248,7 @@ namespace epochengine
                 invalidate_ai_source_artifacts(editor);
                 auto& mcp = editor.aiLocalMcp;
                 const bool cancelledLocalModel =
-                    chat.source_request_running() && chat.cancel_pending(true);
+                    chat.source_request_running() && chat.cancel_pending();
                 const bool cancelledQueuedSource = editor.aiDeferredRequestKind
                     == AiDeferredRequestKind::SourceIteration;
                 if (cancelledQueuedSource)
@@ -30805,6 +30964,7 @@ namespace epochengine
                     .local_model_cancelling = chat.source_request_cancelling(),
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
+                    .local_model_activity = std::string{chat.request_activity()},
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =
@@ -36332,6 +36492,7 @@ namespace epochengine
                     .local_model_cancelling = chat.source_request_cancelling(),
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
+                    .local_model_activity = std::string{chat.request_activity()},
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =
@@ -36410,6 +36571,7 @@ namespace epochengine
                     .local_model_cancelling = chat.source_request_cancelling(),
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
+                    .local_model_activity = std::string{chat.request_activity()},
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =

@@ -4716,14 +4716,17 @@ namespace epochengine::editor_ai_development_panel
         if (!view.visible)
             return view;
         view.can_cancel = !input.local_model_cancelling;
-        view.label = input.local_model_cancelling ? "Stopping local model"
-            : input.local_model_running ? "Local model working"
+        view.label = input.local_model_cancelling ? "Stopping model request"
+            : input.local_model_running ? "Model request active"
             : "Local model queued";
         view.detail = input.local_model_cancelling
             ? "Cancellation requested. Waiting for the request worker to finish; no reply will be applied."
             : input.local_model_running
                 ? "Request active; waiting for the model response. Token progress is not available. You can keep using the editor."
                 : "Waiting to send this self-coding request. No model response is running yet.";
+        if (input.local_model_running && !input.local_model_cancelling
+            && !input.local_model_activity.empty())
+            view.detail = input.local_model_activity;
         if (input.local_model_running)
         {
             const auto seconds = input.local_model_elapsed_ms / 1'000u;
@@ -5004,13 +5007,18 @@ namespace epochengine::editor_ai_development_panel
         activityInput.local_model_elapsed_ms = 61'234u;
         const auto working = describe_model_activity(activityInput);
         if (!working.visible || !working.can_cancel || working.elapsed != "1:01"
-            || working.label != "Local model working"
+            || working.label != "Model request active"
             || working.animation_phase < 0.0f || working.animation_phase >= 1.0f)
             return false;
         activityInput.local_model_cancelling = true;
+        activityInput.local_model_activity = "Receiving the model response.";
         const auto stopping = describe_model_activity(activityInput);
         if (!stopping.visible || stopping.can_cancel
-            || stopping.label != "Stopping local model")
+            || stopping.label != "Stopping model request"
+            || stopping.detail == activityInput.local_model_activity)
+            return false;
+        activityInput.local_model_cancelling = false;
+        if (describe_model_activity(activityInput).detail != activityInput.local_model_activity)
             return false;
         activityInput.local_model_running = false;
         activityInput.local_model_queued = false;

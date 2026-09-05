@@ -131,6 +131,7 @@ export namespace epochengine::editor_ai_development_panel
         bool local_model_queued{};
         bool local_model_cancelling{};
         std::uint64_t local_model_elapsed_ms{};
+        std::string local_model_activity{};
         bool external_mcp_available{};
         std::string external_mcp_status{};
         std::uint64_t external_mcp_process_id{};

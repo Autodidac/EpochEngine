@@ -44,6 +44,8 @@ module;
 #endif
 
 #include <cstdint>
+#include <functional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -75,6 +77,14 @@ export namespace epochengine::ai
         source_iteration,
         source_self_review
     };
+
+    enum class ModelRequestStage : std::uint8_t
+    {
+        queued, sending, request_sent, awaiting_response, receiving,
+        completed, cancelled, failed, retirement_failed
+    };
+    // Payload-free, caller-worker notifications; never an OS transport callback.
+    using ModelRequestObserver = std::function<void(ModelRequestStage)>;
 
     struct InferenceBudget final
     {
@@ -186,6 +196,7 @@ export namespace epochengine::ai
         std::string text;
         double score = 0.0;
         std::vector<Candidate> alternatives;
+        bool transport_retirement_failed{};
     };
 
     class EngineAiModel
@@ -208,7 +219,9 @@ export namespace epochengine::ai
         explicit EngineAiModel(Config cfg);
         [[nodiscard]] EngineAiReply submit(
             std::string_view user_input,
-            InferenceWorkload workload = InferenceWorkload::chat);
+            InferenceWorkload workload = InferenceWorkload::chat,
+            std::stop_token cancellation = {},
+            ModelRequestObserver observer = {});
 
     private:
         Config m_cfg{};
@@ -218,11 +231,15 @@ export namespace epochengine::ai
     // Engine-global service wrapper (simple singleton)
     void init_engine_ai();
     void shutdown_engine_ai();
+    // Cancels all requests already admitted/queued by the global service.
+    // Individual callers cancel only their own supplied stop token.
     void cancel_engine_ai_request() noexcept;
 
     [[nodiscard]] std::string send_to_engine_ai(
         const std::string& user_text,
-        InferenceWorkload workload = InferenceWorkload::chat);
+        InferenceWorkload workload = InferenceWorkload::chat,
+        std::stop_token cancellation = {},
+        ModelRequestObserver observer = {});
     [[nodiscard]] std::string default_workspace_root();
     [[nodiscard]] std::string review_fixtures_root();
     [[nodiscard]] std::string evals_root();
@@ -269,6 +286,7 @@ export namespace epochengine::ai
         std::string_view user_text);
     [[nodiscard]] bool direct_llama_cpp_prompt_transport_contract();
     [[nodiscard]] bool openai_source_iteration_request_contract();
+    [[nodiscard]] bool model_request_cancellation_contract();
     [[nodiscard]] bool is_promotable_assistant_reply(std::string_view reply);
     [[nodiscard]] HelperReviewGateResult classify_helper_review_reply(std::string_view reply);
 }
