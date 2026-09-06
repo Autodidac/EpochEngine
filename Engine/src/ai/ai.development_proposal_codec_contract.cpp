@@ -365,7 +365,31 @@ namespace epochengine::ai::development_proposal_codec
                 "replace \"known source\" with \"known reviewed source\" in "
                 "Engine/src/ai/ai.development_proposal_codec.cpp",
                 evidence);
-            return context.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
+            const std::string projectContext = context_request_prompt(
+                SourceArea::project,
+                "EPOCH_SOURCE_EDIT_REQUEST_V1\nInspect a project",
+                "PATH Projects/demo/project.main.cpp\n");
+            for (const auto* prompt : {&context, &projectContext, &engine, &project, &grounded})
+            {
+                if (prompt->find("If response_format supplies a JSON schema") == std::string::npos
+                    || prompt->find("not a literal response prefix") == std::string::npos
+                    || prompt->find("Do not prepend a header or a bare sentinel to JSON") == std::string::npos
+                    || prompt->find("If no JSON schema is supplied") == std::string::npos
+                    || prompt->find("The first response byte must be E") != std::string::npos
+                    || prompt->find("The first byte must be E") != std::string::npos)
+                    return false;
+            }
+            return context.starts_with("EPOCH_SOURCE_SELECTION_V1\n")
+                && projectContext.starts_with("EPOCH_SOURCE_SELECTION_V1\n")
+                && engine.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n")
+                && project.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n")
+                && grounded.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n")
+                && context.find("nonempty reason, paths=[] and reads=[]") != std::string::npos
+                && engine.find("action=insufficient requires a nonempty reason") != std::string::npos
+                && engine.find("empty title, rationale, operations, paths and reads") != std::string::npos
+                && engine.find("JSON action=context") != std::string::npos
+                && engine.find("action=patch") != std::string::npos
+                && context.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
                     != std::string::npos
                 && context.find("path: Engine/") != std::string::npos
                 && context.find("fix bugs") != std::string::npos
@@ -395,8 +419,6 @@ namespace epochengine::ai::development_proposal_codec
                     != std::string::npos
                 && engine.find("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
                     != std::string::npos
-                && engine.find("first response byte")
-                    != std::string::npos
                 && engine.find("FINAL OUTPUT CHECK")
                     != std::string::npos
                 && engine.find("begin_search") != std::string::npos
@@ -406,7 +428,7 @@ namespace epochengine::ai::development_proposal_codec
                     != std::string::npos
                 && engine.find("end_replacement\nRepeat")
                     == std::string::npos
-                && engine.find("Never regenerate the whole file")
+                && engine.find("Never regenerate the whole file") != std::string::npos
                 && grounded.find(
                     "search_final_newline: false\nbegin_search\n"
                     "|known source\nend_search\n"

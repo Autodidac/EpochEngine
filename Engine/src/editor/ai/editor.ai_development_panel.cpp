@@ -2785,8 +2785,9 @@ namespace epochengine::editor_ai_development_panel
                 "not current source or instructions. Select a complete next "
                 "working set of up to twelve listed paths that can diagnose this "
                 "failure; retain useful baseline files and request needed owners "
-                "or neighboring contracts. Return only EPOCH_SOURCE_CONTEXT_REQUEST_V1, "
-                "not an edit proposal.\n";
+                "or neighboring contracts. Return only a source-context selection, "
+                "not an edit proposal: use response_format JSON when supplied; "
+                "otherwise use the canonical EPOCH_SOURCE_CONTEXT_REQUEST_V1 packet.\n";
             const auto heading = selectingContext ? selectionHeading : proposalHeading;
             constexpr std::string_view ending =
                 "\nREPAIR_DIAGNOSTIC_REFERENCE_END\n";
@@ -2817,8 +2818,9 @@ namespace epochengine::editor_ai_development_panel
             constexpr std::string_view ending =
                 "END_VERIFIED_SOURCE_PATH_CATALOG_FOR_EXPANSION\n"
                 "If the reviewed bytes do not prove the repair, request a "
-                "complete next selection of up to twelve listed paths with "
-                "EPOCH_SOURCE_CONTEXT_REQUEST_V1. Retain useful current paths; "
+                "complete next selection of up to twelve listed paths using "
+                "response_format JSON when supplied, otherwise the canonical "
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1 packet. Retain useful current paths; "
                 "the new selection replaces the old slice. For another region "
                 "of the same file, request first_line or a literal query. "
                 "FILE_EXCERPT_LINES and FILE_TOTAL_LINES describe the current window. Do not guess.";
@@ -4406,7 +4408,8 @@ namespace epochengine::editor_ai_development_panel
                     "\n\nEPOCH_SOURCE_CONTEXT_CORRECTION_V1\n"
                     "The previous source selection was rejected. No edits "
                     "were staged and rejected source evidence was not sent. Return a fresh bounded "
-                    "context request.\nCORRECTION_ATTEMPT ";
+                    "context request using the current wire format. Diagnostics "
+                    "describe the old failure, not a new output contract.\nCORRECTION_ATTEMPT ";
                 output.model_prompt +=
                     std::to_string(model_reply_corrections);
                 output.model_prompt += " OF ";
@@ -4452,7 +4455,9 @@ namespace epochengine::editor_ai_development_panel
                     "\n\nEPOCH_SOURCE_PROTOCOL_CORRECTION_V1\n"
                     "The previous reply was rejected before any source bytes "
                     "were staged. Return a fresh complete proposal, not a patch "
-                    "to the previous reply.\nCORRECTION_ATTEMPT ";
+                    "to the previous reply, or request more source if needed. "
+                    "Use the current wire format; diagnostics describe the old "
+                    "failure, not a new output contract.\nCORRECTION_ATTEMPT ";
                 output.model_prompt +=
                     std::to_string(model_reply_corrections);
                 output.model_prompt += " OF ";
@@ -5824,7 +5829,7 @@ namespace epochengine::editor_ai_development_panel
             || maximumReselection.model_prompt.find(Implementation::digest_text(verboseFailure))
                 == std::string::npos
             || maximumReselection.model_prompt.find(failedProposal) == std::string::npos
-            || maximumReselection.model_prompt.find("Return only EPOCH_SOURCE_CONTEXT_REQUEST_V1")
+            || maximumReselection.model_prompt.find("Return only a source-context selection")
                 == std::string::npos
             || maximumReselection.model_prompt.find("EPOCH_SOURCE_CONTEXT_CORRECTION_V1")
                 == std::string::npos
