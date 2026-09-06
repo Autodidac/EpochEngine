@@ -37,9 +37,59 @@ The immediate acceptance objective is the local-model sandbox coding/build/
 comparison/succession loop in `Changes/active_pass.md`. It must operate from
 ordinary language and keep live source and unrelated projects unchanged.
 After that gate, prove the current editor-free CLI/platform-window/GUI baseline
-before expanding the fragile multicontext system. A playable baseline 2D project
-remains the game-facing integration target, not the sole purpose of Epoch or a
-competing immediate deadline. Higher-tier rendering cannot displace these gates.
+before expanding the fragile multicontext system. The complete playable 2D game
+remains a major product goal, not the sole purpose of Epoch, a minor demo, or a
+goal removed by the latest deadline. The roadmap alone orders today's GUI,
+Extensions, Sim/Space and private SDK milestones. Higher-tier rendering cannot
+displace the retained software and 2D acceptance contracts.
+
+## Cross-System Architecture Alignment Review
+
+Apply this review to each substantial source tranche and before accepting a
+stable-base refresh or release. Review the relevant dependency neighborhood,
+not only the edited file. Periodic whole-engine inventories should identify
+gaps across that same structure; they do not authorize a blanket rewrite or
+create a second schedule. Record the next bounded repair in active_pass and
+longer-lived recommendations under existing roadmap mission IDs.
+
+| Review axis | Questions and required evidence |
+| --- | --- |
+| Documentation and intent | Do current behavior, public API, capability matrix, project templates and tests match the docs? Label implemented, integrated, tested and planned separately; retain older unfinished goals, especially the full 2D loop |
+| Input/output structure | For each affected file/schema/message/API, identify producer, consumer, authoritative owner, type/units/encoding, size/version limits, identity and permitted side effects. Test malformed/partial/stale inputs and exact round trips |
+| State and boundaries | Separate authoring/history, compiled artifacts, physical caches, Engine/project/candidate sessions and host evidence. Identify write roots, credentials, model/web egress, restore behavior, transaction failure and cleanup ownership |
+| Optimization/recommendation | Measure CPU time, allocations, copying, I/O, queue latency, GPU uploads/residency and startup/build cost where relevant. Identify correctness baseline, workload and before/after metrics; distinguish estimate from measured result and retain a regression guard |
+| Cross-platform scaling | Check CLI/headless, native-window, GUI, 2D/game and intensive accelerated graphics consumers, including small machines. Record platform/toolchain/profile support, optional dependencies, fallback, resource ceilings and unsupported states explicitly |
+| Context-specific needs | Inventory owned/borrowed/external-PID windows; creation/thread/current-context affinity, input/focus/capture, timing, resources, presentation, suspend/restore, replacement and shutdown. Shared typed intent must not erase backend-specific requirements |
+| Compatibility and delivery | Verify public module/API identity, serialization versions, selected dependency closure, source/binary/version binding, SDK/reference coverage and public/private access. Prove changed producer/consumer pairs before freezing or publishing |
+
+For each recommendation retain a compact record: mission ID, problem/evidence,
+affected producers/consumers and profiles, proposed change, expected benefit,
+risks/fallback, measurable acceptance, and owner/next action. An optimization
+without measurements is a hypothesis, not completed performance work. An
+unsupported profile is a reported limit, not silently passed coverage.
+
+The minimum profile sweep is dependency-light CLI; native software window;
+GUI tool without editor; the full playable 2D game; and a selected accelerated
+graphics workload. Test impacted profiles directly, keep a coverage matrix for
+the rest, and run the full supported matrix at stable-base/release boundaries.
+Do not run every GPU backend during every tiny edit or infer viability from API
+brand, CPU count, a successful compile or one high-end machine.
+
+Planned curated model references may expose this analysis and current contracts
+through separate Engine self-coding and project/software/game collections.
+Reference metadata should bind version, provenance, evidence state, audience and
+scope; it cannot grant model execution, source writes or cross-project access.
+See [curated research](ai_curated_research_contract.md) and
+[SDK reference](sdk_reference_and_access_contract.md). Reuse a shared versioned
+public API/module inventory where appropriate; this metadata pipeline is a
+recommendation, not an implemented registry or reason to delay core repair.
+
+The stable context/software base freezes **interfaces and compatibility proof**:
+public APIs/modules, profile/dependency selection, build/toolchain assumptions,
+document/artifact formats, context lifecycle/input/resource contracts and
+backend-specific acceptance. Preserve its historical commit and qualify later
+changes deliberately. Do not freeze unfinished code or mirror every game change
+into the base automatically.
 
 ## Core Flow
 

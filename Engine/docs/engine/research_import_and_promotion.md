@@ -1,9 +1,11 @@
 # Research Import And Promotion
 
-Epoch planning material can come from anywhere in the workspace. PDFs, HTML
-prototypes, scratch notes, and downloaded documents should be staged into a
-neutral research-import path before they rewrite roadmap language, datasets, or
-automation policy.
+Epoch planning material may include explicitly scoped PDFs, HTML prototypes,
+scratch notes and downloaded documents. Import only inputs selected by the
+operator or admitted within the current task's stated scope; this workflow
+does not authorize automatic workspace scans, unrelated project intake or
+implicit imports. Stage those inputs in a neutral research-import path before
+reviewing any proposed change to roadmap language, datasets or automation policy.
 
 ## Staging path
 
@@ -14,7 +16,8 @@ automation policy.
 
 ## Import tool
 
-Use [Tools/research_import.ps1](/C:/Users/iammi/.codex/worktrees/2a8f/epoch_vibed/Tools/research_import.ps1):
+Use [Tools/research_import.ps1](../../../Tools/research_import.ps1) from the
+repository root with one explicitly scoped input:
 
 ```powershell
 powershell -File Tools/research_import.ps1 -InputPath "C:\path\to\doc.pdf"

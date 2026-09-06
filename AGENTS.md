@@ -89,9 +89,11 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- `v0.89.35` is the current local development source and remains unpublished.
-  The public Windows/Linux packaged-runtime and authenticated-source authority
-  is `v0.89.34`; macOS packaged authority remains `v0.89.30`. Preserve
+- Local source is in incomplete, unpublished **v0.90.1 preparation** after
+  v0.89.35 development. The active pass records remaining version/build gaps;
+  a constant or checkpoint is not a tested release. Last recorded public
+  Windows/Linux runtime/authenticated-source authority is `v0.89.34`; macOS
+  packaged authority remains `v0.89.30`. Preserve
   `v0.89.34`, `v0.89.33`, `v0.89.30`, `v0.89.29`, `v0.89.28`, `v0.89.27`, and `v0.89.06` as
   immutable release history and preserve
   `multicontext-base-stable` at
@@ -259,6 +261,11 @@
   them. Record the exact next action, evidence gap and stop condition in the
   active pass. Move definitely completed tasks to the changelog, while retaining
   enduring architecture/safety rules in their owning documents.
+- Preserve older unfinished goals, especially the full playable 2D product.
+  Use the capability-tier architecture's cross-system review for data flow,
+  ownership, optimization evidence and portable software/graphics profiles.
+  Curated model reference sets are separately scoped Engine and project data,
+  not permission to ingest every document or another campaign's state.
 - The active pass owns the current source gate. Implement/refactor production
   C++ first, build/test what changed, then record only new/completed systems
   and changed contracts.

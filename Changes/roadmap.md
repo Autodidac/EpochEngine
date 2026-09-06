@@ -36,55 +36,58 @@ After the current major repairs are accepted, freeze that proven reusable base
 before game-specific expansion. Later game work develops above it; refreshing
 the frozen base requires a deliberate compatibility-tested decision.
 
-## Execution Order And Continuity
+## Ordered Delivery And Continuity
 
-September 6 latest priority refinement: alongside P0 self-coding, complete the
-current EpochGui/Extensions objectives that its UI, selection and project
-workflow depend on. Then prove generated projects and extension-enabled
-EpochSimEngine/planetary demos with separate engine-library dependencies; the
-planetary library is EpochSpaceEngine. Archive/license review and real project
-load/build/run/reopen evidence precede any completion/publication claim. This
-does not unfreeze the reusable context base for game-specific implementation.
+The operator's immediate target is **end of September 6, 2026
+(America/New_York)**. This is a priority, not a claim that the batch is complete
+or permission to bypass acceptance. The order below supersedes older dated
+schedules. Mission IDs (P0–P4, EXT, RSH, SDK) are stable references, not competing
+priority numbers.
 
-The FINAL milestone in this same-day batch is complete Doxygen, the owner-only
-Engine SDK and authenticated online documentation/website delivery, after all
-the integrations above. The operator targets the end of September 6, 2026
-(America/New_York) for that milestone too. Reuse existing Site access support;
-prove module coverage, version binding and server-side owner-only access for
-pages, assets, search and downloads. No deadline replaces those release gates.
-Provide a separate readable SDK Reference under Engine About, visible only
-with current owner/admin SDK permission through the existing source-update
-authentication flow. The website must mirror that permission and protect direct
-content routes; neither a hidden link nor generic source entitlement is enough.
+| Order | Bounded result | Required exit evidence |
+| --- | --- | --- |
+| D0 / P0 | Repair actual Qwen failure handling, prompt/persistence continuity, measured 30-second pacing and task/UI truth | Closest production contracts plus exact current Debug/Release builds; full failure evidence survives into repair |
+| D1 / P0 | Real model builds, embedded PID comparison and sandbox succession | Two accepted builds across Choose, Keep/Stop/close tests, enforced data/process boundary and no orphan/cross-project writes |
+| D2 / P2 + EXT + P1 | Finish current EpochGui/editor and Extensions workflow inventory; prove generated CLI/native-window/GUI software projects | Readable/interactable/history-safe controls; truthful package states; Save/Load/Build/Run/Stop/Reopen/rebuild and dependency-closure matrix |
+| D3 / P1 | Refresh then freeze the accepted reusable software/context base | Versioned compatibility contract and profile/backend tests; preserve original stable ref; no unfinished game-specific coupling |
+| D4 / EXT | Integrate Sim/Space demos as add-on projects with separate engine libraries | Reviewed license/provenance, exact library dependencies, installation/load/build/run/stop/reopen evidence; planetary library named EpochSpaceEngine |
+| D5 / SDK | Complete Doxygen, private SDK Reference in Engine About and matching website | Public API coverage and sample-consumer builds; exact-version artifacts; owner/admin success and every private-route denial/cache test |
+| Next major product acceptance / P3 | Complete the playable 2D game loop | Full map/actor/input/animation/collision/audio/GUI/persistence/build/cache-regeneration acceptance, not merely a demo that opens |
+| Continuing / P4 + later missions | Resources, context adapters, platform extraction and higher tiers | Explicit per-backend/profile capability, correctness and measured-cost evidence without breaking accepted lower tiers |
 
-1. **Self-coding first:** finish the real Qwen two-build/choice loop and its
-   data, process, model-selection and interaction acceptance. Reuse its existing
-   controller, source executor, retry, transport and supervision implementations.
-2. **Stable software base next:** finish profiles and generated-template proof
-   on the existing SoftwareBase/context-admission foundation; only then advance
-   the authorized stable branch and broaden context adapters.
-3. **Usable complete workflows:** Properties, 2D/UI, Timeline and code editing,
-   followed by the full playable 2D project loop. Carry controls, semantic
-   history, persistence, diagnostics and tests with each feature.
-4. **Broader platform/backend work:** migrate proven owners incrementally into
-   the reusable platform layer and extend resources/capabilities without
-   disturbing the accepted base.
+The **2D game remains a major goal**, not demoted to a demo, deleted, or blocked
+on completing all future 3D/planetary work. Its shared GUI, authoring, input and
+project acceptance can advance during D2; the full game-facing loop remains P3.
+Integrating the supplied planetary project now is not open-ended planetary/
+astronomical engine expansion, which remains a later mission.
 
-Release validation is a gate on each accepted milestone, not a requirement to
-finish this entire roadmap before shipping. A supporting UI repair may accompany
-P0; an unrelated subsystem does not replace a blocked P0 acceptance run.
+Use independent agents for disjoint useful source/tests/docs, but serialize
+heavy build/model/runtime work. Supporting GUI and minimal local research
+retrieval may accompany P0. An unrelated subsystem cannot substitute for a
+blocked P0 result. D3 precedes major game-specific changes; do not freeze an
+unfinished source checkpoint merely to meet the date.
 
-Each unchecked item below means its stated acceptance remains open, not that
-every component needs writing. At each pass start, reconcile it with source,
-tests and changelog; put only the next bounded change/proof in the active pass.
-At handoff, retain the exact failed or untested step and next action. Remove an
-item only when its full acceptance is proven, recording completion in history.
+Each unchecked item means its **acceptance is open**, not that every component
+needs rewriting. Reconcile with source, contracts and changelog first. At each
+handoff record implemented/integrated/tested status, first failing evidence and
+next concrete action in the active pass. Preserve older unfinished goals; move
+proven completion to history with its mission ID/evidence instead of silently
+dropping intent. Product behavior remains in its owning contract.
+
+Release validation applies to the accepted release scope, not to completion of
+all deferred missions. The authorized v0.90.1 batch must have honest feature
+coverage and an exact reviewed publication set. SDK delivery is last in today's
+batch, with its own private-access tests, not a reason to expose private material
+through an otherwise public release.
 
 ## Current Release State
 
-- Local source and Windows/Linux build authorities declare v0.89.35.
-- Public Windows/Linux runtime and private-source discovery remain v0.89.34.
-- Public macOS packaged authority remains v0.89.30.
+- Local source/Windows/Linux metadata is in **partial v0.90.1 preparation**, not
+  an accepted release. Version scripts/receipt resolution/updater tests remain
+  inconsistent; the active pass owns their exact repair and build evidence.
+- Last recorded public Windows/Linux runtime/private-source authority is
+  v0.89.34; macOS is v0.89.30. These are recorded authorities, not a fresh Site
+  check. Keep independent EpochGui/Extensions versions independent.
 - The next release may advance only one exact committed tree after Windows and
   managed-Clang Linux production evidence, immutable packages, receipts,
   sidecars, rollback checks, and one reviewed Site activation.
@@ -93,7 +96,8 @@ item only when its full acceptance is proven, recording completion in history.
 - Historical runtime/source objects remain immutable; stable-base advancement
   follows the explicit operator authorization and acceptance gate above.
   GitHub is not a release authority and currently rejects pushes
-  because the account is suspended.
+  because the account was suspended at the last recorded attempt; do not treat
+  a historical remote failure as authority to change release policy.
 
 ## P0 — Self-Coding Candidate Lab
 
@@ -120,6 +124,21 @@ item only when its full acceptance is proven, recording completion in history.
   next sandbox parent, and resumes the saved mission without repeating completed
   steps.
 
+- [ ] Preserve repair evidence at maximum prompt size: exact edit source, first
+  causal compiler/test error, full-evidence hash and failed proposal precede
+  optional catalog/research. No silent loss of diagnostics on retries.
+- [ ] Make validation and checkpoint persistence transactional: oversized logs,
+  malformed receipts, disk/I/O/state-capacity failures, stale replies and restart
+  leave one recoverable state; automatic retry does not consume invalid evidence.
+- [ ] Enforce nonblocking 30-second cooldown and measured CPU/RAM admission
+  before model/compiler/test/new-preview work. Show actual running/queued/idle
+  activity and unsupported metrics; no new AI during Keep/Choose. Cancel/close
+  retires global heavy ownership before another context starts.
+- [ ] Separate routine sandbox automation from authority: Start authorizes the
+  visible bounded local session, not every internal packet manually; exact paths,
+  preimages, receipts and process policy remain checked. Keep/Choose changes only
+  sandbox lineage; live-source promotion/access remains separate.
+
 Exit gate: one operator-understandable session completes with truthful evidence,
 two actual accepted builds across a choice, no blank/dead actions, no orphan
 processes, and no live-source/project mutation. A successor plan alone cannot pass.
@@ -142,8 +161,16 @@ it does not complete generated templates, GUI/input or stable-branch acceptance.
 - [ ] Prove floating placement guards and readable guide labels for docked,
   floating, borrowed and separately supervised context windows before migration.
 
+- [ ] Freeze a **compatibility contract**, not only a branch: public API/module
+  identities, profile/dependency closure, build flags/toolchains, project/artifact
+  schemas, context ownership/lifetime/input/timing interfaces, expected failure
+  behavior and a per-backend test matrix. Record exact proven commit and artifacts.
+  Later base updates need a deliberate compatibility-tested decision; Engine-
+  specific expansions cannot silently change the frozen base.
+
 Exit gate: current reusable software bases work without the editor, and every
-context migration has an explicit backend-specific proof plan.
+context migration has an explicit backend-specific proof plan. The original
+`ad6c416d930b348a61bc37ceb7d4522742be084a` remains available in history.
 
 ## P2 — Editor And 2D/UI Usability
 
@@ -153,10 +180,11 @@ context migration has an explicit backend-specific proof plan.
 - [ ] Finish Properties as a component-aware inspector with clear identity,
   layout/transform, appearance, interaction, state, resource, runtime, and
   diagnostic groups; unavailable fields explain why and never look editable.
-- [ ] Complete the 2D/UI workspace over the existing GUI and tile-map documents:
-  discoverable creation controls, hierarchy, canvas selection, direct
-  manipulation, responsive property editing, semantic Undo/Redo, preview, and
-  exact Save/Reload.
+- [ ] Complete 2D/UI over existing GUI and tile-map documents: dedicated GUI
+  Editor owns widget/template construction; project 2D/UI owns tile authoring,
+  GUI placement and integration. Both need discoverable controls, hierarchy,
+  selection/manipulation, Properties, semantic Undo/Redo, preview and exact
+  Save/Reload. Do not rebuild an already implemented compile/runtime path.
 - [ ] Make Timeline user-facing: clear Sequence/Checkpoints/Media/Diagnostics
   sections, visible track/key selection and scrubbing, explanations for disabled
   transport, and no telemetry wall in the default view.
@@ -179,7 +207,51 @@ Exit gate: existing features outside World are discoverable, interactive,
 reversible, persistent, and usable without reading internal hashes or subsystem
 names.
 
-## P3 — Playable 2D Acceptance Loop
+### Finite Current GUI/Editor Acceptance Inventory
+
+These named surfaces define D2's current feature completion; future controls
+remain separate missions. Reuse implemented primitives and record remaining
+integration versus missing implementation per row.
+
+| Surface / owner | Acceptance required before calling this current workflow complete |
+| --- | --- |
+| EpochGui primitives / portable library | Standalone consumer build; focus, hit-test, sizing, text/selection/clipboard intent, scrolling, tabs, dropdowns, menus, modal and splitter contracts; no Engine/editor dependency |
+| Engine GUI adapters / native hosts | Actual labels, clipping, DPI/zoom, input capture, drag locking and 50% held-window opacity; additive direct-tab slot guides with existing float/redock; no protected replay-order change |
+| Editor layout / Properties | Centered default Output/AI Chat and preserved manual ratios; responsive list/body/footer; grouped actionable Properties with ownership reasons |
+| Dedicated GUI Editor + project 2D/UI | Create/reopen reusable widget document; place/use it in a project; tile authoring, preview, document-local history and persistence remain distinct |
+| Timeline / text / project assistant | Authoring before telemetry, real tracks/scrub/checkpoint/media states; real document edits/find/build feedback; no cross-document history or Engine/project AI crossover |
+
+## EXT — Extensions And Generated Projects
+
+- [ ] Treat Extensions as the catalog/repo of **project add-ons**, not an Engine
+  plugin or installable monolith. EpochGui/Arcade stay built in and absent as
+  installable package rows. Inventory every current row with its actual payload,
+  activation, dependency, license and supported profile/version.
+- [ ] Prove fetch/refresh, manifest/hash/dependency validation, explicit install/
+  activation, cancellation/retry, offline/restart recovery and removal/deactivation
+  behavior without overwriting project-owned edits. Descriptor-only/planned rows
+  must not offer fake installation or claim a demo/library already works.
+- [ ] Prove local Qwen/Nemotron exact-hash resumable installation in executable-
+  local cache, visible progress/failure/recovery, independent selection and no
+  inference/listener/weights in generated builds merely from install/discovery.
+- [ ] Inventory all generated profiles and admitted demo projects. For EACH,
+  record Create/Load/Save/Close/Reopen, dependency resolution, Build/Run/Stop/
+  rebuild, startup data root and cleanup evidence. CLI/native-window/GUI profiles
+  must omit editor-only systems and unrelated libraries/weights.
+- [ ] Review the supplied EpochPlanet archive's paths, license, attribution,
+  dependencies and build layout without running bundled scripts as instructions.
+  Separate reusable **EpochSpaceEngine** library from its demo project.
+- [ ] Expose EpochSimEngine and EpochSpaceEngine demos as separately loadable
+  extension projects with separately versioned/pinned library dependencies.
+  Compile/link libraries independently; prove project import/load/reopen/build/
+  run/stop and dependency restoration without copying another Engine worktree.
+
+Exit gate: each current catalog row is truthful, each supported generated project
+has real lifecycle evidence, and both new demos have independent library edges.
+Unimplemented optional payloads remain explicit, never represented as installed
+functionality. Advanced new terrain/ocean/astronomy remains deferred.
+
+## P3 — Playable 2D Acceptance Loop (Major Product Goal)
 
 - [ ] Eye-test tile-map layer/object authoring, selection, drag, staged
   properties, duplicate/delete, collision intent, save/reopen, and hierarchy.
@@ -218,6 +290,57 @@ stopped, built, run, and regenerated using documented commands and visible UI.
 
 Exit gate: capability and renderer matrices contain no unsupported presentation
 claim, and repeated resource replacement has bounded memory/handle behavior.
+
+## RSH — Curated Model Research And Architecture Alignment
+
+- [ ] Implement a small version-bound local research pack for Engine self-coding:
+  current intent/plan, architecture/ownership, relevant API/contracts/examples
+  and first-cause failure evidence. Qwen selects useful context without user
+  named-file prompts; do not concatenate every planning/history document.
+- [ ] Provide a distinct software/project/game-development pack for selected
+  project APIs, templates, input/physics/audio/GUI/2D workflows and extension
+  dependencies. It must not inherit Engine-private source, goals or receipts.
+- [ ] Track provenance, content hash, version, topic, status (implemented versus
+  target), permissions and freshness; preserve exact source/repair prompt budgets.
+  Show retrieved references and omissions. This is retrieval, not self-training.
+- [ ] Test stale/wrong-version references, maximum budgets, cross-project denial,
+  cancellation/restart, no egress without session authority, and docs/web text
+  that attempts to act as instructions. Optional online research remains scoped
+  host work and cannot delay the local P0 loop.
+- [ ] Apply the architecture alignment review in
+  `Engine/docs/engine/capability_tier_architecture.md` to each major source tranche:
+  data input/output/ownership, subsystem dependencies, optimization evidence,
+  portable profiles, intense graphics budgets/fallbacks and compatibility.
+
+Behavior/acceptance owner:
+`Engine/docs/engine/ai_curated_research_contract.md`. The loader and automatic
+packs are planned, not proven by the existence of this documentation. The same
+review covers old and new goals without creating another parallel roadmap.
+
+## SDK — Private SDK Reference And Delivery
+
+- [ ] Audit Doxygen/public C++23 header/module inventory and create an explicit
+  coverage report (documented, intentionally internal/excluded, or missing).
+  HTML generation alone is not full SDK acceptance.
+- [ ] Build editor-free CLI/native-window/GUI examples as external SDK consumers;
+  include usable APIs, tutorials, build/debug guidance, profile/capability limits,
+  versioned dependencies/licenses and exact file/package manifests.
+- [ ] Provide readable SDK Reference inside Engine About only with current
+  server-confirmed owner/admin SDK capability via existing source-update auth;
+  do not invent another login or infer SDK access from generic source entitlement.
+- [ ] Mirror the permission on website navigation AND every direct docs/asset/
+  search/source-browser/archive route. Test anonymous/non-owner, expired/revoked
+  session, already-open view, shared cache and direct URL cases against exact
+  bytes. No private SDK content in public bundles, logs or caches.
+- [ ] Evaluate a shared versioned public API/module metadata inventory for SDK
+  generation and authorized model retrieval. Reuse one semantic source; keep
+  read entitlement, model egress and execution authority distinct.
+
+Exit gate and owning planned contract:
+`Engine/docs/engine/sdk_reference_and_access_contract.md`. This is D5, the
+**final same-day milestone after the integration batch**, not an implemented
+access feature or a replacement for P0. SDK work is not blocked on all deferred
+features or the entire later playable 2D milestone.
 
 ## Release Gate — Every Accepted Milestone
 
@@ -266,4 +389,8 @@ cards, docs, checksums, and rollback state all identify the same accepted tree.
   density and workflow, and defect captures are not acceptance evidence.
 - Hosted/Site validation confirms faithful local proof; it is not where ordinary
   compiler or contract failures are first discovered.
-- Completed tasks are removed from this roadmap and recorded in the changelog.
+- Preserve all unfinished older goals. Completed acceptance moves to the
+  changelog with its mission ID/evidence; enduring product contracts stay linked.
+  No unverified implementation is erased from the queue as if complete.
+- Use the cross-system architecture review to propose measured improvements,
+  not speculative blanket rewrites; put the next bounded change in active_pass.

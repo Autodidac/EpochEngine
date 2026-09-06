@@ -5,7 +5,8 @@
 This document is the canonical contract for Epoch's renderer-neutral 2D
 composition path. It is subordinate to `capability_tier_architecture.md` and
 specializes the document/runtime separation in
-`temporal_authoring_platform.md` for the two-month playable 2D objective.
+`temporal_authoring_platform.md` for the complete playable 2D product objective.
+The roadmap owns its current priority and delivery schedule.
 
 `Changes/active_pass.md` owns the current acceptance gate,
 `Changes/roadmap.md` owns scheduling, and `renderer_feature_matrix.md` owns
@@ -382,16 +383,25 @@ Physical atlas, bindless, sparse,
 streaming, mip, and backend-native caches remain disposable implementations
 behind that boundary.
 
-## Remaining Delivery Order
+## Remaining Integration And Acceptance
 
-1. Compile canonical GUI documents into editor-free runtime artifacts and bind
-   widget action/focus/input execution to the Canvas2D runtime without importing
-   authoring history, docking, floating hosts, or editor state.
-2. Complete the playable 2D interaction loop: physical controller sampling and
-   binding/dead-zone editing, decoded cue/music controls, Play/Stop, and
-   acceptance game proof against one saved project revision. Keyboard binding
-   authoring already publishes matching source/runtime artifact revisions and
-   feeds the live project sampler independently of editor-camera controls.
+These are unfinished acceptance results, not a second schedule or a request to
+rewrite existing foundations. The roadmap owns ordering. Preserve the full
+map, actor, animation, collision, audio and GUI product loop through Save,
+Close/Reopen, repeated Play/Stop, external Run, Build and cache regeneration.
+
+1. Reuse canonical GUI source compilation, `project.gui_library` publication
+   and `project.gui_runtime` restoration already described in
+   `runtime_and_editor_workflows.md`. Finish and prove editor-free widget
+   action/focus/input behavior against the same accepted artifacts without
+   importing authoring history, docking, floating hosts or editor state.
+2. Complete native interaction and acceptance-game proof against one saved
+   project revision. Process-owned physical controller sampling and semantic
+   keyboard/controller binding and dead-zone editing already have production
+   owners; reuse them and verify real device input, focus transitions and
+   persistence instead of rebuilding those systems. Prove decoded sound cues
+   and looping music through physical output, including unavailable-device
+   behavior, repeated Play/Stop and isolation from editor-camera controls.
    Authored solid, one-way, rising-right, falling-right, and
    custom-box collision now reaches exact Library/preview artifacts and the
    deterministic reference solver; sensor dispatch remains gated.

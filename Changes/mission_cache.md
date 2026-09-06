@@ -1,9 +1,11 @@
 # Mission Cache
 
-This file preserves durable unresolved operator intent and safety boundaries. It
-is not a completion log or schedule. Completed work is removed from here and
-recorded in `Changes/changelog.txt`; current ordering belongs in
-`Changes/roadmap.md`; the one active gate belongs in `Changes/active_pass.md`.
+This file preserves durable operator intent and safety boundaries, including
+older unfinished goals. It is not a completion log or a second schedule. Proven
+completion moves to `Changes/changelog.txt` with traceable evidence; enduring
+product requirements remain in owning contracts. Current ordering belongs only
+in `Changes/roadmap.md`; the one active gate is `Changes/active_pass.md`.
+A documentation cleanup must never silently delete or downgrade a goal.
 
 ## Overall Intent And Pass Continuity
 
@@ -14,7 +16,9 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   separately resolved library dependencies, not just pass a descriptor test.
 - Integrate the EpochSimEngine demo and the supplied
   `C:/Users/iammi/Downloads/EpochPlanet-0.2.3-source.zip` (402,994 bytes,
-  supplied September 6, not yet inspected) as projects enabled through
+  supplied September 6; SHA-256
+  `8fe79234b6f8694d40fc477864f576014af0a3fcd3a2308c4d9fa4615a5245ab`;
+  file identity checked, archive contents/license not inspected) as projects enabled through
   Extensions. The planetary core is to become the separately reusable
   **EpochSpaceEngine** library. Keep each demo/project distinct from its engine
   library dependency; preserve licenses/attribution and inspect package
@@ -28,10 +32,12 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 - One reusable Engine serves software and games. The editor and self-coding
   tools are optional development consumers, not mandatory generated-runtime
   dependencies. A stable base must stay small enough for quick iterations.
-- Current order is real sandbox self-coding first, current editor-free software
-  base next, then usable editor/project workflows and incremental context/
-  EpochPlatformEngine expansion. Publication follows each fully accepted
-  milestone; it does not wait for every deferred feature.
+- Use the roadmap's latest September 6 ordered acceptance table, not an old
+  dated sequence. Self-coding is immediate; current GUI/Extensions and loadable
+  profiles, accepted stable-base freeze, separate Sim/Space integration and
+  private SDK delivery all remain in the immediate batch. The full playable
+  2D game is still a major product goal, not replaced by either demo. Publication
+  follows accepted scope, not completion of every deferred feature.
 - Reconcile fragmented documents against current source and exact evidence
   before each pass. Do not reimplement completed systems because an old document
   still says "add" or "planned". Distinguish implemented-but-unverified
@@ -40,10 +46,12 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 - Keep one chat-owned source copy. Branches and disposable candidate generations
   are not excuses to multiply full worktrees or copy sibling project material.
   Names and historical paths do not justify moving a live workspace again.
-- September 6 reset continuity: save the in-flight agents' focused repairs and
-  exact tested/untested state before refresh. Resume from the active checkpoint,
-  not an older screenshot or dated to-do list. Work in large but bounded,
-  production-backed steps with independent ownership and faithful validation.
+- Preserve focused code and exact tested/untested state at checkpoints; after
+  refresh resume from active_pass, not old screenshots. The operator explicitly
+  requested full resumption after the documentation cleanup. Work in large,
+  bounded, production-backed steps with disjoint agents and serial heavy work.
+  The end-of-September-6 target (America/New_York) is urgent but not permission
+  to fake success, ignore failed safety tests or expand into unrelated systems.
 - Freeze the stable software/context base only AFTER these major self-coding,
   platform and context patches pass acceptance, and BEFORE large game-engine-
   specific changes. Preserve old baseline history and make later base updates
@@ -61,11 +69,9 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   Update current downloads, authenticated source, docs and authorized branches
   together; never rewrite old verified objects or call an untested base stable.
 
-- September 5 operator deadline priority: make the complete self-coding loop
-  usable and tested within the remaining day. Prioritize real outcomes over
-  code volume; no padding, duplicate frameworks, or unrelated feature expansion.
-  Do not claim perfection from contracts or substitute infrastructure for the
-  actual model/build/comparison/successor run.
+- Prioritize real outcomes over code volume; no padding, duplicate frameworks
+  or unrelated expansion. Contracts/infrastructure do not prove the actual
+  model/build/comparison/successor run and are not a claim of perfection.
 - Model selection needs both memory and a default. Preserve an explicit current
   selection; otherwise restore the last-used model; otherwise use the confirmed
   local default `nvidia/nemotron-3-nano-4b`. Ejection is not deletion and an empty
@@ -81,8 +87,8 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   changes. Do not silently substitute the small helper for the coding worker or
   unload models owned by other tasks. Model names are configuration/selection
   policy, not proof that an actual task will succeed.
-- September 5 priority: prove the actual Qwen self-coding loop before expanding
-  unrelated editor/context features. A compiler failure feeds its real diagnostic
+- Prove the actual Qwen loop before expanding unrelated features. A compiler
+  failure feeds its real diagnostic
   back into the next bounded repair automatically; preparing a workspace or
   waiting for another hidden/manual action is not iteration success.
 - Consider optional host-brokered web research when documentation could resolve
@@ -102,6 +108,15 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   reason only after the relevant retry/expansion budget is exhausted.
 - Show that the model is still working: active phase, animated progress, elapsed
   time, cancellation, retries, and next action must remain visible and readable.
+- Within an explicitly started authorized sandbox session, routine selection,
+  plan/edit/build/test and bounded repair should advance without repeated manual
+  packet approvals. Show what is being read/sent/changed and permit Stop.
+  Keep/Choose is the user's baseline decision; source access/egress expansion,
+  protected operations and live-source promotion remain separate authorities.
+- Preserve exact relevant source and first-cause diagnostic/full-evidence hash
+  through maximum-budget prompts. Oversized logs, checkpoint I/O/capacity
+  failure, stale results, cancellation and exhausted retry must leave a
+  recoverable truthful state, not a hidden wait or lost plan.
 - Keep every model-authored byte inside a disposable Candidate Lab sandbox.
   Live Engine source, active projects, unrelated sandboxes, Git, releases, Site
   state, listeners, approvals, and host validation evidence stay outside model
@@ -124,8 +139,55 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   Candidate execution needs a proved filesystem/network boundary before the
   product can claim arbitrary generated code cannot affect source or projects.
 
+## Curated Research For Qwen And Other Selected Models
+
+- Provide distinct curated local collections for **Engine self-iteration** and
+  **Engine API/software/project/game development**. The first can reference
+  authorized Engine architecture/source/contracts/failure evidence; the second
+  uses the selected project's permitted APIs/templates/2D/input/physics/audio/
+  GUI/extension guidance. Separate manifests, histories, goals and access roots.
+- Let Qwen retrieve useful documentation and continuity without named-file
+  prompts. Include the current plan and relevant implemented contracts, not every
+  historical log or a dump of mission_cache. Show what it used and why a
+  reference is stale, omitted, unavailable or planned rather than implemented.
+- Bind each reference to provenance, revision/date/hash, license, topic, product
+  profile, evidence state and audience. Budget exact edit source and repair
+  diagnostics before optional reference/catalog material. Reindex only relevant
+  changed entries after a chosen sandbox successor; do not mix candidate versions.
+- This is **retrieval, not training or hidden memory ingestion**. Do not
+  automatically ingest other chats, hidden reasoning, credentials, personal
+  files, unrelated projects or model weights. Local read entitlement does not
+  grant egress to an endpoint; private SDK access does not grant model access.
+- Optional external research is host-brokered and visible with no private
+  source/paths/logs/secrets in queries. Retrieved material cannot grant tools,
+  execute scripts, alter policy or attest tests. No implicit server/listener.
+- Planned behavior and tests are in
+  `Engine/docs/engine/ai_curated_research_contract.md`. Start with a small local
+  P0-supporting pack; full SDK/search/web integration must not delay the real
+  build/choice loop. No research loader is claimed implemented by these notes.
+
+## Continuous Architecture And Data-Flow Review
+
+- At each major pass review docs against Engine input/output structures and
+  public contracts, not just the file currently edited. Keep authoring authority,
+  artifacts, caches, requests/replies, process state and external egress distinct.
+- Examine correctness, optimization opportunities and recommendations across
+  CLI/headless, native-window, GUI, 2D/game and intense accelerated graphics
+  profiles, including small machines and cross-platform fallback. Measure before
+  claiming improvement; unsupported platforms/features stay explicit.
+- Inventory each context's individual lifecycle/thread/input/resource needs.
+  Reuse a shared typed boundary without forcing backend internals into one
+  universal implementation or disturbing protected draw order.
+- The review checklist in `capability_tier_architecture.md` owns this analysis.
+  Record affected producers/consumers, risk, metrics, recommendation, acceptance
+  test and next bounded action. It is not another roadmap or permission for a
+  blanket rewrite; preserve stable software and older game goals.
+
 ## Owner-Only SDK And Online Documentation
 
+- Detailed planned behavior/finite access tests live in
+  `Engine/docs/engine/sdk_reference_and_access_contract.md`; no access feature
+  or complete SDK is claimed merely from this plan.
 - The SDK is a separate readable reference inside the Engine's About command
   menu (for example About Epoch > SDK Reference), not merely an archive download
   or part of the source-update dialog. Show its entry only when the existing
@@ -209,6 +271,11 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   to match the current Engine. Preserve its original `ad6c416d930b348a61bc37ceb7d4522742be084a`
   checkpoint in history; advance the branch only to a reviewed, build-tested
   editor-free baseline. A branch does not require another full worktree/copy.
+- Freeze the accepted compatibility contract as well as its branch: public
+  API/modules, profile/dependency closure, build/toolchain and serialization
+  versions, context lifecycle/input/resource behavior, supported backends and
+  tests. Later updates require explicit compatibility proof, not automatic
+  propagation of all game-specific changes.
 - Establish that current stable base and prove CLI/platform-window template
   generation, build, run, exit, and rapid rebuild before broad context feature
   expansion. Keep incomplete self-coding work out of stable-base claims.
@@ -229,8 +296,12 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   Do not copy its source, API assumptions, frame ordering, or tutorial material
   into Epoch. Production behavior must be proved against Epoch's own contracts.
 
-## Playable 2D Product
+## Playable 2D Product — Major Goal, Explicitly Retained
 
+- The operator reaffirmed this goal on September 6. It is not optional demo
+  polish and is not satisfied by loading the Sim/Space demonstrations. Shared
+  GUI/project foundations advance it now; future planetary/3D work cannot erase
+  or indefinitely displace its full acceptance.
 - Deliver the full map → actor → animation → collision → audio → GUI →
   save/reopen → Play/Stop → Run → Build loop from one project-owned state.
 - Prove keyboard and controller editing, dead zones, default restoration,
@@ -323,9 +394,10 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 - Broader material/model/effect authoring and portable compute.
 - T2 explicit-resource parity, T3 GPU-driven features, T4 ray query, and T5 full
   ray-tracing pipelines.
-- Persistent regions, collaboration, networking, planetary/astronomical worlds,
-  and autonomous live-source replacement only after separate product/security
-  designs and explicit gates.
+- Persistent regions, collaboration, networking, advanced planetary/astronomical
+  worlds, and autonomous live-source replacement only after separate product/
+  security designs and explicit gates. This defers new large world technology,
+  not today's requested integration of the supplied planetary library/demo.
 
 ## Delivery Discipline
 
@@ -336,5 +408,7 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   record only remaining work here, and move proven completion into the changelog.
 - Never use placeholders, fake UI, model self-attestation, dead controls, hidden
   training, duplicate wrappers, or capability claims as progress.
-- Keep docs synchronized with source and tests. A completed mission must not
-  remain in this cache, the roadmap, or AGENTS.md as pending work.
+- Keep docs synchronized with source and tests. Proven completed acceptance
+  moves to history with evidence; keep durable product contracts and every
+  older unfinished mission traceable. Never infer completion from a code stub,
+  a source-only check, a rewritten plan or a deadline.

@@ -1,4 +1,51 @@
-## [Unreleased] - v0.89.35
+## [Unreleased] - v0.90.1 preparation (not a release)
+
+- September 6 planning consolidation: replace stacked reset/resume instructions
+  with one current evidence table and bounded production continuation. Preserve
+  the major full playable 2D game and all older unfinished goals; order current
+  self-coding, Gui/Extensions/software profiles, proven base freeze, separate
+  Sim/Space demo/library integration, then owner-only SDK/About/Site delivery.
+  Record finite acceptance for GUI surfaces, every generated project profile,
+  the stable compatibility contract and private SDK coverage/access. Add planned
+  separate Engine self-coding and project/software/game reference collections;
+  retrieval is not training or access authority. Add cross-system architecture
+  review for docs, data I/O, ownership, optimization evidence, context needs and
+  software-to-accelerated-graphics portability. No implementation/native/Site
+  acceptance is claimed from these documentation changes.
+
+- September 6 implementation checkpoint dc96a778: bounded 2048-byte validation
+  receipt summaries retain UTF-8 boundaries, full-status SHA-256 and first causal
+  compiler error; separate 32 KiB repair context survives verbose status.
+  Summary/capacity preflight and verbose-failure, seven-gate verbose-success,
+  malformed-receipt regressions saved. The supplied Qwen candidate had an
+  unmatched brace (C1075), not a good live-source patch; 66,198-byte compiler
+  status broke its receipt handoff. Model log: 8,005,972 bytes/4,244 lines/seven
+  stopped predictions; compiler ran 06:42:01–06:43:36, with downstream MSB4181.
+  Preserve full sandbox/host logs; no malformed OpenGL promotion occurred.
+- The same checkpoint adds platform.work_admission controller and Windows/Linux
+  real CPU/RAM sampling: 30-second nonblocking cooldown, one-second cached
+  observations, five-second freshness, two-sample CPU measurement, available
+  memory >=2 GiB and >=5%, CPU <=90%, monotonic consumed/cancelled tokens and
+  choice/busy handling. macOS/GPU/VRAM qualification is not provided. Scheduler
+  snapshots distinguish running/queued/idle workers from registered thread
+  lifetimes. Initial scheduler CTest passed 1/1; resumed admission/scheduler
+  component CTests passed 2/2 (0.05s). These are component, not dispatch proofs.
+- September 6 implementation checkpoint f494ed5f saves 123 preparatory
+  editor.application admission fields/helpers. They were UNWIRED at checkpoint;
+  no production cooldown claim. Version module/compatibility/resource/vcpkg/
+  MCP/CI changes partially prepare 0.90.1 and pin macOS constants to 0.89.30.
+  Version script D2 spelling, receipt platform resolution and updater hardcoded
+  contracts remained open. Debug Editor build exited 0 but began before the
+  final host/version edits; no exact final aggregate/Release/native proof.
+  Additional known gaps: repair prompt catalog can starve diagnostics; validation
+  persistence can fail after inner state advances. Neither was marked repaired.
+- Scope-only checkpoints 37ce9a9a and e52f7c0a retain the final same-day private
+  SDK milestone and separate readable Engine About/website admin entitlement.
+  No SDK implementation, runtime/source publication, stable ref advance, GUI,
+  Qwen, WSL or release staging occurred in those checkpoints. EpochPlanet archive
+  identity only was checked; contents/license and integration remain unreviewed.
+
+## Prior unreleased development - v0.89.35
 
 - September 6 compiler-handoff repair: resolve the trusted host executable's
   physical path before constructing a sandbox under a renamed checkout alias.

@@ -3,7 +3,9 @@
 ## Start Here
 
 Epoch is a reusable engine for software and games, with an optional editor and
-a sandboxed AI development workflow. These documents have distinct authority:
+an in-development sandbox AI workflow. Source transaction containment and
+process supervision do not yet prove OS confinement. These documents have
+distinct authority:
 
 | Question | Owning document |
 | --- | --- |
@@ -42,12 +44,19 @@ actual build from the chosen sandbox. Live source and projects remain outside
 that loop. Component implementations are not proof that this entire workflow
 already works; the active pass identifies the remaining evidence.
 
-Next comes a proven editor-free CLI/platform-window/GUI software base before
-broad context expansion. The same reusable foundation supports the 2D/UI,
-Properties, Timeline, scripting and playable 2D acceptance workflows. Platform
-extraction is incremental; completed subsystem foundations are reused, not
-scheduled again as new work. Exact-build release checks apply to each release,
-not only after the entire long-term roadmap is finished.
+The roadmap's September 6 batch also retains current EpochGui/Extensions and
+loadable CLI/native-window/GUI projects, a proven stable-base compatibility freeze
+before major game-specific changes, separate Sim/Space demo/library integration,
+then private SDK/About/Site delivery last. The full playable 2D game remains a
+major goal, not replaced by the demos. Platform extraction is incremental;
+completed foundations are reused, not rescheduled as new work. Exact-build
+release checks apply to accepted release scope, not every deferred feature.
+
+Architecture alignment includes input/output ownership, performance evidence,
+cross-platform software-to-accelerated-graphics profiles and context-specific
+needs. Planned curated references give Qwen separate Engine self-coding and
+project/game-development collections; they are retrieval, not training or
+automatic permission to read/send every document.
 
 Read:
 
@@ -87,6 +96,8 @@ not set independent product priorities:
 - `engine/forest_factory_package_contract.md`
 - `engine/voxel_planetary_package_track.md`
 - `engine/os_ai_tooling_and_evidence_policy.md`
+- [Curated model research contract](engine/ai_curated_research_contract.md) - planned domain-separated references, budgets, provenance and access tests;
+- [SDK Reference and access contract](engine/sdk_reference_and_access_contract.md) - planned API/SDK coverage, About/website access and private delivery tests;
 - `engine/research_import_and_promotion.md`
 - `engine/source_naming_architecture.md` - canonical C++ filename, module,
   owner, directory, and temporal-layer naming contract;
@@ -110,8 +121,8 @@ plan.
   backlogs or promises to restart an old calendar.
 - Every pass reconciles source and evidence before selecting its next action.
   Separate missing implementation from implemented-but-unverified behavior.
-  Remove proven completed tasks from live queues; retain their behavior in the
-  owning contract and their completion evidence in the changelog.
+  Move proven completion to history with mission/evidence traceability; retain
+  behavior in its owning contract and every older unfinished goal in the plan.
 - The renderer matrix states evidence, not aspiration.
 - Settings and controls are documented with the subsystem that owns them.
 - `Present` requires implementation and validation evidence.
