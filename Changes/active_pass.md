@@ -26,6 +26,57 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 
 ## Current Checkpoint
 
+### September 6 second reset checkpoint — this supersedes the parked state below
+
+The user resumed, then requested an immediate new checkpoint. All agents are
+stopped and no owned build/runtime is left running. Preserve this in-flight
+source; do not mistake a checkpoint for a tested release.
+
+- Windows Debug EpochEditor build finished with exit 0 during this pass
+  (`build/self_coding_resume_debug.log`). It started before the last version/
+  host-helper edits, so it is NOT exact-build proof for this final checkpoint.
+  Fresh admission and scheduler component builds/CTest passed 2/2 (0.05s).
+  The newly built Editor aggregate was NOT run before the reset request.
+- Six version files now declare v0.90.1 (source/Windows/Linux, Windows resource,
+  compatibility module, vcpkg project version, MCP advertised version and CI
+  revision regex); macOS is explicitly 0.89.30. This version pass is INCOMPLETE:
+  `Tools/ai/get_epoch_version.ps1` still yields 0.90.01, the receipt writer still
+  inherits source major/minor for macOS, and the updater discovery contract
+  still requires 0.89.35/source-package equality. Repair those three next and
+  prove historical 0.89.06 spelling. Independent EpochGui was not bumped.
+- `editor.application.cpp` retains 123 preparatory lines: the admission import,
+  EditorState exact-action/epoch/token/lease/status fields, synchronized global
+  coordinator, and `cancel_ai_work_admission`, `release_ai_work_lease`,
+  `queue_ai_work`, `ai_work_pending`, `admit_ai_work` helpers. They are UNWIRED,
+  untested, and do not yet enforce pacing. Finish the dispatch/final-HTTP/tick/
+  cancellation/choice/visible-status hooks described below; also finish the
+  toolbar and nullable Systems scheduler hooks. Do not release ownership on a
+  failed close while actual child/worker retirement is unresolved.
+- Independent review found the NEXT real repair-loop risk in
+  `campaign_model_prompt`: the path catalog is appended before repair context.
+  Reviewed source and catalog each permit 184 KiB, but the whole prompt limit
+  is 256 KiB; 32 KiB diagnostics plus a 16 KiB failed proposal can be silently
+  omitted. Preserve exact reviewed bytes, reserve the repair envelope first,
+  then fit catalog on complete PATH-line boundaries. Add a maximum-budget test
+  carrying the actual C1075 error and full-evidence hash before another model run.
+- Separate follow-up: orchestrator `record_validation` can still advance inner
+  state before `commit/persist` fails from I/O or state-size limits. Its new
+  summary preflight is fixed; persistence transaction atomicity is not. Do not
+  conflate the two or mark the broader issue repaired.
+- No GUI, Qwen, candidate preview, WSL, Site publication, release tagging or
+  stable-branch change happened here. SDK and demo packages remain unintegrated.
+
+New same-day scope, explicitly requested and still OPEN: make self-coding and
+iteration selection work end to end; finish current EpochGui/Extensions major
+objectives before broad new game-specific work; make every generated project
+loadable with meaningful Build/Run/Stop/Reopen/dependency behavior; expose the
+EpochSimEngine demo and supplied EpochPlanet project through Extensions as
+project add-ons, separately depending on their engine libraries. Develop the
+planetary library as **EpochSpaceEngine**, not a built-in Engine plugin. Review
+the supplied archive and licenses before extracting/integrating any contents.
+Then finish owner-only SDK/docs as already planned. The same-day deadline is a
+priority, not permission to claim untested integrations or publish partial code.
+
 ### September 6 07:15 EDT reset checkpoint — resume here
 
 The operator is refreshing now. Agents have stopped; no compiler, model or

@@ -105,6 +105,7 @@ import authoring.gui_document;
 import authoring.gui_compiler;
 import capability.profile;
 import platform.budgets;
+import platform.work_admission;
 import project.texture_admission;
 import project.texture_pipeline;
 import project.texture_resources;
@@ -1501,6 +1502,16 @@ namespace epochengine
                 AiSourceValidationLane::DebugEditor};
             candidate_artifacts::Ledger aiSourceArtifacts{};
             std::uint64_t aiSourceArtifactEpoch{1u};
+            // The exact host action is retained while resources settle. A
+            // generation change cancels it; polling never reconstructs work.
+            platform::work_admission::Controller aiWorkAdmission{};
+            std::optional<editor_ai_development_panel::RenderResult> aiWorkAction{};
+            bool aiWorkLocalHttp{};
+            std::uint64_t aiWorkArtifactEpoch{};
+            std::uint64_t aiWorkToken{};
+            std::uint64_t aiWorkLease{};
+            std::uint64_t aiWorkObservedFinish{};
+            std::string aiWorkStatus{};
             // Host compiler dependencies survive sandbox parent selection.
             // This is never populated from a model/panel action source root.
             std::filesystem::path aiSourceHostDependencyRoot{};
@@ -1526,6 +1537,118 @@ namespace epochengine
             std::optional<std::future<EditorScriptBuildResult>> aiGuardedHarnessPending{};
             std::string aiGuardedHarnessBefore{};
         };
+
+        struct AiHeavyWorkCoordinator final
+        {
+            std::mutex mutex{};
+            std::uint64_t owner{};
+            std::uint64_t token{};
+            std::uint64_t finishRevision{};
+            std::uint64_t finishedAt{};
+        };
+
+        AiHeavyWorkCoordinator& ai_heavy_work_coordinator()
+        {
+            static AiHeavyWorkCoordinator coordinator{};
+            return coordinator;
+        }
+
+        void cancel_ai_work_admission(EditorState& editor)
+        {
+            editor.aiWorkAdmission.cancel();
+            editor.aiWorkAction.reset();
+            editor.aiWorkLocalHttp = false;
+            editor.aiWorkArtifactEpoch = 0u;
+            editor.aiWorkToken = 0u;
+            editor.aiWorkStatus.clear();
+            // An executing operation owns its lease until real retirement.
+        }
+
+        void release_ai_work_lease(EditorState& editor)
+        {
+            if (editor.aiWorkLease == 0u) return;
+            auto& coordinator = ai_heavy_work_coordinator();
+            std::scoped_lock lock(coordinator.mutex);
+            if (coordinator.owner == editor.aiWorkLease)
+            {
+                coordinator.owner = 0u;
+                coordinator.finishedAt = platform::work_admission::now_milliseconds();
+                ++coordinator.finishRevision;
+                editor.aiWorkAdmission.note_finished(coordinator.finishedAt);
+                editor.aiWorkObservedFinish = coordinator.finishRevision;
+            }
+            editor.aiWorkLease = 0u;
+        }
+
+        [[nodiscard]] bool queue_ai_work(
+            EditorState& editor, platform::work_admission::WorkKind kind,
+            const editor_ai_development_panel::RenderResult* action = nullptr)
+        {
+            if (editor.aiWorkToken != 0u) return false;
+            auto& coordinator = ai_heavy_work_coordinator();
+            std::scoped_lock lock(coordinator.mutex);
+            if (coordinator.token == (std::numeric_limits<std::uint64_t>::max)())
+                return false;
+            const auto token = ++coordinator.token;
+            // Copy potentially allocating data before the controller accepts it.
+            if (action) editor.aiWorkAction = *action;
+            if (!editor.aiWorkAdmission.queue({token, kind},
+                    platform::work_admission::now_milliseconds()))
+            {
+                editor.aiWorkAction.reset();
+                return false;
+            }
+            editor.aiWorkToken = token;
+            editor.aiWorkLocalHttp = action == nullptr;
+            editor.aiWorkArtifactEpoch = editor.aiSourceArtifactEpoch;
+            editor.aiWorkStatus = "Queued: checking host RAM/CPU and allowing a 30-second cooldown. No work has started.";
+            return true;
+        }
+
+        [[nodiscard]] bool ai_work_pending(const EditorState& editor) noexcept
+        {
+            return editor.aiWorkToken != 0u;
+        }
+
+        [[nodiscard]] bool admit_ai_work(
+            EditorState& editor, bool hostWorkActive, bool consume)
+        {
+            namespace admission = platform::work_admission;
+            if (!ai_work_pending(editor)) return false;
+            if (editor.aiWorkArtifactEpoch != editor.aiSourceArtifactEpoch)
+            {
+                cancel_ai_work_admission(editor);
+                return false;
+            }
+            const auto now = admission::now_milliseconds();
+            const auto sample = admission::sample_host_resources();
+            auto& coordinator = ai_heavy_work_coordinator();
+            std::scoped_lock lock(coordinator.mutex);
+            if (editor.aiWorkObservedFinish != coordinator.finishRevision)
+            {
+                editor.aiWorkAdmission.note_finished(coordinator.finishedAt);
+                editor.aiWorkObservedFinish = coordinator.finishRevision;
+            }
+            const bool choice = editor.aiCandidateChallengerProcess.valid();
+            const bool busy = hostWorkActive || coordinator.owner != 0u;
+            const auto decision = editor.aiWorkAdmission.poll(now, sample, choice, busy);
+            editor.aiWorkStatus = std::string{admission::reason_message(decision.reason)};
+            if (decision.remaining_ms != 0u)
+                editor.aiWorkStatus += " " + std::to_string((decision.remaining_ms + 999u) / 1000u) + "s remaining.";
+            if (sample.memory_valid && sample.cpu_valid)
+                editor.aiWorkStatus += epochengine::format_text(
+                    " RAM available: {} MiB. CPU load: {}%. No GPU/VRAM measurement.",
+                    sample.available_memory_bytes / (1024u * 1024u),
+                    static_cast<unsigned>(sample.cpu_busy_fraction * 100.0));
+            if (!consume || !decision.ready()
+                || !editor.aiWorkAdmission.consume(editor.aiWorkToken, now, sample, choice, busy))
+                return false;
+            coordinator.owner = editor.aiWorkToken;
+            editor.aiWorkLease = editor.aiWorkToken;
+            editor.aiWorkToken = 0u;
+            editor.aiWorkStatus.clear();
+            return true;
+        }
 
         void invalidate_ai_source_artifacts(EditorState& editor)
         {

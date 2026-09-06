@@ -38,6 +38,14 @@ the frozen base requires a deliberate compatibility-tested decision.
 
 ## Execution Order And Continuity
 
+September 6 latest priority refinement: alongside P0 self-coding, complete the
+current EpochGui/Extensions objectives that its UI, selection and project
+workflow depend on. Then prove generated projects and extension-enabled
+EpochSimEngine/planetary demos with separate engine-library dependencies; the
+planetary library is EpochSpaceEngine. Archive/license review and real project
+load/build/run/reopen evidence precede any completion/publication claim. This
+does not unfreeze the reusable context base for game-specific implementation.
+
 1. **Self-coding first:** finish the real Qwen two-build/choice loop and its
    data, process, model-selection and interaction acceptance. Reuse its existing
    controller, source executor, retry, transport and supervision implementations.

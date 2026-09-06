@@ -31,7 +31,7 @@
 module;
 
 #include <array>
-#include <cstdio>
+#include <charconv>
 #include <cstdlib>
 #include <string>
 #include <string_view>
@@ -45,13 +45,13 @@ module;
 #if defined(EPOCH_OVERRIDE_VERSION_MINOR)
 #  define EPOCH_VERSION_MINOR_VALUE EPOCH_OVERRIDE_VERSION_MINOR
 #else
-#  define EPOCH_VERSION_MINOR_VALUE 89
+#  define EPOCH_VERSION_MINOR_VALUE 90
 #endif
 
 #if defined(EPOCH_OVERRIDE_VERSION_REVISION)
 #  define EPOCH_VERSION_REVISION_VALUE EPOCH_OVERRIDE_VERSION_REVISION
 #else
-#  define EPOCH_VERSION_REVISION_VALUE 35
+#  define EPOCH_VERSION_REVISION_VALUE 1
 #endif
 
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR)
@@ -69,7 +69,7 @@ module;
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION)
 #  define EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION
 #else
-#  define EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE 35
+#  define EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE 1
 #endif
 
 #if defined(EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_MAJOR)
@@ -87,19 +87,19 @@ module;
 #if defined(EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION)
 #  define EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION
 #else
-#  define EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE 35
+#  define EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE 1
 #endif
 
 #if defined(EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR)
 #  define EPOCH_MACOS_PACKAGED_VERSION_MAJOR_VALUE EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR
 #else
-#  define EPOCH_MACOS_PACKAGED_VERSION_MAJOR_VALUE EPOCH_VERSION_MAJOR_VALUE
+#  define EPOCH_MACOS_PACKAGED_VERSION_MAJOR_VALUE 0
 #endif
 
 #if defined(EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MINOR)
 #  define EPOCH_MACOS_PACKAGED_VERSION_MINOR_VALUE EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MINOR
 #else
-#  define EPOCH_MACOS_PACKAGED_VERSION_MINOR_VALUE EPOCH_VERSION_MINOR_VALUE
+#  define EPOCH_MACOS_PACKAGED_VERSION_MINOR_VALUE 89
 #endif
 
 #if defined(EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_REVISION)
@@ -199,17 +199,37 @@ namespace epochengine
         return kEngineName.data();
     }
 
+    // Historical release names (for example 0.89.06) are immutable. New
+    // feature lines use ordinary semantic-version spelling, such as 0.90.1.
+    [[nodiscard]] std::array<char, 64> format_version_components(
+        int version_major, int version_minor, int version_revision) noexcept
+    {
+        std::array<char, 64> buffer{};
+        auto* cursor = buffer.data();
+        auto* const end = buffer.data() + buffer.size() - 1;
+        cursor = std::to_chars(cursor, end, version_major).ptr;
+        *cursor++ = '.';
+        cursor = std::to_chars(cursor, end, version_minor).ptr;
+        *cursor++ = '.';
+        if (version_major == 0 && version_minor <= 89
+            && version_revision >= 0 && version_revision < 10)
+            *cursor++ = '0';
+        cursor = std::to_chars(cursor, end, version_revision).ptr;
+        *cursor = '\0';
+        return buffer;
+    }
+
+    export std::string FormatVersionString(
+        int version_major, int version_minor, int version_revision)
+    {
+        const auto buffer = format_version_components(
+            version_major, version_minor, version_revision);
+        return std::string{buffer.data()};
+    }
+
     export const char* GetEngineVersion() noexcept
     {
-        thread_local std::array<char, 32> buffer{};
-        std::snprintf(
-            buffer.data(),
-            buffer.size(),
-            "%d.%d.%02d",
-            major,
-            minor,
-            revision
-        );
+        thread_local const auto buffer = format_version_components(major, minor, revision);
         return buffer.data();
     }
 
@@ -220,11 +240,7 @@ namespace epochengine
 
     export const char* GetPackagedVersion() noexcept
     {
-        thread_local std::array<char, 32> buffer{};
-        std::snprintf(
-            buffer.data(),
-            buffer.size(),
-            "%d.%d.%02d",
+        thread_local const auto buffer = format_version_components(
             GetPackagedMajor(),
             GetPackagedMinor(),
             GetPackagedRevision()
