@@ -1,5 +1,11 @@
 ## [Unreleased] - v0.90.1 preparation (not a release)
 
+- Implementation batch saved as 93d542f4. The subsequent exact Release native
+  Qwen test launch was rejected by execution policy before process creation;
+  no test root/model request/runtime was started. Model lane was released.
+  No alternate-tool launch was attempted. Native two-build/choice acceptance
+  remains open; this is a current stop, not a pass or publication checkpoint.
+
 - September 6 self-coding repair batch: reserve exact source, causal compiler
   diagnostics/full SHA and failed proposal ahead of optional PATH catalog lines;
   retain that repair envelope through source reselection. Make orchestrator

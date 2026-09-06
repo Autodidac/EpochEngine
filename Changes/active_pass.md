@@ -27,10 +27,11 @@ or redefine them.
 
 ## Current Source And Evidence
 
-Last committed planning checkpoint: `056ab2e9`, following implementation
-`f494ed5f`, receipt/resource `dc96a778` and host-alias `7d538759`. The September 6
-repair batch below is currently uncommitted. This table supersedes the stacked
-reset notes; implementation and current-build evidence are separate.
+Current implementation checkpoint: `93d542f42c9b9767b144536531d6760e79b3c624`,
+following planning `056ab2e9`, implementation `f494ed5f`, receipt/resource
+`dc96a778` and host-alias `7d538759`. The focused 16-file repair batch is saved.
+This table supersedes the stacked reset notes; implementation and current-build
+evidence are separate.
 
 | Area | Actual state | Missing acceptance / next action |
 | --- | --- | --- |
@@ -86,10 +87,15 @@ transport status.
 
 ## Exact Next Production Work
 
-1. **Preserve the green source checkpoint.** Debug/Release Editor builds and both
-   rebuilt 180-check aggregates plus component/script contracts are green. Save
-   this focused source/docs batch before the native run; do not rebuild these
-   systems or treat their unit proof as completed native acceptance.
+1. **Respect the current native-launch stop.** The September 6 native Qwen
+   launch from the exact Release folder was rejected by execution policy before
+   CreateProcess. No test data root, Editor process or model request started.
+   The model lane was released back to its owner. Do not retry through another
+   tool, launcher, script or command shape to bypass this denial. The operator
+   may launch the rebuilt Editor; inspect resulting logs or proceed only through
+   a legitimately available/authorized native lane. The green `93d542f4`
+   source checkpoint and all older goals are preserved; do not substitute SDK,
+   demos, releases or broad feature work for this unproven P0 gate.
 2. **Exercise and repair the real workflow.** Use an ordinary-language,
    genuinely unfinished `EPOCH_EDITOR_SELF_CODING_OBJECTIVE`, not an existing
    feature. Run Qwen through failure recovery, all validation, distinct embedded
@@ -115,8 +121,9 @@ disables parent update checks and cannot invoke publication/promotion. Its
 Trace: private-root `logs/epoch_editor_auto_command.log`; require explicit PASS
 after two distinct validated artifacts/PIDs and retirement, not exit code alone.
 Coordinate LM Studio start/clear with task `01a03627-5f71-7521-902c-64a31631367d`,
-which reported its probe lane clear. No model has been loaded/ejected by Epoch
-in this resumed pass. WSL is not reserved; EpochSimEngine is using its own lane.
+which reported its probe lane clear and received Epoch's subsequent CLEAR after
+the launch denial. No model has been loaded/ejected by Epoch in this resumed
+pass. WSL is not reserved; EpochSimEngine is using its own lane.
 
 Independent agents may work on disjoint bounded source/contracts while the root
 integrates and serializes heavy work. A minimal curated local architecture/API/
