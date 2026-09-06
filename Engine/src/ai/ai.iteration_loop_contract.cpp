@@ -72,12 +72,14 @@ namespace epochengine::ai::iteration
                 .self_review = true};
         }
 
-        [[nodiscard]] bool contained_flow_contract()
+        [[nodiscard]] bool contained_flow_contract(bool unknownModel = false)
         {
             const EvidenceDigest scope = digest(1'000u);
             const EvidenceDigest proposal = digest(1'001u);
             BoundedIterationLoop loop{};
-            if (!loop.configure(policy_with_scope(scope), strong_model())
+            if (!loop.configure(policy_with_scope(scope), unknownModel
+                    ? infer_model_capabilities("operator/future-agentic-model")
+                    : strong_model())
                 || !loop.begin())
             {
                 return false;
@@ -267,7 +269,7 @@ namespace epochengine::ai::iteration
                 && loop.snapshot().capability.frontier_review_required;
         }
 
-        [[nodiscard]] bool weak_model_contract()
+        [[nodiscard]] bool model_guidance_contract()
         {
             LoopPolicy policy =
                 policy_with_scope(digest(1'400u), RiskClass::subsystem);
@@ -275,10 +277,12 @@ namespace epochengine::ai::iteration
             BoundedIterationLoop loop{};
             if (!loop.configure(policy, std::move(weak)))
                 return false;
-            return loop.begin().code == LoopCode::capability_blocked
-                && loop.snapshot().milestone == Milestone::blocked
+            return loop.begin().code == LoopCode::none
+                && loop.snapshot().milestone == Milestone::inspect_architecture
+                && loop.snapshot().capability.may_attempt()
                 && loop.snapshot().capability.disposition
-                    == CapabilityDisposition::recommend_stronger_model;
+                    == CapabilityDisposition::recommend_stronger_model
+                && !loop.snapshot().complete;
         }
 
         [[nodiscard]] bool visual_gate_contract()
@@ -358,19 +362,43 @@ namespace epochengine::ai::iteration
                 && loop.snapshot().milestone == Milestone::operator_approval;
         }
 
-        [[nodiscard]] bool qwen38_admission_contract()
+        [[nodiscard]] bool selected_identity_admission_contract()
         {
-            const ModelCapabilities qwen =
-                infer_model_capabilities("Qwen3.8");
             const LoopPolicy policy =
                 policy_with_scope(digest(1'700u), RiskClass::subsystem);
-            const CapabilityAssessment assessed =
-                assess_capabilities(qwen, policy);
-            return qwen.context_tokens == 65'536u
-                && qwen.repository_reasoning
-                && qwen.build_repair
-                && qwen.self_review
-                && assessed.disposition == CapabilityDisposition::eligible;
+            for (const auto name : {"Qwen3.8", "qwen/qwen3.5",
+                    "operator/future-agentic-model", "nvidia/nemotron-3-nano-4b"})
+            {
+                const ModelCapabilities model = infer_model_capabilities(name);
+                const auto assessed = assess_capabilities(model, policy);
+                if (model.model_name != name || model.context_tokens != 0u
+                    || model.code_generation || model.repository_reasoning
+                    || model.tool_use || model.research || model.build_repair
+                    || model.self_review || !assessed.may_attempt()
+                    || assessed.disposition != CapabilityDisposition::recommend_stronger_model)
+                    return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool host_budget_admission_contract()
+        {
+            auto policy = policy_with_scope(digest(1'710u), RiskClass::related_files);
+            BoundedIterationLoop missingModel{};
+            if (!missingModel.configure(policy, infer_model_capabilities({}))
+                || missingModel.begin().code != LoopCode::capability_blocked
+                || missingModel.snapshot().capability.may_attempt())
+                return false;
+            for (const auto budget : {0u, 8'192u})
+            {
+                policy.host_context_budget_tokens = budget;
+                BoundedIterationLoop insufficient{};
+                if (!insufficient.configure(policy, strong_model())
+                    || insufficient.begin().code != LoopCode::capability_blocked
+                    || insufficient.snapshot().capability.may_attempt())
+                    return false;
+            }
+            return contained_flow_contract(true);
         }
 
         [[nodiscard]] SandboxCandidateEvidence candidate(
@@ -482,11 +510,12 @@ namespace epochengine::ai::iteration
             if (!actor_and_order_contract()) return 2;
             if (!repair_budget_contract()) return 3;
             if (!high_risk_review_contract()) return 4;
-            if (!weak_model_contract()) return 5;
+            if (!model_guidance_contract()) return 5;
             if (!visual_gate_contract()) return 6;
             if (!authority_binding_contract()) return 7;
-            if (!qwen38_admission_contract()) return 8;
+            if (!selected_identity_admission_contract()) return 8;
             if (!sandbox_candidate_lineage_contract()) return 9;
+            if (!host_budget_admission_contract()) return 10;
             return 0;
         }
     }

@@ -540,6 +540,67 @@ export namespace epochengine::gui_lib
         return result;
     }
 
+    inline constexpr float default_bottom_dock_column_fraction = 0.50f;
+
+    [[nodiscard]] inline float normalize_bottom_dock_column_fraction(float value) noexcept
+    {
+        // A valid saved/user fraction is an intent, not a pixel measurement.
+        // Do not guess whether an old value represented a historical default.
+        return std::clamp(std::isfinite(value) ? value
+            : default_bottom_dock_column_fraction, 0.25f, 0.75f);
+    }
+
+    struct BottomDockColumnOptions
+    {
+        float viewport_width{};
+        float splitter_width{ 7.0f };
+        float requested_fraction{ default_bottom_dock_column_fraction };
+        bool left_visible{ true };
+        bool right_visible{ true };
+    };
+
+    struct BottomDockColumnLayout
+    {
+        float left_width{};
+        float splitter_width{};
+        float right_offset{};
+        float right_width{};
+        float normalized_fraction{ default_bottom_dock_column_fraction };
+        bool split{};
+    };
+
+    [[nodiscard]] inline BottomDockColumnLayout make_bottom_dock_column_layout(
+        const BottomDockColumnOptions& options) noexcept
+    {
+        BottomDockColumnLayout result{};
+        result.normalized_fraction = normalize_bottom_dock_column_fraction(options.requested_fraction);
+        const float width = std::isfinite(options.viewport_width)
+            ? (std::max)(0.0f, options.viewport_width) : 0.0f;
+        result.split = options.left_visible && options.right_visible;
+        result.splitter_width = result.split && std::isfinite(options.splitter_width)
+            ? std::clamp(options.splitter_width, 0.0f, width) : 0.0f;
+        const float available = width - result.splitter_width;
+        result.left_width = options.left_visible
+            ? (result.split ? available * result.normalized_fraction : available) : 0.0f;
+        result.right_offset = result.split ? result.left_width + result.splitter_width : 0.0f;
+        result.right_width = options.right_visible
+            ? (result.split ? available - result.left_width : available) : 0.0f;
+        return result;
+    }
+
+    [[nodiscard]] inline float bottom_dock_column_fraction_from_pointer(
+        const BottomDockColumnOptions& options, float local_pointer_x,
+        float grabbed_splitter_offset) noexcept
+    {
+        const auto layout = make_bottom_dock_column_layout(options);
+        const float available = layout.left_width + layout.right_width;
+        if (!layout.split || available <= 0.0f || !std::isfinite(local_pointer_x)
+            || !std::isfinite(grabbed_splitter_offset))
+            return layout.normalized_fraction;
+        const float offset = std::clamp(grabbed_splitter_offset, 0.0f, layout.splitter_width);
+        return normalize_bottom_dock_column_fraction((local_pointer_x - offset) / available);
+    }
+
     enum class ChromeDensity : std::uint8_t
     {
         full,

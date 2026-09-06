@@ -1937,5 +1937,11 @@
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp">
       <Filter>Source Files\epochengine\editor</Filter>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp">
+      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp">
+      <Filter>Source Files\epochengine</Filter>
+    </None>
   </ItemGroup>
 </Project>

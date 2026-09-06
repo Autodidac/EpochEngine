@@ -59,6 +59,36 @@ namespace epochengine::platform::child_process
                     == std::filesystem::path::string_type::npos;
         }
 
+        [[nodiscard]] bool ordinary_workspace_directory(const std::filesystem::path& path)
+        {
+            std::error_code error{};
+            const auto status = std::filesystem::symlink_status(path, error);
+            if (error || !std::filesystem::is_directory(status)
+                || std::filesystem::is_symlink(status)) return false;
+#if defined(_WIN32)
+            const DWORD attributes = ::GetFileAttributesW(path.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES
+                || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u) return false;
+#endif
+            return true;
+        }
+
+        [[nodiscard]] bool ordinary_workspace_tree(const std::filesystem::path& path)
+        {
+            if (!valid_executable_path(path) || !path.is_absolute()
+                || path == path.root_path()) return false;
+            auto current = path.root_path();
+            if (!ordinary_workspace_directory(current)) return false;
+            for (const auto& component : path.relative_path())
+            {
+                if (component.empty() || component == "." || component == "..") return false;
+                current /= component;
+                if (!ordinary_workspace_directory(current)) return false;
+            }
+            std::error_code error{};
+            return std::filesystem::canonical(path, error) == path.lexically_normal() && !error;
+        }
+
 #if defined(_WIN32)
         // The image and each directory component stay non-inheritable and
         // deny replacement until CreateProcess/ResumeThread have completed.
@@ -1861,30 +1891,8 @@ namespace epochengine::platform::child_process
     {
         try
         {
-            if (!valid_executable_path(workspace) || !workspace.is_absolute()
-                || workspace == workspace.root_path()) return std::nullopt;
-            for (const auto& component : workspace)
-                if (component == "." || component == "..") return std::nullopt;
-            const auto ownedDirectory = [](const std::filesystem::path& path)
-            {
-                std::error_code error{};
-                const auto status = std::filesystem::symlink_status(path, error);
-                if (error || !std::filesystem::is_directory(status)
-                    || std::filesystem::is_symlink(status)) return false;
-#if defined(_WIN32)
-                const DWORD attributes = ::GetFileAttributesW(path.c_str());
-                if (attributes == INVALID_FILE_ATTRIBUTES
-                    || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u) return false;
-#endif
-                return true;
-            };
+            if (!ordinary_workspace_tree(workspace)) return std::nullopt;
             auto current = workspace.root_path();
-            if (!ownedDirectory(current)) return std::nullopt;
-            for (const auto& component : workspace.relative_path())
-            {
-                current /= component;
-                if (!ownedDirectory(current)) return std::nullopt;
-            }
             // Only descendants of the already admitted disposable root are
             // created. Never redirect the host's profile or mutate host env.
             const auto base = workspace / "cache" / "process";
@@ -1904,7 +1912,7 @@ namespace epochengine::platform::child_process
                     if (error) return std::nullopt;
                     if (!exists && !std::filesystem::create_directory(current, error))
                         return std::nullopt;
-                    if (error || !ownedDirectory(current)) return std::nullopt;
+                    if (error || !ordinary_workspace_directory(current)) return std::nullopt;
                 }
             }
             const auto utf8 = [](const std::filesystem::path& path)
@@ -1949,7 +1957,7 @@ namespace epochengine::platform::child_process
                 if (size == 0u) continue;
                 if (size >= buffer.size()) return std::nullopt;
                 const std::filesystem::path path{std::wstring{buffer.data(), size}};
-                if (!path.is_absolute() || !ownedDirectory(path)) return std::nullopt;
+                if (!path.is_absolute() || !ordinary_workspace_directory(path)) return std::nullopt;
                 variables.push_back({utf8(std::filesystem::path{name}), utf8(path)});
             }
 #else
@@ -1966,6 +1974,36 @@ namespace epochengine::platform::child_process
             return variables;
         }
         catch (...) { return std::nullopt; }
+    }
+
+    std::optional<RuntimeEnvironment> prepare_runtime_environment(
+        const std::filesystem::path& code_workspace, const std::string_view phase) noexcept
+    {
+        try
+        {
+            if (!ordinary_workspace_tree(code_workspace) || phase.empty() || phase.size() > 48u
+                || !std::ranges::all_of(phase, [](const char c)
+                    { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'; }))
+                return std::nullopt;
+            const auto token = Clock::now().time_since_epoch().count();
+            for (unsigned attempt = 0u; attempt < 16u; ++attempt)
+            {
+                const auto data = code_workspace.parent_path()
+                    / (".epoch-runtime-" + std::string{phase} + "-"
+                        + std::to_string(token) + "-" + std::to_string(attempt));
+                std::error_code error{};
+                if (!std::filesystem::create_directory(data, error))
+                {
+                    if (error) return std::nullopt;
+                    continue; // Never reuse an existing phase directory.
+                }
+                auto environment = prepare_workspace_environment(data);
+                if (!environment) return std::nullopt;
+                return RuntimeEnvironment{data, std::move(*environment)};
+            }
+        }
+        catch (...) {}
+        return std::nullopt;
     }
 
     LaunchResult launch_or_focus(const LaunchRequest& request) noexcept

@@ -562,8 +562,32 @@ namespace epochengine
             return out;
         }
 
+        std::recursive_mutex aiModelSelectionMutex{};
+        std::size_t aiModelSelectionUsers{};
+
+        // A queued request owns its model selection until its worker retires.
+        // The same mutex covers selection actions and lease acquisition; no
+        // context reads another context's mutable chat/editor state.
+        struct AiModelSelectionLease final
+        {
+            AiModelSelectionLease()
+            {
+                std::scoped_lock lock(aiModelSelectionMutex);
+                ++aiModelSelectionUsers;
+            }
+            ~AiModelSelectionLease()
+            {
+                std::scoped_lock lock(aiModelSelectionMutex);
+                --aiModelSelectionUsers;
+            }
+            AiModelSelectionLease(const AiModelSelectionLease&) = delete;
+            AiModelSelectionLease& operator=(const AiModelSelectionLease&) = delete;
+        };
+
         struct AiChatRequestState
         {
+            std::shared_ptr<AiModelSelectionLease> selectionLease{
+                std::make_shared<AiModelSelectionLease>()};
             std::string reply{};
             std::string error{};
             std::stop_source cancellation{};
@@ -735,6 +759,7 @@ namespace epochengine
                 epochengine::ai::InferenceWorkload workload =
                     epochengine::ai::InferenceWorkload::chat)
             {
+                std::scoped_lock selectionLock(aiModelSelectionMutex);
                 if (text.empty() || is_ws_only(text))
                     return false;
                 displayText = normalize_editor_text_for_gui(
@@ -742,7 +767,7 @@ namespace epochengine
                 if (displayText.empty())
                     displayText = "(bounded local-model request)";
 
-                if (pending)
+                if (pending || worker.joinable())
                 {
                     lines.emplace_back("ai> (busy)");
                     trim_lines();
@@ -759,8 +784,6 @@ namespace epochengine
                 requestStartedAt = std::chrono::steady_clock::now();
                 try
                 {
-                    if (worker.joinable())
-                        worker.join();
                     worker = std::jthread(
                         [request = pending,
                          t = std::move(text),
@@ -1254,12 +1277,13 @@ namespace epochengine
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
             EditorMainSurface mainSurface{ initial_editor_main_surface(workspaceTab) };
-            float bottomGridSplit{ 0.55f };
+            float bottomGridSplit{ gui_lib::default_bottom_dock_column_fraction };
+            float bottomGridDragOffset{};
             float outlinerSplit{ 0.20f };
             float inspectorSplit{ 0.22f };
             float dockSplit{ 0.28f };
             std::array<float, kEditorMainSurfaceCount> workspaceBottomGridSplits{
-                filled_workspace_values(0.55f) };
+                filled_workspace_values(gui_lib::default_bottom_dock_column_fraction) };
             std::array<float, kEditorMainSurfaceCount> workspaceDockSplits{
                 filled_workspace_values(0.28f) };
             std::array<bool, kEditorMainSurfaceCount> workspaceOutputFollow{
@@ -1319,6 +1343,7 @@ namespace epochengine
             bool showSettingsModal{ false };
             bool showPackageManagerModal{ false };
             bool showAiModelConsentModal{ false };
+            bool showAiModelSettings{ false };
             bool showVoiceConsentModal{ false };
             std::string selectedPackageId{};
             std::string packageInstallStatus{ "The Site package catalog has not loaded." };
@@ -1388,6 +1413,9 @@ namespace epochengine
             std::string aiDeferredPrompt{};
             std::string aiDeferredDisplay{};
             AiDeferredRequestKind aiDeferredRequestKind{ AiDeferredRequestKind::None };
+            std::shared_ptr<AiModelSelectionLease> aiDeferredModelLease{};
+            std::shared_ptr<AiModelSelectionLease> aiSourceModelLease{};
+            std::shared_ptr<AiModelSelectionLease> aiMcpModelLease{};
             bool aiDeferredDispatchQueued{};
             std::string aiModelConsentStatus{
                 "Local model discovery has not been confirmed for use."};
@@ -1914,7 +1942,7 @@ namespace epochengine
             editor.outlinerSplit = 0.20f;
             editor.inspectorSplit = 0.22f;
             editor.dockSplit = 0.28f;
-            editor.bottomGridSplit = 0.55f;
+            editor.bottomGridSplit = gui_lib::default_bottom_dock_column_fraction;
             editor.showOutliner = application.panes.outliner;
             editor.showInspector = application.panes.inspector;
             editor.showConsoleDock = application.panes.console;
@@ -2819,6 +2847,8 @@ namespace epochengine
 
         [[nodiscard]] static std::filesystem::path editor_layout_preferences_root()
         {
+            if (const auto data = core::path::candidate_data_root(); !data.empty())
+                return data / "config";
 #if defined(_WIN32)
             if (const auto localAppData = core::env::get("LOCALAPPDATA");
                 localAppData && !localAppData->empty())
@@ -3145,15 +3175,8 @@ namespace epochengine
             if (schema <= 4u)
             {
                 constexpr float epsilon = 0.0005f;
-                if (std::abs(bottomGridSplit - 0.68f) <= epsilon)
-                    bottomGridSplit = 0.55f;
                 if (std::abs(dockSplit - 0.24f) <= epsilon)
                     dockSplit = 0.28f;
-                for (float& value : workspaceBottomGridSplits)
-                {
-                    if (std::abs(value - 0.68f) <= epsilon)
-                        value = 0.55f;
-                }
                 for (float& value : workspaceDockSplits)
                 {
                     if (std::abs(value - 0.24f) <= epsilon)
@@ -3161,7 +3184,7 @@ namespace epochengine
                 }
             }
 
-            state.bottomGridSplit = std::clamp(bottomGridSplit, 0.25f, 0.75f);
+            state.bottomGridSplit = gui_lib::normalize_bottom_dock_column_fraction(bottomGridSplit);
             state.outlinerSplit = std::clamp(outlinerSplit, 0.06f, 0.70f);
             state.inspectorSplit = std::clamp(inspectorSplit, 0.06f, 0.70f);
             state.dockSplit = std::clamp(dockSplit, 0.08f, 0.80f);
@@ -3970,7 +3993,11 @@ namespace epochengine
 
         void append_editor_automation_trace(const std::string_view message)
         {
-            std::ofstream trace("epoch_editor_auto_command.log", std::ios::app | std::ios::binary);
+            const auto data = core::path::candidate_data_root();
+            const auto path = data.empty()
+                ? std::filesystem::path{"epoch_editor_auto_command.log"}
+                : data / "logs" / "epoch_editor_auto_command.log";
+            std::ofstream trace(path, std::ios::app | std::ios::binary);
             if (!trace)
                 return;
 
@@ -4470,9 +4497,9 @@ namespace epochengine
         {
             if (state.projectRoot.empty())
                 return {};
-            return resolve_editor_path(
-                std::filesystem::path{state.projectRoot})
-                / "Assets" / "Gui" / "main.epochgui";
+            const auto root = resolve_editor_path(std::filesystem::path{state.projectRoot});
+            if (root.empty()) return {};
+            return root / "Assets" / "Gui" / "main.epochgui";
         }
 
         [[nodiscard]] std::optional<std::vector<std::byte>>
@@ -5223,6 +5250,15 @@ namespace epochengine
             failure.clear();
             if (destination.extension() != ".epochgui")
                 destination += ".epochgui";
+            if (!core::path::candidate_data_root().empty())
+            {
+                destination = editor_resolve_candidate_project_path(destination);
+                if (destination.empty())
+                {
+                    failure = "Candidate GUI documents must save inside this preview's private Projects folder.";
+                    return false;
+                }
+            }
 
             const SerializedGuiDocument encoded =
                 serialize_gui_document(
@@ -5461,9 +5497,15 @@ namespace epochengine
             std::filesystem::path initialDirectory{};
             if (!state.projectRoot.empty())
             {
-                initialDirectory =
-                    resolve_editor_path(state.projectRoot)
-                    / "Assets" / "Gui" / "Templates";
+                auto root = resolve_editor_path(state.projectRoot);
+                if (!core::path::candidate_data_root().empty())
+                    root = editor_resolve_candidate_project_path(root);
+                if (root.empty())
+                {
+                    state.guiDocumentStatus = "No writable project is admitted for this GUI template.";
+                    return false;
+                }
+                initialDirectory = root / "Assets" / "Gui" / "Templates";
                 std::error_code ignored{};
                 std::filesystem::create_directories(
                     initialDirectory,
@@ -5471,6 +5513,11 @@ namespace epochengine
             }
             if (initialDirectory.empty())
             {
+                if (!core::path::candidate_data_root().empty())
+                {
+                    state.guiDocumentStatus = "Select a private candidate project before saving a GUI template.";
+                    return false;
+                }
                 std::error_code ignored{};
                 initialDirectory =
                     std::filesystem::current_path(ignored);
@@ -11373,6 +11420,9 @@ namespace epochengine
                 return {};
             if (path.is_absolute())
                 return path.lexically_normal();
+            if (const auto data = core::path::candidate_data_root();
+                !data.empty() && *path.begin() == "Projects")
+                return editor_resolve_candidate_project_path(path, true);
             return (editor_runtime_root() / path).lexically_normal();
         }
 
@@ -11592,7 +11642,10 @@ namespace epochengine
 
         [[nodiscard]] std::filesystem::path project_notes_path(std::string_view projectRoot)
         {
-            return resolve_editor_path(std::filesystem::path{ projectRoot }) / "PROJECT_NOTES.md";
+            auto root = resolve_editor_path(std::filesystem::path{projectRoot});
+            if (!core::path::candidate_data_root().empty())
+                root = editor_resolve_candidate_project_path(root);
+            return root.empty() ? std::filesystem::path{} : root / "PROJECT_NOTES.md";
         }
 
         [[nodiscard]] std::string read_project_notes(std::string_view projectRoot)
@@ -11630,6 +11683,7 @@ namespace epochengine
                 return;
 
             const auto notesPath = project_notes_path(editor.projectRoot);
+            if (notesPath.empty()) return;
             std::error_code ec;
             std::filesystem::create_directories(notesPath.parent_path(), ec);
 
@@ -11842,6 +11896,24 @@ namespace epochengine
         {
             std::error_code error{};
             return std::filesystem::equivalent(expected, observed, error) && !error;
+        }
+
+        [[nodiscard]] std::optional<std::filesystem::path> prepare_ai_candidate_runtime(
+            platform::child_process::LaunchRequest& request,
+            const std::filesystem::path& workspace, const std::string_view phase,
+            const bool editorExecutable)
+        {
+            auto runtime = platform::child_process::prepare_runtime_environment(workspace, phase);
+            if (!runtime) return std::nullopt;
+            request.environment = std::move(runtime->variables);
+            request.disconnect_standard_input = true;
+            if (editorExecutable)
+            {
+                const auto bytes = runtime->data_root.u8string();
+                request.arguments.emplace_back("--candidate-data-root");
+                request.arguments.emplace_back(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+            }
+            return std::move(runtime->data_root);
         }
 
         [[nodiscard]] std::optional<std::filesystem::path>
@@ -12268,11 +12340,12 @@ namespace epochengine
             request.window_mode =
                 platform::child_process::WindowMode::hidden;
             request.expected_executable = artifact.identity;
-            request.environment = platform::child_process::prepare_workspace_environment(workspace);
-            request.disconnect_standard_input = true;
-            if (!request.environment)
+            const auto runtimeData = prepare_ai_candidate_runtime(request, workspace,
+                fullValidation ? "test-full-validation" : headless ? "test-headless"
+                    : release ? "test-release" : "test-debug", !headless);
+            if (!runtimeData)
             {
-                result.summary = "The sandbox test could not prepare its private process environment.";
+                result.summary = "The sandbox test could not prepare runtime data separate from its validated code.";
                 return result;
             }
             if (cancellation.stop_requested())
@@ -12349,6 +12422,7 @@ namespace epochengine
                 : epochengine::format_text(
                     "The {} rejected the disposable source workspace (exit {}).",
                     testLabel, waited.process->exit_code);
+            result.summary += " Runtime data: " + runtimeData->generic_string() + ".";
             if (!result.succeeded)
             {
                 const std::string diagnostics =
@@ -12705,6 +12779,12 @@ namespace epochengine
             }
 
             const auto resolvedPath = resolve_editor_path(std::filesystem::path{ editor.scriptEditorPath });
+            if (!core::path::candidate_data_root().empty()
+                && editor_resolve_candidate_project_path(resolvedPath).empty())
+            {
+                editor.scriptEditorStatus = "This preview's validated engine source is read-only. Project scripts save in its private Projects folder; engine changes belong to the next sandbox iteration.";
+                return false;
+            }
             std::error_code ec;
             std::filesystem::create_directories(resolvedPath.parent_path(), ec);
             if (ec)
@@ -13711,6 +13791,11 @@ namespace epochengine
 
         bool save_engine_source_editor(EditorState& editor)
         {
+            if (!core::path::candidate_data_root().empty())
+            {
+                editor.engineSourceEditorStatus = "This preview's validated engine source is read-only. Make the next engine change in the next sandbox iteration.";
+                return false;
+            }
             if (editor.engineSourceEditorPath.empty())
             {
                 editor.engineSourceEditorStatus =
@@ -18334,7 +18419,15 @@ namespace epochengine
         static void create_project_script_starter(EditorState& editor)
         {
             const std::string scriptIdBase = sanitize_script_id(editor.newScriptName);
-            const auto scriptsRoot = resolve_editor_path(std::filesystem::path{ editor.projectRoot }) / "scripts";
+            auto projectRoot = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            if (!core::path::candidate_data_root().empty())
+                projectRoot = editor_resolve_candidate_project_path(projectRoot);
+            if (projectRoot.empty())
+            {
+                editor.scriptBuildStatus = "No writable project is admitted for this script starter.";
+                return;
+            }
+            const auto scriptsRoot = projectRoot / "scripts";
             std::error_code ec;
             std::filesystem::create_directories(scriptsRoot, ec);
             if (ec)
@@ -20802,17 +20895,13 @@ namespace epochengine
 
         void seed_pending_ai_model(
             EditorState& editor,
-            const std::vector<std::string>& models)
+            const std::vector<std::string>&)
         {
-            if (model_inventory_contains(models, editor.aiPendingModelSelection))
+            // Inventory describes availability, not the operator's choice. Ejecting
+            // a model (or a failed scan) must not silently select another model.
+            if (!editor.aiPendingModelSelection.empty())
                 return;
-
-            const std::string activeModel =
-                epochengine::ai::active_model_name();
-            editor.aiPendingModelSelection =
-                model_inventory_contains(models, activeModel)
-                    ? activeModel
-                    : suggest_discovered_ai_model(models);
+            editor.aiPendingModelSelection = epochengine::ai::active_model_name();
         }
 
         void request_ai_model_inventory_refresh(EditorState& editor)
@@ -20884,16 +20973,16 @@ namespace epochengine
                             "Local model discovery failed"))
                     {
                         editor.aiModelConsentStatus =
-                            "No local API model inventory was reported. Start "
-                            "an operator-approved endpoint and rescan.";
+                            "No model inventory was reported. Your selection is retained; "
+                            "check the endpoint if Send or Start cannot connect.";
                     }
                 }
                 else
                 {
                     editor.aiModelConsentStatus =
                         "Found " + std::to_string(models.size())
-                        + " local model(s). Epoch sends nothing until you "
-                          "confirm one.";
+                        + " model(s) reported. Selection retained; scanning sends no prompt "
+                          "and does not load or eject a model.";
                     push_editor_log(
                         editor,
                         "[ai] Local API model inventory is ready.");
@@ -20910,10 +20999,18 @@ namespace epochengine
         }
         [[nodiscard]] bool confirm_pending_ai_model(EditorState& editor)
         {
+            std::scoped_lock selectionLock(aiModelSelectionMutex);
+            if (aiModelSelectionUsers != 0u)
+            {
+                editor.aiModelConsentStatus =
+                    "A request in an editor context is still queued, working, or stopping. "
+                    "Wait for it to finish before changing the model.";
+                return false;
+            }
             if (editor.aiPendingModelSelection.empty())
             {
                 editor.aiModelConsentStatus =
-                    "Choose a discovered model before confirming local AI use.";
+                    "Choose a model before using this endpoint.";
                 return false;
             }
 
@@ -20921,7 +21018,7 @@ namespace epochengine
                     editor.aiPendingModelSelection))
             {
                 editor.aiModelConsentStatus =
-                    "The endpoint no longer reports that model. Rescan and choose again.";
+                    epochengine::ai::model_detection_status();
                 push_editor_log(
                     editor,
                     "[ai] Local model confirmation failed: "
@@ -20935,6 +21032,12 @@ namespace epochengine
                 editor,
                 "[ai] Operator approved local model: "
                     + editor.aiPendingModelSelection);
+            if (editor.aiDeferredRequestKind != AiDeferredRequestKind::None)
+            {
+                editor.aiDeferredModelLease = std::make_shared<AiModelSelectionLease>();
+                if (editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration)
+                    editor.aiSourceModelLease = editor.aiDeferredModelLease;
+            }
             return true;
         }
 
@@ -20978,6 +21081,17 @@ namespace epochengine
             std::string_view selectBoxId)
         {
             const float contentWidth = (std::max)(180.0f, width);
+            // Selection is global, requests are context-owned. Do not retarget a
+            // queued worker between accepting its prompt and capturing its client.
+            std::scoped_lock selectionLock(aiModelSelectionMutex);
+            if (aiModelSelectionUsers != 0u)
+            {
+                gui::property_row("Model", epochengine::ai::active_model_name());
+                gui::wrapped_label("A model request is queued, working, or stopping. "
+                    "Model switching is available when it finishes; Cancel remains in the session controls.",
+                    contentWidth);
+                return;
+            }
             auto transport =
                 epochengine::ai::current_local_inference_transport();
 
@@ -21085,6 +21199,8 @@ namespace epochengine
             }
             const bool inventoryPending =
                 editor.aiModelInventoryPending.has_value();
+            const auto selection = epochengine::ai::local_model_selection();
+            seed_pending_ai_model(editor, models);
             const auto manifest = epochengine::ai::active_model_manifest();
             const std::string activeModel =
                 epochengine::ai::active_model_name();
@@ -21093,10 +21209,21 @@ namespace epochengine
                 "[model] Session",
                 activeModel.empty()
                     ? std::string("No model configured")
-                    : epochengine::ai::is_model_use_confirmed()
-                        ? std::string("Approved: ") + activeModel
-                        : std::string("Awaiting confirmation: ")
+                    : selection.confirmed || selection.reusable_on_request
+                        ? std::string("Ready on Send / Start: ") + activeModel
+                        : std::string("Confirm endpoint use: ")
                             + activeModel);
+            using SelectionOrigin = epochengine::ai::LocalModelSelectionOrigin;
+            gui::property_row("[model] Selection",
+                selection.origin == SelectionOrigin::default_local ? "Default quick assistant"
+                : selection.origin == SelectionOrigin::remembered ? "Last used at this endpoint"
+                : selection.origin == SelectionOrigin::explicit_selection ? "Selected by you"
+                : selection.origin == SelectionOrigin::legacy_preference ? "Previous local preference"
+                : selection.origin == SelectionOrigin::configured ? "Configured model" : "Not selected");
+            gui::wrapped_label(
+                "Nemotron 4B is the quick assistant. For Engine Self-Coding, choose "
+                "an agentic coding model: Qwen 3.5 or newer, preferably Qwen 3.8. "
+                "Epoch retains your choice; it does not silently replace or eject it.", contentWidth);
             gui::property_row(
                 "[model] Client",
                 epochengine::ai::model_connection_status());
@@ -21187,8 +21314,11 @@ namespace epochengine
                         ? editor.aiModelConsentStatus
                         : epochengine::ai::model_detection_status(),
                     contentWidth);
-                return;
             }
+            // Saved/ejected models remain selectable even when discovery is empty.
+            for (const auto& retained : {activeModel, editor.aiPendingModelSelection})
+                if (!retained.empty() && !model_inventory_contains(models, retained))
+                    models.push_back(retained);
             std::vector<std::string_view> modelViews{};
             modelViews.reserve(models.size());
             for (const auto& modelId : models)
@@ -21201,7 +21331,7 @@ namespace epochengine
             const auto selectResult =
                 gui::select_box(gui::SelectBoxOptions{
                     .id = selectBoxId,
-                    .placeholder = "Choose discovered local model",
+                    .placeholder = "Choose model",
                     .selected = selectedCandidate.empty()
                         ? std::string_view{}
                         : std::string_view{selectedCandidate},
@@ -21223,7 +21353,9 @@ namespace epochengine
                 !editor.aiPendingModelSelection.empty()
                 && editor.aiPendingModelSelection != activeModel;
             if (activeModel.empty() || switchPending
-                || !epochengine::ai::is_model_use_confirmed())
+                || (editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                    && !editor.aiDeferredDispatchQueued)
+                || (!selection.confirmed && !selection.reusable_on_request))
             {
                 gui::wrapped_label(
                     editor.aiModelConsentStatus,
@@ -21245,8 +21377,8 @@ namespace epochengine
             else
             {
                 gui::wrapped_label(
-                    "This model is approved for local requests. Choose another "
-                    "inventory entry to stage a switch.",
+                    "Send or Start uses this model. Inventory does not prove it is "
+                    "loaded; the endpoint handles loading when a request arrives.",
                     contentWidth);
             }
         }
@@ -21465,6 +21597,39 @@ namespace epochengine
             if (chat->worker.joinable())
                 chat->worker.join();
         }
+    }
+
+    bool editor_ai_model_selection_contract() noexcept
+    {
+        try
+        {
+            std::size_t baseline{};
+            {
+                std::scoped_lock lock(aiModelSelectionMutex);
+                baseline = aiModelSelectionUsers;
+            }
+            const auto count = [] {
+                std::scoped_lock lock(aiModelSelectionMutex);
+                return aiModelSelectionUsers;
+            };
+            {
+                auto deferred = std::make_shared<AiModelSelectionLease>();
+                auto sourceHandoff = deferred;
+                if (count() != baseline + 1u) return false;
+                auto request = std::make_shared<AiChatRequestState>();
+                if (count() != baseline + 2u) return false;
+                deferred.reset();
+                (void)request->cancellation.request_stop();
+                if (count() != baseline + 2u) return false;
+                request.reset();
+                // Reply handoff retains the original selection. Cancellation
+                // alone never releases an active worker's selection lease.
+                if (count() != baseline + 1u) return false;
+                sourceHandoff.reset();
+            }
+            return count() == baseline;
+        }
+        catch (...) { return false; }
     }
 
     bool editor_ai_request_cancellation_contract() noexcept
@@ -21875,6 +22040,7 @@ namespace epochengine
         it->second.aiDeferredPrompt.clear();
         it->second.aiDeferredDisplay.clear();
         it->second.aiDeferredRequestKind = AiDeferredRequestKind::None;
+        it->second.aiDeferredModelLease.reset();
         it->second.aiDeferredDispatchQueued = false;
         it->second.showUpdateConfirmModal = false;
         it->second.showSourceUpdateConfirmModal = false;
@@ -22021,7 +22187,7 @@ namespace epochengine
         snapshot.workspace_tab = snapshot_workspace_tab(editor.workspaceTab);
         snapshot.dock_status_tab = snapshot_workspace_tab(editor.dockStatusTab);
         snapshot.main_surface = static_cast<std::uint8_t>(editor.mainSurface);
-        snapshot.bottom_grid_split = snapshot_layout_split(editor.bottomGridSplit, 0.55f);
+        snapshot.bottom_grid_split = gui_lib::normalize_bottom_dock_column_fraction(editor.bottomGridSplit);
         snapshot.outliner_split = snapshot_layout_split(editor.outlinerSplit, 0.20f);
         snapshot.inspector_split = snapshot_layout_split(editor.inspectorSplit, 0.22f);
         snapshot.dock_split = snapshot_layout_split(editor.dockSplit, 0.28f);
@@ -22217,14 +22383,14 @@ namespace epochengine
         editor.mainSurface = snapshot_main_surface(snapshot.main_surface);
         if (!editor_application_supports_surface(application, editor.mainSurface))
             editor.mainSurface = application.default_surface;
-        editor.bottomGridSplit = snapshot_layout_split(snapshot.bottom_grid_split, 0.55f);
+        editor.bottomGridSplit = gui_lib::normalize_bottom_dock_column_fraction(snapshot.bottom_grid_split);
         editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
         editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.22f);
         editor.dockSplit = snapshot_layout_split(snapshot.dock_split, 0.28f);
         for (std::size_t index = 0u; index < kEditorMainSurfaceCount; ++index)
         {
-            editor.workspaceBottomGridSplits[index] = snapshot_layout_split(
-                snapshot.workspace_bottom_grid_splits[index], 0.55f);
+            editor.workspaceBottomGridSplits[index] = gui_lib::normalize_bottom_dock_column_fraction(
+                snapshot.workspace_bottom_grid_splits[index]);
             editor.workspaceDockSplits[index] = snapshot_layout_split(
                 snapshot.workspace_dock_splits[index], 0.28f);
             editor.workspaceOutputFollow[index] =
@@ -22326,6 +22492,7 @@ namespace epochengine
         editor.aiDeferredPrompt.clear();
         editor.aiDeferredDisplay.clear();
         editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+        editor.aiDeferredModelLease.reset();
         editor.aiDeferredDispatchQueued = false;
         editor.showUpdateConfirmModal = false;
         editor.showSourceUpdateConfirmModal = false;
@@ -22672,11 +22839,12 @@ namespace epochengine
                 const auto inputResult = gui::edit_box(detachedChat->input, { contentWidth, 30.0f }, 4096, false);
                 if (inputResult.submitted)
                 {
-                    if (!epochengine::ai::is_model_use_confirmed())
+                    std::scoped_lock selectionLock(aiModelSelectionMutex);
+                    if (!epochengine::ai::prepare_local_model_for_request())
                     {
                         detachedChat->lines.emplace_back(
-                            "ai> Confirm local-model use from the main editor "
-                            "AI tab before sending from a detached window.");
+                            "ai> The selected model is unavailable or needs endpoint approval. "
+                            "Check AI Controls in the main editor; your message is retained.");
                     }
                     else
                     {
@@ -23107,6 +23275,12 @@ namespace epochengine
         else if (editor.showAboutModal)
             gui::begin_modal_input_capture(centered_modal_position({ 456.0f, 222.0f }), { 456.0f, 222.0f });
 
+        // A host resize must not reinterpret the last splitter-drag pixel in
+        // a new client width. Keep the user's fraction even for one-pixel steps.
+        if (editor.layoutDrag == EditorLayoutDrag::BottomColumns
+            && editor.lastLayoutExtent.x > 0.0f
+            && editor.lastLayoutExtent.x != layoutExtent.x)
+            editor.layoutDrag = EditorLayoutDrag::None;
         if (editor.lastLayoutExtent.x > 0.0f
             && editor.lastLayoutExtent.y > 0.0f
             && (std::abs(editor.lastLayoutExtent.x - layoutExtent.x) > 1.0f
@@ -23322,22 +23496,18 @@ namespace epochengine
         const gui::Vec2 bottom_split_size{ w, bottom_split_h };
         const gui::Vec2 bottom_pos{ 0.0f, (std::max)(0.0f, h - bottom_h) };
         const gui::Vec2 bottom_size{ w, bottom_h };
-        const bool splitBottomColumns =
-            bottom_left_visible && bottom_right_visible;
-        const float bottomColumnGap = splitBottomColumns ? splitter_w : 0.0f;
-        const float bottomColumnWidth =
-            (std::max)(0.0f, bottom_size.x - bottomColumnGap);
-        const float bottomLeftWidth = bottom_left_visible
-            ? (splitBottomColumns
-                ? bottomColumnWidth * std::clamp(
-                    editor.bottomGridSplit, 0.25f, 0.75f)
-                : bottomColumnWidth)
-            : 0.0f;
-        const float bottomRightWidth = bottom_right_visible
-            ? (splitBottomColumns
-                ? (std::max)(0.0f, bottomColumnWidth - bottomLeftWidth)
-                : bottomColumnWidth)
-            : 0.0f;
+        const gui_lib::BottomDockColumnOptions bottomColumnOptions{
+            .viewport_width = bottom_size.x,
+            .splitter_width = splitter_w,
+            .requested_fraction = editor.bottomGridSplit,
+            .left_visible = bottom_left_visible,
+            .right_visible = bottom_right_visible
+        };
+        const auto bottomColumns = gui_lib::make_bottom_dock_column_layout(bottomColumnOptions);
+        const bool splitBottomColumns = bottomColumns.split;
+        const float bottomColumnGap = bottomColumns.splitter_width;
+        const float bottomLeftWidth = bottomColumns.left_width;
+        const float bottomRightWidth = bottomColumns.right_width;
         const gui::Vec2 bottomLeftPosition = bottom_pos;
         const gui::Vec2 bottomLeftSize{ bottomLeftWidth, bottom_h };
         const gui::Vec2 bottomColumnsSplitPosition{
@@ -23347,7 +23517,7 @@ namespace epochengine
             bottomColumnGap,
             bottom_h };
         const gui::Vec2 bottomRightPosition{
-            splitBottomColumns ? bottomLeftWidth + bottomColumnGap : 0.0f,
+            bottomColumns.right_offset,
             bottom_pos.y };
         const gui::Vec2 bottomRightSize{ bottomRightWidth, bottom_h };
 
@@ -23423,6 +23593,7 @@ namespace epochengine
             std::string display,
             AiDeferredRequestKind requestKind) -> bool
         {
+            std::scoped_lock selectionLock(aiModelSelectionMutex);
             if (chat.pending
                 || editor.aiDeferredRequestKind
                     != AiDeferredRequestKind::None)
@@ -23433,7 +23604,11 @@ namespace epochengine
                 return false;
             }
 
-            if (!epochengine::ai::is_model_use_confirmed())
+            const auto selection = epochengine::ai::local_model_selection();
+            const bool needsCodingChoice = requestKind == AiDeferredRequestKind::SourceIteration
+                && selection.model_id == "nvidia/nemotron-3-nano-4b"
+                && selection.origin != epochengine::ai::LocalModelSelectionOrigin::explicit_selection;
+            if (needsCodingChoice || !epochengine::ai::prepare_local_model_for_request())
             {
                 (void)stage_ai_model_consent(
                     editor,
@@ -23443,12 +23618,19 @@ namespace epochengine
                 push_editor_log(
                     editor,
                     "[ai] Request staged until selected-model use is confirmed.");
+                if (needsCodingChoice)
+                    editor.aiModelConsentStatus = "Nemotron 4B is the default quick assistant. "
+                        "Choose your coding model (Qwen 3.5+ recommended), then Use Model to continue. "
+                        "Your objective is retained; no request has been sent.";
                 return false;
             }
 
             editor.aiDeferredPrompt = std::move(prompt);
             editor.aiDeferredDisplay = std::move(display);
             editor.aiDeferredRequestKind = requestKind;
+            editor.aiDeferredModelLease = std::make_shared<AiModelSelectionLease>();
+            if (requestKind == AiDeferredRequestKind::SourceIteration)
+                editor.aiSourceModelLease = editor.aiDeferredModelLease;
             editor.aiDeferredDispatchQueued = true;
             return true;
         };
@@ -23468,14 +23650,12 @@ namespace epochengine
             std::string prompt,
             std::string_view logLine)
         {
-            const bool modelConfirmed =
-                epochengine::ai::is_model_use_confirmed();
             const bool submitted = submit_ai_request(
                     std::move(prompt),
                     "Guarded source iteration over explicitly shared context.",
                     AiDeferredRequestKind::SourceIteration);
             const bool waitingForConsent =
-                !modelConfirmed
+                !submitted && !editor.aiDeferredDispatchQueued
                 && editor.aiDeferredRequestKind
                     == AiDeferredRequestKind::SourceIteration;
             if (submitted || waitingForConsent)
@@ -23505,6 +23685,7 @@ namespace epochengine
             if (editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration)
             {
                 editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                editor.aiDeferredModelLease.reset();
                 editor.aiDeferredDispatchQueued = false;
                 editor.aiDeferredPrompt.clear();
                 editor.aiDeferredDisplay.clear();
@@ -24267,16 +24448,15 @@ namespace epochengine
                 request.window_mode =
                     platform::child_process::WindowMode::normal;
                 request.expected_executable = artifact->identity;
-                request.environment = platform::child_process::prepare_workspace_environment(workspace);
-                request.disconnect_standard_input = true;
-                if (!request.environment)
+                const auto runtimeData = prepare_ai_candidate_runtime(request, workspace, "preview", true);
+                if (!runtimeData)
                 {
                     invalidate_ai_source_artifacts(editor);
                     editor.aiCandidatePreviewReported = true;
                     editor.aiCandidatePreviewStartedAt = {};
                     const auto failed = editor.aiDevelopmentPanel->complete_candidate_preview(
                         action.workspace_generation, false, 0u, 0u,
-                        "Candidate preview could not prepare its private process environment.");
+                        "Candidate preview could not prepare runtime data separate from its validated code.");
                     push_ai_development_log(editor, "[candidate-lab] " + failed.status);
                     break;
                 }
@@ -24344,13 +24524,18 @@ namespace epochengine
                 push_ai_development_log(
                     editor,
                     "[candidate-lab] Started the exact validated candidate process; waiting for its native window before bottom-grid admission. HOST_EXECUTABLE_EVIDENCE "
-                        + candidate_artifacts::canonical_evidence(*artifact));
+                        + candidate_artifacts::canonical_evidence(*artifact)
+                        + " RUNTIME_DATA " + runtimeData->generic_string());
                 break;
             }
             case editor_ai_development_panel::HostAction::
                 cancel_model_source_request:
             {
                 invalidate_ai_source_artifacts(editor);
+                for (const auto ticket : {editor.aiSourceWorkspaceCancellation,
+                        editor.aiSourceBuildCancellation, editor.aiSourceTestCancellation})
+                    if (ticket.valid())
+                        (void)editor_task_scheduler(editor).cancel(ticket);
                 auto& mcp = editor.aiLocalMcp;
                 const bool cancelledLocalModel =
                     chat.source_request_running() && chat.cancel_pending();
@@ -24361,6 +24546,7 @@ namespace epochengine
                     editor.aiDeferredPrompt.clear();
                     editor.aiDeferredDisplay.clear();
                     editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                    editor.aiDeferredModelLease.reset();
                     editor.aiDeferredDispatchQueued = false;
                     editor.showAiModelConsentModal = false;
                 }
@@ -24370,7 +24556,8 @@ namespace epochengine
                         mcp.process,
                         platform::child_process::StopMode::force);
                     platform::child_process::poll();
-                    (void)platform::child_process::release(mcp.process);
+                    if (!platform::child_process::release(mcp.process))
+                        editor.aiCandidateRetiringProcesses.push_back(mcp.process);
                 }
                 mcp.process = {};
                 mcp.awaitingResponse = false;
@@ -24380,7 +24567,7 @@ namespace epochengine
                     : cancelledQueuedSource
                     ? "Cancelled the queued self-coding request before dispatch."
                     : epochengine::format_text(
-                        "Stopped local MCP bridge PID {} after {} ms. Live source "
+                        "Stopping local MCP bridge PID {} after {} ms; retirement is checked separately. Live source "
                         "and projects were not changed.",
                         mcp.bridgeProcessId,
                         mcp.elapsedMs);
@@ -24552,20 +24739,34 @@ namespace epochengine
                         request.display_name = "Epoch Local MCP Iteration";
                         request.window_mode =
                             platform::child_process::WindowMode::hidden;
+                        // Allocate all ownership records before starting a child.
+                        // Adoption below is non-throwing even on a failed launch.
+                        auto modelLease = std::make_shared<AiModelSelectionLease>();
+                        editor.aiCandidateRetiringProcesses.reserve(
+                            editor.aiCandidateRetiringProcesses.size() + 1u);
                         const auto launched =
                             platform::child_process::launch_or_focus(request);
+                        if (launched.owns_new_process())
+                        {
+                            mcp.process = launched.handle;
+                            editor.aiMcpModelLease = std::move(modelLease);
+                        }
                         if (launched.code != platform::child_process::LaunchCode::started)
                         {
-                            // A supervisor may return another active operation;
-                            // it did not execute this prompt and is never adopted
-                            // or stopped on behalf of this rejected request.
+                            if (launched.owns_new_process())
+                            {
+                                (void)platform::child_process::stop(mcp.process,
+                                    platform::child_process::StopMode::force);
+                                editor.aiCandidateRetiringProcesses.push_back(mcp.process);
+                                mcp.process = {};
+                            }
+                            // Focused/busy handles belong to another request.
                             rejectMcpDispatch(
                                 "Local MCP bridge did not start this request: "
                                     + launched.message);
                             break;
                         }
 
-                        mcp.process = launched.handle;
                         mcp.startedTickNs = editor_steady_tick_ns();
                         mcp.elapsedMs = 0u;
                         mcp.awaitingResponse = true;
@@ -24717,7 +24918,8 @@ namespace epochengine
             if (chat.completionGeneration <= editor.aiSourceRequestedGeneration)
                 chat.completionGeneration = editor.aiSourceRequestedGeneration + 1u;
             mcp.awaitingResponse = false;
-            (void)platform::child_process::release(mcp.process);
+            if (!platform::child_process::release(mcp.process))
+                editor.aiCandidateRetiringProcesses.push_back(mcp.process);
             mcp.process = {};
 
             std::error_code cleanupError{};
@@ -25398,7 +25600,8 @@ namespace epochengine
                 editor,
                 request,
                 goalMilestone);
-            if (!epochengine::ai::is_model_use_confirmed())
+            if (!epochengine::ai::is_model_use_confirmed()
+                && !epochengine::ai::prepare_local_model_for_request())
             {
                 (void)stage_ai_model_consent(
                     editor,
@@ -25407,7 +25610,7 @@ namespace epochengine
                     display);
                 editor.aiGoalPlanNextQueued = false;
                 editor.aiAuthoringStatus =
-                    "Choose and confirm a discovered local model before Epoch sends this plan request.";
+                    "Check the selected model and endpoint in AI Controls before sending this plan.";
                 chat.append_status(editor.aiAuthoringStatus);
                 return true;
             }
@@ -25482,7 +25685,8 @@ namespace epochengine
 
             const std::string display =
                 "Tool plan: " + std::string{request};
-            if (!epochengine::ai::is_model_use_confirmed())
+            if (!epochengine::ai::is_model_use_confirmed()
+                && !epochengine::ai::prepare_local_model_for_request())
             {
                 (void)stage_ai_model_consent(
                     editor,
@@ -25490,7 +25694,7 @@ namespace epochengine
                     prompt,
                     display);
                 editor.aiToolStatus =
-                    "Choose and confirm a discovered local model before Epoch sends this tool-plan request.";
+                    "Check the selected model and endpoint in AI Controls before sending this tool plan.";
                 chat.append_status(editor.aiToolStatus);
                 return true;
             }
@@ -25512,6 +25716,7 @@ namespace epochengine
 
         auto dispatch_deferred_ai_request = [&]() -> bool
         {
+            std::scoped_lock selectionLock(aiModelSelectionMutex);
             if (editor.aiDeferredRequestKind == AiDeferredRequestKind::None
                 || !epochengine::ai::is_model_use_confirmed())
             {
@@ -25543,6 +25748,7 @@ namespace epochengine
                 std::move(prompt),
                 std::move(display),
                 workload);
+            editor.aiDeferredModelLease.reset();
             if (requestKind == AiDeferredRequestKind::Tooling)
             {
                 editor.aiToolRequestedGeneration =
@@ -25606,6 +25812,73 @@ namespace epochengine
             }
             return submitted;
         };
+
+        const auto source_iteration_input = [&](float width = 320.0f)
+        {
+            const auto evidence = epochengine::ai::default_evidence_paths();
+            (void)epochengine::ai::local_model_selection();
+            const auto manifest = epochengine::ai::active_model_manifest();
+            const auto script = editor_resolve_script_source_path(
+                editor.activeScript, editor.projectRoot);
+            editor_ai_development_panel::Input input{
+                .domain = editor_ai_development_panel::Domain::engine_source,
+                .available_width = width,
+                .workspace_id = "epoch.engine",
+                .workspace_root = evidence.workspace_root,
+                .source_cache_root = evidence.cache_root,
+                .curated_scope_digest = editor.curatedCodeWorkspace.evidenceDigest,
+                .curated_source_paths = editor.sourceWorkspaceLabels,
+                .architecture_evidence = std::string{ai_source_architecture_contract()},
+                .tool_output_relative_path = script,
+                .latest_raw_model_reply = chat.latestRawReply,
+                .selected_model = manifest.display_name,
+                .selected_endpoint = manifest.endpoint,
+                .selected_transport = std::string{epochengine::ai::local_inference_transport_name(
+                    epochengine::ai::current_local_inference_transport())},
+                .local_model_running = chat.source_request_running(),
+                .local_model_queued = editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration,
+                .local_model_cancelling = chat.source_request_cancelling(),
+                .local_model_elapsed_ms = chat.source_request_running() ? chat.elapsed_milliseconds() : 0u,
+                .local_model_activity = std::string{chat.request_activity()},
+                .external_mcp_available = local_mcp_connector_available(),
+                .external_mcp_status = editor.aiLocalMcp.status,
+                .external_mcp_process_id = editor.aiLocalMcp.bridgeProcessId,
+                .external_mcp_elapsed_ms = editor.aiLocalMcp.elapsedMs,
+                .external_mcp_receipt_path = editor.aiLocalMcp.receiptPath.empty()
+                    ? std::string{} : display_project_path(editor.aiLocalMcp.receiptPath),
+                .external_mcp_running = editor.aiLocalMcp.awaitingResponse,
+                .tool_source_ready = !script.empty(),
+                .execution_pending = editor.aiContinuousBuildPending.has_value()
+                    || editor.aiSourceWorkspacePending.has_value()
+                    || editor.aiSourceBuildPending.has_value()
+                    || editor.aiSourceTestPending.has_value(),
+                .session_retirement_pending = !editor.aiCandidateRetiringProcesses.empty()};
+            apply_verified_ai_source_authority(input);
+            return input;
+        };
+        // Model completion and successor planning belong to the context tick,
+        // never to the visibility of the AI Controls dock tab.
+        if (editor.aiDevelopmentPanel)
+        {
+            if (editor.aiSourceAwaitingReply && !chat.pending
+                && chat.completionGeneration > editor.aiSourceRequestedGeneration)
+            {
+                editor.aiSourceAwaitingReply = false;
+                const auto reply = editor.aiDevelopmentPanel->stage_latest_model_proposal(source_iteration_input());
+                chat.latestRawReply.clear();
+                chat.append_status(reply.status);
+                push_ai_development_log(editor, "[ai-source] " + reply.status);
+                dispatch_ai_development_action(reply);
+            }
+            dispatch_ai_development_action(
+                editor.aiDevelopmentPanel->advance_source_iteration(source_iteration_input()));
+            if (!chat.pending && !editor.aiSourceAwaitingReply
+                && editor.aiDeferredRequestKind != AiDeferredRequestKind::SourceIteration)
+                editor.aiSourceModelLease.reset();
+            if (!editor.aiLocalMcp.process.valid() && !editor.aiLocalMcp.awaitingResponse
+                && editor.aiCandidateRetiringProcesses.empty())
+                editor.aiMcpModelLease.reset();
+        }
 
         const auto trim_ai_command = [](std::string_view value) noexcept
         {
@@ -27232,7 +27505,10 @@ namespace epochengine
                 editor.layoutDrag = EditorLayoutDrag::Dock;
             else if (splitBottomColumns
                 && editor_point_in_rect(mouse, bottomColumnsSplitPosition, bottomColumnsSplitSize))
+            {
                 editor.layoutDrag = EditorLayoutDrag::BottomColumns;
+                editor.bottomGridDragOffset = mouse.x - bottomColumnsSplitPosition.x;
+            }
         }
         if (!gui::is_mouse_down())
             editor.layoutDrag = EditorLayoutDrag::None;
@@ -27260,8 +27536,8 @@ namespace epochengine
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::BottomColumns:
-                editor.bottomGridSplit = std::clamp(
-                    mouse.x / (std::max)(1.0f, w), 0.25f, 0.75f);
+                editor.bottomGridSplit = gui_lib::bottom_dock_column_fraction_from_pointer(
+                    bottomColumnOptions, mouse.x - bottom_pos.x, editor.bottomGridDragOffset);
                 editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
                 break;
             case EditorLayoutDrag::None:
@@ -27608,14 +27884,12 @@ namespace epochengine
             const float leftPreviewWidth = (std::max)(left_w, w * 0.24f);
             const float rightPreviewWidth = (std::max)(right_w, w * 0.24f);
             const float bottomPreviewHeight = (std::max)(bottom_h, h * 0.25f);
-            const float bottomPreviewSplit = std::clamp(
-                editor.bottomGridSplit, 0.25f, 0.75f);
-            const float bottomLeftPreviewWidth =
-                (std::max)(0.0f, w * bottomPreviewSplit - splitter_w * 0.5f);
-            const float bottomRightPreviewX =
-                (std::min)(w, bottomLeftPreviewWidth + splitter_w);
-            const float bottomRightPreviewWidth =
-                (std::max)(0.0f, w - bottomRightPreviewX);
+            const auto bottomPreview = gui_lib::make_bottom_dock_column_layout({
+                .viewport_width = w, .splitter_width = splitter_w,
+                .requested_fraction = editor.bottomGridSplit });
+            const float bottomLeftPreviewWidth = bottomPreview.left_width;
+            const float bottomRightPreviewX = bottomPreview.right_offset;
+            const float bottomRightPreviewWidth = bottomPreview.right_width;
             const gui::Vec2 floatingPreviewSize{
                 (std::min)(520.0f, (std::max)(280.0f, viewport_size.x * 0.48f)),
                 (std::min)(420.0f, (std::max)(220.0f, viewport_size.y * 0.52f))
@@ -27780,14 +28054,12 @@ namespace epochengine
             const float leftPreviewWidth = (std::max)(left_w, w * 0.24f);
             const float rightPreviewWidth = (std::max)(right_w, w * 0.24f);
             const float bottomPreviewHeight = (std::max)(bottom_h, h * 0.25f);
-            const float bottomPreviewSplit = std::clamp(
-                editor.bottomGridSplit, 0.25f, 0.75f);
-            const float bottomLeftPreviewWidth =
-                (std::max)(0.0f, w * bottomPreviewSplit - splitter_w * 0.5f);
-            const float bottomRightPreviewX =
-                (std::min)(w, bottomLeftPreviewWidth + splitter_w);
-            const float bottomRightPreviewWidth =
-                (std::max)(0.0f, w - bottomRightPreviewX);
+            const auto bottomPreview = gui_lib::make_bottom_dock_column_layout({
+                .viewport_width = w, .splitter_width = splitter_w,
+                .requested_fraction = editor.bottomGridSplit });
+            const float bottomLeftPreviewWidth = bottomPreview.left_width;
+            const float bottomRightPreviewX = bottomPreview.right_offset;
+            const float bottomRightPreviewWidth = bottomPreview.right_width;
             const gui::DockGuideLayout nativeGuides = gui::make_dock_guide_layout(
                 gui::DockGuideOptions{
                     .guide_bounds = {
@@ -30855,17 +31127,10 @@ namespace epochengine
         }
         if (pane_tab == InspectorToolTab::AiControls)
         {
-            const auto inspectorEvidence =
-                epochengine::ai::default_evidence_paths();
             const std::filesystem::path inspectorBuildLog =
                 project_build_log_path(editor.projectRoot);
             const std::filesystem::path inspectorOutputExe =
                 project_output_exe_path(editor.projectRoot);
-            const std::string inspectorActiveScriptSource =
-                editor_resolve_script_source_path(
-                    editor.activeScript, editor.projectRoot);
-            const auto inspectorManifest =
-                epochengine::ai::active_model_manifest();
             const float inspectorWidth =
                 (std::max)(180.0f, pane_size.x - 24.0f);
             if (editor.aiWorkspaceDomain != AiWorkspaceDomain::Engine
@@ -31052,8 +31317,15 @@ namespace epochengine
                 return;
             }
 
+            if (gui::button(editor.showAiModelSettings ? "Hide Model Settings" : "Choose / Change Coding Model",
+                    {inspectorWidth, 30.0f}))
+                editor.showAiModelSettings = !editor.showAiModelSettings;
+            if (editor.showAiModelSettings
+                || (editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration
+                    && !editor.aiDeferredDispatchQueued))
+                render_ai_model_picker(editor, inspectorWidth, "self-coding-model-select");
             gui::wrapped_label(
-                "Describe one engine result or visible defect. Epoch resolves "
+                "Describe the result you want. Epoch resolves "
                 "the owned systems and exact source files for you, shows them "
                 "in Detailed Session Activity, and keeps every model-authored "
                 "change inside a separate disposable session until you choose "
@@ -31064,51 +31336,7 @@ namespace epochengine
                 editor.aiDevelopmentPanel = std::make_unique<
                     editor_ai_development_panel::Panel>();
             }
-            editor_ai_development_panel::Input guardedInput{
-                    .domain = editor_ai_development_panel::Domain::engine_source,
-                    .available_width = inspectorWidth,
-                    .workspace_id = "epoch.engine",
-                    .source_snapshot_root = {},
-                    .workspace_root = inspectorEvidence.workspace_root,
-                    .source_cache_root = inspectorEvidence.cache_root,
-                    .curated_scope_digest = editor.curatedCodeWorkspace.evidenceDigest,
-                    .curated_source_paths = editor.sourceWorkspaceLabels,
-                    .architecture_evidence =
-                        std::string{ai_source_architecture_contract()},
-                    .tool_output_relative_path = inspectorActiveScriptSource,
-                    .latest_raw_model_reply = chat.latestRawReply,
-                    .selected_model = inspectorManifest.display_name,
-                    .selected_endpoint = inspectorManifest.endpoint,
-                    .selected_transport = std::string{
-                        epochengine::ai::local_inference_transport_name(
-                            epochengine::ai::current_local_inference_transport())},
-                    .local_model_running = chat.source_request_running(),
-                    .local_model_queued = editor.aiDeferredRequestKind
-                        == AiDeferredRequestKind::SourceIteration,
-                    .local_model_cancelling = chat.source_request_cancelling(),
-                    .local_model_elapsed_ms = chat.source_request_running()
-                        ? chat.elapsed_milliseconds() : 0u,
-                    .local_model_activity = std::string{chat.request_activity()},
-                    .external_mcp_available = local_mcp_connector_available(),
-                    .external_mcp_status = editor.aiLocalMcp.status,
-                    .external_mcp_process_id =
-                        editor.aiLocalMcp.bridgeProcessId,
-                    .external_mcp_elapsed_ms = editor.aiLocalMcp.elapsedMs,
-                    .external_mcp_receipt_path =
-                        editor.aiLocalMcp.receiptPath.empty()
-                            ? std::string{}
-                            : display_project_path(
-                                editor.aiLocalMcp.receiptPath),
-                    .external_mcp_running =
-                        editor.aiLocalMcp.awaitingResponse,
-                    .tool_source_ready =
-                        !inspectorActiveScriptSource.empty(),
-                    .execution_pending =
-                        editor.aiContinuousBuildPending.has_value()
-                        || editor.aiSourceWorkspacePending.has_value()
-                        || editor.aiSourceBuildPending.has_value()
-                        || editor.aiSourceTestPending.has_value()};
-            apply_verified_ai_source_authority(guardedInput);
+            auto guardedInput = source_iteration_input(inspectorWidth);
             if (!editor.automationConsumed
                 && editor.automationCommand
                     == EditorAutomationCommand::SelfCodingLocalSmoke)
@@ -31532,19 +31760,6 @@ namespace epochengine
                             "90-minute bounded two-candidate workflow timeout; model and sandbox cancellation was requested");
                     }
                 }
-            }
-            if (editor.aiSourceAwaitingReply
-                && !chat.pending
-                && chat.completionGeneration
-                    > editor.aiSourceRequestedGeneration)
-            {
-                editor.aiSourceAwaitingReply = false;
-                const auto sourceReply = editor.aiDevelopmentPanel
-                    ->stage_latest_model_proposal(guardedInput);
-                chat.latestRawReply.clear();
-                chat.append_status(sourceReply.status);
-                push_editor_log(editor, "[ai-source] " + sourceReply.status);
-                dispatch_ai_development_action(sourceReply);
             }
             const auto guardedPanel =
                 editor.aiDevelopmentPanel->render(guardedInput);
@@ -36490,6 +36705,7 @@ namespace epochengine
                 editor.aiDeferredDisplay.clear();
                 editor.aiDeferredRequestKind =
                     AiDeferredRequestKind::None;
+                editor.aiDeferredModelLease.reset();
                 editor.aiDeferredDispatchQueued = false;
                 editor.showAiModelConsentModal = false;
                 if (declinedGoalMilestone)
@@ -37142,6 +37358,7 @@ namespace epochengine
                     editor.aiDeferredDisplay.clear();
                     editor.aiDeferredRequestKind =
                         AiDeferredRequestKind::None;
+                    editor.aiDeferredModelLease.reset();
                     editor.aiDeferredDispatchQueued = false;
                     editor.aiModelConsentStatus =
                         "Local-model use was not approved.";

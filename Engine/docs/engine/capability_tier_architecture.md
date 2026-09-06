@@ -2,9 +2,10 @@
 
 ## Authority
 
-This is Epoch's single forward architecture and delivery plan. It joins the
+This is Epoch's single forward architecture. It joins the
 capability model, temporal world, temporal authoring, renderer/resource spine,
-editor controls, and product profiles into one dependency order.
+editor controls, and product profiles into one dependency model. Product
+ordering belongs only to the roadmap; this document is not a second backlog.
 
 The supporting documents have narrow roles:
 
@@ -12,8 +13,9 @@ The supporting documents have narrow roles:
 - `temporal_engine_architecture.md` defines authoritative world time and state.
 - `temporal_authoring_platform.md` defines editable documents and compilation.
 - `Changes/active_pass.md` defines the current bounded source gate.
-- `Changes/roadmap.md` schedules the next eight weeks.
-- `Changes/mission_cache.md` preserves durable missions and historical context.
+- `Changes/roadmap.md` orders unfinished product milestones.
+- `Changes/mission_cache.md` preserves unresolved operator intent and boundaries.
+- `Changes/changelog.txt` and Git retain completed implementation and evidence.
 
 Architecture documents describe current contracts and future invariants. Release
 history, abandoned approaches, and pass-by-pass debugging belong under
@@ -31,13 +33,13 @@ quality, determinism, latency, memory, power, stability, and project policy.
 No graphics API, cache layout, or physical device becomes authoritative world
 state.
 
-The immediate product objective is deliberately smaller:
-
-> Within two months, produce a playable baseline 2D project that can be authored,
-> run, built, and reopened through Epoch's normal project workflow.
-
-Higher-tier rendering remains architecturally compatible but cannot displace
-that critical path.
+The immediate acceptance objective is the local-model sandbox coding/build/
+comparison/succession loop in `Changes/active_pass.md`. It must operate from
+ordinary language and keep live source and unrelated projects unchanged.
+After that gate, prove the current editor-free CLI/platform-window/GUI baseline
+before expanding the fragile multicontext system. A playable baseline 2D project
+remains the game-facing integration target, not the sole purpose of Epoch or a
+competing immediate deadline. Higher-tier rendering cannot displace these gates.
 
 ## Core Flow
 
@@ -165,9 +167,9 @@ Games, mobile apps, console targets, servers, and headless tools can exclude
 editor workspaces, native floating-window hosts, and heavy authoring code while
 retaining compiled artifact readers and runtime controls.
 
-## Two-Month Baseline 2D Critical Path
+## Baseline 2D Acceptance Contract
 
-The first product profile is a deterministic, playable `T0-CPU` plus `T1-GL`
+The baseline game profile is a deterministic, playable `T0-CPU` plus `T1-GL`
 desktop 2D project, with contracts shaped for later `T1-GLES`. It must include:
 
 1. **Canvas2D composition**
@@ -208,46 +210,20 @@ The acceptance project is small on purpose: one map, controllable actor, camera,
 collision, animation, sound, restart, save/reopen, and packaged run. It proves
 the engine loop before advanced rendering expands.
 
-## Delivery Phases
+## Integration Dependencies
 
-### Phase A: Capability And Control Alignment
+Capability/project admission feeds authoritative authoring documents and their
+compiled artifacts; texture residency and Canvas2D consume those artifacts;
+tilemap, input, physics, animation and audio compose the playable scene; project
+lifecycle owns Save/Reload/Play/Run/Build. Each link carries controls, semantic
+history, diagnostics and resource retirement with it.
 
-Completed source checkpoint:
-
-- `capability.profile` centrally derives renderer and subsystem profiles from
-  render-device evidence and evaluates typed project requirements;
-- `platform.budgets` owns tier recommendations without depending on the
-  high-level runtime-profile module;
-- project manifests carry a capability profile with a portable legacy default
-  and fail-closed malformed, duplicated, unknown, or mismatched values;
-- Project, Settings, status, and System Info surfaces report editor-backend and
-  project-run admission separately, including the recommended budget;
-- build-safe contracts cover project policies, manifest parsing, fallback
-  policy, experimental rejection, and unknown renderer cost.
-
-### Phase B: Canvas2D And Texture Spine
-
-- Complete the texture document/history/compiler/residency vertical slice.
-- Add sprite material and batch contracts.
-- Add Canvas2D offscreen composition and diagnostic default textures.
-- Prove CPU/reference behavior and OpenGL compatibility presentation.
-
-### Phase C: Playable Scene
-
-- Add tilemap document/runtime artifact, deterministic sorting, culling, and
-  animation.
-- Connect input actions, fixed-step 2D physics, and audio output.
-- Make editor selection, focus, transform, spawn, run, save, reopen, and build
-  operate on the same project scene.
-
-### Phase D: Hardening
-
-- Prove Debug and Release builds, contract tests, project restart, asset
-  portability, cache deletion/rebuild, and bounded memory.
-- Add GLES-oriented limits and remove desktop-only assumptions from portable
-  contracts.
-- Keep Vulkan, SDL, SFML, Raylib, and DirectX evidence honest; they do not block
-  the baseline 2D product unless they break shared contracts.
+These are dependency relationships, not instructions to re-add existing
+capability, texture, sprite, tilemap or runtime systems. Consult their owning
+contracts and the changelog, then implement or validate only the remaining gap
+listed in `Changes/roadmap.md`. Debug/Release, portability, cache regeneration,
+bounded memory and native presentation are separate evidence layers. Renderer
+labels or component builds never imply an untested backend is presenting.
 
 ## Settings And Controls
 

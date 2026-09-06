@@ -302,6 +302,15 @@ namespace epochengine::ai
 
         std::string g_selectedEndpoint{ configured_endpoint() };
         std::string g_selectedModel{ configured_model() };
+        LocalModelSelectionOrigin g_selectedModelOrigin = g_selectedModel.empty()
+            ? LocalModelSelectionOrigin::none : LocalModelSelectionOrigin::configured;
+        struct LocalModelPreference
+        {
+            std::string model_id{};
+            std::string endpoint{};
+            bool legacy{};
+        };
+        LocalModelPreference g_rememberedModel{};
         bool g_selectedModelPreferenceLoaded = false;
         std::vector<std::string> g_detectedModels{};
         std::string g_modelDetectionStatus = g_selectedModel.empty()
@@ -316,18 +325,31 @@ namespace epochengine::ai
         bool g_runtimePreferenceLoaded = false;
         std::string g_loadedProjectAiProfile{};
         bool g_modelUseConfirmedForSession = false;
+        bool g_projectAiAllowsLocalFallback = true;
+
+        [[nodiscard]] static std::filesystem::path cache_bucket_path(
+            const std::filesystem::path& candidateData,
+            const std::filesystem::path& executableRoot,
+            const std::filesystem::path& runtimeRoot,
+            std::string_view bucket)
+        {
+            if (!candidateData.empty())
+                return candidateData / "cache" / std::string{bucket};
+            if (!executableRoot.empty())
+                return executableRoot / "cache" / std::string{bucket};
+            if (!runtimeRoot.empty())
+                return runtimeRoot / "cache" / std::string{bucket};
+            return std::filesystem::path{"cache"} / std::string{bucket};
+        }
 
         static std::string executable_cache_bucket(std::string_view bucket)
         {
-            const auto runtimeRoot = epochengine::core::path::runtime_root_dir();
-            const auto executableRoot = epochengine::core::path::executable_dir();
-            if (!executableRoot.empty())
-                return (executableRoot / "cache" / std::string{ bucket }).generic_string();
-
-            if (!runtimeRoot.empty())
-                return (runtimeRoot / "cache" / std::string{ bucket }).generic_string();
-
-            return std::string{ "cache/" } + std::string{ bucket };
+            const auto candidate = epochengine::core::path::candidate_data_root();
+            if (!candidate.empty())
+                return cache_bucket_path(candidate, {}, {}, bucket).generic_string();
+            return cache_bucket_path({},
+                epochengine::core::path::executable_dir(),
+                epochengine::core::path::runtime_root_dir(), bucket).generic_string();
         }
 
         static std::filesystem::path selected_model_preference_file()
@@ -732,31 +754,206 @@ namespace epochengine::ai
                 ? contents : std::string{};
         }
 
+        constexpr std::string_view kLocalModelPreferenceHeader =
+            "EPOCH_LOCAL_MODEL_PREFERENCE_V1\n";
+        constexpr std::string_view kDefaultLocalModel = "nvidia/nemotron-3-nano-4b";
+        constexpr std::string_view kOriginalLocalEndpoint =
+            "http://localhost:1234/v1/chat/completions";
+
+        [[nodiscard]] static bool valid_preferred_model(std::string_view model)
+        {
+            return !model.empty() && model.size() <= 512u
+                && std::none_of(model.begin(), model.end(), [](unsigned char value)
+                    { return value < 32u || value == 127u; });
+        }
+
+        [[nodiscard]] static std::string local_endpoint_identity(std::string endpoint)
+        {
+            if (endpoint.empty() || endpoint.size() > 512u
+                || std::any_of(endpoint.begin(), endpoint.end(), [](unsigned char value)
+                    { return value <= 32u || value >= 127u || value == '\\'; })
+                || endpoint.find_first_of("?#@") != std::string::npos)
+                return {};
+            const auto schemeEnd = endpoint.find("://");
+            if (schemeEnd == std::string::npos)
+                return {};
+            std::string scheme = endpoint.substr(0u, schemeEnd);
+            std::transform(scheme.begin(), scheme.end(), scheme.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            if (scheme != "http" && scheme != "https")
+                return {};
+            const auto authorityEnd = endpoint.find('/', schemeEnd + 3u);
+            std::string authority = endpoint.substr(schemeEnd + 3u,
+                authorityEnd == std::string::npos ? std::string::npos
+                    : authorityEnd - schemeEnd - 3u);
+            std::transform(authority.begin(), authority.end(), authority.begin(),
+                [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+            const auto portStart = authority.starts_with("[")
+                ? authority.find(':', authority.find(']')) : authority.find(':');
+            const std::string host = authority.substr(0u, portStart);
+            if (host != "localhost" && host != "127.0.0.1" && host != "[::1]")
+                return {};
+            std::string port{};
+            if (portStart != std::string::npos)
+            {
+                const auto rawPort = std::string_view{authority}.substr(portStart + 1u);
+                if (rawPort.empty() || rawPort.size() > 5u)
+                    return {};
+                unsigned value{};
+                for (const char digit : rawPort)
+                {
+                    if (digit < '0' || digit > '9') return {};
+                    value = value * 10u + static_cast<unsigned>(digit - '0');
+                }
+                if (value == 0u || value > 65535u) return {};
+                if (!((scheme == "http" && value == 80u)
+                    || (scheme == "https" && value == 443u)))
+                    port = ":" + std::to_string(value);
+            }
+            std::string suffix = authorityEnd == std::string::npos
+                ? std::string{} : endpoint.substr(authorityEnd);
+            rstrip_slashes(suffix);
+            if (!suffix.empty() && suffix != "/v1"
+                && suffix != "/v1/chat/completions" && suffix != "/v1/models"
+                && suffix != "/api/v1/chat")
+                return {};
+            return scheme + "://" + host + port + "/v1/chat/completions";
+        }
+
+        [[nodiscard]] static LocalModelPreference decode_model_preference(std::string_view bytes)
+        {
+            if (bytes.empty() || bytes.size() > 2048u)
+                return {};
+            if (!bytes.starts_with(kLocalModelPreferenceHeader))
+            {
+                if (bytes.starts_with("EPOCH_LOCAL_MODEL_PREFERENCE_")) return {};
+                const std::string model = trim(bytes);
+                return valid_preferred_model(model)
+                    ? LocalModelPreference{model, {}, true} : LocalModelPreference{};
+            }
+            bytes.remove_prefix(kLocalModelPreferenceHeader.size());
+            constexpr std::string_view endpointKey = "endpoint=";
+            constexpr std::string_view modelKey = "model=";
+            if (!bytes.starts_with(endpointKey)) return {};
+            const auto newline = bytes.find('\n');
+            if (newline == std::string_view::npos) return {};
+            const std::string endpoint = local_endpoint_identity(
+                std::string{bytes.substr(endpointKey.size(), newline - endpointKey.size())});
+            bytes.remove_prefix(newline + 1u);
+            if (!bytes.starts_with(modelKey) || endpoint.empty()) return {};
+            bytes.remove_prefix(modelKey.size());
+            if (bytes.ends_with('\n')) bytes.remove_suffix(1u);
+            if (!valid_preferred_model(bytes)) return {};
+            return {std::string{bytes}, endpoint, false};
+        }
+
+        [[nodiscard]] static std::string encode_model_preference(const LocalModelPreference& preference)
+        {
+            const std::string endpoint = local_endpoint_identity(preference.endpoint);
+            if (endpoint.empty() || !valid_preferred_model(preference.model_id)) return {};
+            return std::string{kLocalModelPreferenceHeader} + "endpoint=" + endpoint
+                + "\nmodel=" + preference.model_id + "\n";
+        }
+
+        [[nodiscard]] static LocalModelSelection resolve_model_selection(
+            std::string current, LocalModelSelectionOrigin currentOrigin,
+            const std::string& endpoint, const LocalModelPreference& remembered,
+            const std::vector<std::string>& inventory, bool confirmed)
+        {
+            LocalModelSelection selection{};
+            selection.endpoint = endpoint;
+            const std::string localEndpoint = local_endpoint_identity(endpoint);
+            if (!current.empty())
+            {
+                if (!valid_preferred_model(current)) return selection;
+                selection.model_id = std::move(current);
+                selection.origin = currentOrigin;
+            }
+            else if (!localEndpoint.empty() && !remembered.legacy
+                && remembered.endpoint == localEndpoint
+                && valid_preferred_model(remembered.model_id))
+            {
+                selection.model_id = remembered.model_id;
+                selection.origin = LocalModelSelectionOrigin::remembered;
+            }
+            else if (localEndpoint == kOriginalLocalEndpoint && remembered.legacy
+                && valid_preferred_model(remembered.model_id))
+            {
+                // Old model-only preferences are reused only on the original
+                // local endpoint, and upgraded only by an actual Send/Start.
+                selection.model_id = remembered.model_id;
+                selection.origin = LocalModelSelectionOrigin::legacy_preference;
+            }
+            else if (!localEndpoint.empty())
+            {
+                selection.model_id = kDefaultLocalModel;
+                selection.origin = LocalModelSelectionOrigin::default_local;
+            }
+            selection.available_in_inventory = !selection.model_id.empty()
+                && std::find(inventory.begin(), inventory.end(), selection.model_id) != inventory.end();
+            selection.confirmed = confirmed && !selection.model_id.empty();
+            if (localEndpoint.empty() || selection.model_id.empty()) return selection;
+            switch (selection.origin)
+            {
+            case LocalModelSelectionOrigin::configured:
+            case LocalModelSelectionOrigin::explicit_selection:
+                selection.reusable_on_request = true;
+                break;
+            case LocalModelSelectionOrigin::remembered:
+                selection.reusable_on_request = remembered.endpoint == localEndpoint
+                    && remembered.model_id == selection.model_id && !remembered.legacy;
+                break;
+            case LocalModelSelectionOrigin::legacy_preference:
+                selection.reusable_on_request = localEndpoint == kOriginalLocalEndpoint
+                    && remembered.legacy && remembered.model_id == selection.model_id;
+                break;
+            case LocalModelSelectionOrigin::default_local:
+                // A newly configured endpoint must not inherit remembered
+                // consent. The automatic small default is for the original host.
+                selection.reusable_on_request = localEndpoint == kOriginalLocalEndpoint;
+                break;
+            default: break;
+            }
+            return selection;
+        }
+
+        [[nodiscard]] static bool model_request_selection_permitted(
+            const LocalModelSelection& selection, bool projectAllowsLocalModel) noexcept
+        {
+            return projectAllowsLocalModel && !selection.model_id.empty()
+                && (selection.confirmed || selection.reusable_on_request);
+        }
+
         static void restore_selected_model_preference_if_needed()
         {
             if (g_selectedModelPreferenceLoaded)
                 return;
             g_selectedModelPreferenceLoaded = true;
-
-            const std::string restored = read_small_text_file(selected_model_preference_file());
-            if (restored.empty())
-                return;
-
-            if (g_selectedModel == restored)
-                return;
-
-            g_selectedModel = restored;
-            g_modelDetectionStatus = "Restored selected OS model preference: " + restored;
+            g_rememberedModel = decode_model_preference(
+                read_small_text_file(selected_model_preference_file()));
+            const auto selection = resolve_model_selection(g_selectedModel, g_selectedModelOrigin,
+                g_selectedEndpoint, g_rememberedModel, g_detectedModels, g_modelUseConfirmedForSession);
+            g_selectedModel = selection.model_id;
+            g_selectedModelOrigin = selection.origin;
+            if (!g_selectedModel.empty())
+                g_modelDetectionStatus = "Selected local model: " + g_selectedModel
+                    + "; availability has not been checked and no model was loaded.";
         }
 
         static void persist_selected_model_preference(std::string_view model_id)
         {
             const std::string selected = trim(model_id);
-            if (selected.empty())
-                return;
-
-            if (!write_text_file(selected_model_preference_file(), selected + "\n"))
+            const LocalModelPreference preference{selected, local_endpoint_identity(g_selectedEndpoint), false};
+            const std::string encoded = encode_model_preference(preference);
+            if (encoded.empty()) return; // Remote selections never grant local reuse.
+            if (!write_text_file(selected_model_preference_file(), encoded))
                 core::log::error("ai", "Failed to persist selected OS model preference.");
+            else
+            {
+                g_rememberedModel = preference;
+                if (g_selectedModelOrigin == LocalModelSelectionOrigin::legacy_preference)
+                    g_selectedModelOrigin = LocalModelSelectionOrigin::remembered;
+            }
         }
 
         static void restore_runtime_preference_if_needed()
@@ -876,15 +1073,39 @@ namespace epochengine::ai
                     });
         }
 
+        [[nodiscard]] static std::filesystem::path project_ai_profile_identity(
+            const std::filesystem::path& configured,
+            const std::filesystem::path& workingDirectory)
+        {
+            if (configured.empty()) return {};
+            if (configured.is_absolute()) return configured.lexically_normal();
+            if (!workingDirectory.is_absolute()) return {};
+            return (workingDirectory / configured).lexically_normal();
+        }
+
         static void apply_project_ai_profile_if_present()
         {
             const std::string configured =
                 trim_env_value(read_env_var("EPOCH_PROJECT_AI_PROFILE"));
-            if (configured.empty()
-                || configured == g_loadedProjectAiProfile)
+            if (configured.empty()) return;
+            std::error_code pathError{};
+            const std::filesystem::path requested{configured};
+            const auto profilePath = project_ai_profile_identity(requested,
+                requested.is_absolute() ? std::filesystem::path{}
+                    : std::filesystem::current_path(pathError));
+            if (pathError || profilePath.empty())
+            {
+                g_engineAi.reset();
+                g_modelUseConfirmedForSession = false;
+                g_projectAiAllowsLocalFallback = false;
+                g_modelDetectionStatus = "Project AI profile rejected: its configured path could not be resolved.";
                 return;
+            }
+            const std::string identity = profilePath.generic_string();
+            if (identity == g_loadedProjectAiProfile) return;
 
-            const std::filesystem::path profilePath{configured};
+            g_projectAiAllowsLocalFallback = false;
+
             const std::string profile =
                 read_small_text_file(profilePath, 64u * 1024u);
             if (profile.empty())
@@ -896,8 +1117,7 @@ namespace epochengine::ai
                 return;
             }
 
-            g_loadedProjectAiProfile =
-                std::filesystem::absolute(profilePath).generic_string();
+            g_loadedProjectAiProfile = identity;
             const project_profile::CodecResult decoded =
                 project_profile::parse_profile(profile);
             if (!decoded)
@@ -935,11 +1155,13 @@ namespace epochengine::ai
                 g_selectedModel =
                     std::string{kEpochLocalQwen38ModelFile};
                 g_modelUseConfirmedForSession = true;
+                g_projectAiAllowsLocalFallback = true;
                 g_modelDetectionStatus =
                     "Project selected the installed Epoch-local Qwen3.8 provider.";
                 return;
             }
             case project_profile::Provider::external_mcp:
+                g_projectAiAllowsLocalFallback = true;
                 g_localTransport =
                     LocalInferenceTransport::OpenAiCompatible;
                 g_modelUseConfirmedForSession =
@@ -949,6 +1171,7 @@ namespace epochengine::ai
                     : "Project selected the existing external MCP/OpenAI-compatible provider.";
                 return;
             case project_profile::Provider::engine_selected:
+                g_projectAiAllowsLocalFallback = true;
                 g_modelUseConfirmedForSession = false;
                 g_modelDetectionStatus =
                     "Project delegates AI to the engine-selected provider; confirm the current local or external model for this session.";
@@ -3812,11 +4035,18 @@ namespace epochengine::ai
     void init_engine_ai()
     {
         const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
-        if (g_engineAi)
-            return;
-
         restore_runtime_preference_if_needed();
         apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback)
+        {
+            // A cached disabled/rejected profile remains authoritative even
+            // after a picker action; session confirmation cannot override it.
+            g_engineAi.reset();
+            g_modelUseConfirmedForSession = false;
+            return;
+        }
+        if (g_engineAi)
+            return;
         if (!g_modelUseConfirmedForSession)
         {
             core::log::info("ai", "OS AI model not initialized: model use awaits session confirmation.");
@@ -4068,17 +4298,28 @@ namespace epochengine::ai
             const auto& artifact = plan->artifacts.front();
             const std::filesystem::path executableRoot =
                 epochengine::core::path::executable_dir();
+            const std::filesystem::path candidateData =
+                epochengine::core::path::candidate_data_root();
             const std::filesystem::path modelsRoot{
                 executable_cache_bucket("models")};
             const std::filesystem::path expectedLegacy = modelsRoot
                 / std::string{kEpochLocalQwen38ModelPackageId};
             const std::filesystem::path expectedVersion = expectedLegacy
                 / "versions" / std::string{kEpochLocalQwen38ModelRevision};
-            const bool executableLocalCache = executableRoot.empty()
+            const bool executableLocalCache = candidateData.empty()
+                ? (executableRoot.empty()
                 || (epoch_local_llama_cpp_root_path()
                         == executableRoot / "cache" / "packages"
                             / std::string{kEpochLocalLlamaCppRuntimePackageId}
-                    && modelsRoot == executableRoot / "cache" / "models");
+                    && modelsRoot == executableRoot / "cache" / "models"))
+                : (epoch_local_llama_cpp_root_path()
+                        == candidateData / "cache" / "packages"
+                            / std::string{kEpochLocalLlamaCppRuntimePackageId}
+                    && modelsRoot == candidateData / "cache" / "models"
+                    && std::filesystem::path{local_cache_root()}
+                        == candidateData / "cache" / "ai"
+                    && std::filesystem::path{default_workspace_root()}
+                        == candidateData / "workspace");
             const std::string receipt =
                 model_install::deterministic_receipt(*plan);
             std::string mutatedReceipt = receipt;
@@ -4177,16 +4418,18 @@ namespace epochengine::ai
 
     bool select_direct_runtime(std::string_view executable, std::string_view model)
     {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback) return false;
         const std::filesystem::path executablePath{trim(executable)};
         const std::filesystem::path modelPath{trim(model)};
         if (!regular_file(executablePath) || !regular_file(modelPath) || modelPath.extension() != ".gguf")
         {
-            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
             g_modelDetectionStatus = "Direct runtime selection rejected: choose an existing llama-cli executable and GGUF model.";
             return false;
         }
 
-        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         g_engineAi.reset();
         g_directExecutable = std::filesystem::absolute(executablePath).generic_string();
         g_directModel = std::filesystem::absolute(modelPath).generic_string();
@@ -4201,6 +4444,18 @@ namespace epochengine::ai
     void select_openai_compatible_runtime()
     {
         const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback) return;
+        if (g_localTransport != LocalInferenceTransport::OpenAiCompatible)
+        {
+            // A direct GGUF filename is not an API model selection. Restore the
+            // explicit API configuration or its remembered endpoint-bound ID.
+            g_selectedModel = configured_model();
+            g_selectedModelOrigin = g_selectedModel.empty()
+                ? LocalModelSelectionOrigin::none : LocalModelSelectionOrigin::configured;
+            g_selectedModelPreferenceLoaded = false;
+        }
         g_engineAi.reset();
         g_localTransport = LocalInferenceTransport::OpenAiCompatible;
         g_modelUseConfirmedForSession = false;
@@ -4232,6 +4487,51 @@ namespace epochengine::ai
             return g_directModel.empty() ? std::string{} : std::filesystem::path{g_directModel}.filename().string();
         restore_selected_model_preference_if_needed();
         return g_selectedModel;
+    }
+
+    LocalModelSelection local_model_selection()
+    {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        if (g_localTransport != LocalInferenceTransport::OpenAiCompatible)
+            return {};
+        restore_selected_model_preference_if_needed();
+        auto selection = resolve_model_selection(g_selectedModel, g_selectedModelOrigin,
+            g_selectedEndpoint, g_rememberedModel, g_detectedModels, g_modelUseConfirmedForSession);
+        selection.reusable_on_request = selection.reusable_on_request && g_projectAiAllowsLocalFallback;
+        selection.confirmed = selection.confirmed && g_projectAiAllowsLocalFallback;
+        return selection;
+    }
+
+    bool prepare_local_model_for_request()
+    {
+        const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback)
+            return false;
+        if (g_localTransport == LocalInferenceTransport::LlamaCppCli)
+        {
+            if (!g_modelUseConfirmedForSession) return false;
+            init_engine_ai();
+            return g_engineAi != nullptr;
+        }
+        restore_selected_model_preference_if_needed();
+        const auto selection = resolve_model_selection(g_selectedModel, g_selectedModelOrigin,
+            g_selectedEndpoint, g_rememberedModel, g_detectedModels, g_modelUseConfirmedForSession);
+        if (!model_request_selection_permitted(selection, g_projectAiAllowsLocalFallback))
+            return false;
+        g_modelUseConfirmedForSession = true;
+        init_engine_ai();
+        if (!g_engineAi) return false;
+        // Only the user request/explicit selection reaches this write; scanning
+        // and preference restoration never load a model or rewrite its choice.
+        persist_selected_model_preference(g_selectedModel);
+        g_modelDetectionStatus = "Using " + g_selectedModel
+            + (selection.available_in_inventory
+                ? "; reported by the endpoint; model residency is not verified."
+                : "; remembered/configured selection retained; endpoint availability is not verified.");
+        return true;
     }
 
     std::string active_provider_summary()
@@ -4281,6 +4581,9 @@ namespace epochengine::ai
         restore_runtime_preference_if_needed();
         if (!g_modelUseConfirmedForSession)
         {
+            const auto selection = local_model_selection();
+            if (selection.reusable_on_request)
+                return "Selected for your next local request; endpoint availability and model residency are not verified.";
             return active_model_name().empty()
                 ? "No local model is configured."
                 : "Configured model awaits confirmation for this session.";
@@ -4350,19 +4653,20 @@ namespace epochengine::ai
                 if (g_modelUseConfirmedForSession && !g_engineAi)
                     init_engine_ai();
 
+                const auto selection = local_model_selection();
                 g_modelDetectionStatus = !g_modelUseConfirmedForSession
-                    ? "Configured model is available and awaits session confirmation: " + g_selectedModel
+                    ? selection.reusable_on_request
+                        ? "Model reported by the endpoint; selected for your next request: " + g_selectedModel
+                        : "Configured model is reported and awaits session confirmation: " + g_selectedModel
                     : g_engineAi
                     ? "Selected and initialized model client: " + g_selectedModel
                     : "Selected model: " + g_selectedModel + " (" + std::to_string(g_detectedModels.size()) + " local model(s) detected), but client init failed.";
-                persist_selected_model_preference(g_selectedModel);
             }
             else
             {
                 const std::string staleModel = g_selectedModel;
-                g_engineAi.reset();
                 g_modelDetectionStatus =
-                    "Selected model '" + staleModel + "' was not reported by the endpoint; keeping the operator preference. Choose another detected model to replace it.";
+                    "Selected model '" + staleModel + "' was not reported by the endpoint; keeping the operator preference. It may be unloaded. Scanning will not replace it or load a model.";
             }
         }
         else
@@ -4375,6 +4679,12 @@ namespace epochengine::ai
 
     bool select_active_model(std::string_view model_id)
     {
+        {
+            const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
+            restore_runtime_preference_if_needed();
+            apply_project_ai_profile_if_present();
+            if (!g_projectAiAllowsLocalFallback) return false;
+        }
         if (current_local_inference_transport() == LocalInferenceTransport::LlamaCppCli)
         {
             std::string executable;
@@ -4392,16 +4702,25 @@ namespace epochengine::ai
             return false;
 
         bool inventoryMissing = false;
+        bool retainedLocalSelection = false;
         {
             const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
             restore_selected_model_preference_if_needed();
             inventoryMissing = g_detectedModels.empty();
+            const auto selection = resolve_model_selection(g_selectedModel, g_selectedModelOrigin,
+                g_selectedEndpoint, g_rememberedModel, g_detectedModels, g_modelUseConfirmedForSession);
+            retainedLocalSelection = selected == selection.model_id
+                && selection.reusable_on_request;
         }
-        if (inventoryMissing)
+        if (inventoryMissing && !retainedLocalSelection)
             (void)refresh_detected_models();
 
         const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
-        if (std::find(g_detectedModels.begin(), g_detectedModels.end(), selected) == g_detectedModels.end())
+        const auto current = resolve_model_selection(g_selectedModel, g_selectedModelOrigin,
+            g_selectedEndpoint, g_rememberedModel, g_detectedModels, g_modelUseConfirmedForSession);
+        retainedLocalSelection = selected == current.model_id && current.reusable_on_request;
+        if (!retainedLocalSelection
+            && std::find(g_detectedModels.begin(), g_detectedModels.end(), selected) == g_detectedModels.end())
         {
             g_modelDetectionStatus = "Could not select OS model '" + selected + "' because the endpoint did not report it.";
             return false;
@@ -4409,6 +4728,7 @@ namespace epochengine::ai
 
         g_engineAi.reset();
         g_selectedModel = selected;
+        g_selectedModelOrigin = LocalModelSelectionOrigin::explicit_selection;
         g_modelUseConfirmedForSession = true;
         persist_selected_model_preference(selected);
         init_engine_ai();
@@ -4537,6 +4857,117 @@ namespace epochengine::ai
     bool direct_llama_cpp_prompt_transport_contract()
     {
         return direct_llama_cpp_prompt_file_arguments_contract();
+    }
+
+    bool local_model_preference_contract()
+    {
+        // The same codec, endpoint identity and precedence used by production,
+        // with no global selection mutation, filesystem I/O or model transport.
+        const std::string endpoint{"http://localhost:1234"};
+        const LocalModelPreference saved{"qwen/qwen3.8-27b",
+            std::string{kOriginalLocalEndpoint}, false};
+        const std::string encoded = encode_model_preference(saved);
+        const auto decoded = decode_model_preference(encoded);
+        const auto restored = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            endpoint, decoded, {}, false);
+        const auto configured = resolve_model_selection("operator/current-model",
+            LocalModelSelectionOrigin::configured, endpoint, decoded, {}, false);
+        const auto explicitSelection = resolve_model_selection("operator/chosen-model",
+            LocalModelSelectionOrigin::explicit_selection, endpoint, decoded,
+            {"qwen/qwen3.8-27b"}, true);
+        const auto ejected = resolve_model_selection(restored.model_id, restored.origin,
+            endpoint, decoded, {"another/loaded-model"}, false);
+        const auto changedEndpoint = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            "http://localhost:4321", decoded, {}, false);
+        const auto remote = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            "https://models.example.test", decoded, {}, false);
+        const auto remoteConfigured = resolve_model_selection("operator/remote-model",
+            LocalModelSelectionOrigin::configured, "https://models.example.test", decoded, {}, false);
+        const auto legacy = decode_model_preference("qwen/qwen3.8-27b\r\n");
+        const auto legacyLocal = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            endpoint, legacy, {}, false);
+        const auto legacyChanged = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            "http://localhost:4321", legacy, {}, false);
+        const auto initialDefault = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            endpoint, {}, {}, false);
+        const auto reported = resolve_model_selection({}, LocalModelSelectionOrigin::none,
+            endpoint, decoded, {saved.model_id}, false);
+        const std::filesystem::path candidate{"candidate-data"};
+        const std::filesystem::path executable{"editor-bin"};
+        const std::filesystem::path runtime{"immutable-source"};
+#if defined(_WIN32)
+        const std::filesystem::path profileWorkingDirectory{"C:/epoch/profile-contract"};
+#else
+        const std::filesystem::path profileWorkingDirectory{"/epoch/profile-contract"};
+#endif
+        const auto relativeProfile = project_ai_profile_identity(
+            "Assets/AI/project_ai.epochai", profileWorkingDirectory);
+        const std::string cachedProfile = relativeProfile.generic_string();
+        return !encoded.empty() && decoded.model_id == saved.model_id
+            && decoded.endpoint == saved.endpoint && !decoded.legacy
+            && restored.model_id == saved.model_id
+            && restored.origin == LocalModelSelectionOrigin::remembered
+            && restored.reusable_on_request && !restored.confirmed
+            && !restored.available_in_inventory
+            && configured.model_id == "operator/current-model"
+            && configured.origin == LocalModelSelectionOrigin::configured
+            && explicitSelection.model_id == "operator/chosen-model"
+            && explicitSelection.confirmed && explicitSelection.reusable_on_request
+            && model_request_selection_permitted(explicitSelection, true)
+            && !model_request_selection_permitted(explicitSelection, false)
+            && model_request_selection_permitted(restored, true)
+            && !model_request_selection_permitted(restored, false)
+            && !model_request_selection_permitted(changedEndpoint, true)
+            && !model_request_selection_permitted(remoteConfigured, true)
+            && !model_request_selection_permitted({}, true)
+            && ejected.model_id == saved.model_id && ejected.reusable_on_request
+            && !ejected.available_in_inventory
+            && changedEndpoint.model_id == kDefaultLocalModel
+            && !changedEndpoint.confirmed && !changedEndpoint.reusable_on_request
+            && remote.model_id.empty() && !remote.reusable_on_request
+            && remoteConfigured.model_id == "operator/remote-model"
+            && !remoteConfigured.reusable_on_request && !remoteConfigured.confirmed
+            && legacy.legacy && legacyLocal.model_id == saved.model_id
+            && legacyLocal.origin == LocalModelSelectionOrigin::legacy_preference
+            && legacyLocal.reusable_on_request && !legacyLocal.confirmed
+            && legacyChanged.model_id == kDefaultLocalModel
+            && !legacyChanged.reusable_on_request
+            && initialDefault.model_id == "nvidia/nemotron-3-nano-4b"
+            && initialDefault.origin == LocalModelSelectionOrigin::default_local
+            && initialDefault.reusable_on_request && !initialDefault.confirmed
+            && reported.available_in_inventory && !reported.confirmed
+            && decode_model_preference("").model_id.empty()
+            && decode_model_preference("EPOCH_LOCAL_MODEL_PREFERENCE_V9").model_id.empty()
+            && decode_model_preference("first\nsecond").model_id.empty()
+            && decode_model_preference(std::string{kLocalModelPreferenceHeader}
+                + "endpoint=http://localhost:1234\nmodel=\n").model_id.empty()
+            && decode_model_preference(encoded + "model=duplicate\n").model_id.empty()
+            && decode_model_preference(std::string{kLocalModelPreferenceHeader}
+                + "endpoint=https://remote.example.test\nmodel=remote/model\n").model_id.empty()
+            && decode_model_preference(std::string(513u, 'x')).model_id.empty()
+            && encode_model_preference({"line\nbreak", saved.endpoint, false}).empty()
+            && local_endpoint_identity("HTTP://LOCALHOST:01234/v1/") == kOriginalLocalEndpoint
+            && local_endpoint_identity("http://127.0.0.1:1234/v1/models")
+                == "http://127.0.0.1:1234/v1/chat/completions"
+            && local_endpoint_identity("http://[::1]:1234")
+                == "http://[::1]:1234/v1/chat/completions"
+            && local_endpoint_identity("http://localhost.evil.test:1234").empty()
+            && local_endpoint_identity("http://localhost:1234@evil.test").empty()
+            && local_endpoint_identity("http://localhost:0").empty()
+            && local_endpoint_identity("http://localhost:65536").empty()
+            && local_endpoint_identity("http://localhost:1234/?target=remote").empty()
+            && cache_bucket_path(candidate, executable, runtime, "models")
+                == candidate / "cache" / "models"
+            && cache_bucket_path({}, executable, runtime, "models")
+                == executable / "cache" / "models"
+            && cache_bucket_path({}, {}, runtime, "models")
+                == runtime / "cache" / "models"
+            && relativeProfile == profileWorkingDirectory / "Assets/AI/project_ai.epochai"
+            && project_ai_profile_identity("Assets/AI/project_ai.epochai",
+                profileWorkingDirectory).generic_string() == cachedProfile
+            && project_ai_profile_identity(relativeProfile, {}).generic_string() == cachedProfile
+            && project_ai_profile_identity("Assets/AI/project_ai.epochai", {}).empty()
+            && project_ai_profile_identity({}, profileWorkingDirectory).empty();
     }
 
     bool model_request_cancellation_contract()
@@ -5014,7 +5445,8 @@ namespace epochengine::ai
             }
             if (cancellation.stop_requested())
                 return std::string{kModelRequestCancelled};
-            if (!g_modelUseConfirmedForSession || g_selectedModel.empty())
+            if (!prepare_local_model_for_request()
+                || !g_modelUseConfirmedForSession || g_selectedModel.empty())
                 return "No local AI model has been confirmed for this session. Confirm a discovered model before sending a request.";
 
             if (!g_engineAi)

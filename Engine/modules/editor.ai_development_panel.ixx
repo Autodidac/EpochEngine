@@ -140,6 +140,9 @@ export namespace epochengine::editor_ai_development_panel
         bool external_mcp_running{};
         bool tool_source_ready{};
         bool execution_pending{};
+        // The host retains cancelled child/process leases until retirement.
+        // A new session must not replace their generation while they settle.
+        bool session_retirement_pending{};
     };
 
     struct ModelActivityView final
@@ -192,6 +195,9 @@ export namespace epochengine::editor_ai_development_panel
         [[nodiscard]] RenderResult begin_source_iteration(
             const Input& input,
             std::string objective);
+        // Called once from the owning context update, even when AI Controls
+        // is hidden. Advances automatic planning without drawing any GUI.
+        [[nodiscard]] RenderResult advance_source_iteration(const Input& input);
         [[nodiscard]] bool has_reviewed_plan() const;
         [[nodiscard]] RenderResult approve_latest_plan();
         [[nodiscard]] bool sandbox_session_failed() const;

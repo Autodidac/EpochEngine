@@ -1312,8 +1312,87 @@ namespace
         return fs::absolute(project_root.empty() ? fs::path{} : project_root, ec).lexically_normal();
     }
 
+    [[nodiscard]] static bool project_path_below(
+        const fs::path& path, const fs::path& root, bool allow_root = false)
+    {
+        if (path.empty() || root.empty() || !path.is_absolute() || !root.is_absolute())
+            return false;
+        const fs::path relative = path.lexically_relative(root);
+        if (relative.empty() || relative.is_absolute())
+            return false;
+        if (relative == ".")
+            return allow_root;
+        for (const auto& component : relative)
+        {
+            const auto text = component.generic_string();
+            if (text.empty() || text == "." || text == ".."
+                || text.find(':') != std::string::npos
+                || std::ranges::any_of(text, [](unsigned char value) { return value < 32u; }))
+                return false;
+        }
+        return true;
+    }
+
+    // Candidate project paths are data, never aliases for the source checkout's
+    // Projects directory. Keep lexical routing independently testable, and check
+    // existing filesystem aliases separately before opening or writing a file.
+    [[nodiscard]] static fs::path candidate_project_path_lexical(
+        const fs::path& data_root, const fs::path& requested, bool allow_root = false)
+    {
+        if (data_root.empty() || !data_root.is_absolute() || requested.empty())
+            return {};
+        for (const auto& component : requested.relative_path())
+            if (component == "." || component == "..")
+                return {};
+        const fs::path projects = (data_root / "Projects").lexically_normal();
+        fs::path resolved{};
+        if (requested.is_absolute())
+            resolved = requested.lexically_normal();
+        else
+        {
+            if (requested.has_root_path() || *requested.begin() != "Projects")
+                return {};
+            resolved = (data_root / requested).lexically_normal();
+        }
+        return project_path_below(resolved, projects, allow_root) ? resolved : fs::path{};
+    }
+
+    [[nodiscard]] static fs::path candidate_project_path(
+        const fs::path& data_root, const fs::path& requested, bool allow_root = false)
+    {
+        const fs::path routed = candidate_project_path_lexical(data_root, requested, allow_root);
+        if (routed.empty())
+            return {};
+        std::error_code error{};
+        const fs::path canonical_data = fs::canonical(data_root, error);
+        if (error)
+            return {};
+        const fs::path canonical_path = fs::weakly_canonical(routed, error);
+        if (error || canonical_path != (canonical_data / routed.lexically_relative(data_root)).lexically_normal())
+            return {};
+        fs::path observed = data_root;
+        for (const auto& component : routed.lexically_relative(data_root))
+        {
+            observed /= component;
+            const auto status = fs::symlink_status(observed, error);
+            if (error == std::errc::no_such_file_or_directory)
+            {
+                error.clear();
+                continue;
+            }
+            if (error || fs::is_symlink(status))
+                return {};
+            if (fs::is_regular_file(status)
+                && (fs::hard_link_count(observed, error) != 1u || error))
+                return {};
+        }
+        return routed;
+    }
+
     [[nodiscard]] static fs::path resolve_projects_root(const fs::path& hint = {}) noexcept
     {
+        if (const auto data = epochengine::core::path::candidate_data_root(); !data.empty())
+            return candidate_project_path(data, "Projects", true);
         return (resolve_epoch_repo_root(hint) / "Projects").lexically_normal();
     }
 
@@ -1321,6 +1400,9 @@ namespace
     {
         if (project_root.empty())
             return {};
+
+        if (const auto data = epochengine::core::path::candidate_data_root(); !data.empty())
+            return candidate_project_path(data, project_root);
 
         std::error_code ec;
         if (project_root.is_absolute())
@@ -1333,6 +1415,10 @@ namespace
     {
         if (candidate.empty())
             return {};
+        if (const auto data = epochengine::core::path::candidate_data_root();
+            !data.empty() && !candidate.is_absolute()
+            && *candidate.begin() == "Projects")
+            return candidate_project_path(data, candidate);
         if (candidate.is_absolute())
             return candidate.lexically_normal();
         return (resolve_epoch_repo_root(hint) / candidate).lexically_normal();
@@ -1352,6 +1438,8 @@ namespace
             return resolve_repo_relative_path(declared, profile.root_path);
 
         const fs::path projectRoot = resolve_project_root_path(fs::path{ profile.root_path });
+        if (projectRoot.empty())
+            return {};
         const fs::path projectLocal = (projectRoot / declared).lexically_normal();
         std::error_code ec;
         if (fs::exists(projectLocal, ec) && !ec)
@@ -1621,7 +1709,7 @@ namespace
 
     [[nodiscard]] static std::optional<OwnedProjectProfile>
         parse_manifest_project_profile(
-            const fs::path& manifest_path,
+            const fs::path& requested_manifest,
             std::string* diagnostic = nullptr,
             bool* requires_migration = nullptr)
     {
@@ -1636,6 +1724,12 @@ namespace
                 *diagnostic = std::move(message);
             return std::nullopt;
         };
+
+        const fs::path candidate_data = epochengine::core::path::candidate_data_root();
+        const fs::path manifest_path = candidate_data.empty() ? requested_manifest
+            : candidate_project_path(candidate_data, requested_manifest);
+        if (manifest_path.empty())
+            return fail("Candidate previews can open projects only inside their private Projects directory.");
 
         const std::string manifestText = read_text_file(manifest_path);
         if (manifestText.empty())
@@ -1700,6 +1794,16 @@ namespace
         profile.root_path = manifest_path.parent_path().lexically_normal().generic_string();
 
         fs::path scenePath{ *sceneText };
+        if (!candidate_data.empty())
+        {
+            if (scenePath.is_relative() && !scenePath.empty()
+                && *scenePath.begin() != "Projects")
+                scenePath = manifest_path.parent_path() / scenePath;
+            scenePath = candidate_project_path(candidate_data, scenePath);
+            if (scenePath.empty()
+                || !project_path_below(scenePath, manifest_path.parent_path()))
+                return fail("Candidate project scenes must stay inside the selected private project.");
+        }
         if (scenePath.is_relative()
             && !scenePath.empty()
             && !scenePath.generic_string().starts_with("Projects/"))
@@ -1710,6 +1814,13 @@ namespace
         profile.scene_path = scenePath.generic_string();
         profile.tilemap_path = extract_json_string_field(
             manifestText, "tilemap").value_or("");
+        if (!candidate_data.empty() && !profile.tilemap_path.empty())
+        {
+            const fs::path tilemap = candidate_project_path(candidate_data,
+                manifest_path.parent_path() / fs::path{profile.tilemap_path});
+            if (tilemap.empty() || !project_path_below(tilemap, manifest_path.parent_path()))
+                return fail("Candidate tilemap source must stay inside the selected private project.");
+        }
         profile.input_profile_path = extract_json_string_field(
             manifestText, "input_profile").value_or("");
         if (!profile.input_profile_path.empty()
@@ -1757,12 +1868,42 @@ namespace
             .value_or(profile.kind == EditorProjectKind::EngineDevelopment
                 ? "engine_development_harness"
                 : (profile.kind == EditorProjectKind::Tool ? "tool_bootstrap" : "project_demo_bootstrap"));
+        if (!candidate_data.empty())
+        {
+            const fs::path script = candidate_project_path(candidate_data,
+                manifest_path.parent_path() / "scripts" / (profile.default_script + ".ascript.cpp"));
+            if (script.empty() || !project_path_below(script, manifest_path.parent_path() / "scripts"))
+                return fail("Candidate default script must stay inside the selected private project's scripts directory.");
+        }
         profile.engine_integration_mode = extract_json_string_field(manifestText, "engine_integration")
             .value_or(std::string{kStaticRuntimeBuildProfile});
         profile.public_include_root = extract_json_string_field(manifestText, "public_include_root")
             .value_or("Engine/include");
         profile.demo_model_asset = extract_json_string_field(manifestText, "demo_model_asset")
             .value_or("");
+        if (!candidate_data.empty() && !profile.demo_model_asset.empty())
+        {
+            const fs::path declared{profile.demo_model_asset};
+            if (declared.is_relative() && *declared.begin() == "Engine")
+            {
+                // Engine assets stay immutable; they are not redirected into
+                // project data. A manifest cannot turn this into another root.
+                const fs::path asset = resolve_repo_relative_path(declared, manifest_path.parent_path());
+                if (!project_path_below(asset, epochengine::core::path::engine_asset_dir()))
+                    return fail("Candidate engine model assets must stay inside the immutable engine asset directory.");
+                for (const auto& component : declared)
+                    if (component == "." || component == "..")
+                        return fail("Candidate model asset paths cannot contain traversal.");
+            }
+            else
+            {
+                const fs::path asset = candidate_project_path(candidate_data,
+                    declared.is_relative() && *declared.begin() != "Projects"
+                        ? manifest_path.parent_path() / declared : declared);
+                if (asset.empty() || !project_path_below(asset, manifest_path.parent_path()))
+                    return fail("Candidate model assets must belong to the selected private project or immutable engine assets.");
+            }
+        }
         const JsonStringFieldResult capabilityField =
             inspect_json_string_field(manifestText, "capability_profile");
         if (capabilityField.state == JsonStringFieldState::malformed)
@@ -1808,7 +1949,8 @@ namespace
         for (const auto& profile : admitted_project_profiles())
         {
             if (!is_builtin_project_id(profile.id)
-                && !is_launcher_application_id(profile.id))
+                && !is_launcher_application_id(profile.id)
+                && !resolve_project_root_path(fs::path{profile.root_path}).empty())
             {
                 owned.push_back(profile);
             }
@@ -1826,7 +1968,7 @@ namespace
 
         const fs::path projectsRoot = resolve_projects_root();
         std::error_code ec;
-        if (fs::exists(projectsRoot, ec) && !ec)
+        if (!projectsRoot.empty() && fs::exists(projectsRoot, ec) && !ec)
         {
             constexpr auto options = fs::directory_options::skip_permission_denied;
             for (fs::recursive_directory_iterator it(projectsRoot, options, ec), end; !ec && it != end; it.increment(ec))
@@ -1944,9 +2086,15 @@ namespace
         if (project_root.empty())
             return {};
 
-        return (resolve_project_root_path(fs::path(project_root)) / "scripts" / (std::string(script_name) + ".ascript.cpp"))
-            .lexically_normal()
-            .generic_string();
+        const fs::path root = resolve_project_root_path(fs::path{project_root});
+        if (root.empty())
+            return {};
+        const fs::path script = root / "scripts" / (std::string{script_name} + ".ascript.cpp");
+        if (const fs::path data = epochengine::core::path::candidate_data_root(); !data.empty()
+            && (candidate_project_path(data, script).empty()
+                || !project_path_below(script, root / "scripts")))
+            return {};
+        return script.lexically_normal().generic_string();
     }
 
     [[nodiscard]] static std::string make_project_pcm16_wave(
@@ -3402,6 +3550,9 @@ namespace
     [[nodiscard]] static EditorProjectCreationResult write_project_shell(const ProjectShellSpec& spec)
     {
         const fs::path root = resolve_project_root_path(spec.root);
+        if (root.empty())
+            return {.project_id = spec.project_id,
+                .summary = "Project creation refused an unavailable or non-private candidate project root."};
         const fs::path worlds = root / "worlds";
         const fs::path scripts = root / "scripts";
         const fs::path source = root / "source";
@@ -3502,6 +3653,15 @@ namespace
             ? spec.world_file.lexically_normal()
             : resolve_repo_relative_path(spec.world_file, root);
         const fs::path scriptFile = scripts / (spec.script_id + ".ascript.cpp");
+        if (const fs::path data = epochengine::core::path::candidate_data_root(); !data.empty())
+        {
+            if (candidate_project_path(data, worldFile).empty()
+                || !project_path_below(worldFile, root)
+                || candidate_project_path(data, scriptFile).empty()
+                || !project_path_below(scriptFile, scripts))
+                return {.project_id = spec.project_id, .root_path = root.generic_string(),
+                    .summary = "Candidate project creation refused a scene or script outside its private project."};
+        }
         const fs::path engineArcadePackageFile = assetPackages / "engine_arcade.package.json";
         const fs::path engineArcadeScriptFile = scripts / "script.engine_arcade_scene.cpp";
         const fs::path inputProfileFile = spec.input_profile_path.empty()
@@ -4473,6 +4633,8 @@ namespace
     [[nodiscard]] static const EditorProjectProfile* find_project_profile_by_root(std::string_view project_root) noexcept
     {
         const fs::path resolved = resolve_project_root_path(fs::path{ project_root });
+        if (resolved.empty())
+            return nullptr;
         for (const auto& profile : live_project_profiles())
         {
             if (resolve_project_root_path(fs::path{ profile.root_path }) == resolved)
@@ -4485,6 +4647,15 @@ namespace
 
 namespace epochengine
 {
+    std::filesystem::path editor_resolve_candidate_project_path(
+        const std::filesystem::path& requested,
+        bool allow_root)
+    {
+        const fs::path data = core::path::candidate_data_root();
+        return data.empty() ? fs::path{}
+            : candidate_project_path(data, requested, allow_root);
+    }
+
     EditorProjectAdmissionResult editor_admit_project_manifest(
         std::string_view manifest_path)
     {
@@ -4495,8 +4666,18 @@ namespace epochengine
             return result;
         }
 
+        const fs::path data = epochengine::core::path::candidate_data_root();
+        const fs::path candidate_manifest = data.empty() ? fs::path{}
+            : candidate_project_path(data, fs::path{manifest_path});
+        if (!data.empty() && candidate_manifest.empty())
+        {
+            result.summary = "Candidate previews can open projects only inside their private Projects directory.";
+            return result;
+        }
+
         std::error_code error{};
-        fs::path selected = fs::absolute(fs::path{manifest_path}, error);
+        fs::path selected = data.empty() ? fs::absolute(fs::path{manifest_path}, error)
+            : candidate_manifest;
         if (error)
         {
             result.summary = "The selected project path could not be resolved.";
@@ -4749,6 +4930,34 @@ namespace epochengine
 
     bool editor_project_manifest_capability_contract() noexcept
     {
+#if defined(_WIN32)
+        const fs::path candidateData{"C:/epoch/contracts/candidate-data"};
+#else
+        const fs::path candidateData{"/epoch/contracts/candidate-data"};
+#endif
+        // Exercise the production lexical router without reading real projects
+        // or changing the process's startup-frozen candidate configuration.
+        const fs::path candidateProjects = candidateData / "Projects";
+        const bool candidatePathGate =
+            candidate_project_path_lexical(candidateData, "Projects/Example")
+                == candidateProjects / "Example"
+            && candidate_project_path_lexical(candidateData,
+                candidateProjects / "Example" / "project.epoch.json")
+                == candidateProjects / "Example" / "project.epoch.json"
+            && candidate_project_path_lexical(candidateData, "Projects", true)
+                == candidateProjects
+            && candidate_project_path_lexical(candidateData, "Projects").empty()
+            && candidate_project_path_lexical(candidateData, "Engine/src/editor").empty()
+            && candidate_project_path_lexical(candidateData, "ProjectsSibling/Example").empty()
+            && candidate_project_path_lexical(candidateData, "Projects/../outside").empty()
+            && candidate_project_path_lexical(candidateData, "Projects/Example/./scene.epoch").empty()
+            && candidate_project_path_lexical(candidateData, "Projects/Example/scene.epoch:stream").empty()
+            && candidate_project_path_lexical(candidateData,
+                candidateData.parent_path() / "other-candidate" / "Projects" / "Example").empty()
+            && !project_path_below(candidateProjects / "Other" / "scene.epoch",
+                candidateProjects / "Example")
+            && project_path_below(candidateProjects / "Example" / "worlds" / "scene.epoch",
+                candidateProjects / "Example");
         const JsonStringFieldResult missing =
             inspect_json_string_field(R"({"id":"legacy"})", "capability_profile");
         const JsonStringFieldResult valid =
@@ -4968,7 +5177,7 @@ namespace epochengine
             && hasKeyboardBinding
             && hasControllerBinding
             && platformerInputGate;
-        return missing.state == JsonStringFieldState::missing
+        return candidatePathGate && missing.state == JsonStringFieldState::missing
             && valid.state == JsonStringFieldState::present
             && valid.value == "portable"
             && editor_project_capability_policy(valid.value).has_value()
@@ -5056,6 +5265,9 @@ namespace epochengine
         }
 
         const fs::path root = resolve_project_root_path(fs::path{ profile->root_path });
+        if (root.empty())
+            return {.project_id = std::string{project_id},
+                .summary = "Project shell refused an unavailable or non-private candidate project root."};
         const fs::path manifest = root / "project.epoch.json";
         const fs::path buildScript = generated_project_windows_build_script_path(root);
         const fs::path entrySource = generated_project_entry_source_path(root);
@@ -6643,6 +6855,8 @@ namespace epochengine
             return {false, "Project build cancelled before preflight.", {}, {}, true};
 
         const fs::path root = resolve_project_root_path(fs::path{project_root});
+        if (root.empty())
+            return {false, "Project build refused an unavailable or non-private candidate project root."};
         const fs::path scriptPath =
 #if defined(_WIN32)
             generated_project_windows_build_script_path(root);

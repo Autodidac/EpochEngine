@@ -329,7 +329,9 @@ If you're new:
 
 If you're digging into engine behavior:
 
-- [Engine/docs/engine/capability_tier_architecture.md](Engine/docs/engine/capability_tier_architecture.md)`n- [Engine/docs/engine/temporal_engine_architecture.md](Engine/docs/engine/temporal_engine_architecture.md)`n- [Engine/docs/engine/temporal_authoring_platform.md](Engine/docs/engine/temporal_authoring_platform.md)
+- [Engine/docs/engine/capability_tier_architecture.md](Engine/docs/engine/capability_tier_architecture.md)
+- [Engine/docs/engine/temporal_engine_architecture.md](Engine/docs/engine/temporal_engine_architecture.md)
+- [Engine/docs/engine/temporal_authoring_platform.md](Engine/docs/engine/temporal_authoring_platform.md)
 - [Engine/docs/engine/backend_context_status.md](Engine/docs/engine/backend_context_status.md)
 - [Engine/docs/engine/backend_menu_overlay_status.md](Engine/docs/engine/backend_menu_overlay_status.md)
 - [Engine/docs/engine/os_ai_tooling_and_evidence_policy.md](Engine/docs/engine/os_ai_tooling_and_evidence_policy.md)
@@ -343,16 +345,18 @@ Project planning and release history:
 
 ## Roadmap Direction
 
-The next eight weeks are focused on one acceptance loop:
+Epoch is a reusable engine for software and games. The immediate gate is real
+local-model self-coding: ordinary-language objectives, sandbox-only changes,
+build/test feedback, separately supervised candidate comparison, and continued
+iteration from the user's choice. Full end-to-end and execution-isolation proof
+remain required; implementation alone is not release readiness.
 
-```text
-capability/project profile
--> temporal textures and residency
--> Canvas2D compose and sprite batches
--> tilemap and scene authoring
--> input, deterministic 2D physics, audio, and animation
--> Play, Run, Build, save, reopen, and cache regeneration
-```
+After that gate, prove the current editor-free CLI/platform-window/GUI base
+before broad context expansion and gradual EpochPlatformEngine extraction.
+Properties, 2D/UI, Timeline, code editing, temporal history and the playable 2D
+loop build on that foundation. Each accepted release receives its own complete
+platform, runtime, safety and artifact checks; the long-term backlog is not one
+monolithic release.
 
 The canonical architecture is
 [Engine/docs/engine/capability_tier_architecture.md](Engine/docs/engine/capability_tier_architecture.md).

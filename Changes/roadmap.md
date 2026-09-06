@@ -7,6 +7,11 @@ operator intent is `Changes/mission_cache.md`.
 
 ## Product Mission
 
+Make Epoch a reusable engine for software and games, with an optional capable
+editor and a local-agent workflow that can improve, compile, compare and carry
+forward its own sandbox source. Self-coding serves that product; neither model
+autonomy nor a renderer demo is an alternative product goal.
+
 Ship reusable non-editor software foundations (CLI, platform-window and GUI
 applications) alongside a complete baseline 2D project loop. The editor and its
 sandboxed AI workflow are development tools, not required runtime dependencies
@@ -28,6 +33,31 @@ base against the current Engine. The September 5 operator authorization permits
 updating `multicontext-base-stable` after that evidence; preserve the original
 checkpoint in history and use this worktree rather than multiplying copies.
 
+## Execution Order And Continuity
+
+1. **Self-coding first:** finish the real Qwen two-build/choice loop and its
+   data, process, model-selection and interaction acceptance. Reuse its existing
+   controller, source executor, retry, transport and supervision implementations.
+2. **Stable software base next:** finish profiles and generated-template proof
+   on the existing SoftwareBase/context-admission foundation; only then advance
+   the authorized stable branch and broaden context adapters.
+3. **Usable complete workflows:** Properties, 2D/UI, Timeline and code editing,
+   followed by the full playable 2D project loop. Carry controls, semantic
+   history, persistence, diagnostics and tests with each feature.
+4. **Broader platform/backend work:** migrate proven owners incrementally into
+   the reusable platform layer and extend resources/capabilities without
+   disturbing the accepted base.
+
+Release validation is a gate on each accepted milestone, not a requirement to
+finish this entire roadmap before shipping. A supporting UI repair may accompany
+P0; an unrelated subsystem does not replace a blocked P0 acceptance run.
+
+Each unchecked item below means its stated acceptance remains open, not that
+every component needs writing. At each pass start, reconcile it with source,
+tests and changelog; put only the next bounded change/proof in the active pass.
+At handoff, retain the exact failed or untested step and next action. Remove an
+item only when its full acceptance is proven, recording completion in history.
+
 ## Current Release State
 
 - Local source and Windows/Linux build authorities declare v0.89.35.
@@ -43,6 +73,10 @@ checkpoint in history and use this worktree rather than multiplying copies.
 
 ## P0 — Self-Coding Candidate Lab
 
+- [ ] Prove explicit model > remembered same-endpoint model > Nemotron 4B
+  default selection, including unloaded/missing inventory and restart. Restore
+  alone performs no inference. Make assistant versus Qwen 3.5+/3.8 coding roles
+  visible, with no silent model eviction or weaker-worker substitution.
 - [ ] Complete a real local-model run from an ordinary-language objective
   through model-selected context, plan, exact proposal, sandbox apply, all host
   validation, candidate PID/context preview, and Keep Current / Choose
@@ -61,17 +95,16 @@ checkpoint in history and use this worktree rather than multiplying copies.
 - [ ] Prove Keep/Choose retires every losing child/worker, persists exactly one
   next sandbox parent, and resumes the saved mission without repeating completed
   steps.
-- [ ] Decide the stable inbound/outbound MCP transport after the installed Codex
-  `mcp-server` deprecation has a documented successor; no listener is enabled by
-  default.
-- [ ] Add an opt-in generated-project campaign profile using project-owned
-  source, save/build/test/run executors without inheriting Engine-development
-  authority or model weights.
 
 Exit gate: one operator-understandable session completes with truthful evidence,
-no blank/dead actions, no orphan processes, and no live-source/project mutation.
+two actual accepted builds across a choice, no blank/dead actions, no orphan
+processes, and no live-source/project mutation. A successor plan alone cannot pass.
 
-## P0 — Stable Software Base Before Context Expansion
+## P1 — Stable Software Base Before Context Expansion
+
+Reuse `Epoch::SoftwareBase`, its CLI/Win32 lifecycle, and `context.admission`.
+Their component/native-window foundation evidence is already in the changelog;
+it does not complete generated templates, GUI/input or stable-branch acceptance.
 
 - [ ] Audit Engine/runtime/editor dependencies and prove minimal CLI,
   platform-window and GUI software profiles against current source.
@@ -88,8 +121,11 @@ no blank/dead actions, no orphan processes, and no live-source/project mutation.
 Exit gate: current reusable software bases work without the editor, and every
 context migration has an explicit backend-specific proof plan.
 
-## P1 — Editor And 2D/UI Usability
+## P2 — Editor And 2D/UI Usability
 
+- [ ] Prove centered Output/AI Chat defaults and proportional manual-divider
+  persistence across main and secondary context resize, docking previews and
+  save/reload. Reuse the existing docking system rather than replacing it.
 - [ ] Finish Properties as a component-aware inspector with clear identity,
   layout/transform, appearance, interaction, state, resource, runtime, and
   diagnostic groups; unavailable fields explain why and never look editable.
@@ -108,6 +144,9 @@ context migration has an explicit backend-specific proof plan.
   the supported editor applications.
 - [ ] Eye-test Package Manager responsive list/detail/footer sizing and model
   install progress at compact, 1080p, 2K, 4K, and high-zoom layouts.
+- [ ] Finish an opt-in generated-project AI campaign using project-owned
+  source and Save/Build/Test/Run executors without inheriting Engine-development
+  authority or model weights; reuse the existing project AI profile contracts.
 
 World, World Outliner, World Settings, and the two command rows are not current
 redesign targets unless an acceptance regression is found.
@@ -116,7 +155,7 @@ Exit gate: existing features outside World are discoverable, interactive,
 reversible, persistent, and usable without reading internal hashes or subsystem
 names.
 
-## P2 — Playable 2D Acceptance Loop
+## P3 — Playable 2D Acceptance Loop
 
 - [ ] Eye-test tile-map layer/object authoring, selection, drag, staged
   properties, duplicate/delete, collision intent, save/reopen, and hierarchy.
@@ -137,7 +176,7 @@ names.
 Exit gate: a new project can be authored, saved, closed, reopened, played,
 stopped, built, run, and regenerated using documented commands and visible UI.
 
-## P3 — Resources, Diagnostics, And Backend Truth
+## P4 — Resources, Diagnostics, And Backend Truth
 
 - [ ] Complete texture pointer feel, native save/reopen/assignment proof,
   dependency inspection, broader admitted formats, and measured residency/cost
@@ -156,7 +195,7 @@ stopped, built, run, and regenerated using documented commands and visible UI.
 Exit gate: capability and renderer matrices contain no unsupported presentation
 claim, and repeated resource replacement has bounded memory/handle behavior.
 
-## P4 — Release And Distribution
+## Release Gate — Every Accepted Milestone
 
 - [ ] Run final serial Windows Debug/Release and managed-Clang Linux Release
   builds plus required contract, HeadlessCI, package-layout, RPATH/library,
@@ -187,6 +226,9 @@ cards, docs, checksums, and rollback state all identify the same accepted tree.
    and T5 full ray-tracing pipelines.
 7. Persistent regions, collaboration, networking, and planetary/astronomical
    packages after explicit product and security gates.
+8. Qualify a stable inbound/outbound MCP adapter against the then-current
+   supported client protocol. Do not rebuild the existing supervisor registry
+   or enable a listener implicitly; this does not block the local HTTP P0 loop.
 
 ## Planning Rules
 

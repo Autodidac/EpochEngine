@@ -5,8 +5,46 @@ is not a completion log or schedule. Completed work is removed from here and
 recorded in `Changes/changelog.txt`; current ordering belongs in
 `Changes/roadmap.md`; the one active gate belongs in `Changes/active_pass.md`.
 
+## Overall Intent And Pass Continuity
+
+- One reusable Engine serves software and games. The editor and self-coding
+  tools are optional development consumers, not mandatory generated-runtime
+  dependencies. A stable base must stay small enough for quick iterations.
+- Current order is real sandbox self-coding first, current editor-free software
+  base next, then usable editor/project workflows and incremental context/
+  EpochPlatformEngine expansion. Publication follows each fully accepted
+  milestone; it does not wait for every deferred feature.
+- Reconcile fragmented documents against current source and exact evidence
+  before each pass. Do not reimplement completed systems because an old document
+  still says "add" or "planned". Distinguish implemented-but-unverified
+  integration from missing code and proven completion. Preserve the remaining
+  acceptance, next action and unresolved operator intent across handoffs.
+- Keep one chat-owned source copy. Branches and disposable candidate generations
+  are not excuses to multiply full worktrees or copy sibling project material.
+  Names and historical paths do not justify moving a live workspace again.
+
 ## Engine Self-Coding
 
+- September 5 operator deadline priority: make the complete self-coding loop
+  usable and tested within the remaining day. Prioritize real outcomes over
+  code volume; no padding, duplicate frameworks, or unrelated feature expansion.
+  Do not claim perfection from contracts or substitute infrastructure for the
+  actual model/build/comparison/successor run.
+- Model selection needs both memory and a default. Preserve an explicit current
+  selection; otherwise restore the last-used model; otherwise use the confirmed
+  local default `nvidia/nemotron-3-nano-4b`. Ejection is not deletion and an empty
+  inventory must not erase a saved model. Scanning/restoring preferences never
+  sends a prompt, starts inference, or ejects another task's model. A user request
+  may use the eligible remembered/default local model without redundant Confirm.
+- Show model roles clearly: Nemotron 4B is the quick assistant/diagnostic helper;
+  Qwen 3.5+ is the requested self-coding guidance, and Qwen 3.8 is preferred
+  for independent long-horizon coding. This is not a model-brand/version
+  allowlist: newer explicitly selected agentic models may attempt the same
+  validated workflow. Keep role selection explicit and visible,
+  preserve a selected coding model through retries, and explain required model
+  changes. Do not silently substitute the small helper for the coding worker or
+  unload models owned by other tasks. Model names are configuration/selection
+  policy, not proof that an actual task will succeed.
 - September 5 priority: prove the actual Qwen self-coding loop before expanding
   unrelated editor/context features. A compiler failure feeds its real diagnostic
   back into the next bounded repair automatically; preparing a workspace or
@@ -80,6 +118,11 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
   guides/ghosting, native float/redock, opacity, drag locking, input capture,
   responsive modal sizing, and remembered dividers must behave like a modern
   desktop editor across normal and high-DPI layouts.
+- Output and AI Chat default to a centered 50/50 divider. Once the user adjusts
+  it, preserve the chosen proportion across main/secondary context resize and
+  save/reload. Layout, pointer drag, and docking previews must use the same
+  splitter geometry; do not reset legitimate saved positions by guessing from
+  old default values.
 - World, World Outliner, World Settings, and the two command rows are acceptable
   unless testing finds a regression. Prioritize unfinished interface and AI
   workflows elsewhere.
@@ -215,9 +258,9 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 
 ## Delivery Discipline
 
-- Preserve unrelated dirty work. The reviewed `ai.mcp_supervisor_*` source is
-  now part of the Engine's bounded inbound supervisor contract; do not confuse
-  that protocol surface with permission to enable a listener or transport.
+- Preserve unrelated dirty work. A registered MCP supervisor protocol is not
+  permission to enable a listener or transport; keep the existing authority
+  boundary when extending its adapters.
 - Implement production source first, run the closest faithful build/contracts,
   record only remaining work here, and move proven completion into the changelog.
 - Never use placeholders, fake UI, model self-attestation, dead controls, hidden

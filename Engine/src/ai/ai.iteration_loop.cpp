@@ -5,7 +5,6 @@
 module;
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -18,18 +17,6 @@ namespace epochengine::ai::iteration
 {
     namespace
     {
-        [[nodiscard]] std::string lowercase(std::string_view value)
-        {
-            std::string result{value};
-            std::transform(result.begin(), result.end(), result.begin(),
-                [](char character)
-                {
-                    return static_cast<char>(std::tolower(
-                        static_cast<unsigned char>(character)));
-                });
-            return result;
-        }
-
         [[nodiscard]] constexpr bool architecture_review_required(
             RiskClass risk) noexcept
         {
@@ -79,33 +66,6 @@ namespace epochengine::ai::iteration
     {
         ModelCapabilities result{};
         result.model_name = std::string{model_name};
-        if (model_name.empty())
-            return result;
-
-        const std::string normalized = lowercase(model_name);
-        const bool qwen38 = normalized.find("qwen3.8") != std::string::npos
-            || normalized.find("qwen-3.8") != std::string::npos
-            || normalized.find("qwen_3.8") != std::string::npos;
-        const bool heavy_qwen = normalized.find("qwen") != std::string::npos
-            && (qwen38
-                || normalized.find("27b") != std::string::npos
-                || normalized.find("30b") != std::string::npos
-                || normalized.find("32b") != std::string::npos
-                || normalized.find("70b") != std::string::npos
-                || normalized.find("72b") != std::string::npos);
-        const bool coding_model = heavy_qwen
-            || normalized.find("coder") != std::string::npos
-            || normalized.find("devstral") != std::string::npos
-            || normalized.find("codestral") != std::string::npos;
-
-        result.context_tokens = heavy_qwen ? 65'536u
-            : coding_model ? 32'768u : 16'384u;
-        result.code_generation = true;
-        result.tool_use = true;
-        result.repository_reasoning = coding_model;
-        result.research = coding_model;
-        result.build_repair = coding_model;
-        result.self_review = coding_model;
         return result;
     }
 
@@ -115,7 +75,7 @@ namespace epochengine::ai::iteration
     {
         CapabilityAssessment result{
             .disposition = CapabilityDisposition::eligible,
-            .summary = "The selected model fits the bounded writer lane.",
+            .summary = "Reported model properties fit the bounded writer lane; actual output remains unverified.",
             .recommended_model_class =
                 "A tool-capable coding model with repository reasoning.",
             .operator_approval_required = true,
@@ -133,29 +93,32 @@ namespace epochengine::ai::iteration
             return result;
         }
 
+        if (policy.host_context_budget_tokens < minimum_context(policy.risk))
+        {
+            result.disposition = CapabilityDisposition::blocked;
+            result.summary = "The host source-request context budget is below the required bounded lane.";
+            result.recommended_model_class = "Configure a sufficient host request budget; changing a model name cannot enlarge it.";
+            return result;
+        }
+
         const bool common = model.code_generation && model.tool_use
             && model.context_tokens >= minimum_context(policy.risk);
         const bool repository = policy.risk == RiskClass::contained_feature
             || (model.repository_reasoning && model.build_repair);
         const bool planning = !policy.require_research || model.research;
-        const bool review = model.self_review;
+        const bool review = !policy.require_local_self_review || model.self_review;
         if (!common || !repository || !planning || !review)
         {
             result.disposition =
                 CapabilityDisposition::recommend_stronger_model;
             result.summary =
-                "The selected model may assist, but it is not admitted to the "
-                "requested automated writer lane.";
-            result.recommended_model_class = policy.risk
-                    == RiskClass::contained_feature
-                ? "Use a coding model with tool use, self-review, and at least "
-                  "8K context."
-                : policy.risk == RiskClass::related_files
-                    ? "Use a 27B-class coding model with repository reasoning, "
-                      "build repair, and at least 16K context."
-                    : "Use a strong 27B-70B coding model with repository "
-                      "reasoning, research, build repair, self-review, and at "
-                      "least 64K context.";
+                "Model skill and context support are not established by its name. "
+                "The selected model may attempt bounded sandbox work; its output "
+                "must still pass exact source, compiler and validation checks.";
+            result.recommended_model_class =
+                "Choose an agentic coding model with enough context for the task. "
+                "Qwen 3.5+ is the requested coding tier, with 3.8 preferred; "
+                "newer operator-selected models are not rejected by name.";
             return result;
         }
 
@@ -242,7 +205,7 @@ namespace epochengine::ai::iteration
         if (!configured_ || milestone_ != Milestone::idle)
             return remember(LoopCode::invalid_state,
                 "The loop must be configured and idle before it starts.");
-        if (capability_.disposition != CapabilityDisposition::eligible)
+        if (!capability_.may_attempt())
         {
             milestone_ = Milestone::blocked;
             return remember(LoopCode::capability_blocked,

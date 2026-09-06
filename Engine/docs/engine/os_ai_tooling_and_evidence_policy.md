@@ -158,8 +158,11 @@ dirty relative to its reported Git commit. Current curated-file digests are the
 source bytes authorized for that request.
 
 The ordinary one-change policy remains `manual_each_candidate`. Candidate Lab
-enables `auto_validate_within_approved_scope` only after the operator has
-reviewed one objective and exact source scope. Within that boundary the model
+enables `auto_validate_within_approved_scope` under the operator's Start action
+for the plain-language objective and displayed provider. The model selects
+catalog-listed paths; the host validates and displays the exact scope before
+reading/sending its bounded contents. The operator is not required to name
+files or approve another dialog at every same-session step. Within that boundary the model
 may produce successive sandbox candidates and the host may apply and validate
 them without repeating approval UI; strict proposal, preimage, transaction,
 actor, receipt, generation, digest, and repair checks are not bypassed. No
@@ -204,6 +207,22 @@ repair proceed automatically until a validated candidate is ready for native
 comparison. This does not approve live-source mutation, promotion, Git, upload,
 publication, listener, server, or release. Complete model responses remain
 visible in AI Chat when the operational preview is truncated.
+
+Model replies and automatic initial/successor planning advance from the owning
+editor context tick, not the AI Controls renderer. Hiding or switching inspector
+tabs therefore does not pause the session. Stop latches progression off before
+requesting owned worker/process cancellation. Restart waits for pending work and
+retirement leases, preserves the chosen sandbox lineage and mission, and resets
+obsolete source/request bindings. Model selection leases also cover deferred
+requests, HTTP worker completion/source-reply handoff and MCP retirement; one
+context cannot retarget another context's active request through the picker.
+These paths have build-safe contracts; native interaction proof remains separate.
+
+Model-name heuristics are not capability evidence. Explicitly selected unknown
+agentic models receive advisory guidance, not a brand-derived refusal. Host
+context limits, source/packet authority and independent compiler/validation
+evidence remain admission requirements. The automatic or remembered Nemotron
+helper is not silently substituted for an explicitly chosen coding worker.
 
 `ai.mcp_supervisor_adapter` is registered in the Engine source/build graph and
 the build-safe aggregate contract. It remains a transport-neutral protocol
@@ -421,8 +440,12 @@ without stopping another request's borrowed handle. A missing snapshot alone is
 not stale proof: only successful release or the supervisor's typed stale result
 ends ownership. These contracts do not grant OS execution confinement.
 
-Candidate Lab uses workspace-local `cache/process/` temp, profile and package
-paths; it copies only the three validated ProgramFiles install-root values, not
+Candidate Lab compilation uses generation-local `cache/process/` temp/profile
+state. Test and preview launch preparation instead exclusively creates a fresh
+sibling `.epoch-runtime-<phase>-...` data root and binds its environment there.
+Editor children receive `--candidate-data-root`; HeadlessCI retains its exact
+source-root argument and captured output. The environment copies only the three
+validated ProgramFiles install-root values, not
 host PATH, proxy/model credentials, automation flags or user-profile settings.
 OS system paths and fixed noninteractive tool settings complete the allowlist.
 Compiler discovery and the original read-only dependency authority remain
@@ -430,6 +453,16 @@ host-owned across Choose. MSBuild disables automatic response files and node
 reuse. These paths are preferences, not permission enforcement: Windows APIs or
 arbitrary candidate code can still access resources allowed by the inherited
 token until an actual OS execution boundary is implemented and tested.
+
+The editor binds the candidate data root before file logging and normal CLI
+dispatch. That binding routes mutable logs, captures, preferences, model/package/
+update caches, workspace state and checked private Projects independently of
+validated executable/assets/source inputs. Ordinary runs retain their established
+paths. Malformed, aliased or rebound candidate roots are refused; immutable
+runtime/asset lookups are not moved into the data root. Preview UI source Save
+cannot make validated code writable. Native candidate code still runs under the
+ordinary token: these routed consumers and path checks do not enforce arbitrary
+code's access rights or establish race-free OS isolation.
 
 The source materializer always excludes the owned checkout-local runtime tree
 `Engine/examples/EpochEditor/workspace`, including explicit-file includes.
@@ -494,11 +527,12 @@ hosting, and recover abandoned identity leases safely. Do not grant broad user-p
 compatibility test pass. Linux also still needs a real filesystem/network/IPC
 execution boundary; descriptor cleanup is only one prerequisite.
 
-The current source layout is not yet a valid phase grant layout: `Engine.sln`
-lives at the generation root, intermediates/output are its siblings of `Engine`,
-and runtime writes still occur below both source and executable directories.
-Before enabling the policy, move those consumers to distinct owned phase roots
-and relocate `.epoch/local_mcp` control/receipt files outside child grants.
+The current compiler/control layout is not yet a valid phase grant layout:
+`Engine.sln` lives at the generation root and intermediates/output are its
+siblings of `Engine`. The mutable test/preview routing above is a prerequisite,
+not completion of immutable input/writable output grants. Before enabling the
+policy, qualify compiler phase roots and relocate host logs and
+`.epoch/local_mcp` control/receipt files outside child grants.
 Installed MSBuild/VC/SDK and vcpkg dependencies are outside the generation and
 cannot be admitted by the existing owned-descendant grant API. Their immutable
 dependency closure and discovery paths must be qualified explicitly; copying
@@ -929,18 +963,20 @@ project built or authorize external Run.
 
 Engine-source writes require engine-source permission, exact content states,
 review, operator approval, and resulting evidence. Ordinary AI development
-authority cannot commit, push, publish, release, edit the sealed `v0.89.06`
-updater/release lane, start a listener, or grant itself broader permission.
+authority cannot commit, push, publish, release, edit any sealed historical
+updater/release artifact, start a listener, or grant itself broader permission.
 Process-native editor code is trusted host code; model-facing tool schemas must
 not expose approval, permit issuance, or unrestricted native invocation.
 
 Bounded source-context request parsing, passive path review, explicit reviewed
 source-byte handoff, grounded proposal parsing, and sandbox staging are
-implemented. Reviewed scene and GUI creation are the first non-source authoring
-lane. Save, build, run, test, capture, live iteration orchestration, and broader
-multi-tool dispatch remain unfinished; until each tool uses an existing host-owned
-authority and validated evidence contract, operator-invoked editor/project paths
-remain the real executors.
+implemented. Reviewed scene/GUI and single-command project-tool actions use
+existing host owners. Candidate Lab also has connected sandbox apply, compiler/
+test dispatch, bounded repair, process attachment and succession implementations.
+Their actual two-build/native/OS-boundary acceptance remains open. Generic
+multi-tool project campaigns and additional analysis/capture adapters are
+separate unfinished work; they must reuse those owners and cannot turn model
+output into permission or host validation evidence.
 
 ## Evidence Storage
 

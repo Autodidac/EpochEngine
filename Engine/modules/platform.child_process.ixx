@@ -258,6 +258,17 @@ export namespace epochengine::platform::child_process
     // directories. This is environment hygiene, not OS access confinement.
     [[nodiscard]] std::optional<std::vector<EnvironmentVariable>>
         prepare_workspace_environment(const std::filesystem::path& workspace) noexcept;
+    struct RuntimeEnvironment final
+    {
+        std::filesystem::path data_root{};
+        std::vector<EnvironmentVariable> variables{};
+    };
+    // Creates a fresh sibling of an admitted disposable code workspace. Test
+    // and preview writes must not become part of source or validated output.
+    // The host retains this directory as disposable evidence; this is path
+    // separation, not a substitute for restricted-token filesystem grants.
+    [[nodiscard]] std::optional<RuntimeEnvironment> prepare_runtime_environment(
+        const std::filesystem::path& code_workspace, std::string_view phase) noexcept;
     [[nodiscard]] LaunchResult launch_or_focus(const LaunchRequest& request) noexcept;
     [[nodiscard]] FocusCode focus(ProcessHandle handle) noexcept;
     [[nodiscard]] StopCode stop(ProcessHandle handle, StopMode mode) noexcept;

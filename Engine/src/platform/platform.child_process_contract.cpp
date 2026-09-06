@@ -359,6 +359,26 @@ namespace
             || child_process::prepare_workspace_environment(first) != firstEnvironment)
             return false;
 
+        const auto code = fixture.root / "runtime-code";
+        if (!std::filesystem::create_directory(code, error) || error) return false;
+        const auto testRuntime = child_process::prepare_runtime_environment(code, "test-release");
+        const auto previewRuntime = child_process::prepare_runtime_environment(code, "preview");
+        const auto nextRuntime = child_process::prepare_runtime_environment(code, "preview");
+        if (!testRuntime || !previewRuntime || !nextRuntime
+            || testRuntime->data_root == previewRuntime->data_root
+            || nextRuntime->data_root == previewRuntime->data_root
+            || !std::filesystem::is_empty(code, error) || error)
+            return false;
+        for (const auto* runtime : {&*testRuntime, &*previewRuntime, &*nextRuntime})
+            if (runtime->data_root.parent_path() != code.parent_path()
+                || runtime->data_root == code || !verify(runtime->variables, runtime->data_root))
+                return false;
+        if (child_process::prepare_runtime_environment(code, "../escape")
+            || child_process::prepare_runtime_environment(code, "")
+            || child_process::prepare_runtime_environment(code / "..", "preview")
+            || child_process::prepare_runtime_environment(fixture.root / "missing", "preview")
+            || child_process::prepare_runtime_environment("relative", "preview")) return false;
+
         // Links point only into this owned fixture. The factory must refuse
         // before creating a process cache through either redirected root.
         const auto linkedRoot = fixture.root / "environment-root-link";
@@ -366,6 +386,7 @@ namespace
         if (!create_fixture_directory_link(linkedRoot, outside)
             || !create_fixture_directory_link(linkedCache, outside)) return false;
         const bool rejected = !child_process::prepare_workspace_environment(linkedRoot)
+            && !child_process::prepare_runtime_environment(linkedRoot, "preview")
             && !child_process::prepare_workspace_environment(poisoned)
             && !std::filesystem::exists(outside / "cache", error) && !error
             && !std::filesystem::exists(outside / "process", error) && !error;

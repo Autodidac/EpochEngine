@@ -264,6 +264,31 @@ export namespace epochengine::ai
     [[nodiscard]] bool select_direct_runtime(std::string_view executable, std::string_view model);
     void select_openai_compatible_runtime();
     [[nodiscard]] std::string active_model_name();
+    enum class LocalModelSelectionOrigin : unsigned char
+    {
+        none,
+        configured,
+        explicit_selection,
+        remembered,
+        legacy_preference,
+        default_local
+    };
+    struct LocalModelSelection
+    {
+        std::string model_id{};
+        std::string endpoint{};
+        LocalModelSelectionOrigin origin{LocalModelSelectionOrigin::none};
+        bool available_in_inventory{};
+        bool reusable_on_request{};
+        bool confirmed{};
+    };
+    // Read-only preference/default restoration. Inventory presence is not proof
+    // of model residency, and this accessor never loads or queries a model.
+    [[nodiscard]] LocalModelSelection local_model_selection();
+    // Invoke only for a user Send/Start: prepares the selected local client and
+    // persists its endpoint-bound preference, without opening any transport.
+    [[nodiscard]] bool prepare_local_model_for_request();
+    [[nodiscard]] bool local_model_preference_contract();
     [[nodiscard]] std::string active_provider_summary();
     [[nodiscard]] ModelManifest active_model_manifest();
     [[nodiscard]] std::vector<std::string> detected_model_names();

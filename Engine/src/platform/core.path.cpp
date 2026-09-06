@@ -32,15 +32,22 @@ module;
 
 #include <filesystem>
 #include <cstdlib>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #  include <windows.h>
-#elif defined(__APPLE__)
-#  include <mach-o/dyld.h>
-#  include <vector>
+#  include <shellapi.h>
 #else
+#  include <fcntl.h>
+#  include <sys/stat.h>
 #  include <unistd.h>
-#  include <vector>
+#if defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#endif
 #endif
 
 module core.path;
@@ -49,6 +56,179 @@ namespace epochengine::core::path
 {
     namespace
     {
+        constexpr std::size_t maximum_candidate_depth = 128u;
+        constexpr std::size_t maximum_candidate_path = 32760u;
+
+        struct CandidateRoot final
+        {
+            std::mutex mutex{};
+            path root{};
+#if defined(_WIN32)
+            std::vector<HANDLE> directories{};
+#else
+            std::vector<int> directories{};
+#endif
+
+            ~CandidateRoot()
+            {
+                for (const auto directory : directories)
+#if defined(_WIN32)
+                    CloseHandle(directory);
+#else
+                    ::close(directory);
+#endif
+            }
+        };
+
+        CandidateRoot& candidate_state()
+        {
+            static CandidateRoot state;
+            return state;
+        }
+
+        // Keep every admitted ancestor pinned while this process uses the
+        // binding. This does not constrain arbitrary candidate code or writes
+        // through other APIs, and Unix directory handles do not prevent rename.
+        bool validate_candidate_root(const path& root, CandidateRoot& pending)
+        {
+            if (root.empty() || !root.is_absolute() || root == root.root_path()
+                || root.filename().empty() || root.native().size() > maximum_candidate_path
+                || root.native().find(path::value_type{}) != path::string_type::npos)
+                return false;
+
+            const auto native = root.native();
+#if defined(_WIN32)
+            const auto drive = root.root_name().native();
+            if (drive.size() != 2u || drive[1] != L':'
+                || !((drive[0] >= L'A' && drive[0] <= L'Z')
+                    || (drive[0] >= L'a' && drive[0] <= L'z')))
+                return false;
+            if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, native.data(),
+                    static_cast<int>(native.size()), nullptr, 0, nullptr, nullptr) == 0)
+                return false;
+            const auto separator = [](wchar_t ch) { return ch == L'\\' || ch == L'/'; };
+#else
+            const auto separator = [](char ch) { return ch == '/'; };
+#endif
+            for (std::size_t index = 1u; index < native.size(); ++index)
+                if (separator(native[index - 1u]) && separator(native[index]))
+                    return false;
+
+            std::size_t depth{};
+            for (const auto& component : root.relative_path())
+            {
+                if (++depth > maximum_candidate_depth || component.empty()
+                    || component == "." || component == "..")
+                    return false;
+#if defined(_WIN32)
+                const auto name = component.native();
+                if (name.back() == L'.' || name.back() == L' '
+                    || name.find_first_of(L":*?\"<>|") != std::wstring::npos)
+                    return false;
+                for (const auto ch : name)
+                    if (ch < 32)
+                        return false;
+                auto stem = name.substr(0u, name.find(L'.'));
+                for (auto& ch : stem)
+                    if (ch >= L'a' && ch <= L'z')
+                        ch = static_cast<wchar_t>(ch - L'a' + L'A');
+                if (stem == L"CON" || stem == L"PRN" || stem == L"AUX"
+                    || stem == L"NUL" || stem == L"CONIN$" || stem == L"CONOUT$"
+                    || (stem.size() == 4u
+                        && (stem.starts_with(L"COM") || stem.starts_with(L"LPT"))
+                        && ((stem[3] >= L'1' && stem[3] <= L'9')
+                            || stem[3] == L'\u00b9' || stem[3] == L'\u00b2'
+                            || stem[3] == L'\u00b3')))
+                    return false;
+#endif
+            }
+            if (depth == 0u)
+                return false;
+
+            pending.directories.reserve(depth + 1u);
+            path current = root.root_path();
+#if defined(_WIN32)
+            const auto pin = [&](const path& directory)
+            {
+                auto extended = directory;
+                extended.make_preferred();
+                const auto name = L"\\\\?\\" + extended.native();
+                const HANDLE handle = CreateFileW(name.c_str(), FILE_READ_ATTRIBUTES,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+                if (handle == INVALID_HANDLE_VALUE)
+                    return false;
+                pending.directories.push_back(handle);
+                FILE_ATTRIBUTE_TAG_INFO attributes{};
+                if (!GetFileInformationByHandleEx(handle, FileAttributeTagInfo,
+                        &attributes, sizeof(attributes))
+                    || !(attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                    || (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT))
+                    return false;
+                std::wstring final_name(maximum_candidate_path + 4u, L'\0');
+                const DWORD length = GetFinalPathNameByHandleW(handle, final_name.data(),
+                    static_cast<DWORD>(final_name.size()), FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+                if (length == 0u || length >= final_name.size())
+                    return false;
+                final_name.resize(length);
+                // Reject DOS short-name or other namespace aliases, not just
+                // symlinks. Case differences are ordinary on Windows.
+                return CompareStringOrdinal(name.data(), static_cast<int>(name.size()),
+                    final_name.data(), static_cast<int>(final_name.size()), TRUE) == CSTR_EQUAL;
+            };
+            if (!pin(current))
+                return false;
+            for (const auto& component : root.relative_path())
+            {
+                current /= component;
+                if (!pin(current))
+                    return false;
+            }
+#else
+            const int first = ::open(current.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+            if (first < 0)
+                return false;
+            pending.directories.push_back(first);
+            for (const auto& component : root.relative_path())
+            {
+                const int descriptor = ::openat(pending.directories.back(), component.c_str(),
+                    O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+                if (descriptor < 0)
+                    return false;
+                pending.directories.push_back(descriptor);
+                struct stat status{};
+                if (::fstat(descriptor, &status) != 0 || !S_ISDIR(status.st_mode))
+                    return false;
+            }
+#endif
+            pending.root = root;
+            pending.root.make_preferred();
+            return true;
+        }
+
+        template<class Character>
+        CandidateDataArguments scan_candidate_arguments(
+            int argc, Character** argv, std::basic_string_view<Character> option)
+        {
+            int found{};
+            for (int index = 1; index < argc; ++index)
+            {
+                if (!argv[index])
+                    return { false, 0 };
+                const std::basic_string_view<Character> argument{ argv[index] };
+                if (!argument.starts_with(option))
+                    continue;
+                if (argument != option || found != 0 || index + 1 >= argc
+                    || !argv[index + 1] || argv[index + 1][0] == Character{})
+                    return { false, 0 };
+                found = index;
+                ++index;
+            }
+            if (found == 0)
+                return { true, 0 };
+            return { configure_candidate_data_root(path{ argv[found + 1] }), found };
+        }
+
         [[nodiscard]] bool exists_noerr(const path& p) noexcept
         {
             std::error_code ec;
@@ -97,6 +277,72 @@ namespace epochengine::core::path
             }
 
             return {};
+        }
+    }
+
+    path candidate_data_root()
+    {
+        auto& state = candidate_state();
+        const std::lock_guard lock{ state.mutex };
+        return state.root;
+    }
+
+    bool configure_candidate_data_root(const path& root) noexcept
+    {
+        try
+        {
+            auto& state = candidate_state();
+            const std::lock_guard lock{ state.mutex };
+            if (!state.root.empty())
+                return false;
+            CandidateRoot pending;
+            if (!validate_candidate_root(root, pending))
+                return false;
+            state.root.swap(pending.root);
+            state.directories.swap(pending.directories);
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    CandidateDataArguments preflight_candidate_data_arguments(int argc, char** argv) noexcept
+    {
+        try
+        {
+            if (argc < 1 || argc > 4096 || !argv || !argv[0])
+                return { false, 0 };
+            for (int index = 1; index < argc; ++index)
+                if (!argv[index])
+                    return { false, 0 };
+#if defined(_WIN32)
+            bool requested{};
+            for (int index = 1; index < argc; ++index)
+                requested = requested || std::string_view{argv[index]}.starts_with("--candidate-data-root");
+            // Ordinary command lines keep CRT semantics, including quoting
+            // forms whose token count differs from CommandLineToArgvW.
+            if (!requested) return {true, 0};
+            struct NativeArguments final
+            {
+                wchar_t** value{};
+                ~NativeArguments() { if (value) LocalFree(value); }
+            };
+            int native_count{};
+            const NativeArguments native{ CommandLineToArgvW(GetCommandLineW(), &native_count) };
+            if (!native.value || native_count != argc)
+                return { false, 0 };
+            return scan_candidate_arguments(argc, native.value,
+                std::wstring_view{ L"--candidate-data-root" });
+#else
+            return scan_candidate_arguments(argc, argv,
+                std::string_view{ "--candidate-data-root" });
+#endif
+        }
+        catch (...)
+        {
+            return { false, 0 };
         }
     }
 
@@ -176,6 +422,9 @@ namespace epochengine::core::path
 
     path example_console_workspace_dir()
     {
+        if (const auto candidate = candidate_data_root(); !candidate.empty())
+            return candidate / "workspace";
+
         if (const path repoRoot = find_epoch_repo_root(executable_path()); !repoRoot.empty())
             return normalize(repoRoot / "Engine" / "examples" / "EpochEditor" / "workspace");
 
@@ -253,6 +502,9 @@ namespace epochengine::core::path
 
     path log_output_dir()
     {
+        if (const auto candidate = candidate_data_root(); !candidate.empty())
+            return candidate / "logs";
+
         if (const path overridePath = env_override_path("EPOCH_LOG_DIR"); !overridePath.empty())
             return overridePath;
 
@@ -267,6 +519,9 @@ namespace epochengine::core::path
 
     path capture_output_dir()
     {
+        if (const auto candidate = candidate_data_root(); !candidate.empty())
+            return candidate / "logs" / "captures";
+
         if (const path overridePath = env_override_path("EPOCH_CAPTURE_DIR"); !overridePath.empty())
             return overridePath;
 

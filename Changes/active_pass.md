@@ -27,8 +27,8 @@ missions, not reasons to label incomplete self-coding or context behavior comple
 ## Current Checkpoint
 
 - Source version: v0.89.35, local and unpublished. Starting commit for this
-  exact-candidate validation and launch-ownership pass:
-  `d99f8b5056e893adc7b1810d5bb3bb958fe4b645`.
+  candidate-data/model-usability pass:
+  `3938faf381366f1e030999df86f8de2aa9ef8bd3`.
 - Public Windows/Linux runtime and private-source discovery remain v0.89.34;
   public macOS packaged authority remains v0.89.30.
 - GitHub push is unavailable while the repository account returns HTTP 403
@@ -78,6 +78,44 @@ the narrow HTTP component compile passed and the lane was released again.
 
 ## Remaining Work
 
+Pass ordering follows the September 5 one-day self-coding priority. First finish
+the existing candidate-data repair and model-selection/working-state usability,
+then exercise the actual model/build/comparison/succession gate below. The small
+Output/AI Chat ratio repair supports that workflow; broad context/platform and
+other missions stay in the roadmap, not in parallel as substitutes for P0.
+Every pass begins from current source and this gate, diagnoses the actual failed
+step, changes production behavior, tests that step, and records the evidence.
+Only definitely completed requirements leave the mission queues; implementation
+without its required real-model/native/safety evidence remains incomplete.
+
+Model policy to finish and prove: current explicit selection wins, then the
+last-used eligible same-endpoint model, then `nvidia/nemotron-3-nano-4b` for quick
+assistance. Inventory absence/ejection does not erase memory. Actual user
+Send/Start can reuse an eligible local selection; discovery alone never loads,
+infers, or ejects. Qwen 3.5+ is the requested self-coding tier, with Qwen 3.8
+preferred for long-horizon work. Show model purpose, selection source, endpoint,
+working/waiting state and recovery actions in plain language; never silently
+replace a coding worker with the small assistant.
+
+Immediate continuation checkpoint: candidate-data routing, centered-divider
+geometry and model preference/default Send/Start integration are implemented.
+Production regressions cover remembered/disabled-profile selection, model
+selection leases, hidden-pane progression, Stop/no resurrection, restart after
+retirement, and unknown explicitly selected agentic models with real host
+budgets. The September 5 combined Debug/Release builds and aggregates passed;
+final exact build/transport results are recorded in the changelog. The operator
+requested a fresh build after this AI pass, superseding the previous executable
+hold. Native eye acceptance and the real two-compile Qwen comparison/succession
+gate remain outstanding; do not restart these foundations or claim full success.
+
+Real HTTP evidence now includes a passing warm Qwen cancellation/recovery probe
+and an independent health response, alongside the retained initial cold-load
+two-deadline failure. Model-server response latency remains material: the warm
+canary took about 85 seconds and the independent short reply 53 seconds. No
+server configuration or model ejection was changed. Next acceptance is the
+exact Release eye test and complete native candidate/successor run when native
+execution is available, not another reimplementation of these model controls.
+
 1. Exercise one complete local-model session from an ordinary-language request
    through automatic source selection, plan, exact patch, sandbox apply, build,
    validation, candidate PID/context admission, and Keep/Choose. Record the
@@ -111,9 +149,12 @@ the narrow HTTP component compile passed and the lane was released again.
    uncompleted network evidence. Qualify crash recovery for persisted identity
    grants; normal retirement alone does not prove abrupt-parent cleanup. Linux
    descriptor cleanup is implemented, but filesystem/network/IPC confinement is not.
-   The existing root-level solution, source/output-local runtime writes and
-   `.epoch/local_mcp` receipts do not fit disjoint immutable/writable grants.
-   Bind actual consumers to separate phase roots and qualify an owned immutable
+   The existing root-level solution/build layout, host logs and
+   `.epoch/local_mcp` receipts do not yet fit disjoint immutable/writable grants.
+   The current source routes candidate test/preview mutable state through a
+   fresh sibling data root; qualify all consumers and integration rather than
+   rebuilding that router. Compiler layout, host log/receipt placement and
+   enforced permissions remain separate unfinished work. Qualify an owned immutable
    MSBuild/VC/SDK/vcpkg dependency closure before enabling restricted launches.
 5. Only after the exact candidate passes those gates, stage immutable Windows
    and Linux packages, exact-file validation receipts and sidecars, then hand the

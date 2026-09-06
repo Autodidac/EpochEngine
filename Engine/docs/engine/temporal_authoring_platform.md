@@ -419,9 +419,11 @@ Tilemap/scene adds stable object identity, deterministic chunk compilation,
 selection persistence, collision artifact generation, and save/reopen/Run/Build
 agreement.
 
-## Delivery Order
+## Authoring Dependency Order
 
-The authoring dependency order follows the canonical eight-week roadmap:
+This is a dependency map, not a dated delivery plan or a list of missing systems.
+Existing implementations and their evidence must be checked before work is
+scheduled. The active pass and roadmap own current priorities:
 
 1. capability/project profile and Tier-0 scene;
 2. texture document/history/compiler/residency;
@@ -432,8 +434,10 @@ The authoring dependency order follows the canonical eight-week roadmap:
 7. integration/portability;
 8. hardening.
 
-Afterward: shared graph, material, model, procedural modeling, effects/animation,
-unified scene, collaboration, and UX refinement.
+Broader graph, material, model, procedural modeling, effects/animation, unified
+scene and collaboration work follows the roadmap. User-facing controls,
+readability, persistence and Undo/Redo travel with each current feature; they are
+not deferred until all authoring systems exist.
 
 ## Invariants
 

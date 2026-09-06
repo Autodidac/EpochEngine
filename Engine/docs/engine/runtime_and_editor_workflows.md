@@ -8,10 +8,13 @@ the same engine-owned path.
 
 - enter through the normal engine bootstrap so scripting, AI, backend setup,
   logging, capture, and project/runtime selection share one path
-- editor layout preference schema 5 uses 55/45 bottom columns and a 28% bottom
-  dock for untouched defaults. Loading schema 1-4 migrates only exact legacy
-  68/32 and 24% default values; user-adjusted divider positions remain
-  authoritative. Package Manager sizes from the live editor viewport and keeps
+- current source uses centered 50/50 bottom-column defaults and a 28% bottom
+  dock. Valid saved column ratios remain authoritative, including values that
+  once matched an older default; schema migration does not guess column intent.
+  One EpochGui geometry helper owns layout, drag and docking-preview positions;
+  resizing preserves the ratio and cancels a stale in-flight column drag.
+  Renderer-free geometry proof does not replace native resize/save-reload proof.
+  Package Manager sizes from the live editor viewport and keeps
   its action footer inside the visible dialog.
 - routed native tool panes remain independent top-level windows while dragged.
   The parent editor renders and publishes exact compatible tab-strip insertion
@@ -72,7 +75,8 @@ the same engine-owned path.
   not claim non-exportability from protected-at-rest storage alone. Static source
   credentials, bearer tokens, and plaintext archive keys never ship in the
   executable or browser bundle.
-- Site v28 is live from exact Site commit
+- Historical Site v28 verification (not current discovery or release authority):
+  the recorded Site commit was
   `1b7e0b2236c2db6cf43228a5425e9431ba11d98e`, deployment
   `appgdep_6a901ac57fc88191bbc974db18ccbdbc`, environment revision 7. Its
   owner-only `/admin` CMS uses direct Sign in with ChatGPT and never accepts a
@@ -85,17 +89,19 @@ the same engine-owned path.
   devices later use short-lived persistent-key challenge/token exchanges with
   one-use replay refusal and owner CMS revocation. Successful runtime and
   encrypted-source downloads update only anonymous aggregate artifact, asset,
-  byte-count, and last-time metrics visible to the owner. Active artifact
+  byte-count, and last-time metrics visible to the owner. The then-active artifact
   `epoch-engine-v0.89.28-8d9f9541b5f4` is a committed-tree-only Git archive of
-  `8d9f9541b5f4bc55a7295c57fb7571beae47791a`. Its live 59,726,694-byte
+  `8d9f9541b5f4bc55a7295c57fb7571beae47791a`. Its recorded 59,726,694-byte
   ciphertext hashes to
   `bade9212fc6167f73e9ce275a91737da33739d556ee8e4be38af40cf60c301be`;
   authenticated 59,726,678-byte plaintext hashes to
   `1d98e67565676bfe3af078e7e9afdaa28d418021136b4128c67ac7d25184bea5`.
-  Owner-approved live proof verifies the signed manifest, client-key binding,
+  The owner-approved proof verified the signed manifest, client-key binding,
   P-256 ECDH/HKDF unwrap, AES-256-GCM decrypt, and byte identity. Token replay
-  fails 401 and consumed authorization replay fails 400. The old artifact stays
-  inactive for rollback, and no credentials or private key material are recorded.
+  failed 401 and consumed authorization replay failed 400. That checkpoint
+  retained its predecessor for rollback and recorded no private key material.
+  Current authorities belong to `Changes/active_pass.md`; these historical
+  bytes must not be presented as the current release or re-published as new.
 - editor update checks must also prove the matching hosted build lane before
   surfacing an update: Windows waits for `windows-msvc`, Linux waits for
   `linux-clang-engine`, and pending/failing/missing job evidence withholds the
@@ -1002,7 +1008,8 @@ tabs or command surfaces.
   request/status paths with focus ownership, teardown, and evidence logging.
   Games, mobile apps, console targets, and headless tools may omit native host
   routes entirely while still using the portable `EpochGui` layout library.
-  True drag/drop redock behavior remains a later native-host movement feature.
+  Native redocking and direct tab insertion have production paths; repeated
+  transfer, input capture and backend-specific eye acceptance remain required.
 - editor context selection is an in-process handoff, not a process restart. The
   Editor Settings selector starts one state-preserving whole-editor replacement
   transaction. While the manager owns retirement, creation, restoration, and the
@@ -1394,13 +1401,15 @@ an operational campaign surface, while `60ce0032` exposes sealed patch review
 and exact approval/refusal evidence. World Outliner hierarchy is owned by
 `6deaf036`; responsive workspace routing is owned by `4cedf62b`.
 
-The host-callable MCP supervisor adapter is implemented locally but its two
-modules and three implementation/contract files are not registered, built, or
-published because shared build-metadata approval is still pending. It opens no
-transport and grants no filesystem, model, apply, promotion, or release
-authority. The source-iteration worker is blocked on missing prerequisites and
-has no committed checkpoint; the `disposable_sandbox` design is still pending.
-Neither lane is presented as working editor behavior.
+The host-callable MCP supervisor adapter is registered in the build and engine
+contract aggregate. Disposable source materialization, exact transactions,
+campaign checkpoints, retry, compiler/test dispatch and supervised candidate
+attachment have production implementations. The adapter itself opens no
+transport and grants no filesystem, model, promotion or release authority.
+The remaining acceptance is the actual model-to-two-build/choice workflow and
+candidate execution boundary, not writing those foundations again. See the
+active pass for exact evidence and blockers; component proof is not native
+editor or successful self-coding proof.
 
 Epoch runs an operator-selected external model through a local
 OpenAI-compatible endpoint or a directly selected `llama-cli`/GGUF pair. It
@@ -1500,12 +1509,13 @@ each completed generation is ingested only once. The prompt's packet sample uses
 the first exact reviewed evidence path; explicit two-literal replacements use
 exact unique reviewed search and requested replacement bytes. Packet rejection
 queues no more than two complete host-diagnosed retries over the same evidence.
-OpenAI-compatible source calls disable hidden reasoning, use the bounded
+OpenAI-compatible source calls preserve the provider's configured reasoning
+mode (no forced `reasoning_effort=none` or `/no_think`), use the bounded
 600-second source timeout, retry one failed/empty call, and keep an animated
 elapsed-time working indicator visible until the response or cancellation.
 
-submitted through the public completion path; it must come from
-`ai.development_executor`.
+Source execution completion must come from `ai.development_executor`, not
+model-written claims submitted through the public completion path.
 
 The source executor verifies operation IDs, canonical relative paths, approved
 preimages/postimages, and exact replacement bytes. It exclusively creates and
@@ -1523,8 +1533,8 @@ dispatch remains incomplete.
 Project creation, document/script changes, Save, Build, external Run, test,
 capture, and diagnostics use the existing project and evidence contracts.
 Normal chat is not captured automatically; explicit traces remain bounded
-evidence rather than training data. Source v0.89.28 claims these source
-contracts, not GUI eye proof. See
+evidence rather than training data. These are current source contracts, not
+substitute GUI eye or full self-coding acceptance proof. See
 `os_ai_tooling_and_evidence_policy.md` for the normative authority contract.
 
 ## Procedural/time-node direction
@@ -1578,14 +1588,15 @@ usable, and honest about its limits. Do not add fake controls, duplicate command
 paths, placeholder windows, or temporary UI experiments unless they preserve a
 working path and are documented with the next promotion/removal condition.
 
-Current editor-shell gaps:
+Current editor-shell integration and remaining gaps (scheduled only by the
+roadmap):
 
-- the World Outliner needs stronger grouping, clipping, and resizable columns;
-  the current compact button rows are a first cleanup pass, not the final
-  desktop-grade control
+- World, World Outliner, World Settings and the two command rows are accepted
+  for now; only a demonstrated regression makes them a current redesign target
 - the engine GUI now has reusable `tab_bar`, `scroll_text_panel`, and modal
-  focus overlay paths; selectable text is currently row-level and must grow into
-  true text-range selection/copy support
+  focus overlay paths, plus real text-range selection/copy and editing contracts.
+  Domain coverage, clipboard/input behavior and native large-file usability
+  still require integration and eye evidence
 - `tab_bar` is a real tab primitive now, not a segmented button alias. Future
   work should keep tabs visually connected to their content pane and reserve
   ordinary buttons for actions.
@@ -1596,16 +1607,14 @@ Current editor-shell gaps:
 - launcher/editor settings buttons should open modal windows with concrete
   backend, display, package, project, and AI safety controls. Modal close
   affordances should be normal top-right X controls with overlay-priority z-order.
-- Project Hub should present a basic project/game/software launcher mockup, not
-  a miniature duplicate of the editor shell.
-- World Outliner rows should show human project/entity names, type, and useful
-  grouping instead of implementation-ish labels.
+- Project Hub should remain a working project/game/software launcher, not a
+  mockup or miniature duplicate of the editor shell.
 - the AI Visualizer should eventually expose proposal/evidence graphs, scene-state diffs,
   and sampled weight/memory terrain views; it must not attempt to draw billions
   of raw parameters directly.
 - the GUI still needs broader domain context-menu coverage, resize cursors,
-  resize handles, column controls, arbitrary compatible stack creation, and
-  user tab reordering
+  resize handles, column controls and arbitrary compatible stack creation;
+  tab reordering/direct insertion already exist and need cross-host acceptance
   for desktop editor/tool builds; product targets that do not support native
   floating hosts should exclude those routes instead of carrying hidden shells
 - editor theme selection remains user-facing: `System

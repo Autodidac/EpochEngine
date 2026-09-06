@@ -1,131 +1,132 @@
 # Epoch AI Workspace
 
-Epoch integrates operator-selected external or source-available models and an
-optional verified Epoch-local Qwen3.8 installation. It does not train,
-fine-tune, silently activate, or self-modify any model.
+Epoch uses operator-selected models to assist with projects and improve Engine
+source in disposable Candidate Lab generations. It does not train models or
+silently replace live source. Local v0.89.35 remains unpublished; the active
+acceptance gate is [Changes/active_pass.md](../../Changes/active_pass.md).
 
-## Implemented
+## Model Selection And Requests
 
-- OpenAI-compatible model inventory, explicit per-session selection, and
-  asynchronous chat. The endpoint may run on an operator-managed external
-  machine while Epoch retains MCP tool authority and validation.
-- Direct `llama-cli` inference with an operator-selected GGUF, captured output,
-  timeout, cancellation, termination, and no server.
-- A pinned, operator-invoked Epoch-local installer for llama.cpp `b10516` and
-  the community `Qwen3.8-27B-UD-Q4_K_M.gguf` quantization. Exact hashes,
-  revision, model size, and executable-local receipts gate readiness.
-- Generated-project `epoch.project.ai.v1` profiles with three explicit modes:
-  Off, shared Epoch-local Qwen3.8, or an operator-managed external model
-  endpoint using the same Epoch MCP guards. New projects default to Off, copy
-  only the profile into build output, and never bundle weights.
-- One movable AI Controls pane for model consent, single-command scene/GUI
-  authoring, and guarded Engine Development; AI Chat remains a separate movable
-  conversation pane.
-- `EPOCH_AUTHORING_PLAN_V1` parsing with exactly one allowlisted semantic command
-  per approval, canonical scene inventory, stable object identity, support
-  placement, visible Apply/Discard, and persistent Play/Pause/Edit/Delete goals.
-- `EPOCH_TOOL_PLAN_V1` parsing for exactly one argument-free active-project
-  inspect, save, build, run, test, or diagnostics proposal. AI Chat `/tool`
-  keeps approval attached to the parsed response; the trusted host revalidates
-  it through the MCP registry and invokes only canonical project owners. The
-  model receives no path, native command, permit, Git, network, release, updater,
-  or self-approval authority.
-- `EPOCH_SOURCE_CONTEXT_REQUEST_V1` path validation and passive review, plus an
-  explicit Share Requested Context action that reads only the displayed UTF-8
-  files after canonical-root, unchanged-objective, and 184 KiB budget checks.
-  Exact counted contents or absent-path evidence are request-local and sent only
-  to the displayed selected endpoint; no directory scan or automatic handoff runs.
-- Strict grounded `EPOCH_SOURCE_PROPOSAL_V1` parsing. Existing-file proposals
-  require exact source evidence, while generic logger/singleton/entry rewrites,
-  placeholders, stubs, duplicate wrappers, unrelated cleanup, invented
-  architecture, and validation claims fail before staging. A deterministic
-  quality gate also rejects no-op replacements, `.ixx` textual includes,
-  destructive whole-file shrinkage, removed license/module/namespace ownership,
-  and proposals whose generic subsystem does not match the current objective.
-- AI Controls owns development objectives and read-only request/evidence detail.
-  Review, Share/Reject, and Approve/Cancel remain attached to the originating AI
-  Chat response; changing the objective invalidates previously reviewed source
-  evidence.
-- Disposable source-iteration sandboxes with digest-bound review, approval,
-  single-use permits, exact-content transactions, rollback evidence, and a
-  separate two-action verified live-source promotion transaction after Debug and
-  Release compiler plus contract-test success and a distinct HeadlessCI Debug
-  build plus asset-light run, followed by separately operator-approved full
-  project-profile, generated-child, and AI-gate validation.
-- Manual project creation, save, build, run, script build/run, diagnostics, and
-  generated-project self-test paths.
-- An operator-invoked Tool Harness that records explicit before/after evidence.
-- `ai.mcp` protocol types, bounded tool registry, capability/approval validation,
-  cancellation, budgets, and build-safe contract proof.
-  Source proposals may now contain one to four related exact-file operations in
-  one immutable generation, allowing interface/implementation/build/test changes
-  to travel together while retaining per-file preimages, one digest, and one
-  visible operator approval.
-  Malformed, ungrounded, or deterministic quality-gate failures can trigger at
-  most two host-diagnosed packet-correction requests before stopping for
-  operator refinement. These retries stage no source and cannot bypass proposal
-  review or exact digest approval.
-- `ai.iteration_session` now coordinates one typed, non-GUI source candidate
-  across a verified source authority, current-byte curated file SHA-256 values,
-  explicit context sharing, manual candidate approval, disposable execution,
-  bounded repair identity, and seven trusted Debug/Release/Headless/full-validation
-  actors. Validation evidence names the exact candidate digest. Source authority
-  resolves an explicit checkout with a readable Git identity first, then an
-  authenticated cached-source receipt, and otherwise fails visibly. In both
-  accepted cases the files actually shared are freshly hashed from current
-  bytes; neither a checkout commit nor an archive receipt claims the extracted
-  working tree stayed immutable.
-- Ambiguous host curation now returns visible `selection_required` and sends no
-  bytes. Engine Development no longer asks a model to invent source paths.
-  Live-source promotion, Git, release, network, and self-approval authority stay
-  outside the coordinator.- A contract-proven `ai.iteration_loop` risk/milestone state machine plus one
-  contained Engine Development production slice: Qwen3.8-class proposal,
-  digest approval, exact-copy sandbox application, hidden Debug and Release
-  compiler passes, build-safe engine contract tests for both configurations, a
-  distinct HeadlessCI Debug build and asset-light run, an explicitly approved
-  full engine validation, and at most three fresh-generation repairs from
-  bounded diagnostics. `Stage Live Promotion` verifies exact live and sandbox
-  evidence plus a freshly reparsed
-  identical operation set; a separate `Approve Live Promotion` rechecks and
-  atomically applies that exact source.
-- One-owner asynchronous sandbox compiler/contract, HeadlessCI, and approved
-  Diagnostics do not consume its future, apply source edits, or create training records.
+The production API supports an operator-managed OpenAI-compatible endpoint and
+an explicitly selected `llama-cli` executable/GGUF pair. A verified Epoch-local
+Qwen3.8 package is optional; installation never starts a server or inference.
+Generated-project AI profiles default to Off and never bundle model weights.
 
-## Not Implemented
+For the local API, a current explicit/configured selection wins. Otherwise Epoch
+restores an eligible endpoint-bound preference, or selects the operator-confirmed
+small default `nvidia/nemotron-3-nano-4b`. A missing inventory entry does not erase
+the selection or substitute another model. Inventory presence is not proof that
+a model is loaded or responsive.
 
-- model training, weight mutation, or automatic dataset promotion;
-- automatic/background llama.cpp or GGUF download; installation remains an
-  explicit operator-invoked action;
-- an MCP network server or hidden listener;
-- unattended autonomous iteration or chained/multi-call model tool execution;
-- additional test-suite, static-analysis, sanitizer, architecture-review,
-  visual-harness, and frontier-review host adapters for `ai.iteration_loop`;
-- autonomous patch application to live source, commit, push, or release;
-- hidden continuous development or self-building.
+Restoration and scanning do not load, infer, or eject. An actual user Send/Start
+can prepare an eligible local selection without redundant endpoint confirmation; the
+request then follows the normal transport and failure path. Remembered local
+consent does not transfer to a different or remote endpoint. Legacy model-only
+preferences can be upgraded on a user request at the original
+`http://localhost:1234` endpoint. Explicitly disabled project profiles remain Off.
 
-## Repository Layout
+Nemotron 4B is the requested quick-assistant role. Qwen 3.5+ is the requested
+self-coding tier, with Qwen 3.8 preferred for long-horizon work. Role guidance is
+not a task-success guarantee or a model-name allowlist. An unknown explicitly
+selected agentic model may attempt the same bounded workflow: actual source,
+packet, host-budget and build validation remain mandatory. The automatic or
+remembered Nemotron helper requires an explicit coding choice before a source
+request; that request retains its objective while the user selects a model.
+Choose / Change Coding Model is available directly in Engine Self-Coding.
+Queued requests retain selection leases through worker retirement and source
+reply handoff, preventing cross-context model switches during active work.
+Native role/selection UI and restart acceptance still require an eye test.
 
-- `prompts/`: tracked system prompts.
-- `evals/`: deterministic behavior and safety cases.
-- `evals/fixtures/`: explicitly reviewed non-training fixtures and expected
-  results.
-- `manifests/`: provider and MCP protocol declarations.
-- `control/continuous_build_loop.json`: legacy path retained for the headless
-  contract probe; its content defines the operator-gated planner/builder/verifier
-  policy and does not enable a continuous background loop.
+## Operator-Started Candidate Lab
 
-Local-only runtime state belongs under executable-local `cache/` and the example
-workspace:
+The automatic sandbox workflow is implemented in production, not just described
+by `ai.iteration_loop`. It does not require an operator-named subsystem, path,
+symbol, diagnostic code, or packet header:
 
-- `workspace/model_exchange.jsonl` for explicitly retained model exchanges;
-- `workspace/tool_trace.jsonl` for explicit structured tool evidence;
-- `cache/models/` for operator-managed model assets;
-- `cache/ai/` for disposable AI and iteration cache.
+1. Start with an ordinary-language objective. The model receives a path-only
+   catalog and selects a coherent working set of at most 12 canonical C++ paths.
+2. The host validates and displays that selection before reading its source.
+   Proposal requests include the actual bounded UTF-8 evidence. Local identity
+   hashing and the full buildable workspace are not extra outbound context.
+3. The model returns an exact proposal or requests a bounded context revision.
+   Host-owned preimages, digests, generation checks and transactions admit
+   changes only to the disposable sandbox. Invalid packets and verified failures
+   have bounded correction/repair budgets; cancellation does not retry.
+4. Within the operator-started lab, plan/proposal, apply, Debug/Release compiler
+   and contract checks, HeadlessCI and full validation advance automatically.
+   The separate manual one-change workflow retains its explicit review actions.
+   Neither mode accepts model-authored build or test success as evidence.
+5. A validated candidate launches as a separately supervised editor PID for
+   bottom-grid comparison. Keep Current retires the challenger. Choose Candidate
+   retains it as the next sandbox parent and continues the saved mission. Stop
+   Lab retires its owned work. Selection never promotes bytes into live source.
 
-Normal chat, build results, and tool results are not automatically captured,
-promoted, or treated as training data. Explicit harness, trace, and reviewed eval
-fixture actions own retained evidence.
+AI Controls and Detailed Session Activity own the self-coding objective,
+progress, review and host evidence. Project Assistant conversation and project
+goals are a separate workflow; an AI Chat reply is not source-edit authority.
+Selectable source inspection does not imply writable validated preview code.
 
-See
-[`os_ai_tooling_and_evidence_policy.md`](../docs/engine/os_ai_tooling_and_evidence_policy.md)
-for permissions, MCP, source context, project-operation, and Extensions rules.
+Reply consumption and automatic initial/successor planning run in the owning
+context tick, even when AI Controls is hidden or another inspector tab is active.
+Stop latches automatic progression off and requests cancellation of owned model,
+workspace, compiler, test and preview work. Restart waits for retirement, then
+retains the objective/chosen sandbox parent and mission checkpoints while
+resetting stale request/scope identity. Renderer-free production contracts cover
+these transitions; they are not native two-generation runtime evidence.
+
+The source contains exact-artifact binding, request cancellation, bounded repair,
+chosen-parent continuity and owned child-retirement checks. These implementations
+do **not** establish full end-to-end acceptance. The real-model rig must complete
+two actual accepted compiles and candidate admissions, including the successor
+after Choose; a plan, a launched worker or a synthetic receipt cannot pass it.
+
+## Remaining Acceptance And Boundaries
+
+- Complete the actual local-model/build/validation/comparison/succession run,
+  including losing-process retirement and a genuinely unfinished objective.
+- Eye-test working/elapsed/cancel state, readable actions, Keep/Choose, and
+  context/session Close while model or compiler work is pending. Existing
+  component and HTTP evidence is not native editor proof.
+- Finish real OS confinement for Candidate Lab. The current launches retain
+  the user's token. Environment replacement, private runtime-data routing,
+  transaction guards and Job Objects are not filesystem/network isolation.
+  The optional Windows restricted-child primitive is not connected to the lab;
+  network/IPC, compiler dependencies, embedded HWND compatibility and abandoned
+  permission-lease recovery remain open.
+- Keep host receipts, permits, mission lineage, other projects and live Engine
+  source outside model authority. Source promotion is a separate host-verified,
+  explicit operator transaction, never an automatic consequence of Choose.
+- Static-analysis, sanitizer, architecture, visual and frontier-review adapters
+  beyond the connected validation actors remain unimplemented. No hidden
+  listener, model training, autonomous live-source replacement, Git or release
+  authority is implied by the sandbox loop.
+
+## Project Assistance And Tooling
+
+The existing authoring and project-tool paths use allowlisted semantic commands,
+visible proposal decisions, exact active-project identity and host-owned
+execution. Project Save/Build/Run, script actions and diagnostics retain their
+own lifecycle and approval rules; they do not inherit Engine-development powers.
+MCP protocol adapters and the explicit external-agent bridge remain separate
+from inference. A registered protocol is not a running server or listener.
+
+## Source And Runtime Layout
+
+- `prompts/` contains tracked system prompts.
+- `evals/` and `evals/fixtures/` contain reviewed, non-training cases.
+- `manifests/` declares providers and tool protocols.
+- `control/continuous_build_loop.json` is the actual HeadlessCI control contract;
+  its legacy filename does not enable a hidden background loop.
+- Ordinary model preferences/assets use executable-local `cache/models/`;
+  disposable AI state uses `cache/ai/`. Explicitly retained exchanges and tool
+  traces use the configured workspace. These are not release payloads.
+- A bound candidate data root redirects its model preferences/cache, workspace,
+  configuration, logs and private Projects independently of validated code.
+  It does not import the parent editor's conversation, credentials or model
+  weights. Path routing remains distinct from the unfinished OS execution boundary.
+
+Normal chat and build results are not training data. Explicit evidence capture
+and reviewed eval fixtures own any retained records. See the
+[OS AI policy](../docs/engine/os_ai_tooling_and_evidence_policy.md) for the detailed
+contracts, [roadmap](../../Changes/roadmap.md) for scheduling and
+[mission cache](../../Changes/mission_cache.md) for unresolved operator intent.

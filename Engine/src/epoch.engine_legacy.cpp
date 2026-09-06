@@ -117,6 +117,7 @@ import context.type;
 import context.window;
 import core.context;
 import core.env;
+import core.log;
 import core.logger;
 import core.path;
 import core.time;
@@ -2843,12 +2844,18 @@ namespace epochengine::core
             "editor.ai_request_cancellation",
             epochengine::editor_ai_request_cancellation_contract());
         check(
+            "editor.ai_model_selection",
+            epochengine::editor_ai_model_selection_contract());
+        check(
             "ai.model_request_cancellation",
             epochengine::ai::model_request_cancellation_contract());
         check("ai.mcp.tool_protocol", epochengine::ai::run_mcp_contract());
         check(
             "ai.epoch_local_install",
             epochengine::ai::epoch_local_ai_install_contract());
+        check(
+            "ai.local_model_preference",
+            epochengine::ai::local_model_preference_contract());
         check(
             "ai.model_install",
             epochengine::ai::model_install::run_contract());
@@ -5253,6 +5260,10 @@ namespace epochengine::core
         constexpr std::string_view kEditorLog = "Engine.Editor";
 
 #if defined(_WIN32)
+        // Bound once before crash handlers or worker threads are installed.
+        // Crash breadcrumbs must not fall back into a validated image folder.
+        std::wstring candidate_breadcrumb_directory{};
+
         LONG WINAPI log_unhandled_windows_exception(EXCEPTION_POINTERS* exception_info) noexcept
         {
             try
@@ -5315,6 +5326,12 @@ namespace epochengine::core
         {
             try
             {
+                if (!candidate_breadcrumb_directory.empty())
+                {
+                    directory = candidate_breadcrumb_directory;
+                    directory += L"\\";
+                    return true;
+                }
                 std::wstring module_directory;
                 if (!current_module_directory_noexcept(module_directory))
                     return false;
@@ -6967,6 +6984,11 @@ namespace epochengine::core
         [[nodiscard]] std::filesystem::path project_runtime_root(
             const epochengine::EditorProjectProfile& profile)
         {
+            // Preview project identity comes only from its private project
+            // admission. An ambient override must not reopen the parent project.
+            if (!epochengine::core::path::candidate_data_root().empty())
+                return epochengine::editor_resolve_candidate_project_path(
+                    std::filesystem::path{profile.root_path});
             const auto requestedId =
                 epochengine::core::env::get("EPOCH_EDITOR_PROJECT_ID");
             const auto requestedRoot =
@@ -6985,9 +7007,15 @@ namespace epochengine::core
             const std::filesystem::path& runtimeRoot,
             std::string_view declaredPath)
         {
-            if (declaredPath.empty())
+            if (declaredPath.empty() || runtimeRoot.empty())
                 return {};
             std::filesystem::path path{declaredPath};
+            if (!epochengine::core::path::candidate_data_root().empty())
+            {
+                const auto declared = path.is_absolute() || (!path.empty() && *path.begin() == "Projects")
+                    ? path : runtimeRoot / path;
+                return epochengine::editor_resolve_candidate_project_path(declared);
+            }
             if (path.is_absolute())
                 return path.lexically_normal();
 
@@ -11486,9 +11514,52 @@ namespace urls
     const std::string source_version_url = epochengine::updater::PROJECT_SOURCE_VERSION_URL();
 }
 
-#if defined(_WIN32)
 namespace
 {
+    [[nodiscard]] bool initialize_candidate_runtime(int& argc, char** argv) noexcept
+    {
+        try
+        {
+            const auto arguments = epochengine::core::path::preflight_candidate_data_arguments(argc, argv);
+            if (!arguments.ok) return false;
+            if (arguments.option_index == 0) return true;
+            const auto root = epochengine::core::path::candidate_data_root();
+            if (root.empty()) return false;
+            const auto logs = root / "logs";
+            std::error_code error{};
+            (void)std::filesystem::create_directory(logs, error);
+            if (error) return false;
+            const auto status = std::filesystem::symlink_status(logs, error);
+            if (error || !std::filesystem::is_directory(status)
+                || std::filesystem::is_symlink(status)) return false;
+#if defined(_WIN32)
+            const auto attributes = ::GetFileAttributesW(logs.c_str());
+            if (attributes == INVALID_FILE_ATTRIBUTES
+                || (attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u) return false;
+            epochengine::core::engine::candidate_breadcrumb_directory = logs.native();
+#endif
+            epochengine::logger::LogConfig config{};
+            config.root_dir = logs;
+            epochengine::logger::init(std::move(config));
+            // The host-only startup binding has already been consumed. Keep it
+            // out of ordinary CLI parsing and source/model diagnostic packets.
+            for (int i = arguments.option_index; i + 2 <= argc; ++i)
+                argv[i] = argv[i + 2];
+            argc -= 2;
+            return true;
+        }
+        catch (...) { return false; }
+    }
+
+    int candidate_startup_failure()
+    {
+        epochengine::core::log::enable_console(true);
+        epochengine::core::log::error("Engine.Startup",
+            "Candidate data-root binding failed before editor startup; no fallback runtime was started.");
+        return 2;
+    }
+
+#if defined(_WIN32)
     void configure_unattended_windows_error_mode()
     {
         ::SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
@@ -11507,8 +11578,8 @@ namespace
         }
 #endif
     }
-}
 #endif
+}
 
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
 int WINAPI wWinMain(
@@ -11521,6 +11592,9 @@ int WINAPI wWinMain(
     UNREFERENCED_PARAMETER(lpCmdLine);
     UNREFERENCED_PARAMETER(nCmdShow);
 
+    int argc = __argc;
+    char** argv = __argv;
+    if (!initialize_candidate_runtime(argc, argv)) return candidate_startup_failure();
     configure_unattended_windows_error_mode();
 
 #if defined(_DEBUG)
@@ -11529,9 +11603,6 @@ int WINAPI wWinMain(
 
     try
     {
-        const int argc = __argc;
-        char** argv = __argv;
-
         const auto cli_result = epochengine::core::cli::parse(argc, argv);
 
         if (cli_result.version_requested && !cli_result.update_requested)
@@ -11598,6 +11669,7 @@ int main(int argc, char** argv)
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
     return wWinMain(GetModuleHandleW(nullptr), nullptr, GetCommandLineW(), SW_SHOWNORMAL);
 #else
+    if (!initialize_candidate_runtime(argc, argv)) return candidate_startup_failure();
     #if defined(_WIN32)
     configure_unattended_windows_error_mode();
     #endif

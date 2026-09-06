@@ -782,6 +782,8 @@
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_layout_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc" />

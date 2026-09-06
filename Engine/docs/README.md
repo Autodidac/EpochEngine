@@ -2,10 +2,21 @@
 
 ## Start Here
 
+Epoch is a reusable engine for software and games, with an optional editor and
+a sandboxed AI development workflow. These documents have distinct authority:
+
+| Question | Owning document |
+| --- | --- |
+| What are we doing next, and in what order? | [Roadmap](../../Changes/roadmap.md) |
+| What exact result must this pass prove? | [Active pass](../../Changes/active_pass.md) |
+| Which unresolved operator requirements must survive a handoff? | [Mission cache](../../Changes/mission_cache.md) |
+| What is already implemented and verified? | [Changelog](../../Changes/changelog.txt), source and named test evidence |
+| How do the systems fit together? | Architecture and subsystem contracts below |
+
 Epoch has one forward architecture:
 
 - `engine/capability_tier_architecture.md` - canonical product, capability,
-  renderer, resource, authoring, temporal, settings, and delivery architecture.
+  renderer, resource, authoring, temporal, settings, and dependency architecture.
 
 Its focused subordinate contracts are:
 
@@ -24,21 +35,24 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-The active objective is a playable baseline 2D project within two months:
+The immediate acceptance objective is the real local-model self-coding loop:
+plain-language request, automatic bounded context, plan and edits, sandbox
+build/test, separately supervised candidate context, Keep/Choose, then another
+actual build from the chosen sandbox. Live source and projects remain outside
+that loop. Component implementations are not proof that this entire workflow
+already works; the active pass identifies the remaining evidence.
 
-```text
-capability/project profile
--> temporal texture document and residency
--> Canvas2D compose and sprite batch
--> tilemap and scene authoring
--> input, 2D physics, audio, animation
--> Play, Run, Build, save, and reopen
-```
+Next comes a proven editor-free CLI/platform-window/GUI software base before
+broad context expansion. The same reusable foundation supports the 2D/UI,
+Properties, Timeline, scripting and playable 2D acceptance workflows. Platform
+extraction is incremental; completed subsystem foundations are reused, not
+scheduled again as new work. Exact-build release checks apply to each release,
+not only after the entire long-term roadmap is finished.
 
 Read:
 
 - `../../Changes/active_pass.md` for the current bounded gate;
-- `../../Changes/roadmap.md` for the eight-week schedule;
+- `../../Changes/roadmap.md` for the ordered remaining milestones;
 - `../../Changes/mission_cache.md` for durable follow-up;
 - `../../Changes/changelog.txt` for implementation/release history.
 
@@ -92,6 +106,12 @@ plan.
 ## Documentation Rules
 
 - Architecture states current contracts and durable invariants.
+- The roadmap alone schedules work; dependency diagrams are not duplicate
+  backlogs or promises to restart an old calendar.
+- Every pass reconciles source and evidence before selecting its next action.
+  Separate missing implementation from implemented-but-unverified behavior.
+  Remove proven completed tasks from live queues; retain their behavior in the
+  owning contract and their completion evidence in the changelog.
 - The renderer matrix states evidence, not aspiration.
 - Settings and controls are documented with the subsystem that owns them.
 - `Present` requires implementation and validation evidence.

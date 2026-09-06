@@ -289,6 +289,43 @@ if(BUILD_TESTING)
         COMMAND epoch_texture_artifact_contract
     )
     if(EPOCH_CONFIGURES_MODULE_TARGETS)
+        # Pure reusable dock geometry; no GUI host, renderer, or native window.
+        add_executable(epoch_gui_bottom_dock_contract
+            src/epochgui/gui.bottom_dock_contract.cpp)
+        target_sources(epoch_gui_bottom_dock_contract PRIVATE
+            FILE_SET epoch_gui_bottom_dock_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
+                FILES ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx)
+        epoch_apply_cxx_dialect(epoch_gui_bottom_dock_contract)
+        epoch_apply_warnings(epoch_gui_bottom_dock_contract)
+        epoch_apply_sanitizers(epoch_gui_bottom_dock_contract)
+        add_test(NAME epoch_gui_bottom_dock_contract COMMAND epoch_gui_bottom_dock_contract)
+
+        # Fresh console-only subprocesses exercise the production startup path
+        # binding without importing the editor, logger, or any renderer.
+        add_executable(epoch_core_candidate_data_contract
+            src/platform/core.path.cpp
+            src/platform/platform.child_process.cpp
+            src/platform/core.candidate_data_contract.cpp)
+        target_sources(epoch_core_candidate_data_contract PRIVATE
+            FILE_SET epoch_core_candidate_data_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.path.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.child_process.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx)
+        target_compile_definitions(epoch_core_candidate_data_contract PRIVATE
+            EPOCH_CORE_CANDIDATE_DATA_CONTRACT_MAIN=1)
+        epoch_apply_cxx_dialect(epoch_core_candidate_data_contract)
+        epoch_apply_warnings(epoch_core_candidate_data_contract)
+        epoch_apply_sanitizers(epoch_core_candidate_data_contract)
+        if(WIN32)
+            target_link_libraries(epoch_core_candidate_data_contract PRIVATE
+                shell32 userenv advapi32 bcrypt)
+        endif()
+        add_test(NAME epoch_core_candidate_data_contract
+            COMMAND epoch_core_candidate_data_contract)
+
         add_executable(epoch_platform_child_process_contract
             src/platform/platform.child_process.cpp
             src/platform/platform.child_process_contract.cpp
@@ -482,7 +519,7 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
     find_package(Threads REQUIRED)
     target_link_libraries(epoch_ai_transport_contract PRIVATE Threads::Threads)
     if(WIN32)
-        target_link_libraries(epoch_ai_transport_contract PRIVATE winhttp)
+        target_link_libraries(epoch_ai_transport_contract PRIVATE winhttp shell32)
     else()
         find_package(CURL REQUIRED)
         target_link_libraries(epoch_ai_transport_contract PRIVATE CURL::libcurl)
@@ -2608,7 +2645,7 @@ if(BUILD_TESTING)
     epoch_apply_warnings(epoch_script_compiler_contract)
     epoch_apply_sanitizers(epoch_script_compiler_contract)
     if(WIN32)
-        target_link_libraries(epoch_script_compiler_contract PRIVATE userenv advapi32 bcrypt)
+        target_link_libraries(epoch_script_compiler_contract PRIVATE shell32 userenv advapi32 bcrypt)
     endif()
     add_test(
         NAME epoch_script_compiler_contract
@@ -2848,7 +2885,7 @@ target_compile_definitions(epoch PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(epoch PRIVATE comdlg32 ncrypt userenv advapi32 bcrypt)
+    target_link_libraries(epoch PRIVATE shell32 comdlg32 ncrypt userenv advapi32 bcrypt)
 endif()
 
 if(WIN32 AND EPOCH_DIRECTX_ACTIVE)

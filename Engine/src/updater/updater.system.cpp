@@ -609,6 +609,12 @@ namespace epochengine::updater
 
         [[nodiscard]] inline std::filesystem::path runtime_cache_root()
         {
+            // The explicit candidate data root outranks ambient updater paths.
+            // This routes storage only; it does not authorize an update.
+            if (const auto candidateData = epochengine::core::path::candidate_data_root();
+                !candidateData.empty())
+                return ensure_directory(candidateData / CACHE_ROOT_SUBDIR());
+
             std::error_code ec;
             auto root = env_path("EPOCH_UPDATER_CACHE_ROOT");
             if (!root.empty())

@@ -40,7 +40,9 @@ context replacement is a single serialized transaction:
 6. restore the captured state;
 7. acknowledge one restored frame before another replacement may begin.
 
-The primary editor surface cannot be undocked. Secondary contexts are reserved
+On the implemented Windows host, physical renderer surfaces can undock/redock
+without transferring logical active-editor authority. Backend-specific ownership
+and unsupported-host restrictions still apply. Secondary contexts are reserved
 for explicitly requested diagnostics, previews, and floating tool surfaces;
 they are not cloned editors and must not continue rendering after closure.
 Multicontext mode is a diagnostic topology, not the normal editor or a source
@@ -55,10 +57,11 @@ transaction.
 
 The established scene and GUI draw model is protected:
 
-1. acquire the frame and drain scene submissions;
-2. render the scene through the active backend;
-3. compose EpochGui menus, tool windows, modal layers, and diagnostics above it;
-4. present exactly once.
+Preserve each backend's existing frame acquisition, GUI preparation, scene
+submission/drain, top-layer GUI replay and single-present path. Some GUI work is
+prepared or batched before the scene and replayed above it; this document does
+not prescribe moving all GUI execution after scene rendering. The detailed
+ordering guardrails are owned by `gui_library_architecture.md` and each backend.
 
 Backends must not perform a second clear or present, mutate native windows from
 an unowned thread, replay GUI below scene content, or keep backend work alive
@@ -177,9 +180,8 @@ Implement the following small responsibilities through the existing owners:
    fence/activation/proxy cleanup stays in its adapter.
 
 The current Windows `AddExternalProcessWindow` verifies that the HWND belongs
-to the supplied PID, then marks its host entry ready with a presentation
-generation. That is placement bookkeeping, not proof of a rendered candidate.
-The migration must separate attachment evidence from child-reported readiness
+to the supplied PID and records attachment/lifecycle readiness without inventing
+presentation counters. Attachment is separate from child-reported readiness
 and actual frame/capture evidence. An externally hosted candidate keeps its own
 executable, runtime, backend, and process-local resources; it is not an in-process
 clone of the parent editor. Linux currently rejects external-window attachment
@@ -224,7 +226,8 @@ owned windows, library proxies, and admitted external surfaces:
   labels and selected-target descriptions. Test narrow docks, large scaling,
   long titles, and missing-glyph fallback. Do not render opaque technical route
   identifiers or blank/icon-only controls as the user's sole instruction.
-- Keep the primary-editor undock rule and backend-specific proxy restrictions.
+- Keep logical editor authority independent of physical dock state and preserve
+  backend-specific proxy/undocking restrictions.
   Do not convert a floating tool into an editor context or reparent a backend
   window from the wrong thread merely to make a guide appear responsive.
 

@@ -117,6 +117,8 @@ export namespace epochengine::ai::iteration
 
     struct ModelCapabilities final
     {
+        // Optional caller-reported model properties, not proof of skill or
+        // permission. A selected model name alone leaves every property unknown.
         std::string model_name{};
         std::uint32_t context_tokens{};
         bool code_generation{};
@@ -137,6 +139,8 @@ export namespace epochengine::ai::iteration
         bool require_sanitizer{true};
         bool require_local_self_review{true};
         bool require_visual_validation{};
+        // Host-owned source-request ceiling, never inferred from a model name.
+        std::uint32_t host_context_budget_tokens{65'536u};
     };
 
     struct CapabilityAssessment final
@@ -147,6 +151,12 @@ export namespace epochengine::ai::iteration
         bool operator_approval_required{true};
         bool architecture_review_required{};
         bool frontier_review_required{};
+
+        [[nodiscard]] constexpr bool may_attempt() const noexcept
+        {
+            return disposition == CapabilityDisposition::eligible
+                || disposition == CapabilityDisposition::recommend_stronger_model;
+        }
     };
 
     struct MilestoneEvidence final
@@ -266,6 +276,8 @@ export namespace epochengine::ai::iteration
         return "unknown";
     }
 
+    // Compatibility entry point: retains the selected identity but does not
+    // manufacture model context size, tool support or coding skill from its name.
     [[nodiscard]] ModelCapabilities infer_model_capabilities(
         std::string_view model_name);
 

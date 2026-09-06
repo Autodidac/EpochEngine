@@ -1,5 +1,71 @@
 ## [Unreleased] - v0.89.35
 
+- September 5 AI usability/continuity checkpoint: finish endpoint-bound model
+  memory/default selection in actual Send/Start and detached Chat. Retain
+  selected/ejected models across empty inventory; disabled project profiles
+  cannot recreate an approved client. A remembered/default Nemotron assistant
+  requires an explicit coding choice. Expose coding model settings in the
+  self-coding pane. Unknown selected model names no longer fabricate capability
+  evidence or cause a hard refusal; independent host context, exact source,
+  patch, compiler and validation requirements remain enforced.
+- Move completed model reply consumption and automatic initial/successor
+  planning to the context tick so hidden AI Controls does not stall work.
+  Stop latches automatic progression off and cancels owned model/workspace/
+  compiler/test/preview work. Restart waits for retirement and preserves the
+  chosen sandbox parent, objective and saved plan while dropping stale request
+  identity. Add production-helper regressions for hidden-pane progression,
+  no resurrection, six busy/retiring states, unknown models and stale replies.
+- Protect cross-context model selection with explicit deferred/worker/reply-
+  handoff/MCP lifetime leases, not unsynchronized reads of another context's
+  state. Allocate MCP ownership before launch, adopt fresh handles immediately,
+  retain failed launch/stop releases, and never stop a borrowed busy handle.
+- Separate candidate Editor writable state using its validated private data
+  root: startup logs, preferences, cache, project/template output and captures
+  no longer default to validated executable/source locations. Core path
+  preflight preserves ordinary CRT arguments; candidate paths reject aliases
+  and invalid ancestry. This is routing, not OS filesystem/network confinement.
+  New renderer-free subprocess contracts cover candidate-root handling.
+- Center new/reset Output/AI Chat dividers through one reusable EpochGui
+  geometry helper, preserve valid saved ratios, and cancel stale drag coordinates
+  on resize. Actual dock layout, drag and preview calculations share the helper;
+  the independent bottom-dock geometry contract passes.
+- Final Windows Debug and Release EpochEditor builds and both waited
+  --engine-contract-self-test runs pass, including model preference/selection,
+  iteration loop/session and development-panel regressions. Release software-
+  base CTest passes 11/11 in 2.73 seconds. Source naming passes 593 files;
+  diff checks pass. Existing duplicate-logger/optimization override warnings
+  remain. Exact Release EpochEditor.exe: 12,928,000 bytes, SHA-256
+  ea49f941e84540f233bb4185885cb2bb71158c4bd365dff897205b5268408abe.
+- Real production HTTP probe against localhost:1234 qwen/qwen3.8-27b:
+  first run 21:17-21:21 cancelled request A after dispatch in under 1 ms,
+  but B exhausted two 120-second response deadlines (exit 1). Preserve that
+  failure. LM Studio recorded a 240000-token load and 35 offloaded layers;
+  later inventory reported a loaded instance with 120064 context per slot.
+  No model settings/ejection were performed. One repeat after that loaded-state
+  observation passed at 21:27:27 (exit 0): A cancelled after actual send, B
+  returned its exact canary independently of A's stopped token. An independent
+  256-token HTTP health request returned EPOCH_HEALTH_OK in 53.22 seconds.
+  These synthetic requests sent no source or project bytes. No transport probe
+  remained afterward. This proves HTTP cancellation/recovery, not server-side
+  generation stop, GUI/PID comparison, sandbox confinement or two-build Qwen
+  succession. Native editor launch remains tool-blocked; v0.89.35/publication
+  and the stable baseline remain held.
+
+- Reconcile the planning/documentation authorities with current operator intent:
+  real Qwen sandbox build/choice/succession first, current editor-free software
+  base next, usable editor/project workflows, then incremental platform/backend
+  expansion. Releases gate each accepted milestone rather than the entire
+  deferred backlog. Remove the obsolete competing eight-week/two-month plan
+  from entrypoints and architecture; retain the playable 2D acceptance contract.
+  Distinguish implemented-but-unverified behavior from missing implementation;
+  completed evidence stays in history and each active pass retains its exact
+  next action. Correct obsolete MCP-registration/sandbox, text selection/tab
+  reordering, physical undocking, attachment-presentation and provider-reasoning
+  statements against current source. Record model memory/default/role and
+  centered-divider requirements without claiming their native acceptance.
+  Documentation diff checks and 32 local Markdown link paths pass. No native
+  self-coding acceptance, new release or stable-branch advancement is claimed.
+
 - Bind HeadlessCI's explicit root argument to exactly that candidate directory.
   A missing/invalid control contract no longer falls back to a valid parent
   checkout, and candidate validation does not depend on Changes/roadmap.md.

@@ -80,7 +80,7 @@ namespace epochengine::ai::iteration_session
             if (!twelve.accepted || twelve.files.size() != kMaximumCuratedFiles
                 || !twelveSession.configure(SessionConfiguration{
                     .objective = "Inspect a model-selected twelve-file source context.",
-                    .model_name = "Qwen3.8-27B",
+                    .model_name = "operator/future-agentic-model",
                     .source = source,
                     .curated_files = twelve.files,
                     .policy = CandidatePolicy::manual_each_candidate,
@@ -105,7 +105,7 @@ namespace epochengine::ai::iteration_session
             }
             if (!session.configure(SessionConfiguration{
                     .objective = "Strengthen the bounded AI contract.",
-                    .model_name = "Qwen|3.8\n27B",
+                    .model_name = "operator/future|agentic\nmodel",
                     .source = source,
                     .curated_files = inspected.files,
                     .policy = CandidatePolicy::manual_each_candidate,
@@ -171,7 +171,8 @@ namespace epochengine::ai::iteration_session
                 && report.resume_requires_revalidation
                 && session.serialize_report().find(
                     "schema=epoch.ai.iteration.report.v1") != std::string::npos
-                && session.serialize_report().find("model=Qwen%7c3.8%0a27B")
+                && report.model_name == "operator/future|agentic\nmodel"
+                && session.serialize_report().find("model=operator/future%7cagentic%0amodel")
                     != std::string::npos
                 && session.serialize_report().find(
                     "Trusted%7cvalidation%0aactor") != std::string::npos;

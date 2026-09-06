@@ -23,9 +23,13 @@
   explicitly about those artifacts. Common generated/local paths include
   `build/`, `x64/`, `Engine/Bin/`, `Engine/build/`, `Engine/built/`, logs,
   captures, and generated `Projects/` output.
-- Runtime cache buckets are executable-local and disposable:
+- Ordinary runtime cache buckets are executable-local and disposable:
   `cache/updates/`, `cache/packages/`, `cache/models/`, and `cache/atlases/`.
-  They are not public release payload and not tracked source.
+  Candidate Editor test/preview children bind mutable state to their explicit
+  private `--candidate-data-root`; compiler and HeadlessCI requests retain their
+  separate environment/argument handling. Assets and validated executable inputs
+  keep their own paths. Path routing is not OS confinement. Neither form is public release
+  payload or tracked source.
 - Keep `addons/` local/offline. It is staged research material, not online repo
   content by default.
 - Screenshot proof is additive. New README proof goes under `Images/readme/`
@@ -245,6 +249,16 @@
   Read `Changes/roadmap.md` only for broader context or durable follow-up
   placement. Use `Changes/mission_cache.md` only after identifying the current
   gate; it is long-term memory, not permission to widen the pass.
+- Work from one plan: the roadmap owns product ordering, the active pass owns
+  the next bounded acceptance result, mission cache preserves unresolved operator
+  intent, and subsystem docs own behavior. Do not restart an old dated plan from
+  a README or treat a historical implementation note as a new mission.
+- Before choosing work, distinguish missing implementation, implemented but
+  unverified integration, and proven completion. Reuse completed production
+  systems; test and repair their unfinished acceptance instead of rebuilding
+  them. Record the exact next action, evidence gap and stop condition in the
+  active pass. Move definitely completed tasks to the changelog, while retaining
+  enduring architecture/safety rules in their owning documents.
 - The active pass owns the current source gate. Implement/refactor production
   C++ first, build/test what changed, then record only new/completed systems
   and changed contracts.

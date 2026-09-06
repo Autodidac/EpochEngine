@@ -33,6 +33,7 @@ module;
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -488,13 +489,13 @@ namespace epochengine
         EditorWorkspaceTab workspace_tab{ EditorWorkspaceTab::Output };
         EditorWorkspaceTab dock_status_tab{ EditorWorkspaceTab::Output };
         std::uint8_t main_surface{ 0 };
-        float bottom_grid_split{ 0.55f };
+        float bottom_grid_split{ 0.50f };
         float outliner_split{ 0.20f };
         float inspector_split{ 0.22f };
         float dock_split{ 0.28f };
         std::array<float, 9> workspace_bottom_grid_splits{
-            0.55f, 0.55f, 0.55f, 0.55f, 0.55f,
-            0.55f, 0.55f, 0.55f, 0.55f
+            0.50f, 0.50f, 0.50f, 0.50f, 0.50f,
+            0.50f, 0.50f, 0.50f, 0.50f
         };
         std::array<float, 9> workspace_dock_splits{
             0.28f, 0.28f, 0.28f, 0.28f, 0.28f,
@@ -543,6 +544,11 @@ namespace epochengine
     export bool editor_run_script(const core::Context* ctx, std::string_view script_name);
     export [[nodiscard]] EditorProjectAdmissionResult
         editor_admit_project_manifest(std::string_view manifest_path);
+    // Candidate-only mutable project path. Ordinary processes and rejected
+    // paths return empty; immutable Engine resource lookup is separate.
+    export [[nodiscard]] std::filesystem::path editor_resolve_candidate_project_path(
+        const std::filesystem::path& requested,
+        bool allow_root = false);
     export [[nodiscard]] std::span<const EditorProjectProfile> editor_project_profiles() noexcept;
     export [[nodiscard]] const EditorProjectProfile& editor_default_project_profile() noexcept;
     export [[nodiscard]] const EditorProjectProfile* editor_find_project_profile(std::string_view project_id) noexcept;
@@ -644,4 +650,5 @@ namespace epochengine
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();
     export [[nodiscard]] bool editor_ai_request_cancellation_contract() noexcept;
+    export [[nodiscard]] bool editor_ai_model_selection_contract() noexcept;
 }

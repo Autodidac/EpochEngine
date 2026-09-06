@@ -15,8 +15,9 @@ windows should compose shared GUI primitives from the same layer.
 - Backend replay consumers: renderer/context code that drains deferred GUI
   batches after scene rendering
 
-Source `v0.89.28` documents the current portable/controller composition. The
-published `v0.89.06` packaged runtime and updater remain sealed. Source and
+This document describes current local portable/controller composition. Release
+authorities and immutable history are recorded in `Changes/active_pass.md` and
+the changelog, not independently versioned by this architecture. Source and
 contract integration below does not claim GUI screenshots, responsiveness, or
 operator eye proof.
 
@@ -585,9 +586,11 @@ placement requests; scene views and main document tabs are never ordinary
 tool-dock payloads. Logical active-editor authority does not pin its physical
 renderer context to a grid side. Exact tool routes retain native popout/redock,
 with host guide projection and remembered-group restoration. Old generic Floating
-GUI proof routes are infrastructure only. The next safe conversion batch is modal
-sizing/action rows, closable panels with scroll bodies, text adapter integration,
-and Package Manager action rows before touching top-layer menu composition.
+GUI proof routes are infrastructure only. Modal/action sizing, scroll bodies,
+text adapters and Package Manager rows have production consumers; their remaining
+integration, narrow/high-DPI and native interaction evidence belongs to the
+roadmap. Do not recreate those controls from this older conversion sequence or
+touch protected top-layer composition to compensate for an untested layout.
 
 Floating/native GUI hosts are optional integration features, not required
 `EpochGui` payload. Games, mobile apps, console targets, headless tools, and
@@ -709,7 +712,8 @@ not a second editor shell, and not the context-selection UI. Its contract is:
   an empty bottom group collapses and the occupied group consumes the available
   width. Restore is schema-bounded; malformed files fall back to application
   defaults, and writes use same-filesystem atomic replacement. User
-  tab reordering and arbitrary compatible stack creation remain follow-up work.
+  tab reordering/direct insertion have production controllers; arbitrary
+  compatible stack creation and native integration coverage remain follow-up.
 - The session loop refreshes GUI/font upload state for the routed context before
   its first routed panel frame. Font corruption after spawning a pane means the
   route did not receive an isolated atlas upload and must fail validation.
