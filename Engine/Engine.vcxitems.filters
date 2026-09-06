@@ -1101,6 +1101,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.child_process.ixx">
       <Filter>Module Files\epochengine\core\platform</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.work_admission.ixx">
+      <Filter>Module Files\epochengine\core\platform</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx">
       <Filter>Module Files\epochengine\core\platform</Filter>
     </ClCompile>
@@ -1210,6 +1213,9 @@
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </ClInclude>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process.cpp">
+      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission.cpp">
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process_contract.cpp">
@@ -1938,6 +1944,9 @@
       <Filter>Source Files\epochengine\editor</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp">
+      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission_contract.cpp">
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp">

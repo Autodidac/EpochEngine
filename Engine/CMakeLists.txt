@@ -289,6 +289,55 @@ if(BUILD_TESTING)
         COMMAND epoch_texture_artifact_contract
     )
     if(EPOCH_CONFIGURES_MODULE_TARGETS)
+        # Pure resource/cooldown admission; synthetic observations, no runtime
+        # launch, sleeps, model requests, or renderer initialization.
+        add_executable(epoch_platform_work_admission_contract
+            src/platform/platform.work_admission.cpp
+            src/platform/platform.work_admission_contract.cpp)
+        target_sources(epoch_platform_work_admission_contract PRIVATE
+            FILE_SET epoch_platform_work_admission_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.work_admission.ixx)
+        epoch_apply_cxx_dialect(epoch_platform_work_admission_contract)
+        epoch_apply_warnings(epoch_platform_work_admission_contract)
+        epoch_apply_sanitizers(epoch_platform_work_admission_contract)
+        add_test(NAME epoch_platform_work_admission_contract
+            COMMAND epoch_platform_work_admission_contract)
+
+        # CPU-only scheduler proof belongs in the lightweight component lane too.
+        add_executable(epoch_editor_task_scheduler_contract
+            src/core.log.cpp
+            src/core.time.cpp
+            src/editor/systems/editor.task_scheduler_contract.cpp
+        )
+        target_sources(epoch_editor_task_scheduler_contract PRIVATE
+            FILE_SET epoch_editor_task_scheduler_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.logger.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.mpmc_bounded_queue.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.engine.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems.registry.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems.task.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/taskgraph.dotsystem.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor.task_scheduler.ixx
+        )
+        target_include_directories(epoch_editor_task_scheduler_contract PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
+        target_compile_definitions(epoch_editor_task_scheduler_contract PRIVATE
+            EPOCH_EDITOR_TASK_SCHEDULER_CONTRACT_MAIN=1
+        )
+        epoch_apply_cxx_dialect(epoch_editor_task_scheduler_contract)
+        epoch_apply_warnings(epoch_editor_task_scheduler_contract)
+        epoch_apply_sanitizers(epoch_editor_task_scheduler_contract)
+        add_test(
+            NAME epoch_editor_task_scheduler_contract
+            COMMAND epoch_editor_task_scheduler_contract
+        )
+
         # Pure reusable dock geometry; no GUI host, renderer, or native window.
         add_executable(epoch_gui_bottom_dock_contract
             src/epochgui/gui.bottom_dock_contract.cpp)
@@ -789,6 +838,7 @@ set(EPOCH_SOURCES
     src/renderers/platform/platform.context_epoch.cpp
     src/platform/platform.child_process.cpp
     src/platform/platform.window.cpp
+    src/platform/platform.work_admission.cpp
     src/render.graph_epoch.cpp
     src/epoch.systems.cpp
     src/epoch.main.cpp
@@ -2781,38 +2831,6 @@ if(BUILD_TESTING)
         COMMAND epoch_editor_authoring_history_contract
     )
 
-    add_executable(epoch_editor_task_scheduler_contract
-        src/core.log.cpp
-        src/core.time.cpp
-        src/editor/systems/editor.task_scheduler_contract.cpp
-    )
-    target_sources(epoch_editor_task_scheduler_contract PRIVATE
-        FILE_SET epoch_editor_task_scheduler_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.log.ixx
-                ${EPOCH_MODULE_DIR}/core.time.ixx
-                ${EPOCH_MODULE_DIR}/core.logger.ixx
-                ${EPOCH_MODULE_DIR}/core.mpmc_bounded_queue.ixx
-                ${EPOCH_MODULE_DIR}/platform.engine.ixx
-                ${EPOCH_MODULE_DIR}/systems.registry.ixx
-                ${EPOCH_MODULE_DIR}/systems.task.ixx
-                ${EPOCH_MODULE_DIR}/taskgraph.dotsystem.ixx
-                ${EPOCH_MODULE_DIR}/editor.task_scheduler.ixx
-    )
-    target_include_directories(epoch_editor_task_scheduler_contract PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-    target_compile_definitions(epoch_editor_task_scheduler_contract PRIVATE
-        EPOCH_EDITOR_TASK_SCHEDULER_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_editor_task_scheduler_contract)
-    epoch_apply_warnings(epoch_editor_task_scheduler_contract)
-    epoch_apply_sanitizers(epoch_editor_task_scheduler_contract)
-    add_test(
-        NAME epoch_editor_task_scheduler_contract
-        COMMAND epoch_editor_task_scheduler_contract
-    )
 
     if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_NODE_EDITOR)
         add_executable(epoch_authoring_task_graph_contract

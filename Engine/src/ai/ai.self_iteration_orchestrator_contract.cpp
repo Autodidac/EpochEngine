@@ -219,6 +219,30 @@ namespace epochengine::ai::self_iteration_orchestrator
                     fs::remove_all(root, ec);
                     return false;
                 }
+                const auto beforeRejectedReceipt = restarted.snapshot();
+                for (const std::string& malformedSummary : {
+                    std::string(2049u, 'x'), std::string(4097u, 'x'),
+                    std::string{"bad\0summary", 11u}})
+                {
+                    const auto refusedSummary = restarted.record_validation(
+                        receipt(*requested.pending_operation, now + 13u),
+                        std::string(64u, '4'), malformedSummary, false);
+                    const auto afterRejectedReceipt = restarted.snapshot();
+                    if (refusedSummary
+                        || afterRejectedReceipt.generation != beforeRejectedReceipt.generation
+                        || afterRejectedReceipt.state_sha256 != beforeRejectedReceipt.state_sha256
+                        || afterRejectedReceipt.phase != beforeRejectedReceipt.phase
+                        || afterRejectedReceipt.pending_operation_id
+                            != beforeRejectedReceipt.pending_operation_id
+                        || afterRejectedReceipt.validation_index != 0u
+                        || !afterRejectedReceipt.campaign.session.validation.empty())
+                    {
+                        fs::remove_all(root, ec);
+                        return false;
+                    }
+                }
+                // The valid receipt immediately below must still be accepted:
+                // rejected outer descriptions cannot consume the inner actor.
             }
             current = restarted.record_validation(
                 receipt(*requested.pending_operation, now + 13u + index * 2u),

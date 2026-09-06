@@ -91,6 +91,52 @@ namespace epochengine::editor_tasks
                 && pruned.completedCount == 2u;
         }
 
+        [[nodiscard]] bool activity_accounting_contract()
+        {
+            Scheduler scheduler{{
+                .worker_count = 1u,
+                .retained_finished_nodes = 8u}};
+            const auto idle = scheduler.activity();
+            if (idle.worker_count != 1u || idle.idle_workers != 1u
+                || idle.has_work() || idle.running_tasks != 0u
+                || idle.queued_tasks != 0u || idle.waiting_tasks != 0u)
+                return false;
+
+            std::promise<void> startedPromise{};
+            auto started = startedPromise.get_future();
+            std::promise<void> releasePromise{};
+            auto release = releasePromise.get_future().share();
+            auto running = scheduler.submit(
+                "Activity running worker", [&startedPromise, release]
+                {
+                    startedPromise.set_value();
+                    release.wait();
+                });
+            started.wait();
+            auto queued = scheduler.submit_cancellable(
+                "Activity queued task", [](std::stop_token) {});
+            const auto busy = scheduler.activity();
+            const bool busyMatches = busy.worker_count == 1u
+                && busy.idle_workers == 0u && busy.running_tasks == 1u
+                && busy.queued_tasks == 1u && busy.waiting_tasks == 0u
+                && busy.outstanding_tasks == 2u && busy.has_work();
+            const auto cancellation = scheduler.cancel(queued.cancellation);
+            const auto afterCancel = scheduler.activity();
+            const bool cancellationMatches = cancellation == taskgraph::CancelCode::cancelled
+                && afterCancel.running_tasks == 1u && afterCancel.queued_tasks == 0u
+                && afterCancel.outstanding_tasks == 1u && afterCancel.idle_workers == 0u;
+            // Always release the running task before an assertion can return:
+            // scheduler destruction drains its owned jobs rather than abandoning them.
+            releasePromise.set_value();
+            running.get();
+            scheduler.graph().WaitAll();
+            const auto finished = scheduler.activity();
+            return busyMatches && cancellationMatches
+                && finished.worker_count == 1u && finished.idle_workers == 1u
+                && finished.running_tasks == 0u && finished.queued_tasks == 0u
+                && finished.waiting_tasks == 0u && !finished.has_work();
+        }
+
         [[nodiscard]] bool future_exception_contract()
         {
             Scheduler scheduler{{
@@ -326,6 +372,7 @@ namespace epochengine::editor_tasks
     {
         return invalid_limits_contract()
             && submission_contract()
+            && activity_accounting_contract()
             && future_exception_contract()
             && timing_contract()
             && cancellation_contract()

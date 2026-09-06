@@ -51,6 +51,36 @@ export namespace epochengine::editor_tasks
         bool pruned{};
     };
 
+    // Worker lifetime is not task activity: the pool waits for work between
+    // submissions and remains owned by its editor context until teardown.
+    struct ActivitySnapshot final
+    {
+        std::size_t worker_count{};
+        std::size_t idle_workers{};
+        std::size_t running_tasks{};
+        std::size_t queued_tasks{};
+        std::size_t waiting_tasks{};
+        std::size_t outstanding_tasks{};
+
+        [[nodiscard]] bool has_work() const noexcept
+        {
+            return outstanding_tasks != 0u;
+        }
+    };
+
+    [[nodiscard]] inline ActivitySnapshot activity_snapshot(
+        const taskgraph::GraphSnapshot& graph) noexcept
+    {
+        return {
+            .worker_count = graph.workerCount,
+            .idle_workers = graph.runningCount < graph.workerCount
+                ? graph.workerCount - graph.runningCount : 0u,
+            .running_tasks = graph.runningCount,
+            .queued_tasks = graph.queueCount,
+            .waiting_tasks = graph.pendingCount,
+            .outstanding_tasks = graph.outstandingCount};
+    }
+
     class TaskCancelled final : public std::runtime_error
     {
     public:
@@ -286,6 +316,11 @@ export namespace epochengine::editor_tasks
                 taskgraph::TaskGraph::MaxSnapshotNodes) const
         {
             return graph_.Snapshot(maximum_nodes);
+        }
+
+        [[nodiscard]] ActivitySnapshot activity() const
+        {
+            return activity_snapshot(graph_.Snapshot(0u));
         }
 
         [[nodiscard]] taskgraph::TaskGraph& graph() noexcept

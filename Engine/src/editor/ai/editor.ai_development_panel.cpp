@@ -1762,6 +1762,78 @@ namespace epochengine::editor_ai_development_panel
             return core::sha256::hex(core::sha256::hash(text));
         }
 
+        // Receipts contain bounded descriptions; their digest always binds the
+        // complete host evidence. Keep the first causal diagnostic even when
+        // a compiler's verbose output would otherwise crowd it out of a tail.
+        [[nodiscard]] static std::string bounded_host_validation_evidence(
+            const std::string_view evidence, const std::size_t maximumBytes)
+        {
+            std::string text{evidence};
+            std::replace(text.begin(), text.end(), '\0', '?');
+            if (text.size() <= maximumBytes)
+                return text;
+
+            const auto prefix = [](std::string_view value, std::size_t count)
+            {
+                count = (std::min)(count, value.size());
+                while (count > 0u && count < value.size()
+                    && (static_cast<unsigned char>(value[count]) & 0xc0u) == 0x80u)
+                    --count;
+                return value.substr(0u, count);
+            };
+            std::string_view firstError{};
+            std::string_view wrapperError{};
+            std::string_view remaining{text};
+            while (!remaining.empty())
+            {
+                const auto end = remaining.find('\n');
+                const auto line = remaining.substr(0u, end);
+                if (line.find(": error ") != std::string_view::npos
+                    || line.find("error:") != std::string_view::npos
+                    || line.find("fatal error") != std::string_view::npos)
+                {
+                    if (line.find("MSB4181") == std::string_view::npos)
+                    {
+                        firstError = line;
+                        break;
+                    }
+                    if (wrapperError.empty()) wrapperError = line;
+                }
+                if (end == std::string_view::npos) break;
+                remaining.remove_prefix(end + 1u);
+            }
+            if (firstError.empty()) firstError = wrapperError;
+
+            std::string result;
+            result.reserve(maximumBytes);
+            const auto append = [&](std::string_view part)
+            {
+                result += prefix(part, maximumBytes - result.size());
+            };
+            append(epochengine::format_text("Host evidence: {} bytes; SHA-256 {}.\n",
+                evidence.size(), digest_text(evidence)));
+            if (!firstError.empty())
+            {
+                append("First compiler diagnostic: ");
+                append(prefix(firstError, (std::min)(std::size_t{1024u}, maximumBytes / 3u)));
+                append("\n");
+            }
+            constexpr std::string_view omitted{"\n[Bounded excerpt; full host logs are retained.]\n"};
+            const auto available = maximumBytes - result.size();
+            if (available <= omitted.size())
+                return result;
+            const auto bodyBudget = available - omitted.size();
+            append(prefix(text, bodyBudget / 3u));
+            append(omitted);
+            const auto tailBudget = maximumBytes - result.size();
+            auto tailStart = text.size() - (std::min)(text.size(), tailBudget);
+            while (tailStart < text.size()
+                && (static_cast<unsigned char>(text[tailStart]) & 0xc0u) == 0x80u)
+                ++tailStart;
+            append(std::string_view{text}.substr(tailStart));
+            return result;
+        }
+
         [[nodiscard]] static std::string_view campaign_phase_name(
             const ai::self_iteration_orchestrator::Phase phase) noexcept
         {
@@ -2853,38 +2925,36 @@ namespace epochengine::editor_ai_development_panel
                 return true;
             const auto snapshot = campaign_orchestrator->snapshot();
             if (snapshot.phase != Phase::awaiting_validation_result)
-                return true;
+                return reject_validation_completion(output,
+                    "Trusted validation completion refused because the campaign is not awaiting this result.");
             if (!campaign_pending_operation
                 || campaign_pending_operation->kind()
                     != OperationKind::trusted_validation
                 || campaign_pending_operation->validation_actor()
                     != expectedActor)
             {
-                status_message =
-                    "Trusted validation completion refused because it does not match the current digest-bound campaign actor.";
-                output.status = status_message;
-                return false;
+                return reject_validation_completion(output,
+                    "Trusted validation completion refused because it does not match the current digest-bound campaign actor.");
             }
 
             const auto pending = *campaign_pending_operation;
             auto recorded = campaign_orchestrator->record_validation(
                 campaign_receipt(pending, now),
                 digest_text(summary),
-                std::string{summary},
+                bounded_host_validation_evidence(summary,
+                    ai::self_iteration_orchestrator::Limits{}.maximum_summary_bytes),
                 succeeded);
             const bool accepted = static_cast<bool>(recorded);
             capture_campaign_result(output, std::move(recorded));
             if (!accepted)
-                return false;
+                return reject_validation_completion(output, status_message);
             if (succeeded
                 && campaign_orchestrator->snapshot().phase
                     == Phase::awaiting_validation_request
                 && !request_next_campaign_validation(output, now))
             {
-                status_message =
-                    "The completed validation was recorded, but the next trusted actor could not be requested.";
-                output.status = status_message;
-                return false;
+                return reject_validation_completion(output,
+                    "The completed validation was recorded, but the next trusted actor could not be requested.");
             }
             return true;
         }
@@ -3432,6 +3502,20 @@ namespace epochengine::editor_ai_development_panel
             output.candidate_decision = CandidateDecision::stop_lab;
             output.retire_candidate_preview = true;
             return output;
+        }
+
+        [[nodiscard]] bool reject_validation_completion(
+            RenderResult& output, const std::string_view diagnostic)
+        {
+            const std::string reason = "Host validation receipt rejected: "
+                + bounded_host_validation_evidence(diagnostic, 1024u);
+            output = request_session_stop(reason);
+            model_request_failed = true;
+            status_message = reason
+                + " The session is stopped, not waiting. Saved sandbox files and host logs remain available; no candidate can advance.";
+            output.status = status_message;
+            output.campaign_evidence.push_back(status_message);
+            return false;
         }
 
         void render_typed_campaign(
@@ -4140,6 +4224,7 @@ namespace epochengine::editor_ai_development_panel
         }
 
         [[nodiscard]] bool record_iteration_validation(
+            RenderResult& output,
             const ai::iteration_session::ValidationActor actor,
             const bool succeeded,
             const std::string_view summary,
@@ -4154,11 +4239,12 @@ namespace epochengine::editor_ai_development_panel
                     .actor = actor,
                     .candidate_digest = candidate,
                     .evidence_digest = digest_text(summary),
-                    .summary = std::string{summary},
+                    .summary = bounded_host_validation_evidence(summary,
+                        ai::self_iteration_orchestrator::Limits{}.maximum_summary_bytes),
                     .passed = succeeded},
                 sequenceComplete);
             if (!recorded)
-                status_message = recorded.status;
+                return reject_validation_completion(output, recorded.status);
             return static_cast<bool>(recorded);
         }
 
@@ -4402,12 +4488,8 @@ namespace epochengine::editor_ai_development_panel
 
             constexpr std::size_t maximumFailureEvidenceBytes =
                 32u * 1024u;
-            if (failureEvidence.size() > maximumFailureEvidenceBytes)
-            {
-                failureEvidence.erase(
-                    0u,
-                    failureEvidence.size() - maximumFailureEvidenceBytes);
-            }
+            failureEvidence = bounded_host_validation_evidence(
+                failureEvidence, maximumFailureEvidenceBytes);
             source_repair_diagnostic =
                 "\nVERIFIED_HOST_REPAIR_CONTEXT_V1\nGATE ";
             source_repair_diagnostic += gateName;
@@ -5442,6 +5524,60 @@ namespace epochengine::editor_ai_development_panel
             return false;
         }
         const std::string shortPlan{"Inspect one bounded source defect."};
+        const std::string compilerDiagnostic{
+            "opengl.context_init.cpp(156,1): error C1075: '{': no matching token found"};
+        const std::string verboseFailure =
+            "Debug compiler produced one exact repair diagnostic.\n"
+            + std::string(8192u, 'p') + "\n" + compilerDiagnostic + "\n"
+            + std::string(56u * 1024u, 'v')
+            + "\nMicrosoft.CppCommon.targets: error MSB4181: CL returned false.\n";
+        const auto receiptExcerpt = Implementation::bounded_host_validation_evidence(
+            verboseFailure, 2048u);
+        const auto repairExcerpt = Implementation::bounded_host_validation_evidence(
+            verboseFailure, 32u * 1024u);
+        if (receiptExcerpt.size() > 2048u
+            || repairExcerpt.size() > 32u * 1024u
+            || receiptExcerpt.find(compilerDiagnostic) == std::string::npos
+            || repairExcerpt.find(compilerDiagnostic) == std::string::npos
+            || receiptExcerpt.find(Implementation::digest_text(verboseFailure))
+                == std::string::npos
+            || repairExcerpt.find(Implementation::digest_text(verboseFailure))
+                == std::string::npos
+            || Implementation::bounded_host_validation_evidence("Short evidence.", 2048u)
+                != "Short evidence."
+            || Implementation::bounded_host_validation_evidence(
+                std::string{"bad\0status", 10u}, 2048u) != "bad?status")
+        {
+            return false;
+        }
+        for (const bool withCampaign : {false, true})
+        {
+            Panel malformedValidation{};
+            auto& malformedState = *malformedValidation.implementation_;
+            malformedState.generation = 41u;
+            malformedState.source_build_pending = true;
+            malformedState.sandbox_lab_enabled = true;
+            if (withCampaign)
+                malformedState.campaign_orchestrator =
+                    std::make_unique<ai::self_iteration_orchestrator::Orchestrator>();
+            else
+                malformedState.iteration_session =
+                    std::make_unique<ai::iteration_session::IterationSession>();
+            const auto rejectedValidation = malformedValidation.complete_source_build(
+                41u, true, "Receipt without an active candidate.");
+            if (rejectedValidation.action != HostAction::cancel_model_source_request
+                || rejectedValidation.candidate_decision != CandidateDecision::stop_lab
+                || malformedState.source_build_pending
+                || malformedState.sandbox_lab_enabled
+                || !malformedValidation.sandbox_session_failed()
+                || rejectedValidation.status.find("stopped, not waiting")
+                    == std::string::npos
+                || malformedValidation.complete_source_build(
+                    41u, true, "Late rejected receipt.").action != HostAction::none)
+            {
+                return false;
+            }
+        }
         if (Implementation::bounded_review_text(shortPlan) != shortPlan)
             return false;
         const std::string longPlan(5u * 1024u, 'p');
@@ -6577,7 +6713,7 @@ namespace epochengine::editor_ai_development_panel
                 localOpen.complete_source_build(
                     failedGeneration,
                     false,
-                    "Debug compiler produced one exact repair diagnostic.");
+                    verboseFailure);
             const auto repairCampaign =
                 localOpenState.campaign_orchestrator->snapshot();
             if (campaignFailedBuild.action
@@ -6597,7 +6733,14 @@ namespace epochengine::editor_ai_development_panel
                     != ai::self_iteration_orchestrator::Phase::
                         awaiting_proposal_request
                 || repairCampaign.evidence.empty()
-                || repairCampaign.evidence.back().passed)
+                || repairCampaign.evidence.back().passed
+                || repairCampaign.evidence.back().evidence_sha256
+                    != Implementation::digest_text(verboseFailure)
+                || repairCampaign.evidence.back().summary.size() > 2048u
+                || repairCampaign.evidence.back().summary.find(compilerDiagnostic)
+                    == std::string::npos
+                || localOpenState.source_repair_diagnostic.find(compilerDiagnostic)
+                    == std::string::npos)
             {
                 return false;
             }
@@ -6658,6 +6801,10 @@ namespace epochengine::editor_ai_development_panel
                 || repairWorkspaceCompleted.model_prompt.find(
                     "Debug compiler produced one exact repair diagnostic.")
                     == std::string::npos
+                || repairWorkspaceCompleted.model_prompt.find(compilerDiagnostic)
+                    == std::string::npos
+                || repairWorkspaceCompleted.model_prompt.find(
+                    Implementation::digest_text(verboseFailure)) == std::string::npos
                 || repairWorkspaceCompleted.model_prompt.find(
                     localOpenState.campaign_scope_digest) == std::string::npos
                 || repairWorkspaceCompleted.model_prompt.find(repairCatalog)
@@ -6732,29 +6879,31 @@ namespace epochengine::editor_ai_development_panel
             }
 
             const std::uint32_t campaignGeneration = localOpenState.generation;
+            const std::string verboseSuccess = "Exact candidate validation passed.\n"
+                + std::string(8192u, 'v') + "\nExit code: 0.\n";
             const RenderResult campaignDebugBuild =
                 localOpen.complete_source_build(
-                    campaignGeneration, true, "Debug compiler passed.");
+                    campaignGeneration, true, verboseSuccess);
             const RenderResult campaignDebugContract =
                 localOpen.complete_source_test(
-                    campaignGeneration, true, "Debug contract passed.");
+                    campaignGeneration, true, verboseSuccess);
             const RenderResult campaignReleaseBuild =
                 localOpen.complete_source_release_build(
-                    campaignGeneration, true, "Release compiler passed.");
+                    campaignGeneration, true, verboseSuccess);
             const RenderResult campaignReleaseContract =
                 localOpen.complete_source_release_test(
-                    campaignGeneration, true, "Release contract passed.");
+                    campaignGeneration, true, verboseSuccess);
             const RenderResult campaignHeadlessBuild =
                 localOpen.complete_source_headless_build(
-                    campaignGeneration, true, "Headless compiler passed.");
+                    campaignGeneration, true, verboseSuccess);
             const RenderResult campaignHeadlessContract =
                 localOpen.complete_source_headless_test(
-                    campaignGeneration, true, "Headless contract passed.");
+                    campaignGeneration, true, verboseSuccess);
             const RenderResult campaignFullRequested =
                 localOpen.approve_source_full_validation();
             const RenderResult campaignFullCompleted =
                 localOpen.complete_source_full_validation(
-                    campaignGeneration, true, "Full validation passed.");
+                    campaignGeneration, true, verboseSuccess);
             const auto completedCampaign =
                 localOpenState.campaign_orchestrator->snapshot();
             if (campaignDebugBuild.action
@@ -6775,6 +6924,18 @@ namespace epochengine::editor_ai_development_panel
                 || completedCampaign.phase
                     != ai::self_iteration_orchestrator::Phase::checkpoint_ready
                 || completedCampaign.validation_index != 7u)
+            {
+                return false;
+            }
+            const auto& validatedReceipts = completedCampaign.campaign.session.validation;
+            if (validatedReceipts.size() != 7u
+                || std::any_of(validatedReceipts.begin(), validatedReceipts.end(),
+                    [&](const auto& evidence)
+                    {
+                        return !evidence.passed || evidence.summary.size() > 2048u
+                            || evidence.evidence_digest
+                                != Implementation::digest_text(verboseSuccess);
+                    }))
             {
                 return false;
             }
@@ -8718,6 +8879,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::debug_compiler,
                 succeeded,
                 iterationEvidence,
@@ -8791,6 +8953,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::debug_contract,
                 succeeded,
                 iterationEvidence,
@@ -8871,6 +9034,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::release_compiler,
                 succeeded,
                 iterationEvidence,
@@ -8946,6 +9110,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::release_contract,
                 succeeded,
                 iterationEvidence,
@@ -9028,6 +9193,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::headless_compiler,
                 succeeded,
                 iterationEvidence,
@@ -9107,6 +9273,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::headless_contract,
                 succeeded,
                 iterationEvidence,
@@ -9239,6 +9406,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         if (!state.record_iteration_validation(
+                output,
                 ai::iteration_session::ValidationActor::full_validation,
                 succeeded,
                 iterationEvidence,

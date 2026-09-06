@@ -32,6 +32,9 @@ Before broad context expansion, refresh and prove the stable software/context
 base against the current Engine. The September 5 operator authorization permits
 updating `multicontext-base-stable` after that evidence; preserve the original
 checkpoint in history and use this worktree rather than multiplying copies.
+After the current major repairs are accepted, freeze that proven reusable base
+before game-specific expansion. Later game work develops above it; refreshing
+the frozen base requires a deliberate compatibility-tested decision.
 
 ## Execution Order And Continuity
 
@@ -41,6 +44,10 @@ checkpoint in history and use this worktree rather than multiplying copies.
 2. **Stable software base next:** finish profiles and generated-template proof
    on the existing SoftwareBase/context-admission foundation; only then advance
    the authorized stable branch and broaden context adapters.
+   The September 6 next priority also includes the owner-only SDK/online docs:
+   audit existing Doxygen and Site access support, complete version-bound module
+   reference and software-profile guides, then prove server-side owner-only
+   access for pages, assets, search and downloads before publishing them.
 3. **Usable complete workflows:** Properties, 2D/UI, Timeline and code editing,
    followed by the full playable 2D project loop. Carry controls, semantic
    history, persistence, diagnostics and tests with each feature.
@@ -66,6 +73,8 @@ item only when its full acceptance is proven, recording completion in history.
 - The next release may advance only one exact committed tree after Windows and
   managed-Clang Linux production evidence, immutable packages, receipts,
   sidecars, rollback checks, and one reviewed Site activation.
+- September 6 release target: v0.90.1 as the new accepted base, not a public
+  version advance before self-coding/native/security acceptance.
 - Historical runtime/source objects remain immutable; stable-base advancement
   follows the explicit operator authorization and acceptance gate above.
   GitHub is not a release authority and currently rejects pushes

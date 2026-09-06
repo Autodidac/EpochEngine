@@ -325,6 +325,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.filesystem.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.child_process.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.work_admission.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.capabilities.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx" />
@@ -573,6 +574,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\platform.context_epoch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp" />
@@ -783,6 +785,7 @@
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp" />
   </ItemGroup>
   <ItemGroup>

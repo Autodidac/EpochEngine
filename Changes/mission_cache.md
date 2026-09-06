@@ -22,8 +22,26 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 - Keep one chat-owned source copy. Branches and disposable candidate generations
   are not excuses to multiply full worktrees or copy sibling project material.
   Names and historical paths do not justify moving a live workspace again.
+- September 6 reset continuity: save the in-flight agents' focused repairs and
+  exact tested/untested state before refresh. Resume from the active checkpoint,
+  not an older screenshot or dated to-do list. Work in large but bounded,
+  production-backed steps with independent ownership and faithful validation.
+- Freeze the stable software/context base only AFTER these major self-coding,
+  platform and context patches pass acceptance, and BEFORE large game-engine-
+  specific changes. Preserve old baseline history and make later base updates
+  deliberate, separately tested decisions, not automatic mirrors of game work.
 
 ## Engine Self-Coding
+
+- September 6 renewed 24-hour priority: complete the real Qwen repair/build/
+  comparison/succession workflow, with independent subagents on bounded work.
+  Add nonblocking 30-second cooldowns and measured resource checks before heavy
+  model/compiler/test/preview work, including after Keep/Choose. Show actual
+  running/queued/idle work; registered worker lifetimes are not active jobs.
+- The requested next feature release is v0.90.1 and becomes the current reusable
+  base only after native, build, safety, packaging and rollback gates pass.
+  Update current downloads, authenticated source, docs and authorized branches
+  together; never rewrite old verified objects or call an untested base stable.
 
 - September 5 operator deadline priority: make the complete self-coding loop
   usable and tested within the remaining day. Prioritize real outcomes over
@@ -87,6 +105,24 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 - Disposable directories and PID supervision are not OS security isolation.
   Candidate execution needs a proved filesystem/network boundary before the
   product can claim arbitrary generated code cannot affect source or projects.
+
+## Owner-Only SDK And Online Documentation
+
+- Next priority after self-coding: a complete Epoch Engine SDK for the owner,
+  plus online API and workflow documentation visible only after owner/admin
+  login. Inspect existing project-specific Site support before rebuilding it.
+- Current `Engine/Doxyfile` is only a header-oriented skeleton (`include`,
+  `.h/.hpp`); extend and verify C++23 module coverage, public composition and
+  platform/software profiles, tutorials, build/debug instructions, dependencies,
+  license notices and version-bound SDK/file manifests. Do not claim complete
+  API coverage merely because HTML generation succeeds.
+- Reuse existing protected source/device/admin policy. Protect every docs page,
+  image, search index, source browser, archive and direct object route on the
+  server; non-owner login alone must not grant access. Prevent public CDN/cache
+  leakage and accidental inclusion in public site bundles or search/sitemaps.
+- Verify anonymous/non-owner/direct-URL/session-expiry access denial and owner
+  success on exact versioned bytes before publication. No credentials, model
+  data, runtime caches or unrelated project source belong in SDK output.
 
 ## Editor Control Plane
 

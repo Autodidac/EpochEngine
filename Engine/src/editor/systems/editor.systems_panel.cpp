@@ -29,6 +29,7 @@ module editor.systems_panel;
 
 import authoring.task_graph;
 import editor.systems_workspace;
+import editor.task_scheduler;
 import gui.engine;
 import sprite.handle;
 import taskgraph.dotsystem;
@@ -878,10 +879,33 @@ namespace epochengine::editor_systems_panel
                         ? "no owner"
                         : state.workspace.live_scheduler_snapshot().owner_label),
                 92.0f);
-            gui::property_row("Threads",
-                epochengine::format_text("{} live / {} hardware",
-                    snapshot.live_threads, snapshot.hardware_threads),
+            gui::property_row("Engine threads",
+                epochengine::format_text("{} tracked (includes waiting workers)",
+                    snapshot.live_threads),
                 92.0f);
+            gui::property_row("CPU capacity",
+                epochengine::format_text("{} logical processors",
+                    snapshot.hardware_threads),
+                92.0f);
+            const auto& liveScheduler = state.workspace.live_scheduler_snapshot();
+            if (liveScheduler.state == editor_systems::LiveDataState::available)
+            {
+                const auto activity = editor_tasks::activity_snapshot(liveScheduler.graph);
+                gui::property_row("Background tasks",
+                    epochengine::format_text("{} running | {} queued | {} waiting on dependencies",
+                        activity.running_tasks, activity.queued_tasks,
+                        activity.waiting_tasks),
+                    92.0f);
+                gui::property_row("Worker pool",
+                    epochengine::format_text("{} waiting / {} owned workers",
+                        activity.idle_workers, activity.worker_count),
+                    92.0f);
+            }
+            gui::wrapped_label(
+                "Tracked Engine threads are not the operating system's total thread count "
+                "or an active-job count. Idle scheduler workers sleep until work arrives; "
+                "they are joined when their editor context closes. Model requests and "
+                "candidate processes report their own activity in AI Controls.", width);
             gui::property_row("Evidence",
                 epochengine::format_text(
                     "{} / {} time samples | {} graph nodes | {} unit critical path",
@@ -997,6 +1021,15 @@ namespace epochengine::editor_systems_panel
             }
 
             const auto& graph = scheduler.graph;
+            const auto activity = editor_tasks::activity_snapshot(graph);
+            gui::property_row("Tasks now",
+                epochengine::format_text("{} running | {} queued | {} waiting on dependencies",
+                    activity.running_tasks, activity.queued_tasks, activity.waiting_tasks),
+                82.0f);
+            gui::property_row("Workers now",
+                epochengine::format_text("{} waiting / {} owned (not running jobs)",
+                    activity.idle_workers, activity.worker_count),
+                82.0f);
             const std::string_view lifecycle = graph.stopped
                 ? "Stopped"
                 : graph.draining

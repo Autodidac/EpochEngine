@@ -1009,8 +1009,12 @@ namespace epochengine::ai::self_iteration_orchestrator
             || snapshot_.pending_operation_kind != OperationKind::trusted_validation
             || !receipt_matches(receipt)
             || !lowercase_hex(evidence_sha256, 64u)
-            || snapshot_.validation_index >= validation_actors().size())
+            || snapshot_.validation_index >= validation_actors().size()
+            || !valid_summary(summary, limits_)
+            || snapshot_.evidence.size() >= limits_.maximum_evidence_records)
             return reject("Validation evidence is stale, malformed, or outside the fixed sequence.");
+        // Validate the outer receipt budget before advancing the inner session;
+        // a failed commit must not consume an otherwise retryable validation.
         const std::uint32_t prior_index = snapshot_.validation_index;
         const bool complete = passed && prior_index + 1u == validation_actors().size();
         const auto recorded = session_.record_validation(

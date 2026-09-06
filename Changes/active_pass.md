@@ -2,7 +2,7 @@
 
 ## Gate
 
-Finish the v0.89.35 Engine Self-Coding Candidate Lab as one usable, truthful,
+Finish the v0.90.1 Engine Self-Coding Candidate Lab as one usable, truthful,
 end-to-end sandbox succession workflow. The operator describes the desired
 result in ordinary language. Epoch and the selected agentic model resolve a
 bounded source slice, produce and apply an exact candidate only in a disposable
@@ -25,6 +25,85 @@ floating guide readability and gradual EpochPlatformEngine extraction are durabl
 missions, not reasons to label incomplete self-coding or context behavior complete.
 
 ## Current Checkpoint
+
+### September 6 07:15 EDT reset checkpoint — resume here
+
+The operator is refreshing now. Agents have stopped; no compiler, model or
+native runtime was launched for this final checkpoint. Source still declares
+v0.89.35; the requested NEXT feature release is now **v0.90.1**, superseding
+v0.90.0. No public release or stable branch advanced.
+
+Saved coherent source batch:
+
+- Panel/orchestrator validation receipt summaries are bounded to 2048 bytes,
+  retain the full-status SHA-256 and first causal compiler error, and preserve
+  separate 32 KiB repair context. Rejected current receipts stop cleanly rather
+  than hanging. Added verbose-failure, seven-gate verbose-success and malformed
+  receipt non-mutation regressions. These new regressions are NOT yet built/run.
+- `platform.work_admission` has a nonblocking 30-second controller, one-second
+  cached real Windows/Linux RAM/CPU samples, strict stale/pressure checks and
+  monotonic consumed/cancelled token retirement. Three new files plus CMake/
+  MSVC wiring are saved. This component is NOT yet compiled/tested and is NOT
+  connected to Editor dispatch. No production cooldown enforcement is claimed.
+- Scheduler activity snapshot and Systems panel descriptions distinguish real
+  active/queued/idle work from registered thread lifetimes. The focused CMake
+  Release `epoch_editor_task_scheduler_contract` builds and passes (1/1, 0.04s).
+  It was moved into the lightweight software-base CMake lane without duplication.
+- `editor.application.cpp` has NO pending edits. Next hook work remains: replace
+  toolbar Threads/CPU ratio with actual scheduler activity, and stop creating a
+  scheduler merely to view Systems (pass an existing nullable graph instead).
+
+EXACT NEXT ACTION: review/build the saved receipt regressions and admission
+contract, then integrate admission in `editor.application.cpp`. Retain one exact
+deferred RenderResult plus monotonic token/artifact epoch per context. Queue
+model/compiler/test/preview operations centrally, including the final deferred
+local HTTP submission. Use a synchronized process-wide heavyweight lease, not
+unsynchronized reads of other contexts. Retain that lease through real worker/
+child retirement and Keep/Choose. Poll without sleeps on each owning context
+tick; show countdown/resource wait and Stop; include queued admission in
+execution_pending. Cancel/Restart/Close must discard queued actions without
+resurrection and retire active ownership before another operation starts.
+macOS metrics and GPU/VRAM admission remain unsupported/unproven; do not claim
+the RAM/CPU sampler prevents every possible resource overload.
+
+Then rebuild Windows Debug/Release and run the build-safe aggregate contracts.
+Do not launch another Qwen/native/GPU test through a workaround for the existing
+tool denial. Resume the actual two-build/choice and isolation gates when allowed.
+Epoch owns no WSL lane; the user explicitly authorized sharing that status and
+it was delivered to EpochSimEngine. No new Linux work was started here.
+
+The operator requested an immediate durable checkpoint before a usage refresh.
+Finish integrating only the scoped work already underway, run the closest
+build-safe regressions, then record the exact source status and next action.
+Do not start a new native/model/release/SDK expansion merely to fill the pause.
+
+- Last clean commit before this batch: `7d538759db65b854a19a95c6d9f8f0f927f89841`.
+- In progress: bounded validation receipt summaries and real compiler-error
+  repair handoff; measured CPU/RAM admission and nonblocking 30-second heavy-work
+  cooldowns integrated with cancellation/choice; truthful task activity and no
+  scheduler allocation merely to view Systems diagnostics.
+- Native Qwen two-build/choice/succession and OS isolation remain unproven.
+  Existing native tool denial and Winsock 10107 failure still apply. No new
+  runtime/source/SDK Site publication is authorized from partial evidence.
+- v0.90.1 is the requested next feature release; source/version metadata and
+  accepted base refs must be reconciled before release, not guessed from UI.
+  Version audit found these exact follow-ups (not yet changed):
+  `epoch.version.ixx` and compatibility `engine.version.ixx`; runtime `%02d`
+  and `get_epoch_version.ps1` `D2` formatting; CI's two-digit revision regex;
+  receipt writer's assumption that all platform major/minor values equal
+  source; updater discovery contract's hardcoded v0.89.35; stale Windows
+  resource v0.89.32 and vcpkg project metadata v0.88.76. Explicitly pin macOS
+  packaged major/minor/revision to 0/89/30 before bumping source, since it
+  currently inherits the source minor. Preserve independent EpochGui v0.89.30
+  and the dependency baseline. Canonical new release spelling is `0.90.1`.
+- After the major self-coding/platform/context repairs pass their required
+  acceptance, freeze the stable software/context base at that exact proven
+  checkpoint BEFORE major game-engine-specific expansion. Retain the original
+  `ad6c416d...` history. Do not freeze an unfinished checkpoint or make the
+  reusable base follow every game-specific change automatically.
+- Subsequent passes should take substantial, bounded implementation steps with
+  explicit owners, tests and evidence. Reuse the stable base and proven systems;
+  no padding, duplicate frameworks, speculative rewrites or unbounded churn.
 
 - Source version: v0.89.35, local and unpublished. Starting commit for this
   candidate-data/model-usability pass:
@@ -77,6 +156,38 @@ was released on September 5 after the other task's compiler processes retired;
 the narrow HTTP component compile passed and the lane was released again.
 
 ## Remaining Work
+
+September 6, current 24-hour priority (supersedes older dated task ordering):
+
+1. Repair the actual Qwen run before broad new work. Campaign `fbd95e52...`
+   staged its OpenGL patch and ran MSBuild; the first failure was C1075, an
+   unmatched brace in `opengl.context_init.cpp`. Its 66,198-byte compiler status
+   exceeded the validation-summary limits and stopped the repair handoff.
+   Keep full logs, record bounded receipts, and prove the failure reaches the
+   model repair loop. Do not promote that malformed patch into live source.
+2. Add measured host-resource admission and a visible, cancellable, nonblocking
+   30-second cooldown before model, compiler, validation and new candidate
+   process work. Pause heavy work while Keep/Choose is pending; retire the loser
+   before resuming. Report actual work separately from registered idle threads.
+3. Build and run the closest regression contracts, then complete the exact
+   native Qwen two-build/embedded-context/choice/successor and isolation gates
+   below. Never substitute source tests for a blocked native or security check.
+4. Prepare v0.90.1 as the new base. After every required gate passes, publish
+   one exact committed tree to current runtime downloads, authenticated source,
+   matching docs and the authorized stable branch. Preserve historical refs,
+   archives and rollback bytes. Publication remains conditional on evidence.
+5. Next priority: finish the owner-only Epoch Engine SDK and online API/manual
+   documentation. First inspect existing Doxygen and Site per-project access
+   controls. Generate version-bound C++23 module/header reference plus usable
+   software-profile samples, build/debug guides and SDK manifests. Serve docs,
+   assets, search indexes and SDK downloads only after server-side owner/admin
+   authorization; hiding a link is not access control. Test anonymous and
+   non-owner denial, direct asset URLs, session expiry and shared-cache leakage.
+
+Use independent subagents continuously where useful, with disjoint source
+ownership and serial heavy build/runtime work. At each checkpoint update this
+gate and the owning subsystem docs with the next concrete action and actual
+evidence. The SDK mission cannot replace a blocked self-coding acceptance run.
 
 September 6 operator run: saved campaign `903a94c397919a67...` against
 `8d0080fb` admitted Qwen's proposal and committed its sandbox postimage, then
