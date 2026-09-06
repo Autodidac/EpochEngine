@@ -46,16 +46,19 @@ planetary library is EpochSpaceEngine. Archive/license review and real project
 load/build/run/reopen evidence precede any completion/publication claim. This
 does not unfreeze the reusable context base for game-specific implementation.
 
+The FINAL milestone in this same-day batch is complete Doxygen, the owner-only
+Engine SDK and authenticated online documentation/website delivery, after all
+the integrations above. The operator targets the end of September 6, 2026
+(America/New_York) for that milestone too. Reuse existing Site access support;
+prove module coverage, version binding and server-side owner-only access for
+pages, assets, search and downloads. No deadline replaces those release gates.
+
 1. **Self-coding first:** finish the real Qwen two-build/choice loop and its
    data, process, model-selection and interaction acceptance. Reuse its existing
    controller, source executor, retry, transport and supervision implementations.
 2. **Stable software base next:** finish profiles and generated-template proof
    on the existing SoftwareBase/context-admission foundation; only then advance
    the authorized stable branch and broaden context adapters.
-   The September 6 next priority also includes the owner-only SDK/online docs:
-   audit existing Doxygen and Site access support, complete version-bound module
-   reference and software-profile guides, then prove server-side owner-only
-   access for pages, assets, search and downloads before publishing them.
 3. **Usable complete workflows:** Properties, 2D/UI, Timeline and code editing,
    followed by the full playable 2D project loop. Carry controls, semantic
    history, persistence, diagnostics and tests with each feature.

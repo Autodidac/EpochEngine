@@ -126,9 +126,13 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 
 ## Owner-Only SDK And Online Documentation
 
-- Next priority after self-coding: a complete Epoch Engine SDK for the owner,
-  plus online API and workflow documentation visible only after owner/admin
-  login. Inspect existing project-specific Site support before rebuilding it.
+- Final priority AFTER the current self-coding, EpochGui/Extensions, generated-
+  project and EpochSimEngine/EpochSpaceEngine demo/library integration batch:
+  complete Doxygen, a full Epoch Engine SDK for the owner, and online API/
+  workflow documentation and website delivery visible only after owner/admin
+  login. The operator explicitly includes this in the end-of-September-6, 2026
+  target (America/New_York). Inspect existing project-specific Site support
+  before rebuilding it; the deadline does not waive verification or privacy.
 - Current `Engine/Doxyfile` is only a header-oriented skeleton (`include`,
   `.h/.hpp`); extend and verify C++23 module coverage, public composition and
   platform/software profiles, tutorials, build/debug instructions, dependencies,

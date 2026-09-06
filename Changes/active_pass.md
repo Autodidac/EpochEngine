@@ -74,8 +74,11 @@ EpochSimEngine demo and supplied EpochPlanet project through Extensions as
 project add-ons, separately depending on their engine libraries. Develop the
 planetary library as **EpochSpaceEngine**, not a built-in Engine plugin. Review
 the supplied archive and licenses before extracting/integrating any contents.
-Then finish owner-only SDK/docs as already planned. The same-day deadline is a
-priority, not permission to claim untested integrations or publish partial code.
+FINAL same-day milestone, after that entire integration batch: finish Doxygen,
+the full owner-only SDK, and authenticated online documentation/website delivery.
+The operator explicitly targets the end of September 6, 2026 (America/New_York)
+for this too. The deadline is a priority, not permission to claim untested
+integrations, bypass access checks, or publish partial code.
 
 ### September 6 07:15 EDT reset checkpoint — resume here
 
@@ -227,8 +230,11 @@ September 6, current 24-hour priority (supersedes older dated task ordering):
    one exact committed tree to current runtime downloads, authenticated source,
    matching docs and the authorized stable branch. Preserve historical refs,
    archives and rollback bytes. Publication remains conditional on evidence.
-5. Next priority: finish the owner-only Epoch Engine SDK and online API/manual
-   documentation. First inspect existing Doxygen and Site per-project access
+5. Final same-day priority AFTER self-coding, EpochGui/Extensions, loadable
+   projects and the EpochSimEngine/EpochSpaceEngine demo/library integrations:
+   finish the owner-only Epoch Engine SDK and online API/manual documentation
+   and website delivery by the end of September 6. First inspect existing
+   Doxygen and Site per-project access
    controls. Generate version-bound C++23 module/header reference plus usable
    software-profile samples, build/debug guides and SDK manifests. Serve docs,
    assets, search indexes and SDK downloads only after server-side owner/admin
