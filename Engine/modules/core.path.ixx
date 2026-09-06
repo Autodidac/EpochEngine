@@ -76,6 +76,12 @@ export namespace epochengine::core::path
     // Falls back to a sibling executable workspace for packaged/runtime installs.
     path example_console_workspace_dir();
 
+    // Derives an ordinary host workspace from a known executable identity.
+    // Resolves host launch aliases before appending writable workspace paths;
+    // never canonicalizes a candidate workspace or grants redirected outputs.
+    // Does not inspect or override the separately bound candidate-data root.
+    path example_console_workspace_dir(const path& host_executable);
+
     // Canonical repo/install runtime root derived from executable location.
     // For repo-local runs this resolves to the repo root. For packaged/runtime
     // installs it resolves to the nearest asset-bearing executable root.

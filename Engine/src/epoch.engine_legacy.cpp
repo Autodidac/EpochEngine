@@ -2847,6 +2847,9 @@ namespace epochengine::core
             "editor.ai_model_selection",
             epochengine::editor_ai_model_selection_contract());
         check(
+            "editor.ai_source_path",
+            epochengine::editor_ai_source_path_contract());
+        check(
             "ai.model_request_cancellation",
             epochengine::ai::model_request_cancellation_contract());
         check("ai.mcp.tool_protocol", epochengine::ai::run_mcp_contract());

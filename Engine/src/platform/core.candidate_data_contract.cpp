@@ -178,6 +178,62 @@ namespace
 #endif
     }
 
+    bool host_workspace_alias_contract(const fs::path& fixture)
+    {
+        const auto host = fixture / "physical-host";
+        const auto alias = fixture / "EpochEngine";
+        const auto executable = host / "x64" / "Release" / "EpochEditor.exe";
+        const auto workspace = host / "Engine" / "examples" / "EpochEditor" / "workspace";
+        for (const auto& relative : {
+                fs::path{"Engine/CMakeLists.txt"},
+                fs::path{"Engine/include/epoch.engine.hpp"},
+                fs::path{"Engine/src/epoch.main.cpp"},
+                fs::path{"Engine/examples/EpochEngine/EpochEngine.vcxproj"},
+                fs::path{"x64/Release/EpochEditor.exe"}})
+        {
+            fs::create_directories((host / relative).parent_path());
+            std::ofstream file{host / relative, std::ios::binary};
+            file << "host path fixture";
+            if (!file) return false;
+        }
+        fs::create_directories(workspace);
+        if (!make_directory_link(alias, host))
+            return false;
+
+        const auto expected = fs::canonical(workspace);
+        const auto aliasExecutable = alias / "x64" / "Release" / "EpochEditor.exe";
+        const auto throughAlias = paths::example_console_workspace_dir(aliasExecutable);
+        if (throughAlias != expected
+            || throughAlias != fs::canonical(throughAlias)
+            || paths::example_console_workspace_dir(executable) != expected
+            || aliasExecutable == fs::canonical(aliasExecutable)
+            || !paths::example_console_workspace_dir(fs::path{}).empty()
+            || !paths::example_console_workspace_dir("relative/EpochEditor.exe").empty()
+            || !paths::example_console_workspace_dir(host / "missing.exe").empty()
+            || !paths::example_console_workspace_dir(host).empty())
+            return false;
+
+        // Host launch alias resolution must not turn candidate-owned paths
+        // into trusted aliases. The production candidate admission is tested
+        // against this interior redirect by its own fresh subprocess below.
+        if (!make_directory_link(workspace / "candidate-output", fixture / "target"))
+            return false;
+
+        const auto installed = fixture / "physical-install";
+        const auto installAlias = fixture / "InstalledEpoch";
+        fs::create_directories(installed / "workspace");
+        {
+            std::ofstream file{installed / "EpochEditor.exe", std::ios::binary};
+            file << "packaged host path fixture";
+            if (!file) return false;
+        }
+        if (!make_directory_link(installAlias, installed))
+            return false;
+        return paths::example_console_workspace_dir(installAlias / "EpochEditor.exe")
+                == fs::canonical(installed / "workspace")
+            && paths::candidate_data_root().empty();
+    }
+
     bool run_case(const fs::path& fixture, std::vector<std::string> arguments, unsigned number)
     {
         children::LaunchRequest request;
@@ -237,6 +293,8 @@ namespace
         { std::ofstream file{ fixture / "ordinary-file" }; file << "fixture"; }
         if (!make_directory_link(fixture / "link", fixture / "target"))
             return 21;
+        if (!host_workspace_alias_contract(fixture))
+            return 22;
         const std::string option = "--candidate-data-root";
         const auto root = utf8(valid);
         std::vector<std::vector<std::string>> cases{
@@ -255,7 +313,9 @@ namespace
             { "--case=invalid", option + "=" },
             { "--case=invalid", option, root, option + "=" + root },
             { "--case=invalid", option + "-unexpected", root },
-            { "--case=invalid", option, utf8(fixture / "." / unicode_leaf()) }
+            { "--case=invalid", option, utf8(fixture / "." / unicode_leaf()) },
+            { "--case=invalid", option, utf8(fixture / "physical-host" / "Engine"
+                / "examples" / "EpochEditor" / "workspace" / "candidate-output" / "inside") }
         };
         for (std::size_t index = 0u; index < cases.size(); ++index)
             if (!run_case(fixture, std::move(cases[index]), static_cast<unsigned>(index))

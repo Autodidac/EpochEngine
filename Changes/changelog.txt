@@ -1,5 +1,27 @@
 ## [Unreleased] - v0.89.35
 
+- September 6 compiler-handoff repair: resolve the trusted host executable's
+  physical path before constructing a sandbox under a renamed checkout alias.
+  Preserve explicit candidate-data bindings and strict candidate/output link
+  refusal. Split compiler path, generation and ticket diagnostics; persist
+  host-only lifecycle/PID evidence in Engine.AI.Candidate.log so validation
+  test windows cannot be confused with admitted comparison previews.
+- Review the saved Qwen dock-tab clamp rather than automatically promoting it:
+  the existing move algorithm already enforces the proposed bound. Preserve
+  the sandbox unchanged and add an independent production-API regression
+  covering all 91,520 valid same-group moves, including full capacity, selection,
+  metadata and unused-array sentinels. Standalone Release docking CTest passes
+  1/1. Renderer-free software-base CTest passes 11/11, including host repo/install
+  junction fixtures and interior redirect refusal. Windows Debug/Release editor
+  builds and their build-safe aggregates pass through the EpochEngine alias,
+  including the actual host-router/path-admission/first-build-ticket contract.
+  Source naming passes 593 files and diff checks pass. Exact Release executable:
+  12,956,160 bytes; SHA-256
+  8e6e4b6e7d8fc009891995da6e3868586e7f368eeec26ec2ae004af727adff12.
+  Existing duplicate-logger/optimization-override warnings remain. No model
+  rerun, native comparison/succession, publication or stable-ref advance is
+  claimed. The operator will test this exact rebuilt executable with full logs.
+
 - September 5 AI usability/continuity checkpoint: finish endpoint-bound model
   memory/default selection in actual Send/Start and detached Chat. Retain
   selected/ejected models across empty inventory; disabled project profiles

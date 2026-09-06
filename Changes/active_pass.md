@@ -78,6 +78,20 @@ the narrow HTTP component compile passed and the lane was released again.
 
 ## Remaining Work
 
+September 6 operator run: saved campaign `903a94c397919a67...` against
+`8d0080fb` admitted Qwen's proposal and committed its sandbox postimage, then
+stopped before the first Debug compiler. No validation artifact or candidate
+preview was produced. The supplied `EpochEngine` launch path is a junction;
+host workspace discovery retained that spelling while compiler admission
+required the physical path. The current bounded repair canonicalizes only the
+trusted host executable before sandbox creation and adds precise persisted
+handoff/PID evidence. Candidate interior redirect checks remain strict.
+The saved docking clamp was reviewed but not promoted: existing source already
+guarantees its bound, and exhaustive production tab-move regression covers all
+91,520 admitted same-group combinations. The operator requested a rebuilt
+executable and will rerun with full logs; native comparison/succession is still
+unproven. Do not rerun the model merely to recover the already-saved failure.
+
 Pass ordering follows the September 5 one-day self-coding priority. First finish
 the existing candidate-data repair and model-selection/working-state usability,
 then exercise the actual model/build/comparison/succession gate below. The small

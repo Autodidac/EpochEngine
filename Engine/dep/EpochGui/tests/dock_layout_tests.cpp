@@ -311,6 +311,77 @@ namespace
         }
         return 0;
     }
+    [[nodiscard]] int check_every_same_group_insertion()
+    {
+        using namespace epochengine::gui_lib;
+
+        // Insert into the original slot sequence while omitting the source;
+        // this oracle does not reuse the production index adjustment.
+        for (std::uint32_t count = 1U; count <= maximum_dock_tabs; ++count)
+        {
+            for (std::uint32_t source = 0U; source < count; ++source)
+            {
+                for (std::uint32_t insertion = 0U; insertion <= count; ++insertion)
+                {
+                    DockTabGroup group{};
+                    group.id = 71U;
+                    group.count = count;
+                    for (std::uint32_t index = 0U; index < maximum_dock_tabs; ++index)
+                    {
+                        group.tabs[index] = {
+                            1'000U + index, 7'000U + index, index,
+                            index == count / 2U, index % 2U == 0U
+                        };
+                    }
+                    const DockTabGroup original = group;
+                    DockTabGroup expected = original;
+                    std::uint32_t written = 0U;
+                    std::uint32_t destination = invalid_dock_tab_index;
+                    for (std::uint32_t slot = 0U; slot <= count; ++slot)
+                    {
+                        if (slot == insertion)
+                        {
+                            destination = written;
+                            expected.tabs[written++] = original.tabs[source];
+                        }
+                        if (slot < count && slot != source)
+                            expected.tabs[written++] = original.tabs[slot];
+                    }
+                    if (written != count || destination >= count)
+                        return 21;
+                    for (std::uint32_t index = 0U; index < count; ++index)
+                        expected.tabs[index].keyboard_order = index;
+
+                    const auto result = move_dock_tab(group, group, source, insertion);
+                    const auto expectedCode = destination == source
+                        ? DockTabMoveCode::unchanged : DockTabMoveCode::moved;
+                    const auto expectedActive = original.tabs[source].active
+                        ? original.tabs[source].id : 0U;
+                    if (result.code != expectedCode || result.source_index != source
+                        || result.target_index != destination
+                        || result.active_tab_id != expectedActive
+                        || group.id != original.id || group.count != count)
+                    {
+                        return 22;
+                    }
+                    for (std::uint32_t index = 0U; index < maximum_dock_tabs; ++index)
+                    {
+                        const auto& actualTab = group.tabs[index];
+                        const auto& expectedTab = expected.tabs[index];
+                        if (actualTab.id != expectedTab.id
+                            || actualTab.remembered_group_id != expectedTab.remembered_group_id
+                            || actualTab.keyboard_order != expectedTab.keyboard_order
+                            || actualTab.active != expectedTab.active
+                            || actualTab.closable != expectedTab.closable)
+                        {
+                            return 23;
+                        }
+                    }
+                }
+            }
+        }
+        return 0;
+    }
 }
 
 int main()
@@ -326,6 +397,8 @@ int main()
     if (const int result = check_direct_tab_strip_slots(); result != 0)
         return result;
     if (const int result = check_same_group_reorder(); result != 0)
+        return result;
+    if (const int result = check_every_same_group_insertion(); result != 0)
         return result;
     return check_cross_group_move();
 }

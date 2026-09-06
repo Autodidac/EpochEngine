@@ -90,6 +90,7 @@ import sprite.handle;
 import core.context;
 import core.env;
 import core.path;
+import core.logger;
 import core.time;
 import core.sha256;
 import context.commandqueue;
@@ -2157,6 +2158,18 @@ namespace epochengine
                             state.aiDevelopmentLines.size()
                                 - kMaxAiDevelopmentLines));
             }
+        }
+
+        // Host lifecycle evidence only: never pass a prompt, reply or source
+        // packet here. Keep disk logging independent of compiler/child cleanup.
+        void log_ai_candidate_event(const std::string_view event) noexcept
+        {
+            try
+            {
+                logger::get("Engine.AI.Candidate").log(
+                    logger::LogLevel::INFO, event);
+            }
+            catch (...) { /* The visible session evidence remains available. */ }
         }
 
         [[nodiscard]] bool project_scene_document_into_editor(EditorState& state)
@@ -11846,14 +11859,22 @@ namespace epochengine
         // happens to have the same filename. Check each component before
         // canonicalization, since canonicalization alone erases link evidence.
         [[nodiscard]] std::optional<std::filesystem::path>
-            ai_source_owned_path(const std::filesystem::path& requested)
+            ai_source_owned_path(const std::filesystem::path& requested,
+                std::string* diagnostic = nullptr)
         {
-            if (requested.empty() || !requested.is_absolute())
+            if (diagnostic) diagnostic->clear();
+            const auto refuse = [&](std::string reason)
+                -> std::optional<std::filesystem::path>
+            {
+                if (diagnostic) *diagnostic = std::move(reason);
                 return std::nullopt;
+            };
+            if (requested.empty() || !requested.is_absolute())
+                return refuse("The sandbox path is empty or not absolute.");
             for (const auto& component : requested.relative_path())
             {
                 if (component == "." || component == "..")
-                    return std::nullopt;
+                    return refuse("The sandbox path contains a traversal component.");
             }
             std::filesystem::path inspected = requested.root_path();
             std::error_code error{};
@@ -11861,13 +11882,21 @@ namespace epochengine
             {
                 inspected /= component;
                 const auto status = std::filesystem::symlink_status(inspected, error);
-                if (error || !std::filesystem::exists(status)
-                    || std::filesystem::is_symlink(status))
-                    return std::nullopt;
+                if (error || !std::filesystem::exists(status))
+                    return refuse("The sandbox path component is unavailable: "
+                        + inspected.generic_string()
+                        + (error ? "; " + error.message() : std::string{}));
+                if (std::filesystem::is_symlink(status))
+                    return refuse("The sandbox path component redirects through a link: "
+                        + inspected.generic_string());
             }
             const auto canonical = std::filesystem::canonical(requested, error);
-            if (error || canonical.empty() || canonical != requested.lexically_normal())
-                return std::nullopt;
+            if (error || canonical.empty())
+                return refuse("The sandbox path could not be canonicalized: "
+                    + (error ? error.message() : std::string{"empty result"}));
+            if (canonical != requested.lexically_normal())
+                return refuse("The sandbox path is not its physical identity; requested="
+                    + requested.generic_string() + "; physical=" + canonical.generic_string());
             return canonical;
         }
 
@@ -12143,6 +12172,12 @@ namespace epochengine
                 return result;
             }
 
+            const auto compilerProcess = platform::child_process::snapshot(launched.handle);
+            log_ai_candidate_event(epochengine::format_text(
+                "compiler_started lane={} generation={} ticket={} pid={} log={}",
+                candidate_artifacts::lane_name(lane), generation, buildTicket,
+                compilerProcess ? compilerProcess->platform_process_id : 0u,
+                msbuildLog.generic_string()));
             constexpr std::uint64_t timeoutNs =
                 30ull * 60ull * 1'000'000'000ull;
             const auto waited = platform::child_process::wait(
@@ -12366,6 +12401,12 @@ namespace epochengine
                 return result;
             }
 
+            const auto testProcess = platform::child_process::snapshot(launched.handle);
+            log_ai_candidate_event(epochengine::format_text(
+                "validation_started lane={} generation={} pid={} executable={} data_root={} log={}; not a comparison preview",
+                candidate_artifacts::lane_name(lane), artifact.generation,
+                testProcess ? testProcess->platform_process_id : 0u,
+                executable.generic_string(), runtimeData->generic_string(), logPath.generic_string()));
             const std::uint64_t timeoutNs =
                 (fullValidation ? 30ull : 5ull)
                 * 60ull * 1'000'000'000ull;
@@ -21599,6 +21640,43 @@ namespace epochengine
         }
     }
 
+    bool editor_ai_source_path_contract() noexcept
+    {
+        // No files, model, compiler or renderer are created: connect the actual
+        // host router and path admission to the first artifact build ticket.
+        try
+        {
+            std::string diagnostic{};
+            if (ai_source_owned_path({}, &diagnostic) || diagnostic.empty()
+                || ai_source_owned_path("relative/sandbox", &diagnostic)
+                || diagnostic.empty()) return false;
+            const auto host = core::path::executable_path();
+            const auto workspace = core::path::example_console_workspace_dir(host);
+            if (workspace.empty() || !workspace.is_absolute()) return false;
+            std::error_code error{};
+            if (std::filesystem::exists(workspace, error)
+                && !ai_source_owned_path(workspace, &diagnostic)) return false;
+            if (error) return false;
+            // Workspace may not exist in a clean packaged contract invocation;
+            // the existing executable directory still exercises the same gate.
+            const auto root = std::filesystem::canonical(host.parent_path(), error);
+            if (error) return false;
+            const auto owned = ai_source_owned_path(root, &diagnostic);
+            if (!owned || *owned != root || !diagnostic.empty()
+                || ai_source_owned_path(root / ".", &diagnostic)
+                || diagnostic.empty()
+                || ai_source_owned_path(root / "..", &diagnostic)
+                || diagnostic.empty()) return false;
+            candidate_artifacts::Ledger ledger;
+            if (!ledger.reset(owned->generic_string(), 1u)
+                || ledger.begin_build(AiSourceValidationLane::DebugEditor) == 0u)
+                return false;
+            return !ledger.reset(owned->generic_string(), 0u)
+                && ledger.begin_build(AiSourceValidationLane::DebugEditor) == 0u;
+        }
+        catch (...) { return false; }
+    }
+
     bool editor_ai_model_selection_contract() noexcept
     {
         try
@@ -23679,6 +23757,7 @@ namespace epochengine
 
         const auto rejectSourceDispatch = [&](const std::string& status)
         {
+            log_ai_candidate_event("dispatch_rejected: " + status);
             invalidate_ai_source_artifacts(editor);
             editor.aiSourceAwaitingReply = false;
             editor.aiSourceRequestedGeneration = chat.completionGeneration;
@@ -24089,23 +24168,46 @@ namespace epochengine
                     break;
                 }
 
+                const std::string dispatchIdentity = epochengine::format_text(
+                    "lane={} generation={} workspace={}",
+                    candidate_artifacts::lane_name(lane),
+                    action.workspace_generation, action.workspace_root);
+                log_ai_candidate_event("compiler_requested " + dispatchIdentity);
+                std::string pathDiagnostic{};
                 const auto workspace = ai_source_owned_path(
-                    std::filesystem::path{action.workspace_root});
+                    std::filesystem::path{action.workspace_root}, &pathDiagnostic);
+                if (!workspace)
+                {
+                    rejectSourceDispatch("Sandbox compiler path admission failed. "
+                        + pathDiagnostic + " No compiler was launched. " + dispatchIdentity);
+                    break;
+                }
+                if (action.workspace_generation == 0u)
+                {
+                    rejectSourceDispatch("Sandbox compiler request has no workspace generation. "
+                        "No compiler was launched. " + dispatchIdentity);
+                    break;
+                }
                 if (lane == AiSourceValidationLane::DebugEditor)
                 {
                     invalidate_ai_source_artifacts(editor);
-                    if (workspace)
-                        (void)editor.aiSourceArtifacts.reset(
-                            workspace->generic_string(), action.workspace_generation);
+                    if (!editor.aiSourceArtifacts.reset(
+                            workspace->generic_string(), action.workspace_generation))
+                    {
+                        rejectSourceDispatch("Sandbox artifact identity could not be initialized. "
+                            "No compiler was launched. " + dispatchIdentity);
+                        break;
+                    }
                 }
-                const auto buildTicket = workspace
-                    ? editor.aiSourceArtifacts.begin_build(lane) : 0u;
-                if (!workspace || buildTicket == 0u)
+                const auto buildTicket = editor.aiSourceArtifacts.begin_build(lane);
+                if (buildTicket == 0u)
                 {
-                    rejectSourceDispatch(
-                        "Sandbox compiler dispatch has no current owned artifact generation or required predecessor evidence. The session was retired without a compiler launch.");
+                    rejectSourceDispatch("Sandbox compiler artifact ticket could not be allocated "
+                        "from the active generation. No compiler was launched. " + dispatchIdentity);
                     break;
                 }
+                log_ai_candidate_event(epochengine::format_text(
+                    "compiler_path_admitted {} ticket={}", dispatchIdentity, buildTicket));
 
                 if (editor.aiSourceHostDependencyRoot.empty())
                 {
@@ -24521,6 +24623,10 @@ namespace epochengine
                 editor.aiCandidatePreviewReported = false;
                 editor.aiCandidatePreviewStartedAt =
                     std::chrono::steady_clock::now();
+                log_ai_candidate_event(epochengine::format_text(
+                    "preview_started generation={} pid={} workspace={} data_root={}",
+                    action.workspace_generation, launchedSnapshot->platform_process_id,
+                    workspace.generic_string(), runtimeData->generic_string()));
                 push_ai_development_log(
                     editor,
                     "[candidate-lab] Started the exact validated candidate process; waiting for its native window before bottom-grid admission. HOST_EXECUTABLE_EVIDENCE "
@@ -25106,6 +25212,10 @@ namespace epochengine
             editor.aiSourceBuildCancellation = {};
             editor.aiSourceBuildLane = AiSourceValidationLane::DebugEditor;
 
+            log_ai_candidate_event(epochengine::format_text(
+                "compiler_completed lane={} generation={} current={} accepted={} status={}",
+                candidate_artifacts::lane_name(lane), generation,
+                currentArtifactEpoch, succeeded, status));
             if (!currentArtifactEpoch)
             {
                 push_ai_development_log(editor,
@@ -25209,6 +25319,10 @@ namespace epochengine
             editor.aiSourceTestPending.reset();
             editor.aiSourceTestCancellation = {};
             editor.aiSourceTestLane = AiSourceValidationLane::DebugEditor;
+            log_ai_candidate_event(epochengine::format_text(
+                "validation_completed lane={} generation={} current={} accepted={} status={}",
+                candidate_artifacts::lane_name(lane), generation,
+                currentArtifactEpoch, succeeded, status));
             if (!currentArtifactEpoch)
             {
                 push_ai_development_log(editor,
@@ -25253,6 +25367,7 @@ namespace epochengine
         {
             const auto failAdmittedComparison = [&](const std::string& detail)
             {
+                log_ai_candidate_event("comparison_failed: " + detail);
                 editor_ai_development_panel::RenderResult cancel{};
                 cancel.action = editor_ai_development_panel::HostAction::cancel_model_source_request;
                 dispatch_ai_development_action(cancel);
@@ -25441,6 +25556,10 @@ namespace epochengine
                     "Candidate window registration did not retain its exact native attachment. The comparison was cancelled and the recorded lease was removed.");
                 return;
             }
+            log_ai_candidate_event(epochengine::format_text(
+                "preview_docked generation={} pid={} window={}",
+                editor.aiCandidatePreviewGeneration, observed->platform_process_id,
+                observed->platform_window_id));
             editor.aiCandidatePreviewReported = true;
             editor.aiCandidatePreviewStartedAt = {};
             if (editor.aiDevelopmentPanel)

@@ -1476,6 +1476,19 @@ application, Debug/Release/Headless/full validation, bounded correction, and
 repair advance without another same-scope approval click; their existing
 preimage, actor, receipt, generation, and digest checks remain mandatory.
 
+Host launch aliases (for example, a renamed-checkout directory junction) are
+resolved from the host executable before deriving the disposable workspace
+base. That trusted host resolution does not admit links or redirected paths
+inside candidate workspaces or compiled outputs. Compiler admission separately
+reports path, generation and artifact-ticket failures rather than conflating
+them with missing validation evidence. Host lifecycle events are retained in
+`Engine.AI.Candidate.log` under the configured log directory, normally
+`x64/Release/logs`: compiler requests/starts/completions, validation starts and
+completions, preview PID/window admission and dispatch/comparison failures.
+These entries contain host identities and diagnostic/log paths, not model
+prompts or replies. Validation subprocesses are explicitly labeled as tests,
+not comparison previews. Provider-side full model logs remain separate.
+
 After full validation, the exact sandbox `x64/Release/EpochEditor.exe` starts as
 a separately supervised normal-window child. Its PID and native-window identity
 must match, the Win32 host reparents that external window as a backend-ready

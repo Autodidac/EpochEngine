@@ -651,4 +651,5 @@ namespace epochengine
     export void shutdown_chat_system();
     export [[nodiscard]] bool editor_ai_request_cancellation_contract() noexcept;
     export [[nodiscard]] bool editor_ai_model_selection_contract() noexcept;
+    export [[nodiscard]] bool editor_ai_source_path_contract() noexcept;
 }

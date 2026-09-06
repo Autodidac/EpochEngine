@@ -425,13 +425,28 @@ namespace epochengine::core::path
         if (const auto candidate = candidate_data_root(); !candidate.empty())
             return candidate / "workspace";
 
-        if (const path repoRoot = find_epoch_repo_root(executable_path()); !repoRoot.empty())
+        return example_console_workspace_dir(executable_path());
+    }
+
+    path example_console_workspace_dir(const path& host_executable)
+    {
+        if (host_executable.empty() || !host_executable.is_absolute())
+            return {};
+
+        // GetModuleFileNameW preserves the operator's launch spelling, which
+        // may pass through a renamed-checkout junction. Resolve only that
+        // trusted host identity, before any sandbox directory is created or
+        // any candidate path is admitted. Candidate/output redirects still
+        // belong to their strict no-redirect checks, not this host resolver.
+        std::error_code error;
+        const path executable = std::filesystem::canonical(host_executable, error);
+        if (error || !std::filesystem::is_regular_file(executable, error) || error)
+            return {};
+
+        if (const path repoRoot = find_epoch_repo_root(executable); !repoRoot.empty())
             return normalize(repoRoot / "Engine" / "examples" / "EpochEditor" / "workspace");
 
-        if (const path exeDir = executable_dir(); !exeDir.empty())
-            return normalize(exeDir / "workspace");
-
-        return {};
+        return normalize(executable.parent_path() / "workspace");
     }
 
     path runtime_root_dir()
