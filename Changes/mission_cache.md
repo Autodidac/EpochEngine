@@ -108,6 +108,12 @@ A documentation cleanup must never silently delete or downgrade a goal.
   reason only after the relevant retry/expansion budget is exhausted.
 - Show that the model is still working: active phase, animated progress, elapsed
   time, cancellation, retries, and next action must remain visible and readable.
+- September 6 usability correction: expose one session-wide self-coding Stop,
+  not multiple synonymous controls. Show total self-coding time across setup,
+  retries, builds and candidate choices separately from current-request time.
+  Keep setup plans concise and next-action oriented; avoid spending patch-sized
+  generations repeatedly describing generic work. Preserve bounded repair and
+  real evidence rather than claiming that reduced output limits guarantee speed.
 - Within an explicitly started authorized sandbox session, routine selection,
   plan/edit/build/test and bounded repair should advance without repeated manual
   packet approvals. Show what is being read/sent/changed and permit Stop.
@@ -124,7 +130,7 @@ A documentation cleanup must never silently delete or downgrade a goal.
 - Preserve a numbered mission plan and continuity. After each successful build,
   launch the candidate editor as a separate supervised PID/context in the parent
   grid, present current versus candidate evidence, and expose Keep Current,
-  Choose Candidate, and Stop Lab.
+  Choose Candidate, and the same session-wide Stop Self-Coding control.
 - Keep/Choose must retire the losing child, retain exactly one sandbox parent,
   and continue with the next unfinished plan step. Automatic replacement of live
   source remains a future, separately reviewed policy.

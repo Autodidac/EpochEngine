@@ -395,7 +395,7 @@ writable root or process handle.
 The comparison surface presents the current editor and a candidate in the bottom
 context grid. Keep Current retires the challenger; Choose Candidate retires the
 prior sandbox child and retains the chosen child as the next sandbox parent;
-Stop Lab retires both. The buttons and native regression harness use the same
+The session-wide Stop Self-Coding retires both. The buttons and native regression harness use the same
 panel transition. The next iteration materializes from the selected sandbox
 bytes and retains the mission plan. Selection does not copy bytes to live source,
 replace the parent editor, promote a candidate, or grant
@@ -849,8 +849,27 @@ Host-owned terminal metadata is separate from assistant text and survives the
 chat-worker/panel boundary. Whole-budget timeout, cancellation and unconfirmed
 retirement cannot trigger a higher-level automatic plan or packet retry, and a
 project-assistant completion cannot be consumed by the source campaign.
+Planning and source-selection requests allow at most 4,096 output tokens;
+code proposals/repairs retain 32,768. The host-owned stage envelope selects that
+budget, not quoted source text. Context/source-byte limits and the independent
+wall ceiling are unchanged. Plans request three to six concrete steps and at
+most 300 words; selection requests ask for one coherent working set, not a
+speculative investigation without file bytes. Provider reasoning mode remains
+unchanged; these limits need real-model qualification and do not guarantee speed.
+Transport diagnostics record stage, attempt, elapsed milliseconds, prompt and
+response sizes and output-token limit. They do not copy prompt, reply or reasoning
+contents, including undecodable-response snippets.
+
 While a request is pending, AI Controls displays local-model activity, the selected
-model and elapsed time; this is request activity, not fabricated token progress.
+model and separately labeled current-request elapsed time; this is request
+activity, not fabricated token progress. One Stop Self-Coding action cancels
+the whole source session, including queued work, builds/tests and comparison
+children, with retirement still supervised. Total self-coding time uses owning
+context monotonic ticks and survives retries, stage changes and Keep/Choose.
+Explicit Start/Restart resets it; Stop/terminal failure freezes it; same-process
+Resume excludes the stopped interval. This timer is process-local and does not
+invent elapsed history for older persisted sessions. Hidden-pane owner updates
+continue timing; totals are not derived from model-request age.
 
 
 Every operation requires reviewed path context and one exact search block that

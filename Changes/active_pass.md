@@ -27,16 +27,17 @@ or redefine them.
 
 ## Current Source And Evidence
 
-Current implementation checkpoint: `3f459b8f9b266794036242de43615f427551633b`,
-following implementation `93d542f4`, planning `056ab2e9`, implementation
+Current implementation checkpoint: `f36acfd028d94b0f74a99b8e5f343f5577c5dbab`,
+following stage/wire repair `3f459b8f`, implementation `93d542f4`, planning `056ab2e9`, implementation
 `f494ed5f`, receipt/resource `dc96a778` and host-alias `7d538759`.
-The focused four-file stage/wire repair and the earlier 16-file batch are saved.
+The focused four-file Stop/timing/budget repair and earlier implementation batches are saved.
 This table supersedes the stacked reset notes; implementation and current-build
 evidence are separate.
 
 | Area | Actual state | Missing acceptance / next action |
 | --- | --- | --- |
 | Stage-specific model contract | Host-owned first-line envelope selects plan/selection/edit; plans remain numbered prose, HTTP selection/patch uses JSON schema, direct CLI uses canonical packets. Repair references cannot switch stage; codec-valid source literals are not rejected by chat prose heuristics | Actual request-body/codec/repair/quoted-marker/literal contracts pass in Debug and Release; real Qwen plan-to-build progression remains unverified |
+| Session usability and setup cost | One session-wide Stop covers queued/model/build/comparison/retirement work. Monotonic total time survives retries and Keep/Choose alongside current-request time. Plan/selection output is limited to 4,096 tokens; patch/repair retains 32,768. Concise planning and content-free timing/size diagnostics implemented | Rebuilt Debug/Release contracts pass, including actual Keep/Choose continuity. Exact native readability, Stop and Qwen latency remain unverified; elapsed state is process-local, not restored from older saved sessions |
 | Host-alias compiler handoff | Trusted executable canonicalization and 91,520 same-group dock-move regression passed at `7d538759`; redundant Qwen clamp was not promoted | Reuse these foundations |
 | Compiler failure receipts | UTF-8-safe summary/full-status SHA/causal error/32 KiB repair context retained; accepted repair starts a fresh candidate receipt set; all seven exact-candidate actors required | Rebuilt verbose-failure/repair/seven-pass and invalid receipt contracts pass; native malformed-build repair remains open |
 | Repair prompt budget | Mandatory source/causal evidence/hash/failed proposal precede optional catalog; complete PATH lines fitted within 256 KiB; max-budget and source-reselection regressions pass | Native model use of the preserved repair context remains open |
@@ -50,19 +51,31 @@ evidence are separate.
 | SDK/research/demo integrations | Requirements and planned contracts recorded | No SDK access/UI, curated research loader or new demo/Space library integration claimed |
 
 The exact current serial Debug Editor build exited 0
-(`build/self_coding_wire_debug.log`). Its rebuilt build-safe aggregate completed
-12:17:36 with all 180 checks passing, including actual stage-specific requests,
+(`build/self_coding_session_debug.log`). Its rebuilt build-safe aggregate completed
+14:26:09–14:26:20 with all 180 checks passing, including actual stage-specific requests,
 terminal metadata, MCP deadline, repair followed by seven fresh validations
 and atomic checkpoint faults. The serial Release build also passed
-(`build/self_coding_wire_release.log`); its 12:19:05–12:19:09 aggregate passed
-all 180 checks, with process exit 0 explicitly waited. Release EXE: 13,237,248
+(`build/self_coding_session_release.log`); its 14:32:04–14:32:09 aggregate passed
+all 180 checks, with process exit 0 explicitly waited. Release EXE: 13,263,872
 bytes, SHA-256
-`ce1372bb098600291e10bf028803b42eb0f7e777bde351de34da3f8f0466df7e`.
+`01beda26c452c8ef71d73fc2fa373a07f31201da5411a57048d3ab02fbfe1a2e`.
 Existing duplicate-logger and optimization-override warnings remain. No native
 Qwen comparison, WSL package, Site publication or stable-ref advance is proven
 for this tree. Builds do not substitute for pixels or security.
 
 ## Actual Failure To Repair
+
+The operator's September 6 14:10:21 screenshot shows an exhausted 1,800-second
+request, redundant Stop controls and no total session timer. The original
+13:08–13:38 model log has been removed; the operator confirmed no retained copy.
+The replacement `.2.log` begins after the failure. Do not infer that model
+reasoning, focus or transport silence caused that particular timeout. The host
+previously gave planning/selection the same 32,768-token output allowance as
+patch generation. `f36acfd0` separates those setup budgets and adds the single
+Stop and total timer; smaller budgets are not proof of faster successful Qwen
+output. No new model/GUI request ran in this pass. Next acceptance must check
+useful complete setup replies, real elapsed/Stop behavior and the actual build
+loop; do not ask the operator to repeat a run solely to recover missing logs.
 
 The operator's September 6 10:47:42 Qwen screenshot proves a separate host
 prompt contradiction: `EPOCH_SELF_ITERATION_PLAN_V2` requested a numbered plan,
@@ -82,7 +95,8 @@ receipt limits and was rejected as stale/malformed, preventing repair. Later
 MSB4181 messages are consequences, not separate causes.
 
 - Preserve the malformed candidate; **do not promote it into live OpenGL**.
-- Model evidence: `C:/Users/iammi/.lmstudio/server-logs/2026-09/2026-09-06.1.log`.
+- Historical model evidence: `C:/Users/iammi/.lmstudio/server-logs/2026-09/2026-09-06.1.log`
+  was inspected earlier but has since been removed; do not treat it as available.
 - Candidate: `Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_117223600226305`.
   Its `logs/ai_source_debug_build.msbuild.log` and `.output.log` retain full output.
 - Host evidence: `x64/Release/logs/Engine.AI.Candidate.log`.
@@ -107,7 +121,7 @@ transport status.
    The model lane was released back to its owner. Do not retry through another
    tool, launcher, script or command shape to bypass this denial. The operator
    may launch the rebuilt Editor; inspect resulting logs or proceed only through
-   a legitimately available/authorized native lane. The green `3f459b8f`
+   a legitimately available/authorized native lane. The green `f36acfd0`
    source checkpoint and all older goals are preserved; do not substitute SDK,
    demos, releases or broad feature work for this unproven P0 gate.
 2. **Exercise and repair the real workflow.** Use an ordinary-language,
@@ -119,6 +133,9 @@ transport status.
 3. **Qualify admission and interaction in that run.** Observe nonblocking
    CPU/RAM/30-second waits, real activity/elapsed/Stop, source/project separation,
    candidate attachment, chosen-baseline survival and loser/worker retirement.
+   Confirm exactly one self-coding Stop, total time through retries/build/choice,
+   and separately labeled current-request time. Totals currently survive only
+   within the Editor process; old persisted sessions have no timing history.
    Use the Windows computer-use skill for native pixels/input. Do not call the
    automated harness's HWND/identity checks visual acceptance.
 

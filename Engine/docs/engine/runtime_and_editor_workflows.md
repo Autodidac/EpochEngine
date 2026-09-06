@@ -1522,7 +1522,9 @@ custom `candidate_preview.challenger` context, and the existing grid places the
 route at the bottom. `Keep Current` retires the challenger. `Choose Candidate`
 retires the prior sandbox child, adopts the challenger workspace as the only
 next source parent, re-curates the reviewed scope there, and begins the next
-unfinished mission step. `Stop Lab` retires both. Selection cannot write live
+unfinished mission step. The single `Stop Self-Coding` control retires both.
+It also cancels queued/model/compiler/test work, retaining actual retirement
+tracking rather than removing the session while workers still run. Selection cannot write live
 source or invoke promotion, Git, upload, publication, listener, server, or
 release work.
 
@@ -1553,6 +1555,15 @@ mode (no forced `reasoning_effort=none` or `/no_think`), use the bounded
 1,800-second source timeout, retry one early failed/empty call (not an exhausted
 whole request budget), and keep an animated
 elapsed-time working indicator visible until the response or cancellation.
+AI Controls distinguishes `Current request` from `Total self-coding time`.
+Total time follows monotonic owning-context ticks across setup, retries, builds
+and Keep/Choose, including hidden-pane updates. Start/Restart resets the total;
+Stop or terminal failure freezes it; same-process Resume excludes the stopped
+interval. Saved sessions from another process have no reconstructed timer history.
+Plan/selection output limits are 4,096 tokens with concise actionable planning;
+patch/repair retains 32,768. Context/source capacity and wall budgets are unchanged.
+Stage/elapsed/size diagnostics omit request and response bodies. These contracts
+do not prove native responsiveness or faster successful model output.
 Terminal timeout/cancellation/retirement metadata travels separately from model
 text through the transport, chat worker and source panel. It cannot be forged by
 assistant content or converted into a higher-level automatic plan retry. The

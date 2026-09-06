@@ -1,5 +1,24 @@
 ## [Unreleased] - v0.90.1 preparation (not a release)
 
+- September 6 Stop/timing/setup-budget repair saved as f36acfd0: consolidate
+  self-coding into one Stop covering queued work, model/compiler/test children,
+  comparison and retirement; keep the separate project-assistant goal intact.
+  Show monotonic total self-coding time alongside current-request activity.
+  Total survives retries and real Keep/Choose transitions; Stop freezes it,
+  same-process Resume excludes stopped time, explicit Start/Restart resets it.
+  Historical saved sessions have no persisted elapsed history. Plan/selection
+  requests now allow 4,096 output tokens and concise actionable plans; actual
+  patch/repair retains 32,768 and all source/context/deadline limits remain.
+  Transport logs stage, elapsed and byte/token counts without prompt/reply
+  bodies; removed the undecodable-response raw snippet. Debug and Release
+  builds and each rebuilt 180-check aggregate passed with waited exit 0;
+  source naming passes 596 files and focused peer/diff checks pass.
+  Release EXE: 13,263,872 bytes; SHA-256
+  01beda26c452c8ef71d73fc2fa373a07f31201da5411a57048d3ab02fbfe1a2e.
+  The operator's 30-minute run has no surviving model log; no model-internal
+  cause, native latency/visual improvement or two-build acceptance is claimed.
+  No new GUI/model request, publication or stable-ref advance occurred.
+
 - September 6 stage/wire repair saved as 3f459b8f: resolve the operator's Qwen
   screenshot contradiction between a numbered plan and patch-only system
   instructions. Select stage from the host envelope only; align HTTP JSON and
