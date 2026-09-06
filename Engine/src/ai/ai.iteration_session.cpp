@@ -178,16 +178,37 @@ namespace epochengine::ai::iteration_session
             return escaped;
         }
 
-        [[nodiscard]] bool complete_validation_set(
-            const std::vector<ValidationEvidence>& evidence)
+        constexpr std::array required_validation_actors{
+            ValidationActor::debug_compiler,
+            ValidationActor::debug_contract,
+            ValidationActor::release_compiler,
+            ValidationActor::release_contract,
+            ValidationActor::headless_compiler,
+            ValidationActor::headless_contract,
+            ValidationActor::full_validation};
+
+        [[nodiscard]] bool valid_validation_actor(const ValidationActor actor)
         {
+            return std::find(required_validation_actors.begin(),
+                required_validation_actors.end(), actor) != required_validation_actors.end();
+        }
+
+        [[nodiscard]] bool complete_validation_set(
+            const std::vector<ValidationEvidence>& evidence,
+            const std::string_view candidate_digest)
+        {
+            if (evidence.size() != required_validation_actors.size()
+                || !lowercase_hex(candidate_digest, 64u))
+                return false;
             std::set<ValidationActor> passed{};
             for (const auto& item : evidence)
             {
-                if (item.passed)
-                    passed.insert(item.actor);
+                if (!item.passed || item.candidate_digest != candidate_digest
+                    || !valid_validation_actor(item.actor)
+                    || !passed.insert(item.actor).second)
+                    return false;
             }
-            return passed.size() == 7u;
+            return passed.size() == required_validation_actors.size();
         }
 
         [[nodiscard]] std::string source_kind_name(SourceAuthorityKind kind)
@@ -394,6 +415,11 @@ namespace epochengine::ai::iteration_session
         proposal_digest_ = loop_digest(report_.proposal_digest);
         report_.candidate_digest.clear();
         report_.candidate_approved = false;
+        // The report owns only this candidate's receipts. Earlier candidates
+        // remain in immutable campaign checkpoints and the iteration history.
+        // Rejected/stale staging above must leave those active receipts intact.
+        report_.validation.clear();
+        compiler_milestone_recorded_ = false;
         report_.phase = SessionPhase::awaiting_candidate_approval;
         return accept("Exact candidate digest staged for manual operator review.");
     }
@@ -508,13 +534,25 @@ namespace epochengine::ai::iteration_session
     {
         if (!identity_matches(identity) || report_.phase != SessionPhase::validating_candidate
             || evidence.candidate_digest != report_.candidate_digest
+            || !valid_validation_actor(evidence.actor)
             || !lowercase_hex(evidence.evidence_digest, 64u)
             || !valid_summary(evidence.summary))
             return reject("Validation evidence is stale, malformed, or outside the active candidate.");
+        if (std::any_of(report_.validation.begin(), report_.validation.end(),
+                [&](const ValidationEvidence& recorded) { return recorded.actor == evidence.actor; }))
+            return reject("Validation actor already has a receipt for the active candidate.");
         const auto digest = loop_digest(evidence.evidence_digest);
         if (!digest.valid())
             return reject("Validation evidence digest is invalid.");
-        report_.validation.push_back(evidence);
+        auto validation = report_.validation;
+        validation.push_back(evidence);
+        // Reject a premature/fabricated final set before consuming a compiler
+        // milestone or appending a receipt, so the exact operation can retry.
+        if (evidence.passed && validation_sequence_complete
+            && (!complete_validation_set(validation, report_.candidate_digest)
+                || (!compiler_milestone_recorded_
+                    && evidence.actor != ValidationActor::debug_compiler)))
+            return reject("Candidate verification requires all seven trusted validation actors for this exact candidate.");
 
         if (!evidence.passed)
         {
@@ -527,6 +565,7 @@ namespace epochengine::ai::iteration_session
                 milestone, actor, digest, evidence.summary, false);
             if (!failed)
                 return failed;
+            report_.validation = std::move(validation);
             report_.repair_attempt = loop_.snapshot().repair_attempts;
             report_.phase = SessionPhase::awaiting_repair;
             report_.candidate_approved = false;
@@ -551,8 +590,6 @@ namespace epochengine::ai::iteration_session
 
         if (validation_sequence_complete)
         {
-            if (!compiler_milestone_recorded_ || !complete_validation_set(report_.validation))
-                return reject("Candidate verification requires all seven trusted validation actors.");
             const auto tested = record_loop_host_milestone(
                 iteration::Milestone::test,
                 iteration::EvidenceActor::test_runner,
@@ -561,10 +598,12 @@ namespace epochengine::ai::iteration_session
                 true);
             if (!tested || !loop_.snapshot().complete)
                 return reject("The bounded iteration loop did not accept the complete validation set.");
+            report_.validation = std::move(validation);
             report_.phase = SessionPhase::candidate_verified;
             report_.resume_requires_revalidation = true;
             return accept("Exact candidate passed the bounded validation session; manual live promotion remains separate.");
         }
+        report_.validation = std::move(validation);
         return accept("Trusted validation evidence recorded for the active candidate.");
     }
 

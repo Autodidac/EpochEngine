@@ -27,28 +27,36 @@ or redefine them.
 
 ## Current Source And Evidence
 
-Last implementation checkpoint: `f494ed5f`, following receipt/resource checkpoint
-`dc96a778` and host-alias repair `7d538759`. Later `37ce9a9a` / `e52f7c0a` record
-SDK scope only. This table supersedes the stacked reset notes.
+Last committed planning checkpoint: `056ab2e9`, following implementation
+`f494ed5f`, receipt/resource `dc96a778` and host-alias `7d538759`. The September 6
+repair batch below is currently uncommitted. This table supersedes the stacked
+reset notes; implementation and current-build evidence are separate.
 
 | Area | Actual state | Missing acceptance / next action |
 | --- | --- | --- |
 | Host-alias compiler handoff | Trusted executable canonicalization and 91,520 same-group dock-move regression passed at `7d538759`; redundant Qwen clamp was not promoted | Reuse these foundations |
-| Compiler failure receipts | 2048-byte UTF-8-safe summaries, full-status SHA-256, first causal error and separate 32 KiB repair context saved at `dc96a778` | Rebuild exact current Editor; run verbose-failure, seven-gate success and malformed-receipt regressions |
-| Repair prompt budget | Catalog precedes repair context; source/catalog can each use 184 KiB against a 256 KiB total | Reserve repair envelope first; fit complete catalog lines in the remainder; prove maximum-budget recovery |
-| Validation transaction | Malformed-summary preflight prevents that inner-state mutation | Persistence/I/O/state-size failure after inner validation can still advance state; make commits atomic and fault-test |
-| Resource admission | Controller and real Windows/Linux CPU/RAM sampling plus scheduler component CTests passed 2/2 | 123 saved application helper lines are UNWIRED; no production cooldown or overload prevention claimed |
-| Task activity | Scheduler exposes running/queued/idle counts and Systems descriptions | Connect toolbar; inspecting Systems must not allocate a scheduler |
-| Version preparation | Source/Windows/Linux constants and associated metadata partially declare 0.90.1; macOS constants explicitly 0.89.30 | Fix version script (currently 0.90.01), receipt platform resolution and updater contracts; preserve historical 0.89.06 |
+| Compiler failure receipts | UTF-8-safe summary/full-status SHA/causal error/32 KiB repair context retained; accepted repair starts a fresh candidate receipt set; all seven exact-candidate actors required | Rebuilt verbose-failure/repair/seven-pass and invalid receipt contracts pass; native malformed-build repair remains open |
+| Repair prompt budget | Mandatory source/causal evidence/hash/failed proposal precede optional catalog; complete PATH lines fitted within 256 KiB; max-budget and source-reselection regressions pass | Native model use of the preserved repair context remains open |
+| Validation transaction | Copy-staged orchestrator transaction and immutable generation/digest records; atomic outer checkpoint, exact resume and redirect guards implemented | Rebuilt Debug orchestrator fault contracts pass; native persistence/repair continuity remains open |
+| Resource admission | Global heavy-work ownership, measured CPU/RAM and nonblocking 30-second healthy/cooldown admission wired through source/project model, compiler, tests and previews, including floating chat and parked context retirement | Component CTests 2/2 and rebuilt Debug source-path contract pass; native dispatch/retirement and generated-child resource behavior remain unverified |
+| Task activity | Toolbar uses active/queued/idle counts; Systems reads nullable existing scheduler | Exact Release eye test required |
+| Version preparation | Script resolves 0.90.1, historical 0.89.06 and separate macOS 0.89.30; receipt platform resolver and updater contracts repaired | PowerShell 7/5.1 self-tests and rebuilt Debug updater contracts pass; exact Release/package evidence remains open |
+| Model timeout | Local source attempts allow 1,800 seconds; total-budget timeout is terminal, only an earlier recoverable failure retries once; typed cause survives chat/panel with no upper-layer retry. MCP has an explicit 900-second owner deadline and retained retirement/cancellation cause | Rebuilt HTTP/CLI/MCP completion/cancellation contracts pass; real Qwen background/minimize/Stop proof remains open |
 | Model/UI foundations | Model memory/default, hidden-pane progression, Stop/restart ownership, candidate-data routing and centered-divider geometry have prior contract/build evidence | Exact current native readability, cancellation, docking and two-build Qwen acceptance still open |
 | Candidate execution | Private data roots/process supervision implemented; optional LPAC component has partial console proof | Candidate Lab still uses inherited OS identity; filesystem/network/IPC confinement and embedding compatibility unproven |
 | SDK/research/demo integrations | Requirements and planned contracts recorded | No SDK access/UI, curated research loader or new demo/Space library integration claimed |
 
-The resumed Debug Editor build exited 0 (`build/self_coding_resume_debug.log`)
-but started before the final version/host-helper edits. It is not exact-build
-proof for this checkpoint. The new Editor aggregate was not run. No final
-Release build, native Qwen comparison, WSL package, Site publication or stable-ref
-advance is proven for this tree. Builds do not substitute for pixels or security.
+The exact current serial Debug Editor build exited 0
+(`build/self_coding_0901_debug.log`). Its rebuilt build-safe aggregate completed
+09:58:06 with all 180 checks passing, including terminal metadata, MCP deadline,
+repair followed by seven fresh validations and atomic checkpoint faults. The
+serial Release build also passed (`build/self_coding_0901_release.log`), and its
+rebuilt aggregate passed all 180 checks with the process explicitly waited and
+exit 0. Release EXE: 13,218,304 bytes, SHA-256
+`590a4def52773711925e4acfedabe195f80ff55407df56e28335b775affe74ba`.
+Existing duplicate-logger and optimization-override warnings remain. No native
+Qwen comparison, WSL package, Site publication or stable-ref advance is proven
+for this tree. Builds do not substitute for pixels or security.
 
 ## Actual Failure To Repair
 
@@ -68,41 +76,47 @@ MSB4181 messages are consequences, not separate causes.
 These are disposable local evidence locations, not tracked source or release
 payload. Do not rerun a model merely to recover an already saved failure.
 
+The later operator-reported disconnect is separately diagnosed: the Epoch host
+requests beginning 08:09:19 and 08:19:21 disconnected at 08:19:19 and 08:29:19,
+matching the old 600-second attempt deadline. Background OpenGL owner ticks
+continued; focus/minimize did not cancel those requests. Later LM Studio records
+include another client's tests and are not evidence of another Epoch attempt.
+Never dump unrelated model reasoning, prompts or process credentials to report
+transport status.
+
 ## Exact Next Production Work
 
-1. **Repair information continuity.** Review `campaign_model_prompt` in
-   `editor.ai_development_panel.cpp`. Preserve exact reviewed source bytes;
-   reserve real causal diagnostics/full-evidence hash and failed proposal before
-   optional catalog/reference material. Add a maximum-size regression proving
-   C1075 reaches the repair request without overflow or silent omission.
-   Current budgets: 184 KiB source evidence, 256 KiB whole prompt, 32 KiB repair
-   context and 16 KiB failed proposal. Fit catalog on complete PATH boundaries.
-2. **Make validation commits atomic.** Repair `Orchestrator::record_validation`
-   so persistence/I/O/state-size failure cannot advance inner state, consume the
-   pending operation or lose the last good checkpoint. Prove failure, reload,
-   retry and stale-completion behavior with injected failures.
-3. **Wire measured admission once.** Reuse `platform.work_admission` and
-   `editor.application.cpp` helpers. Queue exact actions with monotonic token/
-   artifact epoch before model/compiler/test/preview side effects, including
-   final deferred local HTTP dispatch. Poll on owner ticks without UI sleeps;
-   show the nonblocking 30-second cooldown/resource wait and Stop. Retain a
-   synchronized process-wide heavy-work lease through actual worker/child
-   retirement. Pause new heavy work during comparison; retire the loser before
-   resuming. The chosen baseline may remain alive without being mistaken for
-   newly admitted work. Cancel/Restart/Close discard queued actions; queued work
-   counts as pending; no late resurrection or early release on failed close.
-   Connect truthful toolbar activity and existing nullable Systems scheduler.
-4. **Reconcile versions and build.** Finish `get_epoch_version.ps1`,
-   `write_epoch_build_validation_receipt.ps1` and updater contract gaps above.
-   Then serial Windows Debug/Release builds and rebuilt
-   `--engine-contract-self-test` aggregates plus focused component tests. Verify
-   historical/platform versions instead of weakening contracts to pass.
-5. **Exercise and repair the real workflow.** Use an ordinary-language,
+1. **Preserve the green source checkpoint.** Debug/Release Editor builds and both
+   rebuilt 180-check aggregates plus component/script contracts are green. Save
+   this focused source/docs batch before the native run; do not rebuild these
+   systems or treat their unit proof as completed native acceptance.
+2. **Exercise and repair the real workflow.** Use an ordinary-language,
    genuinely unfinished `EPOCH_EDITOR_SELF_CODING_OBJECTIVE`, not an existing
    feature. Run Qwen through failure recovery, all validation, distinct embedded
    comparison and Choose, then another accepted Release compile from that parent.
    Prove Keep, Stop and context-close retirement too. Repair the first causal
    failure before retry; a new plan alone is not a successful successor.
+3. **Qualify admission and interaction in that run.** Observe nonblocking
+   CPU/RAM/30-second waits, real activity/elapsed/Stop, source/project separation,
+   candidate attachment, chosen-baseline survival and loser/worker retirement.
+   Use the Windows computer-use skill for native pixels/input. Do not call the
+   automated harness's HWND/identity checks visual acceptance.
+
+Native launch preparation is source-reviewed: use the physical checkout's
+asset-bearing `x64/Release`, `--editor --parented --renderer opengl` and a fresh
+precreated real absolute `--candidate-data-root C:/tmp/<unique-test-root>`.
+Set process-local `EPOCH_EDITOR_AUTO_COMMAND=self-coding-local-smoke`, explicit
+Qwen model/localhost:1234 endpoint and `EPOCH_EDITOR_SELF_CODING_CHOICE=choose`.
+The unfinished objective is two successive Candidate Lab feedback changes:
+first exact seven-check progress/states, then readable Keep/Choose/Stop and next
+step guidance. Do not ask it to reimplement a feature already present. The rig
+disables parent update checks and cannot invoke publication/promotion. Its
+90-minute overall timeout remains separate from each model/build request.
+Trace: private-root `logs/epoch_editor_auto_command.log`; require explicit PASS
+after two distinct validated artifacts/PIDs and retirement, not exit code alone.
+Coordinate LM Studio start/clear with task `01a03627-5f71-7521-902c-64a31631367d`,
+which reported its probe lane clear. No model has been loaded/ejected by Epoch
+in this resumed pass. WSL is not reserved; EpochSimEngine is using its own lane.
 
 Independent agents may work on disjoint bounded source/contracts while the root
 integrates and serializes heavy work. A minimal curated local architecture/API/

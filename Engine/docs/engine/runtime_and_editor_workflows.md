@@ -1455,6 +1455,16 @@ showing an in-memory campaign that the scheduler cannot resume. Resume prefers
 the compact state and fails closed when that exact file is present but invalid;
 legacy layout fallback is used only when compact state is absent.
 
+Validation completion is also transactional. The orchestrator works on a copy,
+persists an immutable inner campaign record addressed by generation and digest,
+then atomically publishes the outer checkpoint before installing the new memory
+state. A failed write, replacement, capacity check or redirected path cannot
+consume the pending validation operation. Resume uses that exact record, not a
+newer shared file; legacy checkpoints retain exact identity checks. Each newly
+accepted candidate starts with an empty active validation set. Failed candidate
+history remains in prior immutable records, but cannot satisfy the next
+candidate's seven distinct successful actor checks.
+
 Successful validation aggregates existing `epoch.build_validation` receipts
 into deterministic Site-readable JSON bound to the exact candidate, bundle,
 authority, source commit/tree, toolchain, and configuration. This is admission
@@ -1488,6 +1498,22 @@ completions, preview PID/window admission and dispatch/comparison failures.
 These entries contain host identities and diagnostic/log paths, not model
 prompts or replies. Validation subprocesses are explicitly labeled as tests,
 not comparison previews. Provider-side full model logs remain separate.
+
+Heavy host work is admitted through one process-wide ownership lease. The
+owner tick polls measured CPU/RAM and a nonblocking 30-second healthy/cooldown
+interval before model, compiler, validation and preview dispatch. The lease
+survives actual worker/child retirement, not just completion notification.
+Comparison pauses new heavy work; selection retires the losing preview before
+successor work, while the selected baseline may remain alive. Cancel, Restart
+and Close invalidate queued identities; unconfirmed retirement quarantines the
+lane. Project chat, including floating chat, uses the same final admission point.
+An exact source successor waiting behind project chat is retained separately;
+neither can replace the other's prompt, goal or completed reply. Toolbar counts
+describe running/queued/idle tasks, not registered thread lifetimes.
+
+CPU/RAM samples currently cover Windows/Linux, not GPU/VRAM or macOS. Generated
+project subprocesses inside full validation still require separate resource
+qualification; these host admission rules are not universal overload protection.
 
 After full validation, the exact sandbox `x64/Release/EpochEditor.exe` starts as
 a separately supervised normal-window child. Its PID and native-window identity
@@ -1524,8 +1550,14 @@ exact unique reviewed search and requested replacement bytes. Packet rejection
 queues no more than two complete host-diagnosed retries over the same evidence.
 OpenAI-compatible source calls preserve the provider's configured reasoning
 mode (no forced `reasoning_effort=none` or `/no_think`), use the bounded
-600-second source timeout, retry one failed/empty call, and keep an animated
+1,800-second source timeout, retry one early failed/empty call (not an exhausted
+whole request budget), and keep an animated
 elapsed-time working indicator visible until the response or cancellation.
+Terminal timeout/cancellation/retirement metadata travels separately from model
+text through the transport, chat worker and source panel. It cannot be forged by
+assistant content or converted into a higher-level automatic plan retry. The
+panel retains the host's exact cause; project completion metadata cannot be
+consumed as a source result.
 
 Source execution completion must come from `ai.development_executor`, not
 model-written claims submitted through the public completion path.

@@ -820,12 +820,20 @@ read/edit responses are rejected. Proposal metadata does not have to repeat word
 from the operator's objective: lexical overlap does not prove relevance or safety.
 Exact-byte grounding, ownership checks, actual validation and operator candidate
 choice remain separate requirements.
-The transport honors the declared 600-second source timeout rather than the
-ordinary short chat timeout. One transport, API, hidden-reasoning, malformed-
-schema, or empty-content failure is retried with an explicit final-answer
-request; cancellation remains immediate and is never retried. While either
-attempt is pending, AI Controls displays an animated local-model activity bar,
-the selected model, and elapsed time.
+Source iteration has a bounded 1,800-second per-attempt wall budget, including
+prompt evaluation and model reasoning; ordinary chat/authoring/self-review keep
+their separate 120/180/300-second budgets. Window focus does not cancel the
+independent HTTP worker. One early transport-operation, API, hidden-reasoning,
+malformed-schema, or empty-content failure may retry with an explicit final-answer
+request. Expiry of the whole wall budget does not automatically restart the same
+expensive generation. Cancellation and failed native retirement are never retried.
+Timeout diagnostics preserve elapsed time, configured limit and attempt number.
+Host-owned terminal metadata is separate from assistant text and survives the
+chat-worker/panel boundary. Whole-budget timeout, cancellation and unconfirmed
+retirement cannot trigger a higher-level automatic plan or packet retry, and a
+project-assistant completion cannot be consumed by the source campaign.
+While a request is pending, AI Controls displays local-model activity, the selected
+model and elapsed time; this is request activity, not fabricated token progress.
 
 
 Every operation requires reviewed path context and one exact search block that

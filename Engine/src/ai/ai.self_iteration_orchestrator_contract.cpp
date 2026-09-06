@@ -7,7 +7,9 @@ module;
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
+#include <string_view>
 
 module ai.self_iteration_orchestrator;
 
@@ -39,6 +41,321 @@ namespace epochengine::ai::self_iteration_orchestrator
                 .expected_state_sha256 = operation.expected_state_sha256(),
                 .transition_id = operation.transition_id(),
                 .now_unix_seconds = now};
+        }
+
+        [[nodiscard]] std::string read_bytes(const std::filesystem::path& path)
+        {
+            std::ifstream input{path, std::ios::binary};
+            return {std::istreambuf_iterator<char>{input},
+                std::istreambuf_iterator<char>{}};
+        }
+
+        [[nodiscard]] bool write_bytes(
+            const std::filesystem::path& path, const std::string_view bytes)
+        {
+            std::error_code ec{};
+            std::filesystem::create_directories(path.parent_path(), ec);
+            if (ec) return false;
+            std::ofstream output{path, std::ios::binary | std::ios::trunc};
+            output << bytes;
+            output.close();
+            return static_cast<bool>(output);
+        }
+
+        [[nodiscard]] bool same_validation_state(const Snapshot& before, const Snapshot& after)
+        {
+            return before.generation == after.generation
+                && before.state_sha256 == after.state_sha256
+                && before.previous_state_sha256 == after.previous_state_sha256
+                && before.phase == after.phase && before.status == after.status
+                && before.pending_operation_id == after.pending_operation_id
+                && before.validation_index == after.validation_index
+                && before.evidence.size() == after.evidence.size()
+                && before.candidate_sha256 == after.candidate_sha256
+                && before.proposal_sha256 == after.proposal_sha256
+                && before.campaign.record_generation == after.campaign.record_generation
+                && before.campaign.state_digest == after.campaign.state_digest
+                && before.campaign.counters == after.campaign.counters
+                && before.campaign.session.identity == after.campaign.session.identity
+                && before.campaign.session.phase == after.campaign.session.phase
+                && before.campaign.session.status == after.campaign.session.status
+                && before.campaign.session.repair_attempt == after.campaign.session.repair_attempt
+                && before.campaign.session.candidate_approved == after.campaign.session.candidate_approved
+                && before.campaign.session.validation.size() == after.campaign.session.validation.size();
+        }
+
+        [[nodiscard]] std::filesystem::path record_path(
+            const Configuration& configuration, const Snapshot& snapshot)
+        {
+            return configuration.cache_root / "orchestrator_records"
+                / std::to_string(snapshot.campaign.record_generation)
+                / (snapshot.campaign.state_digest + ".epochai");
+        }
+
+        [[nodiscard]] bool failed_publication_contract(
+            Orchestrator& orchestrator, const Result& requested,
+            const std::uint64_t now, const std::string& evidence,
+            const std::string& summary, const bool passed)
+        {
+            namespace fs = std::filesystem;
+            const Snapshot before = orchestrator.snapshot();
+            const std::string bytes = read_bytes(requested.state_path);
+            const fs::path backup = requested.state_path.string() + ".previous";
+            std::error_code ec{};
+            fs::rename(requested.state_path, backup, ec);
+            if (ec) return false;
+            // A directory at the publication destination forces the real
+            // atomic-replace primitive to fail on both Windows and POSIX.
+            const bool blocked = fs::create_directory(requested.state_path, ec) && !ec;
+            Result refused{};
+            if (blocked) refused = orchestrator.record_validation(
+                receipt(*requested.pending_operation, now), evidence, summary, passed);
+            const bool unchanged = blocked && !refused
+                && refused.status.find("atomically replaced") != std::string::npos
+                && same_validation_state(before, refused.snapshot)
+                && same_validation_state(before, orchestrator.snapshot())
+                && read_bytes(backup) == bytes;
+            if (blocked) fs::remove(requested.state_path, ec);
+            fs::rename(backup, requested.state_path, ec);
+            return unchanged && !ec && read_bytes(requested.state_path) == bytes;
+        }
+
+        [[nodiscard]] bool durable_reference_contract(
+            const Configuration& configuration, const Result& requested,
+            const std::uint64_t now)
+        {
+            namespace fs = std::filesystem;
+            const Snapshot& before = requested.snapshot;
+            const std::string checkpoint = read_bytes(requested.state_path);
+            const fs::path exact = record_path(configuration, before);
+            const std::string exact_bytes = read_bytes(exact);
+            if (checkpoint.empty() || exact_bytes.empty()) return false;
+            const fs::path next_generation = configuration.cache_root / "orchestrator_records"
+                / std::to_string(before.campaign.record_generation + 1u);
+            iteration_campaign::CampaignResult unpublished{};
+            std::error_code ec{};
+            fs::directory_iterator entries{next_generation, ec};
+            if (ec) return false;
+            for (const auto& entry : entries)
+            {
+                auto candidate = iteration_campaign::load_report(entry.path());
+                if (candidate && candidate.report.campaign_id == before.campaign.campaign_id
+                    && !candidate.report.session.validation.empty()
+                    && candidate.report.session.validation.back().passed)
+                    unpublished = std::move(candidate);
+            }
+            if (!unpublished || unpublished.state_digest == before.campaign.state_digest)
+                return false;
+            auto shared = iteration_campaign::save_report(
+                configuration.cache_root, unpublished.report);
+            if (!shared) return false;
+
+            auto reload = [&](const std::string_view name, const std::string& bytes,
+                              const bool accepted)
+            {
+                const fs::path copy = configuration.cache_root / "reload"
+                    / (std::string{name} + ".epochai");
+                if (!write_bytes(copy, bytes)) return false;
+                Orchestrator restarted{};
+                const auto result = restarted.resume(configuration, copy, now);
+                return accepted
+                    ? result.accepted
+                        && result.snapshot.campaign.previous_state_digest == before.campaign.state_digest
+                        && result.snapshot.campaign.record_generation == before.campaign.record_generation + 1u
+                        && result.snapshot.pending_operation_id.empty()
+                        && result.snapshot.campaign.session.validation.empty()
+                        && result.snapshot.campaign.counters == before.campaign.counters
+                    : !result && read_bytes(copy) == bytes;
+            };
+            // A newer shared record (or orphan from interrupted publication)
+            // must never replace the exact generation referenced by V2.
+            if (!reload("exact", checkpoint, true)
+                || read_bytes(exact) != exact_bytes) return false;
+            const fs::path backup = exact.string() + ".previous";
+            fs::rename(exact, backup, ec);
+            if (ec) return false;
+            const bool missing_refused = reload("missing", checkpoint, false)
+                && !fs::exists(exact);
+            const bool corrupt_refused = write_bytes(exact, "corrupt immutable record")
+                && reload("corrupt", checkpoint, false)
+                && read_bytes(exact) == "corrupt immutable record";
+            fs::remove(exact, ec);
+            fs::rename(backup, exact, ec);
+            if (ec || !missing_refused || !corrupt_refused
+                || read_bytes(exact) != exact_bytes) return false;
+
+            // V1 used a shared campaign path, so compatibility is allowed only
+            // for an equal digest AND generation, never merely a newer record.
+            std::string legacy = checkpoint;
+            const std::string current_header = "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V2\n";
+            if (!legacy.starts_with(current_header)) return false;
+            legacy.replace(0u, current_header.size(), "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V1\n");
+            shared = iteration_campaign::save_report(configuration.cache_root, before.campaign);
+            if (!shared || shared.state_digest != before.campaign.state_digest
+                || !reload("legacy-exact", legacy, true)) return false;
+            auto changed = before.campaign;
+            changed.status = "Different bytes at the same campaign generation.";
+            changed.state_digest.clear();
+            shared = iteration_campaign::save_report(configuration.cache_root, changed);
+            if (!shared || shared.state_digest == before.campaign.state_digest
+                || !reload("legacy-wrong-digest", legacy, false)) return false;
+            shared = iteration_campaign::save_report(configuration.cache_root, unpublished.report);
+            return shared.accepted && reload("legacy-newer", legacy, false)
+                && read_bytes(requested.state_path) == checkpoint
+                && read_bytes(exact) == exact_bytes;
+        }
+
+        [[nodiscard]] bool capacity_contract(Configuration configuration, const std::uint64_t now)
+        {
+            configuration.cache_root /= "capacity";
+            Limits limits{};
+            limits.maximum_state_bytes = 64u * 1024u;
+            limits.maximum_summary_bytes = 4096u;
+            Orchestrator orchestrator{};
+            Result step = orchestrator.begin(configuration, limits);
+            if (!step) return false;
+            step = orchestrator.request_plan(action(step.snapshot, "plan", now + 1u));
+            if (!step || !step.pending_operation) return false;
+            // Five bounded descriptions fit individually; percent escaping
+            // makes their aggregate leave insufficient space for a long receipt.
+            const std::string large(3072u, '%');
+            step = orchestrator.record_plan(receipt(*step.pending_operation, now + 2u),
+                "One bounded plan", large);
+            if (!step) return false;
+            step = orchestrator.share_curated_evidence(action(step.snapshot, "share", now + 3u),
+                step.snapshot.campaign.session.scope_digest, std::string(64u, '2'), large);
+            if (!step) return false;
+            step = orchestrator.request_proposal(action(step.snapshot, "proposal", now + 4u));
+            if (!step || !step.pending_operation) return false;
+            step = orchestrator.record_proposal(receipt(*step.pending_operation, now + 5u),
+                "One bounded candidate", large);
+            if (!step) return false;
+            step = orchestrator.review_proposal(action(step.snapshot, "review", now + 6u), true, large);
+            if (!step) return false;
+            step = orchestrator.decide_apply(action(step.snapshot, "apply", now + 7u), true, large);
+            if (!step || !step.pending_operation) return false;
+            step = orchestrator.record_apply(receipt(*step.pending_operation, now + 8u),
+                std::string(64u, '3'), "Host applied exact candidate.");
+            if (!step) return false;
+            step = orchestrator.request_validation(action(step.snapshot, "validation", now + 9u));
+            if (!step || !step.pending_operation) return false;
+            const Snapshot before = orchestrator.snapshot();
+            const std::string bytes = read_bytes(step.state_path);
+            const auto operation_receipt = receipt(*step.pending_operation, now + 10u);
+            const auto refused = orchestrator.record_validation(operation_receipt,
+                std::string(64u, '4'), std::string(4096u, '%'), false);
+            if (refused || refused.status != "Orchestration state exceeds its persistence budget."
+                || !same_validation_state(before, refused.snapshot)
+                || !same_validation_state(before, orchestrator.snapshot())
+                || read_bytes(step.state_path) != bytes) return false;
+            const auto retried = orchestrator.record_validation(operation_receipt,
+                std::string(64u, '4'), "Compiler failed; request one bounded repair.", false);
+            return retried.accepted && retried.snapshot.phase == Phase::awaiting_proposal_request
+                && retried.snapshot.campaign.session.validation.size() == 1u
+                && retried.snapshot.campaign.session.repair_attempt == 1u
+                && !orchestrator.record_validation(operation_receipt,
+                    std::string(64u, '4'), "Stale receipt after successful retry.", false);
+        }
+
+        [[nodiscard]] bool redirected_cache_contract(
+            Configuration configuration, const std::uint64_t now)
+        {
+            namespace fs = std::filesystem;
+            const auto fixture = configuration.cache_root / "redirect-fixture";
+            const auto outside = fixture / "outside";
+            std::error_code ec{};
+            if (!write_bytes(outside / "canary", "outside cache canary")) return false;
+            const auto unchanged = [&]
+            {
+                return read_bytes(outside / "canary") == "outside cache canary";
+            };
+            // Link creation is required proof, not a skipped passing branch.
+            // Windows hosts must provide symlink privilege/Developer Mode.
+            const auto link = [&](const fs::path& target, const fs::path& path)
+            {
+                fs::create_directories(path.parent_path(), ec);
+                if (ec) return false;
+                fs::create_directory_symlink(target, path, ec);
+                return !ec;
+            };
+            for (const std::string prefix : {"orchestrator_records", "op"})
+            {
+                configuration.cache_root = fixture / ("write-" + prefix);
+                if (!link(outside, configuration.cache_root / prefix)) return false;
+                Orchestrator rejected{};
+                const auto result = rejected.begin(configuration);
+                if (result || !unchanged() || fs::exists(outside / "1")) return false;
+                fs::remove(configuration.cache_root / prefix, ec);
+                if (ec) return false;
+            }
+
+            const auto physical = fixture / "physical";
+            const auto alias = fixture / "trusted-alias";
+            fs::create_directories(physical, ec);
+            if (ec || !link(physical, alias)) return false;
+            configuration.cache_root = alias;
+            Orchestrator first{};
+            const auto begun = first.begin(configuration);
+            if (!begun || !unchanged()) return false;
+            Orchestrator alias_reload{};
+            const auto resumed = alias_reload.resume(configuration, begun.state_path, now + 1u);
+            if (!resumed || resumed.snapshot.campaign.previous_state_digest
+                != begun.snapshot.campaign.state_digest) return false;
+            configuration.cache_root = physical;
+            const auto checkpoint = read_bytes(resumed.state_path);
+            const auto exact = record_path(configuration, resumed.snapshot);
+            const auto campaign_bytes = read_bytes(exact);
+            const auto records = physical / "orchestrator_records";
+            const auto saved_records = physical / "records-original";
+            const auto generation = resumed.snapshot.campaign.record_generation;
+            const auto outside_exact = outside / std::to_string(generation)
+                / (resumed.snapshot.campaign.state_digest + ".epochai");
+            if (checkpoint.empty() || campaign_bytes.empty()
+                || !write_bytes(outside_exact, campaign_bytes)) return false;
+            fs::rename(records, saved_records, ec);
+            if (ec || !link(outside, records)) return false;
+            Orchestrator redirected{};
+            const auto denied = redirected.resume(configuration, resumed.state_path, now + 2u);
+            const bool exact_refused = !denied && denied.snapshot.generation == 0u
+                && read_bytes(resumed.state_path) == checkpoint
+                && read_bytes(outside_exact) == campaign_bytes && unchanged()
+                && !fs::exists(outside / std::to_string(generation + 1u));
+            fs::remove(records, ec);
+            if (ec) return false;
+            fs::rename(saved_records, records, ec);
+            if (ec || !exact_refused) return false;
+
+            const auto shared = iteration_campaign::save_report(physical, resumed.snapshot.campaign);
+            if (!shared) return false;
+            const auto shared_relative = shared.state_path.lexically_relative(physical / "campaigns");
+            if (!write_bytes(outside / shared_relative, read_bytes(shared.state_path))) return false;
+            fs::rename(physical / "campaigns", physical / "campaigns-original", ec);
+            if (ec || !link(outside, physical / "campaigns")) return false;
+            std::string legacy = checkpoint;
+            const std::string header = "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V2\n";
+            legacy.replace(0u, header.size(), "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V1\n");
+            const auto legacy_path = physical / "legacy-state.epochai";
+            if (!write_bytes(legacy_path, legacy)) return false;
+            Orchestrator legacy_reader{};
+            const auto legacy_denied = legacy_reader.resume(configuration, legacy_path, now + 3u);
+            const bool legacy_refused = !legacy_denied && legacy_denied.snapshot.generation == 0u
+                && read_bytes(legacy_path) == legacy && unchanged();
+            fs::remove(physical / "campaigns", ec);
+            if (ec) return false;
+            fs::rename(physical / "campaigns-original", physical / "campaigns", ec);
+            if (ec || !legacy_refused) return false;
+
+            const auto outer = physical / "outer-link";
+            if (!write_bytes(outside / "state.epochai", checkpoint) || !link(outside, outer))
+                return false;
+            Orchestrator outer_reader{};
+            const auto outer_denied = outer_reader.resume(configuration, outer / "state.epochai", now + 4u);
+            const bool outer_refused = !outer_denied && outer_denied.snapshot.generation == 0u
+                && read_bytes(outside / "state.epochai") == checkpoint && unchanged();
+            fs::remove(outer, ec);
+            if (ec) return false;
+            fs::remove(alias, ec);
+            return !ec && outer_refused;
         }
     }
 
@@ -243,12 +560,34 @@ namespace epochengine::ai::self_iteration_orchestrator
                 }
                 // The valid receipt immediately below must still be accepted:
                 // rejected outer descriptions cannot consume the inner actor.
+                if (!failed_publication_contract(restarted, requested, now + 13u,
+                        std::string(64u, '4'), "Compiler failed; preserve a retryable receipt.", false))
+                {
+                    fs::remove_all(root, ec);
+                    return false;
+                }
+            }
+            // Exercise the final persistence boundary for every trusted actor.
+            // The exact retry must reuse the same immutable report successfully.
+            if (!failed_publication_contract(restarted, requested,
+                    now + 13u + index * 2u, std::string(64u, validation_hex[index]),
+                    "Fake trusted host validated the exact candidate digest.", true)
+                || (index == 0u && !durable_reference_contract(
+                    configuration, requested, now + 13u)))
+            {
+                fs::remove_all(root, ec);
+                return false;
             }
             current = restarted.record_validation(
                 receipt(*requested.pending_operation, now + 13u + index * 2u),
                 std::string(64u, validation_hex[index]),
                 "Fake trusted host validated the exact candidate digest.", true);
-            if (!current)
+            if (!current
+                || current.snapshot.validation_index != index + 1u
+                || current.snapshot.campaign.session.validation.size() != index + 1u
+                || restarted.record_validation(
+                    receipt(*requested.pending_operation, now + 13u + index * 2u),
+                    std::string(64u, validation_hex[index]), "Consumed receipt replay.", true))
             {
                 fs::remove_all(root, ec);
                 return false;
@@ -320,7 +659,9 @@ namespace epochengine::ai::self_iteration_orchestrator
             action(engine_begun.snapshot, "engine-cancel", now + 51u),
             "Operator cancelled before any model or source operation.") : Result{};
 
-        const bool ok = external_begun
+        const bool ok = capacity_contract(configuration, now + 60u)
+            && redirected_cache_contract(configuration, now + 80u)
+            && external_begun
             && external_begun.snapshot.transport == TransportKind::external_mcp
             && !external_begun.snapshot.network_or_server_permitted
             && external_begun.snapshot.target_key != begun.snapshot.target_key

@@ -211,6 +211,7 @@ namespace epochengine::ai::self_iteration_orchestrator
                 iteration_session::IterationTargetKind::engine_source};
             std::string campaign_sha256{};
             std::uint64_t campaign_generation{};
+            bool immutable_campaign_record{};
         };
 
         [[nodiscard]] bool parse_payload(
@@ -354,8 +355,13 @@ namespace epochengine::ai::self_iteration_orchestrator
             std::string& digest,
             const Limits limits)
         {
-            constexpr std::string_view header =
+            constexpr std::string_view current_header =
+                "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V2\n";
+            constexpr std::string_view legacy_header =
                 "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V1\n";
+            state.immutable_campaign_record = bytes.starts_with(current_header);
+            const auto header = state.immutable_campaign_record
+                ? current_header : legacy_header;
             if (bytes.size() > limits.maximum_state_bytes
                 || !bytes.starts_with(header)) return false;
             const auto size_end = bytes.find('\n', header.size());
@@ -393,6 +399,130 @@ namespace epochengine::ai::self_iteration_orchestrator
                 std::istreambuf_iterator<char>{input},
                 std::istreambuf_iterator<char>{}};
         }
+
+        [[nodiscard]] std::filesystem::path campaign_record_path(
+            const std::filesystem::path& root,
+            const std::uint64_t generation,
+            const std::string_view digest)
+        {
+            // The digest also binds campaign identity and content. Generation
+            // alone is insufficient when retrying an unpublished transition.
+            return root / "orchestrator_records" / std::to_string(generation)
+                / (std::string{digest} + ".epochai");
+        }
+
+        [[nodiscard]] std::string state_envelope(
+            const std::string_view payload, const std::string_view digest)
+        {
+            return "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V2\npayload_bytes="
+                + std::to_string(payload.size()) + "\npayload_sha256="
+                + std::string{digest} + "\n\n" + std::string{payload};
+        }
+
+        [[nodiscard]] bool prepare_cache_directory(
+            const std::filesystem::path& directory,
+            const std::filesystem::path& canonical_root,
+            const bool create_missing = true)
+        {
+            const auto normalized = directory.lexically_normal();
+            const auto relative = normalized.lexically_relative(canonical_root);
+            if (relative.empty() || relative.is_absolute()
+                || std::any_of(relative.begin(), relative.end(),
+                    [](const auto& part) { return part == ".."; })) return false;
+            std::error_code ec{};
+            auto current = canonical_root;
+            const auto root_status = std::filesystem::symlink_status(current, ec);
+            if (ec || !std::filesystem::is_directory(root_status)
+                || std::filesystem::is_symlink(root_status)) return false;
+            const auto verified_root = std::filesystem::weakly_canonical(current, ec);
+            if (ec || verified_root != canonical_root) return false;
+            for (const auto& part : relative)
+            {
+                if (part == ".") continue;
+                current /= part;
+                auto state = std::filesystem::symlink_status(current, ec);
+                if (state.type() == std::filesystem::file_type::not_found
+                    && (!ec || ec == std::errc::no_such_file_or_directory))
+                {
+                    if (!create_missing) return false;
+                    ec.clear();
+                    std::filesystem::create_directory(current, ec);
+                    if (ec) return false;
+                    state = std::filesystem::symlink_status(current, ec);
+                }
+                if (ec || !std::filesystem::is_directory(state)
+                    || std::filesystem::is_symlink(state)) return false;
+                // Canonical identity also catches directory junction/reparse
+                // redirects on hosts whose status exposes them as directories.
+                const auto canonical = std::filesystem::weakly_canonical(current, ec);
+                if (ec || canonical != current) return false;
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::filesystem::path rebase_cache_path(
+            const std::filesystem::path& configured_root,
+            const std::filesystem::path& canonical_root,
+            const std::filesystem::path& path)
+        {
+            // The configured root may be the operator's trusted checkout alias.
+            // Only that root alias is resolved; interior redirects are refused.
+            for (const auto& root : {configured_root, canonical_root})
+            {
+                const auto relative = path.lexically_normal().lexically_relative(
+                    root.lexically_normal());
+                if (!relative.empty() && !relative.is_absolute()
+                    && std::none_of(relative.begin(), relative.end(),
+                        [](const auto& part) { return part == ".."; }))
+                    return (canonical_root / relative).lexically_normal();
+            }
+            return {};
+        }
+
+        [[nodiscard]] bool regular_cache_file(
+            const std::filesystem::path& path,
+            const std::filesystem::path& canonical_root)
+        {
+            if (!prepare_cache_directory(path.parent_path(), canonical_root, false))
+                return false;
+            std::error_code ec{};
+            const auto state = std::filesystem::symlink_status(path, ec);
+            if (ec || !std::filesystem::is_regular_file(state)
+                || std::filesystem::is_symlink(state)) return false;
+            const auto canonical = std::filesystem::weakly_canonical(path, ec);
+            return !ec && canonical == path;
+        }
+
+        struct OwnedCampaignStaging final
+        {
+            // Assigned only after exclusive directory creation inside the
+            // canonical cache. Never remove a pre-existing or shared subtree.
+            std::filesystem::path root{};
+            std::filesystem::path cache_root{};
+            std::filesystem::path report_path{};
+            std::string report_digest{};
+            ~OwnedCampaignStaging()
+            {
+                if (root.empty() || report_path.empty()
+                    || !prepare_cache_directory(root, cache_root, false)) return;
+                std::error_code ignored{};
+                if (!report_digest.empty() && regular_cache_file(report_path, root))
+                {
+                    const auto report = iteration_campaign::load_report(report_path);
+                    if (report && report.state_digest == report_digest)
+                        std::filesystem::remove(report_path, ignored);
+                }
+                // Remove only known empty directories, never a recursively
+                // traversed subtree that may have acquired foreign contents.
+                for (auto parent = report_path.parent_path();;
+                     parent = parent.parent_path())
+                {
+                    if (!prepare_cache_directory(parent, cache_root, false)) break;
+                    if (!std::filesystem::remove(parent, ignored) || ignored) break;
+                    if (parent == root) break;
+                }
+            }
+        };
     }
 
     OperationKind PendingOperation::kind() const noexcept { return kind_; }
@@ -571,16 +701,19 @@ namespace epochengine::ai::self_iteration_orchestrator
         const std::uint64_t now,
         const Limits limits)
     {
-        if (configured_ || !path.is_absolute() || !limits.valid())
+        if (configured_ || !path.is_absolute()
+            || !configuration.cache_root.is_absolute() || !limits.valid())
             return reject("Resume requires one fresh orchestrator and an absolute state path.");
         limits_ = limits;
         std::error_code ec{};
-        if (!std::filesystem::is_regular_file(path, ec)
-            || std::filesystem::is_symlink(path, ec))
-            return reject("Orchestration state is missing, linked, or not regular.");
+        const auto root = std::filesystem::weakly_canonical(configuration.cache_root, ec);
+        if (ec || root.empty()) return reject("Resume cache root is unavailable.");
+        const auto checkpoint_path = rebase_cache_path(configuration.cache_root, root, path);
+        if (checkpoint_path.empty() || !regular_cache_file(checkpoint_path, root))
+            return reject("Orchestration state is missing, redirected, outside the cache, or not regular.");
         PersistedState persisted{};
         std::string state_digest{};
-        const std::string bytes = read_bounded(path, limits.maximum_state_bytes);
+        const std::string bytes = read_bounded(checkpoint_path, limits.maximum_state_bytes);
         if (!parse_envelope(bytes, persisted, state_digest, limits))
             return reject("Orchestration state envelope or digest is invalid.");
         cache_root_ = configuration.cache_root;
@@ -598,21 +731,27 @@ namespace epochengine::ai::self_iteration_orchestrator
             || configuration.host.generation != persisted.snapshot.host.generation
             || configuration.authority.target_kind != persisted.target_kind)
             return reject("Resume refused provider, profile, target, or host-binding drift.");
-        const auto campaign_path = iteration_campaign::state_path(
-            cache_root_, persisted.snapshot.campaign);
-        auto loaded = iteration_campaign::load_report(campaign_path);
+        const auto campaign_path = persisted.immutable_campaign_record
+            ? campaign_record_path(root, persisted.campaign_generation,
+                persisted.campaign_sha256)
+            : iteration_campaign::state_path(root, persisted.snapshot.campaign);
+        auto loaded = regular_cache_file(campaign_path, root)
+            ? iteration_campaign::load_report(campaign_path)
+            : iteration_campaign::CampaignResult{};
         std::error_code campaign_path_error{};
         const bool compact_campaign_state_exists =
-            std::filesystem::is_regular_file(
-                campaign_path, campaign_path_error)
-            && !campaign_path_error;
-        if (!loaded && !compact_campaign_state_exists)
+            prepare_cache_directory(campaign_path.parent_path(), root, false)
+            && std::filesystem::exists(std::filesystem::symlink_status(
+                campaign_path, campaign_path_error)) && !campaign_path_error;
+        if (!persisted.immutable_campaign_record
+            && !loaded && !compact_campaign_state_exists)
         {
-            const auto legacy_campaign_path = cache_root_ / "campaigns"
+            const auto legacy_campaign_path = root / "campaigns"
                 / target_name(persisted.target_kind)
                 / persisted.snapshot.target_key
                 / persisted.snapshot.campaign.campaign_id / "state.epochai";
-            loaded = iteration_campaign::load_report(legacy_campaign_path);
+            if (regular_cache_file(legacy_campaign_path, root))
+                loaded = iteration_campaign::load_report(legacy_campaign_path);
         }
         if (!loaded)
             return reject("Resume refused missing durable campaign state: "
@@ -621,8 +760,9 @@ namespace epochengine::ai::self_iteration_orchestrator
                 != persisted.snapshot.campaign.campaign_id
             || loaded.report.target_key != persisted.snapshot.target_key)
             return reject("Resume refused mismatched durable campaign identity.");
-        if (loaded.report.record_generation < persisted.campaign_generation)
-            return reject("Resume refused stale durable campaign generation.");
+        if (loaded.report.record_generation != persisted.campaign_generation
+            || loaded.state_digest != persisted.campaign_sha256)
+            return reject("Resume refused campaign state that does not match the exact checkpoint generation and digest.");
         auto resumed = iteration_campaign::resume_campaign(
             loaded.report, configuration.authority, configuration.curated_files,
             now, session_, false);
@@ -652,7 +792,7 @@ namespace epochengine::ai::self_iteration_orchestrator
             .passed = true});
         if (snapshot_.evidence.size() > limits_.maximum_evidence_records)
             return reject("Resume evidence exceeds the orchestration record budget.");
-        state_path_ = path;
+        state_path_ = checkpoint_path;
         configured_ = true;
         return persist("Campaign resumed fail-closed; a fresh plan request is required.");
     }
@@ -714,31 +854,82 @@ namespace epochengine::ai::self_iteration_orchestrator
     {
         snapshot_.campaign.session = session_.report();
         snapshot_.campaign.status = status;
-        auto saved_campaign = iteration_campaign::save_report(cache_root_, snapshot_.campaign);
-        if (!saved_campaign) return reject(saved_campaign.status);
-        snapshot_.campaign = std::move(saved_campaign.report);
         snapshot_.status = std::move(status);
-        const std::string payload = serialize_payload(snapshot_);
-        const std::string digest = digest_text(payload);
-        const std::string bytes = "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V1\npayload_bytes="
-            + std::to_string(payload.size()) + "\npayload_sha256=" + digest
-            + "\n\n" + payload;
-        if (bytes.size() > limits_.maximum_state_bytes)
+        // A campaign digest always has 64 bytes. Preflight the complete outer
+        // envelope before writing even an unreferenced campaign generation.
+        Snapshot projected = snapshot_;
+        projected.campaign.state_digest.assign(64u, '0');
+        if (state_envelope(serialize_payload(projected), std::string(64u, '0')).size()
+            > limits_.maximum_state_bytes)
             return reject("Orchestration state exceeds its persistence budget.");
         std::error_code ec{};
-        std::filesystem::create_directories(state_path_.parent_path(), ec);
-        if (ec) return reject("Orchestration state directory could not be created.");
         const auto root = std::filesystem::weakly_canonical(cache_root_, ec);
-        const auto parent = std::filesystem::weakly_canonical(state_path_.parent_path(), ec);
-        const auto relative = parent.lexically_relative(root);
-        if (ec || root.empty() || parent.empty() || relative.empty()
-            || relative.is_absolute()
-            || std::any_of(relative.begin(), relative.end(),
-                [](const auto& part) { return part == ".."; })
-            || std::filesystem::is_symlink(parent, ec))
+        if (ec || root.empty()) return reject("Orchestration cache root is unavailable.");
+        std::filesystem::create_directories(root, ec);
+        if (ec) return reject("Orchestration cache root could not be created.");
+        const auto destination = rebase_cache_path(cache_root_, root, state_path_);
+        if (destination.empty()
+            || !prepare_cache_directory(destination.parent_path(), root))
             return reject("Orchestration state directory escaped the canonical cache root.");
+
+        // Reuse the campaign serializer in an exclusively owned staging root;
+        // never overwrite the shared campaign record before the outer commit.
+        // Keep this private prefix short: the campaign serializer adds its own
+        // identity directories, including on Windows long-path-limited hosts.
+        const auto staging_parent = root / "op";
+        if (!prepare_cache_directory(staging_parent, root))
+            return reject("Orchestration campaign staging directory is unavailable.");
+        static std::atomic<std::uint64_t> next_staging{0u};
+        OwnedCampaignStaging staging{};
+        for (unsigned attempt = 0u; attempt < 32u && staging.root.empty(); ++attempt)
+        {
+            const auto candidate = staging_parent
+                / std::to_string(next_staging.fetch_add(1u, std::memory_order_relaxed) + 1u);
+            if (std::filesystem::create_directory(candidate, ec))
+                staging.root = candidate;
+            else if (ec && ec != std::errc::file_exists)
+                return reject("Orchestration campaign staging root could not be reserved.");
+        }
+        if (staging.root.empty())
+            return reject("Orchestration campaign staging root collision budget was exhausted.");
+        staging.cache_root = root;
+        staging.report_path = iteration_campaign::state_path(staging.root, snapshot_.campaign);
+        auto saved_campaign = iteration_campaign::save_report(staging.root, snapshot_.campaign);
+        if (!saved_campaign) return reject(saved_campaign.status);
+        staging.report_digest = saved_campaign.state_digest;
+        const auto record_path = campaign_record_path(root,
+            saved_campaign.report.record_generation, saved_campaign.state_digest);
+        if (!prepare_cache_directory(record_path.parent_path(), root))
+            return reject("Orchestration campaign record directory is unavailable.");
+        constexpr std::size_t maximum_campaign_bytes = 512u * 1024u;
+        const std::string campaign_bytes = regular_cache_file(saved_campaign.state_path, root)
+            ? read_bounded(saved_campaign.state_path, maximum_campaign_bytes) : std::string{};
+        if (campaign_bytes.empty())
+            return reject("Orchestration staged campaign record could not be reread.");
+        const auto campaign_data = std::span<const std::byte>{
+            reinterpret_cast<const std::byte*>(campaign_bytes.data()), campaign_bytes.size()};
+        // Exclusive creation cannot replace a previously committed record. A
+        // retry may reuse identical bytes, but corruption fails closed instead
+        // of silently rewriting evidence referenced by another checkpoint.
+        (void)platform::filesystem::exclusive_create_and_write(record_path, campaign_data, ec);
+        const auto verified_campaign = regular_cache_file(record_path, root)
+            ? iteration_campaign::load_report(record_path) : iteration_campaign::CampaignResult{};
+        if (!verified_campaign
+            || verified_campaign.state_digest != saved_campaign.state_digest
+            || verified_campaign.report.record_generation
+                != saved_campaign.report.record_generation
+            || read_bounded(record_path, maximum_campaign_bytes) != campaign_bytes)
+        {
+            return reject("Orchestration immutable campaign record could not be published or verified.");
+        }
+        snapshot_.campaign = std::move(saved_campaign.report);
+        const std::string payload = serialize_payload(snapshot_);
+        const std::string digest = digest_text(payload);
+        const std::string bytes = state_envelope(payload, digest);
+        if (bytes.size() > limits_.maximum_state_bytes)
+            return reject("Orchestration state exceeds its persistence budget.");
         static std::atomic<std::uint64_t> next_temp{0u};
-        const auto temporary = std::filesystem::path{state_path_.string()
+        const auto temporary = std::filesystem::path{destination.string()
             + ".tmp." + std::to_string(snapshot_.generation) + "."
             + std::to_string(next_temp.fetch_add(1u) + 1u)};
         const auto data = std::span<const std::byte>{
@@ -747,21 +938,23 @@ namespace epochengine::ai::self_iteration_orchestrator
             return reject("Orchestration temporary state could not be flushed.");
         PersistedState verified{};
         std::string verified_digest{};
-        const std::string reread = read_bounded(temporary, limits_.maximum_state_bytes);
+        const std::string reread = regular_cache_file(temporary, root)
+            ? read_bounded(temporary, limits_.maximum_state_bytes) : std::string{};
         if (reread != bytes
             || !parse_envelope(reread, verified, verified_digest, limits_)
             || verified_digest != digest
             || serialize_payload(verified.snapshot) != payload)
         {
-            std::filesystem::remove(temporary, ec);
+            if (regular_cache_file(temporary, root)) std::filesystem::remove(temporary, ec);
             return reject("Orchestration temporary state failed exact reread verification.");
         }
         if (!platform::filesystem::atomic_replace_same_filesystem(
-                temporary, state_path_, ec))
+                temporary, destination, ec))
         {
-            std::filesystem::remove(temporary, ec);
+            if (regular_cache_file(temporary, root)) std::filesystem::remove(temporary, ec);
             return reject("Orchestration state could not be atomically replaced.");
         }
+        state_path_ = destination;
         snapshot_.state_sha256 = digest;
         Result result{.accepted = true, .snapshot = snapshot_,
             .state_path = state_path_, .status = snapshot_.status};
@@ -1013,11 +1206,13 @@ namespace epochengine::ai::self_iteration_orchestrator
             || !valid_summary(summary, limits_)
             || snapshot_.evidence.size() >= limits_.maximum_evidence_records)
             return reject("Validation evidence is stale, malformed, or outside the fixed sequence.");
-        // Validate the outer receipt budget before advancing the inner session;
-        // a failed commit must not consume an otherwise retryable validation.
+        // Stage both layers together. The immutable campaign record and atomic
+        // outer checkpoint publication must succeed before consuming this
+        // receipt in memory; inner rejection can itself have partial work.
+        Orchestrator staged = *this;
         const std::uint32_t prior_index = snapshot_.validation_index;
         const bool complete = passed && prior_index + 1u == validation_actors().size();
-        const auto recorded = session_.record_validation(
+        const auto recorded = staged.session_.record_validation(
             snapshot_.campaign.session.identity,
             iteration_session::ValidationEvidence{
                 .actor = validation_actors()[prior_index],
@@ -1026,22 +1221,24 @@ namespace epochengine::ai::self_iteration_orchestrator
                 .summary = summary,
                 .passed = passed}, complete);
         if (!recorded) return reject(recorded.status);
-        snapshot_.campaign.session = session_.report();
-        snapshot_.pending_operation_id.clear();
+        staged.snapshot_.campaign.session = staged.session_.report();
+        staged.snapshot_.pending_operation_id.clear();
+        Phase phase = complete ? Phase::checkpoint_ready
+            : Phase::awaiting_validation_request;
         if (!passed)
         {
-            snapshot_.candidate_sha256.clear();
-            snapshot_.proposal_sha256.clear();
-            snapshot_.validation_index = 0u;
-            return commit(Phase::awaiting_proposal_request,
-                EvidenceKind::validation, receipt.transition_id,
-                std::move(evidence_sha256), std::move(summary), false);
+            staged.snapshot_.candidate_sha256.clear();
+            staged.snapshot_.proposal_sha256.clear();
+            staged.snapshot_.validation_index = 0u;
+            phase = Phase::awaiting_proposal_request;
         }
-        ++snapshot_.validation_index;
-        return commit(complete ? Phase::checkpoint_ready
-                : Phase::awaiting_validation_request,
+        else ++staged.snapshot_.validation_index;
+        auto committed = staged.commit(phase,
             EvidenceKind::validation, receipt.transition_id,
-            std::move(evidence_sha256), std::move(summary), true);
+            std::move(evidence_sha256), std::move(summary), passed);
+        if (!committed) return reject(committed.status);
+        *this = std::move(staged);
+        return committed;
     }
 
     Result Orchestrator::checkpoint(ActionToken action, std::string summary)

@@ -115,7 +115,10 @@ export namespace epochengine::ai
         case InferenceWorkload::authoring:
             return {32'768u, 4'096u, 128u * 1024u, 128u * 1024u, 180u};
         case InferenceWorkload::source_iteration:
-            return {65'536u, 32'768u, 256u * 1024u, 1024u * 1024u, 600u};
+            // Local coding includes prompt evaluation and long reasoning. The
+            // finite per-attempt budget is independent of window focus; an
+            // exhausted whole budget must not automatically restart that work.
+            return {65'536u, 32'768u, 256u * 1024u, 1024u * 1024u, 30u * 60u};
         case InferenceWorkload::source_self_review:
             return {65'536u, 8'192u, 256u * 1024u, 256u * 1024u, 300u};
         }
@@ -191,12 +194,21 @@ export namespace epochengine::ai
         double score = 0.0;
     };
 
+    enum class ModelTerminalFailure : std::uint8_t
+    {
+        none,
+        total_timeout,
+        cancelled,
+        retirement_failed
+    };
+
     struct EngineAiReply
     {
         std::string text;
         double score = 0.0;
         std::vector<Candidate> alternatives;
         bool transport_retirement_failed{};
+        ModelTerminalFailure terminal_failure{ModelTerminalFailure::none};
     };
 
     class EngineAiModel
@@ -239,7 +251,8 @@ export namespace epochengine::ai
         const std::string& user_text,
         InferenceWorkload workload = InferenceWorkload::chat,
         std::stop_token cancellation = {},
-        ModelRequestObserver observer = {});
+        ModelRequestObserver observer = {},
+        ModelTerminalFailure* terminal_failure = nullptr);
     [[nodiscard]] std::string default_workspace_root();
     [[nodiscard]] std::string review_fixtures_root();
     [[nodiscard]] std::string evals_root();

@@ -13,6 +13,7 @@ module;
 
 export module editor.ai_development_panel;
 
+export import ai.engine;
 export import ai.source_patch_proposal;
 
 export namespace epochengine::editor_ai_development_panel
@@ -124,6 +125,8 @@ export namespace epochengine::editor_ai_development_panel
         std::string architecture_evidence{};
         std::string tool_output_relative_path{};
         std::string latest_raw_model_reply{};
+        ai::ModelTerminalFailure model_terminal_failure{ai::ModelTerminalFailure::none};
+        std::string model_terminal_status{};
         std::string selected_model{};
         std::string selected_endpoint{};
         std::string selected_transport{};

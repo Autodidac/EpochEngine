@@ -129,6 +129,51 @@ namespace epochengine::ai
             using std::runtime_error::runtime_error;
         };
 
+        enum class ModelAttemptFailure : unsigned char
+        {
+            recoverable, operation_timeout, total_timeout, cancelled, retirement_failed
+        };
+
+        class ModelTransportTimeout final : public std::runtime_error
+        {
+        public:
+            ModelTransportTimeout(bool totalBudget, const char* detail)
+                : std::runtime_error(detail), total_budget(totalBudget) {}
+            bool total_budget{};
+        };
+
+        [[nodiscard]] constexpr bool retry_model_attempt(std::size_t attempt,
+            ModelAttemptFailure failure, bool cancelled) noexcept
+        {
+            return !cancelled && attempt == 0u
+                && (failure == ModelAttemptFailure::recoverable
+                    || failure == ModelAttemptFailure::operation_timeout);
+        }
+
+        [[nodiscard]] constexpr bool model_total_budget_elapsed(
+            std::uint64_t elapsedMilliseconds, std::uint32_t budgetSeconds) noexcept
+        {
+            const auto limit = static_cast<std::uint64_t>(budgetSeconds) * 1'000u;
+            // Native timeout timers may round slightly before our steady-clock
+            // observation. A sub-second boundary must not restart a 30m call.
+            return elapsedMilliseconds >= limit
+                || limit - elapsedMilliseconds <= 999u;
+        }
+
+        [[nodiscard]] std::string model_timeout_message(std::size_t attempt,
+            std::uint64_t elapsedMilliseconds, std::uint32_t budgetSeconds,
+            bool totalBudget, std::string_view transportDetail)
+        {
+            return "Local OpenAI-compatible request failed: attempt "
+                + std::to_string(attempt + 1u) + "/2, elapsed "
+                + std::to_string(elapsedMilliseconds / 1'000u) + "s, per-attempt limit "
+                + std::to_string(budgetSeconds) + "s. "
+                + (totalBudget
+                    ? "The whole request time budget expired; the same expensive generation was not automatically restarted. "
+                    : "A transport operation timed out before the whole request budget expired. ")
+                + std::string{transportDetail};
+        }
+
         class GlobalRequestCancellation final
         {
         public:
@@ -1489,7 +1534,11 @@ namespace epochengine::ai
                     throw std::runtime_error("WinHTTP: local-model request cancelled");
                 }
                 if (!completed)
-                    throw std::runtime_error("WinHTTP: local-model request deadline exceeded");
+                    throw ModelTransportTimeout(true, "WinHTTP: local-model request deadline exceeded");
+                if (error == ERROR_WINHTTP_TIMEOUT)
+                    throw ModelTransportTimeout(std::chrono::steady_clock::now()
+                            + std::chrono::milliseconds{999} >= deadline,
+                        "WinHTTP: asynchronous model transport operation timed out");
                 if (error != 0u || closed)
                     throw std::runtime_error("WinHTTP: asynchronous model request failed (error "
                         + std::to_string(error) + ")");
@@ -1895,9 +1944,18 @@ namespace epochengine::ai
             notify_model_stage(observer, ModelRequestStage::sending);
             if (cancellation.stop_requested())
                 throw std::runtime_error("CURL: local-model request cancelled before dispatch");
+            const auto attemptStarted = std::chrono::steady_clock::now();
             const CURLcode code = curl_easy_perform(curl);
             if (code != CURLE_OK || cancellation.stop_requested())
             {
+                if (code == CURLE_OPERATION_TIMEDOUT && !cancellation.stop_requested())
+                {
+                    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - attemptStarted).count();
+                    throw ModelTransportTimeout(model_total_budget_elapsed(
+                        static_cast<std::uint64_t>((std::max)(elapsed, decltype(elapsed){0})), timeoutSeconds),
+                        "CURL: model transport operation timed out");
+                }
                 const std::string err = cancellation.stop_requested() || code == CURLE_ABORTED_BY_CALLBACK
                     ? "CURL: local-model request cancelled"
                     : std::string("CURL: curl_easy_perform failed: ") + curl_easy_strerror(code);
@@ -3186,14 +3244,21 @@ namespace epochengine::ai
             std::uint32_t timeoutSeconds,
             bool structuredSource,
             std::stop_token cancellation,
+            ModelTerminalFailure& terminalFailure,
             const ModelRequestObserver& observer = {})
         {
+            terminalFailure = ModelTerminalFailure::none;
+            const auto cancelled = [&]() -> std::string
+            {
+                terminalFailure = ModelTerminalFailure::cancelled;
+                return std::string{kModelRequestCancelled};
+            };
             const StructuredSourceReply sourceReply =
                 structured_source_reply_for(input, structuredSource);
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
                 if (cancellation.stop_requested())
-                    return std::string{kModelRequestCancelled};
+                    return cancelled();
                 const std::string body = openai_chat_request_body(
                     model, system_prompt, input, maximumTokens, recoveryRequest,
                     structuredSource);
@@ -3213,7 +3278,7 @@ namespace epochengine::ai
 #endif
                 });
                 if (cancellation.stop_requested())
-                    return std::string{kModelRequestCancelled};
+                    return cancelled();
                 if (rawResponse)
                     *rawResponse = resp;
                 std::string parsed = normalize_assistant_text(extract_lmstudio_message_content(resp));
@@ -3267,14 +3332,21 @@ namespace epochengine::ai
             for (std::size_t attempt = 0u; attempt < 2u; ++attempt)
             {
                 if (cancellation.stop_requested())
-                    return std::string{kModelRequestCancelled};
+                    return cancelled();
+                const auto attemptStarted = std::chrono::steady_clock::now();
+                ModelAttemptFailure failure{ModelAttemptFailure::recoverable};
+                const auto startedMessage = "Local model transport attempt "
+                    + std::to_string(attempt + 1u) + "/2 started; per-attempt wall budget "
+                    + std::to_string(timeoutSeconds)
+                    + "s. Window focus does not control this worker; Stop remains available.";
+                core::log::info("ai", epochengine::string_view{startedMessage.data(), startedMessage.size()});
                 try
                 {
                     std::string rawResponse{};
                     std::string reply = request_once(
                         attempt > 0u, &rawResponse);
                     if (cancellation.stop_requested())
-                        return std::string{kModelRequestCancelled};
+                        return cancelled();
                     if (is_promotable_assistant_text(reply))
                         return reply;
 
@@ -3291,6 +3363,7 @@ namespace epochengine::ai
                         if (contains_text(
                                 lowercase_ascii(error), "cancelled"))
                         {
+                            terminalFailure = ModelTerminalFailure::cancelled;
                             return lastFailure;
                         }
                     }
@@ -3313,16 +3386,32 @@ namespace epochengine::ai
                     // Preserve the typed failure through cancellation checks.
                     throw;
                 }
+                catch (const ModelTransportTimeout& timeout)
+                {
+                    if (cancellation.stop_requested())
+                        return cancelled();
+                    failure = timeout.total_budget ? ModelAttemptFailure::total_timeout
+                        : ModelAttemptFailure::operation_timeout;
+                    if (timeout.total_budget)
+                        terminalFailure = ModelTerminalFailure::total_timeout;
+                    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - attemptStarted).count();
+                    lastFailure = model_timeout_message(attempt,
+                        static_cast<std::uint64_t>((std::max)(elapsed, decltype(elapsed){0})),
+                        timeoutSeconds, timeout.total_budget, timeout.what());
+                    core::log::warn("ai", epochengine::string_view{lastFailure.data(), lastFailure.size()});
+                }
                 catch (const std::exception& ex)
                 {
                     if (cancellation.stop_requested())
-                        return std::string{kModelRequestCancelled};
+                        return cancelled();
                     lastFailure =
                         "Local OpenAI-compatible request failed: ";
                     lastFailure += ex.what();
                     if (contains_text(
                             lowercase_ascii(lastFailure), "cancelled"))
                     {
+                        terminalFailure = ModelTerminalFailure::cancelled;
                         core::log::warn(
                             "ai",
                             epochengine::string_view{
@@ -3331,6 +3420,10 @@ namespace epochengine::ai
                     }
                 }
 
+                if (cancellation.stop_requested())
+                    return cancelled();
+                if (!retry_model_attempt(attempt, failure, false))
+                    break;
                 if (attempt == 0u)
                 {
                     core::log::warn(
@@ -3726,10 +3819,15 @@ namespace epochengine::ai
             std::string_view userText,
             bool allowStrictSourcePacket,
             std::stop_token cancellation,
+            ModelTerminalFailure& terminalFailure,
             const ModelRequestObserver& observer)
         {
+            terminalFailure = ModelTerminalFailure::none;
             if (cancellation.stop_requested())
+            {
+                terminalFailure = ModelTerminalFailure::cancelled;
                 return std::string{kModelRequestCancelled};
+            }
             const std::filesystem::path outputRoot =
                 std::filesystem::path{executable_cache_bucket("ai")}
                     / "transient";
@@ -3797,15 +3895,27 @@ namespace epochengine::ai
                     config, outputPath, systemPromptPath, userPromptPath);
 
             notify_model_stage(observer, ModelRequestStage::sending);
+            const auto attemptStarted = std::chrono::steady_clock::now();
             ProcessCapture capture = capture_process(
                 std::filesystem::path{config.executable}, arguments,
                 std::chrono::seconds{config.timeout_seconds}, cancellation);
             if (capture.cancelled || cancellation.stop_requested())
+            {
+                terminalFailure = ModelTerminalFailure::cancelled;
                 return std::string{kModelRequestCancelled};
+            }
             if (!capture.launched)
                 return "Direct llama.cpp inference could not start. Check the configured llama-cli executable.";
             if (capture.timed_out)
-                return "Direct llama.cpp inference exceeded its time budget and was stopped.";
+            {
+                terminalFailure = ModelTerminalFailure::total_timeout;
+                const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::steady_clock::now() - attemptStarted).count();
+                return "Direct llama.cpp inference exceeded its "
+                    + std::to_string(config.timeout_seconds) + "s whole request budget after "
+                    + std::to_string(elapsed)
+                    + "s on attempt 1/1. Stop was requested; this generation was not automatically restarted.";
+            }
             if (capture.exit_code != 0)
             {
                 const std::string captured = trim(capture.output);
@@ -3817,7 +3927,10 @@ namespace epochengine::ai
             }
             notify_model_stage(observer, ModelRequestStage::receiving);
             if (cancellation.stop_requested())
+            {
+                terminalFailure = ModelTerminalFailure::cancelled;
                 return std::string{kModelRequestCancelled};
+            }
             const std::string transcript = read_small_text_file(
                 outputPath, kMaximumInferenceOutputBytes);
             const std::string reply = allowStrictSourcePacket
@@ -3895,6 +4008,7 @@ namespace epochengine::ai
         if (cancellation.stop_requested())
         {
             out.text = kModelRequestCancelled;
+            out.terminal_failure = ModelTerminalFailure::cancelled;
             return out;
         }
         const InferenceBudget budget = inference_budget(workload);
@@ -3952,12 +4066,14 @@ namespace epochengine::ai
             {
                 out.text = kModelRequestCancelled;
                 out.alternatives.clear();
+                out.terminal_failure = ModelTerminalFailure::cancelled;
                 return out;
             }
             std::string txt = effective.backend == "llama_cpp_cli"
                 ? llama_cpp_complete(
                     effective, sys, user_input,
-                    workload == InferenceWorkload::source_iteration, cancellation, observer)
+                    workload == InferenceWorkload::source_iteration, cancellation,
+                    out.terminal_failure, observer)
                 : openai_chat_complete(
                     m_endpoint_full,
                     effective.model,
@@ -3966,11 +4082,21 @@ namespace epochengine::ai
                     {},
                     effective.output_tokens,
                     effective.timeout_seconds,
-                    workload == InferenceWorkload::source_iteration, cancellation, observer);
+                    workload == InferenceWorkload::source_iteration, cancellation,
+                    out.terminal_failure, observer);
 
             if (cancellation.stop_requested())
             {
                 out.text = kModelRequestCancelled;
+                out.alternatives.clear();
+                out.terminal_failure = ModelTerminalFailure::cancelled;
+                return out;
+            }
+            if (out.terminal_failure != ModelTerminalFailure::none)
+            {
+                // Host transport outcomes are not assistant alternatives or
+                // source packets. Preserve their type through every UI layer.
+                out.text = std::move(txt);
                 out.alternatives.clear();
                 return out;
             }
@@ -4016,6 +4142,7 @@ namespace epochengine::ai
         {
             out.text = kModelRequestCancelled;
             out.alternatives.clear();
+            out.terminal_failure = ModelTerminalFailure::cancelled;
         }
         }
         catch (const ModelTransportRetirementFailure& exception)
@@ -4023,6 +4150,7 @@ namespace epochengine::ai
             out.text = std::string{"Local model transport retirement failed: "} + exception.what();
             out.alternatives.clear();
             out.transport_retirement_failed = true;
+            out.terminal_failure = ModelTerminalFailure::retirement_failed;
             observation.retirement_failed = true;
             core::log::error("ai", epochengine::string_view{out.text.data(), out.text.size()});
             return out;
@@ -5058,19 +5186,29 @@ namespace epochengine::ai
             wrongThread = wrongThread || std::this_thread::get_id() != callerThread;
             stages.push_back(stage);
         };
+        ModelTerminalFailure serviceFailure{ModelTerminalFailure::total_timeout};
         if (send_to_engine_ai("cancelled contract request", InferenceWorkload::source_iteration,
-                stopped.get_token(), observer) != kModelRequestCancelled
+                stopped.get_token(), observer, &serviceFailure) != kModelRequestCancelled
+            || serviceFailure != ModelTerminalFailure::cancelled
             || stages != std::vector{ModelRequestStage::cancelled} || wrongThread)
             return false;
         stages.clear();
         EngineAiModel direct{EngineAiModel::Config{.backend = "llama_cpp_cli"}};
-        if (direct.submit("cancelled direct request", InferenceWorkload::source_iteration,
-                stopped.get_token(), observer).text != kModelRequestCancelled
+        const auto directCancelled = direct.submit("cancelled direct request",
+            InferenceWorkload::source_iteration, stopped.get_token(), observer);
+        if (directCancelled.text != kModelRequestCancelled
+            || directCancelled.terminal_failure != ModelTerminalFailure::cancelled
             || stages != std::vector{ModelRequestStage::cancelled} || wrongThread)
             return false;
         stages.clear();
-        if (!direct.submit({}, InferenceWorkload::source_iteration, {}, observer).text.empty()
+        const auto directRejected = direct.submit({}, InferenceWorkload::source_iteration, {}, observer);
+        if (!directRejected.text.empty()
+            || directRejected.terminal_failure != ModelTerminalFailure::none
             || stages != std::vector{ModelRequestStage::failed} || wrongThread)
+            return false;
+        serviceFailure = ModelTerminalFailure::total_timeout;
+        if (send_to_engine_ai({}, InferenceWorkload::source_iteration, {}, {},
+                &serviceFailure).empty() || serviceFailure != ModelTerminalFailure::none)
             return false;
         stages.clear();
         {
@@ -5134,13 +5272,95 @@ namespace epochengine::ai
 
         // A real outer retry entry with a pre-cancelled token cannot construct
         // or send even its first HTTP payload. The URL is deliberately invalid.
+        ModelTerminalFailure terminalFailure{ModelTerminalFailure::none};
         return openai_chat_complete("not-a-transport", "contract-model", {},
-            "cancelled contract request", {}, 1u, 1u, false, stopped.get_token())
-            == kModelRequestCancelled;
+            "cancelled contract request", {}, 1u, 1u, false, stopped.get_token(),
+            terminalFailure) == kModelRequestCancelled
+            && terminalFailure == ModelTerminalFailure::cancelled;
     }
 
     bool openai_source_iteration_request_contract()
     {
+        const auto codingBudget = inference_budget(InferenceWorkload::source_iteration);
+        if (!codingBudget.valid() || codingBudget.timeout_seconds != 1'800u
+            || inference_budget(InferenceWorkload::chat).timeout_seconds != 120u
+            || inference_budget(InferenceWorkload::authoring).timeout_seconds != 180u
+            || inference_budget(InferenceWorkload::source_self_review).timeout_seconds != 300u
+            || model_http_timeout_milliseconds(codingBudget.timeout_seconds) != 1'800'000
+            || model_total_budget_elapsed(10'000u, 1'800u)
+            || model_total_budget_elapsed(1'799'000u, 1'800u)
+            || !model_total_budget_elapsed(1'799'001u, 1'800u)
+            || !model_total_budget_elapsed(1'800'000u, 1'800u)
+            || !model_total_budget_elapsed((std::numeric_limits<std::uint64_t>::max)(), 1'800u))
+            return false;
+        for (const auto failure : {ModelAttemptFailure::recoverable,
+                ModelAttemptFailure::operation_timeout, ModelAttemptFailure::total_timeout,
+                ModelAttemptFailure::cancelled, ModelAttemptFailure::retirement_failed})
+        {
+            std::size_t actualAttempts{};
+            for (std::size_t attempt = 0u; attempt < 2u; ++attempt)
+            {
+                ++actualAttempts;
+                if (!retry_model_attempt(attempt, failure, false)) break;
+            }
+            const auto expected = failure == ModelAttemptFailure::recoverable
+                || failure == ModelAttemptFailure::operation_timeout ? 2u : 1u;
+            if (actualAttempts != expected || retry_model_attempt(0u, failure, true)
+                || retry_model_attempt(1u, failure, false))
+                return false;
+        }
+        const auto exhaustedMessage = model_timeout_message(0u, 1'800'010u, 1'800u,
+            true, "synthetic timeout evidence");
+        const auto operationMessage = model_timeout_message(1u, 10'010u, 1'800u,
+            false, "synthetic connect timeout");
+        if (!model_reply_is_failure(exhaustedMessage)
+            || exhaustedMessage.find("attempt 1/2, elapsed 1800s, per-attempt limit 1800s") == std::string::npos
+            || exhaustedMessage.find("not automatically restarted") == std::string::npos
+            || operationMessage.find("attempt 2/2, elapsed 10s") == std::string::npos
+            || operationMessage.find("before the whole request budget") == std::string::npos)
+            return false;
+#if defined(_WIN32)
+        // Exercise the real asynchronous wait without creating a session,
+        // handle, worker, endpoint, or native request. Cancellation still wins
+        // when both the stop token and deadline are already terminal.
+        const auto syntheticWait = std::make_shared<AsyncModelHttpState>();
+        const auto elapsedDeadline = std::chrono::steady_clock::now() - std::chrono::seconds{1};
+        bool totalTimeout{};
+        try { syntheticWait->wait_operation(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE, {}, elapsedDeadline); }
+        catch (const ModelTransportTimeout& timeout) { totalTimeout = timeout.total_budget; }
+        catch (...) { return false; }
+        if (!totalTimeout) return false;
+        syntheticWait->error = ERROR_WINHTTP_TIMEOUT;
+        for (const auto remaining : {std::chrono::milliseconds{100}, std::chrono::milliseconds{5'000}})
+        {
+            bool observedTimeout{};
+            try
+            {
+                syntheticWait->wait_operation(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE, {},
+                    std::chrono::steady_clock::now() + remaining);
+            }
+            catch (const ModelTransportTimeout& timeout)
+            {
+                observedTimeout = timeout.total_budget == (remaining < std::chrono::seconds{1});
+            }
+            catch (...) { return false; }
+            if (!observedTimeout) return false;
+        }
+        std::stop_source cancelledWait{};
+        (void)cancelledWait.request_stop();
+        try
+        {
+            syntheticWait->wait_operation(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE,
+                cancelledWait.get_token(), elapsedDeadline);
+            return false;
+        }
+        catch (const ModelTransportTimeout&) { return false; }
+        catch (const std::runtime_error& error)
+        {
+            if (std::string_view{error.what()}.find("cancelled") == std::string_view::npos)
+                return false;
+        }
+#endif
         const std::string sourceBody = openai_chat_request_body(
             "qwen/test", "system",
             "EPOCH_SOURCE_CONTEXT_REQUEST_V1", 512u, false, true);
@@ -5410,12 +5630,21 @@ namespace epochengine::ai
         const std::string& user_text,
         InferenceWorkload workload,
         std::stop_token cancellation,
-        ModelRequestObserver observer)
+        ModelRequestObserver observer,
+        ModelTerminalFailure* terminal_failure)
     {
+        if (terminal_failure)
+            *terminal_failure = ModelTerminalFailure::none;
+        const auto cancelled = [&]() -> std::string
+        {
+            if (terminal_failure)
+                *terminal_failure = ModelTerminalFailure::cancelled;
+            return std::string{kModelRequestCancelled};
+        };
         if (cancellation.stop_requested())
         {
             notify_model_stage(observer, ModelRequestStage::cancelled);
-            return std::string{kModelRequestCancelled};
+            return cancelled();
         }
         // Capture the global epoch before either service lock. Every queued
         // request retains that epoch through all attempts; only a later public
@@ -5440,11 +5669,11 @@ namespace epochengine::ai
             while (!stateLock.try_lock())
             {
                 if (cancellation.stop_requested())
-                    return std::string{kModelRequestCancelled};
+                    return cancelled();
                 std::this_thread::sleep_for(std::chrono::milliseconds{10});
             }
             if (cancellation.stop_requested())
-                return std::string{kModelRequestCancelled};
+                return cancelled();
             if (!prepare_local_model_for_request()
                 || !g_modelUseConfirmedForSession || g_selectedModel.empty())
                 return "No local AI model has been confirmed for this session. Confirm a discovered model before sending a request.";
@@ -5462,7 +5691,7 @@ namespace epochengine::ai
         {
             const ScopedModelRequest requestPermit{g_aiRequestGate, cancellation};
             if (!requestPermit.acquired() || cancellation.stop_requested())
-                return std::string{kModelRequestCancelled};
+                return cancelled();
             reply = client->submit(user_text, workload, cancellation,
                 [&](ModelRequestStage stage)
                 {
@@ -5475,13 +5704,17 @@ namespace epochengine::ai
                         notify_model_stage(observer, stage);
                 });
         }
+        if (terminal_failure)
+            *terminal_failure = reply.terminal_failure;
         if (reply.transport_retirement_failed)
         {
             observation.retirement_failed = true;
             return reply.text;
         }
         if (cancellation.stop_requested())
-            return std::string{kModelRequestCancelled};
+            return cancelled();
+        if (reply.terminal_failure != ModelTerminalFailure::none)
+            return reply.text;
         if (model_reply_is_failure(reply.text))
         {
             return reply.text;

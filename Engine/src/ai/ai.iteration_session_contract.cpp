@@ -5,6 +5,8 @@
 module;
 
 #include <chrono>
+#include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -178,7 +180,28 @@ namespace epochengine::ai::iteration_session
                     "Trusted%7cvalidation%0aactor") != std::string::npos;
         }
 
-        [[nodiscard]] bool repair_and_resume_contract()
+        [[nodiscard]] bool same_candidate_state(
+            const CandidateReport& left, const CandidateReport& right)
+        {
+            // Refusals may update visible status, never candidate authority.
+            return left.identity == right.identity && left.phase == right.phase
+                && left.proposal_digest == right.proposal_digest
+                && left.candidate_digest == right.candidate_digest
+                && left.scope_digest == right.scope_digest
+                && left.objective_digest == right.objective_digest
+                && left.candidate_approved == right.candidate_approved
+                && left.repair_attempt == right.repair_attempt
+                && left.validation.size() == right.validation.size()
+                && std::equal(left.validation.begin(), left.validation.end(), right.validation.begin(),
+                    [](const ValidationEvidence& a, const ValidationEvidence& b)
+                    {
+                        return a.actor == b.actor && a.candidate_digest == b.candidate_digest
+                            && a.evidence_digest == b.evidence_digest && a.summary == b.summary
+                            && a.passed == b.passed;
+                    });
+        }
+
+        [[nodiscard]] bool repair_and_resume_contract(const bool fail_after_partial_success)
         {
             auto fixture = make_fixture();
             SourceAuthority source{
@@ -210,27 +233,105 @@ namespace epochengine::ai::iteration_session
             {
                 return false;
             }
-            if (!session.record_validation(
-                    first,
-                    ValidationEvidence{
-                        .actor = ValidationActor::debug_compiler,
-                        .candidate_digest = session.report().candidate_digest,
-                        .evidence_digest = std::string(64u, 'd'),
-                        .summary = "Compiler rejected candidate one.",
-                        .passed = false},
-                    false))
+            constexpr std::array actors{
+                ValidationActor::debug_compiler,
+                ValidationActor::debug_contract,
+                ValidationActor::release_compiler,
+                ValidationActor::release_contract,
+                ValidationActor::headless_compiler,
+                ValidationActor::headless_contract,
+                ValidationActor::full_validation};
+            const std::size_t failureIndex = fail_after_partial_success ? actors.size() - 1u : 0u;
+            for (std::size_t index = 0u; index <= failureIndex; ++index)
             {
-                return false;
+                if (!session.record_validation(first,
+                        ValidationEvidence{
+                            .actor = actors[index],
+                            .candidate_digest = std::string(64u, 'c'),
+                            .evidence_digest = std::string(64u, 'd'),
+                            .summary = "Candidate one validation receipt.",
+                            .passed = index != failureIndex},
+                        false))
+                    return false;
             }
+            const CandidateReport failedCandidate = session.report();
             const RequestIdentity repair = session.identity();
-            if (repair == first || session.stage_candidate(first, "stale repair")
+            if (failedCandidate.validation.size() != failureIndex + 1u
+                || failedCandidate.validation.back().passed
+                || repair == first || session.stage_candidate(first, "stale repair")
+                || !same_candidate_state(failedCandidate, session.report())
+                || session.stage_candidate(repair, {})
+                || !same_candidate_state(failedCandidate, session.report())
                 || !session.stage_candidate(repair, "candidate two")
+                || !session.report().validation.empty()
+                || !session.report().candidate_digest.empty()
                 || !session.approve_candidate(repair))
             {
                 return false;
             }
 
+            const auto approvedRepair = session.report();
+            if (session.record_implementation(first, std::string(64u, 'e'), "Stale implementation.")
+                || !same_candidate_state(approvedRepair, session.report())
+                || session.record_implementation(repair, "invalid", "Malformed implementation.")
+                || !same_candidate_state(approvedRepair, session.report())
+                || !session.record_implementation(repair, std::string(64u, 'e'), "Sandbox candidate two."))
+                return false;
+
+            const auto emptyRepair = session.report();
+            ValidationEvidence receipt{
+                .actor = ValidationActor::debug_compiler,
+                .candidate_digest = std::string(64u, 'e'),
+                .evidence_digest = std::string(64u, '2'),
+                .summary = "Candidate two validation receipt.",
+                .passed = true};
+            if (session.record_validation(first, receipt, false)
+                || !same_candidate_state(emptyRepair, session.report()))
+                return false;
+            receipt.candidate_digest = failedCandidate.candidate_digest;
+            if (session.record_validation(repair, receipt, false)
+                || !same_candidate_state(emptyRepair, session.report()))
+                return false;
+            receipt.candidate_digest = emptyRepair.candidate_digest;
+            receipt.actor = static_cast<ValidationActor>(255u);
+            if (session.record_validation(repair, receipt, false)
+                || !same_candidate_state(emptyRepair, session.report()))
+                return false;
+            receipt.actor = ValidationActor::debug_compiler;
+            if (session.record_validation(repair, receipt, true)
+                || !same_candidate_state(emptyRepair, session.report()))
+                return false;
+
+            for (std::size_t index = 0u; index < actors.size(); ++index)
+            {
+                receipt.actor = actors[index];
+                receipt.evidence_digest = std::string(64u, static_cast<char>('2' + index));
+                if (!session.record_validation(repair, receipt, index + 1u == actors.size()))
+                    return false;
+                const auto accepted = session.report();
+                if (accepted.validation.size() != index + 1u
+                    || session.record_validation(repair, receipt, false)
+                    || !same_candidate_state(accepted, session.report()))
+                    return false;
+                if (index == 0u)
+                {
+                    // Six passed actors from the failed predecessor cannot
+                    // supplement this candidate's single current receipt.
+                    receipt.actor = ValidationActor::full_validation;
+                    if (session.record_validation(repair, receipt, true)
+                        || !same_candidate_state(accepted, session.report()))
+                        return false;
+                }
+            }
+
             CandidateReport report = session.report();
+            if (report.phase != SessionPhase::candidate_verified || report.validation.size() != actors.size()
+                || report.repair_attempt != 1u
+                || !std::all_of(report.validation.begin(), report.validation.end(),
+                    [&](const ValidationEvidence& item)
+                    { return item.passed && item.candidate_digest == report.candidate_digest; })
+                || failedCandidate.validation.size() != failureIndex + 1u)
+                return false;
             IterationSession sameScope{};
             if (!sameScope.resume_scope_fail_closed(
                     report, source, inspected.files)
@@ -251,6 +352,7 @@ namespace epochengine::ai::iteration_session
 
     bool run_contract()
     {
-        return complete_flow_contract() && repair_and_resume_contract();
+        return complete_flow_contract() && repair_and_resume_contract(false)
+            && repair_and_resume_contract(true);
     }
 }

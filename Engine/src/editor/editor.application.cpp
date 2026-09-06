@@ -592,6 +592,7 @@ namespace epochengine
                 std::make_shared<AiModelSelectionLease>()};
             std::string reply{};
             std::string error{};
+            ai::ModelTerminalFailure terminalFailure{ai::ModelTerminalFailure::none};
             std::stop_source cancellation{};
             std::atomic<ai::ModelRequestStage> stage{ai::ModelRequestStage::queued};
             std::atomic_bool ready{false};
@@ -604,6 +605,9 @@ namespace epochengine
             std::string input{};
             std::string pendingPrompt{};
             std::string latestRawReply{};
+            ai::ModelTerminalFailure latestTerminalFailure{ai::ModelTerminalFailure::none};
+            std::string latestTerminalStatus{};
+            ai::InferenceWorkload latestCompletionWorkload{ai::InferenceWorkload::chat};
             std::uint64_t completionGeneration{};
             std::shared_ptr<AiChatRequestState> pending{};
             std::chrono::steady_clock::time_point requestStartedAt{};
@@ -621,6 +625,14 @@ namespace epochengine
             AiChat& operator=(const AiChat&) = delete;
             AiChat(AiChat&&) noexcept = default;
             AiChat& operator=(AiChat&&) noexcept = default;
+            bool requestRetirementFailed{};
+
+            void clear_completion_payload() noexcept
+            {
+                latestRawReply.clear();
+                latestTerminalFailure = ai::ModelTerminalFailure::none;
+                latestTerminalStatus.clear();
+            }
 
             void pump()
             {
@@ -628,31 +640,52 @@ namespace epochengine
                     || !pending->ready.load(std::memory_order_acquire))
                     return;
 
+                latestCompletionWorkload = pendingWorkload;
+                latestTerminalFailure = pending->terminalFailure;
+                latestTerminalStatus.clear();
+
                 if (pending->stage.load(std::memory_order_acquire)
-                    == ai::ModelRequestStage::retirement_failed)
+                        == ai::ModelRequestStage::retirement_failed
+                    || pending->terminalFailure == ai::ModelTerminalFailure::retirement_failed)
                 {
                     if (worker.joinable())
                         worker.join();
+                    requestRetirementFailed = true;
                     ++completionGeneration;
                     latestRawReply.clear();
+                    latestTerminalFailure = ai::ModelTerminalFailure::retirement_failed;
+                    latestTerminalStatus = "Model request ended, but HTTP handle retirement could not be confirmed. Restart the engine before another HTTP request. No response was applied.";
                     pendingPrompt.clear();
                     pending.reset();
-                    append_status("Model request ended, but HTTP handle retirement could not be confirmed. Restart the engine before another HTTP request. No response was applied.");
+                    append_status(latestTerminalStatus);
                     return;
                 }
-                if (pending->cancellation.stop_requested())
+                if (pending->cancellation.stop_requested()
+                    || pending->terminalFailure == ai::ModelTerminalFailure::cancelled)
                 {
                     if (worker.joinable())
                         worker.join();
                     ++completionGeneration;
                     latestRawReply.clear();
+                    latestTerminalFailure = ai::ModelTerminalFailure::cancelled;
+                    latestTerminalStatus = "Request cancelled. Its response was discarded.";
                     pendingPrompt.clear();
                     pending.reset();
-                    append_status("Request cancelled. Its response was discarded.");
+                    append_status(latestTerminalStatus);
                     return;
                 }
 
-                if (pending->error.empty())
+                if (pending->terminalFailure != ai::ModelTerminalFailure::none)
+                {
+                    ++completionGeneration;
+                    latestRawReply.clear();
+                    latestTerminalStatus = !pending->error.empty() ? pending->error : pending->reply;
+                    if (latestTerminalStatus.empty())
+                        latestTerminalStatus = "The model request exhausted its time budget; no automatic repeat was started.";
+                    pendingPrompt.clear();
+                    append_status(latestTerminalStatus);
+                }
+                else if (pending->error.empty())
                 {
                     latestRawReply = std::move(pending->reply);
                     ++completionGeneration;
@@ -769,7 +802,7 @@ namespace epochengine
                 if (displayText.empty())
                     displayText = "(bounded local-model request)";
 
-                if (pending || worker.joinable())
+                if (pending || worker.joinable() || requestRetirementFailed)
                 {
                     lines.emplace_back("ai> (busy)");
                     trim_lines();
@@ -778,7 +811,7 @@ namespace epochengine
 
                 lines.emplace_back("you> " + displayText);
                 trim_lines();
-                latestRawReply.clear();
+                clear_completion_payload();
                 pendingPrompt = displayText;
 
                 pending = std::make_shared<AiChatRequestState>();
@@ -808,7 +841,7 @@ namespace epochengine
                                             {
                                                 request->stage.store(stage,
                                                     std::memory_order_release);
-                                            });
+                                            }, &request->terminalFailure);
                             }
                             catch (const std::exception& e)
                             {
@@ -855,6 +888,28 @@ namespace epochengine
                 }
             }
         };
+
+        [[nodiscard]] bool source_model_completion_ready(const AiChat& chat,
+            std::uint64_t requestedGeneration) noexcept
+        {
+            return !chat.pending
+                && chat.latestCompletionWorkload == ai::InferenceWorkload::source_iteration
+                && chat.completionGeneration > requestedGeneration;
+        }
+
+        void apply_source_model_completion(editor_ai_development_panel::Input& input,
+            const AiChat& chat, std::uint64_t requestedGeneration)
+        {
+            input.latest_raw_model_reply.clear();
+            input.model_terminal_failure = ai::ModelTerminalFailure::none;
+            input.model_terminal_status.clear();
+            if (!source_model_completion_ready(chat, requestedGeneration)
+                || input.local_model_running || input.local_model_queued || input.external_mcp_running)
+                return;
+            input.latest_raw_model_reply = chat.latestRawReply;
+            input.model_terminal_failure = chat.latestTerminalFailure;
+            input.model_terminal_status = chat.latestTerminalStatus;
+        }
 
         [[nodiscard]] static std::string last_chat_line_with_prefix(const AiChat& chat, std::string_view prefix)
         {
@@ -1049,8 +1104,48 @@ namespace epochengine
             std::uint64_t bridgeProcessId{};
             std::uint64_t startedTickNs{};
             std::uint64_t elapsedMs{};
+            ai::ModelTerminalFailure terminalFailure{ai::ModelTerminalFailure::none};
             bool awaitingResponse{};
         };
+
+        inline constexpr std::uint64_t localMcpRequestBudgetMs = 900'000u;
+
+        [[nodiscard]] ai::ModelTerminalFailure local_mcp_terminal_failure(
+            const std::optional<platform::child_process::ProcessSnapshot>& snapshot,
+            std::uint64_t elapsedMs, ai::ModelTerminalFailure retained) noexcept
+        {
+            using Failure = ai::ModelTerminalFailure;
+            using State = platform::child_process::ProcessState;
+            // ProcessState has no timeout/cancelled members. These are host
+            // causes retained across the nonblocking stop/retirement ticks.
+            if (!snapshot || snapshot->state == State::failed
+                || snapshot->state == State::idle)
+                return Failure::retirement_failed;
+            if (retained != Failure::none) return retained;
+            if (snapshot->state == State::stop_requested) return Failure::cancelled;
+            if (snapshot->active() && elapsedMs >= localMcpRequestBudgetMs)
+                return Failure::total_timeout;
+            // A bridge can enforce its own same deadline before this poll.
+            // Use its observed runtime, not a delayed UI poll or message text.
+            if (!snapshot->active() && snapshot->exit_code_valid
+                && snapshot->exit_code != 0
+                && snapshot->runtime_ns / 1'000'000u >= localMcpRequestBudgetMs)
+                return Failure::total_timeout;
+            return Failure::none;
+        }
+
+        void complete_local_mcp_terminal(AiChat& chat,
+            ai::ModelTerminalFailure failure, const std::string& status,
+            std::uint64_t requestedGeneration)
+        {
+            chat.clear_completion_payload();
+            chat.latestTerminalFailure = failure;
+            chat.latestTerminalStatus = status;
+            chat.latestCompletionWorkload = ai::InferenceWorkload::source_iteration;
+            ++chat.completionGeneration;
+            if (chat.completionGeneration <= requestedGeneration)
+                chat.completionGeneration = requestedGeneration + 1u;
+        }
 
         enum class TimelineWorkspaceSection : std::uint8_t
         {
@@ -1417,6 +1512,12 @@ namespace epochengine
             AiDeferredRequestKind aiDeferredRequestKind{ AiDeferredRequestKind::None };
             std::shared_ptr<AiModelSelectionLease> aiDeferredModelLease{};
             std::shared_ptr<AiModelSelectionLease> aiSourceModelLease{};
+            // A campaign may emit its next exact request while ordinary chat
+            // owns the shared transport slot. Retain both domains separately.
+            std::optional<editor_ai_development_panel::RenderResult> aiRetainedSourceRequest{};
+            std::shared_ptr<AiModelSelectionLease> aiRetainedSourceModelLease{};
+            std::uint64_t aiRetainedSourceEpoch{};
+            std::uint64_t aiRetainedSourceToken{};
             std::shared_ptr<AiModelSelectionLease> aiMcpModelLease{};
             bool aiDeferredDispatchQueued{};
             std::string aiModelConsentStatus{
@@ -1510,6 +1611,9 @@ namespace epochengine
             std::uint64_t aiWorkArtifactEpoch{};
             std::uint64_t aiWorkToken{};
             std::uint64_t aiWorkLease{};
+            bool aiWorkLeaseIsSource{true};
+            bool aiSourceParkedRetirement{};
+            bool aiWorkRetirementBarrier{};
             std::uint64_t aiWorkObservedFinish{};
             std::string aiWorkStatus{};
             // Host compiler dependencies survive sandbox parent selection.
@@ -1545,6 +1649,8 @@ namespace epochengine
             std::uint64_t token{};
             std::uint64_t finishRevision{};
             std::uint64_t finishedAt{};
+            bool retirementBlocked{};
+            std::uint64_t retiringContexts{};
         };
 
         AiHeavyWorkCoordinator& ai_heavy_work_coordinator()
@@ -1553,8 +1659,20 @@ namespace epochengine
             return coordinator;
         }
 
+        void quarantine_local_mcp_retirement(AiChat& chat,
+            AiHeavyWorkCoordinator& coordinator)
+        {
+            chat.requestRetirementFailed = true;
+            std::scoped_lock lock(coordinator.mutex);
+            coordinator.retirementBlocked = true;
+        }
+
         void cancel_ai_work_admission(EditorState& editor)
         {
+            editor.aiRetainedSourceRequest.reset();
+            editor.aiRetainedSourceModelLease.reset();
+            editor.aiRetainedSourceEpoch = 0u;
+            editor.aiRetainedSourceToken = 0u;
             editor.aiWorkAdmission.cancel();
             editor.aiWorkAction.reset();
             editor.aiWorkLocalHttp = false;
@@ -1564,15 +1682,15 @@ namespace epochengine
             // An executing operation owns its lease until real retirement.
         }
 
-        void release_ai_work_lease(EditorState& editor)
+        void release_ai_work_lease_at(EditorState& editor,
+            std::uint64_t now, AiHeavyWorkCoordinator& coordinator)
         {
             if (editor.aiWorkLease == 0u) return;
-            auto& coordinator = ai_heavy_work_coordinator();
             std::scoped_lock lock(coordinator.mutex);
-            if (coordinator.owner == editor.aiWorkLease)
+            if (coordinator.owner == editor.aiWorkLease && !coordinator.retirementBlocked)
             {
                 coordinator.owner = 0u;
-                coordinator.finishedAt = platform::work_admission::now_milliseconds();
+                coordinator.finishedAt = now;
                 ++coordinator.finishRevision;
                 editor.aiWorkAdmission.note_finished(coordinator.finishedAt);
                 editor.aiWorkObservedFinish = coordinator.finishRevision;
@@ -1580,20 +1698,172 @@ namespace epochengine
             editor.aiWorkLease = 0u;
         }
 
-        [[nodiscard]] bool queue_ai_work(
+        void release_ai_work_lease(EditorState& editor)
+        {
+            release_ai_work_lease_at(editor, platform::work_admission::now_milliseconds(),
+                ai_heavy_work_coordinator());
+        }
+
+        void finish_ai_retirement_barrier_at(EditorState& editor,
+            std::uint64_t now, AiHeavyWorkCoordinator& coordinator)
+        {
+            if (!editor.aiWorkRetirementBarrier || !editor.aiCandidateRetiringProcesses.empty()) return;
+            std::scoped_lock lock(coordinator.mutex);
+            editor.aiWorkRetirementBarrier = false;
+            if (coordinator.retiringContexts != 0u) --coordinator.retiringContexts;
+            coordinator.finishedAt = now;
+            ++coordinator.finishRevision;
+        }
+
+        // Called only after the context's scheduler and chat worker have joined.
+        // A failed native retirement keeps the global lease quarantined even
+        // when the closed EditorState is destroyed; another context cannot
+        // reuse ownership that was never proved retired.
+        void finish_ai_work_owner_close_at(EditorState& editor, bool modelRetirementFailed,
+            std::uint64_t now, AiHeavyWorkCoordinator& coordinator)
+        {
+            finish_ai_retirement_barrier_at(editor, now, coordinator);
+            if (!modelRetirementFailed && editor.aiCandidateRetiringProcesses.empty())
+            {
+                release_ai_work_lease_at(editor, now, coordinator);
+                return;
+            }
+            std::scoped_lock lock(coordinator.mutex);
+            // A chosen baseline is intentionally unleased while idle. Its
+            // failed retirement still quarantines the lane on context close.
+            coordinator.retirementBlocked = true;
+        }
+
+        void finish_ai_work_owner_close(EditorState& editor, bool modelRetirementFailed)
+        {
+            finish_ai_work_owner_close_at(editor, modelRetirementFailed,
+                platform::work_admission::now_milliseconds(), ai_heavy_work_coordinator());
+        }
+
+        [[nodiscard]] bool same_ai_work_action(
+            const editor_ai_development_panel::RenderResult& left,
+            const editor_ai_development_panel::RenderResult& right)
+        {
+            return left.action == right.action && left.model_transport == right.model_transport
+                && left.reveal_source_workspace == right.reveal_source_workspace
+                && left.reveal_source_patch_workbench == right.reveal_source_patch_workbench
+                && left.status == right.status && left.model_prompt == right.model_prompt
+                && left.source_root == right.source_root && left.workspace_root == right.workspace_root
+                && left.include_paths == right.include_paths && left.source_paths == right.source_paths
+                && left.excluded_components == right.excluded_components
+                && left.campaign_evidence == right.campaign_evidence
+                && left.source_patch_relative_path == right.source_patch_relative_path
+                && left.source_patch_postimage_utf8 == right.source_patch_postimage_utf8
+                && left.source_patch_evidence == right.source_patch_evidence
+                && left.source_patch_staging == right.source_patch_staging
+                && left.workspace_generation == right.workspace_generation
+                && left.retire_candidate_preview == right.retire_candidate_preview
+                && left.candidate_decision == right.candidate_decision;
+        }
+
+        [[nodiscard]] bool retain_source_model_request_at(EditorState& editor,
+            const editor_ai_development_panel::RenderResult& action,
+            AiHeavyWorkCoordinator& coordinator)
+        {
+            if (editor.aiRetainedSourceRequest)
+                return editor.aiRetainedSourceEpoch == editor.aiSourceArtifactEpoch
+                    && same_ai_work_action(*editor.aiRetainedSourceRequest, action);
+            if (action.action != editor_ai_development_panel::HostAction::request_model_source_proposal
+                || action.model_prompt.empty()) return false;
+            auto retained = action;
+            auto modelLease = editor.aiSourceModelLease
+                ? editor.aiSourceModelLease : std::make_shared<AiModelSelectionLease>();
+            std::scoped_lock lock(coordinator.mutex);
+            if (coordinator.token == (std::numeric_limits<std::uint64_t>::max)()) return false;
+            editor.aiRetainedSourceRequest = std::move(retained);
+            editor.aiRetainedSourceModelLease = std::move(modelLease);
+            editor.aiRetainedSourceEpoch = editor.aiSourceArtifactEpoch;
+            editor.aiRetainedSourceToken = ++coordinator.token;
+            return true;
+        }
+
+        [[nodiscard]] bool source_model_slot_busy(const EditorState& editor, const AiChat& chat) noexcept
+        {
+            return chat.pending || chat.worker.joinable() || chat.requestRetirementFailed
+                || editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                || editor.aiWorkToken != 0u;
+        }
+
+        [[nodiscard]] std::optional<editor_ai_development_panel::RenderResult>
+            take_retained_source_model_request(EditorState& editor, const AiChat& chat)
+        {
+            if (!editor.aiRetainedSourceRequest || source_model_slot_busy(editor, chat)
+                || editor.aiRetainedSourceEpoch != editor.aiSourceArtifactEpoch)
+                return std::nullopt;
+            auto action = std::move(editor.aiRetainedSourceRequest);
+            editor.aiRetainedSourceRequest.reset();
+            // Preserve selection ownership through ordinary dispatch and its
+            // final HTTP admission. Taking the action is not permission to run.
+            editor.aiSourceModelLease = std::move(editor.aiRetainedSourceModelLease);
+            editor.aiRetainedSourceEpoch = 0u;
+            editor.aiRetainedSourceToken = 0u;
+            return action;
+        }
+
+        void record_source_model_submission(EditorState& editor,
+            std::uint64_t completionGeneration, bool submitted) noexcept
+        {
+            editor.aiSourceRequestedGeneration = completionGeneration;
+            editor.aiSourceAwaitingReply = submitted;
+            // Project plans, goal progress and pending approvals are another
+            // domain. A source request must not reset or apply them.
+        }
+
+        [[nodiscard]] bool reserve_project_ai_work_at(EditorState& editor,
+            std::uint64_t now, AiHeavyWorkCoordinator& coordinator)
+        {
+            std::scoped_lock lock(coordinator.mutex);
+            const bool settling = coordinator.finishRevision != 0u
+                && (now < coordinator.finishedAt
+                    || now - coordinator.finishedAt < editor.aiWorkAdmission.policy().cooldown_ms);
+            if (coordinator.retirementBlocked || coordinator.retiringContexts != 0u
+                || coordinator.owner != 0u || settling)
+            {
+                editor.aiAuthoringStatus = coordinator.retirementBlocked
+                    ? "Native retirement could not be confirmed. Restart Epoch before another model request."
+                    : settling && coordinator.owner == 0u
+                        ? "Project-assistant request retained during the 30-second cooldown after heavy work."
+                        : "Project-assistant request retained; waiting for active AI/build work or candidate comparison to finish.";
+                return false;
+            }
+            if (coordinator.token == (std::numeric_limits<std::uint64_t>::max)())
+            {
+                editor.aiAuthoringStatus = "Project-assistant request retained: host ownership tokens are exhausted. Restart Epoch before sending.";
+                return false;
+            }
+            // Reserve before the final submission, not after it starts. Other
+            // contexts never inspect this context's mutable chat state.
+            coordinator.owner = ++coordinator.token;
+            editor.aiWorkLease = coordinator.owner;
+            editor.aiWorkLeaseIsSource = false;
+            return true;
+        }
+
+        [[nodiscard]] bool queue_ai_work_at(
             EditorState& editor, platform::work_admission::WorkKind kind,
-            const editor_ai_development_panel::RenderResult* action = nullptr)
+            const editor_ai_development_panel::RenderResult* action,
+            std::uint64_t now, AiHeavyWorkCoordinator& coordinator)
         {
             if (editor.aiWorkToken != 0u) return false;
-            auto& coordinator = ai_heavy_work_coordinator();
+            // Acquire model-selection ownership before the coordinator mutex:
+            // final local dispatch already owns the recursive selection mutex.
+            // Never invert that lock order for a queued external MCP request.
+            auto modelLease = kind == platform::work_admission::WorkKind::model
+                    && !editor.aiSourceModelLease
+                ? std::make_shared<AiModelSelectionLease>()
+                : std::shared_ptr<AiModelSelectionLease>{};
             std::scoped_lock lock(coordinator.mutex);
             if (coordinator.token == (std::numeric_limits<std::uint64_t>::max)())
                 return false;
             const auto token = ++coordinator.token;
             // Copy potentially allocating data before the controller accepts it.
             if (action) editor.aiWorkAction = *action;
-            if (!editor.aiWorkAdmission.queue({token, kind},
-                    platform::work_admission::now_milliseconds()))
+            if (!editor.aiWorkAdmission.queue({token, kind}, now))
             {
                 editor.aiWorkAction.reset();
                 return false;
@@ -1601,8 +1871,17 @@ namespace epochengine
             editor.aiWorkToken = token;
             editor.aiWorkLocalHttp = action == nullptr;
             editor.aiWorkArtifactEpoch = editor.aiSourceArtifactEpoch;
+            if (modelLease) editor.aiSourceModelLease = std::move(modelLease);
             editor.aiWorkStatus = "Queued: checking host RAM/CPU and allowing a 30-second cooldown. No work has started.";
             return true;
+        }
+
+        [[nodiscard]] bool queue_ai_work(EditorState& editor,
+            platform::work_admission::WorkKind kind,
+            const editor_ai_development_panel::RenderResult* action = nullptr)
+        {
+            return queue_ai_work_at(editor, kind, action,
+                platform::work_admission::now_milliseconds(), ai_heavy_work_coordinator());
         }
 
         [[nodiscard]] bool ai_work_pending(const EditorState& editor) noexcept
@@ -1610,8 +1889,47 @@ namespace epochengine
             return editor.aiWorkToken != 0u;
         }
 
-        [[nodiscard]] bool admit_ai_work(
-            EditorState& editor, bool hostWorkActive, bool consume)
+        [[nodiscard]] bool ai_source_native_work_active(
+            const EditorState& editor, const AiChat& chat) noexcept
+        {
+            return chat.pending || chat.worker.joinable() || chat.requestRetirementFailed
+                || editor.aiSourceWorkspacePending || editor.aiSourceBuildPending
+                || editor.aiSourceTestPending || editor.aiLocalMcp.awaitingResponse
+                || editor.aiLocalMcp.process.valid()
+                || editor.aiCandidateChallengerProcess.valid()
+                || !editor.aiCandidateRetiringProcesses.empty();
+        }
+
+        [[nodiscard]] std::optional<platform::work_admission::WorkKind>
+            ai_action_work_kind(const editor_ai_development_panel::RenderResult& action) noexcept
+        {
+            using Action = editor_ai_development_panel::HostAction;
+            using Kind = platform::work_admission::WorkKind;
+            switch (action.action)
+            {
+            case Action::materialize_source_workspace:
+            case Action::compile_source_workspace:
+            case Action::compile_source_release_workspace:
+            case Action::compile_source_headless_workspace: return Kind::compiler;
+            case Action::test_source_workspace:
+            case Action::test_source_release_workspace:
+            case Action::test_source_headless_workspace:
+            case Action::test_source_full_validation_workspace: return Kind::validation;
+            case Action::launch_source_candidate_preview: return Kind::preview;
+            case Action::request_model_source_proposal:
+                // Local inference is admitted at the final HTTP/CLI submission,
+                // after any model consent, not twice at both queue layers.
+                if (action.model_transport == editor_ai_development_panel::ModelTransport::external_mcp)
+                    return Kind::model;
+                return std::nullopt;
+            default: return std::nullopt;
+            }
+        }
+
+        [[nodiscard]] bool admit_ai_work_at(
+            EditorState& editor, bool hostWorkActive, bool consume,
+            std::uint64_t now, const platform::work_admission::ResourceSample& sample,
+            AiHeavyWorkCoordinator& coordinator)
         {
             namespace admission = platform::work_admission;
             if (!ai_work_pending(editor)) return false;
@@ -1620,9 +1938,6 @@ namespace epochengine
                 cancel_ai_work_admission(editor);
                 return false;
             }
-            const auto now = admission::now_milliseconds();
-            const auto sample = admission::sample_host_resources();
-            auto& coordinator = ai_heavy_work_coordinator();
             std::scoped_lock lock(coordinator.mutex);
             if (editor.aiWorkObservedFinish != coordinator.finishRevision)
             {
@@ -1630,12 +1945,18 @@ namespace epochengine
                 editor.aiWorkObservedFinish = coordinator.finishRevision;
             }
             const bool choice = editor.aiCandidateChallengerProcess.valid();
-            const bool busy = hostWorkActive || coordinator.owner != 0u;
+            const bool busy = hostWorkActive || coordinator.owner != 0u
+                || coordinator.retirementBlocked || coordinator.retiringContexts != 0u;
             const auto decision = editor.aiWorkAdmission.poll(now, sample, choice, busy);
             editor.aiWorkStatus = std::string{admission::reason_message(decision.reason)};
+            if (coordinator.retirementBlocked)
+                editor.aiWorkStatus = "A previous context could not confirm native worker/process retirement. Stop the session and restart Epoch before new heavy work.";
             if (decision.remaining_ms != 0u)
-                editor.aiWorkStatus += " " + std::to_string((decision.remaining_ms + 999u) / 1000u) + "s remaining.";
-            if (sample.memory_valid && sample.cpu_valid)
+                editor.aiWorkStatus += " " + std::to_string(decision.remaining_ms / 1000u
+                    + (decision.remaining_ms % 1000u != 0u ? 1u : 0u)) + "s remaining.";
+            if (sample.memory_valid && sample.cpu_valid
+                && std::isfinite(sample.cpu_busy_fraction)
+                && sample.cpu_busy_fraction >= 0.0 && sample.cpu_busy_fraction <= 1.0)
                 editor.aiWorkStatus += epochengine::format_text(
                     " RAM available: {} MiB. CPU load: {}%. No GPU/VRAM measurement.",
                     sample.available_memory_bytes / (1024u * 1024u),
@@ -1645,13 +1966,23 @@ namespace epochengine
                 return false;
             coordinator.owner = editor.aiWorkToken;
             editor.aiWorkLease = editor.aiWorkToken;
+            editor.aiWorkLeaseIsSource = true;
             editor.aiWorkToken = 0u;
             editor.aiWorkStatus.clear();
             return true;
         }
 
+        [[nodiscard]] bool admit_ai_work(EditorState& editor, bool hostWorkActive, bool consume)
+        {
+            const auto sample = platform::work_admission::sample_host_resources();
+            return admit_ai_work_at(editor, hostWorkActive, consume,
+                platform::work_admission::now_milliseconds(),
+                sample, ai_heavy_work_coordinator());
+        }
+
         void invalidate_ai_source_artifacts(EditorState& editor)
         {
+            cancel_ai_work_admission(editor);
             editor.aiSourceArtifacts.invalidate();
             editor.aiCandidatePreviewArtifact.reset();
             ++editor.aiSourceArtifactEpoch;
@@ -1682,6 +2013,13 @@ namespace epochengine
             admittedWindow = 0u;
             if (handle.valid())
             {
+                if (!editor.aiWorkRetirementBarrier)
+                {
+                    auto& coordinator = ai_heavy_work_coordinator();
+                    std::scoped_lock lock(coordinator.mutex);
+                    ++coordinator.retiringContexts;
+                    editor.aiWorkRetirementBarrier = true;
+                }
                 (void)platform::child_process::stop(handle, platform::child_process::StopMode::force);
                 editor.aiCandidateRetiringProcesses.push_back(handle);
             }
@@ -21646,12 +21984,11 @@ namespace epochengine
 
     namespace
     {
-        // The caller has detached this state from both storage maps. No UI
-        // pump can dispatch a completed task into another preview while its
-        // owned scheduler drains, and no storage lock spans a join or the
-        // manager's owner-thread-routed attachment removal.
+        // Called by the owning context while parking, or after detachment for
+        // close. No storage lock spans native attachment removal or a join.
         void request_editor_source_session_stop(EditorState& editor)
         {
+            cancel_ai_work_admission(editor);
             editor.aiSourceAwaitingReply = false;
             editor.aiLocalMcp.awaitingResponse = false;
             if (editor.taskScheduler)
@@ -21760,6 +22097,55 @@ namespace epochengine
             (void)chat->cancel_pending();
             if (chat->worker.joinable())
                 chat->worker.join();
+            if (chat->pending && chat->pending->stage.load(std::memory_order_acquire)
+                    == ai::ModelRequestStage::retirement_failed)
+                chat->requestRetirementFailed = true;
+        }
+
+        void poll_parked_source_retirement(EditorState& editor, AiChat* chat)
+        {
+            if (!editor.aiSourceParkedRetirement) return;
+            if (chat) chat->pump();
+            const auto collectReady = [&](auto& pending, auto* ownership)
+            {
+                if (!pending || pending->wait_for(std::chrono::seconds{0}) != std::future_status::ready)
+                    return;
+                try { (void)pending->get(); }
+                catch (...) { append_editor_automation_trace("[ai-session] A cancelled parked task completed with an error; its result was discarded."); }
+                pending.reset();
+                // Only read the worker's shared handle after future readiness
+                // has synchronized its writes with this owning context.
+                if (ownership && *ownership && (*ownership)->valid())
+                {
+                    editor.aiCandidateRetiringProcesses.push_back(**ownership);
+                    (void)platform::child_process::stop(**ownership,
+                        platform::child_process::StopMode::force);
+                    ownership->reset();
+                }
+            };
+            collectReady(editor.aiSourceWorkspacePending,
+                static_cast<std::shared_ptr<platform::child_process::ProcessHandle>*>(nullptr));
+            collectReady(editor.aiSourceBuildPending, &editor.aiSourceBuildProcess);
+            collectReady(editor.aiSourceTestPending, &editor.aiSourceTestProcess);
+            platform::child_process::poll();
+            std::erase_if(editor.aiCandidateRetiringProcesses,
+                [](platform::child_process::ProcessHandle handle)
+                {
+                    const auto observed = platform::child_process::snapshot(handle);
+                    if (!observed)
+                        return platform::child_process::stop(handle, platform::child_process::StopMode::force)
+                            == platform::child_process::StopCode::stale_handle;
+                    return !observed->active() && platform::child_process::release(handle);
+                });
+            finish_ai_retirement_barrier_at(editor, platform::work_admission::now_milliseconds(),
+                ai_heavy_work_coordinator());
+            if (!editor.aiSourceWorkspacePending && !editor.aiSourceBuildPending && !editor.aiSourceTestPending
+                && editor.aiCandidateRetiringProcesses.empty()
+                && (!chat || (!chat->pending && !chat->worker.joinable() && !chat->requestRetirementFailed)))
+            {
+                release_ai_work_lease(editor);
+                editor.aiSourceParkedRetirement = false;
+            }
         }
     }
 
@@ -21767,6 +22153,22 @@ namespace epochengine
     {
         // No files, model, compiler or renderer are created: connect the actual
         // host router and path admission to the first artifact build ticket.
+        struct FailureTrace final
+        {
+            std::string_view stage{"path_admission"};
+            bool passed{};
+            ~FailureTrace() noexcept
+            {
+                if (passed) return;
+                try
+                {
+                    logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::INFO,
+                        std::string{"engine_contract_self_test.editor.ai_source_path.failed_stage="}
+                            + std::string{stage});
+                }
+                catch (...) { }
+            }
+        } trace;
         try
         {
             std::string diagnostic{};
@@ -21780,8 +22182,114 @@ namespace epochengine
             if (std::filesystem::exists(workspace, error)
                 && !ai_source_owned_path(workspace, &diagnostic)) return false;
             if (error) return false;
+            // A successor/repair request and an earlier project prompt must
+            // survive comparison, cooldown and active project transport without
+            // sharing a mutable request slot or losing their model binding.
+            {
+                trace.stage = "retained_request_identity";
+                AiHeavyWorkCoordinator requests{};
+                auto state = std::make_unique<EditorState>();
+                AiChat projectChat{};
+                state->aiDeferredRequestKind = AiDeferredRequestKind::Authoring;
+                state->aiDeferredPrompt = "exact project prompt canary";
+                state->aiDeferredDisplay = "project display canary";
+                state->aiDeferredDispatchQueued = true;
+                state->aiDeferredModelLease = std::make_shared<AiModelSelectionLease>();
+                const auto projectLease = state->aiDeferredModelLease;
+                state->aiGoal = "independent project goal";
+                state->aiGoalActive = state->aiGoalRunning = true;
+                state->aiGoalPlanNextQueued = state->aiAuthoringPlanForGoal = true;
+                state->aiGoalCompletedMilestones = 3u;
+                state->aiAuthoringPlan.message = "retained project result";
+                state->aiAuthoringStatus = "project approval remains pending";
+                state->aiCandidateCurrentProcess = {0u, 1u};
+                const auto projectUnchanged = [&]
+                {
+                    return state->aiDeferredPrompt == "exact project prompt canary"
+                        && state->aiDeferredDisplay == "project display canary"
+                        && state->aiDeferredRequestKind == AiDeferredRequestKind::Authoring
+                        && state->aiDeferredDispatchQueued
+                        && state->aiDeferredModelLease == projectLease;
+                };
+                editor_ai_development_panel::RenderResult request{};
+                request.action = editor_ai_development_panel::HostAction::request_model_source_proposal;
+                request.model_transport = editor_ai_development_panel::ModelTransport::local_inference;
+                request.model_prompt = "exact successor plan / causal repair context canary";
+                request.workspace_generation = 12u;
+                request.source_paths = {"Engine/src/owned.source.cpp"};
+                if (!retain_source_model_request_at(*state, request, requests)) return false;
+                const auto token = state->aiRetainedSourceToken;
+                const auto sourceLease = state->aiRetainedSourceModelLease;
+                if (!token || !sourceLease || !projectUnchanged()
+                    || !retain_source_model_request_at(*state, request, requests)
+                    || state->aiRetainedSourceToken != token
+                    || state->aiRetainedSourceModelLease != sourceLease
+                    || take_retained_source_model_request(*state, projectChat)) return false;
+                auto conflicting = request;
+                conflicting.model_prompt = "must not replace retained request";
+                if (retain_source_model_request_at(*state, conflicting, requests)
+                    || !same_ai_work_action(*state->aiRetainedSourceRequest, request)) return false;
+                trace.stage = "retained_request_cancellation_epoch";
+                cancel_ai_work_admission(*state);
+                if (state->aiRetainedSourceRequest || state->aiRetainedSourceModelLease
+                    || !projectUnchanged() || !state->aiCandidateCurrentProcess.valid()) return false;
+                if (!retain_source_model_request_at(*state, request, requests)
+                    || state->aiRetainedSourceToken <= token) return false;
+                ++state->aiSourceArtifactEpoch;
+                if (take_retained_source_model_request(*state, projectChat)) return false;
+                invalidate_ai_source_artifacts(*state);
+                if (state->aiRetainedSourceRequest || !projectUnchanged()) return false;
+                trace.stage = "retained_request_project_worker";
+                if (!retain_source_model_request_at(*state, request, requests)
+                    || !reserve_project_ai_work_at(*state, 1'000u, requests)) return false;
+                const auto selectedSourceLease = state->aiRetainedSourceModelLease;
+                // The project prompt now entered its own worker. Retention
+                // continues after the deferred slot becomes empty.
+                state->aiDeferredRequestKind = AiDeferredRequestKind::None;
+                projectChat.pending = std::make_shared<AiChatRequestState>();
+                if (take_retained_source_model_request(*state, projectChat)
+                    || !retain_source_model_request_at(*state, request, requests)) return false;
+                projectChat.pending.reset();
+                release_ai_work_lease_at(*state, 2'000u, requests);
+                const auto resumed = take_retained_source_model_request(*state, projectChat);
+                if (!resumed || !same_ai_work_action(*resumed, request)
+                    || state->aiRetainedSourceRequest || state->aiRetainedSourceToken
+                    || state->aiSourceModelLease != selectedSourceLease
+                    || take_retained_source_model_request(*state, projectChat)
+                    || !state->aiCandidateCurrentProcess.valid()) return false;
+                trace.stage = "retained_request_resource_cooldown";
+                if (!queue_ai_work_at(*state, platform::work_admission::WorkKind::model,
+                        nullptr, 2'000u, requests)
+                    || state->aiWorkArtifactEpoch != state->aiSourceArtifactEpoch
+                    || requests.owner != 0u) return false;
+                platform::work_admission::ResourceSample ready{
+                    .captured_at_ms = 2'000u,
+                    .total_memory_bytes = 16ull * 1024u * 1024u * 1024u,
+                    .available_memory_bytes = 8ull * 1024u * 1024u * 1024u,
+                    .cpu_busy_fraction = 0.25, .memory_valid = true, .cpu_valid = true};
+                // Queue age is not evidence of healthy host resources. Owner
+                // ticks start the required healthy interval at the first sample.
+                if (admit_ai_work_at(*state, false, true, 2'000u, ready, requests)) return false;
+                ready.captured_at_ms = 31'999u;
+                if (admit_ai_work_at(*state, false, true, 31'999u, ready, requests)) return false;
+                ready.captured_at_ms = 32'000u;
+                if (!admit_ai_work_at(*state, false, true, 32'000u, ready, requests)) return false;
+                trace.stage = "retained_request_project_goal_preservation";
+                record_source_model_submission(*state, 7u, true);
+                if (state->aiSourceRequestedGeneration != 7u || !state->aiSourceAwaitingReply
+                    || state->aiGoal != "independent project goal"
+                    || !state->aiGoalActive || !state->aiGoalRunning
+                    || !state->aiGoalPlanNextQueued || !state->aiAuthoringPlanForGoal
+                    || state->aiGoalCompletedMilestones != 3u
+                    || state->aiAuthoringPlan.message != "retained project result"
+                    || state->aiAuthoringStatus != "project approval remains pending") return false;
+                cancel_ai_work_admission(*state);
+                release_ai_work_lease_at(*state, 33'000u, requests);
+                state->aiCandidateCurrentProcess = {};
+            }
             // Workspace may not exist in a clean packaged contract invocation;
             // the existing executable directory still exercises the same gate.
+            trace.stage = "canonical_path_and_artifact_ticket";
             const auto root = std::filesystem::canonical(host.parent_path(), error);
             if (error) return false;
             const auto owned = ai_source_owned_path(root, &diagnostic);
@@ -21794,8 +22302,142 @@ namespace epochengine
             if (!ledger.reset(owned->generic_string(), 1u)
                 || ledger.begin_build(AiSourceValidationLane::DebugEditor) == 0u)
                 return false;
-            return !ledger.reset(owned->generic_string(), 0u)
-                && ledger.begin_build(AiSourceValidationLane::DebugEditor) == 0u;
+            if (ledger.reset(owned->generic_string(), 0u)
+                || ledger.begin_build(AiSourceValidationLane::DebugEditor) != 0u)
+                return false;
+
+            // Exercise the same application queue/lease helpers with a private
+            // coordinator and synthetic clock/samples: no sleeps, sampler,
+            // task pool, model transport or child processes are started.
+            trace.stage = "exact_admission_token";
+            using Kind = platform::work_admission::WorkKind;
+            using Action = editor_ai_development_panel::HostAction;
+            AiHeavyWorkCoordinator coordinator{};
+            auto first = std::make_unique<EditorState>();
+            auto second = std::make_unique<EditorState>();
+            AiChat chat{};
+            const auto sample = [](std::uint64_t at)
+            {
+                return platform::work_admission::ResourceSample{
+                    .captured_at_ms = at,
+                    .total_memory_bytes = 16ull * 1024u * 1024u * 1024u,
+                    .available_memory_bytes = 8ull * 1024u * 1024u * 1024u,
+                    .cpu_busy_fraction = 0.25,
+                    .memory_valid = true, .cpu_valid = true};
+            };
+            editor_ai_development_panel::RenderResult retained{};
+            retained.action = Action::compile_source_workspace;
+            retained.workspace_generation = 7u;
+            retained.workspace_root = "exact-sandbox-canary";
+            retained.source_paths = {"Engine/src/owned.source.cpp"};
+            if (ai_action_work_kind(retained) != Kind::compiler
+                || !queue_ai_work_at(*first, Kind::compiler, &retained, 1'000u, coordinator))
+                return false;
+            const auto firstToken = first->aiWorkToken;
+            if (!same_ai_work_action(*first->aiWorkAction, retained)) return false;
+            retained.workspace_root = "replacement-must-not-enter";
+            if (queue_ai_work_at(*first, Kind::compiler, &retained, 2'000u, coordinator)
+                || same_ai_work_action(*first->aiWorkAction, retained)
+                || first->aiWorkToken != firstToken
+                || first->aiWorkAction->workspace_root != "exact-sandbox-canary"
+                || first->aiWorkAction->workspace_generation != 7u
+                || admit_ai_work_at(*first, false, true, 1'000u, sample(1'000u), coordinator)
+                || admit_ai_work_at(*first, false, true, 30'999u, sample(30'999u), coordinator)
+                || !admit_ai_work_at(*first, false, true, 31'000u, sample(31'000u), coordinator)
+                || coordinator.owner != firstToken || ai_work_pending(*first)
+                || !first->aiWorkLeaseIsSource)
+                return false;
+            if (!queue_ai_work_at(*second, Kind::preview, &retained, 31'000u, coordinator)
+                || admit_ai_work_at(*second, false, true, 62'000u, sample(62'000u), coordinator))
+                return false;
+            trace.stage = "comparison_retirement_cooldown";
+            cancel_ai_work_admission(*first);
+            invalidate_ai_source_artifacts(*first);
+            if (first->aiWorkAction || coordinator.owner != firstToken
+                || first->aiWorkLease != firstToken)
+                return false;
+            release_ai_work_lease_at(*first, 62'000u, coordinator);
+            if (coordinator.owner != 0u
+                || admit_ai_work_at(*second, false, true, 62'000u, sample(62'000u), coordinator))
+                return false;
+            second->aiCandidateChallengerProcess = {0u, 1u};
+            if (admit_ai_work_at(*second, false, true, 92'000u, sample(92'000u), coordinator)
+                || second->aiWorkStatus.find("Keep Current") == std::string::npos)
+                return false;
+            second->aiCandidateChallengerProcess = {};
+            if (admit_ai_work_at(*second, false, true, 93'000u, sample(93'000u), coordinator)
+                || !admit_ai_work_at(*second, false, true, 123'000u, sample(123'000u), coordinator))
+                return false;
+            release_ai_work_lease_at(*second, 123'000u, coordinator);
+            trace.stage = "source_epoch_and_native_ownership";
+            if (!queue_ai_work_at(*first, Kind::model, nullptr, 124'000u, coordinator)
+                || !first->aiWorkLocalHttp)
+                return false;
+            ++first->aiSourceArtifactEpoch;
+            if (admit_ai_work_at(*first, false, true, 160'000u, sample(160'000u), coordinator)
+                || ai_work_pending(*first) || first->aiWorkLocalHttp || first->aiWorkAction)
+                return false;
+            retained.action = Action::request_model_source_proposal;
+            if (ai_action_work_kind(retained)) return false;
+            retained.model_transport = editor_ai_development_panel::ModelTransport::external_mcp;
+            if (ai_action_work_kind(retained) != Kind::model) return false;
+            std::promise<AiSourceTaskResult> pendingBuild;
+            first->aiSourceBuildPending.emplace(pendingBuild.get_future());
+            if (!ai_source_native_work_active(*first, chat)) return false;
+            first->aiSourceBuildPending.reset();
+            chat.requestRetirementFailed = true;
+            if (!ai_source_native_work_active(*first, chat)) return false;
+            chat.requestRetirementFailed = false;
+            first->aiCandidateRetiringProcesses.push_back({0u, 1u});
+            if (!ai_source_native_work_active(*first, chat)) return false;
+            first->aiCandidateRetiringProcesses.clear();
+            first->aiCandidateCurrentProcess = {0u, 1u};
+            if (ai_source_native_work_active(*first, chat)) return false;
+            first->aiCandidateCurrentProcess = {};
+            // Ordinary project chat participates in the same atomic lease;
+            // another context cannot dispatch a compiler behind its worker.
+            trace.stage = "project_compiler_lease_cooldown";
+            if (!reserve_project_ai_work_at(*first, 170'000u, coordinator)
+                || first->aiWorkLeaseIsSource || coordinator.owner != first->aiWorkLease
+                || !queue_ai_work_at(*second, Kind::compiler, &retained, 170'000u, coordinator)
+                || admit_ai_work_at(*second, false, true, 200'000u, sample(200'000u), coordinator))
+                return false;
+            release_ai_work_lease_at(*first, 200'000u, coordinator);
+            // The owner observes actual retirement before the 30-second
+            // healthy interval; jumping straight to the deadline is not proof.
+            if (admit_ai_work_at(*second, false, true, 200'000u, sample(200'000u), coordinator)
+                || reserve_project_ai_work_at(*first, 229'999u, coordinator)
+                || admit_ai_work_at(*second, false, true, 229'999u, sample(229'999u), coordinator)
+                || !admit_ai_work_at(*second, false, true, 230'000u, sample(230'000u), coordinator))
+                return false;
+            release_ai_work_lease_at(*second, 230'000u, coordinator);
+            trace.stage = "retirement_barrier_and_close_quarantine";
+            first->aiWorkRetirementBarrier = true;
+            coordinator.retiringContexts = 1u;
+            first->aiCandidateRetiringProcesses.push_back({0u, 1u});
+            if (reserve_project_ai_work_at(*second, 270'000u, coordinator)) return false;
+            first->aiCandidateRetiringProcesses.clear();
+            finish_ai_retirement_barrier_at(*first, 270'000u, coordinator);
+            if (coordinator.retiringContexts != 0u || first->aiWorkRetirementBarrier
+                || reserve_project_ai_work_at(*second, 299'999u, coordinator))
+                return false;
+            // Closing an unleased selected baseline still quarantines failed
+            // native retirement. An owner value of zero is not proof of idle.
+            first->aiCandidateRetiringProcesses.push_back({0u, 1u});
+            finish_ai_work_owner_close_at(*first, false, 300'000u, coordinator);
+            if (!coordinator.retirementBlocked || coordinator.owner != 0u
+                || reserve_project_ai_work_at(*second, 340'000u, coordinator)
+                || !queue_ai_work_at(*first, Kind::model, nullptr, 300'000u, coordinator)
+                || admit_ai_work_at(*first, false, true, 340'000u, sample(340'000u), coordinator))
+                return false;
+            cancel_ai_work_admission(*first);
+            first->aiCandidateRetiringProcesses.clear();
+            coordinator.owner = firstToken;
+            coordinator.retirementBlocked = true;
+            first->aiWorkLease = firstToken;
+            release_ai_work_lease_at(*first, 170'000u, coordinator);
+            trace.passed = coordinator.owner == firstToken;
+            return trace.passed;
         }
         catch (...) { return false; }
     }
@@ -21878,7 +22520,9 @@ namespace epochengine
             first.pump();
             if (first.pending || first.completionGeneration != 1u
                 || !first.latestRawReply.empty() || first.cancel_pending()
-                || first.source_request_running())
+                || first.source_request_running()
+                || first.latestTerminalFailure != ai::ModelTerminalFailure::cancelled
+                || first.latestTerminalStatus.empty())
                 return false;
             for (const auto& line : first.lines)
                 if (line.find("cancelled reply canary") != std::string::npos)
@@ -21908,7 +22552,9 @@ namespace epochengine
             successor->ready.store(true, std::memory_order_release);
             first.pump();
             if (first.pending || first.latestRawReply != "successor reply"
-                || first.completionGeneration != 2u || !first.pendingPrompt.empty())
+                || first.completionGeneration != 2u || !first.pendingPrompt.empty()
+                || first.latestTerminalFailure != ai::ModelTerminalFailure::none
+                || !first.latestTerminalStatus.empty())
                 return false;
 
             // Cancellation wins even when the response was already published
@@ -21935,7 +22581,111 @@ namespace epochengine
             first.pump();
             if (first.pending || !first.latestRawReply.empty()
                 || first.completionGeneration != 4u
+                || !first.requestRetirementFailed
+                || first.latestTerminalFailure != ai::ModelTerminalFailure::retirement_failed
                 || first.lines.back().find("retirement could not be confirmed") == std::string::npos)
+                return false;
+            editor_ai_development_panel::Input terminalInput{};
+            apply_source_model_completion(terminalInput, first, 3u);
+            if (terminalInput.model_terminal_failure != ai::ModelTerminalFailure::retirement_failed
+                || terminalInput.model_terminal_status.empty()
+                || !terminalInput.latest_raw_model_reply.empty()) return false;
+
+            AiChat timed{};
+            timed.pendingWorkload = ai::InferenceWorkload::source_iteration;
+            const auto timeout = std::make_shared<AiChatRequestState>();
+            timed.pending = timeout;
+            timeout->reply = "Host timeout: attempt 1/2 elapsed 1800s; no automatic repeat.";
+            timeout->terminalFailure = ai::ModelTerminalFailure::total_timeout;
+            timeout->ready.store(true, std::memory_order_release);
+            timed.pump();
+            apply_source_model_completion(terminalInput, timed, 0u);
+            if (timed.latestTerminalFailure != ai::ModelTerminalFailure::total_timeout
+                || timed.latestTerminalStatus != timeout->reply
+                || !timed.latestRawReply.empty()
+                || terminalInput.model_terminal_failure != ai::ModelTerminalFailure::total_timeout
+                || terminalInput.model_terminal_status != timeout->reply
+                || !terminalInput.latest_raw_model_reply.empty()) return false;
+            // A completed old request cannot terminate a newly queued one;
+            // nor can project output enter the self-coding input envelope.
+            terminalInput.local_model_queued = true;
+            apply_source_model_completion(terminalInput, timed, 0u);
+            if (terminalInput.model_terminal_failure != ai::ModelTerminalFailure::none
+                || !terminalInput.model_terminal_status.empty()) return false;
+            terminalInput.local_model_queued = false;
+            apply_source_model_completion(terminalInput, timed, 1u);
+            if (terminalInput.model_terminal_failure != ai::ModelTerminalFailure::none) return false;
+            timed.clear_completion_payload();
+            if (timed.latestTerminalFailure != ai::ModelTerminalFailure::none
+                || !timed.latestTerminalStatus.empty() || !timed.latestRawReply.empty()) return false;
+            timed.pendingWorkload = ai::InferenceWorkload::chat;
+            timed.pending = std::make_shared<AiChatRequestState>();
+            timeout->terminalFailure = ai::ModelTerminalFailure::retirement_failed;
+            timeout->reply = "late expired source result canary";
+            timed.pump();
+            if (timed.latestTerminalFailure != ai::ModelTerminalFailure::none
+                || timed.completionGeneration != 1u) return false;
+            timed.pending->terminalFailure = ai::ModelTerminalFailure::total_timeout;
+            timed.pending->reply = "project assistant timeout canary";
+            timed.pending->ready.store(true, std::memory_order_release);
+            timed.pump();
+            apply_source_model_completion(terminalInput, timed, 0u);
+            if (terminalInput.model_terminal_failure != ai::ModelTerminalFailure::none
+                || !terminalInput.model_terminal_status.empty()
+                || !terminalInput.latest_raw_model_reply.empty()) return false;
+            timed.latestRawReply = "EPOCH_SOURCE_PROPOSAL_V1 project-channel canary";
+            timed.latestTerminalFailure = ai::ModelTerminalFailure::none;
+            apply_source_model_completion(terminalInput, timed, 0u);
+            if (!terminalInput.latest_raw_model_reply.empty()) return false;
+
+            // External MCP has the same terminal envelope, but derives its
+            // causes from host time/process evidence, never model text.
+            using Failure = ai::ModelTerminalFailure;
+            using ProcessState = platform::child_process::ProcessState;
+            std::optional<platform::child_process::ProcessSnapshot> mcpProcess{
+                platform::child_process::ProcessSnapshot{}};
+            mcpProcess->state = ProcessState::running;
+            if (local_mcp_terminal_failure(mcpProcess, 899'999u, Failure::none) != Failure::none
+                || local_mcp_terminal_failure(mcpProcess, 900'000u, Failure::none) != Failure::total_timeout)
+                return false;
+            mcpProcess->state = ProcessState::stop_requested;
+            if (local_mcp_terminal_failure(mcpProcess, 900'001u, Failure::total_timeout) != Failure::total_timeout
+                || local_mcp_terminal_failure(mcpProcess, 500u, Failure::none) != Failure::cancelled)
+                return false;
+            mcpProcess->state = ProcessState::exited;
+            mcpProcess->exit_code_valid = true;
+            mcpProcess->exit_code = 1;
+            mcpProcess->runtime_ns = 899'999'000'000u;
+            if (local_mcp_terminal_failure(mcpProcess, 990'000u, Failure::none) != Failure::none)
+                return false; // A late UI poll cannot turn an ordinary exit into a timeout.
+            mcpProcess->runtime_ns = 900'000'000'000u;
+            if (local_mcp_terminal_failure(mcpProcess, 900'000u, Failure::none) != Failure::total_timeout)
+                return false;
+            mcpProcess->exit_code = 0;
+            if (local_mcp_terminal_failure(mcpProcess, 900'000u, Failure::none) != Failure::none)
+                return false; // Clean exit with empty response remains a protocol failure.
+            mcpProcess->state = ProcessState::failed;
+            if (local_mcp_terminal_failure(mcpProcess, 500u, Failure::none) != Failure::retirement_failed
+                || local_mcp_terminal_failure(std::nullopt, 500u, Failure::total_timeout) != Failure::retirement_failed)
+                return false;
+            AiChat mcpChat{};
+            mcpChat.latestRawReply = "late response must not be promoted";
+            complete_local_mcp_terminal(mcpChat, Failure::total_timeout,
+                "Host bridge timeout: 900000 ms; no automatic repeat.", 8u);
+            apply_source_model_completion(terminalInput, mcpChat, 8u);
+            if (mcpChat.completionGeneration != 9u || !mcpChat.latestRawReply.empty()
+                || terminalInput.model_terminal_failure != Failure::total_timeout
+                || terminalInput.model_terminal_status != mcpChat.latestTerminalStatus)
+                return false;
+            AiHeavyWorkCoordinator mcpCoordinator{};
+            mcpCoordinator.owner = 41u;
+            quarantine_local_mcp_retirement(mcpChat, mcpCoordinator);
+            auto mcpEditor = std::make_unique<EditorState>();
+            mcpEditor->aiWorkLease = 41u;
+            release_ai_work_lease_at(*mcpEditor, 900'001u, mcpCoordinator);
+            if (!mcpChat.requestRetirementFailed || !mcpCoordinator.retirementBlocked
+                || mcpCoordinator.owner != 41u || mcpCoordinator.finishRevision != 0u
+                || reserve_project_ai_work_at(*mcpEditor, 1'000'000u, mcpCoordinator))
                 return false;
             return true;
         }
@@ -21967,6 +22717,10 @@ namespace epochengine
         }
         if (!retiredChat.empty())
             retire_detached_chat(retiredChat.mapped());
+        if (!retiredState.empty())
+            finish_ai_work_owner_close(retiredState.mapped(),
+                !retiredChat.empty() && retiredChat.mapped()
+                    && retiredChat.mapped()->requestRetirementFailed);
         (void)epochengine::canvas2d::scene_content::retire(ctx);
         epochengine::previewgrid::cleanup_context(ctx);
     }
@@ -22014,6 +22768,13 @@ namespace epochengine
         {
             (void)ctx;
             retire_detached_chat(chat);
+        }
+
+        for (auto& [ctx, state] : retiredStates)
+        {
+            const auto found = retiredChats.find(ctx);
+            finish_ai_work_owner_close(state, found != retiredChats.end()
+                && found->second && found->second->requestRetirementFailed);
         }
 
         if (shutdownAi)
@@ -22226,10 +22987,12 @@ namespace epochengine
             return;
 
         auto& storage = editor_storage();
-        std::scoped_lock lock(storage.mutex);
+        std::unique_lock lock(storage.mutex);
         const auto it = storage.states.find(ctx);
         if (it == storage.states.end())
             return;
+
+        auto& parked = it->second;
 
         it->second.openMenu = TopMenu::None;
         it->second.showAboutModal = false;
@@ -22243,10 +23006,31 @@ namespace epochengine
         it->second.aiDeferredRequestKind = AiDeferredRequestKind::None;
         it->second.aiDeferredModelLease.reset();
         it->second.aiDeferredDispatchQueued = false;
+        cancel_ai_work_admission(it->second);
         it->second.showUpdateConfirmModal = false;
         it->second.showSourceUpdateConfirmModal = false;
         it->second.previewMode = core::ScenePreviewMode::Editor;
         it->second.viewportCameraMode = epochengine::previewgrid::CameraMode::Editor;
+        lock.unlock();
+        // Menu contexts still receive the existing time-snapshot owner tick.
+        // Stop admission now, then drain only ready results there without a UI
+        // sleep, scheduler join, source edit, or loss of the saved project goal.
+        invalidate_ai_source_artifacts(parked);
+        parked.aiSourceParkedRetirement = true;
+        if (parked.aiDevelopmentPanel)
+        {
+            const auto cancelled = parked.aiDevelopmentPanel->cancel_active_campaign(
+                "Editor parked. Sandbox work is stopping; its saved files and plan remain available. Start a session after reopening the editor.");
+            push_ai_development_log(parked, "[self-coding] " + cancelled.status);
+        }
+        request_editor_source_session_stop(parked);
+        {
+            auto& chats = chat_storage();
+            std::scoped_lock chatLock(chats.mutex);
+            const auto found = chats.chats.find(ctx);
+            if (found != chats.chats.end() && found->second)
+                (void)found->second->cancel_pending();
+        }
         epochengine::previewgrid::set_camera_mode(ctx, epochengine::previewgrid::CameraMode::Editor);
         epochengine::previewgrid::reset_camera(ctx);
     }
@@ -22258,7 +23042,7 @@ namespace epochengine
 
         const auto passiveObservation = passive_context_observation_for(ctx);
         auto& storage = editor_storage();
-        std::scoped_lock lock(storage.mutex);
+        std::unique_lock lock(storage.mutex);
         const auto it = storage.states.find(ctx);
         if (it == storage.states.end())
             return;
@@ -22266,6 +23050,19 @@ namespace epochengine
         auto& state = it->second;
         state.timeSnapshot = snapshot;
         update_passive_context_scoring(storage, state, ctx, snapshot, passiveObservation);
+        const bool parked = state.aiSourceParkedRetirement;
+        lock.unlock();
+        if (parked)
+        {
+            std::shared_ptr<AiChat> chat;
+            {
+                auto& chats = chat_storage();
+                std::scoped_lock chatLock(chats.mutex);
+                const auto found = chats.chats.find(ctx);
+                if (found != chats.chats.end()) chat = found->second;
+            }
+            poll_parked_source_retirement(state, chat.get());
+        }
     }
 
     void editor_set_context_selection_status(const core::Context* ctx, std::string_view status)
@@ -22695,6 +23492,7 @@ namespace epochengine
         editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
         editor.aiDeferredModelLease.reset();
         editor.aiDeferredDispatchQueued = false;
+        cancel_ai_work_admission(editor);
         editor.showUpdateConfirmModal = false;
         editor.showSourceUpdateConfirmModal = false;
         editor.updateState = EditorUpdateState::Idle;
@@ -22873,6 +23671,38 @@ namespace epochengine
         {
             detachedChat = chat_state_for(ctx);
             detachedChat->pump();
+            if (editor.aiWorkLease != 0u && !ai_source_native_work_active(editor, *detachedChat))
+                release_ai_work_lease(editor);
+            if (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat
+                && editor.aiDeferredDispatchQueued && !detachedChat->pending
+                && !detachedChat->worker.joinable() && !detachedChat->requestRetirementFailed)
+            {
+                std::scoped_lock selectionLock(aiModelSelectionMutex);
+                if (!epochengine::ai::is_model_use_confirmed())
+                    editor.aiAuthoringStatus = "Queued message retained: confirm the selected model in the main editor.";
+                else if (reserve_project_ai_work_at(editor,
+                        platform::work_admission::now_milliseconds(), ai_heavy_work_coordinator()))
+                {
+                    // Copy at the final call: failed submission retains the
+                    // original queue bytes and never loses a user's message.
+                    const bool submitted = detachedChat->submit_with_display(
+                        editor.aiDeferredPrompt, editor.aiDeferredDisplay);
+                    editor.aiDeferredDispatchQueued = false;
+                    if (submitted)
+                    {
+                        editor.aiDeferredPrompt.clear();
+                        editor.aiDeferredDisplay.clear();
+                        editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                        editor.aiDeferredModelLease.reset();
+                    }
+                    else
+                    {
+                        editor.aiAuthoringStatus = "The worker could not start. Your exact message is retained; use Retry Queued Message.";
+                        if (!ai_source_native_work_active(editor, *detachedChat))
+                            release_ai_work_lease(editor);
+                    }
+                }
+            }
         }
         if (paneRoute)
         {
@@ -23030,7 +23860,9 @@ namespace epochengine
             {
                 (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
                     .id = "popout-ai-chat",
-                    .size = { contentWidth, (std::max)(120.0f, h - 212.0f) },
+                    .size = { contentWidth, (std::max)(80.0f, h - 212.0f
+                        - (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat ? 136.0f : 0.0f)
+                        - (detachedChat->pending ? 34.0f : 0.0f)) },
                     .lines = detachedChat->lines,
                     .line_roles = ai_chat_message_roles(detachedChat->lines),
                     .max_line_chars = 240,
@@ -23041,19 +23873,45 @@ namespace epochengine
                 if (inputResult.submitted)
                 {
                     std::scoped_lock selectionLock(aiModelSelectionMutex);
-                    if (!epochengine::ai::prepare_local_model_for_request())
+                    if (editor.aiDeferredRequestKind != AiDeferredRequestKind::None)
+                        detachedChat->append_status("A message is already queued. Your new draft is retained; send it after that request finishes.");
+                    else if (!epochengine::ai::prepare_local_model_for_request())
                     {
                         detachedChat->lines.emplace_back(
                             "ai> The selected model is unavailable or needs endpoint approval. "
                             "Check AI Controls in the main editor; your message is retained.");
                     }
-                    else
+                    else if (!detachedChat->input.empty() && !is_ws_only(detachedChat->input))
                     {
-                        detachedChat->submit(
-                            std::move(detachedChat->input));
+                        auto modelLease = std::make_shared<AiModelSelectionLease>();
+                        editor.aiDeferredPrompt = detachedChat->input;
+                        editor.aiDeferredDisplay = detachedChat->input;
+                        editor.aiDeferredRequestKind = AiDeferredRequestKind::Chat;
+                        editor.aiDeferredModelLease = std::move(modelLease);
+                        editor.aiDeferredDispatchQueued = true;
+                        editor.aiAuthoringStatus = "Message queued; waiting for the shared AI/build work lane.";
                         detachedChat->input.clear();
                     }
                 }
+                if (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat)
+                {
+                    gui::wrapped_label(editor.aiAuthoringStatus, contentWidth);
+                    if (!editor.aiDeferredDispatchQueued
+                        && gui::button("Retry Queued Message", {contentWidth, 30.0f}))
+                        editor.aiDeferredDispatchQueued = true;
+                    if (gui::button("Cancel Queued Message", {contentWidth, 30.0f}))
+                    {
+                        detachedChat->append_status("Queued message cancelled before transport. Its text: " + editor.aiDeferredDisplay);
+                        editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                        editor.aiDeferredDispatchQueued = false;
+                        editor.aiDeferredPrompt.clear();
+                        editor.aiDeferredDisplay.clear();
+                        editor.aiDeferredModelLease.reset();
+                    }
+                }
+                if (detachedChat->pending
+                    && gui::button("Stop Model Request", {contentWidth, 30.0f}))
+                    (void)detachedChat->cancel_pending();
             }
 
             else
@@ -23124,8 +23982,9 @@ namespace epochengine
         const gui::ScopedRoundedRectangles roundedRectScope{ editor.roundedRectangles };
         const std::shared_ptr<AiChat> chatState = chat_state_for(ctx);
         auto& chat = *chatState;
-        if (application.panes.ai_chat)
-            chat.pump();
+        // Request ownership is independent of whether this application shows
+        // an AI Chat pane (for example after switching to GUI or Plant Lab).
+        chat.pump();
         publish_detached_pane_projection(editor, chat);
         if (!chat.pending
             && chat.completionGeneration
@@ -23133,7 +23992,9 @@ namespace epochengine
         {
             editor.aiObservedCompletionGeneration =
                 chat.completionGeneration;
-            if (chat.completionGeneration
+            const bool sourceCompletion = editor.aiSourceAwaitingReply
+                && source_model_completion_ready(chat, editor.aiSourceRequestedGeneration);
+            if (!sourceCompletion && chat.completionGeneration
                 <= editor.aiAuthoringIgnoredThroughGeneration)
             {
                 editor.aiAuthoringAwaitingReply = false;
@@ -23145,7 +24006,7 @@ namespace epochengine
                     "Discarded an obsolete AI reply because its goal changed.";
                 push_editor_log(editor, "[ai] " + editor.aiAuthoringStatus);
             }
-            else
+            else if (!sourceCompletion)
             {
                 const bool expectedToolReply =
                     editor.aiToolAwaitingReply
@@ -23861,18 +24722,9 @@ namespace epochengine
                     == AiDeferredRequestKind::SourceIteration;
             if (submitted || waitingForConsent)
             {
-                editor.aiAuthoringPlan = {};
-                editor.aiAuthoringPlanApplied = false;
-                editor.aiAuthoringAwaitingReply = false;
-                editor.aiAuthoringPlanForGoal = false;
-                editor.aiAuthoringIgnoredThroughGeneration =
-                    (std::max)(
-                        editor.aiAuthoringIgnoredThroughGeneration,
-                        chat.completionGeneration);
-                editor.aiAuthoringStatus = waitingForConsent
-                    ? "Source iteration is waiting for local-model confirmation; the previous scene plan is inactive."
-                    : "The reviewed source request is queued for the selected local model; the previous scene plan is inactive.";
-                chat.append_status(editor.aiAuthoringStatus);
+                chat.append_status(waitingForConsent
+                    ? "Source iteration is waiting for local-model confirmation; project plans and goal progress are preserved."
+                    : "The source request is queued for the selected local model; project plans and goal progress are preserved.");
                 push_ai_development_log(editor, std::string(logLine));
             }
             return std::pair{submitted, waitingForConsent};
@@ -23906,6 +24758,7 @@ namespace epochengine
 
         std::function<void(const editor_ai_development_panel::RenderResult&)>
             dispatch_ai_development_action;
+        const editor_ai_development_panel::RenderResult* admittedAiAction{};
         dispatch_ai_development_action = [&](
             const editor_ai_development_panel::RenderResult& action)
         {
@@ -23968,6 +24821,70 @@ namespace epochengine
                     editor.aiCandidateCurrentSnapshot,
                     editor.aiCandidateCurrentAdmittedProcessId,
                     editor.aiCandidateCurrentAdmittedWindow);
+            }
+            if (action.action == editor_ai_development_panel::HostAction::request_model_source_proposal)
+            {
+                auto sourceRequest = action;
+                sourceRequest.candidate_decision = CandidateDecision::none;
+                if (&action != admittedAiAction && editor.aiWorkAction
+                    && same_ai_work_action(*editor.aiWorkAction, sourceRequest))
+                    return;
+                const bool projectOwnsSlot = (chat.pending && !chat.source_request_running())
+                    || (editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                        && editor.aiDeferredRequestKind != AiDeferredRequestKind::SourceIteration);
+                if (editor.aiRetainedSourceRequest || projectOwnsSlot)
+                {
+                    const auto previousToken = editor.aiRetainedSourceToken;
+                    if (!retain_source_model_request_at(editor, sourceRequest, ai_heavy_work_coordinator()))
+                    {
+                        rejectSourceDispatch("The host could not retain the exact next self-coding request. The project-assistant request is unchanged; no new model work started.");
+                        return;
+                    }
+                    if (previousToken == 0u)
+                    {
+                        if (chat.latestCompletionWorkload == ai::InferenceWorkload::source_iteration)
+                            chat.clear_completion_payload();
+                        log_ai_candidate_event(epochengine::format_text(
+                            "source_request_retained token={} artifact_epoch={} generation={}",
+                            editor.aiRetainedSourceToken, editor.aiRetainedSourceEpoch,
+                            sourceRequest.workspace_generation));
+                        push_ai_development_log(editor,
+                            "[ai] Next self-coding request retained until the earlier project-assistant request finishes. Both exact requests and the chosen sandbox are preserved.");
+                    }
+                    return;
+                }
+            }
+            if (&action != admittedAiAction)
+            {
+                if (const auto kind = ai_action_work_kind(action))
+                {
+                    // Choice has already transferred/retired its exact PIDs.
+                    // Retain the successor operation without replaying choice.
+                    auto queued = action;
+                    queued.candidate_decision = CandidateDecision::none;
+                    if (ai_work_pending(editor))
+                    {
+                        if (editor.aiWorkAction && same_ai_work_action(*editor.aiWorkAction, queued))
+                            return; // Exact repeated delivery keeps its original token and cooldown.
+                        editor_ai_development_panel::RenderResult stop{};
+                        stop.action = editor_ai_development_panel::HostAction::cancel_model_source_request;
+                        stop.candidate_decision = CandidateDecision::stop_lab;
+                        dispatch_ai_development_action(stop);
+                        rejectSourceDispatch("Two different self-coding operations reached the same pending admission slot. The session was stopped without replacing queued work or starting either new operation; active workers are retiring.");
+                        return;
+                    }
+                    if (queue_ai_work(editor, *kind, &queued))
+                    {
+                        log_ai_candidate_event(epochengine::format_text(
+                            "work_queued token={} artifact_epoch={} action={} generation={}",
+                            editor.aiWorkToken, editor.aiWorkArtifactEpoch,
+                            static_cast<unsigned>(queued.action), queued.workspace_generation));
+                        push_ai_development_log(editor, "[resource] " + editor.aiWorkStatus);
+                    }
+                    else
+                        rejectSourceDispatch("The host could not retain the exact self-coding operation for resource admission. The session was stopped; no new work started.");
+                    return;
+                }
             }
             if (action.reveal_source_patch_workbench
                 && !action.source_patch_relative_path.empty())
@@ -24557,39 +25474,13 @@ namespace epochengine
             case editor_ai_development_panel::HostAction::
                 cancel_source_task:
             {
-                invalidate_ai_source_artifacts(editor);
-                if (editor.aiDevelopmentPanel)
-                {
-                    const auto cancelled =
-                        editor.aiDevelopmentPanel->cancel_active_campaign(
-                            "The operator cancelled the running sandbox task.");
-                    push_ai_development_log(
-                        editor, "[self-coding] " + cancelled.status);
-                }
-                bool requested{};
-                if (editor.aiSourceWorkspaceCancellation.valid())
-                {
-                    (void)editor_task_scheduler(editor).cancel(
-                        editor.aiSourceWorkspaceCancellation);
-                    requested = true;
-                }
-                if (editor.aiSourceBuildCancellation.valid())
-                {
-                    (void)editor_task_scheduler(editor).cancel(
-                        editor.aiSourceBuildCancellation);
-                    requested = true;
-                }
-                if (editor.aiSourceTestCancellation.valid())
-                {
-                    (void)editor_task_scheduler(editor).cancel(
-                        editor.aiSourceTestCancellation);
-                    requested = true;
-                }
-                push_ai_development_log(
-                    editor,
-                    requested
-                        ? "[ai] Cancellation requested for the running guarded source task."
-                        : "[ai] No cancellable guarded source task is active.");
+                // A queued admission is a sandbox task too. Use the single
+                // source cancellation owner so an advanced Cancel cannot leave
+                // a deferred model prompt ready to resurrect at frame end.
+                auto stop = action;
+                stop.action = editor_ai_development_panel::HostAction::cancel_model_source_request;
+                stop.candidate_decision = CandidateDecision::stop_lab;
+                dispatch_ai_development_action(stop);
                 break;
             }
             case editor_ai_development_panel::HostAction::
@@ -24766,6 +25657,7 @@ namespace epochengine
                     if (ticket.valid())
                         (void)editor_task_scheduler(editor).cancel(ticket);
                 auto& mcp = editor.aiLocalMcp;
+                const bool cancelledMcpRequest = mcp.awaitingResponse || mcp.process.valid();
                 const bool cancelledLocalModel =
                     chat.source_request_running() && chat.cancel_pending();
                 const bool cancelledQueuedSource = editor.aiDeferredRequestKind
@@ -24800,6 +25692,12 @@ namespace epochengine
                         "and projects were not changed.",
                         mcp.bridgeProcessId,
                         mcp.elapsedMs);
+                if (cancelledMcpRequest)
+                {
+                    mcp.terminalFailure = ai::ModelTerminalFailure::cancelled;
+                    complete_local_mcp_terminal(chat, mcp.terminalFailure,
+                        mcp.status, editor.aiSourceRequestedGeneration);
+                }
                 std::error_code cleanupError{};
                 std::filesystem::remove(mcp.promptPath, cleanupError);
                 cleanupError.clear();
@@ -24831,13 +25729,6 @@ namespace epochengine
                         "[ai] Another model request is already owned by the host; the duplicate dispatch was ignored and the existing operation remains active.");
                     break;
                 }
-                if (chat.pending
-                    || editor.aiDeferredRequestKind != AiDeferredRequestKind::None)
-                {
-                    rejectSourceDispatch(
-                        "Self-coding could not start while another project-assistant request owns the local model. That request is unchanged; wait for it to finish, then start self-coding again.");
-                    break;
-                }
                 if (editor.automationCommand == EditorAutomationCommand::SelfCodingLocalSmoke
                     && (action.model_transport != editor_ai_development_panel::ModelTransport::local_inference
                         || epochengine::ai::current_local_inference_transport()
@@ -24849,6 +25740,7 @@ namespace epochengine
                 }
                 if (!action.model_prompt.empty())
                 {
+                    chat.clear_completion_payload();
                     invalidate_ai_source_artifacts(editor);
                     if (editor.automationCommand
                             == EditorAutomationCommand::SelfCodingLocalSmoke
@@ -24998,6 +25890,7 @@ namespace epochengine
 
                         mcp.startedTickNs = editor_steady_tick_ns();
                         mcp.elapsedMs = 0u;
+                        mcp.terminalFailure = ai::ModelTerminalFailure::none;
                         mcp.awaitingResponse = true;
                         if (const auto snapshot =
                                 platform::child_process::snapshot(mcp.process))
@@ -25082,25 +25975,43 @@ namespace epochengine
             platform::child_process::poll();
             const auto snapshot =
                 platform::child_process::snapshot(mcp.process);
+            const std::uint64_t now = editor_steady_tick_ns();
+            mcp.elapsedMs = now >= mcp.startedTickNs
+                ? (now - mcp.startedTickNs) / 1'000'000u : 0u;
+            mcp.terminalFailure = local_mcp_terminal_failure(
+                snapshot, mcp.elapsedMs, mcp.terminalFailure);
             if (!snapshot)
             {
                 mcp.status =
-                    "Local MCP process evidence was lost; the request stopped.";
-                chat.latestRawReply = "EPOCH_LOCAL_MCP_TRANSPORT_FAILED_V1";
-                ++chat.completionGeneration;
+                    "Local MCP process evidence was lost; retirement is unconfirmed. "
+                    "The heavy-work lane is quarantined; restart the editor after checking the bridge process. "
+                    "No response was applied and this request will not be repeated.";
+                complete_local_mcp_terminal(chat, mcp.terminalFailure,
+                    mcp.status, editor.aiSourceRequestedGeneration);
+                quarantine_local_mcp_retirement(chat, ai_heavy_work_coordinator());
                 mcp.awaitingResponse = false;
-                mcp.process = {};
+                // Keep the original handle for shutdown retirement. Absence
+                // of a snapshot is not evidence that its process exited.
                 chat.append_status(mcp.status);
                 push_ai_development_log(editor, "[local-mcp] " + mcp.status);
                 return;
             }
 
             mcp.bridgeProcessId = snapshot->platform_process_id;
-            const std::uint64_t now = editor_steady_tick_ns();
-            mcp.elapsedMs = now >= mcp.startedTickNs
-                ? (now - mcp.startedTickNs) / 1'000'000u : 0u;
             if (snapshot->active())
             {
+                if (mcp.terminalFailure != ai::ModelTerminalFailure::none)
+                {
+                    (void)platform::child_process::stop(
+                        mcp.process, platform::child_process::StopMode::force);
+                    mcp.status = epochengine::format_text(
+                        "Local MCP {} after {} ms (900000 ms request budget); "
+                        "waiting for bridge retirement. No automatic repeat.",
+                        mcp.terminalFailure == ai::ModelTerminalFailure::total_timeout
+                            ? "exhausted its total time budget" : "was cancelled",
+                        mcp.elapsedMs);
+                    return;
+                }
                 mcp.status = epochengine::format_text(
                     "Local MCP bridge PID {} is running ({} ms / 900000 ms).",
                     mcp.bridgeProcessId,
@@ -25112,6 +26023,7 @@ namespace epochengine
                     == platform::child_process::ProcessState::exited
                 && snapshot->exit_code_valid && snapshot->exit_code == 0;
             const auto response = exitedCleanly
+                    && mcp.terminalFailure == ai::ModelTerminalFailure::none
                 ? read_local_mcp_text(mcp.responsePath, 512u * 1024u)
                 : std::nullopt;
             if (const auto thread =
@@ -25120,8 +26032,26 @@ namespace epochengine
                 mcp.threadId = *thread;
             }
 
-            if (response)
+            if (mcp.terminalFailure != ai::ModelTerminalFailure::none)
             {
+                mcp.status = epochengine::format_text(
+                    "Local MCP {} after {} ms (900000 ms request budget). "
+                    "No response was applied and this request will not be repeated. "
+                    "Receipt: {} Log: {}",
+                    mcp.terminalFailure == ai::ModelTerminalFailure::total_timeout
+                        ? "exhausted its total time budget"
+                        : mcp.terminalFailure == ai::ModelTerminalFailure::cancelled
+                        ? "was cancelled" : "could not prove process retirement",
+                    mcp.elapsedMs, display_project_path(mcp.receiptPath),
+                    display_project_path(mcp.logPath));
+                complete_local_mcp_terminal(chat, mcp.terminalFailure,
+                    mcp.status, editor.aiSourceRequestedGeneration);
+                if (mcp.terminalFailure == ai::ModelTerminalFailure::retirement_failed)
+                    quarantine_local_mcp_retirement(chat, ai_heavy_work_coordinator());
+            }
+            else if (response)
+            {
+                chat.clear_completion_payload();
                 chat.latestRawReply = *response;
                 mcp.status = epochengine::format_text(
                     "Local MCP completed in {} ms. The response is queued for "
@@ -25132,6 +26062,7 @@ namespace epochengine
             }
             else
             {
+                chat.clear_completion_payload();
                 chat.latestRawReply = "EPOCH_LOCAL_MCP_TRANSPORT_FAILED_V1";
                 mcp.status = epochengine::format_text(
                     "Local MCP stopped without a bounded response (state {}, "
@@ -25143,9 +26074,13 @@ namespace epochengine
                     display_project_path(mcp.receiptPath),
                     display_project_path(mcp.logPath));
             }
-            ++chat.completionGeneration;
-            if (chat.completionGeneration <= editor.aiSourceRequestedGeneration)
-                chat.completionGeneration = editor.aiSourceRequestedGeneration + 1u;
+            if (mcp.terminalFailure == ai::ModelTerminalFailure::none)
+            {
+                chat.latestCompletionWorkload = ai::InferenceWorkload::source_iteration;
+                ++chat.completionGeneration;
+                if (chat.completionGeneration <= editor.aiSourceRequestedGeneration)
+                    chat.completionGeneration = editor.aiSourceRequestedGeneration + 1u;
+            }
             mcp.awaitingResponse = false;
             if (!platform::child_process::release(mcp.process))
                 editor.aiCandidateRetiringProcesses.push_back(mcp.process);
@@ -25703,6 +26638,62 @@ namespace epochengine
         };
         reconcile_ai_candidate_preview();
 
+        // Context-owned update: it runs even with AI Controls hidden. No read
+        // of another context's mutable EditorState is needed for global pacing.
+        const bool sourceWorkActive = ai_source_native_work_active(editor, chat);
+        finish_ai_retirement_barrier_at(editor, platform::work_admission::now_milliseconds(),
+            ai_heavy_work_coordinator());
+        if (editor.aiWorkLease != 0u && !sourceWorkActive)
+            release_ai_work_lease(editor);
+        if (editor.aiRetainedSourceRequest
+            && editor.aiRetainedSourceEpoch != editor.aiSourceArtifactEpoch)
+            rejectSourceDispatch("The retained self-coding request belongs to an obsolete sandbox generation; it was discarded without changing the project-assistant request.");
+        const auto retainedSourceToken = editor.aiRetainedSourceToken;
+        if (auto retained = take_retained_source_model_request(editor, chat))
+        {
+            log_ai_candidate_event(epochengine::format_text(
+                "source_request_resumed token={} artifact_epoch={} generation={}",
+                retainedSourceToken, editor.aiSourceArtifactEpoch, retained->workspace_generation));
+            // Re-enter the real dispatcher, including resource/cooldown checks.
+            // This handoff never replays a previous Keep/Choose decision.
+            dispatch_ai_development_action(*retained);
+        }
+        if (editor.aiWorkLocalHttp
+            && editor.aiDeferredRequestKind != AiDeferredRequestKind::SourceIteration)
+            cancel_ai_work_admission(editor);
+        if (ai_work_pending(editor)
+            && editor.aiWorkArtifactEpoch != editor.aiSourceArtifactEpoch)
+        {
+            cancel_ai_work_admission(editor);
+            rejectSourceDispatch("The queued self-coding operation belongs to an obsolete sandbox generation; it was discarded before dispatch.");
+        }
+        if (editor.aiWorkAction && admit_ai_work(editor, sourceWorkActive, true))
+        {
+            auto admitted = std::move(*editor.aiWorkAction);
+            editor.aiWorkAction.reset();
+            editor.aiWorkLocalHttp = false;
+            const auto lease = editor.aiWorkLease;
+            admittedAiAction = &admitted;
+            try
+            {
+                dispatch_ai_development_action(admitted);
+            }
+            catch (const std::exception& exception)
+            {
+                rejectSourceDispatch(std::string{"Admitted self-coding dispatch failed: "} + exception.what());
+            }
+            catch (...)
+            {
+                rejectSourceDispatch("Admitted self-coding dispatch failed with an unknown error.");
+            }
+            admittedAiAction = nullptr;
+            log_ai_candidate_event(epochengine::format_text(
+                "work_dispatched token={} action={} generation={}",
+                lease, static_cast<unsigned>(admitted.action), admitted.workspace_generation));
+            if (!ai_source_native_work_active(editor, chat))
+                release_ai_work_lease(editor);
+        }
+
         if (!editor.automationConsumed
             && (editor.automationCommand
                     == EditorAutomationCommand::CandidateLabSmokeChoose
@@ -25971,6 +26962,32 @@ namespace epochengine
                 return false;
             }
 
+            if (editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration)
+            {
+                if (ai_work_pending(editor) && !editor.aiWorkLocalHttp)
+                    return false;
+                if (!ai_work_pending(editor))
+                {
+                    if (!queue_ai_work(editor, platform::work_admission::WorkKind::model))
+                    {
+                        rejectSourceDispatch("The host could not retain the local-model admission request. No request was sent.");
+                        return false;
+                    }
+                    push_ai_development_log(editor, "[resource] " + editor.aiWorkStatus);
+                }
+                if (!admit_ai_work(editor, ai_source_native_work_active(editor, chat), true))
+                    return false;
+                editor.aiWorkLocalHttp = false;
+            }
+            else
+            {
+                // Preserve a queued project-assistant prompt during comparison;
+                // it must not start AI alongside an owned self-coding operation.
+                if (!reserve_project_ai_work_at(editor,
+                        platform::work_admission::now_milliseconds(), ai_heavy_work_coordinator()))
+                    return false;
+            }
+
             const AiDeferredRequestKind requestKind =
                 editor.aiDeferredRequestKind;
             std::string prompt = std::move(editor.aiDeferredPrompt);
@@ -26018,17 +27035,10 @@ namespace epochengine
             }
             else if (requestKind == AiDeferredRequestKind::SourceIteration)
             {
-                editor.aiSourceRequestedGeneration =
-                    chat.completionGeneration;
-                editor.aiSourceAwaitingReply = submitted;
-                editor.aiAuthoringPlan = {};
-                editor.aiAuthoringPlanApplied = false;
-                editor.aiAuthoringAwaitingReply = false;
-                editor.aiAuthoringPlanForGoal = false;
-                editor.aiAuthoringStatus = submitted
-                    ? "Host started the guarded source request worker. Scene authoring is inactive while it waits for the selected model endpoint."
-                    : "The host rejected the queued source request before starting a local-model worker.";
-                chat.append_status(editor.aiAuthoringStatus);
+                record_source_model_submission(editor, chat.completionGeneration, submitted);
+                chat.append_status(submitted
+                    ? "Host started the self-coding request. Project plans and goal progress are preserved while it waits for the selected model endpoint."
+                    : "The host rejected the queued source request before starting a local-model worker.");
                 if (editor.aiDevelopmentPanel)
                 {
                     const auto manifest =
@@ -26052,6 +27062,8 @@ namespace epochengine
             {
                 chat.input.clear();
             }
+            if (!submitted && !ai_source_native_work_active(editor, chat))
+                release_ai_work_lease(editor);
             return submitted;
         };
 
@@ -26072,16 +27084,20 @@ namespace epochengine
                 .curated_source_paths = editor.sourceWorkspaceLabels,
                 .architecture_evidence = std::string{ai_source_architecture_contract()},
                 .tool_output_relative_path = script,
-                .latest_raw_model_reply = chat.latestRawReply,
                 .selected_model = manifest.display_name,
                 .selected_endpoint = manifest.endpoint,
                 .selected_transport = std::string{epochengine::ai::local_inference_transport_name(
                     epochengine::ai::current_local_inference_transport())},
                 .local_model_running = chat.source_request_running(),
-                .local_model_queued = editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration,
+                .local_model_queued = editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration
+                    || editor.aiRetainedSourceRequest.has_value()
+                    || (editor.aiWorkAction && editor.aiWorkAction->action
+                        == editor_ai_development_panel::HostAction::request_model_source_proposal),
                 .local_model_cancelling = chat.source_request_cancelling(),
                 .local_model_elapsed_ms = chat.source_request_running() ? chat.elapsed_milliseconds() : 0u,
-                .local_model_activity = std::string{chat.request_activity()},
+                .local_model_activity = editor.aiRetainedSourceRequest
+                    ? "Next self-coding request is retained while the earlier project-assistant request finishes."
+                    : ai_work_pending(editor) ? editor.aiWorkStatus : std::string{chat.request_activity()},
                 .external_mcp_available = local_mcp_connector_available(),
                 .external_mcp_status = editor.aiLocalMcp.status,
                 .external_mcp_process_id = editor.aiLocalMcp.bridgeProcessId,
@@ -26090,12 +27106,15 @@ namespace epochengine
                     ? std::string{} : display_project_path(editor.aiLocalMcp.receiptPath),
                 .external_mcp_running = editor.aiLocalMcp.awaitingResponse,
                 .tool_source_ready = !script.empty(),
-                .execution_pending = editor.aiContinuousBuildPending.has_value()
+                .execution_pending = ai_work_pending(editor) || editor.aiRetainedSourceRequest.has_value()
+                    || editor.aiContinuousBuildPending.has_value()
                     || editor.aiSourceWorkspacePending.has_value()
                     || editor.aiSourceBuildPending.has_value()
                     || editor.aiSourceTestPending.has_value(),
-                .session_retirement_pending = !editor.aiCandidateRetiringProcesses.empty()};
+                .session_retirement_pending = editor.aiSourceParkedRetirement || !editor.aiCandidateRetiringProcesses.empty()
+                    || chat.requestRetirementFailed};
             apply_verified_ai_source_authority(input);
+            apply_source_model_completion(input, chat, editor.aiSourceRequestedGeneration);
             return input;
         };
         // Model completion and successor planning belong to the context tick,
@@ -26103,7 +27122,7 @@ namespace epochengine
         if (editor.aiDevelopmentPanel)
         {
             if (editor.aiSourceAwaitingReply && !chat.pending
-                && chat.completionGeneration > editor.aiSourceRequestedGeneration)
+                && source_model_completion_ready(chat, editor.aiSourceRequestedGeneration))
             {
                 editor.aiSourceAwaitingReply = false;
                 const auto reply = editor.aiDevelopmentPanel->stage_latest_model_proposal(source_iteration_input());
@@ -26115,7 +27134,10 @@ namespace epochengine
             dispatch_ai_development_action(
                 editor.aiDevelopmentPanel->advance_source_iteration(source_iteration_input()));
             if (!chat.pending && !editor.aiSourceAwaitingReply
-                && editor.aiDeferredRequestKind != AiDeferredRequestKind::SourceIteration)
+                && !editor.aiRetainedSourceRequest
+                && editor.aiDeferredRequestKind != AiDeferredRequestKind::SourceIteration
+                && !(editor.aiWorkAction && editor.aiWorkAction->action
+                    == editor_ai_development_panel::HostAction::request_model_source_proposal))
                 editor.aiSourceModelLease.reset();
             if (!editor.aiLocalMcp.process.valid() && !editor.aiLocalMcp.awaitingResponse
                 && editor.aiCandidateRetiringProcesses.empty())
@@ -26260,7 +27282,10 @@ namespace epochengine
             && editor.aiGoalRunning
             && !editor.aiAuthoringAwaitingReply
             && !goalPlanAwaitingApproval
-            && !chat.pending)
+            && !source_model_slot_busy(editor, chat)
+            && !editor.aiRetainedSourceRequest
+            && !editor.aiSourceAwaitingReply
+            && !ai_source_native_work_active(editor, chat))
         {
             (void)request_ai_authoring_plan(true);
         }
@@ -27464,18 +28489,27 @@ namespace epochengine
             chromeCommands.push_back(ChromeCommand::Update);
         }
 
-        const std::size_t toolbarThreadCount =
-            epochengine::systems::threading::live_thread_count();
-        const std::size_t toolbarCpuThreadCount = (std::max)(
-            std::size_t{ 1 },
-            std::thread::hardware_concurrency() > 0
-                ? static_cast<std::size_t>(std::thread::hardware_concurrency())
-                : std::size_t{ 1 });
+        const auto toolbarActivity = editor.taskScheduler
+            ? editor.taskScheduler->activity() : editor_tasks::ActivitySnapshot{};
+        const bool toolbarModelQueued = chat.pending
+            && chat.pending->stage.load(std::memory_order_acquire) == ai::ModelRequestStage::queued;
+        const auto toolbarRunning = toolbarActivity.running_tasks
+            + (chat.pending && !toolbarModelQueued ? 1u : 0u)
+            + (editor.aiLocalMcp.awaitingResponse ? 1u : 0u);
+        const auto toolbarQueued = toolbarActivity.queued_tasks + toolbarActivity.waiting_tasks
+            + (toolbarModelQueued ? 1u : 0u)
+            + (editor.aiRetainedSourceRequest ? 1u : 0u)
+            + (editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                && !editor.aiWorkLocalHttp ? 1u : 0u)
+            + (ai_work_pending(editor) ? 1u : 0u);
+        const std::string toolbarTasks = epochengine::format_text(
+            "Tasks here {} active / {} queued / {} idle workers",
+            toolbarRunning, toolbarQueued,
+            toolbarActivity.idle_workers);
         const std::array<std::string, 5> toolbarStatus{{
             std::string("v") + epochengine::GetEngineVersionString(),
             epochengine::GetEngineBuildTagString(),
-            std::string("Threads ") + std::to_string(toolbarThreadCount)
-                + "/" + std::to_string(toolbarCpuThreadCount),
+            toolbarTasks,
             std::string("Context ")
                 + (ctx ? renderer_name(ctx) : std::string{ "Unknown" }),
             std::string("Zoom ") + preview_zoom_text(ctx)
@@ -31578,6 +32612,30 @@ namespace epochengine
                 editor.aiDevelopmentPanel = std::make_unique<
                     editor_ai_development_panel::Panel>();
             }
+            if (editor.aiRetainedSourceRequest || ai_work_pending(editor)
+                || (editor.aiWorkLease != 0u && editor.aiWorkLeaseIsSource))
+            {
+                gui::wrapped_label(editor.aiRetainedSourceRequest
+                        ? "Next self-coding request is retained until the earlier project-assistant request finishes. Neither request nor the chosen sandbox was replaced."
+                        : ai_work_pending(editor) ? editor.aiWorkStatus
+                        : editor.aiCandidateChallengerProcess.valid()
+                            ? "Candidate comparison owns the work lane. Choose below or stop; no new AI/build work will start."
+                            : chat.requestRetirementFailed
+                                ? "Native request retirement failed. Stop and restart Epoch before more work."
+                                : "Self-coding work is active; its worker and child retirement remain supervised.",
+                    inspectorWidth);
+                if (gui::button("Stop Self-Coding Session", {inspectorWidth, 30.0f}))
+                {
+                    editor_ai_development_panel::RenderResult cancel{};
+                    cancel.action = editor_ai_development_panel::HostAction::cancel_model_source_request;
+                    dispatch_ai_development_action(cancel);
+                    cancel.action = editor_ai_development_panel::HostAction::cancel_source_task;
+                    dispatch_ai_development_action(cancel);
+                    cancel.action = editor_ai_development_panel::HostAction::none;
+                    cancel.candidate_decision = editor_ai_development_panel::CandidateDecision::stop_lab;
+                    dispatch_ai_development_action(cancel);
+                }
+            }
             auto guardedInput = source_iteration_input(inspectorWidth);
             if (!editor.automationConsumed
                 && editor.automationCommand
@@ -31850,9 +32908,12 @@ namespace epochengine
                                 editor.selfCodingSmokeSuccessorPreviewRequested = false;
                                 editor.selfCodingSmokePhase = 3u;
                                 dispatch_ai_development_action(successor);
-                                if (!editor.aiSourceWorkspacePending
+                                const bool successorQueued = editor.aiWorkAction
+                                    && editor.aiWorkAction->action == editor_ai_development_panel::HostAction::materialize_source_workspace
+                                    && editor.aiWorkAction->workspace_generation == editor.selfCodingSmokeSuccessorGeneration;
+                                if (!successorQueued && (!editor.aiSourceWorkspacePending
                                     || editor.aiSourceWorkspaceGeneration
-                                        != editor.selfCodingSmokeSuccessorGeneration)
+                                        != editor.selfCodingSmokeSuccessorGeneration))
                                 {
                                     editor.selfCodingSmokeSuccessorMaterializationFailed = true;
                                 }
@@ -31872,6 +32933,7 @@ namespace epochengine
                         && editor.selfCodingSmokeSuccessorPlanRequested
                         && (editor.selfCodingSmokeSuccessorPlanReviewed
                             || editor.aiDevelopmentPanel->has_reviewed_plan())
+                        && !ai_work_pending(editor)
                         && !editor.aiSourceWorkspacePending
                         && !editor.aiSourceBuildPending
                         && !editor.aiSourceTestPending
@@ -31949,6 +33011,7 @@ namespace epochengine
                     }
                     else if (!editor.automationConsumed
                         && editor.selfCodingSmokePhase == 4u
+                        && !ai_work_pending(editor)
                         && !editor.aiSourceWorkspacePending
                         && !editor.aiSourceBuildPending
                         && !editor.aiSourceTestPending
@@ -35743,7 +36806,6 @@ namespace epochengine
                 const auto& projectProfile = active_project_profile(editor);
                 const auto editorBackend = renderer_backend_kind(ctx);
                 const auto runBackend = renderer_backend_kind(editor.projectRunBackend);
-                auto& liveScheduler = editor_task_scheduler(editor);
                 editor.systems.panel->render(
                     centerWidth,
                     registry,
@@ -35778,7 +36840,7 @@ namespace epochengine
                         .live_threads = epochengine::systems::threading::live_thread_count(),
                         .hardware_threads = hardwareThreadCount
                     },
-                    &liveScheduler.graph(),
+                    editor.taskScheduler ? &editor.taskScheduler->graph() : nullptr,
                     "Editor Project and Script Tasks");
                 break;
             }
@@ -36562,12 +37624,14 @@ namespace epochengine
             && !editor.aiToolPlanApplied;
         const bool toolTestPending =
             editor.aiToolTestPending.has_value();
-        const bool sourceContextRequestAvailable =
+        const bool sourceReplyAvailable = source_model_completion_ready(chat, editor.aiSourceRequestedGeneration)
+            && chat.latestTerminalFailure == ai::ModelTerminalFailure::none;
+        const bool sourceContextRequestAvailable = sourceReplyAvailable &&
             chat.latestRawReply.starts_with(
                 "EPOCH_SOURCE_CONTEXT_REQUEST_V1");
-        const bool sourceEditProposalAvailable =
-            chat.latestRawReply.starts_with("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
-            || chat.latestRawReply.starts_with("EPOCH_SOURCE_PROPOSAL_V1");
+        const bool sourceEditProposalAvailable = sourceReplyAvailable
+            && (chat.latestRawReply.starts_with("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
+                || chat.latestRawReply.starts_with("EPOCH_SOURCE_PROPOSAL_V1"));
         const bool sourceProposalAvailable = sourceContextRequestAvailable
             || sourceEditProposalAvailable;
         const bool sourceContextPending = editor.aiDevelopmentPanel
@@ -37070,7 +38134,8 @@ namespace epochengine
                             epochengine::ai::current_local_inference_transport())},
                     .local_model_running = chat.source_request_running(),
                     .local_model_queued = editor.aiDeferredRequestKind
-                        == AiDeferredRequestKind::SourceIteration,
+                        == AiDeferredRequestKind::SourceIteration
+                        || editor.aiRetainedSourceRequest.has_value(),
                     .local_model_cancelling = chat.source_request_cancelling(),
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
@@ -37088,11 +38153,14 @@ namespace epochengine
                     .external_mcp_running =
                         editor.aiLocalMcp.awaitingResponse,
                     .execution_pending =
-                        editor.aiContinuousBuildPending.has_value()
+                        ai_work_pending(editor) || editor.aiContinuousBuildPending.has_value()
                         || editor.aiSourceWorkspacePending.has_value()
                         || editor.aiSourceBuildPending.has_value()
-                        || editor.aiSourceTestPending.has_value()};
+                        || editor.aiSourceTestPending.has_value(),
+                    .session_retirement_pending = editor.aiSourceParkedRetirement || !editor.aiCandidateRetiringProcesses.empty()
+                        || chat.requestRetirementFailed};
                 apply_verified_ai_source_authority(promotionInput);
+                apply_source_model_completion(promotionInput, chat, editor.aiSourceRequestedGeneration);
                 const auto promotionResult = sourcePromotionStaged
                     ? editor.aiDevelopmentPanel
                         ->approve_and_promote_verified_source(
@@ -37141,7 +38209,6 @@ namespace epochengine
                     .curated_source_paths = editor.sourceWorkspaceLabels,
                     .architecture_evidence =
                         std::string{ai_source_architecture_contract()},
-                    .latest_raw_model_reply = chat.latestRawReply,
                     .selected_model = manifest.display_name,
                     .selected_endpoint = manifest.endpoint,
                     .selected_transport = std::string{
@@ -37149,7 +38216,8 @@ namespace epochengine
                             epochengine::ai::current_local_inference_transport())},
                     .local_model_running = chat.source_request_running(),
                     .local_model_queued = editor.aiDeferredRequestKind
-                        == AiDeferredRequestKind::SourceIteration,
+                        == AiDeferredRequestKind::SourceIteration
+                        || editor.aiRetainedSourceRequest.has_value(),
                     .local_model_cancelling = chat.source_request_cancelling(),
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
@@ -37167,11 +38235,14 @@ namespace epochengine
                     .external_mcp_running =
                         editor.aiLocalMcp.awaitingResponse,
                     .execution_pending =
-                        editor.aiContinuousBuildPending.has_value()
+                        ai_work_pending(editor) || editor.aiContinuousBuildPending.has_value()
                         || editor.aiSourceWorkspacePending.has_value()
                         || editor.aiSourceBuildPending.has_value()
-                        || editor.aiSourceTestPending.has_value()};
+                        || editor.aiSourceTestPending.has_value(),
+                    .session_retirement_pending = editor.aiSourceParkedRetirement || !editor.aiCandidateRetiringProcesses.empty()
+                        || chat.requestRetirementFailed};
                 apply_verified_ai_source_authority(proposalInput);
+                apply_source_model_completion(proposalInput, chat, editor.aiSourceRequestedGeneration);
                 const auto proposalResult = sourceContextPending
                     ? editor.aiDevelopmentPanel
                         ->share_requested_source_context(proposalInput)

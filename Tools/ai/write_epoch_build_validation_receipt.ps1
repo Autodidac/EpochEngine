@@ -90,48 +90,19 @@ function ConvertTo-CanonicalJsonString {
     return $builder.ToString()
 }
 
-function Read-VersionMacro {
-    param(
-        [Parameter(Mandatory = $true)][string]$Source,
-        [Parameter(Mandatory = $true)][string]$Name
-    )
-
-    $pattern = "(?m)^#\s+define\s+$([regex]::Escape($Name))\s+([0-9]+)\s*$"
-    $matches = [regex]::Matches($Source, $pattern)
-    if ($matches.Count -ne 1) {
-        throw "Expected exactly one numeric $Name definition; found $($matches.Count)."
-    }
-    return [int]$matches[0].Groups[1].Value
-}
-
 function Resolve-VersionAuthorities {
     param(
         [Parameter(Mandatory = $true)][string]$VersionModule,
+        [ValidateSet('windows-x64', 'linux-x64', 'macos-arm64')]
         [Parameter(Mandatory = $true)][string]$RequestedPlatform
     )
 
-    $source = Get-Content -LiteralPath $VersionModule -Raw
-    $major = Read-VersionMacro -Source $source -Name 'EPOCH_VERSION_MAJOR_VALUE'
-    $minor = Read-VersionMacro -Source $source -Name 'EPOCH_VERSION_MINOR_VALUE'
-    $revision = Read-VersionMacro -Source $source -Name 'EPOCH_VERSION_REVISION_VALUE'
-
-    $prefix = switch ($RequestedPlatform) {
-        'windows-x64' { 'EPOCH_WINDOWS_PACKAGED_VERSION' }
-        'linux-x64' { 'EPOCH_LINUX_PACKAGED_VERSION' }
-        'macos-arm64' { 'EPOCH_MACOS_PACKAGED_VERSION' }
-        default { throw "Unsupported platform authority: $RequestedPlatform" }
-    }
-
-    # Tracked packaged major/minor defaults intentionally alias the source
-    # macros; only build-time overrides replace them. A source admission receipt
-    # describes tracked authorities, so resolve those aliases explicitly.
-    $packagedMajor = $major
-    $packagedMinor = $minor
-    $packagedRevision = Read-VersionMacro -Source $source -Name "${prefix}_REVISION_VALUE"
-
+    # Share canonical spelling and explicit platform-pin resolution with staging.
+    # This reads tracked fallbacks, not the compiler's optional build overrides.
+    $versionScript = Join-Path $PSScriptRoot 'get_epoch_version.ps1'
     return [pscustomobject]@{
-        Source = '{0}.{1}.{2}' -f $major, $minor, $revision
-        Packaged = '{0}.{1}.{2}' -f $packagedMajor, $packagedMinor, $packagedRevision
+        Source = & $versionScript -VersionModule $VersionModule -Platform source
+        Packaged = & $versionScript -VersionModule $VersionModule -Platform $RequestedPlatform
     }
 }
 
@@ -326,6 +297,7 @@ function Write-ReceiptDocument {
 }
 
 function Invoke-SelfTest {
+    & (Join-Path $PSScriptRoot 'get_epoch_version.ps1') -SelfTest | Out-Null
     $selfTestRepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
     $selfTestVersionModule = Join-Path $selfTestRepoRoot 'Engine\modules\epoch.version.ixx'
     foreach ($selfTestPlatform in @('windows-x64', 'linux-x64', 'macos-arm64')) {

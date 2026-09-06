@@ -1,5 +1,39 @@
 ## [Unreleased] - v0.90.1 preparation (not a release)
 
+- September 6 self-coding repair batch: reserve exact source, causal compiler
+  diagnostics/full SHA and failed proposal ahead of optional PATH catalog lines;
+  retain that repair envelope through source reselection. Make orchestrator
+  validation commits atomic with immutable generation/digest campaign records,
+  exact resume and redirect/capacity fault coverage. Repair a real candidate
+  boundary defect: failed-candidate receipts no longer accumulate into the next
+  candidate or satisfy its validation. Each candidate requires seven fresh,
+  distinct successful actors bound to its own digest; stale/duplicate/unknown
+  and incomplete-final evidence cannot consume those checks.
+- Wire measured heavy-work admission through source and project AI, floating
+  chat, compiler/test/preview dispatch and parked context retirement. Retain
+  exact successor requests behind project chat without replacing either goal;
+  keep ownership through actual process/worker retirement, pause during choice,
+  and invalidate queued work on Stop/Restart/Close. Toolbar shows task activity
+  rather than registered thread lifetimes. CPU/RAM 30-second admission is not
+  GPU/VRAM qualification, universal child-workload admission or OS confinement.
+- Diagnose the 08:19:19/08:29:19 model disconnects as the old 600-second request
+  limit, not loss of focus. Source requests now allow 1800 seconds per attempt;
+  exhausted total budget, cancellation and uncertain retirement are typed host
+  outcomes retained through the chat worker and AI Controls, never higher-level
+  automatic retries. Early recoverable failures retain one transport retry.
+  Project completion metadata cannot be consumed as a source result.
+- Correct source/platform version parsing, historical 0.89.06 formatting,
+  independent macOS 0.89.30 authority, receipt platform resolution and updater
+  contracts. Version/receipt script self-tests pass in PowerShell 7 and 5.1;
+  source naming passes 596 files; admission/scheduler component CTests pass 2/2.
+  Serial Debug/Release Editor builds and both rebuilt 180-check aggregates pass,
+  including external-MCP deadline/retirement regressions; Release process exit
+  was explicitly waited and verified 0. Existing duplicate-logger/optimization
+  override warnings remain. Exact Release EXE: 13,218,304 bytes, SHA-256
+  590a4def52773711925e4acfedabe195f80ff55407df56e28335b775affe74ba.
+  No native Qwen two-build/choice, OS isolation, package, Site or stable-ref proof
+  is claimed from these build-safe checks.
+
 - September 6 planning consolidation: replace stacked reset/resume instructions
   with one current evidence table and bounded production continuation. Preserve
   the major full playable 2D game and all older unfinished goals; order current

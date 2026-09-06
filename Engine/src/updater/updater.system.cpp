@@ -77,6 +77,7 @@ import core.logger;
 import core.path;
 import core.sha256;
 import epoch.cli;
+import epoch.version;
 import platform.engine;
 import updater.tools;
 import updater.config;
@@ -6157,6 +6158,14 @@ namespace epochengine::updater
 
     bool update_discovery_contract_self_test()
     {
+        // Source and packaged releases are independent platform authorities.
+        // Exercise historical spelling without pinning this contract to the
+        // previous development version or requiring all platforms to advance.
+        const auto sourceVersion = epochengine::FormatVersionString(
+            epochengine::GetMajor(), epochengine::GetMinor(), epochengine::GetRevision());
+        const auto packagedVersion = epochengine::FormatVersionString(
+            epochengine::GetPackagedMajor(), epochengine::GetPackagedMinor(),
+            epochengine::GetPackagedRevision());
         const std::string padding(128u * 1024u, 'x');
         const std::string document =
             "{\"canonical_payload\":\"{\\\"schema\\\":\\\"epoch-test/v1\\\","
@@ -6214,13 +6223,15 @@ namespace epochengine::updater
                !system_detail::json_document_within_release_limits(too_many_fields) &&
                !system_detail::json_document_within_release_limits(too_long_string) &&
                !system_detail::json_document_within_release_limits(too_large) &&
-               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.35") == 0 &&
-               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.33") > 0 &&
-               system_detail::compare_versions(PROJECT_SOURCE_VERSION, "0.89.30") > 0 &&
-               system_detail::compare_versions(PROJECT_PACKAGED_VERSION, "0.89.33") > 0 &&
-               system_detail::compare_versions(PROJECT_PACKAGED_VERSION, "0.89.35") == 0 &&
-               system_detail::compare_versions(
-                   PROJECT_SOURCE_VERSION, PROJECT_PACKAGED_VERSION) == 0 &&
+               PROJECT_SOURCE_VERSION == sourceVersion &&
+               PROJECT_PACKAGED_VERSION == packagedVersion &&
+               epochengine::FormatVersionString(0, 89, 6) == "0.89.06" &&
+               epochengine::FormatVersionString(0, 89, 30) == "0.89.30" &&
+               epochengine::FormatVersionString(0, 90, 1) == "0.90.1" &&
+               epochengine::FormatVersionString(1, 0, 0) == "1.0.0" &&
+               system_detail::compare_versions("0.90.1", "0.89.35") > 0 &&
+               system_detail::compare_versions("0.89.30", "0.90.1") < 0 &&
+               system_detail::compare_versions("0.89.06", "0.89.6") == 0 &&
                PROJECT_SOURCE_VERSION_URL() ==
                    std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version";
     }
