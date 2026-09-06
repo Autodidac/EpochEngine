@@ -126,6 +126,19 @@ recorded in `Changes/changelog.txt`; current ordering belongs in
 
 ## Owner-Only SDK And Online Documentation
 
+- The SDK is a separate readable reference inside the Engine's About command
+  menu (for example About Epoch > SDK Reference), not merely an archive download
+  or part of the source-update dialog. Show its entry only when the existing
+  source-update authentication flow establishes current server-confirmed owner/
+  admin permission for SDK access. Reuse that identity/device/session flow;
+  do not add a parallel login or treat generic source entitlement, a cached UI
+  flag, or possession of a URL as admin authority. This UI is still planned.
+- The website must implement the same rule: owner/admin-only SDK navigation
+  AND protected documentation/content/download routes, checked server-side.
+  Engine and Site must agree on version and permission semantics. Test absent,
+  expired and revoked authorization in both consumers, including an already-open
+  reference view and direct asset requests; fail closed without leaking content
+  through public runtime bundles, web assets, search indexes or shared caches.
 - Final priority AFTER the current self-coding, EpochGui/Extensions, generated-
   project and EpochSimEngine/EpochSpaceEngine demo/library integration batch:
   complete Doxygen, a full Epoch Engine SDK for the owner, and online API/

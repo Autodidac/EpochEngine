@@ -240,6 +240,13 @@ September 6, current 24-hour priority (supersedes older dated task ordering):
    assets, search indexes and SDK downloads only after server-side owner/admin
    authorization; hiding a link is not access control. Test anonymous and
    non-owner denial, direct asset URLs, session expiry and shared-cache leakage.
+   The Engine must expose SDK Reference as a separate readable About-menu
+   destination only for the currently authorized owner/admin, reusing the
+   source-updater identity/device authentication rather than adding a login.
+   Inspect its actual capabilities: source access alone must not silently become
+   admin/SDK entitlement. Apply the same conditional navigation and server-side
+   content enforcement on the website, with expired/revoked-session tests in
+   both consumers. This is a planned addition, not implemented access control.
 
 Use independent subagents continuously where useful, with disjoint source
 ownership and serial heavy build/runtime work. At each checkpoint update this

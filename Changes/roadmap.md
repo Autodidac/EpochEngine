@@ -52,6 +52,10 @@ the integrations above. The operator targets the end of September 6, 2026
 (America/New_York) for that milestone too. Reuse existing Site access support;
 prove module coverage, version binding and server-side owner-only access for
 pages, assets, search and downloads. No deadline replaces those release gates.
+Provide a separate readable SDK Reference under Engine About, visible only
+with current owner/admin SDK permission through the existing source-update
+authentication flow. The website must mirror that permission and protect direct
+content routes; neither a hidden link nor generic source entitlement is enough.
 
 1. **Self-coding first:** finish the real Qwen two-build/choice loop and its
    data, process, model-selection and interaction acceptance. Reuse its existing
