@@ -1,5 +1,21 @@
 ## [Unreleased] - v0.90.1 preparation (not a release)
 
+- September 6 stage/wire repair saved as 3f459b8f: resolve the operator's Qwen
+  screenshot contradiction between a numbered plan and patch-only system
+  instructions. Select stage from the host envelope only; align HTTP JSON and
+  direct CLI packet contracts across selection, patch and correction prompts.
+  Plans avoid schema/packet extraction, including resumed plans quoting source
+  markers. Canonical codec-valid patches/queries may contain reasoning-filter
+  source literals without being rejected as conversational reasoning. No edit,
+  path, cancellation, resource, candidate or publication authority was broadened.
+  Debug/Release builds and each rebuilt 180-check aggregate passed; exact Release
+  process exit 0 was waited. Source naming passes 596 files; diff checks pass.
+  Release EXE: 13,237,248 bytes; SHA-256
+  ce1372bb098600291e10bf028803b42eb0f7e777bde351de34da3f8f0466df7e.
+  Native Qwen two-build/choice acceptance and all release gates remain open.
+  Site task acknowledged conditional publication after checks, current-only
+  listings and retained immutable rollback objects; no publication occurred.
+
 - Implementation batch saved as 93d542f4. The subsequent exact Release native
   Qwen test launch was rejected by execution policy before process creation;
   no test root/model request/runtime was started. Model lane was released.

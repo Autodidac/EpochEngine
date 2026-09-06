@@ -208,6 +208,23 @@ comparison. This does not approve live-source mutation, promotion, Git, upload,
 publication, listener, server, or release. Complete model responses remain
 visible in AI Chat when the operational preview is truncated.
 
+The host-owned first request line selects the response contract, not markers
+found inside objectives, source excerpts, saved plans or repair evidence.
+`EPOCH_SELF_ITERATION_PLAN_V2` requests a numbered plain-text plan and never
+inherits patch framing or a source JSON schema. Selection/edit requests use
+`EPOCH_SOURCE_SELECTION_V1` / `EPOCH_SOURCE_EDIT_REQUEST_V1`; campaign edits
+retain the outer `EPOCH_SELF_ITERATION_PROPOSAL_V2` envelope. OpenAI-compatible
+transport requires the supplied JSON schema; direct CLI uses canonical
+line-framed packets. Prompt examples and retry addenda describe these conditional
+wire formats consistently. Schema-shaped insufficient evidence maps to the
+existing no-edit outcome and cannot carry operations or admitted reads.
+Strictly decoded source packets may quote literals such as `reasoning_content`
+without being classified as conversational reasoning. This is format recognition,
+not approval: exact source grounding, path admission, preimages, sandbox apply,
+candidate digest and validation ownership remain mandatory. Build-safe tests
+exercise the actual system/body builders and both transport framing paths;
+they do not prove a real model completed a candidate.
+
 Model replies and automatic initial/successor planning advance from the owning
 editor context tick, not the AI Controls renderer. Hiding or switching inspector
 tabs therefore does not pause the session. Stop latches progression off before

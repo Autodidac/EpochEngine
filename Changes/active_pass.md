@@ -27,14 +27,16 @@ or redefine them.
 
 ## Current Source And Evidence
 
-Current implementation checkpoint: `93d542f42c9b9767b144536531d6760e79b3c624`,
-following planning `056ab2e9`, implementation `f494ed5f`, receipt/resource
-`dc96a778` and host-alias `7d538759`. The focused 16-file repair batch is saved.
+Current implementation checkpoint: `3f459b8f9b266794036242de43615f427551633b`,
+following implementation `93d542f4`, planning `056ab2e9`, implementation
+`f494ed5f`, receipt/resource `dc96a778` and host-alias `7d538759`.
+The focused four-file stage/wire repair and the earlier 16-file batch are saved.
 This table supersedes the stacked reset notes; implementation and current-build
 evidence are separate.
 
 | Area | Actual state | Missing acceptance / next action |
 | --- | --- | --- |
+| Stage-specific model contract | Host-owned first-line envelope selects plan/selection/edit; plans remain numbered prose, HTTP selection/patch uses JSON schema, direct CLI uses canonical packets. Repair references cannot switch stage; codec-valid source literals are not rejected by chat prose heuristics | Actual request-body/codec/repair/quoted-marker/literal contracts pass in Debug and Release; real Qwen plan-to-build progression remains unverified |
 | Host-alias compiler handoff | Trusted executable canonicalization and 91,520 same-group dock-move regression passed at `7d538759`; redundant Qwen clamp was not promoted | Reuse these foundations |
 | Compiler failure receipts | UTF-8-safe summary/full-status SHA/causal error/32 KiB repair context retained; accepted repair starts a fresh candidate receipt set; all seven exact-candidate actors required | Rebuilt verbose-failure/repair/seven-pass and invalid receipt contracts pass; native malformed-build repair remains open |
 | Repair prompt budget | Mandatory source/causal evidence/hash/failed proposal precede optional catalog; complete PATH lines fitted within 256 KiB; max-budget and source-reselection regressions pass | Native model use of the preserved repair context remains open |
@@ -48,18 +50,30 @@ evidence are separate.
 | SDK/research/demo integrations | Requirements and planned contracts recorded | No SDK access/UI, curated research loader or new demo/Space library integration claimed |
 
 The exact current serial Debug Editor build exited 0
-(`build/self_coding_0901_debug.log`). Its rebuilt build-safe aggregate completed
-09:58:06 with all 180 checks passing, including terminal metadata, MCP deadline,
-repair followed by seven fresh validations and atomic checkpoint faults. The
-serial Release build also passed (`build/self_coding_0901_release.log`), and its
-rebuilt aggregate passed all 180 checks with the process explicitly waited and
-exit 0. Release EXE: 13,218,304 bytes, SHA-256
-`590a4def52773711925e4acfedabe195f80ff55407df56e28335b775affe74ba`.
+(`build/self_coding_wire_debug.log`). Its rebuilt build-safe aggregate completed
+12:17:36 with all 180 checks passing, including actual stage-specific requests,
+terminal metadata, MCP deadline, repair followed by seven fresh validations
+and atomic checkpoint faults. The serial Release build also passed
+(`build/self_coding_wire_release.log`); its 12:19:05–12:19:09 aggregate passed
+all 180 checks, with process exit 0 explicitly waited. Release EXE: 13,237,248
+bytes, SHA-256
+`ce1372bb098600291e10bf028803b42eb0f7e777bde351de34da3f8f0466df7e`.
 Existing duplicate-logger and optimization-override warnings remain. No native
 Qwen comparison, WSL package, Site publication or stable-ref advance is proven
 for this tree. Builds do not substitute for pixels or security.
 
 ## Actual Failure To Repair
+
+The operator's September 6 10:47:42 Qwen screenshot proves a separate host
+prompt contradiction: `EPOCH_SELF_ITERATION_PLAN_V2` requested a numbered plan,
+but the common source workload system instructions demanded an `EPOCH_SOURCE_`
+header and atomic patch. HTTP selection/edit prompts also demanded line-framed
+packets while supplying a JSON response schema. `3f459b8f` fixes these conflicts
+without loosening edit admission. Source/failed-patch text no longer selects
+the response stage via substring search. Exact decoded code packets may contain
+`reasoning_content`/`<think>` literals without the prose filter rejecting them.
+Next evidence is an actual model plan followed by edits/build/repair/comparison,
+not another request-format contract or a claimed model capability improvement.
 
 September 6 campaign `fbd95e52...` staged source and ran MSBuild. The OpenGL
 proposal added an unmatched brace; the earliest causal failure was
@@ -93,7 +107,7 @@ transport status.
    The model lane was released back to its owner. Do not retry through another
    tool, launcher, script or command shape to bypass this denial. The operator
    may launch the rebuilt Editor; inspect resulting logs or proceed only through
-   a legitimately available/authorized native lane. The green `93d542f4`
+   a legitimately available/authorized native lane. The green `3f459b8f`
    source checkpoint and all older goals are preserved; do not substitute SDK,
    demos, releases or broad feature work for this unproven P0 gate.
 2. **Exercise and repair the real workflow.** Use an ordinary-language,
@@ -122,8 +136,18 @@ Trace: private-root `logs/epoch_editor_auto_command.log`; require explicit PASS
 after two distinct validated artifacts/PIDs and retirement, not exit code alone.
 Coordinate LM Studio start/clear with task `01a03627-5f71-7521-902c-64a31631367d`,
 which reported its probe lane clear and received Epoch's subsequent CLEAR after
-the launch denial. No model has been loaded/ejected by Epoch in this resumed
-pass. WSL is not reserved; EpochSimEngine is using its own lane.
+the launch denial. This agent started no model request and loaded/ejected no
+model during the wire-repair pass; the operator's Qwen run supplied the new
+prompt-conflict evidence. WSL is not reserved by this task; recheck the lane
+before any future compiler/runtime work.
+
+The operator authorized Site publication **after completion/checks** and asked
+to replace outdated current-facing source/release/download listings. Site task
+`01a03f60-0009-7ab2-b0cf-679ccfd9a78d` acknowledged the conditional instruction:
+wait for exact final source/platform artifacts/receipts and explicit READY;
+show only the admitted current release, preserve immutable rollback objects.
+No Site mutation, public upload, GitHub push, historical deletion or stable-ref
+advance occurred from the wire repair or this authorization notice.
 
 Independent agents may work on disjoint bounded source/contracts while the root
 integrates and serializes heavy work. A minimal curated local architecture/API/
