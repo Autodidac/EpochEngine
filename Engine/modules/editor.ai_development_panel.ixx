@@ -146,6 +146,9 @@ export namespace epochengine::editor_ai_development_panel
         // The host retains cancelled child/process leases until retirement.
         // A new session must not replace their generation while they settle.
         bool session_retirement_pending{};
+        // Monotonic owning-context time, unrelated to model token/request time.
+        // Zero uses the panel's steady-clock fallback for standalone hosts.
+        std::uint64_t owner_tick_ms{};
     };
 
     struct ModelActivityView final
@@ -159,6 +162,16 @@ export namespace epochengine::editor_ai_development_panel
     };
 
     [[nodiscard]] ModelActivityView describe_model_activity(const Input& input);
+
+    struct SessionActivityView final
+    {
+        bool visible{};
+        bool running{};
+        bool can_stop{};
+        bool stopping{};
+        std::uint64_t elapsed_ms{};
+        std::string elapsed{};
+    };
 
     struct RenderResult final
     {
@@ -201,6 +214,8 @@ export namespace epochengine::editor_ai_development_panel
         // Called once from the owning context update, even when AI Controls
         // is hidden. Advances automatic planning without drawing any GUI.
         [[nodiscard]] RenderResult advance_source_iteration(const Input& input);
+        [[nodiscard]] SessionActivityView session_activity(const Input& input) const;
+        [[nodiscard]] RenderResult stop_source_iteration();
         [[nodiscard]] bool has_reviewed_plan() const;
         [[nodiscard]] RenderResult approve_latest_plan();
         [[nodiscard]] bool sandbox_session_failed() const;

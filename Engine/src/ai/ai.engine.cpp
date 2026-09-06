@@ -2601,6 +2601,32 @@ namespace epochengine::ai
                 || stage == SourceRequestStage::legacy_proposal;
         }
 
+        [[nodiscard]] static std::string_view source_stage_name(SourceRequestStage stage) noexcept
+        {
+            switch (stage)
+            {
+            case SourceRequestStage::plan: return "planning";
+            case SourceRequestStage::context: return "source selection";
+            case SourceRequestStage::patch: return "code proposal/repair";
+            case SourceRequestStage::legacy_proposal: return "legacy proposal";
+            default: return "conversation";
+            }
+        }
+
+        [[nodiscard]] static InferenceBudget request_inference_budget(
+            InferenceWorkload workload, std::string_view input) noexcept
+        {
+            auto budget = inference_budget(workload);
+            const auto stage = source_request_stage(
+                input, workload == InferenceWorkload::source_iteration);
+            // Control steps need paths or a short plan, not a whole patch-sized
+            // generation. Preserve source/context capacity and the independent
+            // wall ceiling; a code proposal/repair retains its full token budget.
+            if (stage == SourceRequestStage::plan || stage == SourceRequestStage::context)
+                budget.output_tokens = (std::min)(budget.output_tokens, std::size_t{4'096u});
+            return budget;
+        }
+
         [[nodiscard]] static bool model_reply_has_visible_content(
             std::string_view reply, SourceRequestStage stage)
         {
@@ -3267,13 +3293,13 @@ namespace epochengine::ai
             if (stage == SourceRequestStage::plan)
             {
                 prompt +=
-                    " - Current stage: planning only. Return a concise numbered implementation plan in plain text with independently testable steps. Distinguish proposed investigation from confirmed findings. Preserve completed steps when resuming. Do not return a source-patch packet, a JSON object or an insufficient-evidence sentinel; unresolved questions belong in the investigation steps. Source selection and edits are separate requests.\n";
+                    " - Current stage: planning only. Return a concise numbered implementation plan in plain text with 3 to 6 independently testable steps, at most 300 words total. Begin with the next concrete action, not an introduction, repeated objective or generic audit checklist. Distinguish proposed investigation from confirmed findings. Preserve completed steps when resuming. Do not return a source-patch packet, a JSON object or an insufficient-evidence sentinel; unresolved questions belong in the investigation steps. Source selection and edits are separate requests.\n";
             }
             else if (stage == SourceRequestStage::context
                 || stage == SourceRequestStage::patch)
             {
                 prompt += stage == SourceRequestStage::context
-                    ? " - Current stage: source-context selection only, not an edit or a plan.\n"
+                    ? " - Current stage: source-context selection only, not an edit or a plan. Select one coherent next working set and give one short reason; defer bug investigation until source bytes are returned.\n"
                     : " - Current stage: propose exact sandbox edits, or request more source when the current excerpts do not establish an edit.\n";
                 prompt += directRuntime
                     ? " - Wire format: return only the canonical line-framed packet specified in this request. If no edit or source selection can be justified, return only EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1. No Markdown fences or explanatory prose.\n"
@@ -3446,13 +3472,9 @@ namespace epochengine::ai
                         return {};
                     }
 
-                    std::string snippet = trim(resp.substr(0, (std::min)(resp.size(), static_cast<std::size_t>(240))));
-                    if (snippet.empty())
-                        snippet = "(non-empty body with no decodable content)";
                     std::string warn = "Local OpenAI-compatible reply body could not be decoded. bytes=";
                     warn += std::to_string(resp.size());
-                    warn += " snippet=";
-                    warn += snippet;
+                    warn += "; response contents were not copied into the transport log.";
                     core::log::warn("ai", epochengine::string_view{warn.data(), warn.size()});
                 }
 
@@ -3469,13 +3491,24 @@ namespace epochengine::ai
                 const auto startedMessage = "Local model transport attempt "
                     + std::to_string(attempt + 1u) + "/2 started; per-attempt wall budget "
                     + std::to_string(timeoutSeconds)
-                    + "s. Window focus does not control this worker; Stop remains available.";
+                    + "s; stage=" + std::string{source_stage_name(source_request_stage(input, structuredSource))}
+                    + "; prompt_bytes=" + std::to_string(input.size())
+                    + "; output_token_limit=" + std::to_string(maximumTokens)
+                    + ". Window focus does not control this worker; Stop remains available.";
                 core::log::info("ai", epochengine::string_view{startedMessage.data(), startedMessage.size()});
                 try
                 {
                     std::string rawResponse{};
                     std::string reply = request_once(
                         attempt > 0u, &rawResponse);
+                    const auto receivedMessage = "Local model transport returned; stage="
+                        + std::string{source_stage_name(source_request_stage(input, structuredSource))}
+                        + "; attempt=" + std::to_string(attempt + 1u)
+                        + "; elapsed_ms=" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now() - attemptStarted).count())
+                        + "; response_bytes=" + std::to_string(rawResponse.size())
+                        + "; visible_reply_bytes=" + std::to_string(reply.size());
+                    core::log::info("ai", epochengine::string_view{receivedMessage.data(), receivedMessage.size()});
                     if (cancellation.stop_requested())
                         return cancelled();
                     if (model_reply_has_visible_content(reply,
@@ -4143,7 +4176,7 @@ namespace epochengine::ai
             out.terminal_failure = ModelTerminalFailure::cancelled;
             return out;
         }
-        const InferenceBudget budget = inference_budget(workload);
+        const InferenceBudget budget = request_inference_budget(workload, user_input);
         if (!budget.valid() || user_input.empty()
             || user_input.size() > budget.maximum_prompt_bytes)
         {
@@ -5427,6 +5460,17 @@ namespace epochengine::ai
             WireFixture{"EPOCH_SELF_ITERATION_PLAN_V2_suffix\nEPOCH_SOURCE_PATCH_PROPOSAL_V1", Stage::none, StructuredSourceReply::none}};
         for (const auto& fixture : wireFixtures)
         {
+            const auto requestBudget = request_inference_budget(
+                InferenceWorkload::source_iteration, fixture.input);
+            const auto expectedTokens = fixture.stage == Stage::plan || fixture.stage == Stage::context
+                ? 4'096u : 32'768u;
+            if (!requestBudget.valid() || requestBudget.output_tokens != expectedTokens
+                || requestBudget.context_tokens != 65'536u
+                || requestBudget.timeout_seconds != 1'800u
+                || requestBudget.maximum_prompt_bytes != 256u * 1024u
+                || requestBudget.maximum_reply_bytes != 1024u * 1024u
+                || request_inference_budget(InferenceWorkload::chat, fixture.input).output_tokens != 2'048u)
+                return false;
             if (source_request_stage(fixture.input, true) != fixture.stage
                 || structured_source_reply_for(fixture.input, true) != fixture.shape
                 || source_request_stage(fixture.input, false) != Stage::none
@@ -5437,8 +5481,9 @@ namespace epochengine::ai
                 const auto system = model_system_prompt(
                     false, InferenceWorkload::source_iteration, fixture.input);
                 const auto body = openai_chat_request_body(
-                    "qwen/test", system, fixture.input, 512u, recovery, true);
+                    "qwen/test", system, fixture.input, requestBudget.output_tokens, recovery, true);
                 if (body.find(json_escape(system)) == std::string::npos
+                    || body.find("\"max_tokens\":" + std::to_string(expectedTokens)) == std::string::npos
                     || (body.find("\"response_format\"") != std::string::npos)
                         != (fixture.shape != StructuredSourceReply::none)
                     || (body.find("Original request:") != std::string::npos) != recovery

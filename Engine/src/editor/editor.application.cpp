@@ -27112,7 +27112,8 @@ namespace epochengine
                     || editor.aiSourceBuildPending.has_value()
                     || editor.aiSourceTestPending.has_value(),
                 .session_retirement_pending = editor.aiSourceParkedRetirement || !editor.aiCandidateRetiringProcesses.empty()
-                    || chat.requestRetirementFailed};
+                    || chat.requestRetirementFailed,
+                .owner_tick_ms = platform::work_admission::now_milliseconds()};
             apply_verified_ai_source_authority(input);
             apply_source_model_completion(input, chat, editor.aiSourceRequestedGeneration);
             return input;
@@ -32624,17 +32625,8 @@ namespace epochengine
                                 ? "Native request retirement failed. Stop and restart Epoch before more work."
                                 : "Self-coding work is active; its worker and child retirement remain supervised.",
                     inspectorWidth);
-                if (gui::button("Stop Self-Coding Session", {inspectorWidth, 30.0f}))
-                {
-                    editor_ai_development_panel::RenderResult cancel{};
-                    cancel.action = editor_ai_development_panel::HostAction::cancel_model_source_request;
-                    dispatch_ai_development_action(cancel);
-                    cancel.action = editor_ai_development_panel::HostAction::cancel_source_task;
-                    dispatch_ai_development_action(cancel);
-                    cancel.action = editor_ai_development_panel::HostAction::none;
-                    cancel.candidate_decision = editor_ai_development_panel::CandidateDecision::stop_lab;
-                    dispatch_ai_development_action(cancel);
-                }
+                // The panel owns one session-wide Stop control. Its common
+                // stop action also cancels these retained/admission/child leases.
             }
             auto guardedInput = source_iteration_input(inspectorWidth);
             if (!editor.automationConsumed
@@ -38158,7 +38150,8 @@ namespace epochengine
                         || editor.aiSourceBuildPending.has_value()
                         || editor.aiSourceTestPending.has_value(),
                     .session_retirement_pending = editor.aiSourceParkedRetirement || !editor.aiCandidateRetiringProcesses.empty()
-                        || chat.requestRetirementFailed};
+                        || chat.requestRetirementFailed,
+                    .owner_tick_ms = platform::work_admission::now_milliseconds()};
                 apply_verified_ai_source_authority(promotionInput);
                 apply_source_model_completion(promotionInput, chat, editor.aiSourceRequestedGeneration);
                 const auto promotionResult = sourcePromotionStaged
@@ -38240,7 +38233,8 @@ namespace epochengine
                         || editor.aiSourceBuildPending.has_value()
                         || editor.aiSourceTestPending.has_value(),
                     .session_retirement_pending = editor.aiSourceParkedRetirement || !editor.aiCandidateRetiringProcesses.empty()
-                        || chat.requestRetirementFailed};
+                        || chat.requestRetirementFailed,
+                    .owner_tick_ms = platform::work_admission::now_milliseconds()};
                 apply_verified_ai_source_authority(proposalInput);
                 apply_source_model_completion(proposalInput, chat, editor.aiSourceRequestedGeneration);
                 const auto proposalResult = sourceContextPending

@@ -15,6 +15,7 @@ module;
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <source_location>
 #include <string>
@@ -52,6 +53,51 @@ namespace epochengine::editor_ai_development_panel
             return editor_ai_development::LogicalTime{
                 static_cast<std::uint64_t>((std::max)(
                     std::int64_t{1}, seconds))};
+        }
+
+        [[nodiscard]] std::uint64_t session_tick_ms(const Input& input) noexcept
+        {
+            if (input.owner_tick_ms != 0u) return input.owner_tick_ms;
+            const auto value = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            return static_cast<std::uint64_t>((std::max)(decltype(value){0}, value));
+        }
+
+        struct SelfCodingSessionClock final
+        {
+            std::uint64_t elapsed_ms{};
+            std::uint64_t last_tick_ms{};
+            bool started{};
+            bool running{};
+
+            void start(std::uint64_t now) noexcept
+            {
+                elapsed_ms = 0u;
+                last_tick_ms = now;
+                started = running = true;
+            }
+            void observe(std::uint64_t now) noexcept
+            {
+                if (!started || now <= last_tick_ms) return;
+                if (running)
+                    elapsed_ms += (std::min)(now - last_tick_ms,
+                        (std::numeric_limits<std::uint64_t>::max)() - elapsed_ms);
+                last_tick_ms = now;
+            }
+            void stop() noexcept { running = false; }
+            void resume(std::uint64_t now) noexcept
+            {
+                if (!started) { start(now); return; }
+                observe(now); // A stopped interval is not charged on resume.
+                running = true;
+            }
+        };
+
+        [[nodiscard]] std::string session_elapsed_text(std::uint64_t milliseconds)
+        {
+            const auto seconds = milliseconds / 1'000u;
+            return epochengine::format_text("{}:{:02}:{:02}",
+                seconds / 3'600u, (seconds / 60u) % 60u, seconds % 60u);
         }
     }
 
@@ -1549,6 +1595,7 @@ namespace epochengine::editor_ai_development_panel
         Domain active_domain{Domain::tooling};
         bool model_request_cancelled{};
         bool model_request_failed{};
+        SelfCodingSessionClock session_clock{};
 
         void reset_controller(
             std::string requestedWorkspace,
@@ -2913,7 +2960,9 @@ namespace epochengine::editor_ai_development_panel
                     prompt += path + "\n";
                 prompt +=
                     "END_REVIEWED_SOURCE_PATHS\n"
-                    "Plan against this digest-bound reviewed scope. Describe "
+                    "Plan against this digest-bound reviewed scope in three to six "
+                    "concise actionable steps covering focused investigation, the "
+                    "next edit, build and test. Describe "
                     "user-visible results and independently testable steps; you "
                     "do not need to repeat filenames. Do not invent runtime "
                     "symptoms, logs, APIs, or tests that are not established by "
@@ -2926,12 +2975,12 @@ namespace epochengine::editor_ai_development_panel
                     for (const auto& checkpoint : sandbox_lab_checkpoints)
                         prompt += checkpoint + "\n";
                     prompt +=
-                        "Resume at the next unfinished step. Preserve completed steps and return the updated numbered plan before proposing exactly one next candidate.";
+                        "Resume at the next unfinished step. Preserve completed steps and return the updated numbered plan before proposing exactly one next candidate. Keep completed steps to a short status line; do not repeat introductions or a full generic checklist.";
                 }
                 else
                 {
                     prompt +=
-                        "\nReturn a bounded numbered implementation plan with independently testable steps. The lab will pause after each built candidate, retain the chosen sandbox, and resume at the next unfinished step.";
+                        "\nReturn only three to six numbered implementation steps, not an introduction or a generic subsystem checklist. The lab will pause after each built candidate, retain the chosen sandbox, and resume at the next unfinished step.";
                 }
                 prompt +=
                     " Do not claim edits, builds, approval, Git, release, or live-source authority.";
@@ -3499,6 +3548,37 @@ namespace epochengine::editor_ai_development_panel
                 || phase == Phase::blocked;
         }
 
+        void observe_session_clock(const Input& input)
+        {
+            if (session_stopped() || source_promotion_completed)
+                session_clock.stop();
+            session_clock.observe(session_tick_ms(input));
+        }
+
+        [[nodiscard]] SessionActivityView session_activity(const Input& input) const
+        {
+            SessionActivityView view{};
+            if (input.domain == Domain::tooling) return view;
+            const bool stopped = session_stopped() || source_promotion_completed;
+            const bool active = !stopped && (session_clock.running || sandbox_lab_enabled
+                || campaign_orchestrator || !pending_source_context_paths.empty()
+                || source_workspace_pending || source_build_pending || source_test_pending
+                || source_release_build_pending || source_release_test_pending
+                || source_headless_build_pending || source_headless_test_pending
+                || source_full_validation_pending || candidate_preview_pending
+                || candidate_preview_ready);
+            const bool ownedWork = source_work_pending(input);
+            view.visible = session_clock.started || active || ownedWork;
+            view.running = session_clock.running && !stopped;
+            view.stopping = ownedWork && (stopped || input.local_model_cancelling);
+            // Keep one emergency repeat-stop during native retirement.
+            view.can_stop = active || ownedWork;
+            view.elapsed_ms = session_clock.elapsed_ms;
+            if (session_clock.started)
+                view.elapsed = session_elapsed_text(view.elapsed_ms);
+            return view;
+        }
+
         [[nodiscard]] bool can_start_campaign(const Input& input) const
         {
             using Phase = ai::self_iteration_orchestrator::Phase;
@@ -3526,6 +3606,8 @@ namespace epochengine::editor_ai_development_panel
             RenderResult output{};
             if (!can_start_campaign(input))
                 return output;
+            if (!session_clock.started)
+                session_clock.start(session_tick_ms(input));
             sandbox_lab_enabled = true;
             if (sandbox_parent_root.empty())
                 sandbox_parent_root = source_root;
@@ -3535,6 +3617,7 @@ namespace epochengine::editor_ai_development_panel
             {
                 model_request_failed = true;
                 sandbox_lab_enabled = false;
+                session_clock.stop();
                 status_message = std::move(refusal);
                 output.status = status_message;
                 output.campaign_evidence.push_back(status_message);
@@ -3555,6 +3638,7 @@ namespace epochengine::editor_ai_development_panel
         [[nodiscard]] RenderResult cancel_campaign(std::string reason)
         {
             RenderResult output{};
+            session_clock.stop();
             if (reason.empty())
                 reason = "The operator cancelled the active model request.";
             if (campaign_orchestrator)
@@ -3744,13 +3828,6 @@ namespace epochengine::editor_ai_development_panel
                             input.external_mcp_process_id,
                             input.external_mcp_elapsed_ms)
                         : std::string{"Idle"});
-                if (input.external_mcp_running
-                    && gui::button("Stop MCP Request", {width, 29.0f}))
-                {
-                    output.action = HostAction::cancel_model_source_request;
-                    output.status =
-                        "Cancellation requested for the visible local MCP worker.";
-                }
             }
             if (advanced_controls)
             {
@@ -3784,14 +3861,10 @@ namespace epochengine::editor_ai_development_panel
 
             const bool canStart = can_start_campaign(input);
             const bool canResume = !campaign_state_path.empty();
-            const bool canCancel = !campaign_supervisor
-                && campaign_orchestrator && !terminal
-                && snapshot.phase != Phase::idle;
             enum class LifecycleAction : std::uint8_t
             {
                 begin,
-                resume,
-                cancel
+                resume
             };
             std::vector<gui::InlineButtonSpec> lifecycleActions{};
             std::vector<LifecycleAction> lifecycleKinds{};
@@ -3811,8 +3884,6 @@ namespace epochengine::editor_ai_development_panel
             addLifecycleAction(!campaign_orchestrator && canResume,
                 "Resume Saved Session",
                 LifecycleAction::resume);
-            addLifecycleAction(canCancel, "Stop Session",
-                LifecycleAction::cancel);
             std::optional<LifecycleAction> selectedLifecycle{};
             if (!lifecycleActions.empty())
             {
@@ -3851,14 +3922,13 @@ namespace epochengine::editor_ai_development_panel
                             const bool accepted = static_cast<bool>(resumed);
                             capture_campaign_result(output, std::move(resumed));
                             if (accepted)
+                            {
+                                model_request_cancelled = false;
+                                model_request_failed = false;
+                                session_clock.resume(session_tick_ms(input));
                                 (void)initialize_campaign_control(output, now);
+                            }
                         }
-                    }
-                    else if (campaign_orchestrator)
-                    {
-                        output = request_session_stop(
-                            "Operator cancelled the typed self-iteration campaign.");
-                        return;
                     }
                     snapshot = campaign_orchestrator
                         ? campaign_orchestrator->snapshot() : Snapshot{};
@@ -4050,7 +4120,6 @@ namespace epochengine::editor_ai_development_panel
                     ai::iteration_supervisor_control::CommandKind;
                 addAction(availability.pause, "Pause", CommandKind::pause);
                 addAction(availability.resume, "Resume", CommandKind::resume);
-                addAction(availability.cancel, "Stop", CommandKind::cancel);
                 addAction(availability.retry, "Retry", CommandKind::retry);
                 addAction(availability.approve,
                     "Use This Plan", CommandKind::approve);
@@ -4078,12 +4147,6 @@ namespace epochengine::editor_ai_development_panel
                             capture_scheduler_result(output, std::move(retried));
                             if (campaign_scheduler->snapshot().generation != before)
                                 (void)synchronize_supervisor(output, now);
-                        }
-                        else if (accepted && kind == CommandKind::cancel)
-                        {
-                            output = request_session_stop(
-                                "Supervisor cancelled the exact queued objective.");
-                            return;
                         }
                         else if (accepted && kind == CommandKind::reject)
                         {
@@ -5042,6 +5105,7 @@ namespace epochengine::editor_ai_development_panel
             output.status = "Previous self-coding work is still active or retiring. Wait for its owned workers and processes before starting another session.";
             return output;
         }
+        state.observe_session_clock(input);
         if (state.session_stopped())
         {
             const auto parent = state.sandbox_parent_root.empty()
@@ -5066,11 +5130,16 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        // This is an explicit Start/Restart, not an automatic retry, step or
+        // chosen-sandbox successor. Those keep the same session clock.
+        state.session_clock.start(session_tick_ms(input));
+
         const SourcePathCatalog catalog = build_source_path_catalog(
             state.source_root,
             input.domain);
         if (!catalog.accepted)
         {
+            state.session_clock.stop();
             state.status_message = catalog.status;
             output.status = state.status_message;
             return output;
@@ -5100,11 +5169,25 @@ namespace epochengine::editor_ai_development_panel
 
     RenderResult Panel::advance_source_iteration(const Input& input)
     {
-        if (!implementation_ || !implementation_->sandbox_lab_enabled
+        if (!implementation_) return {};
+        implementation_->observe_session_clock(input);
+        if (!implementation_->sandbox_lab_enabled
             || implementation_->session_stopped()
             || Implementation::source_work_pending(input))
             return {};
         return implementation_->start_campaign(input, logical_time_now().value);
+    }
+
+    SessionActivityView Panel::session_activity(const Input& input) const
+    {
+        return implementation_ ? implementation_->session_activity(input) : SessionActivityView{};
+    }
+
+    RenderResult Panel::stop_source_iteration()
+    {
+        return implementation_
+            ? implementation_->request_session_stop("The operator stopped self-coding.")
+            : RenderResult{};
     }
 
     bool Panel::has_reviewed_plan() const
@@ -5181,6 +5264,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         auto& state = *implementation_;
+        state.observe_session_clock(input);
         const bool chooseCandidate = decision == CandidateDecision::choose_candidate;
         if (decision == CandidateDecision::stop_lab)
             return state.request_session_stop("The operator stopped Candidate Lab.");
@@ -5291,6 +5375,81 @@ namespace epochengine::editor_ai_development_panel
         Input activityInput{};
         if (describe_model_activity(activityInput).visible)
             return false;
+        trace.stage = "self-coding session clock and primary stop";
+        SelfCodingSessionClock clock{};
+        clock.start(1'000u);
+        clock.observe(62'000u);
+        clock.observe(62'000u);
+        clock.observe(1'000u);
+        if (!clock.running || clock.elapsed_ms != 61'000u) return false;
+        clock.stop();
+        clock.observe(120'000u);
+        if (clock.running || clock.elapsed_ms != 61'000u) return false;
+        clock.resume(150'000u);
+        clock.observe(151'000u);
+        if (!clock.running || clock.elapsed_ms != 62'000u) return false;
+        clock.start(200'000u);
+        if (!clock.running || clock.elapsed_ms != 0u) return false;
+
+        Panel timedPanel{};
+        auto& timedState = *timedPanel.implementation_;
+        timedState.session_clock.start(1'000u);
+        timedState.sandbox_lab_enabled = true;
+        Input timedInput{};
+        timedInput.domain = Domain::engine_source;
+        timedInput.owner_tick_ms = 61'000u;
+        timedInput.local_model_queued = true;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        const auto total = timedPanel.session_activity(timedInput);
+        if (!total.visible || !total.running || !total.can_stop || total.stopping
+            || total.elapsed_ms != 60'000u || total.elapsed != "0:01:00") return false;
+        // Model request/retry time is independent; repeated owner ticks and
+        // repeated presentation cannot restart or double-charge the session.
+        timedInput.local_model_queued = false;
+        timedInput.local_model_running = true;
+        timedInput.local_model_elapsed_ms = 9'000u;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        timedInput.local_model_elapsed_ms = 0u;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        if (timedPanel.session_activity(timedInput).elapsed_ms != total.elapsed_ms)
+            return false;
+        timedInput.local_model_running = false;
+        timedInput.execution_pending = true;
+        timedInput.owner_tick_ms = 121'000u;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        timedState.candidate_preview_ready = true;
+        timedInput.execution_pending = false;
+        timedInput.owner_tick_ms = 181'000u;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        if (timedPanel.session_activity(timedInput).elapsed_ms != 180'000u
+            || !timedPanel.session_activity(timedInput).can_stop) return false;
+        const auto stoppedSession = timedPanel.stop_source_iteration();
+        if (stoppedSession.action != HostAction::cancel_model_source_request
+            || stoppedSession.candidate_decision != CandidateDecision::stop_lab
+            || !stoppedSession.retire_candidate_preview) return false;
+        timedInput.session_retirement_pending = true;
+        timedInput.owner_tick_ms = 901'000u;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        const auto retiring = timedPanel.session_activity(timedInput);
+        if (retiring.running || !retiring.stopping || !retiring.can_stop
+            || retiring.elapsed_ms != 180'000u) return false;
+        timedInput.session_retirement_pending = false;
+        if (timedPanel.session_activity(timedInput).can_stop) return false;
+        timedState.model_request_cancelled = false;
+        timedState.model_request_failed = false;
+        timedState.session_clock.resume(1'001'000u);
+        timedInput.owner_tick_ms = 1'061'000u;
+        timedInput.local_model_queued = true;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        if (timedPanel.session_activity(timedInput).elapsed_ms != 240'000u) return false;
+        timedState.model_request_failed = true;
+        timedInput.owner_tick_ms = 1'901'000u;
+        (void)timedPanel.advance_source_iteration(timedInput);
+        if (timedPanel.session_activity(timedInput).elapsed_ms != 240'000u
+            || timedPanel.session_activity(timedInput).running) return false;
+        timedInput.domain = Domain::tooling;
+        if (timedPanel.session_activity(timedInput).visible) return false;
+        trace.stage = "activity and session ownership";
         activityInput.local_model_queued = true;
         const auto queued = describe_model_activity(activityInput);
         if (!queued.visible || !queued.can_cancel || !queued.elapsed.empty()
@@ -7438,6 +7597,33 @@ namespace epochengine::editor_ai_development_panel
             {
                 return false;
             }
+            trace.stage = "candidate choice preserves total session time";
+            for (const auto decision : {CandidateDecision::keep_current,
+                    CandidateDecision::choose_candidate})
+            {
+                Panel choiceClock{};
+                auto& choiceState = *choiceClock.implementation_;
+                choiceState.session_clock.start(1'000u);
+                choiceState.session_clock.observe(61'000u);
+                choiceState.sandbox_lab_enabled = true;
+                choiceState.candidate_preview_ready = true;
+                choiceState.sandbox_parent_root = fixture.path.generic_string();
+                choiceState.workspace_root = fixture.path.generic_string();
+                choiceState.development_objective = "Continue the selected sandbox plan";
+                Input choiceInput = localOpenInput;
+                choiceInput.owner_tick_ms = 121'000u;
+                const auto chosen = choiceClock.select_candidate_preview(choiceInput, decision);
+                if (chosen.candidate_decision != decision
+                    || choiceState.sandbox_lab_iteration != 2u
+                    || choiceState.session_clock.elapsed_ms != 120'000u
+                    || !choiceState.session_clock.running)
+                    return false;
+                choiceInput.local_model_queued = true;
+                choiceInput.owner_tick_ms = 181'000u;
+                (void)choiceClock.advance_source_iteration(choiceInput);
+                if (choiceClock.session_activity(choiceInput).elapsed_ms != 180'000u)
+                    return false;
+            }
             trace.stage = "repair does not replenish context-navigation budget";
             const auto exhaustedNavigation = localOpenState.stage_source_reply(
                 localOpenInput,
@@ -8049,6 +8235,7 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         auto& state = *implementation_;
+        state.observe_session_clock(input);
         auto& controller = state.ensure(
             input.workspace_id,
             input.source_snapshot_root,
@@ -8088,26 +8275,29 @@ namespace epochengine::editor_ai_development_panel
         };
 
         gui::label("Engine Self-Coding");
+        const auto session = state.session_activity(input);
+        if (session.visible)
+        {
+            gui::property_row("Total self-coding time",
+                session.elapsed.empty() ? std::string{"Not started"}
+                    : session.elapsed + (session.running ? " (running)" : " (stopped)"));
+            if (session.can_stop && gui::button("Stop Self-Coding", {width, 30.0f}))
+                return stop_source_iteration();
+            if (session.stopping)
+                gui::wrapped_label("Stopping owned work; waiting for retirement. No new iteration will start.", width);
+        }
         const auto activity = describe_model_activity(input);
         if (activity.visible)
         {
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = activity.label,
-                .status = activity.elapsed,
+                .status = activity.elapsed.empty() ? std::string{} : "Current request " + activity.elapsed,
                 .value = 0.0f,
                 .size = {width, 22.0f},
                 .show_percent = false,
                 .activity = true,
                 .activity_phase = activity.animation_phase});
             gui::wrapped_label(activity.detail, width);
-            if (activity.can_cancel
-                && gui::button("Cancel Self-Coding Request", {width, 30.0f}))
-            {
-                output.action = HostAction::cancel_model_source_request;
-                output.status =
-                    "Cancellation requested for the active local-model response.";
-                return output;
-            }
         }
         if (input.domain != Domain::tooling)
         {
@@ -8275,15 +8465,13 @@ namespace epochengine::editor_ai_development_panel
                 {
                     const std::vector<gui::InlineButtonSpec> choices{
                         {.label = "Keep Current", .width = 0.0f, .enabled = true},
-                        {.label = "Choose Candidate", .width = 0.0f, .enabled = true},
-                        {.label = "Stop Lab", .width = 0.0f, .enabled = true}};
+                        {.label = "Choose Candidate", .width = 0.0f, .enabled = true}};
                     if (const auto choice = gui::inline_button_row(
                             choices, 32.0f, 5.0f))
                     {
                         return select_candidate_preview(
                             input,
-                            *choice == 2u ? CandidateDecision::stop_lab
-                                : *choice == 1u ? CandidateDecision::choose_candidate
+                            *choice == 1u ? CandidateDecision::choose_candidate
                                 : CandidateDecision::keep_current);
                     }
                 }
@@ -8422,7 +8610,7 @@ namespace epochengine::editor_ai_development_panel
                         ? "A cancellable host task is running in the disposable source workspace."
                         : "Owned source processes are still retiring; a new session is not available yet.",
                     width);
-                if (input.execution_pending && gui::button(
+                if (input.domain == Domain::tooling && input.execution_pending && gui::button(
                         "Cancel Running Sandbox Task", {width, 30.0f}))
                 {
                     output.action = HostAction::cancel_source_task;
@@ -8525,6 +8713,7 @@ namespace epochengine::editor_ai_development_panel
         }
 
         auto& state = *implementation_;
+        state.observe_session_clock(input);
         if (state.model_request_cancelled || state.model_request_failed)
         {
             output.status = "Discarded a response from the stopped self-coding session.";
