@@ -21707,6 +21707,26 @@ namespace epochengine
             const std::string activeModel =
                 epochengine::ai::active_model_name();
             gui::property_row("[model] Endpoint", manifest.endpoint);
+            gui::property_row("API key", epochengine::ai::has_local_model_api_token()
+                ? "Configured (hidden)" : "Not configured");
+            gui::wrapped_label("Copy your LM Studio API key, then paste it here. "
+                "It is kept only for this Epoch session.", contentWidth);
+            const std::array authActions{
+                gui::InlineButtonSpec{.label = "Paste API Key", .width = 152.0f,
+                    .enabled = !inventoryPending},
+                gui::InlineButtonSpec{.label = "Clear API Key", .width = 152.0f,
+                    .enabled = !inventoryPending}};
+            if (const auto action = gui::inline_button_row(authActions, 30.0f, 8.0f))
+            {
+                std::string token = *action == 0u ? gui::clipboard_text() : std::string{};
+                const bool accepted = (*action != 0u || !token.empty())
+                    && epochengine::ai::set_local_model_api_token(token);
+                std::fill(token.begin(), token.end(), '\0');
+                token.clear();
+                if (accepted) request_ai_model_inventory_refresh(editor);
+                else editor.aiModelConsentStatus = "API key not accepted. Copy a valid key "
+                    "for the local LM Studio endpoint on port 1234 and try again.";
+            }
             gui::property_row(
                 "[model] Session",
                 activeModel.empty()

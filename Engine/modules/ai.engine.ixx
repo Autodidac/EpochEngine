@@ -111,16 +111,16 @@ export namespace epochengine::ai
         switch (workload)
         {
         case InferenceWorkload::chat:
-            return {16'384u, 2'048u, 64u * 1024u, 64u * 1024u, 120u};
+            return {16'384u, 2'048u, 64u * 1024u, 64u * 1024u, 180u};
         case InferenceWorkload::authoring:
             return {32'768u, 4'096u, 128u * 1024u, 128u * 1024u, 180u};
         case InferenceWorkload::source_iteration:
             // Local coding includes prompt evaluation and long reasoning. The
             // finite per-attempt budget is independent of window focus; an
             // exhausted whole budget must not automatically restart that work.
-            return {65'536u, 32'768u, 256u * 1024u, 1024u * 1024u, 30u * 60u};
+            return {65'536u, 32'768u, 256u * 1024u, 1024u * 1024u, 3u * 60u * 60u};
         case InferenceWorkload::source_self_review:
-            return {65'536u, 8'192u, 256u * 1024u, 256u * 1024u, 300u};
+            return {65'536u, 8'192u, 256u * 1024u, 256u * 1024u, 3u * 60u * 60u};
         }
         return {};
     }
@@ -224,7 +224,7 @@ export namespace epochengine::ai
             std::size_t context_tokens = 4096;
             std::size_t output_tokens = 512;
             int gpu_layers = -1;
-            std::uint32_t timeout_seconds = 120;
+            std::uint32_t timeout_seconds = 180;
             std::size_t best_of = 1;
         };
 
@@ -310,6 +310,8 @@ export namespace epochengine::ai
     [[nodiscard]] bool is_engine_ai_initialized() noexcept;
     [[nodiscard]] bool is_model_use_confirmed() noexcept;
     [[nodiscard]] std::vector<std::string> refresh_detected_models();
+    [[nodiscard]] bool set_local_model_api_token(std::string_view token);
+    [[nodiscard]] bool has_local_model_api_token();
     [[nodiscard]] bool select_active_model(std::string_view model_id);
     [[nodiscard]] EvidencePaths default_evidence_paths();
     void append_tool_trace(const McpCaptureRecord& record);

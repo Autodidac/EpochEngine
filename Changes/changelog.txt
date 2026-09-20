@@ -1,5 +1,24 @@
 ## [Unreleased] - v0.90.1 preparation (not a release)
 
+- September 20 connectivity checkpoint: native LM Studio inventory parsing,
+  unsupported-route-only compatibility fallback, and session-only Paste/Clear
+  API Key controls. Native discovery includes unloaded LLM keys but excludes
+  embedding models and nested instance IDs. Generation retains compatibility
+  HTTP; no Bionic agent-protocol claim. Current Release build and pure contracts
+  pass; native Qwen comparison remains unverified (preflight authentication and
+  Windows visual-helper startup blockers). Supplied Epoch logo retained exactly
+  and converted to a seven-size Windows icon by Tools/ai/update_epoch_icon.ps1.
+
+- September 19 local connection/loading repair: model inventory and generation
+  use optional LM_API_TOKEN only for HTTP loopback LM Studio on port 1234;
+  inventory rejects redirects and exposes authentication failures in model
+  status. No credential is saved in source/logs. Inventory response and ordinary
+  chat/authoring budgets are three minutes; source iteration/review requests
+  allow three hours including model loading. Overall mission duration is separate.
+  Live authenticated inventory succeeded. Serial Release build and rebuilt
+  build-safe aggregate passed with exit 0. No live generation or two-candidate
+  acceptance is claimed. Full-project context navigation remains unfinished.
+
 - September 6 Stop/timing/setup-budget repair saved as f36acfd0: consolidate
   self-coding into one Stop covering queued work, model/compiler/test children,
   comparison and retirement; keep the separate project-assistant goal intact.

@@ -94,6 +94,7 @@ namespace epochengine::ai
     namespace
     {
         std::recursive_mutex g_aiStateMutex{};
+        std::optional<std::string> g_localModelApiToken{};
         std::atomic_uint64_t g_directInferenceOutputSequence{1u};
         std::atomic_bool g_modelHttpRetirementUncertain{false};
         std::atomic_uint64_t g_modelHttpNullContextCallbacks{0u};
@@ -155,7 +156,7 @@ namespace epochengine::ai
         {
             const auto limit = static_cast<std::uint64_t>(budgetSeconds) * 1'000u;
             // Native timeout timers may round slightly before our steady-clock
-            // observation. A sub-second boundary must not restart a 30m call.
+            // observation. A sub-second boundary must not restart a long call.
             return elapsedMilliseconds >= limit
                 || limit - elapsedMilliseconds <= 999u;
         }
@@ -429,6 +430,8 @@ namespace epochengine::ai
             rstrip_slashes(endpoint);
 
             constexpr std::string_view suffixes[] = {
+                "/api/v1/models",
+                "/api/v1",
                 "/api/v1/chat",
                 "/v1/chat/completions",
                 "/v1/models",
@@ -453,6 +456,8 @@ namespace epochengine::ai
             rstrip_slashes(endpoint);
 
             constexpr std::string_view suffixes[] = {
+                "/api/v1/models",
+                "/api/v1",
                 "/api/v1/chat",
                 "/v1/chat/completions",
                 "/v1/models",
@@ -860,9 +865,41 @@ namespace epochengine::ai
             rstrip_slashes(suffix);
             if (!suffix.empty() && suffix != "/v1"
                 && suffix != "/v1/chat/completions" && suffix != "/v1/models"
-                && suffix != "/api/v1/chat")
+                && suffix != "/api/v1/chat" && suffix != "/api/v1"
+                && suffix != "/api/v1/models")
                 return {};
             return scheme + "://" + host + port + "/v1/chat/completions";
+        }
+
+        [[nodiscard]] static std::vector<std::pair<std::string, std::string>>
+            local_model_headers(const std::string& endpoint, std::string token)
+        {
+            const auto identity = local_endpoint_identity(endpoint);
+            if (identity != kOriginalLocalEndpoint
+                && identity != "http://127.0.0.1:1234/v1/chat/completions"
+                && identity != "http://[::1]:1234/v1/chat/completions")
+                return {};
+            if (token.empty()) return {};
+            if (token.size() > 4096u || std::any_of(token.begin(), token.end(),
+                [](unsigned char value) { return value <= 32u || value >= 127u; }))
+                throw std::runtime_error("LM_API_TOKEN contains invalid header characters.");
+            return {{"Authorization", "Bearer " + token}};
+        }
+
+        [[nodiscard]] static std::string model_http_status_message(unsigned status)
+        {
+            if (status == 401u || status == 403u)
+                return "Local model authentication failed. For LM Studio on localhost:1234, "
+                    "open Model Settings and use Paste API Key, then Rescan Models.";
+            return "Model endpoint returned HTTP status " + std::to_string(status);
+        }
+
+        [[nodiscard]] static std::vector<std::pair<std::string, std::string>>
+            model_request_headers(const std::string& endpoint)
+        {
+            const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+            return local_model_headers(endpoint, g_localModelApiToken
+                ? *g_localModelApiToken : read_env_var("LM_API_TOKEN"));
         }
 
         [[nodiscard]] static LocalModelPreference decode_model_preference(std::string_view bytes)
@@ -1341,7 +1378,7 @@ namespace epochengine::ai
             std::uint32_t timeoutSeconds) noexcept
         {
             const std::uint64_t milliseconds =
-                (std::max)(std::uint64_t{1u},
+                (std::max)(std::uint64_t{180u},
                     static_cast<std::uint64_t>(timeoutSeconds)) * 1'000u;
             return static_cast<int>((std::min)(
                 milliseconds,
@@ -1611,7 +1648,7 @@ namespace epochengine::ai
             const int receiveTimeout =
                 model_http_timeout_milliseconds(timeoutSeconds);
             if (!WinHttpSetTimeouts(
-                    state->session, 10000, 10000, 15000, receiveTimeout))
+                    state->session, 10000, 10000, 180000, receiveTimeout))
                 throw std::runtime_error("WinHTTP: model request timeouts could not be set");
             const auto deadline = std::chrono::steady_clock::now()
                 + std::chrono::milliseconds{receiveTimeout};
@@ -1742,7 +1779,7 @@ namespace epochengine::ai
             if (cancellation.stop_requested())
                 throw std::runtime_error("WinHTTP: local-model request cancelled");
             if (httpStatus < 200u || httpStatus >= 300u)
-                throw std::runtime_error("WinHTTP: HTTP status " + std::to_string(httpStatus));
+                throw std::runtime_error(model_http_status_message(httpStatus));
             return resp;
             }
             catch (...)
@@ -1765,7 +1802,7 @@ namespace epochengine::ai
                 WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                 WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
             if (!hSession) throw std::runtime_error("WinHTTP: WinHttpOpen failed");
-            (void)WinHttpSetTimeouts(hSession, 2000, 2000, 3000, 5000);
+            (void)WinHttpSetTimeouts(hSession, 10000, 10000, 180000, 180000);
 
             HINTERNET hConnect = WinHttpConnect(hSession, u.host.c_str(), u.port, 0);
             if (!hConnect)
@@ -1784,6 +1821,16 @@ namespace epochengine::ai
                 throw std::runtime_error("WinHTTP: WinHttpOpenRequest failed");
             }
 
+            DWORD disabledFeatures = WINHTTP_DISABLE_REDIRECTS
+                | WINHTTP_DISABLE_AUTHENTICATION | WINHTTP_DISABLE_COOKIES;
+            if (!WinHttpSetOption(hRequest, WINHTTP_OPTION_DISABLE_FEATURE,
+                    &disabledFeatures, sizeof(disabledFeatures)))
+            {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error("WinHTTP: model inventory endpoint policy could not be set");
+            }
             std::wstring hdr = L"Accept: application/json\r\n";
             for (const auto& [k, v] : headers)
             {
@@ -1824,6 +1871,20 @@ namespace epochengine::ai
                 throw std::runtime_error("WinHTTP: WinHttpReceiveResponse failed");
             }
 
+            DWORD httpStatus{};
+            DWORD statusSize = sizeof(httpStatus);
+            const bool statusRead = WinHttpQueryHeaders(hRequest,
+                WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                WINHTTP_HEADER_NAME_BY_INDEX, &httpStatus, &statusSize,
+                WINHTTP_NO_HEADER_INDEX) != FALSE;
+            if (!statusRead || httpStatus < 200u || httpStatus >= 300u)
+            {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                throw std::runtime_error(statusRead ? model_http_status_message(httpStatus)
+                    : "Model inventory HTTP status could not be read.");
+            }
             std::string resp;
             for (;;)
             {
@@ -1971,7 +2032,7 @@ namespace epochengine::ai
             if (http_status < 200 || http_status >= 300)
             {
                 std::ostringstream oss;
-                oss << "CURL: HTTP status " << http_status;
+                oss << model_http_status_message(static_cast<unsigned>(http_status));
                 throw std::runtime_error(oss.str());
             }
 
@@ -2003,8 +2064,8 @@ namespace epochengine::ai
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_cb);
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &resp);
             curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 2000L);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 5000L);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 180000L);
 
             const CURLcode code = curl_easy_perform(curl);
             if (code != CURLE_OK)
@@ -2024,7 +2085,7 @@ namespace epochengine::ai
             if (http_status < 200 || http_status >= 300)
             {
                 std::ostringstream oss;
-                oss << "CURL: HTTP status " << http_status;
+                oss << model_http_status_message(static_cast<unsigned>(http_status));
                 throw std::runtime_error(oss.str());
             }
 
@@ -2081,26 +2142,49 @@ namespace epochengine::ai
             return ids;
         }
 
-        static std::vector<std::string> fetch_detected_models(const std::string& endpoint)
+        static std::vector<std::string> extract_native_model_keys(std::string_view response);
+
+        static std::vector<std::string> fetch_detected_models(const std::string& endpoint,
+            std::string& failure)
         {
             const std::string modelsEndpoint = normalize_model_list_endpoint(endpoint);
             try
             {
+                const auto headers = model_request_headers(endpoint);
+                const auto fetch = [&](const std::string& url) -> std::string
+                {
 #if defined(_WIN32)
-                const std::string response = winhttp_get_json(modelsEndpoint, {});
+                    return winhttp_get_json(url, headers);
 #elif defined(EPOCH_HAS_CURL)
-                const std::string response = http_get_json(modelsEndpoint, {});
+                    return http_get_json(url, headers);
 #else
-                (void)modelsEndpoint;
-                core::log::error("ai", "Model detection failed: no HTTP transport is configured.");
-                return {};
+                    throw std::runtime_error("No HTTP transport is configured.");
 #endif
-                return extract_openai_model_ids(response);
+                };
+                const bool nativeRequested = endpoint.find("/api/v1") != std::string::npos;
+                const auto identity = local_endpoint_identity(endpoint);
+                if (nativeRequested || identity == kOriginalLocalEndpoint
+                    || identity == "http://127.0.0.1:1234/v1/chat/completions"
+                    || identity == "http://[::1]:1234/v1/chat/completions")
+                {
+                    const auto nativeEndpoint = modelsEndpoint.substr(0u,
+                        modelsEndpoint.size() - std::string_view{"/v1/models"}.size())
+                        + "/api/v1/models";
+                    try { return extract_native_model_keys(fetch(nativeEndpoint)); }
+                    catch (const std::exception& error)
+                    {
+                        const std::string_view message{error.what()};
+                        if (nativeRequested || (message.compare("Model endpoint returned HTTP status 404") != 0
+                            && message.compare("Model endpoint returned HTTP status 405") != 0)) throw;
+                    }
+                }
+                return extract_openai_model_ids(fetch(modelsEndpoint));
             }
             catch (const std::exception& ex)
             {
                 std::string msg = "Model detection failed: ";
                 msg += ex.what();
+                failure = msg;
                 core::log::warn("ai", epochengine::string_view{msg.data(), msg.size()});
                 return {};
             }
@@ -2749,6 +2833,65 @@ namespace epochengine::ai
                 return value;
             }
 
+            [[nodiscard]] bool skip_value(unsigned depth = 0u)
+            {
+                if (depth > 32u) return false;
+                skip_space();
+                if (position_ >= source_.size()) return false;
+                if (source_[position_] == '"') return string().has_value();
+                if (consume('{'))
+                {
+                    if (consume('}')) return true;
+                    do
+                    {
+                        if (!string() || !consume(':') || !skip_value(depth + 1u)) return false;
+                        if (consume('}')) return true;
+                    } while (consume(','));
+                    return false;
+                }
+                if (consume('['))
+                {
+                    if (consume(']')) return true;
+                    do
+                    {
+                        if (!skip_value(depth + 1u)) return false;
+                        if (consume(']')) return true;
+                    } while (consume(','));
+                    return false;
+                }
+                for (const std::string_view literal : {"true", "false", "null"})
+                {
+                    if (source_.substr(position_).starts_with(literal))
+                    {
+                        position_ += literal.size();
+                        return true;
+                    }
+                }
+                const auto begin = position_;
+                if (position_ < source_.size() && source_[position_] == '-') ++position_;
+                const auto integer = position_;
+                while (position_ < source_.size() && source_[position_] >= '0'
+                    && source_[position_] <= '9') ++position_;
+                if (position_ == integer || (position_ - integer > 1u && source_[integer] == '0')) return false;
+                if (position_ < source_.size() && source_[position_] == '.')
+                {
+                    const auto fraction = ++position_;
+                    while (position_ < source_.size() && source_[position_] >= '0'
+                        && source_[position_] <= '9') ++position_;
+                    if (position_ == fraction) return false;
+                }
+                if (position_ < source_.size() && (source_[position_] == 'e' || source_[position_] == 'E'))
+                {
+                    ++position_;
+                    if (position_ < source_.size() && (source_[position_] == '+' || source_[position_] == '-')) ++position_;
+                    const auto exponent = position_;
+                    while (position_ < source_.size() && source_[position_] >= '0'
+                        && source_[position_] <= '9') ++position_;
+                    if (position_ == exponent) return false;
+                }
+                return position_ > begin;
+            }
+
             [[nodiscard]] bool complete() noexcept
             {
                 skip_space();
@@ -2769,6 +2912,63 @@ namespace epochengine::ai
             std::string_view source_{};
             std::size_t position_{};
         };
+
+        static std::vector<std::string> extract_native_model_keys(std::string_view response)
+        {
+            StructuredJsonCursor cursor{response};
+            std::vector<std::string> keys;
+            const auto invalid = []() -> void
+            { throw std::runtime_error("LM Studio native model inventory has an invalid response format."); };
+            if (!cursor.consume('{') || cursor.consume('}')) invalid();
+            bool modelsSeen{};
+            do
+            {
+                const auto name = cursor.string();
+                if (!name || !cursor.consume(':')) invalid();
+                if (*name != "models")
+                {
+                    if (!cursor.skip_value()) invalid();
+                }
+                else
+                {
+                    if (modelsSeen || !cursor.consume('[')) invalid();
+                    modelsSeen = true;
+                    std::size_t count{};
+                    if (!cursor.consume(']'))
+                    {
+                        do
+                        {
+                            if (++count > 8192u || !cursor.consume('{') || cursor.consume('}')) invalid();
+                            std::optional<std::string> key, type;
+                            do
+                            {
+                                const auto field = cursor.string();
+                                if (!field || !cursor.consume(':')) invalid();
+                                if (*field == "key" || *field == "type")
+                                {
+                                    auto& target = *field == "key" ? key : type;
+                                    if (target) invalid();
+                                    target = cursor.string();
+                                    if (!target) invalid();
+                                }
+                                else if (!cursor.skip_value()) invalid();
+                                if (cursor.consume('}')) break;
+                                if (!cursor.consume(',')) invalid();
+                            } while (true);
+                            if (!key || !type || !valid_preferred_model(*key)) invalid();
+                            if (*type == "llm" && std::find(keys.begin(), keys.end(), *key) == keys.end())
+                                keys.push_back(*key);
+                            if (cursor.consume(']')) break;
+                            if (!cursor.consume(',')) invalid();
+                        } while (true);
+                    }
+                }
+                if (cursor.consume('}')) break;
+                if (!cursor.consume(',')) invalid();
+            } while (true);
+            if (!modelsSeen || !cursor.complete()) invalid();
+            return keys;
+        }
 
         struct StructuredPatchOperation final
         {
@@ -4225,7 +4425,7 @@ namespace epochengine::ai
                     effective.model,
                     sys,
                     user_input,
-                    {},
+                    model_request_headers(m_endpoint_full),
                     effective.output_tokens,
                     effective.timeout_seconds,
                     workload == InferenceWorkload::source_iteration, cancellation,
@@ -4348,7 +4548,7 @@ namespace epochengine::ai
                 .context_tokens = 4096,
                 .output_tokens = 512,
                 .gpu_layers = -1,
-                .timeout_seconds = 120,
+                .timeout_seconds = 180,
                 .best_of = 1
             });
             g_modelDetectionStatus = "Direct llama.cpp runtime initialized with "
@@ -4884,6 +5084,28 @@ namespace epochengine::ai
             return "Selected model client is initialized.";
         return "Model selected, but client is not initialized; scan models or check the endpoint.";
     }
+    bool set_local_model_api_token(std::string_view token)
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        try
+        {
+            if (!token.empty() && local_model_headers(g_selectedEndpoint, std::string{token}).empty())
+                return false;
+            if (g_localModelApiToken)
+                std::fill(g_localModelApiToken->begin(), g_localModelApiToken->end(), '\0');
+            g_localModelApiToken = std::string{token};
+            return true;
+        }
+        catch (...) { return false; }
+    }
+
+    bool has_local_model_api_token()
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        try { return !model_request_headers(g_selectedEndpoint).empty(); }
+        catch (...) { return false; }
+    }
+
     std::vector<std::string> refresh_detected_models()
     {
         std::string endpoint;
@@ -4902,7 +5124,8 @@ namespace epochengine::ai
             endpoint = g_selectedEndpoint;
         }
 
-        std::vector<std::string> detected = fetch_detected_models(endpoint);
+        std::string detectionFailure;
+        std::vector<std::string> detected = fetch_detected_models(endpoint, detectionFailure);
 
         const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
         if (g_localTransport != LocalInferenceTransport::OpenAiCompatible
@@ -4912,6 +5135,11 @@ namespace epochengine::ai
         }
 
         g_detectedModels = std::move(detected);
+        if (!detectionFailure.empty())
+        {
+            g_modelDetectionStatus = std::move(detectionFailure);
+            return g_detectedModels;
+        }
         if (g_detectedModels.empty())
         {
             g_modelDetectionStatus = g_selectedModel.empty()
@@ -5466,7 +5694,7 @@ namespace epochengine::ai
                 ? 4'096u : 32'768u;
             if (!requestBudget.valid() || requestBudget.output_tokens != expectedTokens
                 || requestBudget.context_tokens != 65'536u
-                || requestBudget.timeout_seconds != 1'800u
+                || requestBudget.timeout_seconds != 10'800u
                 || requestBudget.maximum_prompt_bytes != 256u * 1024u
                 || requestBudget.maximum_reply_bytes != 1024u * 1024u
                 || request_inference_budget(InferenceWorkload::chat, fixture.input).output_tokens != 2'048u)
@@ -5536,12 +5764,39 @@ namespace epochengine::ai
             R"json({"action":"insufficient","title":"","rationale":"","operations":[{"path":"Engine/src/ai/ai.engine.cpp","summary":"Edit","search":"old","replacement":"new"}],"reason":"No source","paths":[],"reads":[]})json"})
             if (!normalize_structured_patch_reply(invalid).empty()) return false;
 
+        const auto nativeModels = extract_native_model_keys(R"json({"models":[
+            {"type":"llm","key":"qwen/loaded","loaded_instances":[{"id":"instance-only","config":{"context_length":65536}}]},
+            {"type":"embedding","key":"embedding-only","loaded_instances":[]},
+            {"type":"llm","key":"qwen/unloaded","loaded_instances":[],"size_bytes":16464440224,"capabilities":{"vision":false,"description":null}},
+            {"type":"llm","key":"qwen/loaded"}]})json");
+        if (nativeModels != std::vector<std::string>{"qwen/loaded", "qwen/unloaded"}
+            || !extract_native_model_keys("{\"models\":[]}").empty()
+            || normalize_model_list_endpoint("http://localhost:1234/api/v1/models")
+                != "http://localhost:1234/v1/models"
+            || normalize_openai_chat_endpoint("http://localhost:1234/api/v1")
+                != "http://localhost:1234/v1/chat/completions") return false;
+        for (const auto invalid : {"{\"error\":{\"id\":\"not-a-model\"}}",
+            "{\"models\":[{\"type\":\"llm\",\"loaded_instances\":[{\"id\":\"nested\"}]}]}",
+            "{\"models\":[]} trailing", "{\"models\":[],\"models\":[]}"})
+        {
+            bool rejected{};
+            try { (void)extract_native_model_keys(invalid); }
+            catch (const std::runtime_error&) { rejected = true; }
+            if (!rejected) return false;
+        }
         const auto codingBudget = inference_budget(InferenceWorkload::source_iteration);
-        if (!codingBudget.valid() || codingBudget.timeout_seconds != 1'800u
-            || inference_budget(InferenceWorkload::chat).timeout_seconds != 120u
+        if (!codingBudget.valid() || codingBudget.timeout_seconds != 10'800u
+            || inference_budget(InferenceWorkload::chat).timeout_seconds != 180u
             || inference_budget(InferenceWorkload::authoring).timeout_seconds != 180u
-            || inference_budget(InferenceWorkload::source_self_review).timeout_seconds != 300u
-            || model_http_timeout_milliseconds(codingBudget.timeout_seconds) != 1'800'000
+            || inference_budget(InferenceWorkload::source_self_review).timeout_seconds != 10'800u
+            || model_http_timeout_milliseconds(codingBudget.timeout_seconds) != 10'800'000
+            || model_http_timeout_milliseconds(1u) != 180'000
+            || model_http_timeout_milliseconds(180u) != 180'000
+            || local_model_headers("http://localhost:1234/v1/models", "synthetic-token")
+                != std::vector<std::pair<std::string, std::string>>{{"Authorization", "Bearer synthetic-token"}}
+            || !local_model_headers("https://remote.example.test", "synthetic-token").empty()
+            || !local_model_headers("http://localhost:4321", "synthetic-token").empty()
+            || !local_model_headers("http://localhost:1234", "").empty()
             || model_total_budget_elapsed(10'000u, 1'800u)
             || model_total_budget_elapsed(1'799'000u, 1'800u)
             || !model_total_budget_elapsed(1'799'001u, 1'800u)

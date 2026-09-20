@@ -1,11 +1,57 @@
 # Active Pass
 
-Updated September 6, 2026. This is the only current resume point. Historical
+Updated September 20, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
 
 ## Current Acceptance Result
+
+September 20 resume: native LM Studio inventory (`/api/v1/models`) now reads
+top-level LLM keys, includes unloaded models, and excludes embedding/instance
+identifiers. Compatibility discovery is a fallback only for unsupported native
+routes. Model Settings has session-only Paste API Key / Clear API Key controls;
+LM_API_TOKEN remains an optional environment fallback. Generation still uses
+the OpenAI-compatible chat endpoint, not the Bionic agent protocol.
+The supplied logo is preserved as `Engine/resource/epoch-logo.png`; the tracked
+conversion script generates the seven-size Windows icon without altering it.
+Serial Release build `build/native_model_discovery_release.log` and its pure
+contract run passed September 19 at 15:16:49. Current executable: 13,317,120 bytes,
+SHA-256 `78b8d8a19ded6938908110754e137c53ac3f521d66376761c14f34618736b59b`.
+This supersedes the narrower build identity immediately below.
+
+The operator explicitly approved the full native Qwen two-candidate test on
+September 20. Preflight currently returns HTTP 401 and this task process has no
+LM_API_TOKEN. The Windows computer-use helper failed before initialization with
+`apply deny-read ACLs`. Subsequently the operator chose manual in-Editor token
+entry; the rebuilt Editor launched successfully as PID 36248 with private data
+under `build/native_auth_eye_20260920`. It is responsive; no model generation or
+comparison is claimed. Obtain the credential through operator UI, never chat/source/logs,
+and restore the visual-control lane before claiming interactive acceptance.
+GitHub is reachable; Engine main can advance without force. Gui and Extensions
+GitHub/Site histories diverge: reconcile additively, do not replace the richer
+GitHub package tree with the reduced Site descriptor catalog. No new release,
+stable-ref advance, or Site READY handoff is justified by these contracts alone.
+
+September 19 immediate repair: restore local-model connectivity first. The live
+localhost:1234 server now requires authentication; an unauthenticated inventory
+request was rejected and the operator-provided credential successfully listed
+models. This new authentication setting does not explain the historical failures.
+Use LM_API_TOKEN from the Editor process environment for the default local
+LM Studio endpoint; never save the credential in source, docs or runtime logs.
+Discovery and ordinary responses now allow three minutes; each local self-coding
+and source-review request allows three hours, including loading/evaluation.
+These are request deadlines, not a limit on the overall multi-iteration mission.
+The existing 90-minute automated smoke harness and external MCP deadlines remain
+separate. Serial Release build passed (`build/local_model_connection_release.log`)
+and the rebuilt build-safe aggregate passed with waited exit 0 at 10:05:46.
+Executable: `x64/Release/EpochEditor.exe`, 13,270,528 bytes, SHA-256
+`8c7e3153174c66238492da7f554a4fc4606fc1397b6104bf9e04902c0c5b3c3f`.
+No GUI launch or generation request was made in this repair pass. Authentication
+was tested through a separate read-only HTTP inventory request; the Editor must
+inherit LM_API_TOKEN at startup for its new authentication path to work.
+After connectivity, resume cumulative whole-project context navigation and the
+real two-build Keep/Choose acceptance below; neither is proven by this patch.
 
 Finish the **v0.90.1 Self-Coding Candidate Lab**: ordinary-language objective,
 automatic source discovery, saved plan, exact sandbox edits, build/test and
@@ -45,7 +91,7 @@ evidence are separate.
 | Resource admission | Global heavy-work ownership, measured CPU/RAM and nonblocking 30-second healthy/cooldown admission wired through source/project model, compiler, tests and previews, including floating chat and parked context retirement | Component CTests 2/2 and rebuilt Debug source-path contract pass; native dispatch/retirement and generated-child resource behavior remain unverified |
 | Task activity | Toolbar uses active/queued/idle counts; Systems reads nullable existing scheduler | Exact Release eye test required |
 | Version preparation | Script resolves 0.90.1, historical 0.89.06 and separate macOS 0.89.30; receipt platform resolver and updater contracts repaired | PowerShell 7/5.1 self-tests and rebuilt Debug updater contracts pass; exact Release/package evidence remains open |
-| Model timeout | Local source attempts allow 1,800 seconds; total-budget timeout is terminal, only an earlier recoverable failure retries once; typed cause survives chat/panel with no upper-layer retry. MCP has an explicit 900-second owner deadline and retained retirement/cancellation cause | Rebuilt HTTP/CLI/MCP completion/cancellation contracts pass; real Qwen background/minimize/Stop proof remains open |
+| Model timeout | September 19: local source/review attempts allow 10,800 seconds; chat/authoring and discovery allow 180 seconds. Total-budget timeout is terminal; only an earlier recoverable failure retries once. MCP retains its separate 900-second deadline | Release aggregate passes; real Qwen loading/background/minimize/Stop proof remains open |
 | Model/UI foundations | Model memory/default, hidden-pane progression, Stop/restart ownership, candidate-data routing and centered-divider geometry have prior contract/build evidence | Exact current native readability, cancellation, docking and two-build Qwen acceptance still open |
 | Candidate execution | Private data roots/process supervision implemented; optional LPAC component has partial console proof | Candidate Lab still uses inherited OS identity; filesystem/network/IPC confinement and embedding compatibility unproven |
 | SDK/research/demo integrations | Requirements and planned contracts recorded | No SDK access/UI, curated research loader or new demo/Space library integration claimed |

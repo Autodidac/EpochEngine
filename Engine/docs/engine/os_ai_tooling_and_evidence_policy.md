@@ -837,14 +837,30 @@ read/edit responses are rejected. Proposal metadata does not have to repeat word
 from the operator's objective: lexical overlap does not prove relevance or safety.
 Exact-byte grounding, ownership checks, actual validation and operator candidate
 choice remain separate requirements.
-Source iteration has a bounded 1,800-second per-attempt wall budget, including
-prompt evaluation and model reasoning; ordinary chat/authoring/self-review keep
-their separate 120/180/300-second budgets. Window focus does not cancel the
+Source iteration and source self-review have a bounded 10,800-second (three-hour)
+per-attempt wall budget, including model loading, prompt evaluation and reasoning.
+Ordinary chat and authoring allow 180 seconds; model inventory discovery allows
+180 seconds for a response. These limits apply to individual requests, not the
+total multi-iteration mission. Window focus does not cancel the
 independent HTTP worker. One early transport-operation, API, hidden-reasoning,
 malformed-schema, or empty-content failure may retry with an explicit final-answer
 request. Expiry of the whole wall budget does not automatically restart the same
 expensive generation. Cancellation and failed native retirement are never retried.
 Timeout diagnostics preserve elapsed time, configured limit and attempt number.
+The default local LM Studio endpoint (HTTP loopback on port 1234) accepts a
+session-only credential through Model Settings > Paste API Key. Clear API Key
+disables that credential for the session. Until either action, the optional
+Editor-process `LM_API_TOKEN` environment variable supplies the credential for
+both inventory and generation. It is not persisted or logged and is
+not sent to other ports or remote endpoints. Redirects are disabled. Discovery
+preserves HTTP authentication errors in the visible model status instead of
+misreporting them as an empty inventory. Restart the Editor after configuring
+its environment. Discovery first uses native `/api/v1/models`, taking top-level
+LLM keys, including unloaded models, and excluding embeddings and nested instance
+IDs. Only an unsupported native route (404/405) permits compatibility fallback;
+an explicitly native URL never silently falls back. Generation retains the
+OpenAI-compatible chat contract, not the Bionic agent protocol. Model inventory
+proves reachability, not generation or loading.
 Host-owned terminal metadata is separate from assistant text and survives the
 chat-worker/panel boundary. Whole-budget timeout, cancellation and unconfirmed
 retirement cannot trigger a higher-level automatic plan or packet retry, and a
