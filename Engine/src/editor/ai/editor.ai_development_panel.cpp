@@ -318,6 +318,7 @@ namespace epochengine::editor_ai_development_panel
                     "local model returned reasoning/debug text instead of final assistant content")
                 || lowered.starts_with(
                     "local model returned no decodable assistant text")
+                || lowered.starts_with("local model returned assistant text, but")
                 || lowered.starts_with(
                     "no decodable reply from selected local model")
                 || lowered.starts_with("direct llama.cpp inference")
@@ -2944,6 +2945,21 @@ namespace epochengine::editor_ai_development_panel
             prompt += ending;
         }
 
+        void append_investigation_continuity(std::string& prompt) const
+        {
+            if (sandbox_lab_plan.empty()) return;
+            prompt += "\n\nRETAINED_INVESTIGATION_PLAN\n";
+            prompt += bounded_review_text(sandbox_lab_plan);
+            prompt += "\nEND_RETAINED_INVESTIGATION_PLAN\n"
+                "Continue the next unfinished step of this plan. The plan is "
+                "context, not proof that edits or tests happened and not a new "
+                "response format. Use the current request's wire format. "
+                "If the current source is insufficient, request the exact "
+                "additional paths or line ranges needed to resolve the next "
+                "step, explaining the missing dependency in the reason. "
+                "Do not restart a generic investigation or invent a defect.";
+        }
+
         [[nodiscard]] std::string campaign_model_prompt(
             const ai::self_iteration_orchestrator::OperationKind kind) const
         {
@@ -2998,6 +3014,7 @@ namespace epochengine::editor_ai_development_panel
                 + "\nEND_CAMPAIGN_BINDING\n\n"
                 + ai::development_proposal_codec::protocol_prompt(
                     area, development_objective, source_context_evidence);
+            append_investigation_continuity(prompt);
             if (!append_repair_diagnostic(prompt))
                 return {};
             append_source_path_catalog(prompt);
@@ -4483,6 +4500,7 @@ namespace epochengine::editor_ai_development_panel
                 output.model_prompt +=
                     "\nEND_EPOCH_SOURCE_CONTEXT_CORRECTION_V1";
             }
+            append_investigation_continuity(output.model_prompt);
             if (!append_repair_diagnostic(output.model_prompt, true))
                 return reject_model_prompt_budget();
             append_source_path_catalog(output.model_prompt,
@@ -4530,6 +4548,7 @@ namespace epochengine::editor_ai_development_panel
                 output.model_prompt += model_reply_correction_diagnostic;
                 output.model_prompt += "\nEND_EPOCH_SOURCE_PROTOCOL_CORRECTION_V1";
             }
+            append_investigation_continuity(output.model_prompt);
             if (!append_repair_diagnostic(output.model_prompt))
                 return reject_model_prompt_budget();
             append_source_path_catalog(output.model_prompt);
@@ -4799,9 +4818,10 @@ namespace epochengine::editor_ai_development_panel
             model_reply_correction_diagnostic = status_message;
             status_message = epochengine::format_text(
                 "Model source selection rejected; correction attempt {}/{} "
-                "is running automatically.",
+                "is running automatically. Reason: {}",
                 model_reply_corrections,
-                maximum_model_reply_corrections);
+                maximum_model_reply_corrections,
+                model_reply_correction_diagnostic);
             output = source_context_model_request();
             output.status = status_message;
             return output;
@@ -4869,7 +4889,7 @@ namespace epochengine::editor_ai_development_panel
                         + contextRequest.status
                         + " No source bytes were read or shared.");
                 }
-                const bool everyPathWasOffered = std::ranges::all_of(
+                const auto unlistedPath = std::ranges::find_if(
                     contextRequest.request.paths,
                     [&](const std::string& path)
                     {
@@ -4878,15 +4898,16 @@ namespace epochengine::editor_ai_development_panel
                                 ? std::string_view{source_context_evidence}
                                 : std::string_view{
                                     source_path_catalog_evidence};
-                        return source_path_is_listed(
+                        return !source_path_is_listed(
                             offeredPaths, path);
                     });
-                if (!everyPathWasOffered)
+                if (unlistedPath != contextRequest.request.paths.end())
                 {
                     return queue_source_context_reply_correction(
-                        "Model source-context request rejected because it named "
-                        "a path outside the verified path catalog. No source bytes "
-                        "were read or shared.");
+                        "Model source-context request rejected: path is not in the verified catalog: "
+                        + *unlistedPath
+                        + ". Select an exact PATH entry from the supplied catalog; do not invent "
+                        "matching implementation or contract filenames. No source bytes were read or shared.");
                 }
                 if (!campaign_reviewed_paths.empty())
                 {
@@ -6228,6 +6249,10 @@ namespace epochengine::editor_ai_development_panel
                 != HostAction::request_model_source_proposal
             || !contextState.pending_source_context_paths.empty()
             || unlistedContext.status.find("correction attempt 2/2")
+                == std::string::npos
+            || unlistedContext.status.find("Engine/src/editor/not-offered.cpp")
+                == std::string::npos
+            || unlistedContext.model_prompt.find("Engine/src/editor/not-offered.cpp")
                 == std::string::npos
             || unlistedContext.model_prompt.find("CORRECTION_ATTEMPT 2 OF 2")
                 == std::string::npos)
@@ -7999,6 +8024,8 @@ namespace epochengine::editor_ai_development_panel
         expandingContextState.campaign_reviewed_paths = {
             "Engine/src/renderers/opengl/opengl.context_init.cpp"};
         expandingContextState.source_repair_diagnostic = expectedRepair;
+        expandingContextState.sandbox_lab_plan =
+            "1. Inspect context ownership before changing its cleanup order.";
         expandingContextState.active_domain = Domain::engine_source;
         const RenderResult expandedContextResult =
             expandingContextState.stage_source_reply(
@@ -8018,9 +8045,23 @@ namespace epochengine::editor_ai_development_panel
             || expandedContextResult.model_prompt.find(Implementation::digest_text(verboseFailure))
                 == std::string::npos
             || expandedContextResult.model_prompt.find(failedProposal) == std::string::npos
+            || expandedContextResult.model_prompt.find(expandingContextState.sandbox_lab_plan)
+                == std::string::npos
             || expandedContextResult.model_prompt.size() > repairPromptBudget)
         {
             return false;
+        }
+        for (const auto& continuedPrompt : {
+                 expandingContextState.source_model_request().model_prompt,
+                 expandingContextState.campaign_model_prompt(
+                     ai::self_iteration_orchestrator::OperationKind::model_proposal)})
+        {
+            if (continuedPrompt.find(expandingContextState.sandbox_lab_plan)
+                    == std::string::npos
+                || continuedPrompt.find("END_RETAINED_INVESTIGATION_PLAN")
+                    == std::string::npos
+                || continuedPrompt.size() > repairPromptBudget)
+                return false;
         }
         const auto selectionRepairRetry = expandingContextState.queue_source_context_reply_correction(
             "The replacement source selection was malformed; preserve the compiler failure while retrying.");
@@ -8379,6 +8420,21 @@ namespace epochengine::editor_ai_development_panel
                     return reject_requested_source_context();
             }
         }
+        if (input.domain == Domain::engine_source)
+        {
+            gui::label("Where this work lives");
+            gui::wrapped_label("Original Engine (not overwritten): "
+                + (input.source_snapshot_root.empty() ? std::string{"Unavailable"}
+                    : input.source_snapshot_root), width);
+            gui::wrapped_label("Active Project (separate from self-coding): "
+                + (input.active_project_root.empty() ? std::string{"No project selected"}
+                    : input.active_project_root), width);
+            gui::wrapped_label("Candidate Sandbox (AI writes here): "
+                + (state.workspace_root.empty() ? std::string{"Created when the session starts"}
+                    : state.workspace_root), width);
+            gui::wrapped_label("Choose Candidate retains its sandbox as the next iteration's parent. "
+                "It does not replace the original engine or active project.", width);
+        }
         (void)gui::toggle_switch(
             "Show technical details",
             state.advanced_controls,
@@ -8396,7 +8452,7 @@ namespace epochengine::editor_ai_development_panel
                 "Live engine source and every project");
             gui::property_row("Controller phase",
                 editor_ai_development::to_string(snapshot.phase));
-            gui::property_row("Live source",
+            gui::property_row("Iteration source",
                 state.source_root.empty()
                     ? std::string{"Unavailable"}
                     : state.source_root);

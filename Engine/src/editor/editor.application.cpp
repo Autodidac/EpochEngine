@@ -27098,6 +27098,8 @@ namespace epochengine
                 .domain = editor_ai_development_panel::Domain::engine_source,
                 .available_width = width,
                 .workspace_id = "epoch.engine",
+                .active_project_root = editor.projectRoot.empty() ? std::string{}
+                    : resolve_editor_path(editor.projectRoot).generic_string(),
                 .workspace_root = evidence.workspace_root,
                 .source_cache_root = evidence.cache_root,
                 .curated_scope_digest = editor.curatedCodeWorkspace.evidenceDigest,

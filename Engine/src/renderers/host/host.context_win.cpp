@@ -34,6 +34,7 @@
 #include <include/engine.config.hpp>
 
 #if defined(_WIN32)
+#   include "../../../resource/resource.h"
 #   ifdef EPOCH_USING_WINMAIN
 #       include <../src/platform.framework.hpp>
 #   endif
@@ -3327,6 +3328,7 @@ namespace epochengine::core
         WNDCLASSW wc{};
         wc.lpfnWndProc = ParentProc;
         wc.hInstance = hInst;
+        wc.hIcon = ::LoadIconW(hInst, MAKEINTRESOURCEW(IDI_EPOCH_EDITOR));
         wc.lpszClassName = name;
         wc.style = CS_OWNDC;
         wc.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
@@ -3339,6 +3341,7 @@ namespace epochengine::core
         WNDCLASSW wc{};
         wc.lpfnWndProc = ChildProc;
         wc.hInstance = hInst;
+        wc.hIcon = ::LoadIconW(hInst, MAKEINTRESOURCEW(IDI_EPOCH_EDITOR));
         wc.lpszClassName = name;
         wc.style = CS_OWNDC;
         wc.hCursor = ::LoadCursor(nullptr, IDC_ARROW);

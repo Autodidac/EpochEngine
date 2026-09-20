@@ -111,6 +111,7 @@ export namespace epochengine::editor_ai_development_panel
         Domain domain{Domain::tooling};
         float available_width{320.0f};
         std::string workspace_id{};
+        std::string active_project_root{};
         std::string source_snapshot_root{};
         std::string source_authority_kind{};
         std::string source_authority_version{};

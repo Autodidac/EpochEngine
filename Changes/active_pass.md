@@ -7,6 +7,46 @@ instructions. Ordering is in `roadmap.md`, durable requirements in
 
 ## Current Acceptance Result
 
+September 20 latest continuation: operator priority is AI repair and real
+two-build acceptance BEFORE any further push or release. GitHub main is
+`3331f362f7f9dec3595fb6971c7cbaac0673d7ec`; later local fixes are not on GitHub.
+The operator's 09:16 screenshot proves context expansion exhausted with no
+source staged, not a completed build or comparison. That run selected
+`qwen/qwen3-vl-4b`; the operator now selected `qwen/qwen3.8-27b` for testing.
+Authenticated requests worked after manual session-key entry. Do not retain
+the older HTTP 401 observation below as the diagnosis of this failed run.
+
+Production repair in progress: the retained sandbox plan was omitted from
+proposal and source-reselection prompts. It now accompanies both production
+proposal paths and source selection, explicitly as context rather than source
+evidence or a competing wire format. Regression checks cover all three paths.
+Debug build `build/self_coding_continuity_debug.log` and the rebuilt pure
+contract process passed (waited exit 0). Release build
+`build/self_coding_continuity_release.log` and its rebuilt pure contracts also
+passed with waited exit 0. No new model success is claimed. Other local repairs expose exact
+selection failures, distinguish format errors, wire native window icons, and
+display original Engine / active project / candidate sandbox locations.
+
+Native computer-use initialization was retried and still fails before app
+access with `apply deny-read ACLs`. Do not claim visual verification or replace
+this with an unapproved UI-control channel. Next: complete Release and its
+contracts, obtain session-only key through the Editor UI, then run the approved
+Qwen sandbox test. Rebuilt Release Editor opened as PID 33492 using normal
+Editor data routing (not the previous private candidate test-host root).
+No process/user LM_API_TOKEN exists; operator was asked for session-only UI
+entry and Qwen 3.8 27B selection. Native helper cannot operate the UI currently.
+Stop claiming success until a real independent candidate
+is embedded, chosen, and followed by a second actual candidate build.
+
+Storage clarification: tracked Engine source and user projects are durable.
+Build outputs are reproducible. Candidate session directories contain disposable
+build output BUT also candidate edits, selection lineage and diagnostic evidence;
+do not delete them while an iteration or recovery depends on them. Choose only
+selects the sandbox parent; it does not promote into original Engine source.
+The earlier manual test host used `build/native_auth_eye_20260920` as its private
+candidate data root, which explains its private-Projects-only restriction.
+Do not mistake that test-host restriction for normal project loss.
+
 September 20 resume: native LM Studio inventory (`/api/v1/models`) now reads
 top-level LLM keys, includes unloaded models, and excludes embedding/instance
 identifiers. Compatibility discovery is a fallback only for unsupported native

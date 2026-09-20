@@ -2515,6 +2515,7 @@ namespace epochengine::ai
                 || starts_with_text(lower, "direct llama.cpp inference")
                 || starts_with_text(lower, "local model returned hidden reasoning")
                 || starts_with_text(lower, "local model returned no decodable assistant text")
+                || starts_with_text(lower, "local model returned assistant text, but")
                 || starts_with_text(lower, "no decodable reply from selected local model"))
             {
                 return false;
@@ -3612,8 +3613,10 @@ namespace epochengine::ai
             };
             const StructuredSourceReply sourceReply =
                 structured_source_reply_for(input, structuredSource);
+            std::string replyDiagnostic;
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
+                replyDiagnostic.clear();
                 if (cancellation.stop_requested())
                     return cancelled();
                 const std::string body = openai_chat_request_body(
@@ -3656,6 +3659,9 @@ namespace epochengine::ai
                         normalize_structured_source_reply(parsed, sourceReply);
                     if (!normalized.empty())
                         return normalized;
+                    replyDiagnostic = "Local model returned assistant text, but it did not match the "
+                        "required " + std::string{source_stage_name(source_request_stage(input, structuredSource))}
+                        + " response format. No source was staged. The automatic format retry also failed.";
                     core::log::warn(
                         "ai",
                         "Schema-constrained source reply could not be normalized; retrying without staging bytes.");
@@ -3737,7 +3743,8 @@ namespace epochengine::ai
                         if (!reply.empty())
                             return reply;
                         lastFailure =
-                            has_hidden_reasoning_without_visible_content(rawResponse)
+                            !replyDiagnostic.empty() ? replyDiagnostic
+                            : has_hidden_reasoning_without_visible_content(rawResponse)
                             ? std::string{
                                 "Local model returned reasoning without final assistant content. Epoch retried with an explicit final-answer request but received no final answer."}
                             : std::string{
@@ -4318,6 +4325,7 @@ namespace epochengine::ai
                 "local model api error", "local openai-compatible request failed",
                 "local-model request cancelled", "local model returned hidden reasoning",
                 "local model returned reasoning", "local model returned no decodable assistant text",
+                "local model returned assistant text, but",
                 "direct llama.cpp inference could not", "direct llama.cpp inference exceeded",
                 "direct llama.cpp inference was cancelled", "direct llama.cpp inference failed",
                 "direct llama.cpp inference returned no parseable"})
