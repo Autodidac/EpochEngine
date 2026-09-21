@@ -31,7 +31,6 @@ jobs:
             build_command: >
               python -m cmake --build "$env:GITHUB_WORKSPACE/build/ci"
               --config Release
-              --target epoch_ci_headless epoch_texture_artifact_contract
             test_command: >
               python -m cmake -E chdir "$env:GITHUB_WORKSPACE/build/ci"
               ctest -C Release --output-on-failure
@@ -47,7 +46,6 @@ jobs:
             build_command: >
               python -m cmake --build "$env:GITHUB_WORKSPACE/build/ci"
               --config Release
-              --target epoch_ci_headless epoch_texture_artifact_contract
             test_command: |
               python -m cmake -E chdir "$env:GITHUB_WORKSPACE/build/ci" ctest -C Release --output-on-failure
           - name: linux-gcc
@@ -79,7 +77,6 @@ jobs:
             install_llvm_current: true
             build_command: >
               python -m cmake --build "$GITHUB_WORKSPACE/build/ci"
-              --target epoch_ci_headless epoch_texture_artifact_contract
             test_command: >
               python -m cmake -E chdir "$GITHUB_WORKSPACE/build/ci"
               ctest --output-on-failure

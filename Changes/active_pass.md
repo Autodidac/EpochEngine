@@ -1,11 +1,60 @@
 # Active Pass
 
-Updated September 20, 2026. This is the only current resume point. Historical
+Updated September 21, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
 
 ## Current Acceptance Result
+
+September 21 hang recovery supersedes the live-run checkpoint below. No Editor
+process remains. Windows recorded AppHangB1 for EpochEditor 0.90.1 at 02:26:36,
+report 309cc937-097c-4f86-8410-ce27c820517e; the WER archive retains Report.wer
+but no crash dump. Do not attribute the hang to graphics or claim its cause is
+proven. Stop native runtime probing after this hang; continue source/build-only.
+
+The red-theme Qwen run DID stage a proposal and reach the Debug compiler in
+`Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_117306283851780`.
+Its original `logs/ai_source_debug_build.msbuild.log` records a successful
+compile followed by unresolved WGL, GLAD and SDL symbols. EpochEditor.vcxproj
+omitted explicit opengl32.lib, glad.lib and SDL3.lib; these are now executable-
+owned dependencies. Do not ask the model to rewrite source for this host-link
+configuration failure. Preserve the candidate edits and original failure logs.
+
+Build-only diagnostic rerun of that same sandbox succeeded (exit 0) using
+`build/sandbox_link_diagnostic.props` imported via ForceImportBeforeCppTargets;
+the sandbox source/project files were not edited. Evidence is
+`build/sandbox_link_diagnostic.log`. This diagnostic ran from the normal build
+environment, not the sanitized production child environment. The permanent
+project fix also passed the root Release build in
+`build/sandbox_link_fix_release.log` and its pure engine contracts (exit 0).
+No candidate renderer was launched and no promotion occurred.
+
+Next gate: diagnose the parent hang around post-link-failure repair dispatch
+(Candidate log last dispatch 21:08:18, orchestrator last update 21:08:24), then
+prove a fresh production sandbox build, embedded independent PID, Keep/Choose,
+and successor build. Worker-ready publication occurs after transport completion;
+the nested model-selection lock is recursive, so neither is a proven deadlock.
+Current logs alone do not establish the hang cause. No release or Site READY.
+
+20:37 live resume checkpoint: Release PID 2364 is the only Editor process.
+Qwen 3.8 27B is active on "change the theme color to red tones". Current
+orchestrator `d041c6ffb925f8dc131a9731fe55fe95f6d2a82c3afff32d381b5bc2999529d8`
+under `x64/Release/cache/ai/orchestrations/engine` is awaiting proposal
+(phase 5); both proposal and candidate digests are empty. Two source-context
+materializations occurred at 20:26:51 and 20:34:45, NOT two compiled candidates.
+Do not restart or kill this run to collect already available evidence. Follow
+the current response, then inspect compiler dispatch or the next exact context
+packet. No docked candidate / Choose acceptance has occurred. The native UI
+helper still fails before initialization; do not claim interactive control.
+
+Local navigation checkpoint is `1efa4950`, following continuity `46a855b3`.
+Neither is pushed. Secondary CI fixes pending locally: build all default
+headless targets before unfiltered CTest (three matrix lanes), and explicitly
+include optional in authoring.gui_document_contract.cpp for Clang visibility.
+Fresh Windows configuration/build `build/ci-navigation-check` passed with
+CTest 13/13. Linux full-engine verification remains outstanding. No release
+or Site READY is justified yet. Preserve this state if limits interrupt work.
 
 Latest September 20 navigation repair (supersedes prior run notes below):
 Qwen 3.8 27B ran the operator objective "change the theme color to red tones".
