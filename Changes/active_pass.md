@@ -7,6 +7,25 @@ instructions. Ordering is in `roadmap.md`, durable requirements in
 
 ## Current Acceptance Result
 
+Latest September 20 navigation repair (supersedes prior run notes below):
+Qwen 3.8 27B ran the operator objective "change the theme color to red tones".
+The final valid context packet requested `gui.engine.cpp`, first_line 1,
+query `PaletteSprites`. Host admission stopped it at the three-expansion limit;
+no candidate was staged or built. Exact final model output is in the local
+LM Studio September 20 `.2.log` at 15:50:15. Preserve sandbox
+`Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_117305074778116`.
+
+Navigation now permits 24 bounded rounds rather than treating three useful
+source reads as exhausted retries. Identical current path/read selections are
+sent through the existing bounded correction path, without spending navigation
+or rematerializing a sandbox. Exact path, byte, digest and edit guards remain.
+Debug `build/source_navigation_debug.log` and Release
+`build/source_navigation_release.log` builds passed. Both rebuilt pure contract
+processes exited 0, including duplicate-selection and navigation-budget checks.
+The operator closed the old Editor; rebuilt Release reopened as PID 2364.
+Server still returns 401 without a token. Asked for session-only key entry and
+the same Qwen test; no live test result for this repair yet. No push or release.
+
 September 20 latest continuation: operator priority is AI repair and real
 two-build acceptance BEFORE any further push or release. GitHub main is
 `3331f362f7f9dec3595fb6971c7cbaac0673d7ec`; later local fixes are not on GitHub.

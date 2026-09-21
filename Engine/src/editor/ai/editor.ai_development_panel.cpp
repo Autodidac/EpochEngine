@@ -1487,7 +1487,9 @@ namespace epochengine::editor_ai_development_panel
         static constexpr std::size_t maximum_source_repair_attempts = 3u;
         static constexpr std::size_t maximum_model_reply_corrections = 2u;
         static constexpr std::size_t maximum_plan_reply_corrections = 1u;
-        static constexpr std::size_t maximum_source_context_expansions = 3u;
+        // Navigation is useful work, not a malformed-response retry. Keep the
+        // per-request evidence cap, but allow investigation across the project.
+        static constexpr std::size_t maximum_source_context_expansions = 24u;
 
         std::unique_ptr<editor_ai_development::DevelopmentController> controller{};
         std::unique_ptr<editor_ai_development::DevelopmentController> promotion_controller{};
@@ -4911,6 +4913,36 @@ namespace epochengine::editor_ai_development_panel
                 }
                 if (!campaign_reviewed_paths.empty())
                 {
+                    const bool samePaths = contextRequest.request.paths.size()
+                            == campaign_reviewed_paths.size()
+                        && std::ranges::all_of(contextRequest.request.paths,
+                            [&](const auto& path) {
+                                return std::ranges::find(campaign_reviewed_paths, path)
+                                    != campaign_reviewed_paths.end();
+                            });
+                    const bool sameReads = samePaths && std::ranges::all_of(
+                        contextRequest.request.paths, [&](const auto& path) {
+                            const auto requested = std::ranges::find(
+                                contextRequest.request.reads, path,
+                                &ai::development_proposal_codec::ContextRead::path);
+                            const auto prior = std::ranges::find(
+                                campaign_reviewed_reads, path,
+                                &ai::development_proposal_codec::ContextRead::path);
+                            const auto requestedLine = requested == contextRequest.request.reads.end()
+                                ? 0u : requested->first_line;
+                            const auto priorLine = prior == campaign_reviewed_reads.end()
+                                ? 0u : prior->first_line;
+                            const std::string_view requestedQuery = requested == contextRequest.request.reads.end()
+                                ? std::string_view{} : requested->query;
+                            const std::string_view priorQuery = prior == campaign_reviewed_reads.end()
+                                ? std::string_view{} : prior->query;
+                            return requestedLine == priorLine && requestedQuery == priorQuery;
+                        });
+                    if (sameReads)
+                        return queue_source_context_reply_correction(
+                            "These exact paths and read selectors are already in the current source context. "
+                            "Request a different first_line, a literal query, or another catalog path "
+                            "that resolves the missing dependency; do not repeat the same evidence.");
                     if (!source_context_reselection_pending)
                     {
                         if (source_context_expansions
@@ -8086,6 +8118,17 @@ namespace epochengine::editor_ai_development_panel
             return false;
         // A full prior working set must not suppress a new selection. Direct
         // context packets spend the same budget as insufficient-evidence retries.
+        expandingContextState.campaign_reviewed_paths = {
+            "Engine/src/renderers/opengl/opengl.context.cpp"};
+        expandingContextState.campaign_reviewed_reads.clear();
+        const auto repeatedContext = expandingContextState.stage_source_reply(
+            diagnosticInsufficientInput, revisedSelection, logical_time_now());
+        if (repeatedContext.action != HostAction::request_model_source_proposal
+            || repeatedContext.model_prompt.find("already in the current source context")
+                == std::string::npos
+            || expandingContextState.source_context_expansions != 1u
+            || !expandingContextState.pending_source_context_paths.empty())
+            return false;
         expandingContextState.campaign_reviewed_paths.clear();
         for (std::size_t index = 0u; index < maximum_source_context_paths; ++index)
             expandingContextState.campaign_reviewed_paths.push_back(
