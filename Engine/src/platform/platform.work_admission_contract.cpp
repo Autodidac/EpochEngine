@@ -16,7 +16,14 @@ namespace
 
     [[nodiscard]] int run_contract()
     {
-        Controller gate{};
+        Controller quick{};
+        if (quick.policy().cooldown_ms != 6'000u
+            || !quick.queue({1u, WorkKind::model}, 0u)
+            || quick.poll(0u, healthy(0u), false, false).remaining_ms != 6'000u
+            || quick.poll(5'999u, healthy(5'999u), false, false).ready()
+            || !quick.consume(1u, 6'000u, healthy(6'000u), false, false)) return 37;
+        // Also exercise a non-default configurable policy.
+        Controller gate{Policy{.cooldown_ms = 30'000u}};
         if (gate.poll(0u, {}, false, false).reason != Reason::idle) return 1;
         if (gate.queue({0u, WorkKind::model}, 0u)) return 2;
         if (gate.queue({1u, static_cast<WorkKind>(255u)}, 0u)) return 3;

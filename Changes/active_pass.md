@@ -7,6 +7,51 @@ instructions. Ordering is in `roadmap.md`, durable requirements in
 
 ## Current Acceptance Result
 
+September 21 latest continuation (supersedes hang recovery below): operator
+owns native testing now, explicitly answered "Leave runtime testing to me".
+Do not start a new GUI/model/candidate run without another request.
+
+The overnight run built three Debug candidates; each failed pure contracts
+with exit 7 before comparison. Actual failure evidence was in each private
+runtime `logs/Engine.Editor.SelfTest.log`, while redirected stdout was empty.
+The host now appends the engine test log to model repair diagnostics.
+Candidate `session_117308049391625` reproduced 14 failing contracts with its
+169-character TEMP root; the IDENTICAL binary with a 60-character private TEMP
+root cleared 13 failures, retaining a deeply nested development-panel fixture
+failure. No model-generated theme edit caused those shared path failures.
+
+Added Windows longPathAware manifest to Editor (MSBuild/CMake) and HeadlessCI
+(MSBuild). Host Windows LongPathsEnabled is already 1; no registry was changed.
+Rebuilt Release `build/long_path_release.log` succeeded; all pure contracts now
+pass with a 179-character private TEMP root, including the panel test, exit 0.
+Evidence: `build/long-path-proof/logs/Engine.Editor.SelfTest.log`. Default heavy
+work cooldown is six seconds; RAM/CPU, retirement and comparison gates remain.
+Dedicated CTest work_admission regression passed, including the six-second
+boundary and an explicit non-default 30-second policy fixture.
+
+Debug build `build/long_path_debug.log` and pure contracts also pass with a
+185-character private TEMP root; evidence is
+`build/long-path-debug-proof/logs/Engine.Editor.SelfTest.log`. HeadlessCI Debug
+build passed (`build/long_path_headless.log`), without running project profiles.
+Release executable SHA-256:
+`f3b943e891f6d5273cd85d73b314c4c2d03a70a24983fdad2732a016c0943180`.
+
+Manual Visual Studio build of a sandbox is NOT equivalent to the host build:
+the operator transcript attempts a fresh per-sandbox vcpkg install and fails
+because the installed vcpkg executable cannot read schema-version-2 tool data.
+The production host explicitly disables install/bootstrap and binds the original
+host dependency cache. Do not repair that by downloading another dependency tree
+per iteration or by changing source unrelated to the compiler configuration.
+Manual sandbox build convenience remains unfinished.
+
+Storage remains unfinished: context reselection and repair allocate fresh
+sessions, retaining compiled intermediates. Reuse/retention must not discard
+candidate edits, evidence or chosen ancestry. Old iteration folders disappeared
+during the operator's cleanup/rebuild; this pass deleted none. The operator's
+existing `Engine/Engine.vcxitems.filters` edits are unrelated and must not be
+staged. Next acceptance is still a real built candidate, embedded PID, choice,
+and successor build; do not publish or claim docking from contract proof alone.
+
 September 21 hang recovery supersedes the live-run checkpoint below. No Editor
 process remains. Windows recorded AppHangB1 for EpochEditor 0.90.1 at 02:26:36,
 report 309cc937-097c-4f86-8410-ce27c820517e; the WER archive retains Report.wer

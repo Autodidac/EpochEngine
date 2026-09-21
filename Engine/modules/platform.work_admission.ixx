@@ -35,7 +35,7 @@ export namespace epochengine::platform::work_admission
 
     struct Policy final
     {
-        std::uint64_t cooldown_ms{30'000u};
+        std::uint64_t cooldown_ms{6'000u};
         std::uint64_t maximum_sample_age_ms{5'000u};
         std::uint64_t minimum_available_memory_bytes{2ull * 1024ull * 1024ull * 1024ull};
         double minimum_available_memory_fraction{0.05};

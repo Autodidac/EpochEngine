@@ -1827,7 +1827,7 @@ namespace epochengine
                 editor.aiAuthoringStatus = coordinator.retirementBlocked
                     ? "Native retirement could not be confirmed. Restart Epoch before another model request."
                     : settling && coordinator.owner == 0u
-                        ? "Project-assistant request retained during the 30-second cooldown after heavy work."
+                        ? "Project-assistant request retained during the resource cooldown after heavy work."
                         : "Project-assistant request retained; waiting for active AI/build work or candidate comparison to finish.";
                 return false;
             }
@@ -1872,7 +1872,7 @@ namespace epochengine
             editor.aiWorkLocalHttp = action == nullptr;
             editor.aiWorkArtifactEpoch = editor.aiSourceArtifactEpoch;
             if (modelLease) editor.aiSourceModelLease = std::move(modelLease);
-            editor.aiWorkStatus = "Queued: checking host RAM/CPU and allowing a 30-second cooldown. No work has started.";
+            editor.aiWorkStatus = "Queued: checking host RAM/CPU and allowing a 6-second cooldown. No work has started.";
             return true;
         }
 
@@ -12927,8 +12927,12 @@ namespace epochengine
             result.summary += " Runtime data: " + runtimeData->generic_string() + ".";
             if (!result.succeeded)
             {
-                const std::string diagnostics =
-                    bounded_file_tail(logPath);
+                std::string diagnostics = bounded_file_tail(logPath);
+                // Engine contract failures are logger output, not stdout.
+                const auto contractLog = *runtimeData / "logs" / "Engine.Editor.SelfTest.log";
+                const auto contractDiagnostics = bounded_file_tail(contractLog);
+                if (!contractDiagnostics.empty())
+                    diagnostics += "\n" + contractDiagnostics;
                 if (!diagnostics.empty())
                 {
                     result.summary +=
@@ -22209,6 +22213,8 @@ namespace epochengine
                 trace.stage = "retained_request_identity";
                 AiHeavyWorkCoordinator requests{};
                 auto state = std::make_unique<EditorState>();
+                state->aiWorkAdmission = platform::work_admission::Controller{
+                    platform::work_admission::Policy{.cooldown_ms = 30'000u}};
                 AiChat projectChat{};
                 state->aiDeferredRequestKind = AiDeferredRequestKind::Authoring;
                 state->aiDeferredPrompt = "exact project prompt canary";
@@ -22335,6 +22341,9 @@ namespace epochengine
             AiHeavyWorkCoordinator coordinator{};
             auto first = std::make_unique<EditorState>();
             auto second = std::make_unique<EditorState>();
+            first->aiWorkAdmission = second->aiWorkAdmission =
+                platform::work_admission::Controller{
+                    platform::work_admission::Policy{.cooldown_ms = 30'000u}};
             AiChat chat{};
             const auto sample = [](std::uint64_t at)
             {

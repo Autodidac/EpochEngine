@@ -84,6 +84,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
+    <Manifest>
+      <AdditionalManifestFiles>$(MSBuildThisFileDirectory)..\..\resource\epoch.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
     <Link>
       <AdditionalDependencies>opengl32.lib;glad.lib;SDL3.lib;userenv.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
