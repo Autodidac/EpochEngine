@@ -172,6 +172,135 @@ export namespace epochengine::lighting
         std::vector<FrameLight> lights{};
     };
 
+    struct LightInfluenceVolume final
+    {
+        Vec3 center{};
+        float radius{};
+    };
+
+    struct LightInfluenceChange final
+    {
+        bool had_previous{};
+        bool has_current{};
+        LightInfluenceVolume previous{};
+        LightInfluenceVolume current{};
+    };
+
+    struct LightingInvalidationFrame final
+    {
+        std::uint64_t revision{};
+        bool global_invalidation{};
+        std::vector<LightInfluenceChange> changes{};
+
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return !global_invalidation && changes.empty();
+        }
+    };
+
+    [[nodiscard]] inline bool same_environment(
+        const LightingEnvironment& lhs,
+        const LightingEnvironment& rhs) noexcept
+    {
+        return lhs.ambient.r == rhs.ambient.r
+            && lhs.ambient.g == rhs.ambient.g
+            && lhs.ambient.b == rhs.ambient.b;
+    }
+
+    [[nodiscard]] inline bool same_light_desc(
+        const LightDesc& lhs,
+        const LightDesc& rhs) noexcept
+    {
+        return lhs.kind == rhs.kind
+            && lhs.color.r == rhs.color.r
+            && lhs.color.g == rhs.color.g
+            && lhs.color.b == rhs.color.b
+            && lhs.intensity == rhs.intensity
+            && lhs.position.x == rhs.position.x
+            && lhs.position.y == rhs.position.y
+            && lhs.position.z == rhs.position.z
+            && lhs.direction.x == rhs.direction.x
+            && lhs.direction.y == rhs.direction.y
+            && lhs.direction.z == rhs.direction.z
+            && lhs.range == rhs.range
+            && lhs.innerConeCosine == rhs.innerConeCosine
+            && lhs.outerConeCosine == rhs.outerConeCosine
+            && lhs.enabled == rhs.enabled;
+    }
+
+    [[nodiscard]] inline LightInfluenceVolume influence_volume(
+        const LightDesc& light) noexcept
+    {
+        // Point lights are spherical. A conservative sphere also encloses the
+        // complete spot cone, so every renderer can consume one backend-neutral
+        // damage primitive without under-invalidating pixels.
+        return {
+            .center = light.position,
+            .radius = light.kind == LightKind::Directional
+                ? (std::numeric_limits<float>::infinity)()
+                : (std::max)(0.001f, light.range)
+        };
+    }
+
+    [[nodiscard]] inline LightingInvalidationFrame diff_lighting_frames(
+        const LightingFrame* previous,
+        const LightingFrame& current)
+    {
+        LightingInvalidationFrame damage{};
+        damage.revision = current.revision;
+        if (!previous)
+        {
+            damage.global_invalidation = !current.lights.empty()
+                || !same_environment({}, current.environment);
+            return damage;
+        }
+
+        if (!same_environment(previous->environment, current.environment))
+        {
+            damage.global_invalidation = true;
+            return damage;
+        }
+
+        const std::size_t count = (std::max)(
+            previous->lights.size(), current.lights.size());
+        damage.changes.reserve(count);
+        for (std::size_t index = 0u; index < count; ++index)
+        {
+            const FrameLight* before = index < previous->lights.size()
+                ? &previous->lights[index]
+                : nullptr;
+            const FrameLight* after = index < current.lights.size()
+                ? &current.lights[index]
+                : nullptr;
+
+            if (before && after && same_light_desc(before->desc, after->desc))
+                continue;
+
+            if ((before && before->desc.kind == LightKind::Directional)
+                || (after && after->desc.kind == LightKind::Directional))
+            {
+                damage.global_invalidation = true;
+                damage.changes.clear();
+                return damage;
+            }
+
+            LightInfluenceChange change{};
+            if (before && before->desc.enabled && before->desc.intensity > 0.0f)
+            {
+                change.had_previous = true;
+                change.previous = influence_volume(before->desc);
+            }
+            if (after && after->desc.enabled && after->desc.intensity > 0.0f)
+            {
+                change.has_current = true;
+                change.current = influence_volume(after->desc);
+            }
+            if (change.had_previous || change.has_current)
+                damage.changes.push_back(change);
+        }
+        return damage;
+    }
+
     struct LightingMetrics final
     {
         std::size_t slotCount{};

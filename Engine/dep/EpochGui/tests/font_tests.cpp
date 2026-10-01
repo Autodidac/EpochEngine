@@ -1,3 +1,4 @@
+import epoch.gui;
 import epoch.gui.font;
 
 namespace font = epochengine::gui_lib::font;
@@ -29,5 +30,16 @@ int main()
 
     constexpr font::BitmapGlyph fallback = font::default_glyph('\x01');
     static_assert(font::pixel_on(fallback, 1, 0));
+
+    constexpr auto darkAssistant = epochengine::gui_lib::semantic_colors(
+        epochengine::gui_lib::SemanticTone::assistant, false);
+    constexpr auto lightEngine = epochengine::gui_lib::semantic_colors(
+        epochengine::gui_lib::SemanticTone::engine, true);
+    static_assert(epochengine::gui_lib::semantic_tone_count == 8u);
+    static_assert(darkAssistant.accent.r == 0x55);
+    static_assert(darkAssistant.background.b == 0x46);
+    static_assert(lightEngine.accent.r == 0xB8);
+    static_assert(epochengine::gui_lib::semantic_tone_name(
+        epochengine::gui_lib::SemanticTone::warning) == "warning");
     return 0;
 }

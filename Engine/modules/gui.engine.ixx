@@ -64,6 +64,18 @@ namespace epochengine::gui
         std::uint8_t r{}, g{}, b{}, a{ 255 };
     };
 
+    export enum class SemanticTone : std::uint8_t
+    {
+        neutral = 0,
+        muted,
+        info,
+        success,
+        warning,
+        error,
+        assistant,
+        engine
+    };
+
     export enum class ThemeVariant : std::uint8_t
     {
         DefaultDark = 0,
@@ -190,6 +202,13 @@ namespace epochengine::gui
         bool submitted{};
     };
 
+    export enum class TextInputKeyboardPolicy : std::uint8_t
+    {
+        focused,
+        focused_and_hovered
+    };
+
+
     export struct SourceEditorOptions
     {
         std::string_view id{};
@@ -225,6 +244,7 @@ namespace epochengine::gui
         float width{};
         bool enabled{ true };
         bool activate_on_press{};
+        SemanticTone tone{ SemanticTone::neutral };
     };
 
     export enum class TextMessageRole : std::uint8_t
@@ -233,7 +253,11 @@ namespace epochengine::gui
         user,
         assistant,
         system,
-        error
+        info,
+        success,
+        warning,
+        error,
+        engine
     };
 
     export struct ConsoleWindowOptions
@@ -252,12 +276,15 @@ namespace epochengine::gui
         std::string* input{ nullptr };
         std::size_t max_input_chars{ 4096 };
         bool multiline_input{ false };
+        TextInputKeyboardPolicy input_keyboard_policy{
+            TextInputKeyboardPolicy::focused };
         bool show_send_button{ false };
         bool send_button_enabled{ true };
         float send_button_width{ 96.0f };
         std::string_view send_button_label{ "Send >" };
         std::string_view task_label{};
         std::string_view task_value{};
+        SemanticTone task_tone{ SemanticTone::neutral };
         std::string* task_edit_buffer{ nullptr };
         std::size_t task_max_input_chars{ 1024 };
         bool task_editing{};
@@ -1119,7 +1146,9 @@ namespace epochengine::gui
     export EditBoxResult edit_box(std::string& text,
         Vec2 size,
         std::size_t max_chars = 0,
-        bool multiline = false) noexcept;
+        bool multiline = false,
+        TextInputKeyboardPolicy keyboard_policy =
+            TextInputKeyboardPolicy::focused) noexcept;
     export void select_all_text_in_edit_box(std::string& text) noexcept;
     export SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept;
     export [[nodiscard]] std::string clipboard_text() noexcept;
@@ -1134,6 +1163,8 @@ namespace epochengine::gui
 
     export void label(std::string_view text) noexcept;
     export void wrapped_label(std::string_view text, float width = 0.0f) noexcept;
+    export void semantic_block(std::string_view text, SemanticTone tone,
+        float max_width = 0.0f) noexcept;
     export void property_row(std::string_view label, std::string_view value, float label_width = 152.0f) noexcept;
     export float wrapped_text_height(std::string_view text, float width = 0.0f) noexcept;
     export float measure_wrapped_label_height(std::string_view text, float width = 0.0f) noexcept;

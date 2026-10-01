@@ -1809,3 +1809,28 @@ operator-review evidence.
 - keep local compiled AI artifacts out of the repo
 - when investigating backend issues, prefer backend-local fixes over broad
   multiplexer edits unless the shared layer is clearly proven at fault
+
+
+## 3D selection and benchmark workflow
+
+The scene editor selection model is a set with one primary object.
+
+- Normal click selects one object.
+- `Shift + Left Click` toggles an object's membership.
+- Dragging empty 3D viewport space performs rectangle/marquee selection.
+- Dragging any selected object moves the whole selection through one scene-document transaction.
+- +4/+8 Cube actions create and select the batch atomically.
+
+For a repeatable event-render benchmark, select a movable object and use **Properties -> Movement / Benchmark -> Attach Oscillator**. The editable example source is also available in ProjectLauncher's scripts directory. Press Play before interpreting movement-driven dirty-region results.
+
+Undo/Redo retains inactive historical slots for temporal reconstruction, but inactive identities do not reserve an ObjectId. Creating a new branch after Undo must remain valid and must invalidate the obsolete redo branch normally.
+
+## MSVC editor and generated-project entry ownership
+
+`Engine.sln` is the engine/editor development solution. It exposes `Debug | x64`, `Release | x64`, and `Debug+Release | x64`; the combined configuration executes the two normal x64 builds sequentially. Generated ProjectLauncher projects are not normal solution targets.
+
+The normal `EpochEditor` executable intentionally relies on the engine's internal legacy `main`/`wWinMain` path. `epoch.editor_entry.cpp` is a thin editor shell and does not own application entry. Therefore `ENGINE_STATICLIB` alone must not suppress legacy entry ownership.
+
+Generated child/static-runtime builds are the separate mode: they pass `EPOCH_MAIN_IN_MAIN_CPP=1` when compiling their runtime and compile generated `source/epoch.main.cpp` as the executable entry. The CMake `EPOCH_BUILD_STATIC_RUNTIME` path follows the same rule.
+
+The bundled ProjectLauncher resolves engine/dependency roots relative to its extracted source tree; generated packages must not contain development-worktree absolute paths.

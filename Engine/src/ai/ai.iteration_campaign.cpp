@@ -69,6 +69,7 @@ namespace epochengine::ai::iteration_campaign
             if (source.target_kind == IterationTargetKind::engine_source)
             {
                 return (source.kind == SourceAuthorityKind::explicit_checkout
+                        || source.kind == SourceAuthorityKind::local_snapshot
                         || source.kind == SourceAuthorityKind::verified_cache)
                     && !source.source_version.empty()
                     && source.source_version.size() <= 64u
@@ -451,7 +452,8 @@ namespace epochengine::ai::iteration_campaign
                 || !number("count_source_operations", report.counters.source_operations)
                 || !number("count_validation_records", report.counters.validation_records)
                 || !number("target_kind", target_kind) || target_kind > 1u
-                || !number("source_kind", source_kind) || source_kind > 3u)
+                || !number("source_kind", source_kind)
+                || source_kind > static_cast<unsigned>(iteration_session::SourceAuthorityKind::local_snapshot))
                 return false;
             report.session.source.target_kind =
                 static_cast<iteration_session::IterationTargetKind>(target_kind);

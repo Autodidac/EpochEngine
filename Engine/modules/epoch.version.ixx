@@ -51,7 +51,7 @@ module;
 #if defined(EPOCH_OVERRIDE_VERSION_REVISION)
 #  define EPOCH_VERSION_REVISION_VALUE EPOCH_OVERRIDE_VERSION_REVISION
 #else
-#  define EPOCH_VERSION_REVISION_VALUE 1
+#  define EPOCH_VERSION_REVISION_VALUE 33
 #endif
 
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR)
@@ -69,7 +69,7 @@ module;
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION)
 #  define EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION
 #else
-#  define EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE 1
+#  define EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE 22
 #endif
 
 #if defined(EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_MAJOR)
@@ -87,7 +87,7 @@ module;
 #if defined(EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION)
 #  define EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION
 #else
-#  define EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE 1
+#  define EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE 22
 #endif
 
 #if defined(EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR)
@@ -199,8 +199,9 @@ namespace epochengine
         return kEngineName.data();
     }
 
-    // Historical release names (for example 0.89.06) are immutable. New
-    // feature lines use ordinary semantic-version spelling, such as 0.90.1.
+    // Historical release names remain immutable.  The 0.90 line keeps the
+    // two-digit patch spelling used by the current development series, e.g.
+    // 0.90.02, while later major/minor lines may use ordinary semver spelling.
     [[nodiscard]] std::array<char, 64> format_version_components(
         int version_major, int version_minor, int version_revision) noexcept
     {
@@ -211,7 +212,7 @@ namespace epochengine
         *cursor++ = '.';
         cursor = std::to_chars(cursor, end, version_minor).ptr;
         *cursor++ = '.';
-        if (version_major == 0 && version_minor <= 89
+        if (version_major == 0 && version_minor <= 90
             && version_revision >= 0 && version_revision < 10)
             *cursor++ = '0';
         cursor = std::to_chars(cursor, end, version_revision).ptr;

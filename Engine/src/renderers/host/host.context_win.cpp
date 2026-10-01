@@ -93,6 +93,7 @@ import systems.registry;
 import perf.tier;
 import platform.budgets;
 import render.context_frame;
+import render.event_debug;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;
@@ -717,7 +718,13 @@ namespace
 
         const int x = GET_X_LPARAM(lp);
         const int y = GET_Y_LPARAM(lp);
-        return x >= 0 && x < width && y >= 0 && y < hotspotHeight;
+        // The backend child can host real GUI controls in this same top strip.
+        // Never steal ordinary left-clicks from those controls. Native context
+        // dragging is an explicit Alt+drag gesture instead.
+        const bool dragModifier = (::GetKeyState(VK_MENU) & 0x8000) != 0;
+        return dragModifier
+            && x >= 0 && x < width
+            && y >= 0 && y < hotspotHeight;
     }
 
     [[nodiscard]] inline RECT screen_client_rect(HWND hwnd) noexcept
@@ -1265,7 +1272,7 @@ namespace
             return;
 
         const auto* window = resolve_window_data_for_hwnd(drag.draggedWindow);
-        if (!window || !window->guiRoute.empty())
+        if (!window)
             return;
 
         HWND targetParent = drag.originalParent;
@@ -1275,8 +1282,9 @@ namespace
             return;
 
         epochengine::gui::DockGuideLayout layout{};
+        const bool routedPanel = !window->guiRoute.empty();
         if (!make_parent_dock_guide_layout(
-                parent, drag.lastMousePos, false, layout))
+                parent, drag.lastMousePos, routedPanel, layout))
         {
             return;
         }
@@ -1309,10 +1317,20 @@ namespace
             ::FillRect(hdc, &rect, guide.hovered ? hoveredGuideBrush : guideBrush);
             ::FrameRect(hdc, &rect, previewFrameBrush);
 
-            const wchar_t* label = guide.target
-                == epochengine::gui::DockGuideTarget::left_context
-                ? L"Left Context"
-                : L"Right Context";
+            const wchar_t* label =
+                guide.target == epochengine::gui::DockGuideTarget::left_tabs
+                    ? L"Left Tabs"
+                : guide.target == epochengine::gui::DockGuideTarget::right_tabs
+                    ? L"Right Tabs"
+                : guide.target == epochengine::gui::DockGuideTarget::bottom_left_tabs
+                    ? L"Bottom Left"
+                : guide.target == epochengine::gui::DockGuideTarget::bottom_right_tabs
+                    ? L"Bottom Right"
+                : guide.target == epochengine::gui::DockGuideTarget::left_context
+                    ? L"Left Context"
+                : guide.target == epochengine::gui::DockGuideTarget::right_context
+                    ? L"Right Context"
+                    : L"Dock";
             ::DrawTextW(
                 hdc,
                 label,
@@ -2500,19 +2518,64 @@ namespace
         std::wstring baseTitle{};
         std::uint64_t frameCount = 0;
         double fps = 0.0;
+        std::wstring renderStatus{};
         std::chrono::steady_clock::time_point lastSample{};
     };
 
     std::mutex g_nativeTitleFpsMutex;
     std::unordered_map<const epochengine::core::WindowData*, NativeTitleFpsState> g_nativeTitleFps;
 
-    [[nodiscard]] std::wstring make_native_fps_title(std::wstring_view base, double fps)
+    [[nodiscard]] std::wstring make_native_fps_title(
+        std::wstring_view base,
+        double fps,
+        std::wstring_view renderStatus = {})
     {
         std::wstring title{ base };
-        title += L" | host ";
+        title += L" | ";
         title += std::to_wstring(static_cast<long long>(fps + 0.5));
         title += L" FPS";
+        if (!renderStatus.empty())
+        {
+            title += L" | ";
+            title += renderStatus;
+        }
         return title;
+    }
+
+    [[nodiscard]] std::wstring native_render_rate_status(
+        const epochengine::core::WindowData& window)
+    {
+        if (window.type != epochengine::core::ContextType::OpenGL)
+            return {};
+
+        const auto snapshot = epochengine::render_event_debug::snapshot();
+        if (snapshot.benchmark_enabled
+            && snapshot.selective.samples > 0u
+            && snapshot.full_baseline.samples > 0u)
+        {
+            const auto selectiveFps = epochengine::render_event_debug::render_fps(
+                snapshot.selective);
+            const auto fullFps = epochengine::render_event_debug::render_fps(
+                snapshot.full_baseline);
+            return L"A/B S "
+                + std::to_wstring(static_cast<long long>(selectiveFps + 0.5))
+                + L" / F "
+                + std::to_wstring(static_cast<long long>(fullFps + 0.5))
+                + L" render FPS";
+        }
+
+        const auto& timing = epochengine::render_event_debug::timing_for_path(
+            snapshot, snapshot.path);
+        if (timing.samples == 0u)
+            return {};
+
+        std::wstring status = epochengine::text::widen_utf16(
+            epochengine::render_event_debug::path_name(snapshot.path));
+        status += L" ";
+        status += std::to_wstring(static_cast<long long>(
+            epochengine::render_event_debug::render_fps(timing) + 0.5));
+        status += L" render FPS";
+        return status;
     }
 
     void set_native_title_if_alive(HWND hwnd, const std::wstring& title) noexcept
@@ -2553,8 +2616,10 @@ namespace
                 : 0.0;
             state.frameCount = 0;
             state.lastSample = now;
+            state.renderStatus = native_render_rate_status(window);
 
-            childTitle = make_native_fps_title(state.baseTitle, state.fps);
+            childTitle = make_native_fps_title(
+                state.baseTitle, state.fps, state.renderStatus);
             parentTitle = L"Epoch Docking";
 
             for (const auto& [_, sampled] : g_nativeTitleFps)
@@ -2567,6 +2632,12 @@ namespace
                 parentTitle += L" ";
                 parentTitle += std::to_wstring(static_cast<long long>(sampled.fps + 0.5));
                 parentTitle += L" FPS";
+                if (!sampled.renderStatus.empty())
+                {
+                    parentTitle += L" [";
+                    parentTitle += sampled.renderStatus;
+                    parentTitle += L"]";
+                }
             }
 
             shouldUpdate = true;
@@ -5585,7 +5656,7 @@ namespace epochengine::core
                 drag.originalParent = stored_dock_parent(hwnd);
             drag.lastMousePos = screen_mouse_point(hwnd, msg, lParam);
             drag.dragStartMousePos = drag.lastMousePos;
-            if (drag.originalParent && window && window->guiRoute.empty())
+            if (drag.originalParent && window)
                 ::InvalidateRect(drag.originalParent, nullptr, FALSE);
 
             HWND dragFrame = hwnd;
@@ -5669,7 +5740,7 @@ namespace epochengine::core
             }
 
             drag.lastMousePos = pt;
-            if (drag.originalParent && window && window->guiRoute.empty())
+            if (drag.originalParent && window)
                 ::InvalidateRect(drag.originalParent, nullptr, FALSE);
             const bool proxyDragActivated =
                 window

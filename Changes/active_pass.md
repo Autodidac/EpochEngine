@@ -1,11 +1,35 @@
 # Active Pass
 
-Updated September 21, 2026. This is the only current resume point. Historical
+Updated September 30, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
 
 ## Current Acceptance Result
+
+September 30 source-sync pass supersedes the older push ordering below. The
+operator supplied `EpochEngine-0.90.33-msvc-internal-entry-dual-build.zip` and
+explicitly requested a source commit on GitHub and a matching Site handoff.
+The archive is merged with the cumulative AI discovery and previous local
+long-path, sandbox linkage, six-second admission, and saved-plan fixes. Version
+identity is now **0.90.33 source preparation**, not a verified binary release.
+New renderer/editor/neuromorphic systems and the Debug+Release solution
+configuration remain subject to their documented runtime acceptance.
+
+Source-name validation passes for 610 files. Build/contract results for this
+exact integration are recorded in `Changes/source_sync_2026-09-30.md` before
+the commit. No GUI, model, candidate, generated-project, or GPU test is part of
+this source-sync request; native testing remains with the operator. Do not
+claim successful Qwen comparison, Choose, successor build, or confinement from
+this checkpoint. Generated Projects, runtime caches, import staging and the
+operator's unrelated local deletions/archives are excluded from the commit.
+The Site handoff must name the exact pushed SHA, mirror source additively, and
+leave immutable historical releases and the stable context branch unchanged.
+
+Next production gate after this requested checkpoint: repair any reported pure
+contract regressions, then obtain operator evidence for the real independent
+candidate PID, embedded Keep/Choose comparison and successor build. Preserve
+the older evidence below as history, not as proof for the newly merged tree.
 
 September 21 latest continuation (supersedes hang recovery below): operator
 owns native testing now, explicitly answered "Leave runtime testing to me".

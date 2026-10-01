@@ -389,77 +389,77 @@ namespace epochengine::core
             guiOverlayPriority.store(enabled, std::memory_order_relaxed);
         }
 
-        bool is_key_held_safe(input::Key k) const noexcept
+        [[nodiscard]] bool has_input_focus_safe() const noexcept
         {
-        #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            const auto has_focus = [this]() noexcept
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            const auto belongs_to_context = [this](HWND candidate) noexcept
             {
-                HWND focused = nullptr;
-                GUITHREADINFO guiInfo{};
-                guiInfo.cbSize = sizeof(guiInfo);
-                if (::GetGUIThreadInfo(0, &guiInfo))
-                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
-                if (!focused)
-                    focused = ::GetFocus();
-                if (!focused)
+                if (!candidate || ::IsWindow(candidate) == FALSE)
                     return false;
 
-                if (hwnd && focused == hwnd)
-                    return true;
+                const auto matches = [candidate](HWND owned) noexcept
+                {
+                    return owned
+                        && ::IsWindow(owned) != FALSE
+                        && (candidate == owned || ::IsChild(owned, candidate));
+                };
 
+                if (matches(hwnd))
+                    return true;
                 if (windowData)
                 {
-                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
+                    if (matches(windowData->hwndChild)
+                        || matches(windowData->host_hwnd)
+                        || matches(windowData->hwnd))
+                    {
                         return true;
-                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
-                        return true;
-                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
-                        return true;
+                    }
                 }
-
                 return false;
             };
 
-            if ((hwnd || windowData) && !has_focus())
+            const HWND foreground = ::GetForegroundWindow();
+            DWORD foregroundProcessId{};
+            if (!foreground
+                || ::GetWindowThreadProcessId(foreground, &foregroundProcessId) == 0
+                || foregroundProcessId != ::GetCurrentProcessId())
+            {
                 return false;
-        #endif
+            }
+
+            HWND focused = nullptr;
+            GUITHREADINFO guiInfo{};
+            guiInfo.cbSize = sizeof(guiInfo);
+            if (::GetGUIThreadInfo(0, &guiInfo))
+                focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
+            if (!focused)
+                focused = ::GetFocus();
+
+            // Focus can temporarily report only the top-level foreground host
+            // while a child backend is transitioning. Accept that host only when
+            // it belongs to this context; never accept another Epoch viewport.
+            return belongs_to_context(focused)
+                || (!focused && belongs_to_context(foreground));
+#else
+            return true;
+#endif
+        }
+
+        bool is_key_held_safe(input::Key k) const noexcept
+        {
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            if ((hwnd || windowData) && !has_input_focus_safe())
+                return false;
+#endif
             return is_key_held ? is_key_held(k) : false;
         }
 
         bool is_key_down_safe(input::Key k) const noexcept
         {
-        #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            const auto has_focus = [this]() noexcept
-            {
-                HWND focused = nullptr;
-                GUITHREADINFO guiInfo{};
-                guiInfo.cbSize = sizeof(guiInfo);
-                if (::GetGUIThreadInfo(0, &guiInfo))
-                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
-                if (!focused)
-                    focused = ::GetFocus();
-                if (!focused)
-                    return false;
-
-                if (hwnd && focused == hwnd)
-                    return true;
-
-                if (windowData)
-                {
-                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
-                        return true;
-                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
-                        return true;
-                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
-                        return true;
-                }
-
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            if ((hwnd || windowData) && !has_input_focus_safe())
                 return false;
-            };
-
-            if ((hwnd || windowData) && !has_focus())
-                return false;
-        #endif
+#endif
             return is_key_down ? is_key_down(k) : false;
         }
 
@@ -512,45 +512,13 @@ namespace epochengine::core
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            const auto has_focus = [this]() noexcept
-            {
-                HWND focused = nullptr;
-                GUITHREADINFO guiInfo{};
-                guiInfo.cbSize = sizeof(guiInfo);
-                if (::GetGUIThreadInfo(0, &guiInfo))
-                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
-                if (!focused)
-                    focused = ::GetFocus();
-                if (!focused)
-                    return false;
-
-                if (hwnd && focused == hwnd)
-                    return true;
-
-                if (windowData)
-                {
-                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
-                        return true;
-                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
-                        return true;
-                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
-                        return true;
-                }
-
+            if ((hwnd || windowData) && !has_input_focus_safe())
                 return false;
-            };
-
-            if (get_hwnd() != nullptr && has_focus())
-            {
-                const int vk =
-                    (b == input::MouseButton::MouseLeft) ? VK_LBUTTON :
-                    (b == input::MouseButton::MouseRight) ? VK_RBUTTON :
-                    (b == input::MouseButton::MouseMiddle) ? VK_MBUTTON :
-                    0;
-                if (vk != 0)
-                    return (::GetAsyncKeyState(vk) & 0x8000) != 0;
-            }
 #endif
+            // Keep held/pressed semantics in the input engine. Calling
+            // GetAsyncKeyState here would bypass the per-frame edge tracker and,
+            // for the pressed query below, turn a held button into a fresh press
+            // every frame.
             return is_mouse_button_held ? is_mouse_button_held(b)
                 : input::is_mouse_button_held(b);
         }
@@ -558,47 +526,57 @@ namespace epochengine::core
         bool is_mouse_button_down_safe(input::MouseButton b) const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            const auto has_focus = [this]() noexcept
-            {
-                HWND focused = nullptr;
-                GUITHREADINFO guiInfo{};
-                guiInfo.cbSize = sizeof(guiInfo);
-                if (::GetGUIThreadInfo(0, &guiInfo))
-                    focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
-                if (!focused)
-                    focused = ::GetFocus();
-                if (!focused)
-                    return false;
-
-                if (hwnd && focused == hwnd)
-                    return true;
-
-                if (windowData)
-                {
-                    if (windowData->hwndChild && (focused == windowData->hwndChild || ::IsChild(windowData->hwndChild, focused)))
-                        return true;
-                    if (windowData->host_hwnd && (focused == windowData->host_hwnd || ::IsChild(windowData->host_hwnd, focused)))
-                        return true;
-                    if (windowData->hwnd && (focused == windowData->hwnd || ::IsChild(windowData->hwnd, focused)))
-                        return true;
-                }
-
+            if ((hwnd || windowData) && !has_input_focus_safe())
                 return false;
-            };
-
-            if (get_hwnd() != nullptr && has_focus())
-            {
-                const int vk =
-                    (b == input::MouseButton::MouseLeft) ? VK_LBUTTON :
-                    (b == input::MouseButton::MouseRight) ? VK_RBUTTON :
-                    (b == input::MouseButton::MouseMiddle) ? VK_MBUTTON :
-                    0;
-                if (vk != 0)
-                    return (::GetAsyncKeyState(vk) & 0x8000) != 0;
-            }
 #endif
             return is_mouse_button_down ? is_mouse_button_down(b)
                 : input::is_mouse_button_down(b);
+        }
+
+        [[nodiscard]] bool action_modifiers_satisfied_safe(
+            const input::ActionBinding& binding) const noexcept
+        {
+            const bool control = is_key_held_safe(input::Key::LeftControl)
+                || is_key_held_safe(input::Key::RightControl);
+            const bool shift = is_key_held_safe(input::Key::LeftShift)
+                || is_key_held_safe(input::Key::RightShift);
+            const bool alt = is_key_held_safe(input::Key::LeftAlt)
+                || is_key_held_safe(input::Key::RightAlt);
+            return (!binding.control || control)
+                && (!binding.shift || shift)
+                && (!binding.alt || alt);
+        }
+
+        [[nodiscard]] bool action_held_safe(input::Action action) const
+        {
+            const input::ActionBinding binding = input::binding_for(action);
+            if (!action_modifiers_satisfied_safe(binding))
+                return false;
+            if (binding.mouse != input::MouseButton::MouseCount
+                && is_mouse_button_held_safe(binding.mouse))
+            {
+                return true;
+            }
+            return (binding.primary != input::Key::Unknown
+                    && is_key_held_safe(binding.primary))
+                || (binding.secondary != input::Key::Unknown
+                    && is_key_held_safe(binding.secondary));
+        }
+
+        [[nodiscard]] bool action_pressed_safe(input::Action action) const
+        {
+            const input::ActionBinding binding = input::binding_for(action);
+            if (!action_modifiers_satisfied_safe(binding))
+                return false;
+            if (binding.mouse != input::MouseButton::MouseCount
+                && is_mouse_button_down_safe(binding.mouse))
+            {
+                return true;
+            }
+            return (binding.primary != input::Key::Unknown
+                    && is_key_down_safe(binding.primary))
+                || (binding.secondary != input::Key::Unknown
+                    && is_key_down_safe(binding.secondary));
         }
 
         int registry_get_safe(const char* key) const noexcept

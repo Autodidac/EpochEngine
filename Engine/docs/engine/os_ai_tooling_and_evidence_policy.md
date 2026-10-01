@@ -238,8 +238,8 @@ These paths have build-safe contracts; native interaction proof remains separate
 Model-name heuristics are not capability evidence. Explicitly selected unknown
 agentic models receive advisory guidance, not a brand-derived refusal. Host
 context limits, source/packet authority and independent compiler/validation
-evidence remain admission requirements. The automatic or remembered Nemotron
-helper is not silently substituted for an explicitly chosen coding worker.
+evidence remain admission requirements. The Qwen3.8 default is not silently substituted for an explicitly chosen
+coding worker, and no other detected model silently replaces the current choice.
 
 `ai.mcp_supervisor_adapter` is registered in the Engine source/build graph and
 the build-safe aggregate contract. It remains a transport-neutral protocol
@@ -818,7 +818,12 @@ rejected packet may receive at most two complete, fresh correction attempts
 carrying only a bounded deterministic host diagnostic and the same reviewed
 evidence. No correction stages bytes, changes paths, bypasses review, or expands
 authority. Sharing a newly reviewed context resets the prior request's correction
-and diagnostic-recheck state.
+and diagnostic-recheck state. Model-supplied `first_line` and literal `query`
+selectors are navigation hints inside an already-approved source path, not new
+authority. If a hinted line is stale/out of range or a literal no longer exists,
+the host keeps the approved file and falls back to its objective-centered bounded
+window instead of rejecting the whole source selection. The fallback is recorded
+in Candidate Lab observability and never expands the approved path set.
 
 OpenAI-compatible workloads leave the selected provider's reasoning mode unchanged.
 They do not send an unsupported `reasoning_effort: none`/off override or a Qwen
@@ -844,8 +849,13 @@ Ordinary chat and authoring allow 180 seconds; model inventory discovery allows
 total multi-iteration mission. Window focus does not cancel the
 independent HTTP worker. One early transport-operation, API, hidden-reasoning,
 malformed-schema, or empty-content failure may retry with an explicit final-answer
-request. Expiry of the whole wall budget does not automatically restart the same
-expensive generation. Cancellation and failed native retirement are never retried.
+request. If a source-selection or source-proposal request remains reasoning-only
+after that transport-level recovery, Candidate Lab keeps the same campaign/pass
+and may issue at most two host-diagnosed structured-response corrections against
+the same authority and reviewed evidence. Exhausting that bounded recovery stops
+the pass; it does not silently approve reasoning text as source output. Expiry of
+the whole wall budget does not automatically restart the same expensive
+generation. Cancellation and failed native retirement are never retried.
 Timeout diagnostics preserve elapsed time, configured limit and attempt number.
 The default local LM Studio endpoint (HTTP loopback on port 1234) accepts a
 session-only credential through Model Settings > Paste API Key. Clear API Key

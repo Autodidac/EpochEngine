@@ -88,6 +88,7 @@ import systems.registry;
 import perf.tier;
 import platform.budgets;
 import render.context_frame;
+import render.event_debug;
 
 // ---- helpers ----
 import utility.string_converter;     // epochengine::text::narrow_utf8
@@ -299,19 +300,56 @@ namespace
             std::wstring baseTitle{};
             std::uint64_t frameCount = 0;
             double fps = 0.0;
+            std::wstring renderStatus{};
             std::chrono::steady_clock::time_point lastSample{};
         };
 
         std::mutex g_nativeTitleFpsMutex;
         std::unordered_map<const WindowData*, NativeTitleFpsState> g_nativeTitleFps;
 
-        [[nodiscard]] std::wstring make_native_fps_title(std::wstring_view base, double fps)
+        [[nodiscard]] std::wstring make_native_fps_title(
+            std::wstring_view base, double fps, std::wstring_view renderStatus = {})
         {
             std::wstring title{ base };
-            title += L" | host ";
+            title += L" | ";
             title += std::to_wstring(static_cast<long long>(fps + 0.5));
             title += L" FPS";
+            if (!renderStatus.empty())
+            {
+                title += L" | ";
+                title += renderStatus;
+            }
             return title;
+        }
+
+        [[nodiscard]] std::wstring native_render_rate_status(const WindowData& window)
+        {
+            if (window.type != ContextType::OpenGL)
+                return {};
+            const auto snapshot = epochengine::render_event_debug::snapshot();
+            if (snapshot.benchmark_enabled
+                && snapshot.selective.samples > 0u
+                && snapshot.full_baseline.samples > 0u)
+            {
+                return L"A/B S "
+                    + std::to_wstring(static_cast<long long>(
+                        epochengine::render_event_debug::render_fps(snapshot.selective) + 0.5))
+                    + L" / F "
+                    + std::to_wstring(static_cast<long long>(
+                        epochengine::render_event_debug::render_fps(snapshot.full_baseline) + 0.5))
+                    + L" render FPS";
+            }
+            const auto& timing = epochengine::render_event_debug::timing_for_path(
+                snapshot, snapshot.path);
+            if (timing.samples == 0u)
+                return {};
+            std::wstring status = epochengine::text::widen_utf16(
+                epochengine::render_event_debug::path_name(snapshot.path));
+            status += L" ";
+            status += std::to_wstring(static_cast<long long>(
+                epochengine::render_event_debug::render_fps(timing) + 0.5));
+            status += L" render FPS";
+            return status;
         }
 
         void record_native_title_frame(Display* display, ::Window xwin, WindowData& window)
@@ -345,7 +383,9 @@ namespace
                     : 0.0;
                 state.frameCount = 0;
                 state.lastSample = now;
-                title = make_native_fps_title(state.baseTitle, state.fps);
+                state.renderStatus = native_render_rate_status(window);
+                title = make_native_fps_title(
+                    state.baseTitle, state.fps, state.renderStatus);
             }
 
             const auto narrow = epochengine::text::narrow_utf8(title);

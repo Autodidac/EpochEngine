@@ -802,28 +802,33 @@ export namespace epochengine::ai
     [[nodiscard]] inline std::string authoring_plan_protocol_prompt()
     {
         return
-            "Return only this exact line protocol; do not use Markdown or prose outside it:\n"
+            "Return only one bounded Epoch authoring plan in this exact envelope; do not use Markdown or prose outside it:\n"
             "EPOCH_AUTHORING_PLAN_V1\n"
             "TITLE short title\n"
-            "SUMMARY one sentence\n"
-            "CALL scene.clear scope=all\n"
-            "CALL scene.reconcile archetype=ground count=1\n"
-            "CALL scene.transform object_id=42 position=0,-0.5,0\n"
-            "CALL scene.create archetype=cube count=1\n"
-            "CALL gui.create widget=button count=1\n"
+            "SUMMARY one sentence describing the single visible change\n"
+            "CALL tool.name name=value\n"
+            "END\n\n"
+            "Emit exactly one CALL line. Replace tool.name and its arguments with one allowed operation below; never copy multiple operations into the response.\n"
+            "If one critical user detail is missing and guessing would make the change unsafe or target the wrong object, do not invent it. Return only:\n"
+            "EPOCH_AUTHORING_QUESTION_V1\n"
+            "QUESTION one concise blocking question\n"
             "END\n"
-            "Allowed scene archetypes: cube, ground, light, spawn, camera.\n"
-            "Allowed GUI widgets: panel, button, text, image, image_button, tabs, input, slider, scroll.\n"
+            "Allowed operations and arguments:\n"
+            " - scene.clear: scope=all\n"
+            " - scene.create: archetype=<cube|ground|light|spawn|camera> and optional count=1..8\n"
+            " - scene.reconcile: archetype=<cube|ground|light|spawn|camera> and count=0..8\n"
+            " - scene.transform: object_id=<stable id> and one or more of position=x,y,z rotation=x,y,z scale=x,y,z; optional placement=<support|free>\n"
+            " - gui.create: widget=<panel|button|text|image|image_button|tabs|input|slider|scroll> and optional count=1..8\n"
             "Treat the supplied canonical scene inventory as authoritative. Reuse existing objects instead of duplicating them.\n"
-            "Use scene.reconcile with count 0 through 8 when the request describes a desired final count. It preserves matching objects and creates or removes only the difference.\n"
+            "Use scene.reconcile when the request describes a desired final count. It preserves matching objects and creates or removes only the difference.\n"
             "scene.reconcile changes counts only. Use scene.transform with the exact stable object_id from the inventory to change position, rotation, or scale. Vector values are x,y,z without spaces.\n"
             "Solid meshes default to placement=support and Epoch snaps their lower face to the primary support surface after position or scale changes. Use placement=free only when the operator explicitly requests free vertical placement.\n"
             "Use scene.create only for explicitly additive requests. Use scene.clear scope=all only when the operator explicitly asks to clear, replace, reset, or start over, and disclose that removal in SUMMARY.\n"
             "When a request describes a complete final scene, reconcile every constrained archetype, including count=0 for conflicting managed archetypes. Preserve editor infrastructure unless removal is explicitly required.\n"
-            "Propose exactly one smallest useful visible change. Return exactly one CALL line; every next change requires a fresh scene inventory and separate operator approval.\n"
-            "scene.create and gui.create count is optional and must be 1 through 8. "
+            "Propose exactly one smallest useful visible change. Every later change requires a fresh scene inventory and separate operator approval.\n"
             "Do not request files, source edits, native commands, Git, builds, runs, network access, updater work, or approval.";
     }
+
     enum class ToolPlanCode : std::uint8_t
     {
         ready,
@@ -1100,6 +1105,10 @@ export namespace epochengine::ai
             "CALL project.inspect\n"
             "END\n"
             "Choose exactly one CALL from: project.inspect, project.save, project.build, project.run, project.test, diagnostics.read.\n"
+            "If one critical user detail is missing and selecting a host operation would be a guess, return only:\n"
+            "EPOCH_TOOL_QUESTION_V1\n"
+            "QUESTION one concise blocking question\n"
+            "END\n"
             "The active project, backend, paths, and process arguments are host-owned and implicit. CALL takes no arguments.\n"
             "Do not request source edits, scripts, files, native commands, shell access, Git, network access, release, updater, approval, or multiple calls.";
     }
@@ -1213,7 +1222,16 @@ export namespace epochengine::ai
             "SUMMARY Reuse the starter scene and make its managed object counts exact.\n"
             "CALL scene.transform object_id=42 position=0,-0.5,0\n"
             "END\n");
+        const std::string authoringPrompt = authoring_plan_protocol_prompt();
+        const auto firstPromptCall = authoringPrompt.find("\nCALL ");
+        const auto secondPromptCall = firstPromptCall == std::string::npos
+            ? std::string::npos
+            : authoringPrompt.find("\nCALL ", firstPromptCall + 1u);
         if (!authoring || authoring.plan.calls.size() != 1u
+            || firstPromptCall == std::string::npos
+            || secondPromptCall != std::string::npos
+            || authoringPrompt.find("Emit exactly one CALL line.")
+                == std::string::npos
             || parse_authoring_plan(
                 "EPOCH_AUTHORING_PLAN_V1\n"
                 "TITLE Too broad\n"

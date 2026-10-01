@@ -3,7 +3,7 @@
 ## Snapshot
 
 Epoch is a C++23 module-first engine/editor. The published Windows/Linux runtime
-remains sealed at `v0.89.06`; active source development is `v0.89.21`.
+is published at `v0.89.30`; active source development is `v0.90.33`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
@@ -49,6 +49,13 @@ ship.
   application. Forest Factory remains in the standard editor as the
   vegetation-import and placement workflow that activates and consumes Plant
   Lab/package outputs in project scenes.
+- **Event-driven OpenGL scene reuse**: the real editor 3D scene owns persistent
+  color/depth history, previous/current object invalidation, conservative projected
+  dirty regions, scissored regional reconstruction, and automatic conventional/full
+  fallback for camera, sampled-surface, global, or dense changes. v0.90.23 adds
+  live CACHED/PARTIAL/FULL/CONVENTIONAL telemetry, a conventional-path A/B toggle,
+  and an optional dirty-region viewport overlay. Vulkan retains geometry-revision
+  reuse but not partial framebuffer reuse yet.
 - **Renderer resource spine**: shared resource handles, graph binding, sampled
   render-target descriptors, capability truth, validated base-mip texture
   uploads, and backend-native allocation are growing from OpenGL-family proof
@@ -268,3 +275,19 @@ storage growth are proven.
 - `../../../Changes/active_pass.md`
 - `../../../Changes/mission_cache.md`
 - `../../../Changes/roadmap.md`
+
+
+## v0.90.24-v0.90.33 integrated editor/rendering baseline
+
+The current source combines these systems rather than treating them as independent prototypes:
+
+- OpenGL persistent scene color/depth caching with cached/partial/full/conventional decisions.
+- Renderer-neutral object and lighting damage, including previous/current bounds and bounded point/spot influence volumes.
+- Neuromorphic sparse activity as a conservative promotion policy over authoritative damage.
+- A/B selective/full-baseline benchmarking through one cache/presentation path, with presentation FPS separated from measured render FPS.
+- Selection-set editing, marquee selection, group transforms, atomic batch creation, and temporal-history-safe recreate after Undo.
+- Focus-owned multicontext input, routed-pane docking recovery, and single-owner AI Chat projection.
+- EpochGui-owned font/window shadow intent.
+- MSVC entry-point ownership is mode-specific: normal EpochEditor uses the engine-owned internal entry point; generated child/static-runtime builds suppress that path with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. `Debug+Release | x64` runs the normal Debug and Release solution builds sequentially.
+
+The renderer optimization currently has production partial color/depth reuse only in the OpenGL editor scene. Shared contracts are intentionally broader than the current optimized backend so Vulkan/DirectX/SDL/SFML/Raylib/software can adopt equivalent reuse without duplicating scene truth or lighting semantics.

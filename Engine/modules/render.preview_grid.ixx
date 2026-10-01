@@ -36,6 +36,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -232,6 +233,21 @@ namespace epochengine::previewgrid
         bool selected = false;
         bool editorOnly = false;
         bool sampledRenderSurface = false;
+    };
+
+    export struct ObjectMarkerChange final
+    {
+        bool had_previous{};
+        bool has_current{};
+        ObjectMarker previous{};
+        ObjectMarker current{};
+    };
+
+    export struct ObjectMarkerChangeFrame final
+    {
+        std::uint64_t revision{};
+        bool global_invalidation{};
+        std::vector<ObjectMarkerChange> changes{};
     };
 
     export [[nodiscard]] constexpr bool object_marker_uses_solid_fill(
@@ -601,12 +617,16 @@ namespace epochengine::previewgrid
         export inline std::unordered_map<const void*, CameraRigState, PtrHash> g_cameraRigs{};
         export inline std::unordered_map<const void*, Vec3, PtrHash> g_lastMarkerHits{};
         export inline std::unordered_map<const void*, std::vector<ObjectMarker>, PtrHash> g_objectMarkers{};
+        export inline std::unordered_map<const void*, ObjectMarkerChangeFrame, PtrHash> g_objectMarkerChanges{};
         export inline std::unordered_map<const void*, epochengine::lighting::LightingFrame, PtrHash> g_lightingFrames{};
+        export inline std::unordered_map<const void*, epochengine::lighting::LightingInvalidationFrame, PtrHash> g_lightingInvalidations{};
         export inline std::unordered_map<const void*, std::uint64_t, PtrHash> g_geometryRevisions{};
         export inline std::unordered_map<const void*, std::shared_ptr<const GridGeometry>, PtrHash> g_gridGeometries{};
         inline std::shared_mutex g_cameraRigMutex{};
         inline std::shared_mutex g_objectMarkerMutex{};
+        inline std::shared_mutex g_objectMarkerChangeMutex{};
         inline std::shared_mutex g_lightingFrameMutex{};
+        inline std::shared_mutex g_lightingInvalidationMutex{};
         inline std::shared_mutex g_geometryRevisionMutex{};
         inline std::shared_mutex g_gridGeometryMutex{};
         inline std::uint64_t g_nextLogicalViewId{ 1u };
@@ -1411,6 +1431,16 @@ namespace epochengine::previewgrid
         const auto it = detail::g_cameraRigs.find(rigKey);
         return it != detail::g_cameraRigs.end() ? it->second.revision : 0;
     }
+    export [[nodiscard]] inline std::uint64_t preview_content_revision_for(const void* ctxKey) noexcept
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return 0;
+        std::shared_lock lock(detail::g_geometryRevisionMutex);
+        const auto it = detail::g_geometryRevisions.find(rigKey);
+        return it != detail::g_geometryRevisions.end() ? it->second : 0u;
+    }
+
     export [[nodiscard]] inline std::uint64_t preview_geometry_revision_for(const void* ctxKey) noexcept
     {
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
@@ -1418,9 +1448,7 @@ namespace epochengine::previewgrid
             return 0;
 
         const std::uint64_t cameraRevision = camera_revision_for(rigKey);
-        std::shared_lock lock(detail::g_geometryRevisionMutex);
-        const auto it = detail::g_geometryRevisions.find(rigKey);
-        const std::uint64_t geometryRevision = it != detail::g_geometryRevisions.end() ? it->second : 0u;
+        const std::uint64_t geometryRevision = preview_content_revision_for(rigKey);
         return (cameraRevision * 1099511628211ull) ^ geometryRevision;
     }
 
@@ -1515,6 +1543,10 @@ namespace epochengine::previewgrid
         {
             std::unique_lock lock(detail::g_lightingFrameMutex);
             detail::g_lightingFrames.erase(rigKey);
+        }
+        {
+            std::unique_lock lock(detail::g_lightingInvalidationMutex);
+            detail::g_lightingInvalidations.erase(rigKey);
         }
         {
             std::unique_lock lock(detail::g_geometryRevisionMutex);
@@ -1796,21 +1828,34 @@ namespace epochengine::previewgrid
         if (!rigKey)
             return;
 
-        bool changed = true;
+        epochengine::lighting::LightingInvalidationFrame damage{};
+        bool changed = false;
         {
             std::unique_lock lock(detail::g_lightingFrameMutex);
-            if (const auto it = detail::g_lightingFrames.find(rigKey); it != detail::g_lightingFrames.end())
-            {
-                changed = it->second.revision != frame.revision
-                    || it->second.lights.size() != frame.lights.size()
-                    || it->second.environment.ambient.r != frame.environment.ambient.r
-                    || it->second.environment.ambient.g != frame.environment.ambient.g
-                    || it->second.environment.ambient.b != frame.environment.ambient.b;
-            }
+            const auto it = detail::g_lightingFrames.find(rigKey);
+            const epochengine::lighting::LightingFrame* previous =
+                it != detail::g_lightingFrames.end() ? &it->second : nullptr;
+            damage = epochengine::lighting::diff_lighting_frames(
+                previous, frame);
+            changed = !damage.empty();
             detail::g_lightingFrames[rigKey] = std::move(frame);
         }
-        if (changed)
-            detail::touch_geometry(rigKey);
+        if (!changed)
+            return;
+
+        detail::touch_geometry(rigKey);
+        {
+            std::shared_lock lock(detail::g_geometryRevisionMutex);
+            if (const auto it = detail::g_geometryRevisions.find(rigKey);
+                it != detail::g_geometryRevisions.end())
+            {
+                damage.revision = it->second;
+            }
+        }
+        {
+            std::unique_lock lock(detail::g_lightingInvalidationMutex);
+            detail::g_lightingInvalidations[rigKey] = std::move(damage);
+        }
     }
 
     export inline void clear_lighting_frame(const void* ctxKey) noexcept
@@ -1819,13 +1864,36 @@ namespace epochengine::previewgrid
         if (!rigKey)
             return;
 
+        epochengine::lighting::LightingInvalidationFrame damage{};
         bool changed = false;
         {
             std::unique_lock lock(detail::g_lightingFrameMutex);
-            changed = detail::g_lightingFrames.erase(rigKey) > 0u;
+            const auto it = detail::g_lightingFrames.find(rigKey);
+            if (it != detail::g_lightingFrames.end())
+            {
+                epochengine::lighting::LightingFrame empty{};
+                damage = epochengine::lighting::diff_lighting_frames(
+                    &it->second, empty);
+                changed = !damage.empty();
+                detail::g_lightingFrames.erase(it);
+            }
         }
-        if (changed)
-            detail::touch_geometry(rigKey);
+        if (!changed)
+            return;
+
+        detail::touch_geometry(rigKey);
+        {
+            std::shared_lock lock(detail::g_geometryRevisionMutex);
+            if (const auto it = detail::g_geometryRevisions.find(rigKey);
+                it != detail::g_geometryRevisions.end())
+            {
+                damage.revision = it->second;
+            }
+        }
+        {
+            std::unique_lock lock(detail::g_lightingInvalidationMutex);
+            detail::g_lightingInvalidations[rigKey] = std::move(damage);
+        }
     }
 
     export [[nodiscard]] inline epochengine::lighting::LightingFrame lighting_frame_for(const void* ctxKey)
@@ -1835,10 +1903,29 @@ namespace epochengine::previewgrid
             return {};
 
         std::shared_lock lock(detail::g_lightingFrameMutex);
-        if (const auto it = detail::g_lightingFrames.find(rigKey); it != detail::g_lightingFrames.end())
+        if (const auto it = detail::g_lightingFrames.find(rigKey);
+            it != detail::g_lightingFrames.end())
+        {
             return it->second;
+        }
         return {};
     }
+
+    export [[nodiscard]] inline epochengine::lighting::LightingInvalidationFrame
+        consume_lighting_invalidation_frame_for(const void* ctxKey)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+        std::unique_lock lock(detail::g_lightingInvalidationMutex);
+        const auto it = detail::g_lightingInvalidations.find(rigKey);
+        if (it == detail::g_lightingInvalidations.end())
+            return {};
+        auto frame = std::move(it->second);
+        detail::g_lightingInvalidations.erase(it);
+        return frame;
+    }
+
     export inline void set_object_markers(const void* ctxKey, std::span<const ObjectMarker> markers)
     {
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
@@ -1846,33 +1933,78 @@ namespace epochengine::previewgrid
             return;
 
         bool changed = false;
+        bool globalInvalidation = false;
+        std::vector<ObjectMarkerChange> markerChanges{};
         {
             std::unique_lock lock(detail::g_objectMarkerMutex);
-            if (markers.empty())
+            const auto it = detail::g_objectMarkers.find(rigKey);
+            const std::vector<ObjectMarker>* previous =
+                it != detail::g_objectMarkers.end() ? &it->second : nullptr;
+
+            if (!previous)
             {
-                changed = detail::g_objectMarkers.erase(rigKey) > 0u;
+                changed = !markers.empty();
+                globalInvalidation = changed;
+            }
+            else if (previous->size() != markers.size())
+            {
+                changed = true;
+                globalInvalidation = true;
             }
             else
             {
-                const auto it = detail::g_objectMarkers.find(rigKey);
-                changed = it == detail::g_objectMarkers.end() || it->second.size() != markers.size();
-                if (!changed)
+                markerChanges.reserve(markers.size());
+                for (std::size_t index = 0; index < markers.size(); ++index)
                 {
-                    for (std::size_t index = 0; index < markers.size(); ++index)
+                    if (!detail::same_marker((*previous)[index], markers[index]))
                     {
-                        if (!detail::same_marker(it->second[index], markers[index]))
-                        {
-                            changed = true;
-                            break;
-                        }
+                        changed = true;
+                        markerChanges.push_back(ObjectMarkerChange{
+                            .had_previous = true,
+                            .has_current = true,
+                            .previous = (*previous)[index],
+                            .current = markers[index]
+                        });
                     }
                 }
-                if (changed)
+            }
+
+            if (changed)
+            {
+                if (markers.empty())
+                    detail::g_objectMarkers.erase(rigKey);
+                else
                     detail::g_objectMarkers[rigKey] = std::vector<ObjectMarker>{ markers.begin(), markers.end() };
             }
         }
-        if (changed)
-            detail::touch_geometry(rigKey);
+
+        if (!changed)
+            return;
+
+        detail::touch_geometry(rigKey);
+        std::uint64_t revision = 0u;
+        {
+            std::shared_lock lock(detail::g_geometryRevisionMutex);
+            if (const auto it = detail::g_geometryRevisions.find(rigKey); it != detail::g_geometryRevisions.end())
+                revision = it->second;
+        }
+        {
+            std::unique_lock lock(detail::g_objectMarkerChangeMutex);
+            auto& frame = detail::g_objectMarkerChanges[rigKey];
+            frame.revision = revision;
+            frame.global_invalidation = frame.global_invalidation || globalInvalidation;
+            if (frame.global_invalidation)
+            {
+                frame.changes.clear();
+            }
+            else
+            {
+                frame.changes.insert(
+                    frame.changes.end(),
+                    std::make_move_iterator(markerChanges.begin()),
+                    std::make_move_iterator(markerChanges.end()));
+            }
+        }
     }
 
     export inline void clear_object_markers(const void* ctxKey) noexcept
@@ -1886,8 +2018,37 @@ namespace epochengine::previewgrid
             std::unique_lock lock(detail::g_objectMarkerMutex);
             changed = detail::g_objectMarkers.erase(rigKey) > 0u;
         }
-        if (changed)
-            detail::touch_geometry(rigKey);
+        if (!changed)
+            return;
+
+        detail::touch_geometry(rigKey);
+        std::uint64_t revision = 0u;
+        {
+            std::shared_lock lock(detail::g_geometryRevisionMutex);
+            if (const auto it = detail::g_geometryRevisions.find(rigKey); it != detail::g_geometryRevisions.end())
+                revision = it->second;
+        }
+        {
+            std::unique_lock lock(detail::g_objectMarkerChangeMutex);
+            auto& frame = detail::g_objectMarkerChanges[rigKey];
+            frame.revision = revision;
+            frame.global_invalidation = true;
+            frame.changes.clear();
+        }
+    }
+
+    export [[nodiscard]] inline ObjectMarkerChangeFrame consume_object_marker_change_frame_for(const void* ctxKey)
+    {
+        const void* const rigKey = detail::normalize_camera_key(ctxKey);
+        if (!rigKey)
+            return {};
+        std::unique_lock lock(detail::g_objectMarkerChangeMutex);
+        const auto it = detail::g_objectMarkerChanges.find(rigKey);
+        if (it == detail::g_objectMarkerChanges.end())
+            return {};
+        ObjectMarkerChangeFrame frame = std::move(it->second);
+        detail::g_objectMarkerChanges.erase(it);
+        return frame;
     }
 
     export [[nodiscard]] inline std::vector<Vertex> object_marker_vertices_for(const void* ctxKey)

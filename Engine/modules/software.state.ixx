@@ -102,6 +102,7 @@ export namespace epochengine::anativecontext
         bool frameValid{ false };
         std::uint64_t lastGuiGeneration{ 0 };
         std::uint64_t lastCameraRevision{ 0 };
+        std::uint64_t lastGeometryRevision{ 0 };
         epochengine::core::RenderViewport lastSceneViewport{};
         std::uint8_t lastPreviewMode{
             static_cast<std::uint8_t>(epochengine::core::ScenePreviewMode::None)

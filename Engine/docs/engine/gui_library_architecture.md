@@ -181,6 +181,12 @@ menu replay remain unchanged.
   platforms without an OS light/dark bridge. Light mode is a real high-luminance
   palette with a dark glyph atlas, not a recolored dark surface. Rounded controls
   default on; new palettes extend this table rather than replacing the baseline.
+  EpochGui also owns semantic UI tones independent of named themes: neutral,
+  muted, info, success, warning, error, assistant, and engine. Each tone resolves
+  to a readable light/dark surface plus an accent strip; editor domains select a
+  semantic meaning but do not define their own color tables. `gui.engine` exposes
+  those tokens through reusable message roles, `semantic_block`, semantic console
+  tasks, and opt-in semantic console actions.
 - Cross-backend visual parity starts in `engine.visuals`. Frame clears, scene
   clears, object colors, selection colors, look markers, and editor-only opacity
   factors are shared there so OpenGL, Vulkan, DirectX, Raylib, SDL, and SFML can
@@ -288,8 +294,11 @@ belong in proper GUI windows:
   can stay visible. Reusable console windows own clipped transcript, input, and
   optional pinned/footer action rows; approval-sensitive actions stay pinned
   above scrollable content so compact docks cannot hide authority controls.
-  Text rows accept optional semantic roles so user, assistant, system, and error
-  messages can use restrained contrasting backgrounds without editor-side drawing.
+  Text rows accept optional semantic roles so user, assistant, system, info,
+  success, warning, error, and engine-work messages use shared contrasting
+  surfaces without editor-side drawing. Project-assistant mode uses the assistant
+  semantic tone; isolated engine self-coding uses the engine tone, so authority
+  domains remain visually distinct in every console using the shared primitive.
   Font line metrics reserve raster/descender padding, and focused text controls
   own a visible high-contrast caret across chat, script, and ordinary edit fields.
   Partially clipped glyphs are omitted rather than destination-scaled because
@@ -748,3 +757,20 @@ Before a new GUI surface is considered production progress, record the answers:
 This checklist is intentionally stricter than a visual mockup. Epoch should
 prefer one real control with correct ownership over three fake panels that only
 work in the current editor frame.
+
+
+## Multicontext routed-pane ownership
+
+Native floating contexts are alternate hosts for canonical editor panes, not independent copies of every subsystem.
+
+- Mouse/keyboard state is accepted only from the focused owning Epoch native context.
+- A floating context's top row remains normal GUI hit-test space; host-window movement must use the explicit host-drag gesture instead of stealing ordinary clicks.
+- Docking guides are computed in the parent editor coordinate space after converting/scaling routed-host mouse coordinates.
+- Closing a detached pane returns it to its remembered dock. Window/command-menu restore actions make the pane active so a closed native host cannot make a tool permanently unreachable.
+- AI Chat is strictly single-owner: the canonical editor owns the AI/model/session state. A detached AI Chat owns only projection/input-buffer/mailbox state. It must never construct a second model/session owner during Play/Run or undock/redock.
+
+These are lifecycle and ownership contracts, not backend-specific visual tricks.
+
+## Font and surface shadowing
+
+EpochGui owns reusable text/window shadow intent. Font shadowing uses a GUI-owned glyph/atlas layer so editor domains do not render a second ad-hoc font pass. Window/chrome shadowing likewise belongs to shared GUI composition. Backends such as SDL3 may have their own native rendering mechanisms, but they consume the shared visual intent rather than defining a competing editor-only shadow system.

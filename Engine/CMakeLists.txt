@@ -260,7 +260,7 @@ include(CTest)
 if(BUILD_TESTING)
     add_test(
         NAME epoch_ci_headless
-        COMMAND epoch_ci_headless ${CMAKE_SOURCE_DIR}
+        COMMAND epoch_ci_headless ${CMAKE_CURRENT_SOURCE_DIR}/..
     )
 
     add_executable(epoch_texture_artifact_contract
@@ -336,6 +336,39 @@ if(BUILD_TESTING)
         add_test(
             NAME epoch_editor_task_scheduler_contract
             COMMAND epoch_editor_task_scheduler_contract
+        )
+
+        # CPU-only mainline neuromorphic graph/camera/renderer-invalidation proof.
+        # No GUI, GPU, native window, or runtime launch is involved.
+        add_executable(epoch_neuromorphic_contract
+            src/core.time.cpp
+            src/simulation/simulation.neuromorphic_contract.cpp
+        )
+        target_sources(epoch_neuromorphic_contract PRIVATE
+            FILE_SET epoch_neuromorphic_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.document.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.task_graph.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.snapshot.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/timeline.system.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation.neuromorphic.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation.neuromorphic_adapters.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.neuromorphic_camera.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.neuromorphic_invalidation.ixx
+        )
+        target_include_directories(epoch_neuromorphic_contract PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        epoch_apply_cxx_dialect(epoch_neuromorphic_contract)
+        epoch_apply_warnings(epoch_neuromorphic_contract)
+        epoch_apply_sanitizers(epoch_neuromorphic_contract)
+        add_test(
+            NAME epoch_neuromorphic_contract
+            COMMAND epoch_neuromorphic_contract
         )
 
         # Pure reusable dock geometry; no GUI host, renderer, or native window.
@@ -582,6 +615,31 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
     # default-build dependency: a model request requires explicit CLI --run.
 endif()
 
+
+if(BUILD_TESTING)
+    add_executable(epoch_ai_source_discovery_contract
+        src/ai/ai.source_index.cpp
+        src/ai/ai.source_workspace.cpp
+        src/ai/ai.source_discovery_contract.cpp
+    )
+    target_sources(epoch_ai_source_discovery_contract PRIVATE
+        FILE_SET epoch_ai_source_discovery_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.source_index.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.source_workspace.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.source_discovery_contract.ixx
+    )
+    target_compile_definitions(epoch_ai_source_discovery_contract PRIVATE
+        EPOCH_AI_SOURCE_DISCOVERY_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_ai_source_discovery_contract)
+    epoch_apply_warnings(epoch_ai_source_discovery_contract)
+    epoch_apply_sanitizers(epoch_ai_source_discovery_contract)
+    add_test(NAME epoch_ai_source_discovery_contract
+        COMMAND epoch_ai_source_discovery_contract)
+endif()
+
 if(EPOCH_SOFTWARE_BASE_ONLY)
     message(STATUS "Software base only: editor, renderer, GUI, updater and project targets are excluded; the separate AI transport probe is opt-in only.")
     return()
@@ -663,6 +721,9 @@ set(EPOCH_SOURCES
     src/ai/ai.iteration_loop.cpp
     src/ai/ai.iteration_loop_contract.cpp
     src/ai/ai.iteration_session.cpp
+    src/ai/ai.source_index.cpp
+    src/ai/ai.source_workspace.cpp
+    src/ai/ai.source_discovery_contract.cpp
     src/ai/ai.iteration_session_contract.cpp
     src/ai/ai.project_profile.cpp
     src/ai/ai.project_profile_contract.cpp

@@ -82,6 +82,10 @@ namespace epochengine::anativecontext
             previewMode == core::ScenePreviewMode::Editor
             ? epochengine::previewgrid::camera_revision_for(&ctx)
             : 0;
+        const std::uint64_t geometryRevision =
+            previewMode == core::ScenePreviewMode::Editor
+            ? epochengine::previewgrid::preview_content_revision_for(&ctx)
+            : 0;
         const std::uint64_t guiGeneration = epochengine::gui::deferred_batch_generation(&ctx);
         const std::int64_t commandDepth = static_cast<std::int64_t>(queue.depth());
         const bool hasPendingCommands = commandDepth != 0;
@@ -98,7 +102,8 @@ namespace epochengine::anativecontext
             || canvas2dSceneChanged
             || !detail::same_viewport(viewport, sr.lastSceneViewport)
             || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode
-            || cameraRevision != sr.lastCameraRevision;
+            || cameraRevision != sr.lastCameraRevision
+            || geometryRevision != sr.lastGeometryRevision;
         const bool guiDirty =
             !sr.frameValid
             || guiGeneration != sr.lastGuiGeneration;
@@ -190,6 +195,7 @@ namespace epochengine::anativecontext
 
             sr.lastGuiGeneration = guiGeneration;
             sr.lastCameraRevision = cameraRevision;
+            sr.lastGeometryRevision = geometryRevision;
             sr.lastSceneViewport = viewport;
             sr.lastPreviewMode = static_cast<std::uint8_t>(previewMode);
             sr.frameValid = true;

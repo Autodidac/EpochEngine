@@ -1,4 +1,4 @@
-﻿/************************************************
+/************************************************
  *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
  *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
  *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
@@ -44,4 +44,9 @@ struct EpochScriptHost
     int (*queue_model_load)(void* user_data, const char* debug_name, const char* path);
     const char* project_model_asset;
     int (*request_engine_scene)(void* user_data, const char* scene_id);
+    int (*attach_selected_entity_oscillator)(
+        void* user_data,
+        int axis,
+        float amplitude,
+        float frequency_hz);
 };

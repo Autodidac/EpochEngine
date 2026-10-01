@@ -5719,21 +5719,38 @@ namespace epochengine::updater
             if (!explicit_checkout.empty())
             {
                 const auto checkout = fs::weakly_canonical(explicit_checkout, ec);
-                if (!ec && source_authority_shape(checkout, true))
+                if (!ec && source_authority_shape(checkout, false))
                 {
                     const std::string version = system_detail::read_local_source_version(checkout);
                     const auto version_digest = system_detail::sha256_file_hex(
                         checkout / "Engine/modules/engine.version.ixx");
                     const auto commit = checkout_commit_identity(checkout);
-                    if (!version.empty() && version_digest && commit)
+                    if (!version.empty() && version_digest)
                     {
+                        if (commit)
+                        {
+                            return VerifiedSourceAuthority{
+                                .kind = SourceAuthorityKind::explicit_checkout,
+                                .root = checkout,
+                                .source_version = version,
+                                .commit = *commit,
+                                .receipt_digest = *version_digest,
+                                .status_message = "Using the explicit verified Epoch development checkout.",
+                                .verified = true};
+                        }
+
+                        // A distributed/extracted Epoch source tree may not carry
+                        // Git metadata. Self-iteration still needs a stable, local
+                        // read authority for exactly those bytes. Bind that
+                        // authority to the version-file digest and rehash every
+                        // curated source file before it is shared or edited.
                         return VerifiedSourceAuthority{
-                            .kind = SourceAuthorityKind::explicit_checkout,
+                            .kind = SourceAuthorityKind::local_snapshot,
                             .root = checkout,
                             .source_version = version,
-                            .commit = *commit,
+                            .commit = version_digest->substr(0u, 40u),
                             .receipt_digest = *version_digest,
-                            .status_message = "Using the explicit verified Epoch development checkout.",
+                            .status_message = "Using the local Epoch source snapshot; Git metadata is absent, so authority is digest-bound to current local source bytes.",
                             .verified = true};
                     }
                 }
@@ -5829,6 +5846,7 @@ namespace epochengine::updater
             / ("epoch_source_authority_" + system_detail::make_source_update_run_token());
         const auto checkout = root / "checkout";
         const auto linked_checkout = root / "linked-checkout";
+        const auto local_snapshot = root / "local-snapshot";
         const auto common_git = root / "common.git";
         const auto linked_git = common_git / "worktrees" / "linked";
         const auto cached = root / "cached";
@@ -5844,7 +5862,7 @@ namespace epochengine::updater
                 return !ec;
             };
         const bool shaped = write_shape(checkout) && write_shape(linked_checkout)
-            && write_shape(cached);
+            && write_shape(local_snapshot) && write_shape(cached);
         std::error_code git_ec{};
         fs::create_directories(checkout / ".git", git_ec);
         std::ofstream{checkout / ".git/HEAD"}
@@ -5868,6 +5886,9 @@ namespace epochengine::updater
         const auto linked_result = shaped && !git_ec
             ? resolve_source_authority_at(linked_checkout, cached)
             : VerifiedSourceAuthority{};
+        const auto local_snapshot_result = shaped
+            ? resolve_source_authority_at(local_snapshot, cached)
+            : VerifiedSourceAuthority{};
         const auto cached_result = resolve_source_authority_at({}, cached);
         std::error_code cleanup_ec{};
         fs::remove_all(root, cleanup_ec);
@@ -5877,6 +5898,10 @@ namespace epochengine::updater
             && linked_result.verified
             && linked_result.kind == SourceAuthorityKind::explicit_checkout
             && linked_result.commit == "abcdefabcdefabcdefabcdefabcdefabcdefabcd"
+            && local_snapshot_result.verified
+            && local_snapshot_result.kind == SourceAuthorityKind::local_snapshot
+            && local_snapshot_result.commit.size() == 40u
+            && local_snapshot_result.receipt_digest.size() == 64u
             && cached_result.verified
             && cached_result.kind == SourceAuthorityKind::verified_cache
             && cached_result.commit == "0123456789012345678901234567890123456789";
@@ -6227,10 +6252,10 @@ namespace epochengine::updater
                PROJECT_PACKAGED_VERSION == packagedVersion &&
                epochengine::FormatVersionString(0, 89, 6) == "0.89.06" &&
                epochengine::FormatVersionString(0, 89, 30) == "0.89.30" &&
-               epochengine::FormatVersionString(0, 90, 1) == "0.90.1" &&
+               epochengine::FormatVersionString(0, 90, 2) == "0.90.02" &&
                epochengine::FormatVersionString(1, 0, 0) == "1.0.0" &&
-               system_detail::compare_versions("0.90.1", "0.89.35") > 0 &&
-               system_detail::compare_versions("0.89.30", "0.90.1") < 0 &&
+               system_detail::compare_versions("0.90.02", "0.89.35") > 0 &&
+               system_detail::compare_versions("0.89.30", "0.90.02") < 0 &&
                system_detail::compare_versions("0.89.06", "0.89.6") == 0 &&
                PROJECT_SOURCE_VERSION_URL() ==
                    std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version";

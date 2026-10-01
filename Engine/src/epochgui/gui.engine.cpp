@@ -103,6 +103,7 @@ namespace epochengine::gui
     constexpr int         kTabSpaces = 4;
     constexpr const char* kDefaultFontName = "__agui_default_font";
     constexpr const char* kDarkTextFontName = "__agui_dark_text_font";
+    constexpr const char* kTextShadowFontName = "__agui_text_shadow_font";
     constexpr const char* kDefaultFontFile = "Roboto-Regular.ttf";
     constexpr const char* kRuntimeSurfaceAtlasName = "__agui_runtime_surfaces";
     constexpr std::uint32_t kRuntimeSurfaceAtlasSize = 4096;
@@ -219,6 +220,12 @@ namespace epochengine::gui
                 SpriteHandle modalScrim{};
             };
 
+            struct SemanticSpritePair
+            {
+                SpriteHandle background{};
+                SpriteHandle accent{};
+            };
+
             bool atlasBuilt = false;
             TextureAtlas* atlas = nullptr;
             TextureAtlas* runtimeSurfaceAtlas = nullptr;
@@ -230,6 +237,8 @@ namespace epochengine::gui
             PaletteSprites emberForge{};
             PaletteSprites forestTerminal{};
             PaletteSprites auroraSteel{};
+            std::array<SemanticSpritePair, gui_lib::semantic_tone_count> semanticDark{};
+            std::array<SemanticSpritePair, gui_lib::semantic_tone_count> semanticLight{};
             SpriteHandle dockGuide{};
             SpriteHandle dockGuideHover{};
             SpriteHandle dockGuidePreview{};
@@ -239,6 +248,10 @@ namespace epochengine::gui
             GuiFontCache darkTextFont{
                 .fontName = kDarkTextFontName
             };
+            GuiFontCache textShadowFont{
+                .fontName = kTextShadowFontName
+            };
+            SpriteHandle windowShadow{};
             font::FontRenderer fontRenderer{};
             std::unordered_map<SpriteHandle, RoundedCorners, SpriteHandleHash> roundedControls{};
         };
@@ -577,6 +590,37 @@ namespace epochengine::gui
             case ThemeVariant::DefaultDark:
             default:
                 return g_resources.defaultDark;
+            }
+        }
+
+        static_assert(gui_lib::semantic_tone_count
+            == static_cast<std::size_t>(SemanticTone::engine) + 1u);
+
+        [[nodiscard]] static const GuiResources::SemanticSpritePair& active_semantic_pair(
+            SemanticTone tone) noexcept
+        {
+            const auto index = static_cast<std::size_t>(tone);
+            const auto safeIndex = index < gui_lib::semantic_tone_count ? index : 0u;
+            return g_frame.activeTheme == ThemeVariant::DefaultLight
+                ? g_resources.semanticLight[safeIndex]
+                : g_resources.semanticDark[safeIndex];
+        }
+
+        [[nodiscard]] static SemanticTone semantic_tone_for_message_role(
+            TextMessageRole role) noexcept
+        {
+            switch (role)
+            {
+            case TextMessageRole::user: return SemanticTone::info;
+            case TextMessageRole::assistant: return SemanticTone::assistant;
+            case TextMessageRole::system: return SemanticTone::muted;
+            case TextMessageRole::info: return SemanticTone::info;
+            case TextMessageRole::success: return SemanticTone::success;
+            case TextMessageRole::warning: return SemanticTone::warning;
+            case TextMessageRole::error: return SemanticTone::error;
+            case TextMessageRole::engine: return SemanticTone::engine;
+            case TextMessageRole::neutral:
+            default: return SemanticTone::neutral;
             }
         }
 
@@ -1530,7 +1574,9 @@ namespace epochengine::gui
 
         static void ensure_font_loaded_locked()
         {
-            if (g_resources.font.asset && g_resources.darkTextFont.asset)
+            if (g_resources.font.asset
+                && g_resources.darkTextFont.asset
+                && g_resources.textShadowFont.asset)
                 return;
 
             const std::filesystem::path fontPath = find_default_font_path();
@@ -1595,7 +1641,10 @@ namespace epochengine::gui
             const bool darkTextLoaded = loadCache(
                 g_resources.darkTextFont,
                 font::FontColor{32, 39, 48, 255});
-            if (!lightTextLoaded || !darkTextLoaded)
+            const bool shadowTextLoaded = loadCache(
+                g_resources.textShadowFont,
+                font::FontColor{0, 0, 0, 112});
+            if (!lightTextLoaded || !darkTextLoaded || !shadowTextLoaded)
             {
                 if (!g_failedFontLoadWarningLogged)
                 {
@@ -1606,7 +1655,9 @@ namespace epochengine::gui
                             fontPath.string()));
                     g_failedFontLoadWarningLogged = true;
                 }
-                if ((!g_resources.font.asset || !g_resources.darkTextFont.asset)
+                if ((!g_resources.font.asset
+                        || !g_resources.darkTextFont.asset
+                        || !g_resources.textShadowFont.asset)
                     && !g_missingFontAssetWarningLogged)
                 {
                     logger::error(
@@ -1650,6 +1701,8 @@ namespace epochengine::gui
                     make_solid_pixels(0xFF, 0xA1, 0x38, 0x78, 8, 8), 8, 8);
                 g_resources.dockContextHover = add_sprite(atlas, "__agui/dock_context_hover",
                     make_solid_pixels(0xFF, 0xB4, 0x55, 0xD0, 8, 8), 8, 8);
+                g_resources.windowShadow = add_sprite(atlas, "__agui/window_shadow",
+                    make_solid_pixels(0x00, 0x00, 0x00, 0x58, 8, 8), 8, 8);
 
                 g_resources.defaultDark.windowBackground = add_sprite(atlas, "__agui/window_bg",
                     make_solid_pixels(0x1F, 0x23, 0x2A, 0xFF, 8, 8), 8, 8);
@@ -1838,6 +1891,44 @@ namespace epochengine::gui
                     { 0x34, 0x3F, 0x4A }, { 0x41, 0x55, 0x61 }, { 0x53, 0x72, 0x7B },
                     { 0x18, 0x1E, 0x24 }, { 0x2A, 0x36, 0x3F }
                 }});
+
+                for (std::size_t index = 0u;
+                     index < gui_lib::semantic_tone_count;
+                     ++index)
+                {
+                    const auto tone = static_cast<gui_lib::SemanticTone>(index);
+                    const auto dark = gui_lib::semantic_colors(tone, false);
+                    const auto light = gui_lib::semantic_colors(tone, true);
+                    const std::string name{gui_lib::semantic_tone_name(tone)};
+                    g_resources.semanticDark[index].background = add_sprite(
+                        atlas,
+                        "__agui_semantic/dark/" + name + "/background",
+                        make_solid_pixels(
+                            dark.background.r, dark.background.g, dark.background.b,
+                            dark.background.a, 8, 8),
+                        8, 8);
+                    g_resources.semanticDark[index].accent = add_sprite(
+                        atlas,
+                        "__agui_semantic/dark/" + name + "/accent",
+                        make_solid_pixels(
+                            dark.accent.r, dark.accent.g, dark.accent.b,
+                            dark.accent.a, 8, 8),
+                        8, 8);
+                    g_resources.semanticLight[index].background = add_sprite(
+                        atlas,
+                        "__agui_semantic/light/" + name + "/background",
+                        make_solid_pixels(
+                            light.background.r, light.background.g, light.background.b,
+                            light.background.a, 8, 8),
+                        8, 8);
+                    g_resources.semanticLight[index].accent = add_sprite(
+                        atlas,
+                        "__agui_semantic/light/" + name + "/accent",
+                        make_solid_pixels(
+                            light.accent.r, light.accent.g, light.accent.b,
+                            light.accent.a, 8, 8),
+                        8, 8);
+                }
 
                 g_resources.atlasBuilt = true;
             }
@@ -2234,9 +2325,10 @@ namespace epochengine::gui
             return average * scale * kLetterSpacingFactor;
         }
 
-        [[nodiscard]] static const font::Glyph* lookup_glyph(char32_t codepoint) noexcept
+        [[nodiscard]] static const font::Glyph* lookup_glyph_from_cache(
+            const GuiFontCache& fontCache,
+            char32_t codepoint) noexcept
         {
-            const auto& fontCache = active_font_cache();
             if (!fontCache.asset)
                 return nullptr;
 
@@ -2251,6 +2343,16 @@ namespace epochengine::gui
             if (found != fontCache.asset->glyphs.end())
                 return &found->second;
             return fontCache.fallbackGlyph;
+        }
+
+        [[nodiscard]] static const font::Glyph* lookup_glyph(char32_t codepoint) noexcept
+        {
+            return lookup_glyph_from_cache(active_font_cache(), codepoint);
+        }
+
+        [[nodiscard]] static const font::Glyph* lookup_shadow_glyph(char32_t codepoint) noexcept
+        {
+            return lookup_glyph_from_cache(g_resources.textShadowFont, codepoint);
         }
 
         [[nodiscard]] static char32_t safe_draw_codepoint(char32_t codepoint) noexcept
@@ -3036,6 +3138,17 @@ namespace epochengine::gui
                             const float drawY = baseline + offsetY;
                             if (glyph_intersects_clip(drawX, drawY, drawW, drawH, clipLeft, clipTop, clipRight, clipBottom))
                             {
+                                if (const auto* shadowGlyph = lookup_shadow_glyph(ch);
+                                    shadowGlyph && shadowGlyph->handle.is_valid())
+                                {
+                                    constexpr float shadowOffset = 1.0f;
+                                    draw_sprite(
+                                        shadowGlyph->handle,
+                                        drawX + shadowOffset,
+                                        drawY + shadowOffset,
+                                        drawW,
+                                        drawH);
+                                }
                                 draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                             }
                         }
@@ -3105,6 +3218,17 @@ namespace epochengine::gui
                             clipBottom);
                         if (glyphVisible && glyph_rect_is_reasonable(drawW, drawH, scale))
                         {
+                            if (const auto* shadowGlyph = lookup_shadow_glyph(ch);
+                                shadowGlyph && shadowGlyph->handle.is_valid())
+                            {
+                                constexpr float shadowOffset = 1.0f;
+                                draw_sprite(
+                                    shadowGlyph->handle,
+                                    drawX + shadowOffset,
+                                    drawY + shadowOffset,
+                                    drawW,
+                                    drawH);
+                            }
                             draw_sprite(glyph->handle, drawX, drawY, drawW, drawH);
                         }
                     }
@@ -3998,7 +4122,19 @@ namespace epochengine::gui
         const auto& palette = active_palette();
 
         if (draw_background)
+        {
+            if (g_resources.windowShadow.is_valid())
+            {
+                constexpr float shadowOffset = 4.0f;
+                draw_sprite_raw(
+                    g_resources.windowShadow,
+                    position.x + shadowOffset,
+                    position.y + shadowOffset,
+                    size.x,
+                    size.y);
+            }
             draw_sprite(palette.windowBackground, position.x, position.y, size.x, size.y);
+        }
 
         const bool hasTitleBar = !title.empty();
         float titleBarHeight = 0.0f;
@@ -4579,7 +4715,8 @@ namespace epochengine::gui
         std::string_view label,
         Vec2 size,
         bool selected,
-        bool enabled = true) noexcept
+        bool enabled = true,
+        SemanticTone tone = SemanticTone::neutral) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
 
@@ -4610,14 +4747,32 @@ namespace epochengine::gui
         }
 
         const auto& palette = active_palette();
+        const bool semantic = enabled && tone != SemanticTone::neutral;
 
-        const SpriteHandle background = !enabled
-            ? palette.panelBackground
-            : selected || pressed ? palette.buttonActive
-            : hovered ? palette.buttonHover
-            : palette.buttonNormal;
-
-        draw_sprite(background, pos.x, pos.y, width, height);
+        if (semantic)
+        {
+            const auto& semanticSprites = active_semantic_pair(tone);
+            draw_sprite(semanticSprites.background, pos.x, pos.y, width, height);
+            draw_sprite(semanticSprites.accent, pos.x, pos.y, 4.0f, height);
+            if (selected || pressed)
+            {
+                draw_sprite(semanticSprites.accent, pos.x, pos.y, width, 2.0f);
+                draw_sprite(semanticSprites.accent, pos.x, pos.y + height - 2.0f, width, 2.0f);
+            }
+            else if (hovered)
+            {
+                draw_sprite(semanticSprites.accent, pos.x, pos.y + height - 2.0f, width, 2.0f);
+            }
+        }
+        else
+        {
+            const SpriteHandle background = !enabled
+                ? palette.panelBackground
+                : selected || pressed ? palette.buttonActive
+                : hovered ? palette.buttonHover
+                : palette.buttonNormal;
+            draw_sprite(background, pos.x, pos.y, width, height);
+        }
 
         const std::string fittedLabel = fit_text_to_width(
             label,
@@ -6643,6 +6798,50 @@ namespace epochengine::gui
         advance_cursor({ 0.0f, drawnHeight });
     }
 
+    void semantic_block(
+        std::string_view text,
+        SemanticTone tone,
+        float width) noexcept
+    {
+        if (!g_frame.insideWindow || !g_frame.ctx) return;
+        ensure_resources();
+
+        constexpr float padding = 8.0f;
+        constexpr float accentWidth = 4.0f;
+        const float availableWidth = content_available_width(g_frame.cursor.x);
+        const float blockWidth = width > 0.0f
+            ? (std::min)(availableWidth, (std::max)(32.0f, width))
+            : availableWidth;
+        const float textWidth = (std::max)(
+            space_advance(kFontScale),
+            blockWidth - accentWidth - padding * 2.0f);
+        const float textHeight = measure_wrapped_text_height(
+            text, textWidth, kFontScale);
+        const float blockHeight = (std::max)(
+            line_advance_amount(kFontScale) + padding * 2.0f,
+            textHeight + padding * 2.0f);
+        const auto& semantic = active_semantic_pair(tone);
+        draw_sprite(
+            semantic.background,
+            g_frame.cursor.x,
+            g_frame.cursor.y,
+            blockWidth,
+            blockHeight);
+        draw_sprite(
+            semantic.accent,
+            g_frame.cursor.x,
+            g_frame.cursor.y,
+            accentWidth,
+            blockHeight);
+        draw_wrapped_text(
+            text,
+            g_frame.cursor.x + accentWidth + padding,
+            g_frame.cursor.y + padding,
+            textWidth,
+            kFontScale);
+        advance_cursor({0.0f, blockHeight + kContentPadding});
+    }
+
     void property_row(std::string_view labelText, std::string_view valueText, float label_width) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return;
@@ -6739,6 +6938,110 @@ namespace epochengine::gui
         return measure_text_width(text.substr(lineStart, index - lineStart), scale);
     }
 
+    struct EditBoxVisualLine final
+    {
+        std::size_t first{};
+        std::size_t past_last{};
+    };
+
+    [[nodiscard]] static std::vector<EditBoxVisualLine> edit_box_visual_lines(
+        std::string_view text,
+        float wrapWidth,
+        float scale,
+        bool multiline)
+    {
+        std::vector<EditBoxVisualLine> lines{};
+        if (!multiline)
+        {
+            lines.push_back({0u, text.size()});
+            return lines;
+        }
+
+        const float effectiveWidth = (std::max)(space_advance(scale), wrapWidth);
+        std::size_t hardStart = 0u;
+        while (hardStart <= text.size())
+        {
+            const std::size_t hardEnd = edit_box_line_end(text, hardStart);
+            if (hardStart == hardEnd)
+            {
+                lines.push_back({hardStart, hardEnd});
+            }
+            else
+            {
+                std::size_t segmentStart = hardStart;
+                while (segmentStart < hardEnd)
+                {
+                    float penX = 0.0f;
+                    std::size_t cursor = segmentStart;
+                    std::size_t lastBreak = segmentStart;
+                    std::size_t segmentEnd = hardEnd;
+                    bool wrapped = false;
+
+                    while (cursor < hardEnd)
+                    {
+                        const DecodedUtf8Codepoint decoded =
+                            decode_utf8_codepoint(text, cursor);
+                        const std::size_t byteCount = (std::max)(
+                            std::size_t{1u}, decoded.byte_count);
+                        const std::size_t next = (std::min)(hardEnd, cursor + byteCount);
+                        const char32_t codepoint = safe_draw_codepoint(decoded.codepoint);
+                        const float advance = glyph_advance_with_kerning(
+                            codepoint,
+                            next_drawable_char(text, cursor),
+                            scale);
+
+                        if (penX > 0.0f && penX + advance > effectiveWidth + 0.001f)
+                        {
+                            segmentEnd = lastBreak > segmentStart
+                                ? lastBreak : cursor;
+                            if (segmentEnd <= segmentStart)
+                                segmentEnd = next;
+                            wrapped = true;
+                            break;
+                        }
+
+                        penX += advance;
+                        if (is_wrap_space(codepoint))
+                            lastBreak = next;
+                        cursor = next;
+                    }
+
+                    if (!wrapped)
+                        segmentEnd = hardEnd;
+                    lines.push_back({segmentStart, segmentEnd});
+                    segmentStart = segmentEnd;
+                }
+            }
+
+            if (hardEnd >= text.size())
+                break;
+            hardStart = hardEnd + 1u;
+        }
+
+        if (lines.empty())
+            lines.push_back({0u, 0u});
+        return lines;
+    }
+
+    [[nodiscard]] static std::size_t edit_box_visual_line_for_index(
+        std::span<const EditBoxVisualLine> lines,
+        std::size_t index) noexcept
+    {
+        if (lines.empty()) return 0u;
+        for (std::size_t line = 0u; line < lines.size(); ++line)
+        {
+            const auto& current = lines[line];
+            const bool last = line + 1u >= lines.size();
+            const std::size_t nextStart = last
+                ? (std::numeric_limits<std::size_t>::max)()
+                : lines[line + 1u].first;
+            if (index < current.past_last
+                || (index == current.past_last && (last || index < nextStart)))
+                return line;
+        }
+        return lines.size() - 1u;
+    }
+
     [[nodiscard]] static std::size_t edit_box_index_from_point(
         std::string_view text,
         float pointerX,
@@ -6748,36 +7051,30 @@ namespace epochengine::gui
         gui_lib::Vec2 scroll,
         float lineAdvance,
         float scale,
-        bool multiline) noexcept
+        bool multiline,
+        float wrapWidth) noexcept
     {
-        std::size_t lineStart = 0u;
-        if (multiline)
-        {
-            const float localY = (std::max)(0.0f, pointerY - textY + scroll.y);
-            const std::size_t requestedLine =
-                static_cast<std::size_t>(localY / (std::max)(1.0f, lineAdvance));
-            for (std::size_t line = 0u; line < requestedLine && lineStart < text.size(); ++line)
-            {
-                const std::size_t lineEnd = edit_box_line_end(text, lineStart);
-                lineStart = lineEnd < text.size() ? lineEnd + 1u : text.size();
-            }
-        }
-
-        const std::size_t lineEnd = edit_box_line_end(text, lineStart);
+        const auto lines = edit_box_visual_lines(text, wrapWidth, scale, multiline);
+        const float localY = multiline
+            ? (std::max)(0.0f, pointerY - textY + scroll.y) : 0.0f;
+        const std::size_t requestedLine = multiline
+            ? (std::min)(lines.size() - 1u,
+                static_cast<std::size_t>(localY / (std::max)(1.0f, lineAdvance)))
+            : 0u;
+        const auto line = lines[requestedLine];
         const float localX = pointerX - textX + scroll.x;
         if (localX <= 0.0f)
-            return lineStart;
+            return line.first;
 
         float penX = 0.0f;
-        for (std::size_t index = lineStart; index < lineEnd; ++index)
+        std::size_t index = line.first;
+        while (index < line.past_last)
         {
             const std::size_t byteIndex = index;
-            const DecodedUtf8Codepoint decoded =
-                decode_utf8_codepoint(text, byteIndex);
-            const char32_t codepoint =
-                safe_draw_codepoint(decoded.codepoint);
-            index += (std::max)(
-                std::size_t{1u}, decoded.byte_count) - 1u;
+            const DecodedUtf8Codepoint decoded = decode_utf8_codepoint(text, byteIndex);
+            const std::size_t byteCount = (std::max)(
+                std::size_t{1u}, decoded.byte_count);
+            const char32_t codepoint = safe_draw_codepoint(decoded.codepoint);
             const float advance = glyph_advance_with_kerning(
                 codepoint,
                 next_drawable_char(text, byteIndex),
@@ -6785,43 +7082,39 @@ namespace epochengine::gui
             if (localX <= penX + advance * 0.5f)
                 return byteIndex;
             penX += advance;
+            index = (std::min)(line.past_last, byteIndex + byteCount);
         }
-        return lineEnd;
+        return line.past_last;
     }
 
     [[nodiscard]] static gui_lib::TextControlMetrics edit_box_text_metrics(
         const gui_lib::TextControlState& state,
         float scale,
         float lineAdvance,
-        float caretHeight) noexcept
+        float caretHeight,
+        float wrapWidth,
+        bool multiline) noexcept
     {
         const std::string_view text{ state.text };
+        const auto lines = edit_box_visual_lines(text, wrapWidth, scale, multiline);
         float maximumWidth = 0.0f;
-        std::size_t lineCount = 1u;
-        std::size_t lineStart = 0u;
-        while (lineStart <= text.size())
+        for (const auto& line : lines)
         {
-            const std::size_t lineEnd = edit_box_line_end(text, lineStart);
-            maximumWidth = (std::max)(
-                maximumWidth,
-                edit_box_x_for_index(text, lineStart, lineEnd, scale));
-            if (lineEnd >= text.size())
-                break;
-            ++lineCount;
-            lineStart = lineEnd + 1u;
+            maximumWidth = (std::max)(maximumWidth,
+                measure_text_width(text.substr(
+                    line.first, line.past_last - line.first), scale));
         }
 
         const std::size_t caret = (std::min)(state.caret, text.size());
-        const std::size_t caretLineStart = edit_box_line_start(text, caret);
-        std::size_t caretLine = 0u;
-        for (std::size_t index = 0u; index < caretLineStart; ++index)
-            if (text[index] == '\n')
-                ++caretLine;
-
+        const std::size_t caretLine = edit_box_visual_line_for_index(lines, caret);
+        const auto line = lines[caretLine];
         return gui_lib::TextControlMetrics{
-            .content_size = { maximumWidth, static_cast<float>(lineCount) * lineAdvance },
+            .content_size = {
+                multiline ? (std::min)(maximumWidth, wrapWidth) : maximumWidth,
+                static_cast<float>(lines.size()) * lineAdvance
+            },
             .caret_position = {
-                edit_box_x_for_index(text, caretLineStart, caret, scale),
+                edit_box_x_for_index(text, line.first, caret, scale),
                 static_cast<float>(caretLine) * lineAdvance
             },
             .caret_size = { 1.0f, caretHeight },
@@ -6829,7 +7122,12 @@ namespace epochengine::gui
         };
     }
 
-    EditBoxResult edit_box(std::string& text, Vec2 size, std::size_t max_chars, bool multiline) noexcept
+    EditBoxResult edit_box(
+        std::string& text,
+        Vec2 size,
+        std::size_t max_chars,
+        bool multiline,
+        TextInputKeyboardPolicy keyboard_policy) noexcept
     {
         EditBoxResult result{};
         if (!g_frame.insideWindow || !g_frame.ctx)
@@ -6889,7 +7187,7 @@ namespace epochengine::gui
 
         const auto metrics = [&]()
         {
-            return edit_box_text_metrics(widget.control, kFontScale, lineAdvance, baseHeight);
+            return edit_box_text_metrics(widget.control, kFontScale, lineAdvance, baseHeight, contentWidth, multiline);
         };
         const auto dispatch = [&](gui_lib::TextControlCommand command,
                                   std::string_view payload = {},
@@ -6966,7 +7264,8 @@ namespace epochengine::gui
                 widget.control.scroll,
                 lineAdvance,
                 kFontScale,
-                multiline);
+                multiline,
+                contentWidth);
             (void)dispatch(
                 gui_lib::TextControlCommand::set_caret,
                 {},
@@ -6985,7 +7284,8 @@ namespace epochengine::gui
                 widget.control.scroll,
                 lineAdvance,
                 kFontScale,
-                multiline);
+                multiline,
+                contentWidth);
             (void)dispatch(
                 gui_lib::TextControlCommand::set_caret,
                 {},
@@ -6995,7 +7295,9 @@ namespace epochengine::gui
         if (!g_frame.mouseDown)
             widget.draggingSelection = false;
 
-        if (active)
+        const bool keyboardInputEnabled = active
+            && (keyboard_policy == TextInputKeyboardPolicy::focused || hovered);
+        if (keyboardInputEnabled)
         {
             for (const auto& event : g_frame.events)
             {
@@ -7074,34 +7376,43 @@ namespace epochengine::gui
         text = widget.control.text;
         result.active = active;
 
-        draw_sprite(active ? palette.textFieldActive : palette.textField, pos.x, pos.y, width, height);
+        draw_sprite(
+            keyboardInputEnabled ? palette.textFieldActive : palette.textField,
+            pos.x,
+            pos.y,
+            width,
+            height);
         {
             ContentClipScope clip(
                 { pos.x + 1.0f, pos.y + 1.0f },
                 { pos.x + width - 1.0f, pos.y + height - 1.0f });
             const auto selection = gui_lib::text_selection(widget.control);
             const std::string_view view{ widget.control.text };
-            std::size_t lineStart = 0u;
-            std::size_t lineIndex = 0u;
-            while (lineStart <= view.size())
+            const auto visualLines = edit_box_visual_lines(
+                view, contentWidth, kFontScale, multiline);
+            for (std::size_t lineIndex = 0u; lineIndex < visualLines.size(); ++lineIndex)
             {
-                const std::size_t lineEnd = edit_box_line_end(view, lineStart);
+                const auto line = visualLines[lineIndex];
                 const float drawX = textX - widget.control.scroll.x;
                 const float drawY = textY
                     + static_cast<float>(lineIndex) * lineAdvance
                     - widget.control.scroll.y;
 
-                if (!selection.empty() && selection.past_last >= lineStart && selection.first <= lineEnd)
+                if (!selection.empty()
+                    && selection.past_last >= line.first
+                    && selection.first <= line.past_last)
                 {
-                    const std::size_t highlightBegin = (std::max)(selection.first, lineStart);
-                    const std::size_t highlightEnd = (std::min)(selection.past_last, lineEnd);
+                    const std::size_t highlightBegin = (std::max)(
+                        selection.first, line.first);
+                    const std::size_t highlightEnd = (std::min)(
+                        selection.past_last, line.past_last);
                     const float highlightX = drawX
-                        + edit_box_x_for_index(view, lineStart, highlightBegin, kFontScale);
-                    float highlightWidth =
-                        edit_box_x_for_index(view, lineStart, highlightEnd, kFontScale)
-                        - edit_box_x_for_index(view, lineStart, highlightBegin, kFontScale);
-                    if (selection.past_last > lineEnd && highlightEnd == lineEnd)
-                        highlightWidth += space_advance(kFontScale) * 0.75f;
+                        + edit_box_x_for_index(
+                            view, line.first, highlightBegin, kFontScale);
+                    const float highlightWidth = edit_box_x_for_index(
+                        view, line.first, highlightEnd, kFontScale)
+                        - edit_box_x_for_index(
+                            view, line.first, highlightBegin, kFontScale);
                     if (highlightWidth > 0.0f)
                         draw_sprite(
                             palette.buttonActive,
@@ -7111,24 +7422,21 @@ namespace epochengine::gui
                             baseHeight + 2.0f);
                 }
 
-                draw_text_line(view.substr(lineStart, lineEnd - lineStart), drawX, drawY, kFontScale);
-                if (!multiline || lineEnd >= view.size())
-                    break;
-                lineStart = lineEnd + 1u;
-                ++lineIndex;
+                draw_text_line(
+                    view.substr(line.first, line.past_last - line.first),
+                    drawX,
+                    drawY,
+                    kFontScale);
             }
 
-            if (active)
+            if (keyboardInputEnabled)
             {
                 const std::size_t caret = (std::min)(widget.control.caret, view.size());
-                const std::size_t caretLineStart = edit_box_line_start(view, caret);
-                std::size_t caretLine = 0u;
-                for (std::size_t index = 0u; index < caretLineStart; ++index)
-                    if (view[index] == '\n')
-                        ++caretLine;
-
+                const std::size_t caretLine = edit_box_visual_line_for_index(
+                    visualLines, caret);
+                const auto line = visualLines[caretLine];
                 const float caretX = textX - widget.control.scroll.x
-                    + edit_box_x_for_index(view, caretLineStart, caret, kFontScale);
+                    + edit_box_x_for_index(view, line.first, caret, kFontScale);
                 const float caretY = textY - widget.control.scroll.y
                     + static_cast<float>(caretLine) * lineAdvance;
                 draw_caret(caretX, caretY, (std::min)(contentHeight, baseHeight));
@@ -10001,24 +10309,20 @@ namespace epochengine::gui
                 const bool styledRole = role_is_styled(role);
                 if (styledRole)
                 {
-                    switch (role)
-                    {
-                    case TextMessageRole::user:
-                        draw_sprite(palette.buttonActive, contentX, rowY, contentWidth, rowHeight - rowGap);
-                        break;
-                    case TextMessageRole::assistant:
-                        draw_sprite(palette.panelBackground, contentX, rowY, contentWidth, rowHeight - rowGap);
-                        break;
-                    case TextMessageRole::system:
-                        draw_sprite(palette.buttonNormal, contentX, rowY, contentWidth, rowHeight - rowGap);
-                        break;
-                    case TextMessageRole::error:
-                        draw_sprite(palette.buttonHover, contentX, rowY, contentWidth, rowHeight - rowGap);
-                        break;
-                    case TextMessageRole::neutral:
-                    default:
-                        break;
-                    }
+                    const auto& semantic = active_semantic_pair(
+                        semantic_tone_for_message_role(role));
+                    draw_sprite(
+                        semantic.background,
+                        contentX,
+                        rowY,
+                        contentWidth,
+                        rowHeight - rowGap);
+                    draw_sprite(
+                        semantic.accent,
+                        contentX,
+                        rowY,
+                        4.0f,
+                        rowHeight - rowGap);
                 }
 
                 const auto [firstSelected, lastSelected] = selected_line_range();
@@ -10162,7 +10466,23 @@ namespace epochengine::gui
         const bool taskVisible = options.task_editing
             || !options.task_label.empty() || !options.task_value.empty()
             || !options.task_actions.empty();
-        const float taskValueHeight = taskVisible ? controlRowHeight : 0.0f;
+        std::string taskDisplayText{};
+        if (taskVisible && !options.task_editing)
+        {
+            if (!options.task_label.empty())
+                taskDisplayText = std::string{options.task_label} + ": ";
+            taskDisplayText += options.task_value;
+        }
+        const float taskValueHeight = !taskVisible
+            ? 0.0f
+            : options.task_editing || options.task_tone == SemanticTone::neutral
+                ? controlRowHeight
+                : (std::max)(
+                    controlRowHeight,
+                    measure_wrapped_text_height(
+                        taskDisplayText,
+                        (std::max)(1.0f, availableWidth - 20.0f),
+                        kFontScale) + 16.0f);
         const float taskActionHeight = options.task_actions.empty()
             ? 0.0f : controlRowHeight;
         const float fieldHeight = options.input
@@ -10256,7 +10576,8 @@ namespace epochengine::gui
                     action.label,
                     actionSize,
                     false,
-                    action.enabled);
+                    action.enabled,
+                    action.tone);
                 if (activatedOnPress
                     || (!action.activate_on_press && clicked))
                 {
@@ -10277,13 +10598,13 @@ namespace epochengine::gui
                     options.task_max_input_chars,
                     false);
             }
+            else if (options.task_tone != SemanticTone::neutral)
+            {
+                semantic_block(taskDisplayText, options.task_tone, availableWidth);
+            }
             else
             {
-                std::string taskText{};
-                if (!options.task_label.empty())
-                    taskText = std::string{options.task_label} + ": ";
-                taskText += options.task_value;
-                text_box(taskText, {availableWidth, taskValueHeight});
+                text_box(taskDisplayText, {availableWidth, taskValueHeight});
             }
             render_actions(
                 options.task_actions,
@@ -10344,7 +10665,12 @@ namespace epochengine::gui
 
                 set_cursor({ logPos.x, rowY });
                 Vec2 inputSize{ inputWidth, fieldHeight };
-                result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
+                result.input = edit_box(
+                    *options.input,
+                    inputSize,
+                    options.max_input_chars,
+                    options.multiline_input,
+                    options.input_keyboard_policy);
 
                 set_cursor({ logPos.x + inputWidth + kContentPadding, rowY });
                 if (button(options.send_button_label, { buttonWidth, fieldHeight }) && options.send_button_enabled)
@@ -10353,7 +10679,12 @@ namespace epochengine::gui
             else
             {
                 Vec2 inputSize{ availableWidth, fieldHeight };
-                result.input = edit_box(*options.input, inputSize, options.max_input_chars, options.multiline_input);
+                result.input = edit_box(
+                    *options.input,
+                    inputSize,
+                    options.max_input_chars,
+                    options.multiline_input,
+                    options.input_keyboard_policy);
             }
         }
 

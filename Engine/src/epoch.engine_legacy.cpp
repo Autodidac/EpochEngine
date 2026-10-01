@@ -186,6 +186,7 @@ import ai.project_profile;
 import ai.curated_context_bundle;
 import ai.iteration_loop;
 import ai.iteration_session;
+import ai.source_discovery_contract;
 import ai.iteration_campaign;
 import ai.mcp_campaign;
 import ai.mcp_child_host;
@@ -2878,6 +2879,9 @@ namespace epochengine::core
         check(
             "ai.iteration_session",
             epochengine::ai::iteration_session::run_contract());
+        check(
+            "ai.source_discovery",
+            epochengine::ai::source_discovery_contract::run_contract());
         check(
             "ai.iteration_campaign",
             epochengine::ai::iteration_campaign::run_contract());
@@ -7146,30 +7150,32 @@ namespace epochengine::core
         }
 
         [[nodiscard]] epochengine::project_input::ModifierMask
-        project_modifier_snapshot() noexcept
+        project_modifier_snapshot(const epochengine::core::Context* ctx) noexcept
         {
             namespace project_input = epochengine::project_input;
             project_input::ModifierMask result{};
-            if (input::is_key_held(input::Key::LeftShift)
-                || input::is_key_held(input::Key::RightShift))
+            if (!ctx)
+                return result;
+            if (ctx->is_key_held_safe(input::Key::LeftShift)
+                || ctx->is_key_held_safe(input::Key::RightShift))
             {
                 result |= project_input::modifier_mask(
                     project_input::Modifier::shift);
             }
-            if (input::is_key_held(input::Key::LeftControl)
-                || input::is_key_held(input::Key::RightControl))
+            if (ctx->is_key_held_safe(input::Key::LeftControl)
+                || ctx->is_key_held_safe(input::Key::RightControl))
             {
                 result |= project_input::modifier_mask(
                     project_input::Modifier::control);
             }
-            if (input::is_key_held(input::Key::LeftAlt)
-                || input::is_key_held(input::Key::RightAlt))
+            if (ctx->is_key_held_safe(input::Key::LeftAlt)
+                || ctx->is_key_held_safe(input::Key::RightAlt))
             {
                 result |= project_input::modifier_mask(
                     project_input::Modifier::alt);
             }
-            if (input::is_key_held(input::Key::LeftSuper)
-                || input::is_key_held(input::Key::RightSuper))
+            if (ctx->is_key_held_safe(input::Key::LeftSuper)
+                || ctx->is_key_held_safe(input::Key::RightSuper))
             {
                 result |= project_input::modifier_mask(
                     project_input::Modifier::super);
@@ -7181,6 +7187,7 @@ namespace epochengine::core
         project_input_snapshot(
             const epochengine::project_input::CompiledInputProfile& profile,
             std::uint64_t frameIndex,
+            const epochengine::core::Context* ctx,
             bool samplePhysicalInput)
         {
             namespace project_input = epochengine::project_input;
@@ -7201,7 +7208,7 @@ namespace epochengine::core
             std::sort(keys.begin(), keys.end());
             keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
 
-            snapshot.modifiers = project_modifier_snapshot();
+            snapshot.modifiers = project_modifier_snapshot(ctx);
             snapshot.keyboard.reserve(keys.size());
             for (const auto projectKey : keys)
             {
@@ -7210,8 +7217,8 @@ namespace epochengine::core
                     continue;
                 snapshot.keyboard.push_back({
                     .key = projectKey,
-                    .held = input::is_key_held(*key),
-                    .pressed = input::is_key_down(*key)
+                    .held = ctx && ctx->is_key_held_safe(*key),
+                    .pressed = ctx && ctx->is_key_down_safe(*key)
                 });
             }
             return snapshot;
@@ -7301,7 +7308,7 @@ namespace epochengine::core
                 if (!ctx)
                     return false;
 
-                if (input::action_pressed(input::Action::Cancel))
+                if (ctx->action_pressed_safe(input::Action::Cancel))
                 {
                     epochengine::previewgrid::clear_object_markers(ctx.get());
                     epochengine::previewgrid::clear_lighting_frame(ctx.get());
@@ -7347,7 +7354,10 @@ namespace epochengine::core
                     projectGuiCapturesKeyboard =
                         m_projectGuiRuntime->keyboard_captured();
                 }
-                advance_gameplay(dt, projectGuiCapturesKeyboard);
+                advance_gameplay(
+                    ctx.get(),
+                    dt,
+                    projectGuiCapturesKeyboard || !ctx->has_input_focus_safe());
 
                 const bool backendOwnsFrameClear =
                     ctx->type == core::ContextType::OpenGL;
@@ -7422,15 +7432,15 @@ namespace epochengine::core
                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
 
                 const int wheelDelta = epochengine::gui::consume_mouse_wheel_delta();
-                if (input::action_pressed(input::Action::ResetCamera))
+                if (ctx->action_pressed_safe(input::Action::ResetCamera))
                     epochengine::previewgrid::reset_camera(ctx.get());
 
-                const bool altHeld = input::is_key_held(input::Key::LeftAlt)
-                    || input::is_key_held(input::Key::RightAlt);
-                const bool shiftHeld = input::is_key_held(input::Key::LeftShift)
-                    || input::is_key_held(input::Key::RightShift);
-                const bool controlHeld = input::is_key_held(input::Key::LeftControl)
-                    || input::is_key_held(input::Key::RightControl);
+                const bool altHeld = ctx->is_key_held_safe(input::Key::LeftAlt)
+                    || ctx->is_key_held_safe(input::Key::RightAlt);
+                const bool shiftHeld = ctx->is_key_held_safe(input::Key::LeftShift)
+                    || ctx->is_key_held_safe(input::Key::RightShift);
+                const bool controlHeld = ctx->is_key_held_safe(input::Key::LeftControl)
+                    || ctx->is_key_held_safe(input::Key::RightControl);
                 const auto navigationGestures =
                     epochengine::previewgrid::resolve_camera_navigation_gestures(
                         altHeld, mouse_left_down, mouse_middle_down, mouse_right_down);
@@ -7442,20 +7452,20 @@ namespace epochengine::core
                 const float navigationMultiplier = shiftHeld ? 4.0f : (controlHeld ? 0.25f : 1.0f);
 
                 const float forwardInput = !keyboardNavigation ? 0.0f :
-                    (input::action_held(input::Action::MoveForward) ? 1.0f : 0.0f)
-                    - (input::action_held(input::Action::MoveBackward) ? 1.0f : 0.0f);
+                    (ctx->action_held_safe(input::Action::MoveForward) ? 1.0f : 0.0f)
+                    - (ctx->action_held_safe(input::Action::MoveBackward) ? 1.0f : 0.0f);
                 const float rightInput = !keyboardNavigation ? 0.0f :
-                    (input::action_held(input::Action::MoveRight) ? 1.0f : 0.0f)
-                    - (input::action_held(input::Action::MoveLeft) ? 1.0f : 0.0f);
+                    (ctx->action_held_safe(input::Action::MoveRight) ? 1.0f : 0.0f)
+                    - (ctx->action_held_safe(input::Action::MoveLeft) ? 1.0f : 0.0f);
                 const float upInput = !keyboardNavigation ? 0.0f :
-                    (input::action_held(input::Action::MoveUp) ? 1.0f : 0.0f)
-                    - (input::action_held(input::Action::MoveDown) ? 1.0f : 0.0f);
+                    (ctx->action_held_safe(input::Action::MoveUp) ? 1.0f : 0.0f)
+                    - (ctx->action_held_safe(input::Action::MoveDown) ? 1.0f : 0.0f);
                 const float yawInput = !keyboardNavigation ? 0.0f :
-                    (input::action_held(input::Action::LookRight) ? 1.0f : 0.0f)
-                    - (input::action_held(input::Action::LookLeft) ? 1.0f : 0.0f);
+                    (ctx->action_held_safe(input::Action::LookRight) ? 1.0f : 0.0f)
+                    - (ctx->action_held_safe(input::Action::LookLeft) ? 1.0f : 0.0f);
                 const float pitchInput = !keyboardNavigation ? 0.0f :
-                    (input::action_held(input::Action::LookUp) ? 1.0f : 0.0f)
-                    - (input::action_held(input::Action::LookDown) ? 1.0f : 0.0f);
+                    (ctx->action_held_safe(input::Action::LookUp) ? 1.0f : 0.0f)
+                    - (ctx->action_held_safe(input::Action::LookDown) ? 1.0f : 0.0f);
 
 
                 if ((flying && m_lookState.flying) || (orbiting && m_lookState.orbiting))
@@ -7965,6 +7975,7 @@ namespace epochengine::core
             }
 
             void advance_gameplay(
+                const epochengine::core::Context* ctx,
                 float frameSeconds,
                 bool suppressPhysicalInput)
             {
@@ -8002,6 +8013,7 @@ namespace epochengine::core
                 auto snapshot = project_input_snapshot(
                     *projectInput,
                     m_inputFrameIndex,
+                    ctx,
                     !suppressPhysicalInput);
                 const auto physicalControllers =
                     epochengine::controller_input::snapshot();
@@ -9800,12 +9812,12 @@ namespace epochengine::core
                                 else
                                 {
                                     const int wheelDelta = epochengine::gui::consume_mouse_wheel_delta();
-                                    const bool altHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftAlt)
-                                        || epochengine::input::is_key_held(epochengine::input::Key::RightAlt);
-                                    const bool shiftHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftShift)
-                                        || epochengine::input::is_key_held(epochengine::input::Key::RightShift);
-                                    const bool controlHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftControl)
-                                        || epochengine::input::is_key_held(epochengine::input::Key::RightControl);
+                                    const bool altHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftAlt)
+                                        || ctx->is_key_held_safe(epochengine::input::Key::RightAlt);
+                                    const bool shiftHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftShift)
+                                        || ctx->is_key_held_safe(epochengine::input::Key::RightShift);
+                                    const bool controlHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftControl)
+                                        || ctx->is_key_held_safe(epochengine::input::Key::RightControl);
                                     const auto navigationGestures =
                                         epochengine::previewgrid::resolve_camera_navigation_gestures(
                                             altHeld, mouse_left_down, mouse_middle_down, mouse_right_down);
@@ -9822,22 +9834,22 @@ namespace epochengine::core
                                         ? 4.0f
                                         : (controlHeld ? 0.25f : 1.0f);
                                     const float forwardInput = !keyboardNavigation ? 0.0f :
-                                        (epochengine::input::action_held(epochengine::input::Action::MoveForward) ? 1.0f : 0.0f)
-                                        - (epochengine::input::action_held(epochengine::input::Action::MoveBackward) ? 1.0f : 0.0f);
+                                        (ctx->action_held_safe(epochengine::input::Action::MoveForward) ? 1.0f : 0.0f)
+                                        - (ctx->action_held_safe(epochengine::input::Action::MoveBackward) ? 1.0f : 0.0f);
                                     const float rightInput = !keyboardNavigation ? 0.0f :
-                                        (epochengine::input::action_held(epochengine::input::Action::MoveRight) ? 1.0f : 0.0f)
-                                        - (epochengine::input::action_held(epochengine::input::Action::MoveLeft) ? 1.0f : 0.0f);
+                                        (ctx->action_held_safe(epochengine::input::Action::MoveRight) ? 1.0f : 0.0f)
+                                        - (ctx->action_held_safe(epochengine::input::Action::MoveLeft) ? 1.0f : 0.0f);
                                     const float upInput = !keyboardNavigation ? 0.0f :
-                                        (epochengine::input::action_held(epochengine::input::Action::MoveUp) ? 1.0f : 0.0f)
-                                        - (epochengine::input::action_held(epochengine::input::Action::MoveDown) ? 1.0f : 0.0f);
+                                        (ctx->action_held_safe(epochengine::input::Action::MoveUp) ? 1.0f : 0.0f)
+                                        - (ctx->action_held_safe(epochengine::input::Action::MoveDown) ? 1.0f : 0.0f);
                                     const float yawInput = !keyboardNavigation ? 0.0f :
-                                        (epochengine::input::action_held(epochengine::input::Action::LookRight) ? 1.0f : 0.0f)
-                                        - (epochengine::input::action_held(epochengine::input::Action::LookLeft) ? 1.0f : 0.0f);
+                                        (ctx->action_held_safe(epochengine::input::Action::LookRight) ? 1.0f : 0.0f)
+                                        - (ctx->action_held_safe(epochengine::input::Action::LookLeft) ? 1.0f : 0.0f);
                                     const float pitchInput = !keyboardNavigation ? 0.0f :
-                                        (epochengine::input::action_held(epochengine::input::Action::LookUp) ? 1.0f : 0.0f)
-                                        - (epochengine::input::action_held(epochengine::input::Action::LookDown) ? 1.0f : 0.0f);
+                                        (ctx->action_held_safe(epochengine::input::Action::LookUp) ? 1.0f : 0.0f)
+                                        - (ctx->action_held_safe(epochengine::input::Action::LookDown) ? 1.0f : 0.0f);
 
-                                    if (epochengine::input::action_pressed(epochengine::input::Action::ResetCamera))
+                                    if (ctx->action_pressed_safe(epochengine::input::Action::ResetCamera))
                                         epochengine::previewgrid::reset_camera(ctx.get());
 
                                     if ((flying && look_state.flying) || (orbiting && look_state.orbiting))

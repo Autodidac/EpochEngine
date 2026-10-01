@@ -57,6 +57,29 @@ A documentation cleanup must never silently delete or downgrade a goal.
   specific changes. Preserve old baseline history and make later base updates
   deliberate, separately tested decisions, not automatic mirrors of game work.
 
+
+## Late-September Renderer/Editor Durability (v0.90.24-v0.90.33)
+
+These are durable requirements, not completion claims:
+
+- Event-driven rendering must invalidate both previous and current object footprints and must never let neuromorphic policy suppress authoritative damage.
+- Cached/partial/full/conventional statistics and A/B selective/full-baseline evidence persist across feature disable/enable until explicit reset. Presentation FPS and measured render throughput remain distinct values.
+- Lighting damage belongs to the shared lighting core. Ambient/directional changes may invalidate globally; point/spot lights should preserve conservative previous/current bounded influence damage for any backend that supports partial reuse.
+- 3D selection is a set with a primary object. Shift selection, marquee selection, batch creation, and group movement must remain one coherent editor model; group transforms use one authored scene transaction.
+- Undo/Redo may retain inactive temporal slots but those slots cannot permanently reserve semantic object identity or block create-after-Undo/delete-recreate.
+- Physical input belongs to the focused native Epoch context. Detached/floating contexts must keep top-row GUI controls clickable, docking guides visible, and closed panes recoverable from the Window/command menu.
+- Detached AI Chat is a projection of one canonical editor AI/model/session owner. Undocking during Run must not instantiate a competing owner.
+- EpochGui owns reusable font/window shadow presentation rather than editor-domain or backend-specific duplicate implementations.
+- `EpochEngine.lib` is reusable library code and must not export an application entry point. Debug x64 and Release x64 ProjectLauncher builds must each link exactly one executable `main` and remain relocatable inside the extracted source tree.
+- The oscillator benchmark example must remain discoverable from selected-object Properties -> Movement / Benchmark and as editable project script source.
+
+## Current Source-Discovery Invariant (v0.90.22)
+
+- Discovery is cumulative and host-owned: exact reviewed evidence grows across the iteration instead of being replaced by small source slices.
+- Navigation uses a compact repository map plus bounded path/symbol/text/import/reference searches; exact bytes remain required before an edit is authorized.
+- Budget by context/evidence size, not a practical fixed file count. Stop repeated zero-information discovery after two stagnant rounds.
+- Preserve the existing sandbox/build/test/approval/promotion boundary.
+
 ## Engine Self-Coding
 
 - September 6 renewed 24-hour priority: complete the real Qwen repair/build/
@@ -64,7 +87,7 @@ A documentation cleanup must never silently delete or downgrade a goal.
   Add nonblocking 30-second cooldowns and measured resource checks before heavy
   model/compiler/test/preview work, including after Keep/Choose. Show actual
   running/queued/idle work; registered worker lifetimes are not active jobs.
-- The requested next feature release is v0.90.1 and becomes the current reusable
+- The requested next feature release is v0.90.04 and becomes the current reusable
   base only after native, build, safety, packaging and rollback gates pass.
   Update current downloads, authenticated source, docs and authorized branches
   together; never rewrite old verified objects or call an untested base stable.
@@ -74,18 +97,18 @@ A documentation cleanup must never silently delete or downgrade a goal.
   model/build/comparison/successor run and are not a claim of perfection.
 - Model selection needs both memory and a default. Preserve an explicit current
   selection; otherwise restore the last-used model; otherwise use the confirmed
-  local default `nvidia/nemotron-3-nano-4b`. Ejection is not deletion and an empty
+  local default `qwen/qwen3.8-27b`. Ejection is not deletion and an empty
   inventory must not erase a saved model. Scanning/restoring preferences never
   sends a prompt, starts inference, or ejects another task's model. A user request
   may use the eligible remembered/default local model without redundant Confirm.
-- Show model roles clearly: Nemotron 4B is the quick assistant/diagnostic helper;
-  Qwen 3.5+ is the requested self-coding guidance, and Qwen 3.8 is preferred
-  for independent long-horizon coding. This is not a model-brand/version
+- Show model roles clearly: Qwen3.8 27B is the default local/self-coding model and
+  remains operator-replaceable from Model Settings. Older/smaller installed models
+  remain optional inventory, not automatic substitutes for the coding worker. This is not a model-brand/version
   allowlist: newer explicitly selected agentic models may attempt the same
   validated workflow. Keep role selection explicit and visible,
   preserve a selected coding model through retries, and explain required model
-  changes. Do not silently substitute the small helper for the coding worker or
-  unload models owned by other tasks. Model names are configuration/selection
+  changes. Do not silently substitute another model for the coding worker or unload models
+  owned by other tasks. Model names are configuration/selection
   policy, not proof that an actual task will succeed.
 - Prove the actual Qwen loop before expanding unrelated features. A compiler
   failure feeds its real diagnostic

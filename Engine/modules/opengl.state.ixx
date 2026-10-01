@@ -70,6 +70,7 @@ export module opengl.state;
 
 import core.timer;          // timing::Timer, timing::createTimer(...)
 import opengl.platform;   // PlatformGLContext
+import render.neuromorphic_invalidation;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
@@ -152,6 +153,17 @@ export namespace epochengine::openglstate
         GLsizei sceneGridIndexCount = 0;
         GLuint sceneMarkerVao = 0;
         GLuint sceneMarkerVbo = 0;
+
+        // Persistent editor-scene cache used by event-driven partial redraw.
+        GLuint sceneCacheFramebuffer = 0;
+        GLuint sceneCacheColor = 0;
+        GLuint sceneCacheDepth = 0;
+        int sceneCacheWidth = 0;
+        int sceneCacheHeight = 0;
+        std::uint64_t sceneCacheCameraRevision = 0;
+        std::uint64_t sceneCacheGeometryRevision = 0;
+        bool sceneCacheValid = false;
+        epochengine::render::neuromorphic_invalidation::InvalidationNetwork sceneInvalidationNetwork{};
 
         GLuint arcadeScreenShader = 0;
         GLint arcadeScreenMvpLoc = -1;

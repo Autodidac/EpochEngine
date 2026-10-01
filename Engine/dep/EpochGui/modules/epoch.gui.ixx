@@ -18,8 +18,87 @@ export namespace epochengine::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 89;
-    inline constexpr int version_revision = 30;
-    inline constexpr std::string_view version_string = "0.89.30";
+    inline constexpr int version_revision = 31;
+    inline constexpr std::string_view version_string = "0.89.32";
+
+    enum class SemanticTone : std::uint8_t
+    {
+        neutral = 0,
+        muted,
+        info,
+        success,
+        warning,
+        error,
+        assistant,
+        engine
+    };
+
+    inline constexpr std::size_t semantic_tone_count = 8u;
+
+    struct Rgba8
+    {
+        std::uint8_t r{};
+        std::uint8_t g{};
+        std::uint8_t b{};
+        std::uint8_t a{255};
+    };
+
+    struct SemanticColors
+    {
+        Rgba8 background{};
+        Rgba8 accent{};
+    };
+
+    [[nodiscard]] constexpr std::string_view semantic_tone_name(
+        SemanticTone tone) noexcept
+    {
+        switch (tone)
+        {
+        case SemanticTone::muted: return "muted";
+        case SemanticTone::info: return "info";
+        case SemanticTone::success: return "success";
+        case SemanticTone::warning: return "warning";
+        case SemanticTone::error: return "error";
+        case SemanticTone::assistant: return "assistant";
+        case SemanticTone::engine: return "engine";
+        case SemanticTone::neutral:
+        default: return "neutral";
+        }
+    }
+
+    [[nodiscard]] constexpr SemanticColors semantic_colors(
+        SemanticTone tone,
+        bool light_surface) noexcept
+    {
+        if (light_surface)
+        {
+            switch (tone)
+            {
+            case SemanticTone::muted: return {{0xE5, 0xE7, 0xEB}, {0x6B, 0x72, 0x80}};
+            case SemanticTone::info: return {{0xDD, 0xEB, 0xFA}, {0x2F, 0x6F, 0xAB}};
+            case SemanticTone::success: return {{0xDD, 0xF3, 0xE6}, {0x2F, 0x8B, 0x57}};
+            case SemanticTone::warning: return {{0xF8, 0xEB, 0xCB}, {0xA7, 0x6B, 0x13}};
+            case SemanticTone::error: return {{0xF9, 0xDF, 0xE3}, {0xB9, 0x43, 0x50}};
+            case SemanticTone::assistant: return {{0xDD, 0xF1, 0xF3}, {0x26, 0x81, 0x8D}};
+            case SemanticTone::engine: return {{0xF6, 0xE5, 0xD6}, {0xB8, 0x63, 0x24}};
+            case SemanticTone::neutral:
+            default: return {{0xF1, 0xF3, 0xF5}, {0x7A, 0x82, 0x8C}};
+            }
+        }
+
+        switch (tone)
+        {
+        case SemanticTone::muted: return {{0x28, 0x2E, 0x38}, {0x6B, 0x72, 0x80}};
+        case SemanticTone::info: return {{0x17, 0x36, 0x5B}, {0x4D, 0xA3, 0xFF}};
+        case SemanticTone::success: return {{0x17, 0x3D, 0x2C}, {0x4A, 0xC7, 0x7B}};
+        case SemanticTone::warning: return {{0x4A, 0x35, 0x17}, {0xF4, 0xB9, 0x42}};
+        case SemanticTone::error: return {{0x4A, 0x1F, 0x26}, {0xF0, 0x6A, 0x75}};
+        case SemanticTone::assistant: return {{0x18, 0x3C, 0x46}, {0x55, 0xC8, 0xD8}};
+        case SemanticTone::engine: return {{0x48, 0x2D, 0x18}, {0xF0, 0x9A, 0x4A}};
+        case SemanticTone::neutral:
+        default: return {{0x24, 0x29, 0x31}, {0x7A, 0x82, 0x8C}};
+        }
+    }
 
     struct Vec2
     {

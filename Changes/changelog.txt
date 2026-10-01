@@ -1,4 +1,211 @@
-## [Unreleased] - v0.90.1 preparation (not a release)
+September 30, 2026 - v0.90.33 source synchronization checkpoint (not a binary release)
+- Integrated the supplied 0.90.33 snapshot, retaining cumulative AI discovery and the four preceding local source/build fixes.
+- Normal Debug and Release x64 Editor builds passed; source naming passed for 610 files.
+- Pure engine contracts still report three pre-existing AI request-format/proposal/prompt-budget failures; full evidence and next gate are in source_sync_2026-09-30.md.
+- No GUI, GPU, model, generated-project or sandbox comparison run is claimed; GitHub/Site source mirroring does not publish new binary downloads.
+
+v0.90.33 - Internal editor entry-point restoration + combined MSVC build
+- Restored EpochEditor to the engine-owned internal legacy main/wWinMain path; epoch.editor_entry.cpp remains a thin editor shell and does not define application main.
+- Removed ProjectLauncher from Engine.sln. Generated ProjectLauncher/static-runtime builds continue to suppress the internal legacy entry point only through EPOCH_MAIN_IN_MAIN_CPP and provide their own generated epoch.main.cpp.
+- Added Debug+Release | x64 to Engine.sln. Selecting it and building the solution invokes the normal Debug | x64 build followed by the normal Release | x64 build.
+- Kept Debug | x64 and Release | x64 behavior unchanged and retained the relocatable ProjectLauncher fixes from v0.90.32.
+
+v0.90.32 - MSVC static entry-point and relocatable ProjectLauncher fix
+- Prevent reusable EpochEngine.lib builds from exporting main/wWinMain.
+- Make bundled ProjectLauncher MSVC/CMake/build-script roots resolve from the extracted source tree.
+
+v0.90.31 - Undo/create scene identity branch fix
+- Fixed scene-document creation after Undo/Delete: inactive temporal tombstone slots no longer reject a new active object that reuses the same semantic ObjectId.
+- Preserved exact undo/redo handle history by allocating the new branch into a new slot rather than recycling the historical slot.
+- Fix applies to single cube creation, +4/+8 batch creation, AI/authoring scene.create transactions, and delete/recreate workflows.
+- Added a scene-document regression contract covering create -> undo -> recreate same identity -> undo/redo on the new branch.
+
+v0.90.30 - Accurate render FPS telemetry + multicontext recovery
+- Window titles now keep actual host/presentation FPS separate from measured render-path FPS; OpenGL titles identify CACHED/PARTIAL/FULL/CONVENTIONAL throughput, and A/B mode reports both selective and full-baseline render FPS.
+- Cached/partial/full/conventional path timing accumulators are persistent and visible even after event rendering is disabled; A/B samples also remain until the explicit reset command.
+- Added explicit reset for render-path statistics rather than silently clearing evidence on feature toggles.
+- Corrected native routed-pane docking-guide projection by scaling parent-host mouse coordinates into the editor surface and refreshing guides during routed-window drags.
+- Closing a detached tool pane now returns that pane to its remembered dock and makes it active; Window-menu Show/Return actions also activate reopened panes.
+- Detached AI Chat now owns only its text buffer and mailbox route; it no longer creates a second AiChat/model owner in the detached renderer context, removing the multicontext Run-mode ownership crash path.
+
+v0.90.29 - Multi-selection + bounded lighting invalidation + EpochGui/multicontext pass
+- Added Shift+click selection-set editing, empty-space marquee selection, one-transaction group movement, and atomic +4/+8 cube creation/selection.
+- Moved lighting damage semantics into renderer-neutral `render.lighting`: ambient/directional changes stay global while point/spot lights publish previous/current bounded influence volumes.
+- OpenGL event rendering consumes bounded light damage; full-frame backends remain correct and can adopt the same contract when partial reuse exists.
+- Added shared EpochGui font/window shadow presentation work, fixed multicontext top-row clicks being consumed by host dragging, and exposed the oscillator from selected-object Movement / Benchmark plus ProjectLauncher scripts.
+- ProjectLauncher remained engine-generated; later v0.90.33 removes it from Engine.sln so generated static-runtime entry-point ownership cannot collide with the editor library mode.
+
+v0.90.28 - Alternating selective/full render benchmark + oscillator example
+- Added A/B render benchmark mode that alternates SELECTIVE and FULL BASELINE frames while preserving one coherent persistent scene cache.
+- Added synchronized GPU-complete timing per lane with sample count, last, accumulated, average, min/max backing data, speedup, and average time-saved comparison.
+- Full baseline reconstructs 100% of the same cache and uses the same final blit, avoiding stale-cache and presentation-path bias.
+- Added a script-host callback and built-in Oscillate Selected Entity script; select a movable object, run the script, press Play, and benchmark repeatable localized motion.
+- Oscillator movement is transient preview behavior and does not spam authored transform history.
+
+v0.90.27 - Vacated-region event-renderer diagnostics
+- Added a separate Vacated-region overlay for previous object bounds so removal/erase reconstruction can be inspected independently from destination redraw.
+- Previous bounds remain mandatory damage and are always reconstructed; the new toggle controls diagnostics only.
+- Event-renderer status now reports localized vacated-region count.
+
+v0.90.26 - Vulkan standalone GLFW module-boundary build fix
+- Stop compiling GLFW window-focus/key polling inside normal integrated Vulkan editor builds.
+- Keep `Application::mouseCallback`, `processMouseInput`, and standalone `updateCamera` entirely behind `EPOCH_VULKAN_STANDALONE`.
+- Include GLFW declarations in the `vulkan.context:window` global module fragment only for the standalone path, preserving module isolation and the v0.90.25 focus-owned standalone camera behavior.
+
+v0.90.25 - Focus-owned input + readable renderer diagnostics + AI protocol privacy
+- Replace abbreviated event-renderer frame totals with explicit Cached / Partial / Full / Conventional labels.
+- Stop Win32 GetAsyncKeyState polling whenever another process owns the foreground window and flush held/pressed state on focus loss.
+- Make context-safe keyboard/mouse/action queries fail closed for unfocused Epoch windows, including detached/multi-monitor contexts; camera/play loops no longer bypass them through global action state.
+- Preserve mouse pressed-edge semantics and focus-gate the standalone Vulkan camera path so held buttons/WASD cannot leak across Epoch windows.
+- Prevent internal EPOCH_* authoring/tool/source protocol packets (including token-progress-prefixed packets) from being painted into Project Assistant chat.
+
+v0.90.24 - Mainline neuromorphic + event-driven 3D integration
+- Ported the latest v0.90.16 neuromorphic core into current mainline without the old Neuro Lab/editor experimental branch surface.
+- Added bounded weighted sparse graph, event-camera front end, timeline/task-graph adapters, and CPU-only `epoch_neuromorphic_contract`.
+- Added `render.neuromorphic_invalidation`; the OpenGL v0.90.23 cached/partial renderer now feeds real dirty-region activity into a persistent weighted network.
+- Neuromorphic render policy is conservative: it may promote partial work to a full redraw under dense/budget-pressure conditions, but it never suppresses a real invalidation. Existing camera/global/region-count/coverage fallbacks remain authoritative.
+- Registered all new C++23 modules in CMake and Visual Studio shared-items/filters and synchronized source identity to v0.90.24.
+
+v0.90.23 - MSVC module registration fix for event-renderer diagnostics
+- Registered `render.event_debug.ixx` in the checked-in `Engine.vcxitems` shared-items manifest used by the Visual Studio solution.
+- Added the matching Visual Studio filter entry so the module is compiled and discoverable before `opengl.preview` and editor imports consume it.
+- Corrected stale `engine.version.ixx` revision data and synchronized active package/source identity to v0.90.23.
+- No event-renderer behavior was removed; this release fixes the MSVC build wiring for the v0.90.22 diagnostics path.
+
+v0.90.22 - Event-driven renderer live diagnostics and A/B controls
+- Added backend-neutral `render.event_debug` state for real-time renderer-path telemetry and runtime controls.
+- World Settings now exposes Event renderer enable/disable, dirty-region overlay, current CACHED/PARTIAL/FULL/CONVENTIONAL path, fallback reason, dirty coverage, last render time, and cumulative path totals.
+- Systems status dock now reports the live event-renderer path and invalidation metrics.
+- OpenGL dirty-region debug outlines are drawn after cache presentation, so diagnostic pixels never contaminate persistent scene history.
+- Dirty rectangle merging is now transitive, preventing overlapping/touching invalidations from inflating dirty coverage.
+- Valid off-screen-only object changes now advance cached geometry revision without forcing a redundant full redraw on the following frame.
+- Corrected stale `epoch.version` 0.90.20 runtime/package revision values and advanced README, vcpkg, MCP asset, docs, and runtime identity to 0.90.23.
+
+v0.90.21 - Event-driven 3D renderer integration
+- OpenGL editor 3D scene now renders through a persistent color/depth cache instead of rebuilding unchanged scene pixels unconditionally.
+- Stable object-marker edits retain previous/current state, project conservative swept bounds, and redraw only affected scissored regions.
+- Camera changes, global/unknown scene mutations, object-count changes, sampled surfaces, >12 dirty regions, or >=60% dirty coverage fall back to a full redraw.
+- Added a raw preview-content revision separate from the existing combined camera/geometry revision so render invalidation remains deterministic.
+- Software renderer now observes scene-content revision in its existing frame-reuse gate, preventing stale scene geometry.
+- Added event-driven renderer architecture documentation. No synthetic Neuro Lab or benchmark UI was added.
+
+## [Unreleased] - v0.90.20 preparation (not a release)
+
+### Automatic AI intent routing and clarification
+- Make the Epoch AI composer the single front door: ordinary conversation stays Project Assistant, explicit project/scene changes route to guarded authoring, active-project build/run/test requests route to guarded tooling, and explicit engine-source changes route to isolated Engine Self-Coding. Ambiguous mutation requests stop and ask which target the operator intended.
+- Keep `Force Engine Next` as an optional one-message override instead of requiring a manual mode toggle for normal use.
+- Add host-owned routing clarification buttons and equivalent natural-language replies; buttons are convenience UI, not required protocol.
+- Accept plain-language approval/rejection (`yes`, `apply`, `do it`, `no`, `discard`, `cancel`, and equivalents) whenever a guarded plan/tool/source action is staged, so a missing or hidden button cannot strand the workflow.
+- Stop rendering authoring/tool/source protocol payloads verbatim in chat. Structured replies stay internal until parsed; the transcript shows only validated summaries, questions, errors, and actions.
+- Add one-question authoring/tool clarification envelopes. When a critical detail is missing, the model may ask one concise blocking question; Epoch renders only the clean question and resumes the exact request from the user's answer.
+- Keep generic UI mutation targets conservative: words such as `button` alone do not silently select project authoring; explicit project/scene or engine/editor ownership is required, otherwise Epoch asks. A pending clarification also owns the next reply before any global yes/no approval shortcut is considered.
+- Advance source/package identity to v0.90.20.
+
+## [Unreleased] - v0.90.19 preparation (not a release)
+
+### Project Assistant routing and ownership
+- Replace completion-type guessing with an explicit request-channel tag carried from deferred queue admission through the model worker and completion pump. Chat, tooling, authoring, and source iteration can no longer consume each other's replies merely because a generation advanced or assistant prose resembles another protocol.
+- Attach bounded active-project evidence to ordinary Project Assistant conversation without granting mutation authority. The docked and detached assistant paths now share the same project-context envelope.
+- Goal invalidation now retires only a pending/deferred goal-authoring request; it no longer marks unrelated Project Assistant/chat/tool/source generations obsolete.
+- Project Assistant queue/start/wait states are surfaced in the chat transcript instead of silently living only in editor status.
+- Preserve explicit source-channel tags for local HTTP and external MCP completions so self-coding remains isolated.
+- Advance source/package identity to v0.90.19.
+
+## [Unreleased] - v0.90.18 preparation (not a release)
+
+### Epoch AI hover-and-focus input gating
+- EpochGUI console text input can now opt into a hover-and-focus keyboard policy. A field must already own keyboard focus and the pointer must remain over that field before text or key events are consumed.
+- The Epoch AI dock enables this policy for its chat composer. Moving the pointer away immediately makes the composer keyboard-passive without clearing text or destroying its focus state; returning over the focused composer resumes input.
+- The inactive visual state and caret now follow the same effective keyboard-input gate so the UI does not look editable while input is suppressed.
+- The behavior is a reusable `TextInputKeyboardPolicy` capability rather than an AI-only event hack; existing EpochGUI edit boxes retain their current behavior by default.
+- Advance source/package identity to v0.90.18.
+
+## [Unreleased] - v0.90.17 preparation (not a release)
+
+### AI source-action phase determinism
+- Stop advertising context, patch, and insufficient-evidence functions together. Each OpenAI-compatible source phase now exposes exactly one legal function: context selection exposes only `epoch_select_source_context`; code proposal exposes only `epoch_propose_source_patch`.
+- Represent insufficient evidence inside that one phase schema: an empty `source_ids`/`reads` result means no context selection is justified, and an empty `operations` array means no safe patch is justified. The host converts either to the existing canonical insufficient-evidence sentinel.
+- Keep `tool_choice=required` and `parallel_tool_calls=false`, but remove model-side action arbitration entirely. The model can no longer choose a context function during a patch request or an insufficient function alongside another source action because those functions are not advertised.
+- Enforce the expected function name again at response admission and report the actual failure class (multiple calls, wrong function, malformed envelope, or schema/authority rejection) instead of the misleading generic single-action message.
+- Retain host-issued `SOURCE_ID`/`REVIEWED_SOURCE_ID` authority and exact-block patch validation from v0.90.15.
+- Advance source/package identity to v0.90.17.
+
+## [Unreleased] - v0.90.16 preparation (not a release)
+
+- Fix MSVC C2593 ambiguity in the source-ID transport regression checks by replacing direct `std::string_view`/literal inequality with member `compare()`.
+- Fix the second matching regression check in the same block before it can become the next compile stop.
+- Advance source/package identity to v0.90.16.
+
+## [Unreleased] - v0.90.15 preparation (not a release)
+
+- Replace model-authored repository path strings in OpenAI-compatible source tools with host-issued verified `SOURCE_ID` values. Exact reviewed evidence is a strict prefix of that catalog and is the only authority accepted by `epoch_propose_source_patch`.
+- Annotate the model-visible source catalog with stable IDs, resolve all accepted IDs back to canonical paths inside the host, and reject invalid/unreviewed IDs before editor staging.
+- Advance bundled EpochGui to v0.89.31 with shared semantic status/message surfaces, accent strips, and opt-in semantic console actions; apply them to Epoch AI so Project Assistant and Engine Self-Coding have distinct cyan/orange mode surfaces, active-mode titles, and readable warning/error/success states.
+- Advance source/package identity to v0.90.15.
+
+## [Unreleased] - v0.90.14 preparation (not a release)
+- Fixed the epoch_ci_headless CTest repository-root argument; CTest now passes the repository root instead of Engine/, preventing false Engine/Engine path probes.
+
+### AI source-action protocol repair
+- Replace the OpenAI-compatible self-coding flat `response_format` action envelope with three mutually exclusive function calls: `epoch_select_source_context`, `epoch_propose_source_patch`, and `epoch_report_source_insufficient`.
+- Require exactly one source tool call for context/patch stages (`tool_choice=required`, parallel calls disabled) and reject assistant prose or mixed/multiple tool actions before editor staging.
+- Parse LM Studio/OpenAI `choices[0].message.tool_calls` structurally and convert only validated tool arguments into the existing canonical Epoch source packets.
+- Keep direct llama.cpp mode on the canonical line-framed protocol; tool calling is the OpenAI-compatible transport contract.
+- Add transport contract tests for valid context/patch/insufficient calls plus mixed-action, multiple-call, wrong-stage, and assistant-only rejection cases.
+
+### Fixed
+- Fix MSVC C2593 in the v0.90.12 context-path recovery code by checking `.` / `..` path components without overloaded `std::string_view` equality.
+- Move SDL capture-path `extern "C"` declarations out of the global module fragment, removing MSVC C5202 while retaining C linkage.
+- Source/package identity advances to v0.90.14.
+
+## [Unreleased] - v0.90.12 preparation (not a release)
+
+### Self-iteration context-path recovery
+- Fix the September 27 v0.90.11 failure where Qwen correctly requested more theme implementation context but wrote path hints as `engine/modules/gui_engine_ixx` and `/src/engine_gui.cpp`; those hints were discarded by transport normalization before verified catalog repair could run.
+- Treat path-only model strings as non-authoritative hints: normalize safe case/root/slash variants into the selected source area, then admit source only after unique resolution to an existing verified `PATH` entry.
+- Add filename-token matching so separator/order/encoded-extension variants such as `gui_engine_ixx` and `engine_gui.cpp` deterministically resolve to `Engine/modules/gui.engine.ixx` and `Engine/src/epochgui/gui.engine.cpp` when those matches are unique. Ambiguous ties, unsafe paths and unlisted inventions remain rejected.
+- Retain the v0.90.11 objective-ranked theme owners, excerpt-aware context budgeting, truncated-catalog prioritization and bounded correction/recovery limits.
+- Add contract regressions using the exact malformed context forms visible in the operator screenshot.
+- Source identity advances to v0.90.12. The text-to-image-to-3D plan remains design-only in this patch.
+
+## [Unreleased] - v0.90.10 preparation (not a release)
+
+- September 26 AI reliability repair: self-iteration now recovers exactly one complete canonical source packet from harmless prose/Markdown while retaining strict rejection of ambiguous multi-packet replies. Provider payload recovery performs the same bounded normalization before spending another model pass.
+- Fix the authoring protocol contradiction: the model prompt now demonstrates and permits exactly one `CALL` line, matching the parser. A unique bare `CALL` wrapped in prose/Markdown is normalized into the strict approval-gated envelope; multiple calls remain rejected.
+- Fix detached AI Chat ownership: pop-out UI no longer transports requests through its detached context. A bounded synchronized command mailbox routes submit/retry/cancel/stop commands to the canonical editor AI session, preserving queued text and the existing model-selection/work-admission gates.
+- Add `Changes/ai_image_to_3d_plan_0.90.10.md`: native C++ text-to-image-to-3D design using the existing FLUX.2 Klein/TRELLIS package lanes, with an optional research DVR port. No image/3D runtime is added in this reliability pass.
+- Validation in the repair environment is source/build-safe only: `ai.mcp.ixx` passes C++23 Clang syntax checking, but the available CMake 3.31.6 cannot configure this tree because Epoch requires CMake 4.4. Native GUI/model runtime testing remains operator-owned.
+- Unify ordinary AI conversation and self-coding objective entry in the Epoch AI pane with an explicit Work on Engine switch; no slash command is required.
+- Replace six-stage/source-count-centric progress with one primary engineering status plus a semantic work plan derived from the objective and admitted proposal summaries.
+- Keep the session timer and animated model activity graphics, while moving System-1 confidence, context/recovery counters, sandbox counts/generation and paths into technical diagnostics.
+- Keep Candidate Lab review controls while hiding operation/path detail unless technical details are enabled.
+- Make the Epoch AI input multiline/wrapped and raise its natural-language input budget to 4096 characters.
+
+## [Unreleased] - v0.90.08 preparation (not a release)
+
+- Correct the authoritative runtime version modules so the Epoch Editor title/runtime identity reports v0.90.08 rather than stale v0.90.04/v0.90.03 values.
+- Fix the v0.90.07 tolerant-proposal parser contract compile regression by using `development_proposal_codec::Proposal::changes` instead of the nonexistent `operations` member.
+
+## [Unreleased] - v0.90.07 preparation (not a release)
+
+### AI self-iteration proposal recovery hardening
+- Tolerates common Qwen structured-response variations, including fenced/prose-wrapped JSON and omitted irrelevant empty schema fields.
+- Malformed-but-visible coding replies stay in the same pass/sandbox and receive host correction instead of terminating the campaign.
+- Transient local provider drops use bounded same-pass recovery (3 host cycles after transport-level retry); explicit cancel, total timeout, and uncertain transport retirement remain terminal.
+- Recovery telemetry now distinguishes navigation, reasoning-only, and provider-drop recovery for later predictor training.
+
+
+- Restore Qwen3.8 27B as the default local/self-coding model while keeping model selection operator-adjustable in AI Controls. Model-host resource policy (context length, GPU/KV offload, flash-attention, batch sizing, model load/unload) remains outside Epoch and is not changed by self-iteration. All v0.90.04 sandbox/UI/self-iteration fixes remain.
+
+## [Unreleased] - v0.90.04 preparation (not a release)
+
+- September 25 self-coding UI/reliability pass: fix the fresh-session materialization failure introduced by predictor telemetry by buffering Candidate Lab analytics in memory until the disposable workspace copy completes, so harness-owned `logs/self_iteration_analytics.jsonl` can never make a fresh sandbox look pre-populated. Restore prominent self-coding session timing and progress graphics, group live iteration/pass/repair/System-1/sandbox/model statistics into one compact status block, move long source/sandbox/analytics paths behind Technical Details, make multiline EpochGui edit boxes soft-wrap to their viewport, and use Qwen3.8 27B as the default local self-coding model. Source identity advanced to v0.90.04.
+
+- September 25 predictor-readiness pass: preserve the v0.90.03 source-navigation and reasoning-only recovery fixes, then add removable engine-local analytics for later EngCoder/JEV-style training without integrating its server/runtime. Candidate Lab writes `logs/self_iteration_analytics.jsonl` with deterministic System-1 score/margin/confidence, pass/candidate/controller counters, recovery/correction/repair counts, sandbox size, validation state, candidate-preview outcome and human Pass/Fail labels. Reserved visual-evidence fields allow later screenshot/image-derived features without making a predictor mandatory now. The predictive controller is telemetry-only in this version; host containment, writes, compiler/tests and human review remain authoritative.
+
+- September 25 self-coding recovery pass: source navigation is now advisory rather than fatal. A stale/out-of-range line or missing literal query falls back to the host objective-centered excerpt for the already-approved file instead of burning source-selection correction attempts. Reasoning-only local-model replies that survive the transport-level final-answer retry now remain in the same Candidate Lab pass and receive bounded structured-response recovery; only exhausted recovery or a real terminal/provider failure stops the campaign. Added contracts for both behaviors. Source identity advanced to v0.90.03.
+
+- September 25 self-coding observability pass: split human Candidate Iteration from coding Pass Iteration, add cumulative coding-pass count, six-stage workflow status, repair/context/correction counters, controller generation and sandbox materialization stats. Start resets only operator-facing counters; internal controller resets preserve them so hidden resets are visible instead of masquerading as progress. Host System-1 remains deterministic source triage plus bounded plan generation; the coding model remains responsible for source proposals and repairs. Engine self-coding now advertises and triages maintained in-tree components (EpochGui, EpochEngineExtensions and EpochPackageDescriptors), while the host still materializes the complete Engine tree and confines every admitted write to the candidate sandbox at the exact repository-relative path. Source identity advanced to v0.90.02.
 
 - September 20 connectivity checkpoint: native LM Studio inventory parsing,
   unsupported-route-only compatibility fallback, and session-only Paste/Clear

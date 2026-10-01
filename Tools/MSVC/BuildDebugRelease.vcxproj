@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug+Release|x64">
+      <Configuration>Debug+Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{2A2B28E5-63F0-4A4D-A1B0-610DAB81F6D8}</ProjectGuid>
+    <RootNamespace>EpochBuildDebugRelease</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug+Release|x64'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EpochBuildBothConfigurations" BeforeTargets="Build">
+    <Message Text="Epoch: building Debug | x64, then Release | x64." Importance="high" />
+    <Exec Command="&quot;$(MSBuildToolsPath)\MSBuild.exe&quot; &quot;$(SolutionDir)Engine.sln&quot; /m /t:Build /p:Configuration=Debug /p:Platform=x64" />
+    <Exec Command="&quot;$(MSBuildToolsPath)\MSBuild.exe&quot; &quot;$(SolutionDir)Engine.sln&quot; /m /t:Build /p:Configuration=Release /p:Platform=x64" />
+  </Target>
+</Project>

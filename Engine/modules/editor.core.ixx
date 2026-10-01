@@ -480,6 +480,7 @@ namespace epochengine
         std::vector<EditorContextSnapshotEntity> entities{};
         std::size_t selected_entity{ 0 };
         std::uint64_t selected_entity_id{ 0u };
+        std::vector<std::uint64_t> selected_entity_ids{};
         scene::SceneSnapshot scene_document{};
         std::vector<std::string> log_lines{};
         bool helpers_visible{ true };

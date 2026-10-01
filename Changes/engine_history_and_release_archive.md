@@ -8,6 +8,13 @@ milestone work. It replaces the older split between:
 - `release_notes_archive.md`
 - `release_notes_version_series_collated.md`
 
+
+## September 27-30, 2026 — v0.90.24-v0.90.33 integration series
+
+The source-development line moved the experimental neuromorphic/event-render work into the real editor renderer and then hardened the surrounding editor/build contracts. v0.90.24 mainlined the bounded sparse graph, event-camera and adapters with a conservative OpenGL invalidation bridge. v0.90.25-v0.90.27 established focus-owned input, protocol-safe AI chat, Vulkan standalone isolation, and separate vacated-region diagnostics. v0.90.28 added synchronized selective/full-baseline measurement plus the oscillator test source. v0.90.29 added selection-set editing, rectangle selection, group transactions, batch cube creation, renderer-neutral lighting damage, shared GUI shadows, and multicontext top-row input repair. v0.90.30 separated presentation FPS from render throughput, preserved statistics across disable/enable, restored pane/docking recovery, and removed duplicate detached-AI ownership. v0.90.31 corrected create-after-Undo semantic identity branching. v0.90.32 attempted to address the operator-reported duplicate-main failure and made bundled ProjectLauncher paths relocatable; v0.90.33 corrects that first repair by restoring the engine-owned internal EpochEditor entry point, keeping generated child entry ownership isolated, removing ProjectLauncher from Engine.sln, and adding a combined Debug+Release x64 workflow.
+
+Native MSVC/GPU/multicontext runtime proof remains acceptance evidence; source integration does not convert those platform checks into historical fact until they are run.
+
 ## Archive legend
 
 - **Stable release**: a packaged release or milestone note that was intended as
@@ -24,8 +31,8 @@ archive for historical context and milestone tracing.
 
 Current orientation:
 
-- Latest published stable runtime line: `v0.84.05`
-- Current development source line: `v0.87.07`
+- Latest recorded signed runtime line: `v0.89.30`
+- Current development source line: `v0.90.33`
 
 ## What the engine has become so far
 

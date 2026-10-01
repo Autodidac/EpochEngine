@@ -56,7 +56,7 @@ namespace epochengine::ai::iteration_campaign
         if (!begun
             || begun.report.session.curated_files.front().byte_count
                 <= begun.report.budgets.maximum_context_bytes
-            || begun.report.budgets.maximum_curated_files != 12u
+            || begun.report.budgets.maximum_curated_files != iteration_session::kMaximumCuratedFiles
             || begun.report.session.source.target_kind
                 != IterationTargetKind::project_source
             || begun.report.budgets.maximum_workspace_files != 2048u

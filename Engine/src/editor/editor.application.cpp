@@ -147,6 +147,7 @@ import editor.tilemap_workspace;
 import render.canvas2d;
 import render.canvas2d_scene;
 import render.device;
+import render.event_debug;
 import render.lighting;
 import render.math;
 import render.ray;
@@ -220,6 +221,15 @@ namespace epochengine
             Tooling,
             Authoring,
             SourceIteration
+        };
+
+        enum class AiChatIntent : unsigned char
+        {
+            ProjectChat = 0,
+            ProjectAuthoring,
+            ProjectTooling,
+            EngineSource,
+            Ambiguous
         };
 
         namespace candidate_artifacts = epochengine::editor::candidate_artifact;
@@ -362,7 +372,7 @@ namespace epochengine
                 "World Settings",
                 "AI Controls",
                 "Output",
-                "AI Chat"
+                "Epoch AI"
             };
         }
 
@@ -598,6 +608,79 @@ namespace epochengine
             std::atomic_bool ready{false};
         };
 
+        [[nodiscard]] bool ai_reply_is_internal_protocol(std::string_view reply) noexcept
+        {
+            while (!reply.empty()
+                && (reply.front() == ' ' || reply.front() == '\t'
+                    || reply.front() == '\r' || reply.front() == '\n'))
+            {
+                reply.remove_prefix(1u);
+            }
+
+            constexpr std::array<std::string_view, 9> headers{
+                "EPOCH_AUTHORING_PLAN_V1",
+                "EPOCH_AUTHORING_QUESTION_V1",
+                "EPOCH_TOOL_PLAN_V1",
+                "EPOCH_TOOL_QUESTION_V1",
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1",
+                "EPOCH_SOURCE_PATCH_PROPOSAL_V1",
+                "EPOCH_SOURCE_PROPOSAL_V1",
+                "EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1",
+                "EPOCH_SELF_ITERATION_PLAN_V2"
+            };
+            for (const std::string_view header : headers)
+            {
+                if (reply.starts_with(header))
+                    return true;
+            }
+
+            // Some local runtimes/debug adapters have prepended a token-progress
+            // sentence before the actual structured packet. Treat a line-framed
+            // protocol header near the front as internal too, rather than ever
+            // painting the plan/reasoning into the user-facing chat transcript.
+            constexpr std::size_t kProtocolProbeBytes = 512u;
+            const std::string_view probe = reply.substr(
+                0u, (std::min)(reply.size(), kProtocolProbeBytes));
+            for (const std::string_view header : headers)
+            {
+                const std::size_t pos = probe.find(header);
+                if (pos != std::string_view::npos
+                    && (pos == 0u || probe[pos - 1u] == '\n'
+                        || probe[pos - 1u] == ' '))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        [[nodiscard]] std::string recover_prefixed_ai_protocol(
+            std::string_view reply,
+            std::string_view firstHeader,
+            std::string_view secondHeader = {})
+        {
+            constexpr std::size_t kProtocolProbeBytes = 512u;
+            const std::string_view probe = reply.substr(
+                0u, (std::min)(reply.size(), kProtocolProbeBytes));
+            const auto find_header = [probe](std::string_view header) noexcept
+            {
+                if (header.empty())
+                    return std::string_view::npos;
+                return probe.find(header);
+            };
+            const std::size_t first = find_header(firstHeader);
+            const std::size_t second = find_header(secondHeader);
+            std::size_t offset = first;
+            if (offset == std::string_view::npos
+                || (second != std::string_view::npos && second < offset))
+            {
+                offset = second;
+            }
+            if (offset == std::string_view::npos)
+                return std::string{reply};
+            return std::string{reply.substr(offset)};
+        }
+
         struct AiChat
         {
             static constexpr std::size_t kMaxLines = 200;
@@ -608,6 +691,8 @@ namespace epochengine
             ai::ModelTerminalFailure latestTerminalFailure{ai::ModelTerminalFailure::none};
             std::string latestTerminalStatus{};
             ai::InferenceWorkload latestCompletionWorkload{ai::InferenceWorkload::chat};
+            AiDeferredRequestKind latestCompletionRequestKind{AiDeferredRequestKind::None};
+            AiDeferredRequestKind pendingRequestKind{AiDeferredRequestKind::None};
             std::uint64_t completionGeneration{};
             std::shared_ptr<AiChatRequestState> pending{};
             std::chrono::steady_clock::time_point requestStartedAt{};
@@ -632,6 +717,7 @@ namespace epochengine
                 latestRawReply.clear();
                 latestTerminalFailure = ai::ModelTerminalFailure::none;
                 latestTerminalStatus.clear();
+                latestCompletionRequestKind = AiDeferredRequestKind::None;
             }
 
             void pump()
@@ -641,6 +727,7 @@ namespace epochengine
                     return;
 
                 latestCompletionWorkload = pendingWorkload;
+                latestCompletionRequestKind = pendingRequestKind;
                 latestTerminalFailure = pending->terminalFailure;
                 latestTerminalStatus.clear();
 
@@ -656,6 +743,7 @@ namespace epochengine
                     latestTerminalFailure = ai::ModelTerminalFailure::retirement_failed;
                     latestTerminalStatus = "Model request ended, but HTTP handle retirement could not be confirmed. Restart the engine before another HTTP request. No response was applied.";
                     pendingPrompt.clear();
+                    pendingRequestKind = AiDeferredRequestKind::None;
                     pending.reset();
                     append_status(latestTerminalStatus);
                     return;
@@ -670,6 +758,7 @@ namespace epochengine
                     latestTerminalFailure = ai::ModelTerminalFailure::cancelled;
                     latestTerminalStatus = "Request cancelled. Its response was discarded.";
                     pendingPrompt.clear();
+                    pendingRequestKind = AiDeferredRequestKind::None;
                     pending.reset();
                     append_status(latestTerminalStatus);
                     return;
@@ -689,12 +778,28 @@ namespace epochengine
                 {
                     latestRawReply = std::move(pending->reply);
                     ++completionGeneration;
-                    std::string reply =
-                        normalize_editor_text_for_gui(latestRawReply);
-                    if (reply.empty()) reply = "(empty reply)";
-                    lines.emplace_back("ai> " + reply);
+                    // Only ordinary conversation is rendered verbatim. Structured
+                    // authoring/tool/source payloads are host protocol, not user-facing
+                    // chat. Their validated summaries and controls are appended by the
+                    // owning completion handler after parsing.
+                    if (latestCompletionRequestKind == AiDeferredRequestKind::Chat)
+                    {
+                        if (ai_reply_is_internal_protocol(latestRawReply))
+                        {
+                            append_status(
+                                "The model returned an internal structured protocol on the conversation channel. "
+                                "Epoch hid it instead of exposing host instructions or reasoning in chat; retry the change request if no staged action appears.");
+                        }
+                        else
+                        {
+                            std::string reply =
+                                normalize_editor_text_for_gui(latestRawReply);
+                            if (reply.empty()) reply = "(empty reply)";
+                            lines.emplace_back("ai> " + reply);
+                            trim_lines();
+                        }
+                    }
                     pendingPrompt.clear();
-                    trim_lines();
                 }
                 else
                 {
@@ -708,13 +813,17 @@ namespace epochengine
 
                 if (worker.joinable())
                     worker.join();
+                pendingRequestKind = AiDeferredRequestKind::None;
                 pending.reset();
             }
 
             [[nodiscard]] bool source_request_running() const noexcept
             {
-                return pending && pendingWorkload
-                    == epochengine::ai::InferenceWorkload::source_iteration;
+                return pending
+                    && pendingRequestKind
+                        == AiDeferredRequestKind::SourceIteration
+                    && pendingWorkload
+                        == epochengine::ai::InferenceWorkload::source_iteration;
             }
 
             [[nodiscard]] bool source_request_cancelling() const noexcept
@@ -783,6 +892,15 @@ namespace epochengine
                 trim_lines();
             }
 
+            void append_user_message(std::string text)
+            {
+                text = normalize_editor_text_for_gui(text);
+                if (text.empty())
+                    return;
+                lines.emplace_back("you> " + std::move(text));
+                trim_lines();
+            }
+
             void submit(std::string text)
             {
                 (void)submit_with_display(std::move(text), {});
@@ -792,7 +910,9 @@ namespace epochengine
                 std::string text,
                 std::string displayText,
                 epochengine::ai::InferenceWorkload workload =
-                    epochengine::ai::InferenceWorkload::chat)
+                    epochengine::ai::InferenceWorkload::chat,
+                AiDeferredRequestKind requestKind =
+                    AiDeferredRequestKind::Chat)
             {
                 std::scoped_lock selectionLock(aiModelSelectionMutex);
                 if (text.empty() || is_ws_only(text))
@@ -816,6 +936,7 @@ namespace epochengine
 
                 pending = std::make_shared<AiChatRequestState>();
                 pendingWorkload = workload;
+                pendingRequestKind = requestKind;
                 requestStartedAt = std::chrono::steady_clock::now();
                 try
                 {
@@ -862,6 +983,7 @@ namespace epochengine
                     // newly allocated request, never an existing operation.
                     pending.reset();
                     pendingPrompt.clear();
+                    pendingRequestKind = AiDeferredRequestKind::None;
                     requestStartedAt = {};
                     append_status(std::string{"The local-model worker could not start: "}
                         + exception.what());
@@ -871,6 +993,7 @@ namespace epochengine
                 {
                     pending.reset();
                     pendingPrompt.clear();
+                    pendingRequestKind = AiDeferredRequestKind::None;
                     requestStartedAt = {};
                     append_status("The local-model worker could not start because of an unknown scheduling failure.");
                     return false;
@@ -893,7 +1016,10 @@ namespace epochengine
             std::uint64_t requestedGeneration) noexcept
         {
             return !chat.pending
-                && chat.latestCompletionWorkload == ai::InferenceWorkload::source_iteration
+                && chat.latestCompletionRequestKind
+                    == AiDeferredRequestKind::SourceIteration
+                && chat.latestCompletionWorkload
+                    == ai::InferenceWorkload::source_iteration
                 && chat.completionGeneration > requestedGeneration;
         }
 
@@ -1142,6 +1268,8 @@ namespace epochengine
             chat.latestTerminalFailure = failure;
             chat.latestTerminalStatus = status;
             chat.latestCompletionWorkload = ai::InferenceWorkload::source_iteration;
+            chat.latestCompletionRequestKind =
+                AiDeferredRequestKind::SourceIteration;
             ++chat.completionGeneration;
             if (chat.completionGeneration <= requestedGeneration)
                 chat.completionGeneration = requestedGeneration + 1u;
@@ -1153,6 +1281,16 @@ namespace epochengine
             save_restore,
             media,
             diagnostics
+        };
+
+        struct ScriptOscillator
+        {
+            bool enabled{ false };
+            scene::SceneObjectId entity_id{ scene::kInvalidSceneObjectId };
+            std::array<float, 3> base_position{ 0.0f, 0.0f, 0.0f };
+            std::uint8_t axis{ 0u };
+            float amplitude{ 2.0f };
+            float frequency_hz{ 0.5f };
         };
 
         struct EditorState
@@ -1331,6 +1469,7 @@ namespace epochengine
             std::uint32_t tileMapTileExtent{32u};
 #endif
             std::vector<EditorEntity> entities{};
+            ScriptOscillator scriptOscillator{};
             authoring::scene::SceneDocument sceneDocument{};
             lighting::LightManager sceneLighting{ 128 };
             std::vector<lighting::LightHandle> sceneLightHandles{};
@@ -1339,6 +1478,7 @@ namespace epochengine
             bool sceneInteractionDirty{ true };
             std::size_t selectedEntity{ 0 };
             scene::SceneObjectId selectedEntityId{ scene::kInvalidSceneObjectId };
+            std::vector<scene::SceneObjectId> selectedEntityIds{};
             editor_hierarchy::Controller worldHierarchy{};
             std::string worldHierarchyFilter{};
             std::string worldHierarchyStatus{"Hierarchy ready."};
@@ -1356,7 +1496,12 @@ namespace epochengine
             gui::Vec2 sceneDragStartMouse{};
             std::array<float, 3> sceneDragStartPosition{ 0.0f, 0.0f, 0.0f };
             std::array<float, 3> sceneDragStartHit{ 0.0f, 0.0f, 0.0f };
+            std::vector<std::pair<scene::SceneObjectId, std::array<float, 3>>> sceneDragStartPositions{};
             bool sceneDragHasPlaneHit{ false };
+            bool sceneMarqueeActive{ false };
+            bool sceneMarqueeAdditive{ false };
+            gui::Vec2 sceneMarqueeStart{};
+            gui::Vec2 sceneMarqueeCurrent{};
             EditorTimeSnapshot timeSnapshot{};
             EditorTimeControl timeControl{};
             epochengine::saveload::StreamingSaveConfig streamingSaveConfig{};
@@ -1391,12 +1536,15 @@ namespace epochengine
                 initial_editor_main_surface(initial_editor_workspace_tab()) };
             bool outputFollowTail{ true };
             bool aiChatFollowTail{ true };
+            bool aiChatEngineWorkMode{ false };
+            std::string aiEngineWorkObjective{};
             std::uint64_t outputScrollToEndGeneration{};
             std::uint64_t aiChatScrollToEndGeneration{};
             bool showOutliner{ true };
             bool showInspector{ true };
             bool showConsoleDock{ true };
             bool showAiChat{ true };
+            std::string detachedAiChatInput{};
             std::array<bool, kEditorToolPaneCount> toolPaneOpen{
                 default_tool_pane_open_state() };
             std::array<EditorToolDockRegion, kEditorToolPaneCount>
@@ -1556,6 +1704,10 @@ namespace epochengine
             bool aiGoalRunning{};
             bool aiGoalEditing{};
             bool aiGoalPlanNextQueued{};
+            bool aiIntentClarificationPending{};
+            AiChatIntent aiIntentClarificationResumeIntent{AiChatIntent::Ambiguous};
+            std::string aiIntentClarificationRequest{};
+            std::optional<std::size_t> aiQueuedMessageActionIndex{};
             bool aiAuthoringAwaitingReply{};
             bool aiAuthoringPlanApplied{};
             bool aiAuthoringPlanForGoal{};
@@ -2137,30 +2289,45 @@ namespace epochengine
         {
             state.selectedEntity = 0u;
             state.selectedEntityId = scene::kInvalidSceneObjectId;
+            state.selectedEntityIds.clear();
             state.sceneDragActive = false;
             state.sceneDragEntity = 0u;
             state.sceneDragEntityId = scene::kInvalidSceneObjectId;
+            state.sceneDragStartPositions.clear();
             state.sceneDragHasPlaneHit = false;
+            state.sceneMarqueeActive = false;
             state.guiContentEditorEntityId = scene::kInvalidSceneObjectId;
             state.textureBrushActive = false;
         }
 
-        [[nodiscard]] bool editor_has_selection(const EditorState& state) noexcept
+        [[nodiscard]] bool editor_entity_selected(
+            const EditorState& state,
+            scene::SceneObjectId id) noexcept
         {
-            return editor_entity_index(state, state.selectedEntityId).has_value();
+            if (id == scene::kInvalidSceneObjectId)
+                return false;
+            if (state.selectedEntityIds.empty())
+                return id == state.selectedEntityId
+                    && editor_entity_index(state, id).has_value();
+            return std::find(
+                    state.selectedEntityIds.begin(),
+                    state.selectedEntityIds.end(),
+                    id) != state.selectedEntityIds.end();
         }
 
-        void select_editor_entity(EditorState& state, std::size_t index) noexcept
+        [[nodiscard]] bool editor_has_selection(const EditorState& state) noexcept
         {
-            if (state.entities.empty())
-            {
-                clear_editor_selection(state);
-                return;
-            }
+            return editor_entity_index(
+                state, state.selectedEntityId).has_value();
+        }
 
-            state.selectedEntity = (std::min)(index, state.entities.size() - 1u);
+        void apply_editor_primary_selection_side_effects(EditorState& state) noexcept
+        {
+            const auto selectedIndex = editor_entity_index(state, state.selectedEntityId);
+            if (!selectedIndex)
+                return;
+            state.selectedEntity = *selectedIndex;
             EditorEntity& selected = state.entities[state.selectedEntity];
-            state.selectedEntityId = selected.sceneObjectId;
             if (selected.textureMaterial)
             {
                 const auto& material = *selected.textureMaterial;
@@ -2183,6 +2350,92 @@ namespace epochengine
             }
         }
 
+        void select_editor_entity(EditorState& state, std::size_t index) noexcept
+        {
+            if (state.entities.empty())
+            {
+                clear_editor_selection(state);
+                return;
+            }
+
+            state.selectedEntity = (std::min)(index, state.entities.size() - 1u);
+            EditorEntity& selected = state.entities[state.selectedEntity];
+            state.selectedEntityId = selected.sceneObjectId;
+            state.selectedEntityIds.assign(1u, selected.sceneObjectId);
+            if (selected.textureMaterial)
+            {
+                const auto& material = *selected.textureMaterial;
+                state.textureFilter = material.filter;
+                state.textureAddressU = material.address_u;
+                state.textureAddressV = material.address_v;
+                state.textureAlpha = material.alpha;
+                state.textureColorSpace = material.color_space;
+                state.textureAlphaCutoff = material.alpha_cutoff;
+                state.selectedAssetPath = material.logical_path;
+                if (state.projectTextures
+                    && state.projectTextures->select(material.logical_path))
+                {
+                    if (const auto* texture = state.projectTextures->selected())
+                    {
+                        state.selectedProjectFile =
+                            texture->source_path.generic_string();
+                    }
+                }
+            }
+        }
+
+        void add_editor_entity_selection(EditorState& state, std::size_t index) noexcept
+        {
+            if (state.entities.empty())
+                return;
+            if (state.selectedEntityIds.empty()
+                && state.selectedEntityId != scene::kInvalidSceneObjectId
+                && editor_entity_index(state, state.selectedEntityId))
+            {
+                state.selectedEntityIds.push_back(state.selectedEntityId);
+            }
+            index = (std::min)(index, state.entities.size() - 1u);
+            const scene::SceneObjectId id = state.entities[index].sceneObjectId;
+            if (!editor_entity_selected(state, id))
+                state.selectedEntityIds.push_back(id);
+            state.selectedEntity = index;
+            state.selectedEntityId = id;
+            apply_editor_primary_selection_side_effects(state);
+        }
+
+        void toggle_editor_entity_selection(EditorState& state, std::size_t index) noexcept
+        {
+            if (state.entities.empty())
+                return;
+            if (state.selectedEntityIds.empty()
+                && state.selectedEntityId != scene::kInvalidSceneObjectId
+                && editor_entity_index(state, state.selectedEntityId))
+            {
+                state.selectedEntityIds.push_back(state.selectedEntityId);
+            }
+            index = (std::min)(index, state.entities.size() - 1u);
+            const scene::SceneObjectId id = state.entities[index].sceneObjectId;
+            const auto found = std::find(
+                state.selectedEntityIds.begin(),
+                state.selectedEntityIds.end(),
+                id);
+            if (found == state.selectedEntityIds.end())
+            {
+                add_editor_entity_selection(state, index);
+                return;
+            }
+
+            state.selectedEntityIds.erase(found);
+            if (state.selectedEntityIds.empty())
+            {
+                clear_editor_selection(state);
+                return;
+            }
+            if (state.selectedEntityId == id)
+                state.selectedEntityId = state.selectedEntityIds.back();
+            apply_editor_primary_selection_side_effects(state);
+        }
+
         void synchronize_editor_selection(EditorState& state)
         {
             normalize_editor_entity_ids(state);
@@ -2194,12 +2447,40 @@ namespace epochengine
                 return;
             }
 
-            if (state.selectedEntityId == scene::kInvalidSceneObjectId)
+            state.selectedEntityIds.erase(
+                std::remove_if(
+                    state.selectedEntityIds.begin(),
+                    state.selectedEntityIds.end(),
+                    [&](scene::SceneObjectId id)
+                    {
+                        return !editor_entity_index(state, id).has_value();
+                    }),
+                state.selectedEntityIds.end());
+            std::sort(state.selectedEntityIds.begin(), state.selectedEntityIds.end());
+            state.selectedEntityIds.erase(
+                std::unique(state.selectedEntityIds.begin(), state.selectedEntityIds.end()),
+                state.selectedEntityIds.end());
+
+            if (state.selectedEntityId != scene::kInvalidSceneObjectId
+                && editor_entity_index(state, state.selectedEntityId)
+                && !editor_entity_selected(state, state.selectedEntityId))
+            {
+                state.selectedEntityIds.push_back(state.selectedEntityId);
+            }
+
+            if (state.selectedEntityIds.empty())
+            {
                 state.selectedEntity = 0u;
-            else if (const auto selected = editor_entity_index(state, state.selectedEntityId))
-                state.selectedEntity = *selected;
+                state.selectedEntityId = scene::kInvalidSceneObjectId;
+            }
             else
-                clear_editor_selection(state);
+            {
+                if (!editor_entity_selected(state, state.selectedEntityId))
+                    state.selectedEntityId = state.selectedEntityIds.back();
+                if (const auto selected = editor_entity_index(state, state.selectedEntityId))
+                    state.selectedEntity = *selected;
+                apply_editor_primary_selection_side_effects(state);
+            }
 
             if (state.sceneDragActive)
             {
@@ -2464,9 +2745,25 @@ namespace epochengine
             tilemap_workspace_controller(EditorState& editor);
 #endif
 
+        enum class DetachedAiChatCommandKind : std::uint8_t
+        {
+            submit,
+            retry_queued,
+            cancel_queued,
+            stop_pending
+        };
+
+        struct DetachedAiChatCommand final
+        {
+            const core::Context* ownerContext{};
+            DetachedAiChatCommandKind kind{DetachedAiChatCommandKind::submit};
+            std::string prompt{};
+        };
+
         struct DetachedPaneProjection
         {
             bool ready{};
+            const core::Context* ownerContext{};
             EditorApplicationKind applicationKind{
                 EditorApplicationKind::Standard};
             std::string projectName{};
@@ -2476,6 +2773,11 @@ namespace epochengine
                 scene::kInvalidSceneObjectId};
             std::vector<std::string> logLines{};
             std::vector<std::string> chatLines{};
+            std::string aiStatus{};
+            bool aiDeferredChatQueued{};
+            bool aiDeferredDispatchQueued{};
+            bool aiRequestPending{};
+            bool aiDetachedSubmitQueued{};
             core::ScenePreviewMode previewMode{
                 core::ScenePreviewMode::Editor};
             std::uint64_t sceneRevision{};
@@ -2487,6 +2789,7 @@ namespace epochengine
             std::map<const core::Context*, EditorState> states{};
             std::unordered_map<std::string, bool> detachedPaneRoutes{};
             std::unordered_map<std::string, bool> paneRedockRequests{};
+            std::vector<DetachedAiChatCommand> detachedAiChatCommands{};
             DetachedPaneProjection detachedPaneProjection{};
             epochengine::context::PassiveContextScoreboard passiveContextScores{};
         };
@@ -2504,11 +2807,13 @@ namespace epochengine
         }
 
         void publish_detached_pane_projection(
+            const core::Context* ownerContext,
             const EditorState& editor,
             const AiChat& chat)
         {
             DetachedPaneProjection projection{
                 .ready = true,
+                .ownerContext = ownerContext,
                 .applicationKind = editor.applicationKind,
                 .projectName = editor.projectName,
                 .activeWorld = editor.activeWorld,
@@ -2516,11 +2821,24 @@ namespace epochengine
                 .selectedEntityId = editor.selectedEntityId,
                 .logLines = editor.logLines,
                 .chatLines = chat.lines,
+                .aiStatus = editor.aiAuthoringStatus,
+                .aiDeferredChatQueued = editor.aiDeferredRequestKind
+                    == AiDeferredRequestKind::Chat,
+                .aiDeferredDispatchQueued = editor.aiDeferredDispatchQueued,
+                .aiRequestPending = static_cast<bool>(chat.pending),
                 .previewMode = editor.previewMode,
                 .sceneRevision = editor.sceneDocumentRevision
             };
             auto& storage = editor_storage();
             std::scoped_lock lock(storage.mutex);
+            projection.aiDetachedSubmitQueued = std::any_of(
+                storage.detachedAiChatCommands.begin(),
+                storage.detachedAiChatCommands.end(),
+                [ownerContext](const DetachedAiChatCommand& command)
+                {
+                    return command.ownerContext == ownerContext
+                        && command.kind == DetachedAiChatCommandKind::submit;
+                });
             storage.detachedPaneProjection = std::move(projection);
         }
 
@@ -2530,6 +2848,62 @@ namespace epochengine
             auto& storage = editor_storage();
             std::scoped_lock lock(storage.mutex);
             return storage.detachedPaneProjection;
+        }
+
+        [[nodiscard]] bool queue_detached_ai_chat_command(
+            const core::Context* ownerContext,
+            DetachedAiChatCommandKind kind,
+            std::string prompt = {})
+        {
+            if (!ownerContext || prompt.size() > 4096u)
+                return false;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            constexpr std::size_t maximumQueuedCommands = 16u;
+            if (storage.detachedAiChatCommands.size() >= maximumQueuedCommands)
+                return false;
+
+            const bool duplicate = std::any_of(
+                storage.detachedAiChatCommands.begin(),
+                storage.detachedAiChatCommands.end(),
+                [ownerContext, kind](const DetachedAiChatCommand& command)
+                {
+                    return command.ownerContext == ownerContext
+                        && command.kind == kind;
+                });
+            if (duplicate)
+                return false;
+
+            storage.detachedAiChatCommands.push_back(DetachedAiChatCommand{
+                .ownerContext = ownerContext,
+                .kind = kind,
+                .prompt = std::move(prompt)
+            });
+            return true;
+        }
+
+        [[nodiscard]] std::vector<DetachedAiChatCommand>
+            consume_detached_ai_chat_commands(const core::Context* ownerContext)
+        {
+            std::vector<DetachedAiChatCommand> commands{};
+            if (!ownerContext)
+                return commands;
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            for (auto it = storage.detachedAiChatCommands.begin();
+                it != storage.detachedAiChatCommands.end();)
+            {
+                if (it->ownerContext != ownerContext)
+                {
+                    ++it;
+                    continue;
+                }
+                commands.push_back(std::move(*it));
+                it = storage.detachedAiChatCommands.erase(it);
+            }
+            return commands;
         }
 
         [[nodiscard]] bool is_detachable_pane_route(std::string_view route) noexcept
@@ -6900,6 +7274,110 @@ namespace epochengine
             return true;
         }
 
+        bool add_cube_batch(EditorState& state, std::size_t count)
+        {
+            if (count == 0u)
+                return false;
+            count = (std::min)(count, std::size_t{64u});
+            if (!state.sceneDocument.initialized()
+                && !rebuild_editor_scene_document(
+                    state, "Initialize scene before batch object creation"))
+            {
+                return false;
+            }
+
+            const std::size_t existingStaticMeshes = static_cast<std::size_t>(
+                std::count_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [](const EditorEntity& entity)
+                    {
+                        return entity.name.starts_with("StaticMesh");
+                    }));
+            const std::size_t worldEntityCount = static_cast<std::size_t>(
+                std::count_if(
+                    state.entities.begin(),
+                    state.entities.end(),
+                    [](const EditorEntity& entity)
+                    {
+                        return entity.category != "UI"
+                            && !entity.type.starts_with("Gui");
+                    }));
+
+            std::vector<authoring::scene::SceneOperation> operations{};
+            std::vector<scene::SceneObjectId> createdIds{};
+            std::unordered_set<scene::SceneObjectId> reservedIds{};
+            operations.reserve(count);
+            createdIds.reserve(count);
+            reservedIds.reserve(count);
+
+            const float groundTop = primary_ground_top_y(state);
+            for (std::size_t i = 0u; i < count; ++i)
+            {
+                EditorEntity entity{};
+                entity.name = epochengine::format_text(
+                    "StaticMesh_{:02}", existingStaticMeshes + i + 1u);
+                entity.type = "StaticMesh";
+                entity.category = "Gameplay";
+                const std::size_t ordinal = worldEntityCount + i;
+                entity.position = {
+                    -2.7f + static_cast<float>(ordinal % 5u) * 1.35f,
+                    groundTop,
+                    1.6f - static_cast<float>((ordinal / 5u) % 4u) * 1.15f
+                };
+                if (!align_editor_entity_bottom_to_surface(entity, groundTop))
+                    return false;
+
+                entity.sceneObjectId = allocate_editor_scene_object_id(
+                    state, entity.name);
+                std::uint64_t salt = static_cast<std::uint64_t>(
+                    state.sceneDocument.objects().size() + i + 1u);
+                while (entity.sceneObjectId == scene::kInvalidSceneObjectId
+                    || reservedIds.contains(entity.sceneObjectId))
+                {
+                    entity.sceneObjectId ^= 0x9e3779b97f4a7c15ull
+                        + salt
+                        + (entity.sceneObjectId << 6u)
+                        + (entity.sceneObjectId >> 2u);
+                    ++salt;
+                }
+                reservedIds.insert(entity.sceneObjectId);
+
+                const auto converted =
+                    authoring::scene::descriptor_from_snapshot_object(
+                        editor_entity_snapshot(entity),
+                        static_cast<std::uint32_t>(
+                            state.sceneDocument.objects().size() + i),
+                        state.sceneDocument.limits());
+                if (!converted)
+                    return false;
+                operations.emplace_back(
+                    authoring::scene::ObjectCreatedOperation{
+                        .object = *converted });
+                createdIds.push_back(entity.sceneObjectId);
+            }
+
+            const scene::SceneObjectId primary = createdIds.back();
+            if (!apply_editor_scene_transaction(
+                    state,
+                    operations,
+                    epochengine::format_text("Create {} cubes", count),
+                    primary))
+            {
+                return false;
+            }
+
+            state.selectedEntityIds = createdIds;
+            state.selectedEntityId = primary;
+            synchronize_editor_selection(state);
+            push_editor_log(
+                state,
+                epochengine::format_text(
+                    "[entity] Created {} cubes in one transaction and selected the group.",
+                    count));
+            return true;
+        }
+
         [[nodiscard]] std::optional<std::string_view>
         ai_authoring_scene_archetype(const EditorEntity& entity) noexcept
         {
@@ -6979,35 +7457,189 @@ namespace epochengine
         [[nodiscard]] std::optional<std::string>
             recover_bare_ai_authoring_call(std::string_view response)
         {
-            while (!response.empty()
-                && (response.front() == ' ' || response.front() == '\t'
-                    || response.front() == '\r'
-                    || response.front() == '\n'))
-            {
-                response.remove_prefix(1u);
-            }
-            while (!response.empty()
-                && (response.back() == ' ' || response.back() == '\t'
-                    || response.back() == '\r'
-                    || response.back() == '\n'))
-            {
-                response.remove_suffix(1u);
-            }
-
-            if (!response.starts_with("CALL ")
-                || response.find_first_of("\r\n")
-                    != std::string_view::npos)
-            {
+            constexpr std::size_t maximumResponseBytes = 32u * 1024u;
+            if (response.empty() || response.size() > maximumResponseBytes)
                 return std::nullopt;
+
+            const auto trim = [](std::string_view value) noexcept
+            {
+                while (!value.empty()
+                    && (value.front() == ' ' || value.front() == '\t'
+                        || value.front() == '\r' || value.front() == '\n'))
+                {
+                    value.remove_prefix(1u);
+                }
+                while (!value.empty()
+                    && (value.back() == ' ' || value.back() == '\t'
+                        || value.back() == '\r' || value.back() == '\n'))
+                {
+                    value.remove_suffix(1u);
+                }
+                return value;
+            };
+
+            // Local models occasionally wrap the one requested CALL in a short
+            // explanation or Markdown. Recover only a unique CALL line. The
+            // strict parser below still validates its tool/arguments, and the
+            // existing operator-approval gate remains authoritative.
+            std::string_view recoveredCall{};
+            std::size_t callCount{};
+            std::size_t cursor{};
+            while (cursor <= response.size())
+            {
+                const std::size_t newline = response.find('\n', cursor);
+                std::string_view line = response.substr(
+                    cursor,
+                    newline == std::string_view::npos
+                        ? response.size() - cursor
+                        : newline - cursor);
+                cursor = newline == std::string_view::npos
+                    ? response.size() + 1u : newline + 1u;
+                line = trim(line);
+                if (line.starts_with("CALL "))
+                {
+                    ++callCount;
+                    recoveredCall = line;
+                    if (callCount > 1u)
+                        return std::nullopt;
+                }
             }
+            if (callCount != 1u)
+                return std::nullopt;
 
             std::string envelope =
                 "EPOCH_AUTHORING_PLAN_V1\n"
                 "TITLE Bounded AI authoring change\n"
                 "SUMMARY Validate and stage the single bounded call returned by the selected model.\n";
-            envelope += response;
+            envelope.append(recoveredCall.data(), recoveredCall.size());
             envelope += "\nEND";
             return envelope;
+        }
+
+        [[nodiscard]] std::optional<std::string>
+            parse_ai_blocking_question(
+                std::string_view response,
+                std::string_view expectedHeader)
+        {
+            constexpr std::size_t maximumQuestionBytes = 2u * 1024u;
+            if (response.empty() || response.size() > maximumQuestionBytes)
+                return std::nullopt;
+
+            const auto trim = [](std::string_view value) noexcept
+            {
+                while (!value.empty()
+                    && (value.front() == ' ' || value.front() == '\t'
+                        || value.front() == '\r' || value.front() == '\n'))
+                {
+                    value.remove_prefix(1u);
+                }
+                while (!value.empty()
+                    && (value.back() == ' ' || value.back() == '\t'
+                        || value.back() == '\r' || value.back() == '\n'))
+                {
+                    value.remove_suffix(1u);
+                }
+                return value;
+            };
+
+            response = trim(response);
+            const std::size_t firstNewline = response.find('\n');
+            if (firstNewline == std::string_view::npos
+                || trim(response.substr(0u, firstNewline)).compare(expectedHeader) != 0)
+            {
+                return std::nullopt;
+            }
+            response.remove_prefix(firstNewline + 1u);
+            const std::size_t secondNewline = response.find('\n');
+            if (secondNewline == std::string_view::npos)
+                return std::nullopt;
+            const std::string_view questionLine = trim(
+                response.substr(0u, secondNewline));
+            constexpr std::string_view prefix{"QUESTION "};
+            if (!questionLine.starts_with(prefix))
+                return std::nullopt;
+            const std::string_view question = trim(
+                questionLine.substr(prefix.size()));
+            if (question.empty() || question.size() > 768u)
+                return std::nullopt;
+            response.remove_prefix(secondNewline + 1u);
+            if (trim(response).compare("END") != 0)
+                return std::nullopt;
+            return std::string{question};
+        }
+
+        [[nodiscard]] std::string build_project_assistant_chat_prompt(
+            const EditorState& editor,
+            std::string_view request)
+        {
+            std::string prompt{};
+            prompt.reserve(4096u + request.size());
+            prompt +=
+                "EPOCH_PROJECT_ASSISTANT_CONTEXT_V1\n"
+                "This is ordinary Project Assistant conversation, not an engine-source "
+                "iteration and not an authoring-plan execution request. Ground the answer "
+                "in the bounded active-project evidence below. Never claim that you changed "
+                "the project, scene, GUI, files, build, or runtime unless the host later "
+                "returns explicit execution evidence.\n";
+            prompt += "Project: ";
+            prompt += editor.projectName.empty()
+                ? std::string{"No project selected"}
+                : editor.projectName;
+            prompt += "\nProject ID: ";
+            prompt += editor.projectId.empty()
+                ? std::string{"none"}
+                : editor.projectId;
+            prompt += "\nProject status: ";
+            prompt += editor.projectStatus.empty()
+                ? std::string{"(none)"}
+                : editor.projectStatus;
+            prompt += "\nBuild status: ";
+            prompt += editor.projectBuildStatus.empty()
+                ? std::string{"(none)"}
+                : editor.projectBuildStatus;
+            prompt += "\nScene revision: ";
+            prompt += std::to_string(editor.sceneDocumentRevision);
+
+            std::size_t worldObjects{};
+            std::size_t guiObjects{};
+            for (const auto& entity : editor.entities)
+            {
+                if (is_screen_space_gui_entity(entity))
+                    ++guiObjects;
+                else
+                    ++worldObjects;
+            }
+            prompt += "\nWorld objects: ";
+            prompt += std::to_string(worldObjects);
+            prompt += "\nGUI objects: ";
+            prompt += std::to_string(guiObjects);
+            prompt += "\nGUI document: ";
+            prompt += editor.guiDocument && editor.guiDocument->valid()
+                ? "loaded" : "not loaded";
+            prompt += "\nActive script: ";
+            prompt += editor.activeScript.empty()
+                ? std::string{"(none)"}
+                : editor.activeScript;
+
+            if (editor.selectedEntityId != scene::kInvalidSceneObjectId
+                && editor.selectedEntity < editor.entities.size())
+            {
+                const auto& selected = editor.entities[editor.selectedEntity];
+                prompt += "\nSelected object: ";
+                prompt += selected.name;
+                prompt += " [";
+                prompt += selected.type;
+                prompt += "] id=";
+                prompt += std::to_string(selected.sceneObjectId);
+            }
+
+            prompt +=
+                "\nEpoch automatically routes explicit change requests to guarded project authoring, project tools, or Engine Self-Coding. /plan, /tool, and Force Engine Next remain optional overrides. In this conversation response, answer "
+                "the user's question directly and do not emit Epoch protocol packets.\n"
+                "END_EPOCH_PROJECT_ASSISTANT_CONTEXT_V1\n\nUSER_REQUEST\n";
+            prompt.append(request.data(), request.size());
+            prompt += "\nEND_USER_REQUEST";
+            return prompt;
         }
 
         [[nodiscard]] std::string build_ai_authoring_prompt(
@@ -7189,12 +7821,33 @@ namespace epochengine
             roles.reserve(lines.size());
             for (const std::string& line : lines)
             {
+                const auto contains = [&line](std::string_view token) noexcept
+                {
+                    return line.find(token) != std::string::npos;
+                };
                 if (line.starts_with("you>"))
                     roles.push_back(gui::TextMessageRole::user);
                 else if (line.starts_with("ai>"))
                     roles.push_back(gui::TextMessageRole::assistant);
-                else if (line.starts_with("[ERROR]") || line.starts_with("[error]"))
+                else if (line.starts_with("[ERROR]") || line.starts_with("[error]")
+                    || contains(" failed") || contains(" rejected")
+                    || contains(" refused") || contains(" exhausted")
+                    || contains(" crashed"))
                     roles.push_back(gui::TextMessageRole::error);
+                else if (contains(" accepted") || contains(" passed")
+                    || contains(" validated") || contains(" succeeded")
+                    || contains(" ready") || contains(" built"))
+                    roles.push_back(gui::TextMessageRole::success);
+                else if (contains(" queued") || contains(" waiting")
+                    || contains(" pending") || contains(" retained")
+                    || contains(" correction") || contains(" stopping")
+                    || contains(" stopped"))
+                    roles.push_back(gui::TextMessageRole::warning);
+                else if (line.starts_with("[self-coding]")
+                    || line.starts_with("[self-iteration]")
+                    || line.starts_with("[ai-source]")
+                    || line.starts_with("[source]"))
+                    roles.push_back(gui::TextMessageRole::engine);
                 else
                     roles.push_back(gui::TextMessageRole::system);
             }
@@ -8876,7 +9529,7 @@ namespace epochengine
                             && (!guiPresentation.authored
                                 || guiPresentation.visible),
                         .editor_only = entity.editorOnly,
-                        .selected = index == state.selectedEntity,
+                        .selected = editor_entity_selected(state, entity.sceneObjectId),
                         .material = entity.textureMaterial
                             ? canvas2d_material_view(
                                 *entity.textureMaterial,
@@ -8965,13 +9618,27 @@ namespace epochengine
                 if (!entity.visible || is_screen_space_gui_entity(entity))
                     continue;
 
-                const bool selected = state.selectedEntityId != scene::kInvalidSceneObjectId
-                    && entity.sceneObjectId == state.selectedEntityId;
+                std::array<float, 3> previewPosition = entity.position;
+                if (state.scriptOscillator.enabled
+                    && entity.sceneObjectId == state.scriptOscillator.entity_id)
+                {
+                    constexpr double tau = 6.283185307179586476925286766559;
+                    const double phase = tau
+                        * static_cast<double>(state.scriptOscillator.frequency_hz)
+                        * state.timeSnapshot.simulated_seconds;
+                    const auto axis = static_cast<std::size_t>(state.scriptOscillator.axis);
+                    previewPosition = state.scriptOscillator.base_position;
+                    previewPosition[axis] += state.scriptOscillator.amplitude
+                        * static_cast<float>(std::sin(phase));
+                }
+
+                const bool selected = editor_entity_selected(
+                    state, entity.sceneObjectId);
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
                     .position{
-                        entity.position[0],
-                        entity.position[1],
-                        entity.position[2]
+                        previewPosition[0],
+                        previewPosition[1],
+                        previewPosition[2]
                     },
                     .color = selection_color_for_entity(entity, selected),
                     .scale{
@@ -9814,6 +10481,173 @@ namespace epochengine
                 return std::nullopt;
             return selection.hit.object.value;
         }
+        [[nodiscard]] std::optional<gui::Vec2> project_editor_world_to_screen(
+            const core::Context* ctx,
+            const gui::WidgetBounds& viewport,
+            const std::array<float, 3>& position) noexcept
+        {
+            if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
+                return std::nullopt;
+
+            const auto camera = epochengine::previewgrid::camera_for(ctx);
+            const float aspect = viewport.size.x / viewport.size.y;
+            const auto projection = epochengine::previewgrid::projection_for(
+                ctx, aspect, camera);
+            const auto view = epochengine::previewgrid::look_at(
+                camera.eye, camera.target, camera.up);
+            const auto mvp = epochengine::previewgrid::multiply(projection, view);
+            const auto clip = epochengine::previewgrid::transform_point(
+                mvp,
+                { position[0], position[1], position[2] });
+            if (!std::isfinite(clip.w) || clip.w <= 0.0001f)
+                return std::nullopt;
+
+            const float ndcX = clip.x / clip.w;
+            const float ndcY = clip.y / clip.w;
+            if (!std::isfinite(ndcX) || !std::isfinite(ndcY))
+                return std::nullopt;
+
+            return gui::Vec2{
+                viewport.position.x
+                    + (ndcX * 0.5f + 0.5f) * viewport.size.x,
+                viewport.position.y
+                    + (1.0f - (ndcY * 0.5f + 0.5f)) * viewport.size.y
+            };
+        }
+
+        void apply_scene_marquee_selection(
+            const core::Context* ctx,
+            EditorState& editor,
+            const gui::WidgetBounds& viewport) noexcept
+        {
+            const float left = (std::min)(
+                editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x);
+            const float right = (std::max)(
+                editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x);
+            const float top = (std::min)(
+                editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y);
+            const float bottom = (std::max)(
+                editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y);
+
+            if (!editor.sceneMarqueeAdditive)
+            {
+                editor.selectedEntityIds.clear();
+                editor.selectedEntityId = scene::kInvalidSceneObjectId;
+                editor.selectedEntity = 0u;
+            }
+
+            for (std::size_t index = 0u; index < editor.entities.size(); ++index)
+            {
+                const EditorEntity& entity = editor.entities[index];
+                if (!entity.visible || is_screen_space_gui_entity(entity))
+                    continue;
+                const auto projected = project_editor_world_to_screen(
+                    ctx, viewport, entity.position);
+                if (!projected
+                    || projected->x < left || projected->x > right
+                    || projected->y < top || projected->y > bottom)
+                {
+                    continue;
+                }
+                if (!editor_entity_selected(editor, entity.sceneObjectId))
+                    editor.selectedEntityIds.push_back(entity.sceneObjectId);
+                editor.selectedEntity = index;
+                editor.selectedEntityId = entity.sceneObjectId;
+            }
+
+            if (editor.selectedEntityIds.empty())
+            {
+                editor.selectedEntityId = scene::kInvalidSceneObjectId;
+                editor.selectedEntity = 0u;
+            }
+            else
+            {
+                apply_editor_primary_selection_side_effects(editor);
+            }
+        }
+
+        [[nodiscard]] bool commit_scene_group_drag(EditorState& editor)
+        {
+            std::vector<authoring::scene::SceneOperation> operations{};
+            operations.reserve(editor.sceneDragStartPositions.size());
+
+            for (const auto& [id, startPosition] : editor.sceneDragStartPositions)
+            {
+                (void)startPosition;
+                const auto index = editor_entity_index(editor, id);
+                if (!index)
+                    continue;
+                const auto handle = editor.sceneDocument.find(
+                    authoring::scene::ObjectId{id});
+                if (!handle)
+                    continue;
+                const EditorEntity& entity = editor.entities[*index];
+                operations.emplace_back(
+                    authoring::scene::ObjectTransformChangedOperation{
+                        .object = *handle,
+                        .value = {
+                            .position = {
+                                entity.position[0],
+                                entity.position[1],
+                                entity.position[2]},
+                            .rotation_degrees = {
+                                entity.rotation[0],
+                                entity.rotation[1],
+                                entity.rotation[2]},
+                            .scale = {
+                                entity.scale[0],
+                                entity.scale[1],
+                                entity.scale[2]}
+                        }
+                    });
+            }
+
+            if (operations.empty())
+                return false;
+
+            const auto selection = editor.selectedEntityIds;
+            const scene::SceneObjectId primary = editor.selectedEntityId;
+            if (!apply_editor_scene_transaction(
+                    editor,
+                    operations,
+                    operations.size() == 1u
+                        ? std::string{"Move selected object"}
+                        : epochengine::format_text(
+                            "Move {} selected objects", operations.size()),
+                    primary))
+            {
+                return false;
+            }
+            editor.selectedEntityIds = selection;
+            editor.selectedEntityId = primary;
+            synchronize_editor_selection(editor);
+            return true;
+        }
+
+        void draw_scene_marquee_overlay(const EditorState& editor) noexcept
+        {
+            if (!editor.sceneMarqueeActive)
+                return;
+            const float left = (std::min)(
+                editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x);
+            const float right = (std::max)(
+                editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x);
+            const float top = (std::min)(
+                editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y);
+            const float bottom = (std::max)(
+                editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y);
+            const float width = right - left;
+            const float height = bottom - top;
+            if (width < 1.0f || height < 1.0f)
+                return;
+
+            constexpr float border = 2.0f;
+            gui::titlebar_rect({left, top}, {width, border});
+            gui::titlebar_rect({left, bottom - border}, {width, border});
+            gui::titlebar_rect({left, top}, {border, height});
+            gui::titlebar_rect({right - border, top}, {border, height});
+        }
+
         void update_scene_object_interaction(
             const std::shared_ptr<core::Context>& ctx,
             EditorState& editor,
@@ -9822,8 +10656,10 @@ namespace epochengine
             if (!ctx || editor.previewMode != core::ScenePreviewMode::Editor)
             {
                 editor.sceneDragActive = false;
+                editor.sceneDragStartPositions.clear();
                 editor.sceneDragHasPlaneHit = false;
                 editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
+                editor.sceneMarqueeActive = false;
                 editor.sceneLeftWasHeld = false;
                 return;
             }
@@ -9831,8 +10667,11 @@ namespace epochengine
             if (result.scene_input_captured)
             {
                 editor.sceneDragActive = false;
+                editor.sceneDragStartPositions.clear();
                 editor.sceneDragHasPlaneHit = false;
-                editor.sceneLeftWasHeld = ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
+                editor.sceneMarqueeActive = false;
+                editor.sceneLeftWasHeld = ctx->is_mouse_button_held_safe(
+                    epochengine::input::MouseButton::MouseLeft);
                 return;
             }
 
@@ -9851,57 +10690,101 @@ namespace epochengine
                 && mouse.x < (viewport.position.x + viewport.size.x)
                 && mouse.y < (viewport.position.y + viewport.size.y);
 
-            const bool leftHeld = ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
-            const bool rightHeld = ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseRight);
-            const bool middleHeld = ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseMiddle);
-            const bool altHeld = epochengine::input::is_key_held(epochengine::input::Key::LeftAlt)
-                || epochengine::input::is_key_held(epochengine::input::Key::RightAlt);
+            const bool leftHeld = ctx->is_mouse_button_held_safe(
+                epochengine::input::MouseButton::MouseLeft);
+            const bool rightHeld = ctx->is_mouse_button_held_safe(
+                epochengine::input::MouseButton::MouseRight);
+            const bool middleHeld = ctx->is_mouse_button_held_safe(
+                epochengine::input::MouseButton::MouseMiddle);
+            const bool altHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftAlt)
+                || ctx->is_key_held_safe(epochengine::input::Key::RightAlt);
+            const bool shiftHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftShift)
+                || ctx->is_key_held_safe(epochengine::input::Key::RightShift);
             const bool leftPressed = leftHeld && !editor.sceneLeftWasHeld;
 
             if (leftPressed && mouseInScene && !rightHeld && !middleHeld && !altHeld)
             {
-                const auto pickedId = pick_editor_scene_entity(ctx.get(), editor, viewport, mouse);
+                const auto pickedId = pick_editor_scene_entity(
+                    ctx.get(), editor, viewport, mouse);
                 const auto picked = pickedId
                     ? editor_entity_index(editor, *pickedId)
                     : std::nullopt;
                 if (picked && pickedId)
                 {
-                    select_editor_entity(editor, *picked);
-                    editor.sceneDragActive = true;
-                    editor.sceneDragEntity = *picked;
-                    editor.sceneDragEntityId = *pickedId;
-                    editor.sceneDragStartMouse = mouse;
-                    editor.sceneDragStartPosition = editor.entities[*picked].position;
-                    const auto startHit = screen_point_to_world_plane(
-                        ctx.get(),
-                        viewport,
-                        mouse,
-                        {
-                            editor.sceneDragStartPosition[0],
-                            editor.sceneDragStartPosition[1],
-                            editor.sceneDragStartPosition[2]
-                        },
-                        scene_drag_plane_normal(ctx.get()));
-                    editor.sceneDragHasPlaneHit = startHit.has_value();
-                    if (startHit)
+                    if (shiftHeld)
                     {
-                        editor.sceneDragStartHit = {
-                            startHit->x,
-                            startHit->y,
-                            startHit->z
-                        };
+                        toggle_editor_entity_selection(editor, *picked);
+                        result.scene_input_captured = true;
+                        push_editor_log(
+                            editor,
+                            epochengine::format_text(
+                                "[scene] Selection now contains {} object(s).",
+                                editor.selectedEntityIds.size()));
                     }
-                    result.scene_input_captured = true;
-                    push_editor_log(editor, "[scene] Selected " + editor.entities[*picked].name + ".");
+                    else
+                    {
+                        if (!editor_entity_selected(editor, *pickedId))
+                            select_editor_entity(editor, *picked);
+                        else
+                        {
+                            editor.selectedEntity = *picked;
+                            editor.selectedEntityId = *pickedId;
+                            apply_editor_primary_selection_side_effects(editor);
+                        }
+
+                        editor.sceneDragActive = true;
+                        editor.sceneDragEntity = *picked;
+                        editor.sceneDragEntityId = *pickedId;
+                        editor.sceneDragStartMouse = mouse;
+                        editor.sceneDragStartPosition = editor.entities[*picked].position;
+                        editor.sceneDragStartPositions.clear();
+                        editor.sceneDragStartPositions.reserve(
+                            editor.selectedEntityIds.size());
+                        for (const scene::SceneObjectId id : editor.selectedEntityIds)
+                        {
+                            if (const auto index = editor_entity_index(editor, id))
+                            {
+                                editor.sceneDragStartPositions.emplace_back(
+                                    id, editor.entities[*index].position);
+                            }
+                        }
+
+                        const auto startHit = screen_point_to_world_plane(
+                            ctx.get(),
+                            viewport,
+                            mouse,
+                            {
+                                editor.sceneDragStartPosition[0],
+                                editor.sceneDragStartPosition[1],
+                                editor.sceneDragStartPosition[2]
+                            },
+                            scene_drag_plane_normal(ctx.get()));
+                        editor.sceneDragHasPlaneHit = startHit.has_value();
+                        if (startHit)
+                        {
+                            editor.sceneDragStartHit = {
+                                startHit->x,
+                                startHit->y,
+                                startHit->z
+                            };
+                        }
+                        result.scene_input_captured = true;
+                    }
                 }
                 else
                 {
-                    const bool hadSelection = editor_has_selection(editor);
-                    clear_editor_selection(editor);
+                    editor.sceneMarqueeActive = true;
+                    editor.sceneMarqueeAdditive = shiftHeld;
+                    editor.sceneMarqueeStart = mouse;
+                    editor.sceneMarqueeCurrent = mouse;
                     result.scene_input_captured = true;
-                    if (hadSelection)
-                        push_editor_log(editor, "[scene] Selection cleared.");
                 }
+            }
+
+            if (editor.sceneMarqueeActive && leftHeld)
+            {
+                editor.sceneMarqueeCurrent = mouse;
+                result.scene_input_captured = true;
             }
 
             if (editor.sceneDragActive && leftHeld && !rightHeld && !middleHeld && !altHeld
@@ -9911,8 +10794,9 @@ namespace epochengine
 
                 const float dx = mouse.x - editor.sceneDragStartMouse.x;
                 const float dy = mouse.y - editor.sceneDragStartMouse.y;
+                epochengine::previewgrid::Vec3 delta{};
+                bool haveDelta = false;
 
-                auto& entity = editor.entities[editor.sceneDragEntity];
                 if (editor.sceneDragHasPlaneHit)
                 {
                     const auto currentHit = screen_point_to_world_plane(
@@ -9927,24 +10811,28 @@ namespace epochengine
                         scene_drag_plane_normal(ctx.get()));
                     if (currentHit)
                     {
-                        entity.position[0] = editor.sceneDragStartPosition[0] + (currentHit->x - editor.sceneDragStartHit[0]);
-                        entity.position[1] = editor.sceneDragStartPosition[1] + (currentHit->y - editor.sceneDragStartHit[1]);
-                        entity.position[2] = editor.sceneDragStartPosition[2] + (currentHit->z - editor.sceneDragStartHit[2]);
-                        editor.sceneLightingDirty = true;
-                        editor.sceneInteractionDirty = true;
+                        delta = {
+                            currentHit->x - editor.sceneDragStartHit[0],
+                            currentHit->y - editor.sceneDragStartHit[1],
+                            currentHit->z - editor.sceneDragStartHit[2]
+                        };
+                        haveDelta = true;
                     }
                 }
                 else
                 {
                     const auto camera = epochengine::previewgrid::camera_for(ctx.get());
-                    auto forward = epochengine::previewgrid::normalize(epochengine::previewgrid::subtract(camera.target, camera.eye));
+                    auto forward = epochengine::previewgrid::normalize(
+                        epochengine::previewgrid::subtract(camera.target, camera.eye));
                     forward.y = 0.0f;
                     forward = epochengine::previewgrid::normalize(forward);
                     if (epochengine::previewgrid::dot(forward, forward) <= 1.0e-6f)
                         forward = { 0.0f, 0.0f, -1.0f };
 
-                    constexpr epochengine::previewgrid::Vec3 kWorldUp{ 0.0f, 1.0f, 0.0f };
-                    auto right = epochengine::previewgrid::normalize(epochengine::previewgrid::cross(forward, kWorldUp));
+                    constexpr epochengine::previewgrid::Vec3 kWorldUp{
+                        0.0f, 1.0f, 0.0f };
+                    auto right = epochengine::previewgrid::normalize(
+                        epochengine::previewgrid::cross(forward, kWorldUp));
                     if (epochengine::previewgrid::dot(right, right) <= 1.0e-6f)
                         right = { 1.0f, 0.0f, 0.0f };
 
@@ -9952,11 +10840,24 @@ namespace epochengine
                         epochengine::previewgrid::camera_distance_for(ctx.get()) * 0.00175f,
                         0.004f,
                         0.045f);
-                    const auto delta = epochengine::previewgrid::add(
+                    delta = epochengine::previewgrid::add(
                         epochengine::previewgrid::scale(right, dx * dragScale),
                         epochengine::previewgrid::scale(forward, -dy * dragScale));
-                    entity.position[0] = editor.sceneDragStartPosition[0] + delta.x;
-                    entity.position[2] = editor.sceneDragStartPosition[2] + delta.z;
+                    haveDelta = true;
+                }
+
+                if (haveDelta)
+                {
+                    for (const auto& [id, startPosition] : editor.sceneDragStartPositions)
+                    {
+                        if (const auto index = editor_entity_index(editor, id))
+                        {
+                            auto& entity = editor.entities[*index];
+                            entity.position[0] = startPosition[0] + delta.x;
+                            entity.position[1] = startPosition[1] + delta.y;
+                            entity.position[2] = startPosition[2] + delta.z;
+                        }
+                    }
                     editor.sceneLightingDirty = true;
                     editor.sceneInteractionDirty = true;
                 }
@@ -9964,15 +10865,46 @@ namespace epochengine
 
             if (!leftHeld && editor.sceneDragActive)
             {
-                if (editor.sceneDragEntity < editor.entities.size())
+                const std::size_t movedCount = editor.sceneDragStartPositions.size();
+                if (commit_scene_group_drag(editor))
                 {
-                    const EditorEntity moved = editor.entities[editor.sceneDragEntity];
-                    if (transform_editor_scene_entity(editor, moved, "Move " + moved.name))
-                        push_editor_log(editor, "[scene] Moved " + moved.name + ".");
+                    push_editor_log(
+                        editor,
+                        movedCount == 1u
+                            ? "[scene] Moved selected object."
+                            : epochengine::format_text(
+                                "[scene] Moved {} selected objects as one group.",
+                                movedCount));
                 }
                 editor.sceneDragActive = false;
+                editor.sceneDragStartPositions.clear();
                 editor.sceneDragHasPlaneHit = false;
                 editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
+            }
+
+            if (!leftHeld && editor.sceneMarqueeActive)
+            {
+                editor.sceneMarqueeCurrent = mouse;
+                const float width = std::abs(
+                    editor.sceneMarqueeCurrent.x - editor.sceneMarqueeStart.x);
+                const float height = std::abs(
+                    editor.sceneMarqueeCurrent.y - editor.sceneMarqueeStart.y);
+                if (width >= 4.0f || height >= 4.0f)
+                {
+                    apply_scene_marquee_selection(
+                        ctx.get(), editor, viewport);
+                    push_editor_log(
+                        editor,
+                        epochengine::format_text(
+                            "[scene] Marquee selected {} object(s).",
+                            editor.selectedEntityIds.size()));
+                }
+                else if (!editor.sceneMarqueeAdditive)
+                {
+                    clear_editor_selection(editor);
+                }
+                editor.sceneMarqueeActive = false;
+                result.scene_input_captured = true;
             }
 
             editor.sceneLeftWasHeld = leftHeld;
@@ -10227,6 +11159,59 @@ namespace epochengine
             push_editor_log(
                 it->second,
                 epochengine::format_text("[script] Rotated {} scene entities by {:.1f} degrees.", rotated, deltaDegrees));
+        }
+
+        int script_attach_selected_entity_oscillator_callback(
+            void* userData,
+            int axis,
+            float amplitude,
+            float frequencyHz)
+        {
+            const auto* ctx = static_cast<const core::Context*>(userData);
+            if (!ctx || axis < 0 || axis > 2
+                || !std::isfinite(amplitude) || !std::isfinite(frequencyHz))
+            {
+                return -1;
+            }
+
+            auto& storage = editor_storage();
+            std::scoped_lock lock(storage.mutex);
+            const auto it = storage.states.find(ctx);
+            if (it == storage.states.end())
+                return -1;
+
+            auto& state = it->second;
+            const auto selected = editor_entity_index(state, state.selectedEntityId);
+            if (!selected)
+            {
+                push_editor_log(state, "[script] Oscillator attach failed: select a scene entity first.");
+                return -1;
+            }
+
+            const auto& entity = state.entities[*selected];
+            if (entity.editorOnly || entity.type == "Level" || entity.type == "Camera")
+            {
+                push_editor_log(state, "[script] Oscillator attach failed: select a movable scene object such as a Cube.");
+                return -1;
+            }
+
+            state.scriptOscillator.enabled = true;
+            state.scriptOscillator.entity_id = entity.sceneObjectId;
+            state.scriptOscillator.base_position = entity.position;
+            state.scriptOscillator.axis = static_cast<std::uint8_t>(axis);
+            state.scriptOscillator.amplitude = (std::clamp)(std::abs(amplitude), 0.01f, 100.0f);
+            state.scriptOscillator.frequency_hz = (std::clamp)(std::abs(frequencyHz), 0.01f, 20.0f);
+
+            static constexpr std::array<std::string_view, 3> axisNames{ "X", "Y", "Z" };
+            push_editor_log(
+                state,
+                epochengine::format_text(
+                    "[script] Attached oscillator to '{}' on {}: +/-{:.2f} units at {:.2f} Hz. Press Play to animate.",
+                    entity.name,
+                    axisNames[state.scriptOscillator.axis],
+                    state.scriptOscillator.amplitude,
+                    state.scriptOscillator.frequency_hz));
+            return 0;
         }
 
         int script_queue_model_load_callback(void* userData, const char* debugName, const char* modelPath)
@@ -11859,8 +12844,11 @@ namespace epochengine
                     == epochengine::updater::SourceAuthorityKind::explicit_checkout
                 ? "explicit_checkout"
                 : authority.kind
-                        == epochengine::updater::SourceAuthorityKind::verified_cache
-                    ? "verified_cache" : "unavailable";
+                        == epochengine::updater::SourceAuthorityKind::local_snapshot
+                    ? "local_snapshot"
+                    : authority.kind
+                            == epochengine::updater::SourceAuthorityKind::verified_cache
+                        ? "verified_cache" : "unavailable";
             input.source_authority_version = authority.source_version;
             input.source_authority_commit = authority.commit;
             input.source_authority_receipt_digest = authority.receipt_digest;
@@ -21563,7 +22551,9 @@ namespace epochengine
             editor.aiDeferredDisplay = std::move(display);
             editor.aiDeferredRequestKind = requestKind;
             editor.aiDeferredDispatchQueued = false;
-            editor.showAiModelConsentModal = false;
+            // A staged request must surface model confirmation instead of
+            // silently parking the deferred dispatch forever.
+            editor.showAiModelConsentModal = true;
             editor.openMenu = TopMenu::None;
 
             if (editor.aiPendingModelSelection.empty())
@@ -21741,15 +22731,15 @@ namespace epochengine
                             + activeModel);
             using SelectionOrigin = epochengine::ai::LocalModelSelectionOrigin;
             gui::property_row("[model] Selection",
-                selection.origin == SelectionOrigin::default_local ? "Default quick assistant"
+                selection.origin == SelectionOrigin::default_local ? "Default Qwen3.8 27B"
                 : selection.origin == SelectionOrigin::remembered ? "Last used at this endpoint"
                 : selection.origin == SelectionOrigin::explicit_selection ? "Selected by you"
                 : selection.origin == SelectionOrigin::legacy_preference ? "Previous local preference"
                 : selection.origin == SelectionOrigin::configured ? "Configured model" : "Not selected");
             gui::wrapped_label(
-                "Nemotron 4B is the quick assistant. For Engine Self-Coding, choose "
-                "an agentic coding model: Qwen 3.5 or newer, preferably Qwen 3.8. "
-                "Epoch retains your choice; it does not silently replace or eject it.", contentWidth);
+                "Qwen3.8 27B is the default local self-coding model. Choose another "
+                "detected model only when you want to override it. Epoch retains an explicit "
+                "current-session choice and does not silently eject it.", contentWidth);
             gui::property_row(
                 "[model] Client",
                 epochengine::ai::model_connection_status());
@@ -22195,6 +23185,26 @@ namespace epochengine
         } trace;
         try
         {
+            trace.stage = "authoring_reply_recovery";
+            const auto recoveredAuthoring = recover_bare_ai_authoring_call(
+                "I will make the smallest visible change.\n"
+                "```text\n"
+                "CALL scene.create archetype=cube count=1\n"
+                "```\n");
+            if (!recoveredAuthoring)
+                return false;
+            const auto recoveredAuthoringPlan =
+                epochengine::ai::parse_authoring_plan(*recoveredAuthoring);
+            if (!recoveredAuthoringPlan
+                || recoveredAuthoringPlan.plan.calls.size() != 1u
+                || recover_bare_ai_authoring_call(
+                    "CALL scene.create archetype=cube count=1\n"
+                    "CALL scene.create archetype=light count=1\n"))
+            {
+                return false;
+            }
+
+            trace.stage = "path_admission";
             std::string diagnostic{};
             if (ai_source_owned_path({}, &diagnostic) || diagnostic.empty()
                 || ai_source_owned_path("relative/sandbox", &diagnostic)
@@ -22510,10 +23520,48 @@ namespace epochengine
         // model, worker, renderer, or transport. Transport has its own contract.
         try
         {
+            auto projectContext = std::make_unique<EditorState>();
+            projectContext->projectName = "Project Assistant Canary";
+            projectContext->projectId = "project.assistant.canary";
+            projectContext->projectStatus = "ready";
+            projectContext->projectBuildStatus = "build idle";
+            projectContext->sceneDocumentRevision = 42u;
+            projectContext->activeScript = "starter";
+            const std::string projectPrompt = build_project_assistant_chat_prompt(
+                *projectContext, "What is selected and is the build ready?");
+            if (projectPrompt.find("EPOCH_PROJECT_ASSISTANT_CONTEXT_V1")
+                    == std::string::npos
+                || projectPrompt.find("Project Assistant Canary")
+                    == std::string::npos
+                || projectPrompt.find("Scene revision: 42")
+                    == std::string::npos
+                || projectPrompt.find("USER_REQUEST")
+                    == std::string::npos
+                || projectPrompt.find("What is selected and is the build ready?")
+                    == std::string::npos)
+                return false;
+
+            AiChat projectChannel{};
+            projectChannel.pendingWorkload = ai::InferenceWorkload::chat;
+            projectChannel.pendingRequestKind = AiDeferredRequestKind::Chat;
+            projectChannel.pending = std::make_shared<AiChatRequestState>();
+            projectChannel.pending->reply =
+                "EPOCH_TOOL_PLAN_V1 mentioned as ordinary project conversation";
+            projectChannel.pending->ready.store(true, std::memory_order_release);
+            projectChannel.pump();
+            if (projectChannel.latestCompletionRequestKind
+                    != AiDeferredRequestKind::Chat
+                || projectChannel.latestCompletionWorkload
+                    != ai::InferenceWorkload::chat
+                || source_model_completion_ready(projectChannel, 0u))
+                return false;
+
             AiChat first{};
             AiChat second{};
             first.pendingWorkload = ai::InferenceWorkload::source_iteration;
             second.pendingWorkload = ai::InferenceWorkload::source_iteration;
+            first.pendingRequestKind = AiDeferredRequestKind::SourceIteration;
+            second.pendingRequestKind = AiDeferredRequestKind::SourceIteration;
             const auto cancelled = std::make_shared<AiChatRequestState>();
             const auto other = std::make_shared<AiChatRequestState>();
             first.pending = cancelled;
@@ -22561,6 +23609,7 @@ namespace epochengine
             // repeated stop nor its stale result may affect the next iteration.
             const auto successor = std::make_shared<AiChatRequestState>();
             first.pending = successor;
+            first.pendingRequestKind = AiDeferredRequestKind::SourceIteration;
             first.pendingPrompt = "successor request";
             (void)cancelled->cancellation.request_stop();
             cancelled->reply = "late stale reply canary";
@@ -22589,6 +23638,7 @@ namespace epochengine
             // Cancellation wins even when the response was already published
             // but the UI had not consumed it yet.
             first.pending = std::make_shared<AiChatRequestState>();
+            first.pendingRequestKind = AiDeferredRequestKind::SourceIteration;
             first.pending->reply = "completed but cancelled canary";
             first.pending->ready.store(true, std::memory_order_release);
             if (!first.cancel_pending())
@@ -22602,6 +23652,7 @@ namespace epochengine
                     || line.find("completed but cancelled canary") != std::string::npos)
                     return false;
             first.pending = std::make_shared<AiChatRequestState>();
+            first.pendingRequestKind = AiDeferredRequestKind::SourceIteration;
             (void)first.cancel_pending();
             first.pending->stage.store(ai::ModelRequestStage::retirement_failed,
                 std::memory_order_release);
@@ -22622,6 +23673,7 @@ namespace epochengine
 
             AiChat timed{};
             timed.pendingWorkload = ai::InferenceWorkload::source_iteration;
+            timed.pendingRequestKind = AiDeferredRequestKind::SourceIteration;
             const auto timeout = std::make_shared<AiChatRequestState>();
             timed.pending = timeout;
             timeout->reply = "Host timeout: attempt 1/2 elapsed 1800s; no automatic repeat.";
@@ -22648,6 +23700,7 @@ namespace epochengine
             if (timed.latestTerminalFailure != ai::ModelTerminalFailure::none
                 || !timed.latestTerminalStatus.empty() || !timed.latestRawReply.empty()) return false;
             timed.pendingWorkload = ai::InferenceWorkload::chat;
+            timed.pendingRequestKind = AiDeferredRequestKind::Chat;
             timed.pending = std::make_shared<AiChatRequestState>();
             timeout->terminalFailure = ai::ModelTerminalFailure::retirement_failed;
             timeout->reply = "late expired source result canary";
@@ -22736,6 +23789,14 @@ namespace epochengine
             std::scoped_lock lock(chatStorage.mutex, editorStorage.mutex);
             retiredChat = chatStorage.chats.extract(ctx);
             retiredState = editorStorage.states.extract(ctx);
+            std::erase_if(
+                editorStorage.detachedAiChatCommands,
+                [ctx](const DetachedAiChatCommand& command)
+                {
+                    return command.ownerContext == ctx;
+                });
+            if (editorStorage.detachedPaneProjection.ownerContext == ctx)
+                editorStorage.detachedPaneProjection = {};
         }
         if (!retiredChat.empty() && retiredChat.mapped())
             (void)retiredChat.mapped()->cancel_pending();
@@ -22768,6 +23829,7 @@ namespace epochengine
             retiredStates.swap(editorStorage.states);
             editorStorage.detachedPaneRoutes.clear();
             editorStorage.paneRedockRequests.clear();
+            editorStorage.detachedAiChatCommands.clear();
             editorStorage.detachedPaneProjection = {};
             editorStorage.passiveContextScores = {};
             shutdownAi = chatStorage.bot_initialized;
@@ -22818,6 +23880,40 @@ namespace epochengine
     void editor_notify_context_panel_closed(std::string_view route_id)
     {
         set_detached_pane_route(route_id, false);
+        const auto pane = editor_tool_pane_from_route(route_id);
+        if (!pane)
+            return;
+
+        auto& storage = editor_storage();
+        std::scoped_lock lock(storage.mutex);
+        for (auto& [context, editor] : storage.states)
+        {
+            (void)context;
+            const std::size_t index = tool_pane_index(*pane);
+            editor.toolPaneOpen[index] = true;
+            if (is_outliner_tool_pane(*pane))
+                editor.showOutliner = true;
+            else if (is_inspector_tool_pane(*pane))
+                editor.showInspector = true;
+            else if (is_console_tool_pane(*pane))
+                editor.showConsoleDock = true;
+            else if (*pane == EditorToolPane::AiChat)
+                editor.showAiChat = true;
+
+            const EditorToolDockRegion region = editor.toolPaneDockRegions[index];
+            std::string& active =
+                region == EditorToolDockRegion::Left
+                ? editor.activeLeftPaneRoute
+                : region == EditorToolDockRegion::Right
+                    ? editor.activeRightPaneRoute
+                    : region == EditorToolDockRegion::BottomLeft
+                        ? editor.activeBottomLeftPaneRoute
+                        : editor.activeBottomRightPaneRoute;
+            active.assign(route_id);
+            editor.detachedPanelHostStatus =
+                std::string(route_id) + " returned after its native window closed.";
+            editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
+        }
     }
 
     void editor_redock_context_panel(
@@ -23205,6 +24301,9 @@ namespace epochengine
             snapshot.entities.emplace_back(capture_snapshot_entity(entity));
         snapshot.selected_entity = editor.selectedEntity;
         snapshot.selected_entity_id = editor.selectedEntityId;
+        snapshot.selected_entity_ids.assign(
+            editor.selectedEntityIds.begin(),
+            editor.selectedEntityIds.end());
         snapshot.log_lines = editor.logLines;
         snapshot.helpers_visible = editor.helpersVisible;
         snapshot.time_snapshot = editor.timeSnapshot;
@@ -23388,9 +24487,20 @@ namespace epochengine
             }
         }
         normalize_editor_entity_ids(editor);
+        editor.selectedEntityIds.assign(
+            snapshot.selected_entity_ids.begin(),
+            snapshot.selected_entity_ids.end());
         editor.selectedEntityId = snapshot.selected_entity_id;
+        if (editor.selectedEntityIds.empty()
+            && editor.selectedEntityId != scene::kInvalidSceneObjectId)
+        {
+            editor.selectedEntityIds.push_back(editor.selectedEntityId);
+        }
         if (const auto selected = editor_entity_index(editor, editor.selectedEntityId))
+        {
             editor.selectedEntity = *selected;
+            synchronize_editor_selection(editor);
+        }
         else
             select_editor_entity(editor, snapshot.selected_entity);
         editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
@@ -23583,7 +24693,8 @@ namespace epochengine
             .rotate_all_entities_yaw = &script_rotate_all_entities_yaw_callback,
             .queue_model_load = &script_queue_model_load_callback,
             .project_model_asset = projectModelAsset.empty() ? nullptr : projectModelAsset.c_str(),
-            .request_engine_scene = &script_request_engine_scene_callback
+            .request_engine_scene = &script_request_engine_scene_callback,
+            .attach_selected_entity_oscillator = &script_attach_selected_entity_oscillator_callback
         };
 
         const std::string sourcePath = editor_resolve_script_source_path(script_name, projectRoot);
@@ -23695,44 +24806,10 @@ namespace epochengine
         gui::begin_window(windowTitle, { 0.0f, 0.0f }, { w, h });
 
         const float contentWidth = (std::max)(1.0f, w - 32.0f);
-        std::shared_ptr<AiChat> detachedChat{};
-        if (aiChatRoute)
-        {
-            detachedChat = chat_state_for(ctx);
-            detachedChat->pump();
-            if (editor.aiWorkLease != 0u && !ai_source_native_work_active(editor, *detachedChat))
-                release_ai_work_lease(editor);
-            if (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat
-                && editor.aiDeferredDispatchQueued && !detachedChat->pending
-                && !detachedChat->worker.joinable() && !detachedChat->requestRetirementFailed)
-            {
-                std::scoped_lock selectionLock(aiModelSelectionMutex);
-                if (!epochengine::ai::is_model_use_confirmed())
-                    editor.aiAuthoringStatus = "Queued message retained: confirm the selected model in the main editor.";
-                else if (reserve_project_ai_work_at(editor,
-                        platform::work_admission::now_milliseconds(), ai_heavy_work_coordinator()))
-                {
-                    // Copy at the final call: failed submission retains the
-                    // original queue bytes and never loses a user's message.
-                    const bool submitted = detachedChat->submit_with_display(
-                        editor.aiDeferredPrompt, editor.aiDeferredDisplay);
-                    editor.aiDeferredDispatchQueued = false;
-                    if (submitted)
-                    {
-                        editor.aiDeferredPrompt.clear();
-                        editor.aiDeferredDisplay.clear();
-                        editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
-                        editor.aiDeferredModelLease.reset();
-                    }
-                    else
-                    {
-                        editor.aiAuthoringStatus = "The worker could not start. Your exact message is retained; use Retry Queued Message.";
-                        if (!ai_source_native_work_active(editor, *detachedChat))
-                            release_ai_work_lease(editor);
-                    }
-                }
-            }
-        }
+        // Detached routed panes must never instantiate a second AiChat/model owner.
+        // They keep only a local text-edit buffer and communicate with the canonical
+        // editor through the bounded mailbox/projection below. This is especially
+        // important while a project runtime is active.
         if (paneRoute)
         {
             gui::label(windowTitle);
@@ -23887,60 +24964,75 @@ namespace epochengine
             }
             else if (aiChatRoute)
             {
+                static const std::vector<std::string> emptyDetachedChatLines{};
+                const auto& paneChatLines = paneProjection.ready
+                    ? paneProjection.chatLines
+                    : emptyDetachedChatLines;
+                const bool queued = paneProjection.ready
+                    && (paneProjection.aiDeferredChatQueued
+                        || paneProjection.aiDetachedSubmitQueued);
+                const bool pending = paneProjection.ready
+                    && paneProjection.aiRequestPending;
                 (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
                     .id = "popout-ai-chat",
                     .size = { contentWidth, (std::max)(80.0f, h - 212.0f
-                        - (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat ? 136.0f : 0.0f)
-                        - (detachedChat->pending ? 34.0f : 0.0f)) },
-                    .lines = detachedChat->lines,
-                    .line_roles = ai_chat_message_roles(detachedChat->lines),
+                        - (queued ? 136.0f : 0.0f)
+                        - (pending ? 34.0f : 0.0f)) },
+                    .lines = paneChatLines,
+                    .line_roles = ai_chat_message_roles(paneChatLines),
                     .max_line_chars = 240,
                     .selectable = true,
                     .stick_to_bottom = true
                 });
-                const auto inputResult = gui::edit_box(detachedChat->input, { contentWidth, 30.0f }, 4096, false);
-                if (inputResult.submitted)
+                const auto inputResult = gui::edit_box(
+                    editor.detachedAiChatInput, { contentWidth, 30.0f }, 4096, false);
+                if (inputResult.submitted
+                    && paneProjection.ready
+                    && paneProjection.ownerContext
+                    && !editor.detachedAiChatInput.empty()
+                    && !is_ws_only(editor.detachedAiChatInput))
                 {
-                    std::scoped_lock selectionLock(aiModelSelectionMutex);
-                    if (editor.aiDeferredRequestKind != AiDeferredRequestKind::None)
-                        detachedChat->append_status("A message is already queued. Your new draft is retained; send it after that request finishes.");
-                    else if (!epochengine::ai::prepare_local_model_for_request())
+                    if (queue_detached_ai_chat_command(
+                            paneProjection.ownerContext,
+                            DetachedAiChatCommandKind::submit,
+                            editor.detachedAiChatInput))
                     {
-                        detachedChat->lines.emplace_back(
-                            "ai> The selected model is unavailable or needs endpoint approval. "
-                            "Check AI Controls in the main editor; your message is retained.");
-                    }
-                    else if (!detachedChat->input.empty() && !is_ws_only(detachedChat->input))
-                    {
-                        auto modelLease = std::make_shared<AiModelSelectionLease>();
-                        editor.aiDeferredPrompt = detachedChat->input;
-                        editor.aiDeferredDisplay = detachedChat->input;
-                        editor.aiDeferredRequestKind = AiDeferredRequestKind::Chat;
-                        editor.aiDeferredModelLease = std::move(modelLease);
-                        editor.aiDeferredDispatchQueued = true;
-                        editor.aiAuthoringStatus = "Message queued; waiting for the shared AI/build work lane.";
-                        detachedChat->input.clear();
+                        editor.detachedAiChatInput.clear();
                     }
                 }
-                if (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat)
+                if (queued)
                 {
-                    gui::wrapped_label(editor.aiAuthoringStatus, contentWidth);
-                    if (!editor.aiDeferredDispatchQueued
-                        && gui::button("Retry Queued Message", {contentWidth, 30.0f}))
-                        editor.aiDeferredDispatchQueued = true;
-                    if (gui::button("Cancel Queued Message", {contentWidth, 30.0f}))
+                    gui::wrapped_label(
+                        paneProjection.aiStatus.empty()
+                            ? std::string_view{
+                                "Message queued for the canonical editor AI session."}
+                            : std::string_view{paneProjection.aiStatus},
+                        contentWidth);
+                    if (paneProjection.aiDeferredChatQueued
+                        && !paneProjection.aiDeferredDispatchQueued
+                        && gui::button(
+                            "Retry Queued Message", {contentWidth, 30.0f}))
                     {
-                        detachedChat->append_status("Queued message cancelled before transport. Its text: " + editor.aiDeferredDisplay);
-                        editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
-                        editor.aiDeferredDispatchQueued = false;
-                        editor.aiDeferredPrompt.clear();
-                        editor.aiDeferredDisplay.clear();
-                        editor.aiDeferredModelLease.reset();
+                        (void)queue_detached_ai_chat_command(
+                            paneProjection.ownerContext,
+                            DetachedAiChatCommandKind::retry_queued);
+                    }
+                    if (gui::button(
+                            "Cancel Queued Message", {contentWidth, 30.0f}))
+                    {
+                        (void)queue_detached_ai_chat_command(
+                            paneProjection.ownerContext,
+                            DetachedAiChatCommandKind::cancel_queued);
                     }
                 }
-                if (detachedChat->pending
-                    && gui::button("Stop Model Request", {contentWidth, 30.0f}))
-                    (void)detachedChat->cancel_pending();
+                if (pending
+                    && gui::button(
+                        "Stop Model Request", {contentWidth, 30.0f}))
+                {
+                    (void)queue_detached_ai_chat_command(
+                        paneProjection.ownerContext,
+                        DetachedAiChatCommandKind::stop_pending);
+                }
             }
 
             else
@@ -24014,84 +25106,94 @@ namespace epochengine
         // Request ownership is independent of whether this application shows
         // an AI Chat pane (for example after switching to GUI or Plant Lab).
         chat.pump();
-        publish_detached_pane_projection(editor, chat);
+        publish_detached_pane_projection(ctx.get(), editor, chat);
         if (!chat.pending
             && chat.completionGeneration
                 > editor.aiObservedCompletionGeneration)
         {
             editor.aiObservedCompletionGeneration =
                 chat.completionGeneration;
-            const bool sourceCompletion = editor.aiSourceAwaitingReply
-                && source_model_completion_ready(chat, editor.aiSourceRequestedGeneration);
-            if (!sourceCompletion && chat.completionGeneration
-                <= editor.aiAuthoringIgnoredThroughGeneration)
+            const AiDeferredRequestKind completedKind =
+                chat.latestCompletionRequestKind;
+            const bool sourceCompletion =
+                completedKind == AiDeferredRequestKind::SourceIteration
+                && editor.aiSourceAwaitingReply
+                && source_model_completion_ready(
+                    chat, editor.aiSourceRequestedGeneration);
+
+            if (completedKind == AiDeferredRequestKind::Authoring)
             {
-                editor.aiAuthoringAwaitingReply = false;
-                editor.aiSourceAwaitingReply = false;
-                editor.aiToolAwaitingReply = false;
-                editor.aiToolPlan = {};
-                editor.aiAuthoringPlanForGoal = false;
-                editor.aiAuthoringStatus =
-                    "Discarded an obsolete AI reply because its goal changed.";
-                push_editor_log(editor, "[ai] " + editor.aiAuthoringStatus);
-            }
-            else if (!sourceCompletion)
-            {
-                const bool expectedToolReply =
-                    editor.aiToolAwaitingReply
-                    && chat.completionGeneration
-                        > editor.aiToolRequestedGeneration;
+                const bool obsoleteAuthoringReply =
+                    chat.completionGeneration
+                        <= editor.aiAuthoringIgnoredThroughGeneration;
                 const bool expectedAuthoringReply =
                     editor.aiAuthoringAwaitingReply
                     && chat.completionGeneration
                         > editor.aiAuthoringRequestedGeneration;
-                const bool toolPacket =
-                    chat.latestRawReply.starts_with("EPOCH_TOOL_PLAN_V1");
-                editor.aiToolAwaitingReply = false;
                 editor.aiAuthoringAwaitingReply = false;
 
-                if (expectedToolReply || toolPacket)
+                if (obsoleteAuthoringReply)
                 {
-                    editor.aiToolPlan =
-                        epochengine::ai::parse_tool_plan(chat.latestRawReply);
-                    editor.aiToolPlanApplied = false;
-                    editor.aiToolStatus = editor.aiToolPlan
-                        ? editor.aiToolPlan.message
-                            + " Nothing has executed; review the exact host tool "
-                              "and use Approve Tool below the assistant response."
-                        : editor.aiToolPlan.message;
+                    editor.aiAuthoringPlan = {};
+                    editor.aiAuthoringPlanApplied = false;
+                    editor.aiAuthoringPlanForGoal = false;
+                    editor.aiAuthoringStatus =
+                        "Discarded an obsolete Project Assistant authoring reply because its goal changed.";
                     push_editor_log(
-                        editor,
-                        "[ai-tool] Tool plan "
-                            + std::string{epochengine::ai::tool_plan_code_name(
-                                editor.aiToolPlan.code)}
-                            + ": " + editor.aiToolStatus);
+                        editor, "[ai-project] " + editor.aiAuthoringStatus);
                 }
-                else
+                else if (expectedAuthoringReply)
                 {
-                    auto parsedPlan = epochengine::ai::parse_authoring_plan(
-                        chat.latestRawReply);
-                    bool recoveredBareCall = false;
-                    if (!parsedPlan && expectedAuthoringReply)
+                    const std::string authoringReply = recover_prefixed_ai_protocol(
+                        chat.latestRawReply,
+                        "EPOCH_AUTHORING_PLAN_V1",
+                        "EPOCH_AUTHORING_QUESTION_V1");
+                    const auto blockingQuestion = !editor.aiAuthoringPlanForGoal
+                        ? parse_ai_blocking_question(
+                            authoringReply,
+                            "EPOCH_AUTHORING_QUESTION_V1")
+                        : std::optional<std::string>{};
+                    if (blockingQuestion)
                     {
-                        if (const auto recovered =
-                                recover_bare_ai_authoring_call(
-                                    chat.latestRawReply))
+                        editor.aiAuthoringPlan = {};
+                        editor.aiAuthoringPlanApplied = false;
+                        editor.aiIntentClarificationPending = true;
+                        editor.aiIntentClarificationResumeIntent =
+                            AiChatIntent::ProjectAuthoring;
+                        editor.aiIntentClarificationRequest =
+                            editor.aiAuthoringRequest;
+                        editor.aiAuthoringStatus =
+                            "I need one critical detail before I can stage the project change: "
+                            + *blockingQuestion
+                            + " Reply normally in chat; no special syntax or button is required.";
+                        chat.append_status(editor.aiAuthoringStatus);
+                        push_editor_log(
+                            editor,
+                            "[ai-project] Blocking authoring clarification: "
+                                + *blockingQuestion);
+                    }
+                    else
+                    {
+                        auto parsedPlan = epochengine::ai::parse_authoring_plan(
+                            authoringReply);
+                        bool recoveredBareCall = false;
+                        if (!parsedPlan)
                         {
-                            auto recoveredPlan =
-                                epochengine::ai::parse_authoring_plan(
-                                    *recovered);
-                            if (recoveredPlan)
+                            if (const auto recovered =
+                                    recover_bare_ai_authoring_call(
+                                        authoringReply))
                             {
-                                parsedPlan = std::move(recoveredPlan);
-                                recoveredBareCall = true;
+                                auto recoveredPlan =
+                                    epochengine::ai::parse_authoring_plan(
+                                        *recovered);
+                                if (recoveredPlan)
+                                {
+                                    parsedPlan = std::move(recoveredPlan);
+                                    recoveredBareCall = true;
+                                }
                             }
                         }
-                    }
-                    if (expectedAuthoringReply || parsedPlan)
-                    {
-                        if (!expectedAuthoringReply)
-                            editor.aiAuthoringPlanForGoal = false;
+
                         editor.aiAuthoringPlan = std::move(parsedPlan);
                         editor.aiAuthoringPlanApplied = false;
                         editor.aiAuthoringStatus = editor.aiAuthoringPlan
@@ -24102,18 +25204,99 @@ namespace epochengine
                                 : std::string{})
                                 + editor.aiAuthoringPlan.message
                                 + " No scene changes have been applied yet; review the "
-                                  "staged calls and use Apply Plan attached below the "
-                                  "assistant response."
+                                  "staged call and approve it below or simply reply "
+                                  "yes / apply / do it."
                             : editor.aiAuthoringPlan.message;
+                        chat.append_status(editor.aiAuthoringStatus);
                         push_editor_log(
                             editor,
-                            "[ai] Authoring plan "
+                            "[ai-project] Authoring plan "
                                 + std::string{
                                     epochengine::ai::authoring_plan_code_name(
                                         editor.aiAuthoringPlan.code)}
                                 + ": " + editor.aiAuthoringStatus);
                     }
                 }
+            }
+            else if (completedKind == AiDeferredRequestKind::Tooling)
+            {
+                const bool expectedToolReply =
+                    editor.aiToolAwaitingReply
+                    && chat.completionGeneration
+                        > editor.aiToolRequestedGeneration;
+                editor.aiToolAwaitingReply = false;
+                if (expectedToolReply)
+                {
+                    const std::string toolingReply = recover_prefixed_ai_protocol(
+                        chat.latestRawReply,
+                        "EPOCH_TOOL_PLAN_V1",
+                        "EPOCH_TOOL_QUESTION_V1");
+                    const auto blockingQuestion = parse_ai_blocking_question(
+                        toolingReply,
+                        "EPOCH_TOOL_QUESTION_V1");
+                    if (blockingQuestion)
+                    {
+                        editor.aiToolPlan = {};
+                        editor.aiToolPlanApplied = false;
+                        editor.aiIntentClarificationPending = true;
+                        editor.aiIntentClarificationResumeIntent =
+                            AiChatIntent::ProjectTooling;
+                        editor.aiIntentClarificationRequest =
+                            editor.aiToolRequest;
+                        editor.aiToolStatus =
+                            "I need one critical detail before I can choose the project tool: "
+                            + *blockingQuestion
+                            + " Reply normally in chat; no special syntax or button is required.";
+                        chat.append_status(editor.aiToolStatus);
+                        push_editor_log(
+                            editor,
+                            "[ai-tool] Blocking tool clarification: "
+                                + *blockingQuestion);
+                    }
+                    else
+                    {
+                        editor.aiToolPlan =
+                            epochengine::ai::parse_tool_plan(toolingReply);
+                        editor.aiToolPlanApplied = false;
+                        editor.aiToolStatus = editor.aiToolPlan
+                            ? editor.aiToolPlan.message
+                                + " Nothing has executed; review the exact host tool "
+                                  "and approve it below or reply yes / approve / run it."
+                            : editor.aiToolPlan.message;
+                        chat.append_status(editor.aiToolStatus);
+                        push_editor_log(
+                            editor,
+                            "[ai-tool] Tool plan "
+                                + std::string{
+                                    epochengine::ai::tool_plan_code_name(
+                                        editor.aiToolPlan.code)}
+                                + ": " + editor.aiToolStatus);
+                    }
+                }
+            }
+            else if (completedKind == AiDeferredRequestKind::Chat)
+            {
+                // AiChat::pump already appended the assistant response. Keep
+                // ordinary Project Assistant conversation out of the authoring
+                // and tool parsers even if the model happens to mention one of
+                // their protocol markers in prose.
+                editor.aiAuthoringStatus =
+                    chat.latestTerminalFailure == ai::ModelTerminalFailure::none
+                        ? "Project Assistant response received."
+                        : "Project Assistant request ended without an applicable response.";
+            }
+            else if (completedKind
+                == AiDeferredRequestKind::SourceIteration)
+            {
+                push_editor_log(
+                    editor,
+                    "[ai-source] Ignored a completed source response because no active source campaign is awaiting that exact channel generation.");
+            }
+            else if (completedKind != AiDeferredRequestKind::None)
+            {
+                push_editor_log(
+                    editor,
+                    "[ai] Ignored a completed request with an unsupported channel tag.");
             }
         }
         if (editor.autoUpdateCheckQueued)
@@ -24303,7 +25486,8 @@ namespace epochengine
         };
 
         const bool shortcutInputAvailable =
-            !modalVisible
+            ctx->has_input_focus_safe()
+            && !modalVisible
             && !pointerGrabActive
             && editor.openMenu == TopMenu::None
             && !floating_gui_visible()
@@ -24311,12 +25495,12 @@ namespace epochengine
         if (shortcutInputAvailable)
         {
             const bool controlDown =
-                input::is_key_held(input::Key::LeftControl)
-                || input::is_key_held(input::Key::RightControl);
+                ctx->is_key_held_safe(input::Key::LeftControl)
+                || ctx->is_key_held_safe(input::Key::RightControl);
             const bool shiftDown =
-                input::is_key_held(input::Key::LeftShift)
-                || input::is_key_held(input::Key::RightShift);
-            if (controlDown && input::is_key_down(input::Key::Z))
+                ctx->is_key_held_safe(input::Key::LeftShift)
+                || ctx->is_key_held_safe(input::Key::RightShift);
+            if (controlDown && ctx->is_key_down_safe(input::Key::Z))
             {
                 if (shiftDown)
                     (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
@@ -24324,17 +25508,17 @@ namespace epochengine
                     (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
                 result.scene_input_captured = true;
             }
-            else if (controlDown && input::is_key_down(input::Key::Y))
+            else if (controlDown && ctx->is_key_down_safe(input::Key::Y))
             {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
                 result.scene_input_captured = true;
             }
-            else if (input::is_key_down(input::Key::Delete))
+            else if (ctx->is_key_down_safe(input::Key::Delete))
             {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
                 result.scene_input_captured = true;
             }
-            else if (input::is_key_down(input::Key::Escape)
+            else if (ctx->is_key_down_safe(input::Key::Escape)
                 && editor_has_selection(editor))
             {
                 clear_editor_selection(editor);
@@ -24710,8 +25894,8 @@ namespace epochengine
                     editor,
                     "[ai] Request staged until selected-model use is confirmed.");
                 if (needsCodingChoice)
-                    editor.aiModelConsentStatus = "Nemotron 4B is the default quick assistant. "
-                        "Choose your coding model (Qwen 3.5+ recommended), then Use Model to continue. "
+                    editor.aiModelConsentStatus = "Qwen3.8 27B is the default self-coding model. "
+                        "Choose another detected model only if desired, then Use Model to continue. "
                         "Your objective is retained; no request has been sent.";
                 return false;
             }
@@ -24725,6 +25909,80 @@ namespace epochengine
             editor.aiDeferredDispatchQueued = true;
             return true;
         };
+
+        for (auto& command : consume_detached_ai_chat_commands(ctx.get()))
+        {
+            switch (command.kind)
+            {
+            case DetachedAiChatCommandKind::submit:
+                if (command.prompt.empty() || is_ws_only(command.prompt))
+                    break;
+                if (chat.pending
+                    || editor.aiDeferredRequestKind
+                        != AiDeferredRequestKind::None)
+                {
+                    // Preserve the exact detached draft until the canonical
+                    // session can accept it. Do not turn a one-frame projection
+                    // race into dropped user input.
+                    (void)queue_detached_ai_chat_command(
+                        ctx.get(),
+                        DetachedAiChatCommandKind::submit,
+                        std::move(command.prompt));
+                    editor.aiAuthoringStatus =
+                        "Detached AI message retained; waiting for the current request to finish.";
+                    break;
+                }
+                {
+                    const std::string detachedProjectPrompt =
+                        build_project_assistant_chat_prompt(
+                            editor, command.prompt);
+                    if (submit_ai_request(
+                            detachedProjectPrompt,
+                            command.prompt,
+                            AiDeferredRequestKind::Chat))
+                    {
+                        editor.aiAuthoringStatus =
+                            "Detached Project Assistant message queued with active-project context; waiting for the shared AI/build work lane.";
+                        push_editor_log(
+                            editor,
+                            "[ai-project] Detached Project Assistant message queued on the canonical editor session.");
+                    }
+                }
+                break;
+            case DetachedAiChatCommandKind::retry_queued:
+                if (editor.aiDeferredRequestKind
+                        == AiDeferredRequestKind::Chat
+                    && !editor.aiDeferredDispatchQueued)
+                {
+                    editor.aiDeferredDispatchQueued = true;
+                    editor.aiAuthoringStatus =
+                        "Retry queued for the canonical AI session.";
+                }
+                break;
+            case DetachedAiChatCommandKind::cancel_queued:
+                if (editor.aiDeferredRequestKind
+                    == AiDeferredRequestKind::Chat)
+                {
+                    chat.append_status(
+                        "Queued message cancelled before transport. Its text: "
+                        + editor.aiDeferredDisplay);
+                    editor.aiDeferredRequestKind =
+                        AiDeferredRequestKind::None;
+                    editor.aiDeferredDispatchQueued = false;
+                    editor.aiDeferredPrompt.clear();
+                    editor.aiDeferredDisplay.clear();
+                    editor.aiDeferredModelLease.reset();
+                    editor.showAiModelConsentModal = false;
+                    editor.aiAuthoringStatus =
+                        "Queued detached AI message cancelled before transport.";
+                }
+                break;
+            case DetachedAiChatCommandKind::stop_pending:
+                if (chat.pending)
+                    (void)chat.cancel_pending();
+                break;
+            }
+        }
 
         auto submit_ai_prompt = [&](std::string prompt, std::string_view logLine)
         {
@@ -26106,6 +27364,8 @@ namespace epochengine
             if (mcp.terminalFailure == ai::ModelTerminalFailure::none)
             {
                 chat.latestCompletionWorkload = ai::InferenceWorkload::source_iteration;
+                chat.latestCompletionRequestKind =
+                    AiDeferredRequestKind::SourceIteration;
                 ++chat.completionGeneration;
                 if (chat.completionGeneration <= editor.aiSourceRequestedGeneration)
                     chat.completionGeneration = editor.aiSourceRequestedGeneration + 1u;
@@ -27035,7 +28295,8 @@ namespace epochengine
             const bool submitted = chat.submit_with_display(
                 std::move(prompt),
                 std::move(display),
-                workload);
+                workload,
+                requestKind);
             editor.aiDeferredModelLease.reset();
             if (requestKind == AiDeferredRequestKind::Tooling)
             {
@@ -27087,9 +28348,21 @@ namespace epochengine
                 if (!submitted)
                     rejectSourceDispatch(editor.aiAuthoringStatus);
             }
-            else if (submitted)
+            else if (requestKind == AiDeferredRequestKind::Chat)
             {
-                chat.input.clear();
+                editor.aiAuthoringStatus = submitted
+                    ? "Project Assistant request started with bounded active-project context."
+                    : "Project Assistant request could not start; its queued request was not applied.";
+                if (submitted)
+                {
+                    chat.append_status(
+                        "Project Assistant request started; waiting for the selected model endpoint.");
+                    chat.input.clear();
+                }
+                else
+                {
+                    chat.append_status(editor.aiAuthoringStatus);
+                }
             }
             if (!submitted && !ai_source_native_work_active(editor, chat))
                 release_ai_work_lease(editor);
@@ -27210,18 +28483,40 @@ namespace epochengine
         };
         auto invalidate_ai_goal_work = [&]()
         {
-            if (editor.aiAuthoringAwaitingReply
-                && editor.aiAuthoringPlanForGoal
-                && chat.pending)
+            const bool invalidatingGoalAuthoring =
+                editor.aiAuthoringPlanForGoal;
+            if (invalidatingGoalAuthoring
+                && editor.aiAuthoringAwaitingReply
+                && chat.pending
+                && chat.pendingRequestKind
+                    == AiDeferredRequestKind::Authoring)
             {
+                const std::uint64_t pendingGeneration =
+                    chat.completionGeneration + 1u;
+                editor.aiAuthoringIgnoredThroughGeneration = (std::max)(
+                    editor.aiAuthoringIgnoredThroughGeneration,
+                    pendingGeneration);
                 (void)chat.cancel_pending();
             }
-            const std::uint64_t pendingGeneration =
-                chat.completionGeneration + (chat.pending ? 1u : 0u);
-            editor.aiAuthoringIgnoredThroughGeneration = (std::max)(
-                editor.aiAuthoringIgnoredThroughGeneration,
-                pendingGeneration);
-            if (editor.aiAuthoringPlanForGoal)
+
+            // A goal can also be waiting for model consent or shared-lane
+            // admission without having started a worker yet. Discard that exact
+            // deferred goal request when the goal changes; never touch ordinary
+            // Project Assistant chat, tools, or self-coding requests here.
+            if (invalidatingGoalAuthoring
+                && editor.aiDeferredRequestKind
+                    == AiDeferredRequestKind::Authoring)
+            {
+                editor.aiDeferredPrompt.clear();
+                editor.aiDeferredDisplay.clear();
+                editor.aiDeferredRequestKind =
+                    AiDeferredRequestKind::None;
+                editor.aiDeferredModelLease.reset();
+                editor.aiDeferredDispatchQueued = false;
+                editor.showAiModelConsentModal = false;
+            }
+
+            if (invalidatingGoalAuthoring)
             {
                 editor.aiAuthoringPlan = {};
                 editor.aiAuthoringPlanApplied = false;
@@ -27230,9 +28525,393 @@ namespace epochengine
             editor.aiAuthoringPlanForGoal = false;
             editor.aiGoalPlanNextQueued = false;
         };
+        const auto ai_lower_text = [](std::string_view value)
+        {
+            std::string lowered;
+            lowered.reserve(value.size());
+            for (const unsigned char ch : value)
+            {
+                lowered.push_back(static_cast<char>(
+                    ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch));
+            }
+            return lowered;
+        };
+        const auto ai_has_any = [](const std::string& value,
+            const std::span<const std::string_view> phrases) noexcept
+        {
+            return std::ranges::any_of(
+                phrases,
+                [&value](const std::string_view phrase)
+                {
+                    return value.find(phrase) != std::string::npos;
+                });
+        };
+        const auto ai_has_any_word = [](const std::string& value,
+            const std::span<const std::string_view> words) noexcept
+        {
+            const auto wordChar = [](const char ch) noexcept
+            {
+                return (ch >= 'a' && ch <= 'z')
+                    || (ch >= '0' && ch <= '9') || ch == '_';
+            };
+            for (const std::string_view word : words)
+            {
+                std::size_t at = value.find(word);
+                while (at != std::string::npos)
+                {
+                    const bool leftOk = at == 0u
+                        || !wordChar(value[at - 1u]);
+                    const std::size_t right = at + word.size();
+                    const bool rightOk = right >= value.size()
+                        || !wordChar(value[right]);
+                    if (leftOk && rightOk)
+                        return true;
+                    at = value.find(word, at + 1u);
+                }
+            }
+            return false;
+        };
+        const auto classify_ai_intent = [&](std::string_view request) noexcept
+        {
+            const std::string lower = ai_lower_text(trim_ai_command(request));
+            if (lower.empty())
+                return AiChatIntent::ProjectChat;
+
+            constexpr std::array mutationTerms{
+                std::string_view{"fix"}, std::string_view{"change"},
+                std::string_view{"add"}, std::string_view{"implement"},
+                std::string_view{"remove"}, std::string_view{"delete"},
+                std::string_view{"rewrite"}, std::string_view{"refactor"},
+                std::string_view{"update"}, std::string_view{"create"},
+                std::string_view{"make"}, std::string_view{"move"},
+                std::string_view{"rotate"}, std::string_view{"scale"},
+                std::string_view{"set"}, std::string_view{"generate"},
+                std::string_view{"build"}, std::string_view{"compile"},
+                std::string_view{"run"}, std::string_view{"test"},
+                std::string_view{"repair"}, std::string_view{"modify"},
+                std::string_view{"replace"}, std::string_view{"rename"},
+                std::string_view{"wire"}, std::string_view{"integrate"},
+                std::string_view{"connect"}, std::string_view{"convert"},
+                std::string_view{"migrate"}, std::string_view{"optimize"},
+                std::string_view{"improve"}, std::string_view{"upgrade"},
+                std::string_view{"advance"}, std::string_view{"enable"},
+                std::string_view{"disable"}, std::string_view{"resolve"},
+                std::string_view{"correct"}, std::string_view{"patch"},
+                std::string_view{"finish"}, std::string_view{"code"},
+                std::string_view{"write"}, std::string_view{"develop"}};
+            constexpr std::array engineTerms{
+                std::string_view{"engine source"}, std::string_view{"epochengine"},
+                std::string_view{"epochgui"}, std::string_view{"self-coding"},
+                std::string_view{"self coding"}, std::string_view{"source code"},
+                std::string_view{"c++"}, std::string_view{".cpp"},
+                std::string_view{".ixx"}, std::string_view{"cmake"},
+                std::string_view{"msvc"}, std::string_view{"compiler error"},
+                std::string_view{"compile error"}, std::string_view{"linker"},
+                std::string_view{"renderer backend"}, std::string_view{"vulkan backend"},
+                std::string_view{"opengl backend"}, std::string_view{"ai assistant"},
+                std::string_view{"project assistant routing"}, std::string_view{"epoch ai"},
+                std::string_view{"ai chat"}, std::string_view{"ai controls"},
+                std::string_view{"editor ui"}, std::string_view{"editor gui"},
+                std::string_view{"editor dock"}, std::string_view{"editor panel"},
+                std::string_view{"editor toolbar"}};
+            constexpr std::array engineWords{
+                std::string_view{"engine"}};
+            constexpr std::array projectTerms{
+                std::string_view{"scene"}, std::string_view{"world"},
+                std::string_view{"project"}, std::string_view{"object"},
+                std::string_view{"entity"}, std::string_view{"cube"},
+                std::string_view{"camera"}, std::string_view{"light"},
+                std::string_view{"asset"}, std::string_view{"sprite"},
+                std::string_view{"mesh"},
+                std::string_view{"material"}, std::string_view{"texture"},
+                std::string_view{"level"}, std::string_view{"3d model"}};
+            constexpr std::array toolTerms{
+                std::string_view{"run project"}, std::string_view{"test project"},
+                std::string_view{"build project"}, std::string_view{"project build"},
+                std::string_view{"project test"}, std::string_view{"project run"},
+                std::string_view{"inspect project"}, std::string_view{"project diagnostics"}};
+            constexpr std::array questionStarts{
+                std::string_view{"what "}, std::string_view{"why "},
+                std::string_view{"how "}, std::string_view{"when "},
+                std::string_view{"where "}, std::string_view{"who "},
+                std::string_view{"can you explain"}, std::string_view{"could you explain"},
+                std::string_view{"explain "}, std::string_view{"describe "},
+                std::string_view{"tell me"}, std::string_view{"show me"},
+                std::string_view{"should i "}, std::string_view{"should we "},
+                std::string_view{"do i "}, std::string_view{"do we "},
+                std::string_view{"is it "}, std::string_view{"are there "},
+                std::string_view{"update me"}, std::string_view{"give me"}};
+
+            const bool mutation = ai_has_any_word(lower, mutationTerms);
+            const bool engineTarget = ai_has_any(lower, engineTerms)
+                || ai_has_any_word(lower, engineWords);
+            const bool projectTarget = ai_has_any(lower, projectTerms);
+            const bool projectTool = ai_has_any(lower, toolTerms);
+            const bool explanatoryQuestion = std::ranges::any_of(
+                questionStarts,
+                [&lower](const std::string_view prefix)
+                {
+                    return lower.starts_with(prefix);
+                });
+
+            // Explanatory questions stay conversational even when they mention
+            // mutation verbs ("how do I fix ...?").  Polite action requests
+            // such as "can you add a cube?" are still routed as changes.
+            if (!mutation || explanatoryQuestion)
+                return AiChatIntent::ProjectChat;
+            if (engineTarget)
+                return AiChatIntent::EngineSource;
+            if (projectTool)
+                return AiChatIntent::ProjectTooling;
+            if (projectTarget)
+                return AiChatIntent::ProjectAuthoring;
+            return AiChatIntent::Ambiguous;
+        };
+        const auto ai_confirmation = [&](std::string_view request)
+            -> std::optional<bool>
+        {
+            const std::string lower = ai_lower_text(trim_ai_command(request));
+            constexpr std::array approveTerms{
+                std::string_view{"yes"}, std::string_view{"y"},
+                std::string_view{"ok"}, std::string_view{"okay"},
+                std::string_view{"approve"}, std::string_view{"apply"},
+                std::string_view{"do it"}, std::string_view{"go ahead"},
+                std::string_view{"proceed"}, std::string_view{"continue"},
+                std::string_view{"use it"}, std::string_view{"run it"}};
+            constexpr std::array rejectTerms{
+                std::string_view{"no"}, std::string_view{"n"},
+                std::string_view{"nope"}, std::string_view{"reject"},
+                std::string_view{"discard"}, std::string_view{"cancel"},
+                std::string_view{"never mind"}, std::string_view{"nevermind"}};
+            for (const std::string_view term : approveTerms)
+                if (lower.compare(term) == 0) return true;
+            for (const std::string_view term : rejectTerms)
+                if (lower.compare(term) == 0) return false;
+            return std::nullopt;
+        };
+        const auto clarification_route = [&](std::string_view request)
+            -> std::optional<AiChatIntent>
+        {
+            const std::string lower = ai_lower_text(trim_ai_command(request));
+            if (lower.find("engine") != std::string::npos
+                || lower.find("source") != std::string::npos
+                || lower.find("code") != std::string::npos
+                || lower.find("self-coding") != std::string::npos
+                || lower.find("self coding") != std::string::npos)
+                return AiChatIntent::EngineSource;
+            if (lower.find("tool") != std::string::npos
+                || lower.find("run") != std::string::npos
+                || lower.find("test") != std::string::npos
+                || lower.find("build project") != std::string::npos)
+                return AiChatIntent::ProjectTooling;
+            if (lower.find("project") != std::string::npos
+                || lower.find("scene") != std::string::npos
+                || lower.find("world") != std::string::npos
+                || lower.find("gui") != std::string::npos
+                || lower.find("ui") != std::string::npos
+                || lower.find("asset") != std::string::npos)
+                return AiChatIntent::ProjectAuthoring;
+            if (lower.find("answer") != std::string::npos
+                || lower.find("chat") != std::string::npos
+                || lower.find("explain") != std::string::npos
+                || lower.find("just tell") != std::string::npos
+                || lower.find("project assistant") != std::string::npos)
+                return AiChatIntent::ProjectChat;
+            return std::nullopt;
+        };
+        auto start_engine_source_iteration = [&](std::string_view request) -> bool
+        {
+            const std::string_view input = trim_ai_command(request);
+            if (input.empty())
+            {
+                chat.append_status(
+                    "Describe the engine change you want before starting self-coding.");
+                return true;
+            }
+            if (!editor.aiDevelopmentPanel)
+            {
+                editor.aiDevelopmentPanel = std::make_unique<
+                    editor_ai_development_panel::Panel>();
+            }
+
+            auto iterationInput = source_iteration_input();
+            const auto session = editor.aiDevelopmentPanel->session_activity(
+                iterationInput);
+            if (session.running || session.stopping
+                || ai_source_native_work_active(editor, chat))
+            {
+                chat.append_status(
+                    "Engine work is already active. Finish, stop, or review the current candidate before starting another engine objective.");
+                return true;
+            }
+
+            editor.aiEngineWorkObjective = std::string{input};
+            iterationInput.development_objective = editor.aiEngineWorkObjective;
+            chat.append_user_message(editor.aiEngineWorkObjective);
+            chat.append_status(
+                "Intent routed to Engine Self-Coding. Epoch will keep all source changes inside the isolated candidate until review.");
+
+            auto started = editor.aiDevelopmentPanel->begin_source_iteration(
+                iterationInput, editor.aiEngineWorkObjective);
+            chat.append_status(started.status);
+            push_ai_development_log(editor, "[self-coding] " + started.status);
+            dispatch_ai_development_action(started);
+            editor.aiChatEngineWorkMode = false;
+            return true;
+        };
+        auto dispatch_ai_intent = [&](AiChatIntent intent,
+            std::string_view request) -> bool
+        {
+            const std::string_view input = trim_ai_command(request);
+            switch (intent)
+            {
+            case AiChatIntent::EngineSource:
+                return start_engine_source_iteration(input);
+            case AiChatIntent::ProjectAuthoring:
+                editor.aiAuthoringRequest = std::string{input};
+                chat.append_status(
+                    "Intent routed to Project Assistant authoring. The exact scene/GUI change will remain staged until approval.");
+                return request_ai_authoring_plan(false);
+            case AiChatIntent::ProjectTooling:
+                editor.aiToolRequest = std::string{input};
+                chat.append_status(
+                    "Intent routed to a guarded Project Assistant tool request. The exact host operation will require approval.");
+                return request_ai_tool_plan();
+            case AiChatIntent::ProjectChat:
+                {
+                    const std::string projectPrompt =
+                        build_project_assistant_chat_prompt(editor, input);
+                    const bool queued = submit_ai_request(
+                        projectPrompt,
+                        std::string{input},
+                        AiDeferredRequestKind::Chat);
+                    if (queued)
+                    {
+                        chat.append_status(
+                            "Project Assistant request queued with the current active-project context.");
+                    }
+                    else if (editor.aiDeferredRequestKind
+                        == AiDeferredRequestKind::Chat)
+                    {
+                        chat.append_status(
+                            "Project Assistant request is retained and will start after model confirmation or the current AI work lane becomes available.");
+                    }
+                    else if (chat.pending || chat.worker.joinable())
+                    {
+                        chat.append_status(
+                            "Project Assistant is waiting for the current model request to retire before accepting another message.");
+                    }
+                    return queued;
+                }
+            case AiChatIntent::Ambiguous:
+            default:
+                return false;
+            }
+        };
+        const auto queue_text_message_action = [&](std::string_view request) -> bool
+        {
+            const auto decision = ai_confirmation(request);
+            if (!decision)
+                return false;
+
+            const bool modelConsentPending =
+                editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                && !epochengine::ai::is_model_use_confirmed();
+            const bool planAwaitingApproval = editor.aiAuthoringPlan
+                && !editor.aiAuthoringPlanApplied;
+            const bool toolPlanAwaitingApproval = editor.aiToolPlan
+                && !editor.aiToolPlanApplied;
+            const bool toolTestPending = editor.aiToolTestPending.has_value();
+            const bool sourceActionPending = editor.aiDevelopmentPanel
+                && (editor.aiDevelopmentPanel->has_pending_source_context()
+                    || editor.aiDevelopmentPanel->has_staged_proposal()
+                    || editor.aiDevelopmentPanel->has_source_full_validation_candidate()
+                    || editor.aiDevelopmentPanel->has_staged_source_promotion()
+                    || editor.aiDevelopmentPanel->has_verified_source_candidate());
+
+            if (toolTestPending)
+            {
+                if (*decision)
+                    return false;
+                editor.aiQueuedMessageActionIndex = 0u;
+            }
+            else if (toolPlanAwaitingApproval || planAwaitingApproval
+                || modelConsentPending || sourceActionPending)
+            {
+                editor.aiQueuedMessageActionIndex = *decision ? 0u : 1u;
+            }
+            else
+            {
+                return false;
+            }
+
+            chat.append_user_message(std::string{trim_ai_command(request)});
+            chat.append_status(
+                *decision
+                    ? "Interpreted your reply as approval of the currently staged action."
+                    : "Interpreted your reply as rejection of the currently staged action.");
+            return true;
+        };
         auto submit_ai_chat_input = [&](std::string text) -> bool
         {
             const std::string_view input = trim_ai_command(text);
+            if (input.empty())
+            {
+                chat.append_status("Type a message before sending.");
+                return true;
+            }
+
+            if (editor.aiIntentClarificationPending)
+            {
+                const std::string lower = ai_lower_text(input);
+                if (lower.compare("cancel") == 0
+                    || lower.compare("never mind") == 0
+                    || lower.compare("nevermind") == 0)
+                {
+                    chat.append_user_message(std::string{input});
+                    editor.aiIntentClarificationPending = false;
+                    editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                    editor.aiIntentClarificationRequest.clear();
+                    chat.append_status("Clarification cancelled.");
+                    return true;
+                }
+
+                if (editor.aiIntentClarificationResumeIntent
+                    != AiChatIntent::Ambiguous)
+                {
+                    chat.append_user_message(std::string{input});
+                    std::string resumed =
+                        std::exchange(editor.aiIntentClarificationRequest, {});
+                    const AiChatIntent resumeIntent =
+                        editor.aiIntentClarificationResumeIntent;
+                    editor.aiIntentClarificationPending = false;
+                    editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                    resumed += "\nUser clarification: ";
+                    resumed.append(input.data(), input.size());
+                    return dispatch_ai_intent(resumeIntent, resumed);
+                }
+
+                if (const auto route = clarification_route(input))
+                {
+                    chat.append_user_message(std::string{input});
+                    const std::string original =
+                        std::exchange(editor.aiIntentClarificationRequest, {});
+                    editor.aiIntentClarificationPending = false;
+                    editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                    return dispatch_ai_intent(*route, original);
+                }
+                chat.append_user_message(std::string{input});
+                chat.append_status(
+                    "I still need the target mode: Engine Source, Project Change, Project Tool, or Just Answer. You can type the choice or use the buttons below.");
+                return true;
+            }
+
+            // A direct answer to a host/model clarification owns the next
+            // message.  Only when no clarification is pending may a short
+            // yes/no reply operate the currently staged approval controls.
+            if (queue_text_message_action(input))
+                return true;
+
             if (const auto tool = ai_command_argument(input, "/tool"))
             {
                 if (!tool->empty())
@@ -27261,7 +28940,7 @@ namespace epochengine
             }
             if (const auto goal = ai_command_argument(input, "/goal"))
             {
-                if (*goal == "stop" || *goal == "done")
+                if (goal->compare("stop") == 0 || goal->compare("done") == 0)
                 {
                     invalidate_ai_goal_work();
                     editor.aiGoal.clear();
@@ -27301,10 +28980,24 @@ namespace epochengine
                 editor.aiGoalRunning = true;
                 return request_ai_authoring_plan(true);
             }
-            return submit_ai_request(
-                std::move(text),
-                std::string{input},
-                AiDeferredRequestKind::Chat);
+
+            // The header button is now only an explicit one-shot override.
+            // Normal messages are routed by intent automatically.
+            if (editor.aiChatEngineWorkMode)
+                return start_engine_source_iteration(input);
+
+            const AiChatIntent intent = classify_ai_intent(input);
+            if (intent == AiChatIntent::Ambiguous)
+            {
+                editor.aiIntentClarificationPending = true;
+                editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                editor.aiIntentClarificationRequest = std::string{input};
+                chat.append_user_message(std::string{input});
+                chat.append_status(
+                    "This sounds like a change request, but the target is ambiguous. Should I change Engine Source, change the Project/Scene, run a Project Tool, or Just Answer? You can type the choice or use the buttons below.");
+                return true;
+            }
+            return dispatch_ai_intent(intent, input);
         };
 
         const bool goalPlanAwaitingApproval = editor.aiAuthoringPlan
@@ -29292,6 +30985,16 @@ namespace epochengine
             }
 
             const bool routedPane = projection.routed_panel;
+            const float projectionScaleX = projection.host_width > 0.0f
+                ? w / projection.host_width
+                : 1.0f;
+            const float projectionScaleY = projection.host_height > 0.0f
+                ? h / projection.host_height
+                : 1.0f;
+            const gui::Vec2 projectedPointer{
+                projection.cursor_x * projectionScaleX,
+                projection.cursor_y * projectionScaleY
+            };
 
             std::optional<EditorToolDockRegion> directTargetRegion{};
             gui_lib::DockTabStripLayout directLayout{};
@@ -29305,7 +31008,7 @@ namespace epochengine
                         .strip_bounds = directTabStripBounds[regionIndex],
                         .tab_bounds = tabBounds.empty() ? nullptr : tabBounds.data(),
                         .tab_count = static_cast<std::uint32_t>(tabBounds.size()),
-                        .pointer = {projection.cursor_x, projection.cursor_y},
+                        .pointer = {projectedPointer.x, projectedPointer.y},
                         .dragged_tab_size = {160.0f, 28.0f},
                         .source_group_id = toolDockRegionCount + 1u,
                         .target_group_id = regionIndex + 1u,
@@ -29372,7 +31075,7 @@ namespace epochengine
                 gui::DockGuideOptions{
                     .guide_bounds = {
                         { 0.0f, 0.0f },
-                        { projection.host_width, projection.host_height } },
+                        { w, h } },
                     .left_tabs_preview = { { 0.0f, toolbar_h }, { leftPreviewWidth, main_h } },
                     .right_tabs_preview = {
                         { (std::max)(0.0f, w - rightPreviewWidth), toolbar_h },
@@ -29390,7 +31093,7 @@ namespace epochengine
                         { w * 0.5f, toolbar_h },
                         { w * 0.5f, main_h } },
                     .floating_preview = {},
-                    .pointer = { projection.cursor_x, projection.cursor_y },
+                    .pointer = projectedPointer,
                     .guide_extent = 94.0f,
                     .guide_gap = 8.0f,
                     .allow_side_tabs = routedPane,
@@ -29457,6 +31160,7 @@ namespace epochengine
         {
         gui::label(std::string("Scene: ") + editor.activeWorld);
         gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
+        gui::label(std::string("Selected: ") + std::to_string(editor.selectedEntityIds.size()));
         gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
         gui::property_row("[outliner] Scene file", file_ready_summary(editor.projectScenePath), 104.0f);
 
@@ -29549,6 +31253,15 @@ namespace epochengine
                 case 2: add_entity(editor, "light"); break;
                 default: break;
                 }
+            }
+            const std::array outlinerBatchButtons{
+                gui::InlineButtonSpec{ .label = "+ 4 Cubes", .width = 88.0f, .enabled = worldSurfaceActive },
+                gui::InlineButtonSpec{ .label = "+ 8 Cubes", .width = 88.0f, .enabled = worldSurfaceActive }
+            };
+            if (const auto action = gui::inline_button_row(
+                    outlinerBatchButtons, 26.0f, 5.0f))
+            {
+                (void)add_cube_batch(editor, *action == 0u ? 4u : 8u);
             }
 
             const std::array outlinerRuntimeButtons{
@@ -32411,6 +34124,161 @@ namespace epochengine
             gui::property_row("Fly speed", epochengine::format_text("{:.2f}", previewgrid::fly_speed_for(ctx.get())), 118.0f);
             gui::property_row("Objects", std::to_string(visible_entity_count(editor)), 118.0f);
             gui::property_row("Project camera", std::string(project_camera_label(editor.projectCameraMode)), 118.0f);
+
+            const auto eventRenderDebug = epochengine::render_event_debug::snapshot();
+            gui::label("Event-Driven Rendering");
+            gui::property_row(
+                "Path",
+                std::string(epochengine::render_event_debug::path_name(eventRenderDebug.path)),
+                118.0f);
+            gui::property_row(
+                "Fallback",
+                std::string(epochengine::render_event_debug::fallback_name(eventRenderDebug.fallback)),
+                118.0f);
+            gui::property_row(
+                "Dirty regions",
+                std::to_string(eventRenderDebug.dirty_regions),
+                118.0f);
+            gui::property_row(
+                "Vacated regions",
+                std::to_string(eventRenderDebug.vacated_regions),
+                118.0f);
+            gui::property_row(
+                "Dirty coverage",
+                epochengine::format_text("{:.2f}%", eventRenderDebug.dirty_coverage_percent),
+                118.0f);
+            gui::property_row(
+                "Render time",
+                epochengine::format_text("{} us", eventRenderDebug.render_time_us),
+                118.0f);
+            gui::property_row(
+                "Frame path totals",
+                epochengine::format_text(
+                    "Cached {} / Partial {} / Full {} / Conventional {}",
+                    eventRenderDebug.cached_frames,
+                    eventRenderDebug.partial_frames,
+                    eventRenderDebug.full_frames,
+                    eventRenderDebug.conventional_frames),
+                118.0f);
+            const auto pathTimingText = [](
+                const epochengine::render_event_debug::BenchmarkTiming& timing)
+            {
+                if (timing.samples == 0u)
+                    return std::string{"waiting"};
+                return epochengine::format_text(
+                    "{:.1f} us avg / {:.0f} render FPS",
+                    timing.average_time_us,
+                    epochengine::render_event_debug::render_fps(timing));
+            };
+            gui::property_row("Cached avg / rate", pathTimingText(eventRenderDebug.cached), 118.0f);
+            gui::property_row("Partial avg / rate", pathTimingText(eventRenderDebug.partial), 118.0f);
+            gui::property_row("Full avg / rate", pathTimingText(eventRenderDebug.full), 118.0f);
+            gui::property_row("Conventional avg / rate", pathTimingText(eventRenderDebug.conventional), 118.0f);
+            gui::property_row(
+                "Benchmark lane",
+                std::string(epochengine::render_event_debug::benchmark_lane_name(eventRenderDebug.benchmark_lane)),
+                118.0f);
+            gui::property_row(
+                "Selective samples",
+                std::to_string(eventRenderDebug.selective.samples),
+                118.0f);
+            gui::property_row(
+                "Selective last / avg",
+                eventRenderDebug.selective.samples == 0u
+                    ? std::string("waiting")
+                    : epochengine::format_text(
+                        "{:.1f} / {:.1f} us",
+                        static_cast<double>(eventRenderDebug.selective.last_time_ns) / 1000.0,
+                        eventRenderDebug.selective.average_time_us),
+                118.0f);
+            gui::property_row(
+                "Selective total",
+                epochengine::format_text(
+                    "{:.3f} ms",
+                    static_cast<double>(eventRenderDebug.selective.total_time_ns) / 1'000'000.0),
+                118.0f);
+            gui::property_row(
+                "Full samples",
+                std::to_string(eventRenderDebug.full_baseline.samples),
+                118.0f);
+            gui::property_row(
+                "Full last / avg",
+                eventRenderDebug.full_baseline.samples == 0u
+                    ? std::string("waiting")
+                    : epochengine::format_text(
+                        "{:.1f} / {:.1f} us",
+                        static_cast<double>(eventRenderDebug.full_baseline.last_time_ns) / 1000.0,
+                        eventRenderDebug.full_baseline.average_time_us),
+                118.0f);
+            gui::property_row(
+                "Full total",
+                epochengine::format_text(
+                    "{:.3f} ms",
+                    static_cast<double>(eventRenderDebug.full_baseline.total_time_ns) / 1'000'000.0),
+                118.0f);
+            gui::property_row(
+                "Average comparison",
+                eventRenderDebug.selective.samples == 0u || eventRenderDebug.full_baseline.samples == 0u
+                    ? std::string("waiting for both lanes")
+                    : epochengine::format_text(
+                        "{:.2f}x speedup / {:.1f}% less time",
+                        eventRenderDebug.average_speedup,
+                        eventRenderDebug.average_time_saved_percent),
+                118.0f);
+
+            bool eventPathEnabled = eventRenderDebug.event_path_enabled;
+            if (gui::toggle_switch("Event renderer", eventPathEnabled, { 210.0f, 28.0f }))
+            {
+                epochengine::render_event_debug::set_event_path_enabled(eventPathEnabled);
+                if (!eventPathEnabled)
+                    epochengine::render_event_debug::set_benchmark_enabled(false);
+                push_editor_log(
+                    editor,
+                    eventPathEnabled
+                        ? "[renderer] Event-driven OpenGL scene reuse enabled."
+                        : "[renderer] Conventional OpenGL scene rendering forced; A/B benchmark disabled.");
+            }
+            bool benchmarkEnabled = eventRenderDebug.benchmark_enabled;
+            if (gui::toggle_switch("A/B render benchmark", benchmarkEnabled, { 210.0f, 28.0f }))
+            {
+                epochengine::render_event_debug::set_benchmark_enabled(benchmarkEnabled);
+                push_editor_log(
+                    editor,
+                    benchmarkEnabled
+                        ? "[renderer] A/B benchmark enabled: alternate SELECTIVE and FULL BASELINE frames with synchronized GPU-complete timing."
+                        : "[renderer] A/B benchmark disabled.");
+            }
+            if (gui::button("Reset render benchmark", { 210.0f, 27.0f }))
+            {
+                epochengine::render_event_debug::reset_benchmark_statistics();
+                push_editor_log(editor, "[renderer] A/B benchmark statistics reset.");
+            }
+            if (gui::button("Reset render path stats", { 210.0f, 27.0f }))
+            {
+                epochengine::render_event_debug::reset_path_statistics();
+                push_editor_log(editor, "[renderer] Cached/partial/full/conventional path statistics reset.");
+            }
+            bool dirtyOverlayEnabled = eventRenderDebug.dirty_overlay_enabled;
+            if (gui::toggle_switch("Dirty-region overlay", dirtyOverlayEnabled, { 210.0f, 28.0f }))
+            {
+                epochengine::render_event_debug::set_dirty_overlay_enabled(dirtyOverlayEnabled);
+                push_editor_log(
+                    editor,
+                    dirtyOverlayEnabled
+                        ? "[renderer] Dirty-region overlay enabled."
+                        : "[renderer] Dirty-region overlay disabled.");
+            }
+            bool vacatedOverlayEnabled = eventRenderDebug.vacated_overlay_enabled;
+            if (gui::toggle_switch("Vacated-region overlay", vacatedOverlayEnabled, { 210.0f, 28.0f }))
+            {
+                epochengine::render_event_debug::set_vacated_overlay_enabled(vacatedOverlayEnabled);
+                push_editor_log(
+                    editor,
+                    vacatedOverlayEnabled
+                        ? "[renderer] Vacated-region overlay enabled (previous object bounds)."
+                        : "[renderer] Vacated-region overlay disabled.");
+            }
+
             if (gui::toggle_switch("Scene helpers", editor.helpersVisible, { 210.0f, 28.0f }))
                 push_editor_log(editor, editor.helpersVisible ? "[world] Scene helpers enabled." : "[world] Scene helpers disabled.");
             if (gui::toggle_switch("Rounded controls", editor.roundedRectangles, { 210.0f, 28.0f }))
@@ -32488,11 +34356,10 @@ namespace epochengine
 
             if (editor.aiWorkspaceDomain == AiWorkspaceDomain::Engine)
             {
-                gui::label("Project Assistant");
-                gui::wrapped_label(
-                    "Describe a scene or GUI result in normal language. Epoch "
-                    "turns it into a visible plan, validates every operation, "
-                    "and changes the active project only after you approve that plan.",
+                gui::semantic_block(
+                    "PROJECT ASSISTANT · ACTIVE PROJECT\n"
+                    "Conversation receives bounded active-project context. Plan Changes or New Project Goal stages scene/GUI work; nothing is applied until you approve the exact staged call.",
+                    gui::SemanticTone::assistant,
                     inspectorWidth);
                 render_ai_model_picker(
                     editor,
@@ -32617,13 +34484,19 @@ namespace epochengine
                 }
 
                 gui::wrapped_label(
-                    "Conversation and response history remain in the AI Chat "
+                    "Conversation and response history remain in the Epoch AI "
                     "dock so the scene stays visible while authoring.",
                     inspectorWidth);
                 gui::end_scroll_area();
                 gui::end_window();
                 return;
             }
+
+            gui::semantic_block(
+                "ENGINE SELF-CODING · ISOLATED SANDBOX\n"
+                "Edits Epoch engine source only inside a disposable candidate. Build, validation, comparison, and human review gate promotion to live source.",
+                gui::SemanticTone::engine,
+                inspectorWidth);
 
             if (gui::button(editor.showAiModelSettings ? "Hide Model Settings" : "Choose / Change Coding Model",
                     {inspectorWidth, 30.0f}))
@@ -32633,11 +34506,7 @@ namespace epochengine
                     && !editor.aiDeferredDispatchQueued))
                 render_ai_model_picker(editor, inspectorWidth, "self-coding-model-select");
             gui::wrapped_label(
-                "Describe the result you want. Epoch resolves "
-                "the owned systems and exact source files for you, shows them "
-                "in Detailed Session Activity, and keeps every model-authored "
-                "change inside a separate disposable session until you choose "
-                "a candidate.",
+                "Use Epoch AI as one input. Epoch infers conversation, project authoring/tooling, or engine-source work from the request; ambiguous change requests ask you before anything is dispatched. Force Engine Next remains an explicit one-message override. Engine changes stay inside an isolated candidate until human review.",
                 inspectorWidth);
             if (!editor.aiDevelopmentPanel)
             {
@@ -33532,6 +35401,71 @@ namespace epochengine
                     "Visible", entity.visible ? "Yes" : "No", 84.0f);
                 gui::property_row(
                     "Editor only", entity.editorOnly ? "Yes" : "No", 84.0f);
+                gui::property_row(
+                    "Selection",
+                    epochengine::format_text(
+                        "{} object(s)", editor.selectedEntityIds.size()),
+                    84.0f);
+
+                gui::label("Movement / Benchmark");
+                const bool movable = !entity.editorOnly
+                    && entity.type != "Level"
+                    && entity.type != "Camera";
+                const bool oscillatorAttached = editor.scriptOscillator.enabled
+                    && editor.scriptOscillator.entity_id == entity.sceneObjectId;
+                const std::array oscillatorActions{
+                    gui::InlineButtonSpec{
+                        .label = oscillatorAttached ? "Reattach Oscillator" : "Attach Oscillator",
+                        .width = 132.0f,
+                        .enabled = movable},
+                    gui::InlineButtonSpec{
+                        .label = "Detach",
+                        .width = 64.0f,
+                        .enabled = oscillatorAttached},
+                    gui::InlineButtonSpec{
+                        .label = "Open Source",
+                        .width = 94.0f}
+                };
+                if (const auto action = gui::inline_button_row(
+                        oscillatorActions, 27.0f, 4.0f))
+                {
+                    if (*action == 0u && movable)
+                    {
+                        editor.scriptOscillator.enabled = true;
+                        editor.scriptOscillator.entity_id = entity.sceneObjectId;
+                        editor.scriptOscillator.base_position = entity.position;
+                        editor.scriptOscillator.axis = 0u;
+                        editor.scriptOscillator.amplitude = 2.0f;
+                        editor.scriptOscillator.frequency_hz = 0.5f;
+                        push_editor_log(
+                            editor,
+                            "[script] Oscillator attached from Properties: X +/-2 units at 0.5 Hz. Press Play to animate.");
+                    }
+                    else if (*action == 1u)
+                    {
+                        editor.scriptOscillator.enabled = false;
+                        editor.scriptOscillator.entity_id = scene::kInvalidSceneObjectId;
+                        push_editor_log(editor, "[script] Oscillator detached.");
+                    }
+                    else if (*action == 2u)
+                    {
+                        editor.activeScript = "oscillate_selected_entity";
+                        const std::string oscillatorSource =
+                            editor_resolve_script_source_path(
+                                editor.activeScript, editor.projectRoot);
+                        editor.mainSurface = EditorMainSurface::Assets;
+                        editor.assetWorkspaceSection = 2u;
+                        editor.workspaceTab = EditorWorkspaceTab::Assets;
+                        editor.outlinerToolTab = OutlinerToolTab::Scripting;
+                        editor.showOutliner = false;
+                        editor.showInspector = true;
+                        (void)load_script_source_editor(
+                            editor, oscillatorSource, false);
+                    }
+                }
+                gui::wrapped_label(
+                    "Select a Cube, Attach Oscillator, press Play, then enable A/B Render Benchmark in World Settings.",
+                    (std::max)(160.0f, pane_size.x - 24.0f));
             }
             else if (!specializedProperties)
             {
@@ -33562,9 +35496,10 @@ namespace epochengine
                     "Run target", editor.activeRuntimeScene, 92.0f);
                 gui::label("Viewport Controls");
                 gui::wrapped_label(
-                    "Select: left mouse  |  Pan: middle mouse  |  Orbit: "
-                    "Alt + left mouse  |  Dolly: Alt + right mouse  |  "
-                    "Fly: right mouse + WASD/QE  |  Focus: F",
+                    "Select: left mouse  |  Add/remove: Shift + left mouse  |  "
+                    "Marquee: drag empty viewport  |  Group move: drag any selected object  |  "
+                    "Pan: middle mouse  |  Orbit: Alt + left mouse  |  "
+                    "Dolly: Alt + right mouse  |  Fly: right mouse + WASD/QE  |  Focus: F",
                     (std::max)(160.0f, pane_size.x - 24.0f));
             }
         }
@@ -33904,9 +35839,10 @@ namespace epochengine
                 }
             }
 #endif
-            if (input::action_pressed(input::Action::FrameSelection))
+            if (ctx->action_pressed_safe(input::Action::FrameSelection))
                 handle_scene_tool(editor, ctx.get(), "focus_selection");
             update_scene_object_interaction(ctx, editor, result);
+            draw_scene_marquee_overlay(editor);
             publish_editor_canvas2d_scene(ctx.get(), editor);
             publish_editor_preview_markers(ctx.get(), editor);
 
@@ -36609,10 +38545,7 @@ namespace epochengine
                     || editor.sourceWorkspacePaths.empty())
                 {
                     gui::wrapped_label(
-                        "Engine self-iteration is isolated from the active project. "
-                        "Use AI Controls > Engine Self-Coding to request and review "
-                        "one bounded source iteration. Shared files open here; "
-                        "project scripts and project build output remain unchanged.",
+                        "Engine work is isolated from the active project. Send the implementation request through Epoch AI; automatic intent routing selects Engine Self-Coding when the target is engine source, and asks when the target is ambiguous. Shared files open here; project scripts and project build output remain unchanged.",
                         centerWidth);
                     gui::property_row(
                         "Active project",
@@ -36626,10 +38559,10 @@ namespace epochengine
                         112.0f);
                     if (!editor.aiDevelopmentLines.empty())
                     {
-                        gui::label("Detailed Session Activity");
+                        gui::label("Self-Coding Diagnostics");
                         gui::wrapped_label(
-                            "Local workflow receipts and validation details stay here; "
-                            "AI Chat is reserved for project-assistant conversation and model replies.",
+                            "Self-coding receipts and validation diagnostics stay here. "
+                            "Epoch AI is the unified conversation and engine-work input.",
                             centerWidth);
                         (void)gui::scroll_text_panel(
                             gui::ScrollTextPanelOptions{
@@ -37535,6 +39468,7 @@ namespace epochengine
                 : std::size_t{ 6 });
             const std::size_t liveThreadCount = epochengine::systems::threading::live_thread_count();
             const std::string supportTier = recommended_support_tier(ctx, hardwareThreadCount);
+            const auto eventRenderDebug = epochengine::render_event_debug::snapshot();
 
             const std::vector<std::string> dockLines{
                 dockLine("[systems] Renderer", renderer_name(ctx)),
@@ -37551,6 +39485,19 @@ namespace epochengine
                 dockLine("[visual] Profile", std::string(epochengine::visuals::active_profile_name())),
                 dockLine("[visual] Parity gate", std::string(epochengine::visuals::parity_gate())),
                 dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
+                dockLine("[renderer] Event path", std::string(epochengine::render_event_debug::path_name(eventRenderDebug.path))),
+                dockLine("[renderer] Event fallback", std::string(epochengine::render_event_debug::fallback_name(eventRenderDebug.fallback))),
+                dockLine("[renderer] Dirty regions", std::to_string(eventRenderDebug.dirty_regions)),
+                dockLine("[renderer] Dirty coverage", epochengine::format_text("{:.2f}%", eventRenderDebug.dirty_coverage_percent)),
+                dockLine("[renderer] Event render time", epochengine::format_text("{} us", eventRenderDebug.render_time_us)),
+                dockLine("[renderer] A/B benchmark",
+                    eventRenderDebug.selective.samples == 0u || eventRenderDebug.full_baseline.samples == 0u
+                        ? std::string("off/warming")
+                        : epochengine::format_text(
+                            "Selective {:.1f} us avg / Full {:.1f} us avg / {:.2f}x",
+                            eventRenderDebug.selective.average_time_us,
+                            eventRenderDebug.full_baseline.average_time_us,
+                            eventRenderDebug.average_speedup)),
                 dockLine("[renderer] Proof stages", renderer_capability_proof_stage_status(ctx)),
                 dockLine("[rtt] Descriptor", renderer_sampled_rtt_descriptor_status(ctx)),
                 dockLine("[rtt] Graph", renderer_sampled_rtt_graph_status(ctx)),
@@ -37791,7 +39738,35 @@ namespace epochengine
                 .width = 148.0f,
                 .activate_on_press = true}
         };
-        const std::array followActions{
+        const std::array intentClarificationActions{
+            gui::ConsoleWindowActionSpec{
+                .label = "Engine Source", .width = 132.0f,
+                .activate_on_press = true, .tone = gui::SemanticTone::engine},
+            gui::ConsoleWindowActionSpec{
+                .label = "Project Change", .width = 132.0f,
+                .activate_on_press = true, .tone = gui::SemanticTone::assistant},
+            gui::ConsoleWindowActionSpec{
+                .label = "Project Tool", .width = 112.0f,
+                .activate_on_press = true, .tone = gui::SemanticTone::info},
+            gui::ConsoleWindowActionSpec{
+                .label = "Just Answer", .width = 108.0f,
+                .activate_on_press = true, .tone = gui::SemanticTone::neutral}
+        };
+        const std::array criticalClarificationActions{
+            gui::ConsoleWindowActionSpec{
+                .label = "Cancel Question", .width = 132.0f,
+                .activate_on_press = true, .tone = gui::SemanticTone::neutral}
+        };
+        const std::array chatHeaderActions{
+            gui::ConsoleWindowActionSpec{
+                .label = editor.aiChatEngineWorkMode
+                    ? "Force Engine Next: ON"
+                    : "Force Engine Next",
+                .width = editor.aiChatEngineWorkMode ? 184.0f : 164.0f,
+                .activate_on_press = true,
+                .tone = editor.aiChatEngineWorkMode
+                    ? gui::SemanticTone::engine
+                    : gui::SemanticTone::neutral},
             gui::ConsoleWindowActionSpec{
                 .label = editor.aiChatFollowTail
                     ? "Pause Follow"
@@ -37800,7 +39775,12 @@ namespace epochengine
                 .activate_on_press = true}
         };
         const std::span<const gui::ConsoleWindowActionSpec> messageActions =
-            toolTestPending
+            editor.aiIntentClarificationPending
+                && editor.aiIntentClarificationResumeIntent == AiChatIntent::Ambiguous
+            ? std::span<const gui::ConsoleWindowActionSpec>{intentClarificationActions}
+            : editor.aiIntentClarificationPending
+                ? std::span<const gui::ConsoleWindowActionSpec>{criticalClarificationActions}
+            : toolTestPending
             ? std::span<const gui::ConsoleWindowActionSpec>{toolTestActions}
             : toolPlanAwaitingApproval
                 ? std::span<const gui::ConsoleWindowActionSpec>{toolActions}
@@ -37818,8 +39798,23 @@ namespace epochengine
                 ? std::span<const gui::ConsoleWindowActionSpec>{
                     sourceProposalActions}
             : std::span<const gui::ConsoleWindowActionSpec>{};
+        const auto engineWorkSession = editor.aiDevelopmentPanel
+            ? editor.aiDevelopmentPanel->session_activity(source_iteration_input())
+            : editor_ai_development_panel::SessionActivityView{};
+        const bool engineWorkActive = engineWorkSession.visible
+            && (engineWorkSession.running || engineWorkSession.stopping
+                || editor.aiSourceAwaitingReply
+                || ai_source_native_work_active(editor, chat));
+        const bool showEngineTask = editor.aiChatEngineWorkMode
+            || engineWorkActive;
+        const std::string_view aiChatModeTitle = showEngineTask
+            ? "Epoch AI · Engine Self-Coding"
+            : "Epoch AI · Project Assistant";
+
         const std::span<const gui::ConsoleWindowActionSpec> taskActions =
-            editor.aiGoalEditing
+            showEngineTask
+                ? std::span<const gui::ConsoleWindowActionSpec>{}
+                : editor.aiGoalEditing
                 ? std::span<const gui::ConsoleWindowActionSpec>{goalEditActions}
                 : editor.aiGoalActive
                     ? std::span<const gui::ConsoleWindowActionSpec>{goalActions}
@@ -37829,7 +39824,7 @@ namespace epochengine
             (std::max)(0.0f, availableChatSize.y) };
         handle_pane_title_drag_to_tab(
             "pane.ai_chat",
-            "AI Chat",
+            aiChatModeTitle,
             chat_render_pos,
             chat_render_size);
         const auto chatLineRoles = ai_chat_message_roles(chat.lines);
@@ -37838,7 +39833,7 @@ namespace epochengine
             editor.projectId.empty() ? "no-project" : editor.projectId,
             editor_main_surface_index(editor.mainSurface));
         gui::ConsoleWindowOptions opts{
-            .title = "AI Chat",
+            .title = aiChatModeTitle,
             .position = chat_render_pos,
             .size = chat_render_size,
             .lines = chat.lines,
@@ -37849,33 +39844,59 @@ namespace epochengine
             .scroll_to_end_generation =
                 editor.aiChatScrollToEndGeneration,
             .input = &chat.input,
-            .max_input_chars = 1024,
-            .multiline_input = false,
+            .max_input_chars = 4096,
+            .multiline_input = true,
+            .input_keyboard_policy =
+                gui::TextInputKeyboardPolicy::focused_and_hovered,
             .show_send_button = true,
             .send_button_enabled = !chat.pending,
             .send_button_width = 88.0f,
             .send_button_label = chat.pending ? "Send > (busy)" : "Send >",
-            .task_label = editor.aiGoalEditing
-                ? "Edit project-assistant goal"
-                : editor.aiGoalRunning
-                    ? "Project Assistant Goal (running)"
-                    : "Project Assistant Goal (paused)",
-            .task_value = editor.aiGoalActive
-                ? std::string_view{editor.aiGoal}
-                : std::string_view{"No project-assistant goal"},
-            .task_edit_buffer = editor.aiGoalEditing ? &editor.aiGoalDraft : nullptr,
-            .task_editing = editor.aiGoalEditing,
+            .task_label = showEngineTask
+                ? engineWorkActive
+                    ? "Engine objective (running)"
+                    : editor.aiChatEngineWorkMode
+                        ? "Engine objective (next message)"
+                        : "Last engine objective"
+                : editor.aiGoalEditing
+                    ? "Edit project-assistant goal"
+                    : editor.aiGoalRunning
+                        ? "Project Assistant Goal (running)"
+                        : "Project Assistant Goal (paused)",
+            .task_value = showEngineTask
+                ? editor.aiEngineWorkObjective.empty()
+                    ? std::string_view{"Type the requested engine change below and send it."}
+                    : std::string_view{editor.aiEngineWorkObjective}
+                : editor.aiGoalActive
+                    ? std::string_view{editor.aiGoal}
+                    : std::string_view{"No project-assistant goal"},
+            .task_tone = showEngineTask
+                ? gui::SemanticTone::engine
+                : gui::SemanticTone::assistant,
+            .task_edit_buffer = !showEngineTask && editor.aiGoalEditing
+                ? &editor.aiGoalDraft : nullptr,
+            .task_editing = !showEngineTask && editor.aiGoalEditing,
             .task_actions = taskActions,
-            .header_actions = followActions,
+            .header_actions = chatHeaderActions,
             .message_actions = messageActions,
         };
 
         gui::ConsoleWindowResult r = gui::console_window(opts);
         if (r.header_action_index)
         {
-            editor.aiChatFollowTail = !editor.aiChatFollowTail;
-            if (editor.aiChatFollowTail)
-                ++editor.aiChatScrollToEndGeneration;
+            if (*r.header_action_index == 0u)
+            {
+                editor.aiChatEngineWorkMode = !editor.aiChatEngineWorkMode;
+                chat.append_status(editor.aiChatEngineWorkMode
+                    ? "Engine-source routing is forced for the next message only. Automatic intent routing resumes after it is accepted."
+                    : "Engine-source override cleared. Epoch will infer Project Assistant, project authoring/tooling, or Engine Self-Coding from each message.");
+            }
+            else if (*r.header_action_index == 1u)
+            {
+                editor.aiChatFollowTail = !editor.aiChatFollowTail;
+                if (editor.aiChatFollowTail)
+                    ++editor.aiChatScrollToEndGeneration;
+            }
         }
         if (r.log_user_scrolled && !r.log_at_end)
             editor.aiChatFollowTail = false;
@@ -38011,9 +40032,47 @@ namespace epochengine
             }
         }
 
-        if (r.message_action_index)
+        std::optional<std::size_t> messageActionIndex = r.message_action_index;
+        if (!messageActionIndex && editor.aiQueuedMessageActionIndex)
         {
-            if (modelConsentPending && *r.message_action_index == 0u)
+            messageActionIndex = editor.aiQueuedMessageActionIndex;
+            editor.aiQueuedMessageActionIndex.reset();
+        }
+        if (messageActionIndex)
+        {
+            if (editor.aiIntentClarificationPending
+                && editor.aiIntentClarificationResumeIntent
+                    != AiChatIntent::Ambiguous)
+            {
+                editor.aiIntentClarificationPending = false;
+                editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                editor.aiIntentClarificationRequest.clear();
+                chat.append_status(
+                    "Blocking question cancelled; no staged project action was applied.");
+            }
+            else if (editor.aiIntentClarificationPending)
+            {
+                const std::string request =
+                    std::exchange(editor.aiIntentClarificationRequest, {});
+                editor.aiIntentClarificationPending = false;
+                editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                const AiChatIntent route = *messageActionIndex == 0u
+                    ? AiChatIntent::EngineSource
+                    : *messageActionIndex == 1u
+                        ? AiChatIntent::ProjectAuthoring
+                        : *messageActionIndex == 2u
+                            ? AiChatIntent::ProjectTooling
+                            : AiChatIntent::ProjectChat;
+                chat.append_status(*messageActionIndex == 0u
+                    ? "Routing clarification: Engine Source."
+                    : *messageActionIndex == 1u
+                        ? "Routing clarification: Project Change."
+                        : *messageActionIndex == 2u
+                            ? "Routing clarification: Project Tool."
+                            : "Routing clarification: Just Answer.");
+                (void)dispatch_ai_intent(route, request);
+            }
+            else if (modelConsentPending && *messageActionIndex == 0u)
             {
                 if (confirm_pending_ai_model(editor))
                 {
@@ -38067,7 +40126,7 @@ namespace epochengine
                     "[ai-tool] " + editor.aiToolStatus);
             }
             else if (toolPlanAwaitingApproval
-                && *r.message_action_index == 0u)
+                && *messageActionIndex == 0u)
             {
                 (void)dispatch_ai_tool_plan();
                 chat.append_status(editor.aiToolStatus);
@@ -38080,7 +40139,7 @@ namespace epochengine
                     "The staged active-project tool plan was discarded without execution.";
                 chat.append_status(editor.aiToolStatus);
             }
-            else if (planAwaitingApproval && *r.message_action_index == 0u)
+            else if (planAwaitingApproval && *messageActionIndex == 0u)
             {
                 const std::uint64_t revisionBefore =
                     editor.sceneDocumentRevision;
@@ -38109,7 +40168,7 @@ namespace epochengine
                 chat.append_status(editor.aiAuthoringStatus);
             }
             else if (sourceFullValidationAvailable
-                && *r.message_action_index == 0u)
+                && *messageActionIndex == 0u)
             {
                 const auto validation =
                     editor.aiDevelopmentPanel
@@ -38132,7 +40191,7 @@ namespace epochengine
                     "[ai-full-validation] " + discarded.status);
             }
             else if (sourcePromotionAvailable
-                && *r.message_action_index == 0u)
+                && *messageActionIndex == 0u)
             {
                 const auto evidence =
                     epochengine::ai::default_evidence_paths();
@@ -38210,7 +40269,7 @@ namespace epochengine
                     "[ai-live-promotion] " + discarded.status);
             }
             else if ((sourceProposalAvailable || sourceProposalStaged)
-                && *r.message_action_index == 0u)
+                && *messageActionIndex == 0u)
             {
                 if (!editor.aiDevelopmentPanel)
                 {
@@ -38478,6 +40537,7 @@ namespace epochengine
                             {
                                 request_detached_pane_redock(route);
                                 set_pane_shown(route, true);
+                                set_active_pane(pane_dock_region(route), route);
                                 push_editor_log(
                                     editor,
                                     "[window] " + std::string(label)
@@ -38485,6 +40545,8 @@ namespace epochengine
                                 return;
                             }
                             set_pane_shown(route, !shown);
+                            if (!shown)
+                                set_active_pane(pane_dock_region(route), route);
                             push_editor_log(
                                 editor,
                                 "[window] " + std::string(label)

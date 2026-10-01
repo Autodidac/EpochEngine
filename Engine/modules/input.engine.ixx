@@ -749,6 +749,20 @@ namespace epochengine::input
         mousePressed.reset();
         mouseWheel.store(0, std::memory_order_relaxed);
 
+        // GetAsyncKeyState is process-external/global state. Never sample it while
+        // another process owns the foreground window, or editor/game shortcuts can
+        // keep firing while the operator is typing into another application.
+        const HWND foreground = ::GetForegroundWindow();
+        DWORD foregroundProcessId{};
+        if (!foreground
+            || ::GetWindowThreadProcessId(foreground, &foregroundProcessId) == 0
+            || foregroundProcessId != ::GetCurrentProcessId())
+        {
+            keyDown.reset();
+            mouseDown.reset();
+            return;
+        }
+
         for (std::uint16_t k = 0; k < Key::Count; ++k)
         {
             int vk = map_key_to_vk(static_cast<Key>(k));

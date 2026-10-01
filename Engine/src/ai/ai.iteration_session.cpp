@@ -122,6 +122,7 @@ namespace epochengine::ai::iteration_session
             if (source.target_kind == IterationTargetKind::engine_source)
             {
                 return (source.kind == SourceAuthorityKind::explicit_checkout
+                        || source.kind == SourceAuthorityKind::local_snapshot
                         || source.kind == SourceAuthorityKind::verified_cache)
                     && !source.source_version.empty()
                     && source.source_version.size() <= 64u
@@ -216,6 +217,7 @@ namespace epochengine::ai::iteration_session
             switch (kind)
             {
             case SourceAuthorityKind::explicit_checkout: return "explicit_checkout";
+            case SourceAuthorityKind::local_snapshot: return "local_snapshot";
             case SourceAuthorityKind::verified_cache: return "verified_cache";
             case SourceAuthorityKind::verified_project: return "verified_project";
             case SourceAuthorityKind::unavailable: return "unavailable";
@@ -237,7 +239,7 @@ namespace epochengine::ai::iteration_session
         }
         if (relative_paths.empty() || relative_paths.size() > kMaximumCuratedFiles)
         {
-            result.status = "Curated source inspection requires one to twelve reviewed files.";
+            result.status = "Curated source inspection requires at least one reviewed file within the token-budgeted workspace safety ceiling.";
             return result;
         }
 

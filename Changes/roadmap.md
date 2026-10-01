@@ -5,6 +5,10 @@ verification history lives in `Changes/changelog.txt` and Git history. The
 single active acceptance gate is `Changes/active_pass.md`; durable unresolved
 operator intent is `Changes/mission_cache.md`.
 
+## Current AI Source-Discovery Baseline
+
+The v0.90.22 self-coding baseline uses cumulative, token-budgeted source discovery: a compact repository map and bounded needle searches feed a persistent reviewed-source workspace. Search metadata is navigation-only; exact reviewed bytes remain required for patch authority. Replacement-slice/24-expansion behavior is superseded.
+
 ## Product Mission
 
 Make Epoch a reusable engine for software and games, with an optional capable
@@ -75,36 +79,27 @@ proven completion to history with its mission ID/evidence instead of silently
 dropping intent. Product behavior remains in its owning contract.
 
 Release validation applies to the accepted release scope, not to completion of
-all deferred missions. The authorized v0.90.1 batch must have honest feature
+all deferred missions. The authorized v0.90.04 batch must have honest feature
 coverage and an exact reviewed publication set. SDK delivery is last in today's
 batch, with its own private-access tests, not a reason to expose private material
 through an otherwise public release.
 
 ## Current Release State
 
-- Local source/Windows/Linux metadata is in **partial v0.90.1 preparation**, not
-  an accepted release. Version scripts/receipt resolution/updater tests remain
-  inconsistent; the active pass owns their exact repair and build evidence.
-- Last recorded public Windows/Linux runtime/private-source authority is
-  v0.89.34; macOS is v0.89.30. These are recorded authorities, not a fresh Site
-  check. Keep independent EpochGui/Extensions versions independent.
-- The next release may advance only one exact committed tree after Windows and
-  managed-Clang Linux production evidence, immutable packages, receipts,
-  sidecars, rollback checks, and one reviewed Site activation.
-- September 6 release target: v0.90.1 as the new accepted base, not a public
-  version advance before self-coding/native/security acceptance.
-- Historical runtime/source objects remain immutable; stable-base advancement
-  follows the explicit operator authorization and acceptance gate above.
-  GitHub is not a release authority and currently rejects pushes
-  because the account was suspended at the last recorded attempt; do not treat
-  a historical remote failure as authority to change release policy.
+- Active source integration is **v0.90.33**. This is a development/source state, not a claim that all native acceptance lanes have passed.
+- The immediate Windows gate is the corrected internal-editor/generated-child entry-point split. EpochEditor Debug x64 and Release x64 must link with the engine-owned internal entry point, `Debug+Release | x64` must complete both normal builds, and a separately generated ProjectLauncher must retain its generated entry point without collision.
+- The current renderer/editor baseline includes event-driven OpenGL scene caching, neuromorphic invalidation pressure, vacated-region diagnostics, alternating selective/full benchmarking, multi-selection/group transforms, renderer-neutral bounded lighting damage, accurate presentation-vs-render FPS telemetry, and persistent statistics.
+- Multicontext acceptance includes focus-owned physical input, clickable top-row controls, visible redocking guides, recoverable closed panes, and single-owner detached AI Chat behavior in Run mode.
+- Temporal scene acceptance includes create-after-Undo/delete-recreate behavior without inactive-history identity collisions.
+- The signed public runtime authority remains independent from this source-development number. A source version advance is not by itself a release publication.
+- New implementation must update the owning architecture/release documents in the same pass; `Changes/active_pass.md` owns the current unresolved proof rather than accumulating stale historical checkpoints here.
 
 ## P0 — Self-Coding Candidate Lab
 
-- [ ] Prove explicit model > remembered same-endpoint model > Nemotron 4B
+- [ ] Prove explicit model > remembered same-endpoint model > Qwen3.8 27B
   default selection, including unloaded/missing inventory and restart. Restore
-  alone performs no inference. Make assistant versus Qwen 3.5+/3.8 coding roles
-  visible, with no silent model eviction or weaker-worker substitution.
+  alone performs no inference. Keep model selection visible, with no silent
+  eviction or weaker-worker substitution.
 - [ ] Complete a real local-model run from an ordinary-language objective
   through model-selected context, plan, exact proposal, sandbox apply, all host
   validation, candidate PID/context preview, and Keep Current / Choose

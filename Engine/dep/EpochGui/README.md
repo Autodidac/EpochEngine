@@ -2,7 +2,7 @@
 
 EpochGui is a portable C++23 GUI layout, input-adapter, raster-data, and geometry library used by EpochEngine and standalone applications.
 
-The current bundled and standalone source release is `v0.89.30`. EpochEngine
+The current bundled and standalone source release is `v0.89.32`. EpochEngine
 mirrors this tree under `Engine/dep/EpochGui`; hosted publication verifies that
 the standalone repository and bundled tree remain identical.
 

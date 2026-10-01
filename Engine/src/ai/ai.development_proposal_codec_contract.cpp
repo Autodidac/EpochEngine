@@ -10,6 +10,8 @@ module;
 
 module ai.development_proposal_codec;
 
+import core.logger;
+
 namespace epochengine::ai::development_proposal_codec
 {
     namespace
@@ -342,6 +344,12 @@ namespace epochengine::ai::development_proposal_codec
         }
         [[nodiscard]] bool protocol_prompt_contract()
         {
+            const auto failed = [](int line)
+            {
+                logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                    "codec prompt failure line " + std::to_string(line));
+                return false;
+            };
             constexpr std::string_view objective{
                 "Repair the parser in Engine/src/ai/"
                 "ai.development_proposal_codec.cpp."};
@@ -371,92 +379,91 @@ namespace epochengine::ai::development_proposal_codec
                 "PATH Projects/demo/project.main.cpp\n");
             for (const auto* prompt : {&context, &projectContext, &engine, &project, &grounded})
             {
-                if (prompt->find("If response_format supplies a JSON schema") == std::string::npos
-                    || prompt->find("not a literal response prefix") == std::string::npos
-                    || prompt->find("Do not prepend a header or a bare sentinel to JSON") == std::string::npos
-                    || prompt->find("If no JSON schema is supplied") == std::string::npos
+                if (prompt->find("ACTION CONTRACT") == std::string::npos
+                    || prompt->find("If Epoch source functions are supplied") == std::string::npos
+                    || prompt->find("If no source functions are supplied") == std::string::npos
+                    || prompt->find("return no assistant prose") == std::string::npos
                     || prompt->find("The first response byte must be E") != std::string::npos
                     || prompt->find("The first byte must be E") != std::string::npos)
                     return false;
             }
-            return context.starts_with("EPOCH_SOURCE_SELECTION_V1\n")
-                && projectContext.starts_with("EPOCH_SOURCE_SELECTION_V1\n")
-                && engine.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n")
-                && project.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n")
-                && grounded.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n")
-                && context.find("nonempty reason, paths=[] and reads=[]") != std::string::npos
-                && engine.find("action=insufficient requires a nonempty reason") != std::string::npos
-                && engine.find("empty title, rationale, operations, paths and reads") != std::string::npos
-                && engine.find("JSON action=context") != std::string::npos
-                && engine.find("action=patch") != std::string::npos
-                && context.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
-                    != std::string::npos
-                && context.find("path: Engine/") != std::string::npos
-                && context.find("fix bugs") != std::string::npos
-                && context.find(evidence) != std::string::npos
-                && context.find("up to twelve") != std::string::npos
-                && context.find("first_line: N") != std::string::npos
-                && context.find("query: text") != std::string::npos
-                && engine.find("another region of the same file") != std::string::npos
-                && context.find("does not add source-file bytes")
-                    != std::string::npos
-                && context.find("EPOCH_SOURCE_PROPOSAL_V1") == std::string::npos
-                && engine.find("path: Engine/") != std::string::npos
-                && engine.find("area: engine") != std::string::npos
-                && engine.find(
+            return (context.starts_with("EPOCH_SOURCE_SELECTION_V1\n") || failed(__LINE__))
+                && (projectContext.starts_with("EPOCH_SOURCE_SELECTION_V1\n") || failed(__LINE__))
+                && (engine.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n") || failed(__LINE__))
+                && (project.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n") || failed(__LINE__))
+                && (grounded.starts_with("EPOCH_SOURCE_EDIT_REQUEST_V1\n") || failed(__LINE__))
+                && (context.find("empty selection") != std::string::npos || failed(__LINE__))
+                && (context.find("Discovery is cumulative") != std::string::npos || failed(__LINE__))
+                && (engine.find("epoch_propose_source_patch") != std::string::npos || failed(__LINE__))
+                && (engine.find("Never combine source selection and edit operations") != std::string::npos || failed(__LINE__))
+                && (context.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
+                    != std::string::npos || failed(__LINE__))
+                && (context.find("path: Engine/") != std::string::npos || failed(__LINE__))
+                && (context.find("fix bugs") != std::string::npos || failed(__LINE__))
+                && (context.find(evidence) != std::string::npos || failed(__LINE__))
+                && (context.find("up to twelve") != std::string::npos || failed(__LINE__))
+                && (context.find("first_line: N") != std::string::npos || failed(__LINE__))
+                && (context.find("query: text") != std::string::npos || failed(__LINE__))
+                && (engine.find("another region of the same file") != std::string::npos || failed(__LINE__))
+                && (context.find("does not add source-file bytes")
+                    != std::string::npos || failed(__LINE__))
+                && (context.find("EPOCH_SOURCE_PROPOSAL_V1") == std::string::npos || failed(__LINE__))
+                && (engine.find("path: Engine/") != std::string::npos || failed(__LINE__))
+                && (engine.find("area: engine") != std::string::npos || failed(__LINE__))
+                && (engine.find(
                     "path: Engine/src/ai/ai.development_proposal_codec.cpp\n")
-                    != std::string::npos
-                && engine.find("Engine/path/to/file.cpp")
-                    == std::string::npos
-                && project.find("path: Projects/") != std::string::npos
-                && project.find("area: project") != std::string::npos
-                && project.find(
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("Engine/path/to/file.cpp")
+                    == std::string::npos || failed(__LINE__))
+                && (project.find("path: Projects/") != std::string::npos || failed(__LINE__))
+                && (project.find("area: project") != std::string::npos || failed(__LINE__))
+                && (project.find(
                     "path: Projects/NO_REVIEWED_PATH_RETURN_INSUFFICIENT\n")
-                    != std::string::npos
-                && engine.find(objective) != std::string::npos
-                && engine.find(evidence) != std::string::npos
-                && engine.find("EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1")
-                    != std::string::npos
-                && engine.find("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
-                    != std::string::npos
-                && engine.find("FINAL OUTPUT CHECK")
-                    != std::string::npos
-                && engine.find("begin_search") != std::string::npos
-                && engine.find("begin_replacement") != std::string::npos
-                && engine.find(
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find(objective) != std::string::npos || failed(__LINE__))
+                && (engine.find(evidence) != std::string::npos || failed(__LINE__))
+                && (engine.find("EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("EPOCH_SOURCE_PATCH_PROPOSAL_V1")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("FINAL OUTPUT CHECK")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("begin_search") != std::string::npos || failed(__LINE__))
+                && (engine.find("begin_replacement") != std::string::npos || failed(__LINE__))
+                && (engine.find(
                     "end_replacement\nend_operation\nend_proposal\n")
-                    != std::string::npos
-                && engine.find("end_replacement\nRepeat")
-                    == std::string::npos
-                && engine.find("Never regenerate the whole file") != std::string::npos
-                && grounded.find(
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("end_replacement\nRepeat")
+                    == std::string::npos || failed(__LINE__))
+                && (engine.find("Never regenerate the whole file") != std::string::npos || failed(__LINE__))
+                && (grounded.find(
                     "search_final_newline: false\nbegin_search\n"
                     "|known source\nend_search\n"
                     "replacement_final_newline: false\nbegin_replacement\n"
                     "|known reviewed source\nend_replacement\n"
                     "end_operation\nend_proposal\n")
-                    != std::string::npos
-                && engine.find("EPOCH_SOURCE_PROPOSAL_V1")
-                    == std::string::npos
-                && engine.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
-                    != std::string::npos
-                && engine.find("FILE_ABSENT") != std::string::npos
-                && engine.find("Never invent a path")
-                    != std::string::npos
-                && engine.find("objective-specific owner")
-                    != std::string::npos
-                && engine.find("exact existing symbol") != std::string::npos
-                && engine.find("generic logger") != std::string::npos
-                && engine.find("FILE_CONTENT_SIZE") != std::string::npos
-                && engine.find("one ownership dot") != std::string::npos
-                && engine.find("one to four related") != std::string::npos
-                && engine.find("set operation_count to that exact integer")
-                    != std::string::npos
-                && engine.find("at most four operations")
-                    != std::string::npos
-                && engine.find("exactly one bounded source change")
-                    == std::string::npos
-                && engine.find("core.log") == std::string::npos;
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("EPOCH_SOURCE_PROPOSAL_V1")
+                    == std::string::npos || failed(__LINE__))
+                && (engine.find("EPOCH_SOURCE_CONTEXT_REQUEST_V1")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("FILE_ABSENT") != std::string::npos || failed(__LINE__))
+                && (engine.find("Never invent a path")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("objective-specific owner")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("exact existing symbol") != std::string::npos || failed(__LINE__))
+                && (engine.find("generic logger") != std::string::npos || failed(__LINE__))
+                && (engine.find("FILE_CONTENT_SIZE") != std::string::npos || failed(__LINE__))
+                && (engine.find("one ownership dot") != std::string::npos || failed(__LINE__))
+                && (engine.find("one to four related") != std::string::npos || failed(__LINE__))
+                && (engine.find("set operation_count to that exact integer")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("at most four operations")
+                    != std::string::npos || failed(__LINE__))
+                && (engine.find("exactly one bounded source change")
+                    == std::string::npos || failed(__LINE__))
+                && (engine.find("core.log") == std::string::npos || failed(__LINE__));
         }
 
         [[nodiscard]] bool proposal_quality_contract()
@@ -597,7 +604,11 @@ namespace epochengine::ai::development_proposal_codec
 
     bool run_contract()
     {
-        return contract_failure_code() == 0;
+        const auto failure = contract_failure_code();
+        if (failure != 0)
+            logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                "proposal codec contract failure " + std::to_string(failure));
+        return failure == 0;
     }
 }
 

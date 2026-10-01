@@ -53,9 +53,10 @@ export namespace epochengine::updater
 
     enum class SourceAuthorityKind : std::uint8_t
     {
-        unavailable,
-        explicit_checkout,
-        verified_cache
+        unavailable = 0,
+        explicit_checkout = 1,
+        verified_cache = 2,
+        local_snapshot = 3
     };
 
     struct VerifiedSourceAuthority final

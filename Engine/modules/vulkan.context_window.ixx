@@ -32,6 +32,13 @@ module;
 
 #include <compare>
 
+#if defined(EPOCH_VULKAN_STANDALONE)
+#   ifndef GLFW_INCLUDE_NONE
+#       define GLFW_INCLUDE_NONE
+#   endif
+#   include <GLFW/glfw3.h>
+#endif
+
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif
@@ -41,7 +48,6 @@ export module vulkan.context:window;
 
 import :shared_vk;
 import vulkan.camera;
-import input.engine;
 
 namespace epochengine::vulkancontext {
 
@@ -64,18 +70,23 @@ namespace epochengine::vulkancontext {
             app->processMouseInput(xpos, ypos);
         }
     }
-#endif
 
     void Application::processMouseInput(double xpos, double ypos) {
+        if (!window || glfwGetWindowAttrib(window, GLFW_FOCUSED) != GLFW_TRUE) {
+            // Rebase on the first focused sample so focus changes cannot produce
+            // a large synthetic mouse delta.
+            firstMouse = true;
+            return;
+        }
         if (firstMouse) {
             lastX = static_cast<float>(xpos);
             lastY = static_cast<float>(ypos);
             firstMouse = false;
             return;
         }
-        float xOffset = static_cast<float>(xpos) - lastX;
+        const float xOffset = static_cast<float>(xpos) - lastX;
         // Screen-space Y grows downward, so invert it before feeding pitch.
-        float yOffset = lastY - static_cast<float>(ypos);
+        const float yOffset = lastY - static_cast<float>(ypos);
 
         lastX = static_cast<float>(xpos);
         lastY = static_cast<float>(ypos);
@@ -84,15 +95,20 @@ namespace epochengine::vulkancontext {
     }
 
     void Application::updateCamera(float deltaTime) {
-        // Process WASD keyboard input for camera movement (engine input)
-        if (epochengine::input::is_key_held(epochengine::input::Key::W))
+        if (!window || glfwGetWindowAttrib(window, GLFW_FOCUSED) != GLFW_TRUE)
+            return;
+
+        // GLFW owns this standalone window, so keep its camera input local to
+        // that native window rather than consulting Epoch's process-global state.
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Forward, deltaTime);
-        if (epochengine::input::is_key_held(epochengine::input::Key::S))
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
             epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Backward, deltaTime);
-        if (epochengine::input::is_key_held(epochengine::input::Key::A))
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
             epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Left, deltaTime);
-        if (epochengine::input::is_key_held(epochengine::input::Key::D))
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
             epochengine::vulkancamera::processKeyboard(cam, epochengine::vulkancamera::Direction::Right, deltaTime);
     }
+#endif
 
 } // namespace epochengine::vulkancontext

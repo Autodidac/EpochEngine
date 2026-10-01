@@ -1628,19 +1628,17 @@ export namespace epochengine::authoring::scene
                 {
                     if (!value.object.id.valid())
                         return ResultCode::invalid_identity;
+                    // Object identities are unique in the *active* document state.
+                    // Inactive slots are temporal tombstones retained so undo/redo can
+                    // restore their exact handles. They must not reserve an identity
+                    // forever: after undoing a creation (or deleting an object), a new
+                    // branch is allowed to create an object with the same semantic ID.
+                    // The new command receives a different slot/handle, so retained
+                    // history remains reversible without aliasing the old generation.
                     for (const ObjectSlot& slot : state.slots)
                     {
-                        if (slot.object.id == value.object.id)
-                        {
-                            const bool restoringSameSlot =
-                                mode == ApplyMode::replay &&
-                                value.handle.valid() &&
-                                value.handle.index < state.slots.size() &&
-                                &slot == &state.slots[value.handle.index] &&
-                                !slot.active;
-                            if (!restoringSameSlot)
-                                return ResultCode::duplicate_identity;
-                        }
+                        if (slot.active && slot.object.id == value.object.id)
+                            return ResultCode::duplicate_identity;
                     }
 
                     if (mode == ApplyMode::command)
@@ -2806,6 +2804,95 @@ export namespace epochengine::authoring::scene
             .code = ResultCode::success,
             .snapshot = std::move(snapshot)
         };
+    }
+
+    struct BranchCreationContractResult final
+    {
+        bool initial_create{};
+        bool undo_create{};
+        bool recreate_same_identity{};
+        bool redo_branch_discarded{};
+        bool one_active_object{};
+        bool undo_new_branch{};
+        bool redo_new_branch{};
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return initial_create &&
+                undo_create &&
+                recreate_same_identity &&
+                redo_branch_discarded &&
+                one_active_object &&
+                undo_new_branch &&
+                redo_new_branch;
+        }
+    };
+
+    // Regression contract for editor create -> undo -> create branching.
+    // An undone/deleted object leaves an inactive history slot. That tombstone
+    // must remain replayable, but it must not permanently reserve ObjectId.
+    [[nodiscard]] inline BranchCreationContractResult
+        scene_document_branch_creation_contract()
+    {
+        BranchCreationContractResult result{};
+        auto built = SceneDocument::make_default_tier0();
+        if (!built)
+            return result;
+
+        SceneDocument document = std::move(built.value);
+        SceneObjectDescriptor cube{};
+        cube.id = ObjectId{0xC0BEB001ull};
+        cube.metadata.name = "BranchCube";
+        cube.metadata.generic_type = "StaticMesh";
+        cube.metadata.category = "Gameplay";
+        cube.metadata.sort_order = static_cast<std::uint32_t>(
+            document.objects().size());
+
+        const std::array<SceneOperation, 1> createFirst{
+            ObjectCreatedOperation{.object = cube}
+        };
+        const TransactionResult first = document.apply_transaction(
+            createFirst,
+            "Create BranchCube");
+        result.initial_create = static_cast<bool>(first);
+        if (!result.initial_create)
+            return result;
+
+        const TransactionResult undone = document.undo();
+        result.undo_create = static_cast<bool>(undone) &&
+            !document.find(cube.id).has_value();
+        if (!result.undo_create)
+            return result;
+
+        const std::array<SceneOperation, 1> createSecond{
+            ObjectCreatedOperation{.object = cube}
+        };
+        const TransactionResult second = document.apply_transaction(
+            createSecond,
+            "Create BranchCube again");
+        result.recreate_same_identity = static_cast<bool>(second) &&
+            second.code != ResultCode::duplicate_identity;
+        result.redo_branch_discarded = !document.can_redo();
+        const std::vector<SceneObject> activeObjects = document.objects();
+        result.one_active_object = document.find(cube.id).has_value() &&
+            std::count_if(
+                activeObjects.begin(),
+                activeObjects.end(),
+                [&](const SceneObject& object)
+                {
+                    return object.descriptor.id == cube.id;
+                }) == 1;
+        if (!result.recreate_same_identity || !result.one_active_object)
+            return result;
+
+        const TransactionResult undoNew = document.undo();
+        result.undo_new_branch = static_cast<bool>(undoNew) &&
+            !document.find(cube.id).has_value();
+
+        const TransactionResult redoNew = document.redo();
+        result.redo_new_branch = static_cast<bool>(redoNew) &&
+            document.find(cube.id).has_value();
+        return result;
     }
 
     struct SnapshotIngestionContractResult final

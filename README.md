@@ -1,7 +1,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.89.33-1F7A4C?style=for-the-badge" alt="Current development source v0.89.33" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.33-1F7A4C?style=for-the-badge" alt="Current development source v0.90.33" />
   <img src="https://img.shields.io/badge/Published_Runtime_Release-v0.89.30-2C6A8A?style=for-the-badge" alt="Published runtime release v0.89.30" />
 </p>
 
@@ -78,7 +78,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.89.33`; the signed binary-first Windows/Linux
+- Active development source is `v0.90.33`; the signed binary-first Windows/Linux
   runtime release is `v0.89.30`. The release Site's signed latest-release API is
   authoritative; published v0.89.29, v0.89.28, v0.89.27, and immutable v0.89.06
   packages remain historical release evidence.
@@ -95,6 +95,17 @@ For engine/tooling developers:
   proven GLES, OpenGL, Vulkan, DirectX, and future ray tiers.
 - The immediate product target is a playable baseline 2D project that can be
   authored, saved, reopened, run, and built through the normal project workflow.
+- The real OpenGL editor 3D scene now has an event-driven reuse path: persistent engine-owned color/depth history, previous/current object-bound invalidation, scissored regional reconstruction, and automatic full-frame fallback for camera/global/dense changes. This is production scene integration rather than a separate lab; Vulkan partial framebuffer reuse is not yet claimed.
+- v0.90.33 restores the intended MSVC entry-point split: EpochEditor receives the engine-owned internal entry point, generated child/static-runtime builds suppress that path with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated `epoch.main.cpp`, ProjectLauncher is no longer a normal `Engine.sln` target, and `Debug+Release | x64` builds the normal Debug and Release x64 configurations sequentially.
+- v0.90.31 fixes temporal scene identity branching: inactive Undo/Redo history slots no longer block creating a new active object with the same semantic ID.
+- v0.90.30 hardens renderer telemetry and multicontext tooling: window titles separate actual presentation FPS from measured render-path FPS, A/B and path statistics persist when disabled until explicitly reset, routed-pane docking guides use correctly scaled host coordinates, closed detached panes return to their remembered dock, and detached AI Chat no longer creates a second AI/model owner.
+- v0.90.29 adds Shift+click and marquee multi-selection, one-transaction group movement, +4/+8 batch cube creation, bounded point/spot-light invalidation through shared `render.lighting`, EpochGui font/window shadow work, multicontext top-row click repair, and direct oscillator attachment from selected-object properties.
+- v0.90.28 adds a synchronized alternating SELECTIVE/FULL BASELINE benchmark through one persistent cache/present path plus the attachable oscillator example for repeatable localized motion.
+- v0.90.27 adds a separate Vacated-region overlay for previous object bounds so erase/reconstruction work can be inspected independently from destination redraw; previous bounds remain mandatory damage.
+- v0.90.26 isolates GLFW-only standalone Vulkan camera input behind `EPOCH_VULKAN_STANDALONE`, fixing normal MSVC editor builds while preserving the v0.90.25 focus-owned input behavior.
+- v0.90.25 makes Windows input focus-owned per native Epoch context, expands event-renderer frame-path labels, and prevents internal AI protocol packets from leaking into user chat while recovering bounded plans from short transport/debug prefixes.
+- v0.90.24 mainlined the bounded neuromorphic signal graph, event-camera front end, timeline/task-graph adapters, and a weighted invalidation bridge for the OpenGL event renderer. The old Neuro Lab/experimental branch UI is not carried into main.
+- v0.90.23 exposes the production path directly in Scene -> World Settings: live CACHED/PARTIAL/FULL/CONVENTIONAL state, fallback reason, dirty coverage and render timing, an Event renderer A/B toggle, and an optional dirty-region viewport overlay.
 - Current source includes renderer-neutral math, bounded lighting, CPU ray
   queries, explicit request-driven temporal mapping/history, temporal texture
   documents, deterministic physics/audio managers and PCM mixing, optional

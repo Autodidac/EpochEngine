@@ -42,13 +42,6 @@ module;
 
 #include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
 
-extern "C" const char* epoch_reserve_capture_path_utf8(
-    const char* backend,
-    std::uintptr_t windowId);
-extern "C" void epoch_release_capture_path_utf8(
-    const char* backend,
-    std::uintptr_t windowId);
-
 export module sdl.renderer;
 
 //import engine.config;
@@ -58,6 +51,13 @@ import core.context;
 import core.logger;
 import context.type;
 import sdl.state;
+
+extern "C" const char* epoch_reserve_capture_path_utf8(
+    const char* backend,
+    std::uintptr_t windowId);
+extern "C" void epoch_release_capture_path_utf8(
+    const char* backend,
+    std::uintptr_t windowId);
 
 export namespace epochengine::sdlcontext
 {

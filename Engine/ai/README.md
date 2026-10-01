@@ -13,8 +13,8 @@ Qwen3.8 package is optional; installation never starts a server or inference.
 Generated-project AI profiles default to Off and never bundle model weights.
 
 For the local API, a current explicit/configured selection wins. Otherwise Epoch
-restores an eligible endpoint-bound preference, or selects the operator-confirmed
-small default `nvidia/nemotron-3-nano-4b`. A missing inventory entry does not erase
+restores an eligible endpoint-bound preference, or selects the local default
+`qwen/qwen3.8-27b`. A missing inventory entry does not erase
 the selection or substitute another model. Inventory presence is not proof that
 a model is loaded or responsive.
 
@@ -25,14 +25,13 @@ consent does not transfer to a different or remote endpoint. Legacy model-only
 preferences can be upgraded on a user request at the original
 `http://localhost:1234` endpoint. Explicitly disabled project profiles remain Off.
 
-Nemotron 4B is the requested quick-assistant role. Qwen 3.5+ is the requested
-self-coding tier, with Qwen 3.8 preferred for long-horizon work. Role guidance is
+Qwen3.8 27B is the default local/self-coding model. The operator may select a
+different detected model from Model Settings; role guidance remains advisory. Role guidance is
 not a task-success guarantee or a model-name allowlist. An unknown explicitly
 selected agentic model may attempt the same bounded workflow: actual source,
-packet, host-budget and build validation remain mandatory. The automatic or
-remembered Nemotron helper requires an explicit coding choice before a source
-request; that request retains its objective while the user selects a model.
-Choose / Change Coding Model is available directly in Engine Self-Coding.
+packet, host-budget and build validation remain mandatory. A remembered explicit model remains eligible on the same endpoint, while the
+Qwen3.8 default is used when no explicit/remembered selection exists. Choose /
+Change Coding Model is available directly in Engine Self-Coding.
 Queued requests retain selection leases through worker retirement and source
 reply handoff, preventing cross-context model switches during active work.
 Native role/selection UI and restart acceptance still require an eye test.

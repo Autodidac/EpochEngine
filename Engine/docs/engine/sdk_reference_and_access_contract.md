@@ -128,7 +128,7 @@ versions. Include exact archive names, sizes and SHA-256 sidecars plus per-file
 hashes. Preserve the admitted license terms; do not relabel LicenseRef-MIT-NoSell
 as plain MIT. Optional add-on library licensing must be reviewed separately.
 
-The target feature release is v0.90.1, not proof of a published SDK version.
+The target feature release is v0.90.02, not proof of a published SDK version.
 Reconcile current source/platform version authorities before packaging. Never
 rename old archives, rewrite historical manifests or imply a newly supported
 macOS package without its own accepted evidence. SDK publication is a separate

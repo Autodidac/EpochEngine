@@ -17,6 +17,7 @@ distinct authority:
 
 Epoch has one forward architecture:
 
+- [AI source discovery architecture](engine/ai_source_discovery_architecture.md) — cumulative, token-budgeted source retrieval and exact-byte patch authority.
 - `engine/capability_tier_architecture.md` - canonical product, capability,
   renderer, resource, authoring, temporal, settings, and dependency architecture.
 
@@ -37,33 +38,11 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-The immediate acceptance objective is the real local-model self-coding loop:
-plain-language request, automatic bounded context, plan and edits, sandbox
-build/test, separately supervised candidate context, Keep/Choose, then another
-actual build from the chosen sandbox. Live source and projects remain outside
-that loop. Component implementations are not proof that this entire workflow
-already works; the active pass identifies the remaining evidence.
+Active source development is v0.90.33. The immediate native acceptance gate is the corrected MSVC entry-point split: normal EpochEditor builds receive the engine-owned internal entry point, while generated child/static-runtime builds suppress it with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. Debug x64, Release x64, and the combined Debug+Release x64 solution workflow must all pass on native MSVC.
 
-The roadmap's September 6 batch also retains current EpochGui/Extensions and
-loadable CLI/native-window/GUI projects, a proven stable-base compatibility freeze
-before major game-specific changes, separate Sim/Space demo/library integration,
-then private SDK/About/Site delivery last. The full playable 2D game remains a
-major goal, not replaced by the demos. Platform extraction is incremental;
-completed foundations are reused, not rescheduled as new work. Exact-build
-release checks apply to accepted release scope, not every deferred feature.
+The current editor/rendering integration also includes the production OpenGL event-driven cache, neuromorphic invalidation pressure, A/B selective/full benchmarking, renderer-neutral bounded lighting damage, multi-selection/group editing, focus-owned multicontext input, persistent renderer telemetry, and detached-pane recovery/single-owner AI Chat behavior. These are real integrated systems, but native GPU timing and multicontext visual/runtime behavior still require operator-side acceptance.
 
-Architecture alignment includes input/output ownership, performance evidence,
-cross-platform software-to-accelerated-graphics profiles and context-specific
-needs. Planned curated references give Qwen separate Engine self-coding and
-project/game-development collections; they are retrieval, not training or
-automatic permission to read/send every document.
-
-Read:
-
-- `../../Changes/active_pass.md` for the current bounded gate;
-- `../../Changes/roadmap.md` for the ordered remaining milestones;
-- `../../Changes/mission_cache.md` for durable follow-up;
-- `../../Changes/changelog.txt` for implementation/release history.
+Read `../../Changes/systems_consolidation_0.90.24_0.90.33.md` for the compact recent-system map and `../../Changes/active_pass.md` for the exact unresolved proof. The broader product mission remains a reusable software/game engine, playable baseline project flow, and sandboxed local-agent development workflow; renderer experiments and AI autonomy do not replace that product goal.
 
 ## Build
 
@@ -87,6 +66,7 @@ operator visual evidence.
 These documents describe current subsystem operation or focused policy. They do
 not set independent product priorities:
 
+- `../../Changes/systems_consolidation_0.90.24_0.90.33.md` - compact map of the late-September integrated renderer/editor/build systems;
 - `engine/runtime_and_editor_workflows.md`
 - `engine/gui_library_architecture.md`
 - `engine/backend_context_status.md`
@@ -129,3 +109,6 @@ plan.
 - Generated caches, local runtime output, and transient diagnostics are not
   documentation.
 - Release history and old debugging detail belong under `Changes/`.
+
+- [`engine/event_driven_rendering.md`](engine/event_driven_rendering.md) — persistent scene reuse, dirty-region invalidation, and dense fallback for the 3D renderer.
+- [`engine/neuromorphic_engine_framework.md`](engine/neuromorphic_engine_framework.md) — bounded weighted signal graph, event-camera front end, temporal/task-graph adapters, and render-invalidation bridge.

@@ -41,6 +41,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.version.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.stl_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.format_text.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\ai\ai.self_iteration_analytics.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)modules\sfml.compat.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
@@ -88,6 +89,12 @@
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_view.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_runtime.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.rotate_all_entities.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\script.oscillate_selected_entity.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
@@ -166,6 +173,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.manager.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.texture.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.cellular.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.neuromorphic.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.neuromorphic_adapters.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.codeinspector.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.commandline.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\visuals.engine.ixx" />
@@ -380,6 +389,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_scene.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_tilemap.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.camera.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.neuromorphic_camera.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.neuromorphic_invalidation.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.portal.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d_scene.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\canvas2d.scene_contracts.ixx" />
@@ -387,6 +398,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture_residency.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.context_frame.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx" />
@@ -678,6 +690,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_executor.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_loop.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_session.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_index.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_workspace.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_discovery_contract.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.project_profile.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.curated_context_bundle.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx" />
@@ -702,6 +717,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_index.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_workspace.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_discovery_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile_contract.cpp" />
@@ -787,6 +805,7 @@
     <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\simulation\simulation.neuromorphic_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc" />

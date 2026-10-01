@@ -1085,7 +1085,7 @@ namespace
         }
     }};
 
-    constexpr std::array<EditorScriptProfile, 6> kScriptProfiles{{
+    constexpr std::array<EditorScriptProfile, 7> kScriptProfiles{{
         {
             "rotate_all_entities",
             "Rotate All Entities",
@@ -1094,6 +1094,15 @@ namespace
             "Rotate current editor scene entities",
             "Checks for a present script source file before using the active engine host to reload it.",
             "Simple validation script for host callbacks against the current editor scene."
+        },
+        {
+            "oscillate_selected_entity",
+            "Oscillate Selected Entity",
+            "Engine/src/scripts/script.oscillate_selected_entity.cpp",
+            "Select a movable scene object before running the oscillator example",
+            "Attach a deterministic X-axis oscillator to the selected object",
+            "Runs once to attach an engine-owned preview behavior; press Play to advance simulation time.",
+            "Renderer benchmark example: select a Cube, run this script, then enable A/B Render Benchmark."
         },
         {
             "project_demo_bootstrap",

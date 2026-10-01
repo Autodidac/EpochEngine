@@ -23,6 +23,8 @@ export namespace epochengine::ai
         std::string manifest_path{};
         std::size_t host_context_budget_tokens{};
         std::size_t host_output_budget_tokens{};
+        std::size_t loaded_context_capacity_tokens{};
+        std::size_t maximum_context_capacity_tokens{};
         bool repo_safe_manifest{true};
         bool local_weights_only{false};
         bool available{false};

@@ -64,6 +64,12 @@
     <Filter Include="Module Files\epochengine">
       <UniqueIdentifier>{4a3d2bbe-62ff-465d-9751-8c8f5aa53573}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Module Files\epochengine\simulation">
+      <UniqueIdentifier>{cec686ee-53e4-4ec6-9db8-57bb155f6ead}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochengine\simulation">
+      <UniqueIdentifier>{a701a79e-b662-49c6-b86f-53f6236bb361}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Module Files\epochengine\ai">
       <UniqueIdentifier>{0f93e72d-fd89-4b1b-abc4-1004fb445804}</UniqueIdentifier>
     </Filter>
@@ -362,6 +368,9 @@
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.rotate_all_entities.cpp">
       <Filter>Source Files\external scripts</Filter>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\script.oscillate_selected_entity.cpp">
+      <Filter>Source Files\external scripts</Filter>
+    </None>
     <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps">
       <Filter>Resource Files</Filter>
     </None>
@@ -372,6 +381,8 @@
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_runtime.inl">
       <Filter>Source Files\epochengine</Filter>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.handles.ixx">
@@ -421,6 +432,12 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.cellular.ixx">
       <Filter>Module Files\epochengine\games</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.neuromorphic.ixx">
+      <Filter>Module Files\epochengine\simulation</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.neuromorphic_adapters.ixx">
+      <Filter>Module Files\epochengine\simulation</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.allocator.ixx">
       <Filter>Module Files\epochengine\utilities</Filter>
@@ -881,7 +898,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.runtime.ixx">
       <Filter>Module Files\epochengine\ai</Filter>
     </ClCompile>
-
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.session.ixx">
       <Filter>Module Files\epochengine\ai</Filter>
     </ClCompile>
@@ -1158,12 +1174,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.application.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter_contract.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine_legacy.cpp">
       <Filter>Source Files\epochengine</Filter>
     </ClCompile>
@@ -1223,9 +1233,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp">
-      <Filter>Source Files\epochengine\packages</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
@@ -1291,6 +1298,12 @@
       <Filter>Module Files\epochengine\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.camera.ixx">
+      <Filter>Module Files\epochengine\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.neuromorphic_camera.ixx">
+      <Filter>Module Files\epochengine\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.neuromorphic_invalidation.ixx">
       <Filter>Module Files\epochengine\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.portal.ixx">
@@ -1495,29 +1508,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx">
       <Filter>Module Files\epochengine</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.authoring_history.ixx">
-      <Filter>Module Files\epochengine\editor</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx">
       <Filter>Module Files\epochengine</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx">
-      <Filter>Module Files\epochengine\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx">
-      <Filter>Module Files\epochengine\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_panel.cpp" />
@@ -1543,6 +1535,18 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.legacy_components.ixx">
       <Filter>Module Files\epochengine\core\ecs</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.task_graph.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\task_graph\authoring.task_graph_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.authoring_history.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico">
@@ -1937,12 +1941,6 @@
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_layout_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </None>
-    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp">
-      <Filter>Source Files\epochengine\editor</Filter>
-    </None>
     <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp">
       <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
     </None>
@@ -1952,5 +1950,17 @@
     <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp">
       <Filter>Source Files\epochengine</Filter>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\simulation\simulation.neuromorphic_contract.cpp">
+      <Filter>Source Files\epochengine\simulation</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_index.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_workspace.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_discovery_contract.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_index.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_workspace.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_discovery_contract.cpp" />
   </ItemGroup>
 </Project>

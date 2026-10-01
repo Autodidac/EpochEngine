@@ -148,6 +148,8 @@ namespace epochengine::ai::mcp_campaign
                 return (source.kind
                         == iteration_session::SourceAuthorityKind::explicit_checkout
                     || source.kind
+                        == iteration_session::SourceAuthorityKind::local_snapshot
+                    || source.kind
                         == iteration_session::SourceAuthorityKind::verified_cache)
                     && bounded_text(source.source_version, 32u)
                     && lowercase_hex(source.commit, 40u)
