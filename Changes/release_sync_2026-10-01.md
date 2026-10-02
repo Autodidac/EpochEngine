@@ -1,5 +1,56 @@
 # October 1 source, dependency and release continuation
 
+## October 2 completed GitHub publication
+
+This outcome supersedes the earlier preparation/remaining-gate notes below.
+GitHub v0.90.33 is public/latest at
+https://github.com/Autodidac/EpochEngine/releases/tag/v0.90.33 , published
+04:42:27 UTC. Its immutable tag and all source/package receipts bind to
+`f33d3d6758abf402747870df4f8887e7887a2035`, tree
+`86a7f4b72d60026d58f08f4dbc4ff29c0acde5c6`, 1066 tracked files. SHA-256 of the
+unprefixed exact-commit git archive TAR is
+`acdb8f240b60c69cad4bfde6b16201acdf5c1e7f1bad09c63b31430ab05cbab9`.
+No working-tree bytes are included. Main/stable were synchronized at f33 before
+release; a following docs-only checkpoint does not replace release source.
+
+- Hosted CMake: https://github.com/Autodidac/EpochEngine/actions/runs/36963049417
+  (all five jobs pass; full Clang job 110700717125 compiles 1963 steps, 62/62
+  tests, bounded software OpenGL smoke and package checks pass).
+- Hosted MSBuild: https://github.com/Autodidac/EpochEngine/actions/runs/36963049433
+  (pass). Local Windows Debug/Release/pure checks, 15 headless tests and 311
+  packaged DLL imports pass; known logger/optimization warnings remain visible.
+- Linux release uses the downloaded hosted Ubuntu 22.04 artifact, not the local
+  GLIBCXX_3.4.32 dependency payload. Independent archive/ABI/dependency/version/
+  pure-contract audit confirms GLIBC <=2.35 and GLIBCXX <=3.4.30.
+- All 14 uploaded asset digests and sizes were compared with admitted local
+  files; release is not draft and is GitHub latest. Inputs/provenance/sidecars
+  are in `C:/tmp/epoch_release_v0.90.33_20261001`; complete proof logs are in
+  `build/import-20260930` (ignored, not release payload).
+
+Final artifact SHA-256:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| Windows runtime ZIP | `14b068ebc9399af8e5a8322214a1c5e18574f44c275fb65cdc5365b9fa8b5a1c` |
+| Linux runtime TAR.GZ | `407c43dc6765fc035b6a1877fbe0ec54c8662b3ea5f8621faa94f2d999e75552` |
+| Source ZIP | `c1fa005462e2dd20eb5cb72ee37d142fd53a62f22f44162f5f0d693a18049ae4` |
+| Source TAR.GZ | `3e4fcbb1466e74d81ecd70e5d5159ef27e910ef7913a536e9eabc37eb5c4db30` |
+| Windows receipt JSON | `15b29e7a67062410815870795b3df701aea282611720d25d07314d9817a22dbd` |
+| Linux receipt JSON | `6363fc4ed7e0082d250f80244f8b54e92658aea83fb16c67aa66dd48ae4ccbd2` |
+
+EpochGui main remains synchronized at c52e91293749a7a34959bfc042c582c3ac182504
+with 11/11 Windows Debug/Release and Linux Debug CPU checks. Extensions is
+unchanged at eccef139f982a9e6b64295cd9c8b976905ef0990; richer package source was
+not overwritten by descriptor catalogs. Historical release refs/bytes and
+macOS 0.89.30 remain unchanged.
+
+Site chat received the READY handoff with these exact files, hashes and proofs.
+Site independently owns admission/private encrypted source/upload/deployment;
+its live publication is pending confirmation. Native GPU/Qwen/candidate PID/
+docked choice/successor acceptance remains operator-owned and unverified.
+Repetitive unfinished model tool arguments and Project Assistant regression
+are unresolved AI gates, not features proved fixed by build/CPU/software smoke.
+
 ## Bounded scope
 
 Continue the operator's 0.90.33 import, prepare Windows/Linux release packages,

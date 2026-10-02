@@ -7,6 +7,40 @@ instructions. Ordering is in `roadmap.md`, durable requirements in
 
 ## Current Acceptance Result
 
+October 2 release checkpoint supersedes the preparation/hold instructions below.
+GitHub v0.90.33 is PUBLIC/LATEST, published 04:42:27 UTC from immutable source
+`f33d3d6758abf402747870df4f8887e7887a2035`:
+https://github.com/Autodidac/EpochEngine/releases/tag/v0.90.33 . All five hosted
+CMake jobs in run 36963049417 and MSBuild run 36963049433 pass. Full hosted
+Clang compiled 1963 steps and passed 62/62 tests, including the repaired script
+compiler contract; its bounded Xvfb software OpenGL package smoke passed.
+The downloaded hosted Linux archive independently passed path, dependency,
+GLIBC_2.35 / GLIBCXX_3.4.30, version and pure-contract checks. Windows final
+Debug/Release/pure checks, 15 headless tests and all 311 staged imports pass.
+All 14 public asset digests/sizes match admitted local files. Final hashes,
+provenance, workflow links and dependency revisions are recorded in
+`release_sync_2026-10-01.md`. The tag/source archives/packages stay at f33;
+a later documentation-only checkpoint does not rewrite published bytes.
+
+Site chat 01a03f60-0009-7ab2-b0cf-679ccfd9a78d received the final READY handoff
+after GitHub publication. Site admission/encryption/upload/deployment is still
+pending confirmation; do not claim a live Site update from dispatch alone.
+Old local Linux packages and earlier receipts remain excluded. Historical tags,
+macOS packaged authority and the preserved ad6c416d base are unchanged.
+
+Next bounded production gate remains AI behavior, not more release churn:
+resolve stage-specific final-content/tool-only prompt ambiguity, inspect safe
+reasoning routing and bounded cancellable progress/repetition recovery for the
+reported unfinished raw tool arguments; diagnose Project Assistant separately
+against its actual request/result. Preserve cumulative repository discovery,
+accepted mission checkpoints, user projects and candidate source ancestry.
+Do not execute partial tool arguments or equate advancing tokens with useful
+progress. Neither a repetition detector nor a Project Assistant repair is
+claimed. Native Qwen -> build -> separate PID -> embedded Keep/Choose ->
+successor acceptance remains operator-owned; no new runtime approval or OS
+confinement claim follows from this release. Stop public admission on future
+failed required lanes; preserve complete logs and repair their earliest cause.
+
 October 2 follow-up supersedes the pending October 1 checkpoint below:
 `18d998e529b0d15ad021590b7fe7fa872eaafe2e` is synchronized on main/stable.
 Hosted MSBuild and four CMake lanes pass; the full Clang lane now compiles all
