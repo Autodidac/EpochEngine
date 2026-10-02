@@ -1,11 +1,30 @@
 # Active Pass
 
-Updated October 1, 2026. This is the only current resume point. Historical
+Updated October 2, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
 
 ## Current Acceptance Result
+
+October 2 follow-up supersedes the pending October 1 checkpoint below:
+`18d998e529b0d15ad021590b7fe7fa872eaafe2e` is synchronized on main/stable.
+Hosted MSBuild and four CMake lanes pass; the full Clang lane now compiles all
+1963 steps and passes 61/62 tests. Its only failure selects Ubuntu's Clang 14
+alias for a C++23 script despite Clang 22 being installed. Complete transcript:
+`hosted-final-linux-engine.log`, run 36960095299, job 110691664922. Locally
+reproduced with Clang 14 first on PATH; that driver rejects -std=c++23.
+Production compiler discovery now prefers installed versioned modern drivers
+through existing executable admission; explicit compiler selection, Windows
+selection, scope checks and atomic artifact publication are unchanged. The
+old-default-PATH contract now selects 22 and passes; both full Linux build
+outputs pass 62/62 again. Evidence: `script-old-path-before.log`,
+`script-old-path-after.log`, `script-discovery-libstd12-build.log`, and
+`script-discovery-production-build.log`. Final Windows dual builds pass.
+Refresh pure checks/package, commit this focused follow-up, synchronize the
+authorized stable branch and require hosted success before final exports,
+Linux hosted-artifact audit, receipts and publication. No tag/release/Site
+admission yet. Linux GLIBCXX hold below still applies.
 
 Latest October 1 continuation: hosted `51c515ea` passes MSBuild and four CMake
 matrix lanes; full Linux cleared all 69 dependencies but failed compilation.

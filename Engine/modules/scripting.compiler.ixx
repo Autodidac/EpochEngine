@@ -560,8 +560,26 @@ namespace epochengine::compiler
             return "C:/Program Files (x86)/Windows Kits/10";
         }
 
+        [[nodiscard]] inline std::filesystem::path resolve_executable(
+            const std::filesystem::path& selected) noexcept;
+
         [[nodiscard]] inline std::filesystem::path resolve_clangxx()
         {
+#ifndef _WIN32
+            // Installing the current compiler need not replace an older distro
+            // clang++ alias. Reuse executable admission for versioned drivers;
+            // explicit CompileRequest compiler selection still takes precedence.
+            for (const std::string_view candidate : std::array{
+                    "clang++-22", "clang++-21", "clang++-20",
+                    "clang++-19", "clang++-18", "clang++-17"})
+            {
+                if (auto resolved = resolve_executable(candidate);
+                    !resolved.empty())
+                {
+                    return resolved;
+                }
+            }
+#endif
             const std::vector<std::filesystem::path> clangCandidates{
                 "C:/Program Files/LLVM/bin/clang++.exe",
                 "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/x64/bin/clang++.exe",

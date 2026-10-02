@@ -83,6 +83,15 @@ source with descriptor catalogs, or start operator-owned native runtime tests.
 
 ## Remaining exact gates
 
+October 2: 18d998e5 is on both remote branches. Hosted full Clang compilation
+passes all 1963 steps; 61/62 tests pass. The remaining script compiler contract
+selects an old Clang 14 alias, rejecting -std=c++23 although 22 is installed.
+This is reproduced locally. Production discovery now prefers modern versioned
+drivers through the existing path resolver without overriding explicit request
+selection; the old-first-PATH regression passes with 22. Both full Linux outputs
+again pass 62/62 and Windows dual builds pass. Final package/pure checks and a
+focused follow-up commit/hosted confirmation are next. No release exists yet.
+
 Latest stop: follow-up `51c515ea` passes MSBuild and four CMake lanes, but the
 full Linux compile failed at missing direct standard headers with hosted
 libstdc++12. The clean alternate full-engine build uses extracted 12 headers
