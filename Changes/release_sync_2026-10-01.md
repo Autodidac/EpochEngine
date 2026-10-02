@@ -1,0 +1,111 @@
+# October 1 source, dependency and release continuation
+
+## Bounded scope
+
+Continue the operator's 0.90.33 import, prepare Windows/Linux release packages,
+push the focused repaired source to GitHub, synchronize the explicitly requested
+stable branch by fast-forward, and give the Site chat exact publication evidence.
+Do not recreate old product plans, rewrite history, overwrite optional package
+source with descriptor catalogs, or start operator-owned native runtime tests.
+
+## Implemented repairs
+
+- Validate recovered structured read paths before admission; traversal remains
+  rejected even if other supplied paths are valid. Explicit read records may
+  recover their own path but cannot invent checkout authority.
+- Count actual line-start navigation entries, not the repository map's PATH
+  heading or symbol metadata.
+- Restarting the same stopped objective retains its plan and accepted selection
+  checkpoints; starting a different objective clears the old mission plan.
+- Restore first-party ownership-dot naming guidance in source proposals.
+- Match pure fixtures to the imported cumulative repository-search behavior,
+  active model budgets, bounded reasoning retries and host-first triage. Keep
+  unsafe selector, source canary, stale result and terminal failure checks.
+- Avoid the MSVC neuromorphic imported-inline-body compiler crash by compiling
+  the four unchanged contract functions out of line in their owning modules.
+- Give bottom-dock tests the GUI implementation that owns exported vtables,
+  without colliding with the full engine's GUI target. Give standalone proposal
+  codec tests their explicit logger/time module and implementation dependencies.
+- Pin hosted vcpkg preparation to the tracked manifest baseline rather than an
+  older registry tag. The local Linux lane uses a separate native vcpkg checkout;
+  the operator's Windows vcpkg installation was not rewritten.
+- Resolve Windows package notices from the same normal-or-nested dependency
+  layout selected by MSBuild; reject missing notices before staging. Generated
+  staging targets are checked against their dedicated output root.
+- Build Debug+Release sequentially with inherited caller dependency properties
+  and a fresh solution reference map for each configuration. The outer combined
+  map cannot accidentally supply Debug module interfaces to Release compilation.
+
+## Proven / in progress
+
+- Source names: 610 files pass.
+- MSBuild Debug Editor: passed; pure engine contracts exit 0, October 1 19:24.
+  Evidence: `build/import-20260930/contract-repair-debug.log` and
+  `x64/Debug/logs/Engine.Editor.SelfTest.log`.
+- MSBuild Release Editor: passed; explicitly waited pure contract process exits
+  0 at 19:27. Evidence: `build/import-20260930/contract-repair-release.log`,
+  `release-contract-stdout.log`, `release-contract-stderr.log` in the same folder.
+- Windows CMake headless: 15/15 pass in `build/release-headless-20261001`, including
+  neuromorphic CPU contracts after removing the ineffective caller workarounds.
+- Combined Debug+Release solution: passed after excluding the outer reference
+  map. Evidence: `build/import-20260930/dual-build-fixed.log`. The earlier failure
+  transcript records Release compilation importing Debug IFCs; no STL source or
+  iterator ABI workaround was added.
+- Windows initial package inventory/version/notices check: passed. Final bytes
+  must be restaged after platform version authority is aligned with this release.
+- EpochGui 0.89.32: 11/11 Windows Debug, 11/11 Windows Release, 11/11 Linux Clang
+  Debug CPU tests. Standalone GitHub main:
+  `c52e91293749a7a34959bfc042c582c3ac182504` (additive sync plus portable test fix).
+- EpochEngineExtensions: unchanged at
+  `eccef139f982a9e6b64295cd9c8b976905ef0990`. No other first-party dependency import
+  changes were found; third-party vendored dependencies are not upstream patches.
+- Linux full Release: passed; all 62 CPU/contract tests pass. Toolchain is Clang 22.1.8/CMake 4.4 on Ubuntu
+  22.04.5, vcpkg registry baseline `5f96cd15fd745122cf27e0524606d6c1efc5fd07`.
+  Initial dependency installation completed all 69 packages. The first compile
+  reached the standalone missing logger dependency; its CMake ownership and a
+  subsequent GUI alias configuration error are repaired. Full transcript:
+  `build/import-20260930/linux-release-build-fixed.log`; tests:
+  `build/import-20260930/linux-release-tests.log`.
+- Windows/Linux packaged version pins are now 0.90.33 for this authorized new
+  release pass; macOS remains 0.89.30. Both production rebuilds pass after changing
+  those pins: `final-dual-build.log` and `linux-release-final-build.log` in the
+  evidence folder. Final Windows Debug/Release pure checks exit 0; final Linux
+  CTest is 62/62. A version constant alone is not publication evidence.
+- Final Windows import-table audit resolves all 311 DLL imports against the
+  staged payload or Windows system libraries. Linux staging proves `$ORIGIN/lib`,
+  packaged SFML/Vulkan resolution without build-cache paths and GLIBC <= 2.35.
+  Both staged archives include assets, notices and license/component hashes and
+  exclude runtime logs/cache. Proof: `windows-dependency-resolution.log`,
+  `windows-final-package-proof.log`, `linux-final-package-proof.log`.
+- Linux's xcb-util-m4 vcpkg recipe intentionally supplies an empty copyright file.
+  The collector preserves its exact bytes/hash and explicitly infers no license
+  terms instead of crashing on null PowerShell text output. No notice was dropped.
+
+## Remaining exact gates
+
+1. Local source repair, production rebuilds, pure/CPU contracts and clean package
+   staging are complete. Keep the exact evidence; stop on any later regression.
+2. Bind release receipts to the final committed tree and actual artifact bytes.
+   Do not confuse source version with platform-packaged authority. Renderer
+   smoke is not run locally; record skipped native pixels explicitly.
+   Receipt `source_tree_sha256` is SHA-256 of the unprefixed TAR emitted by
+   `git archive --format=tar <exact source commit>` (tracked export attributes,
+   no working-tree bytes). Source ZIP/TAR exports carry `EpochEngine-0.90.33/`;
+   their own archive hashes are separate from that tree-export digest.
+3. Push focused Engine main, fast-forward the requested stable branch without
+   force, confirm exact remote SHAs, then publish only admitted release assets.
+   Hosted CI must confirm the repaired candidate before publication. Do not
+   rewrite historical tags or substitute new bytes into historical releases.
+   Send exact files, sizes, hashes, source revisions and remaining acceptance
+   gaps to Site chat `01a03f60-0009-7ab2-b0cf-679ccfd9a78d`.
+4. Operator acceptance remains: real Qwen request, sandbox compile, separate
+   candidate PID embedded beside the parent, Keep/Choose, and a successor build
+   continuing from the chosen sandbox without changing the original source.
+   No such native test or live-source promotion occurred in this pass.
+
+The current prepared binaries are not a claim that all AI/editor/renderer
+features are runtime-verified. Existing duplicate logger and selected MSVC
+optimization-override warnings remain visible. Operator workspace deletions and
+`epochengine69.zip` remain untouched and excluded from focused source staging.
+Candidate storage retention/cleanup, native docking and live-source promotion
+are not newly proven by this CPU/release pass; preserve their unfinished goals.

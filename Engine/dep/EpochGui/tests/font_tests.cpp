@@ -1,3 +1,5 @@
+#include <string_view>
+
 import epoch.gui;
 import epoch.gui.font;
 

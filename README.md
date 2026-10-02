@@ -78,17 +78,19 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.90.33`; the signed binary-first Windows/Linux
-  runtime release is `v0.89.30`. The release Site's signed latest-release API is
-  authoritative; published v0.89.29, v0.89.28, v0.89.27, and immutable v0.89.06
-  packages remain historical release evidence.
+- Active development source is `v0.90.33`. Windows/Linux package preparation and
+  its exact validation gaps are recorded in
+  [the release checkpoint](Changes/release_sync_2026-10-01.md). The release Site's
+  signed latest-release API is authoritative for admitted runtime downloads;
+  historical packages and tags remain immutable.
 - The public updater consumes Epoch-owned runtime releases, checksums, and build
-  evidence from the ChatGPT Site instead of GitHub. Anonymous source discovery,
-  source archives, and EpochEngine smart-Git are disabled.
+  evidence from the ChatGPT Site instead of GitHub. Anonymous Site source
+  discovery, source archives, and EpochEngine smart-Git are disabled; the
+  separately published GitHub source follows the operator's explicit sync.
 - EpochGui remains independently public and is kept identical to
-  `Engine/dep/EpochGui`. The historical `multicontext-base-stable` branch remains
-  fixed at `ad6c416d930b348a61bc37ceb7d4522742be084a` inside restricted development
-  history.
+  `Engine/dep/EpochGui`. This bounded release pass explicitly authorizes
+  fast-forwarding `multicontext-base-stable` to main. Its historical base commit
+  `ad6c416d930b348a61bc37ceb7d4522742be084a` remains preserved in Git history.
 - Epoch now has one forward plan:
   [the capability-tier architecture](Engine/docs/engine/capability_tier_architecture.md).
   It selects implementations per subsystem and operation from `T0-CPU` through

@@ -1,7 +1,8 @@
 param(
     [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
     [string]$Version = '',
-    [string]$OutputRoot = ''
+    [string]$OutputRoot = '',
+    [string]$VcpkgInstalledRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +45,13 @@ elseif ($Version -cne $sourceVersion) {
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = "C:\tmp\epoch_release_v$Version"
 }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    throw 'Release version must contain only three numeric components.'
+}
+$OutputRoot = [System.IO.Path]::GetFullPath($OutputRoot).TrimEnd('\')
+if (-not $OutputRoot.StartsWith('C:\tmp\epoch_release_v', [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Release staging must use a dedicated C:\tmp\epoch_release_v... directory.'
+}
 
 $releaseOutput = Join-Path $repo 'x64\Release'
 $assets = Join-Path $repo 'Engine\assets'
@@ -52,6 +60,12 @@ $stage = Join-Path $OutputRoot $stageName
 $zip = Join-Path $OutputRoot "$stageName.zip"
 $checksumFile = Join-Path $OutputRoot "v$Version`_checksums.txt"
 $verifyLogs = Join-Path $OutputRoot "verify_$stageName`_logs"
+foreach ($target in @($stage, $zip, $verifyLogs, (Join-Path $OutputRoot "verify_$stageName"))) {
+    $resolvedTarget = [System.IO.Path]::GetFullPath($target)
+    if (-not $resolvedTarget.StartsWith($OutputRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Release staging target escapes the dedicated output directory: $resolvedTarget"
+    }
+}
 
 Require-Path -Path $repo -Label 'Repo root'
 Require-Path -Path $releaseOutput -Label 'Release output'
@@ -60,9 +74,20 @@ Require-Path -Path $assets -Label 'Runtime assets'
 Require-Path -Path (Join-Path $repo 'README.md') -Label 'README'
 Require-Path -Path (Join-Path $repo 'LICENSE') -Label 'LICENSE'
 $noticeScript = Join-Path $repo 'Tools\ai\collect_third_party_notices.ps1'
-$vcpkgInstalled = Join-Path $repo 'Engine\vcpkg_installed\x64-windows'
+if ([string]::IsNullOrWhiteSpace($VcpkgInstalledRoot)) {
+    $VcpkgInstalledRoot = Join-Path $repo 'Engine\vcpkg_installed\x64-windows'
+    # Match the dependency layout selected by the MSBuild executable targets.
+    $nestedRoot = Join-Path $VcpkgInstalledRoot 'x64-windows'
+    if (-not (Test-Path -LiteralPath (Join-Path $VcpkgInstalledRoot 'include')) -and
+        (Test-Path -LiteralPath (Join-Path $nestedRoot 'include'))) {
+        $VcpkgInstalledRoot = $nestedRoot
+    }
+}
+$vcpkgInstalled = [System.IO.Path]::GetFullPath($VcpkgInstalledRoot)
 Require-Path -Path $noticeScript -Label 'Third-party notice collector'
 Require-Path -Path $vcpkgInstalled -Label 'Windows vcpkg installed tree'
+Require-Path -Path (Join-Path $vcpkgInstalled 'include') -Label 'Windows dependency headers'
+Require-Path -Path (Join-Path $vcpkgInstalled 'share') -Label 'Windows dependency notices'
 
 $crtRoot = 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC'
 Require-Path -Path $crtRoot -Label 'VC redistributable root'
@@ -101,7 +126,7 @@ try {
         -FilePath (Join-Path $stage 'EpochEditor.exe') `
         -ArgumentList '--version' `
         -WorkingDirectory $stage `
-        -NoNewWindow `
+        -WindowStyle Hidden `
         -Wait `
         -PassThru `
         -RedirectStandardOutput $versionOut `
@@ -149,3 +174,4 @@ $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $zip
 
 Get-Item -LiteralPath $zip | Select-Object FullName, Length
 Get-Content -LiteralPath $checksumFile
+Write-Host "package_inventory.result=pass artifact=$stageName.zip sha256=$($hash.Hash.ToLowerInvariant())"

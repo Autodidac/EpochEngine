@@ -294,7 +294,7 @@ export namespace epochengine::render::neuromorphic_camera
         }
     };
 
-    [[nodiscard]] inline ContractChecks run_contract_checks()
+    [[nodiscard]] ContractChecks run_contract_checks()
     {
         struct SinkState final
         {

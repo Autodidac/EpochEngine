@@ -195,7 +195,7 @@ export namespace epochengine::render::neuromorphic_invalidation
         }
     };
 
-    [[nodiscard]] inline ContractChecks run_contract_checks() noexcept
+    [[nodiscard]] ContractChecks run_contract_checks() noexcept
     {
         InvalidationNetwork network{};
         const ChangeSample sparse[]{{.source = 1u, .magnitude = 0.8f, .salience = 1.0f}};

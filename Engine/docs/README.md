@@ -38,7 +38,7 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-Active source development is v0.90.33. The immediate native acceptance gate is the corrected MSVC entry-point split: normal EpochEditor builds receive the engine-owned internal entry point, while generated child/static-runtime builds suppress it with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. Debug x64, Release x64, and the combined Debug+Release x64 solution workflow must all pass on native MSVC.
+Active source development is v0.90.33. Normal EpochEditor builds receive the engine-owned internal entry point, while generated child/static-runtime builds suppress it with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. Native MSVC Debug x64, Release x64, and the sequential Debug+Release x64 solution workflow pass the October 1 build checks. Pure engine contracts pass in both configurations. Package admission and the remaining native candidate comparison acceptance are tracked in `../../Changes/release_sync_2026-10-01.md`; successful compilation is not proof of an embedded candidate PID or Choose/successor operation.
 
 The current editor/rendering integration also includes the production OpenGL event-driven cache, neuromorphic invalidation pressure, A/B selective/full benchmarking, renderer-neutral bounded lighting damage, multi-selection/group editing, focus-owned multicontext input, persistent renderer telemetry, and detached-pane recovery/single-owner AI Chat behavior. These are real integrated systems, but native GPU timing and multicontext visual/runtime behavior still require operator-side acceptance.
 

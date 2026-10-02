@@ -56,6 +56,9 @@ elseif ($Version -cne $sourceVersion) {
 if ([string]::IsNullOrWhiteSpace($OutputRoot)) {
     $OutputRoot = "C:\tmp\epoch_release_v$Version"
 }
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    throw 'Release version must contain only three numeric components.'
+}
 
 $engine = Join-Path $repo 'Engine'
 if ([string]::IsNullOrWhiteSpace($BinaryRoot)) {
@@ -85,7 +88,7 @@ Require-Path -Path $readme -Label 'README'
 Require-Path -Path $noticeScript -Label 'Third-party notice collector'
 Require-Path -Path $vcpkgInstalled -Label 'Linux vcpkg installed tree'
 
-$resolvedOutput = [System.IO.Path]::GetFullPath($OutputRoot)
+$resolvedOutput = [System.IO.Path]::GetFullPath($OutputRoot).TrimEnd('\')
 if (-not $resolvedOutput.StartsWith('C:\tmp\epoch_release_v', [System.StringComparison]::OrdinalIgnoreCase)) {
     throw "Refusing unexpected output root: $resolvedOutput"
 }
@@ -97,6 +100,12 @@ $checksum = Join-Path $resolvedOutput "v$Version`_checksums.txt"
 $windowsZipName = "epoch_win10_x64_v$Version.zip"
 $windowsZip = Join-Path $resolvedOutput $windowsZipName
 $verifyLogs = Join-Path $resolvedOutput "verify_$stageName`_logs"
+foreach ($target in @($stage, $tarball, $verifyLogs)) {
+    $resolvedTarget = [System.IO.Path]::GetFullPath($target)
+    if (-not $resolvedTarget.StartsWith($resolvedOutput + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Release staging target escapes the dedicated output directory: $resolvedTarget"
+    }
+}
 
 Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $tarball -Force -ErrorAction SilentlyContinue
@@ -159,9 +168,11 @@ if [[ -z "$max_glibc" || "$(printf '%s\n' 'GLIBC_2.35' "$max_glibc" | sort -V | 
     printf 'Packaged Linux runtime exceeds the GLIBC_2.35 baseline: %s\n' "$max_glibc" >&2
     exit 1
 fi
+printf 'shared_library_resolution.result=pass glibc=%s runpath=%s\n' "$max_glibc" "$runpath"
 
 EPOCH_LOG_DIR='__LOGS__' ./epoch --version | grep -F 'Epoch v__VERSION__' >/dev/null
 EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null
+printf 'engine_contract.result=pass version=%s\n' '__VERSION__'
 __RUNTIME_SMOKE__
 '@
 $validationScript = $validationScript.Replace('__STAGE__', $stageWsl)
@@ -202,3 +213,4 @@ $lines += "$hash  $stageName.tar.gz"
 [System.IO.File]::WriteAllLines($checksum, $lines, [System.Text.Encoding]::ASCII)
 
 Get-Item -LiteralPath $tarball, $checksum | Select-Object FullName, Length
+Write-Host "package_inventory.result=pass artifact=$stageName.tar.gz sha256=$hash"

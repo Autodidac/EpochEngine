@@ -134,6 +134,7 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/dock_layout_tests.cpp"
     )
     target_link_libraries(EpochGuiDockLayoutTests PRIVATE EpochGui)
+    target_compile_definitions(EpochGuiDockLayoutTests PRIVATE EPOCHGUI_TEST_MODULE_IMPORT=1)
     target_compile_features(EpochGuiDockLayoutTests PRIVATE cxx_std_23)
     set_target_properties(EpochGuiDockLayoutTests PROPERTIES
         CXX_STANDARD 23

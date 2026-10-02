@@ -109,7 +109,16 @@ foreach ($copyright in $copyrightFiles) {
     $notice.Add("Preserved license: licenses/$preservedName")
     $notice.Add("SHA-256: $hash")
     $notice.Add('')
-    $notice.Add((Get-Content -LiteralPath $preservedPath -Raw).TrimEnd())
+    # vcpkg's xcb-util-m4 build-tool recipe intentionally installs a zero-byte
+    # copyright file. Preserve its exact bytes/hash without treating null
+    # PowerShell pipeline output as text or inventing license terms.
+    $preservedText = [System.IO.File]::ReadAllText($preservedPath)
+    if ($preservedText.Length -eq 0) {
+        $notice.Add('[The installed package supplied an empty copyright file; no license terms are inferred.]')
+    }
+    else {
+        $notice.Add($preservedText.TrimEnd())
+    }
     $notice.Add('')
     $notice.Add(('=' * 78))
     $notice.Add('')

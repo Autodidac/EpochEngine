@@ -1,3 +1,11 @@
+October 1, 2026 - 0.90.33 contract and portable build repair (release preparation)
+- Fixed recovered structured-read traversal admission, repository map navigation counts, and same-objective restart checkpoint continuity.
+- Updated cumulative-discovery pure fixtures without removing unsafe selector, source disclosure, stale result or bounded retry checks; Debug/Release pure engine contracts pass.
+- Repaired MSVC neuromorphic imported-inline compiler failures, CMake GUI vtable ownership and standalone codec logger dependencies; Windows headless checks pass 15/15.
+- EpochGui standalone source is synchronized; Windows Debug/Release and Linux Debug CPU tests pass 11/11. Linux Clang Release CPU checks pass 62/62; native MSVC sequential Debug+Release passes with independent configuration maps.
+- Windows/Linux packaging passes inventory, notices and actual dependency resolution; new packaged authority is prepared at 0.90.33, macOS/history unchanged. Exact receipt/CI/publication gates remain in release_sync_2026-10-01.md.
+- Native Qwen/comparison/Choose and renderer acceptance remain operator-owned and are not claimed by these CPU checks.
+
 September 30, 2026 - v0.90.33 source synchronization checkpoint (not a binary release)
 - Integrated the supplied 0.90.33 snapshot, retaining cumulative AI discovery and the four preceding local source/build fixes.
 - Normal Debug and Release x64 Editor builds passed; source naming passed for 610 files.

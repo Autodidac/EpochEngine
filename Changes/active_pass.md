@@ -1,11 +1,47 @@
 # Active Pass
 
-Updated September 30, 2026. This is the only current resume point. Historical
+Updated October 1, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
 
 ## Current Acceptance Result
+
+October 1 release/dependency continuation supersedes the September 30 source-only
+ordering below. The operator explicitly requested Windows and Linux packages on
+GitHub and the Site, standalone EpochGui/dependency synchronization, and the
+stable branch in sync with main. Native GUI/model/candidate testing remains
+operator-owned. Do not infer a new runtime permission from a package request.
+
+The supplied 0.90.33 source checkpoint is GitHub main `5038a5ea`; the focused
+follow-up now repairs structured-read path traversal, source-map navigation
+counts, same-objective restart checkpoint continuity, missing naming guidance,
+and stale pure fixtures for cumulative repository discovery. Windows Editor
+Debug and Release builds and all pure engine contracts pass. Windows CMake
+headless checks pass 15/15, including the MSVC neuromorphic compiler repair.
+EpochGui CPU checks pass 11/11 in Windows Debug/Release and Linux Clang Debug;
+standalone main is `c52e91293749a7a34959bfc042c582c3ac182504`.
+Extensions remains `eccef139f982a9e6b64295cd9c8b976905ef0990`; no imported changes
+justify replacing its optional package source with the vendored catalog subset.
+
+The updater-equivalent Linux full Release build using Clang 22.1.8, CMake 4.4
+and the manifest-pinned Linux vcpkg checkout passes all 62 CPU/contract tests.
+Final version-aligned Windows dual builds/pure checks and Linux 62/62 checks
+pass; both package inventory/dependency lanes pass. Current work: bind receipts
+to the exact committed candidate, push/synchronize branches, confirm hosted CI
+and hand admitted release assets to the Site. The standalone
+proposal-codec target needs its logger owners (now repaired); bottom-dock tests
+must link the existing full-engine GUI target or the standalone headless library
+without creating an alias collision (now repaired). Complete local production
+proof before one focused source push and authorized stable-branch fast-forward.
+Do not rewrite old release tags or the preserved historical base commit.
+
+Package/receipt/publication gates and exact evidence are tracked in
+`Changes/release_sync_2026-10-01.md`. Native renderer smoke must be truthfully
+recorded as not run when skipped; CPU proof does not establish real Qwen -> build
+-> independent PID -> embedded Keep/Choose -> successor acceptance. Stop public
+binary admission on any required failed lane. Do not claim finished AI autonomy
+or OS confinement. Preserve unrelated operator deletions and `epochengine69.zip`.
 
 September 30 source-sync pass supersedes the older push ordering below. The
 operator supplied `EpochEngine-0.90.33-msvc-internal-entry-dual-build.zip` and

@@ -688,7 +688,7 @@ export namespace epochengine::simulation::neuromorphic
         }
     };
 
-    [[nodiscard]] inline ContractChecks run_contract_checks()
+    [[nodiscard]] ContractChecks run_contract_checks()
     {
         struct SinkState final
         {

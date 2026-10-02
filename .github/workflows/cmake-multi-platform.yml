@@ -169,7 +169,11 @@ jobs:
         if: runner.os == 'Linux' && matrix.prepare_vcpkg == true
         shell: bash
         run: |
-          git clone --branch 2026.06.24 --depth 1 https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
+          baseline="$(python -c 'import json; print(json.load(open("Engine/vcpkg.json"))["builtin-baseline"])')"
+          git init "$RUNNER_TEMP/vcpkg"
+          git -C "$RUNNER_TEMP/vcpkg" remote add origin https://github.com/microsoft/vcpkg.git
+          git -C "$RUNNER_TEMP/vcpkg" fetch --depth 1 origin "$baseline"
+          git -C "$RUNNER_TEMP/vcpkg" checkout --detach FETCH_HEAD
           "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg" >> "$GITHUB_ENV"
 

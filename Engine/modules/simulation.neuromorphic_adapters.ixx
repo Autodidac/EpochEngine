@@ -180,7 +180,7 @@ export namespace epochengine::simulation::neuromorphic::adapters
         }
     };
 
-    [[nodiscard]] inline ContractChecks run_contract_checks()
+    [[nodiscard]] ContractChecks run_contract_checks()
     {
         timeline::TimelineEvent event{};
         event.track_id = "Camera";

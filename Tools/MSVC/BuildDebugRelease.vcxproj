@@ -27,7 +27,15 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="EpochBuildBothConfigurations" BeforeTargets="Build">
     <Message Text="Epoch: building Debug | x64, then Release | x64." Importance="high" />
-    <Exec Command="&quot;$(MSBuildToolsPath)\MSBuild.exe&quot; &quot;$(SolutionDir)Engine.sln&quot; /m /t:Build /p:Configuration=Debug /p:Platform=x64" />
-    <Exec Command="&quot;$(MSBuildToolsPath)\MSBuild.exe&quot; &quot;$(SolutionDir)Engine.sln&quot; /m /t:Build /p:Configuration=Release /p:Platform=x64" />
+    <!-- Preserve caller dependency/build properties and scheduling instead of
+         starting unconstrained nested MSBuild processes with new defaults.
+         Recompute each solution's reference map; the outer combined map points
+         at Debug and must never be inherited by the Release compiler. -->
+    <MSBuild Projects="$(SolutionDir)Engine.sln" Targets="Build"
+             BuildInParallel="false" RemoveProperties="CurrentSolutionConfigurationContents"
+             Properties="Configuration=Debug;Platform=x64" />
+    <MSBuild Projects="$(SolutionDir)Engine.sln" Targets="Build"
+             BuildInParallel="false" RemoveProperties="CurrentSolutionConfigurationContents"
+             Properties="Configuration=Release;Platform=x64" />
   </Target>
 </Project>

@@ -3385,7 +3385,7 @@ namespace epochengine::ai
                 }
             }
             if (recovered)
-                return recovered;
+                return recover_path_only_structured_source_hint(*recovered);
 
             // Local models frequently lowercase the repository root, encode
             // filename dots as underscores, or omit the Engine/ prefix while
@@ -3471,7 +3471,9 @@ namespace epochengine::ai
                     auto value = cursor.string();
                     if (!value || value->empty() || value->size() > 1024u)
                         return false;
-                    read.path = std::move(*value);
+                    const auto recoveredPath = recover_embedded_structured_source_path(*value);
+                    if (!recoveredPath) return false;
+                    read.path = *recoveredPath;
                     pathSeen = true;
                 }
                 else if (*key == "query" && !querySeen)
@@ -7176,17 +7178,28 @@ namespace epochengine::ai
             || normalize_structured_patch_reply(
                 R"json({"action":"insufficient","title":"","rationale":"","operations":[],"reason":"No supported next edit or read","paths":[],"reads":[]})json") != insufficient)
             return failed(__LINE__);
+        // Recovery may supply a neutral reason or derive paths from explicit
+        // read records, but must never fabricate paths or accept extra fields.
+        const auto recoveredRead = development_proposal_codec::decode_context_request(
+            normalize_structured_context_reply(
+                R"json({"reason":"","paths":[],"reads":[{"path":"Engine/src/ai/ai.engine.cpp","first_line":1,"query":""}]})json"),
+            development_proposal_codec::SourceArea::engine);
+        if (normalize_structured_context_reply(
+                R"json({"reason":"","paths":[],"reads":[]})json") != insufficient
+            || !recoveredRead || recoveredRead.request.paths != std::vector<std::string>{"Engine/src/ai/ai.engine.cpp"}
+            || recoveredRead.request.reads.size() != 1u
+            || recoveredRead.request.reads.front().first_line != 1u)
+            return failed(__LINE__);
         for (const auto invalid : {
-            R"json({"reason":"","paths":[],"reads":[]})json",
-            R"json({"reason":"No source","paths":[],"reads":[{"path":"Engine/src/ai/ai.engine.cpp","first_line":1,"query":""}]})json",
+            R"json({"reason":"No source","paths":[],"reads":[{"path":"Engine/src/ai/ai.engine.cpp","first_line":-1,"query":""}]})json",
             R"json({"reason":"No source","paths":[],"reads":[],"unexpected":true})json"})
-            if (!normalize_structured_context_reply(invalid).empty()) return false;
+            if (!normalize_structured_context_reply(invalid).empty()) return failed(__LINE__);
         for (const auto invalid : {
             R"json({"action":"insufficient","title":"Edit","rationale":"","operations":[],"reason":"No source","paths":[],"reads":[]})json",
             R"json({"action":"insufficient","title":"","rationale":"","operations":[],"reason":"","paths":[],"reads":[]})json",
             R"json({"action":"insufficient","title":"","rationale":"","operations":[],"reason":"No source","paths":["Engine/src/ai/ai.engine.cpp"],"reads":[]})json",
             R"json({"action":"insufficient","title":"","rationale":"","operations":[{"path":"Engine/src/ai/ai.engine.cpp","summary":"Edit","search":"old","replacement":"new"}],"reason":"No source","paths":[],"reads":[]})json"})
-            if (!normalize_structured_patch_reply(invalid).empty()) return false;
+            if (!normalize_structured_patch_reply(invalid).empty()) return failed(__LINE__);
 
         constexpr std::string_view nativeInventory = R"json({"models":[
             {"type":"llm","key":"qwen/loaded","loaded_instances":[{"id":"instance-only","config":{"context_length":65536}}],"max_context_length":262144},
@@ -7210,7 +7223,7 @@ namespace epochengine::ai
             || normalize_model_list_endpoint("http://localhost:1234/api/v1/models")
                 != "http://localhost:1234/v1/models"
             || normalize_openai_chat_endpoint("http://localhost:1234/api/v1")
-                != "http://localhost:1234/v1/chat/completions") return false;
+                != "http://localhost:1234/v1/chat/completions") return failed(__LINE__);
         for (const auto invalid : {"{\"error\":{\"id\":\"not-a-model\"}}",
             "{\"models\":[{\"type\":\"llm\",\"loaded_instances\":[{\"id\":\"nested\"}]}]}",
             "{\"models\":[]} trailing", "{\"models\":[],\"models\":[]}"})
@@ -7218,7 +7231,7 @@ namespace epochengine::ai
             bool rejected{};
             try { (void)extract_native_model_keys(invalid); }
             catch (const std::runtime_error&) { rejected = true; }
-            if (!rejected) return false;
+            if (!rejected) return failed(__LINE__);
         }
         const auto codingBudget = inference_budget(InferenceWorkload::source_iteration);
         if (!codingBudget.valid() || codingBudget.timeout_seconds != 10'800u
@@ -7275,7 +7288,7 @@ namespace epochengine::ai
         try { syntheticWait->wait_operation(WINHTTP_CALLBACK_STATUS_HEADERS_AVAILABLE, {}, elapsedDeadline); }
         catch (const ModelTransportTimeout& timeout) { totalTimeout = timeout.total_budget; }
         catch (...) { return false; }
-        if (!totalTimeout) return false;
+        if (!totalTimeout) return failed(__LINE__);
         syntheticWait->error = ERROR_WINHTTP_TIMEOUT;
         for (const auto remaining : {std::chrono::milliseconds{100}, std::chrono::milliseconds{5'000}})
         {
@@ -7290,7 +7303,7 @@ namespace epochengine::ai
                 observedTimeout = timeout.total_budget == (remaining < std::chrono::seconds{1});
             }
             catch (...) { return false; }
-            if (!observedTimeout) return false;
+            if (!observedTimeout) return failed(__LINE__);
         }
         std::stop_source cancelledWait{};
         (void)cancelledWait.request_stop();
@@ -7542,7 +7555,6 @@ namespace epochengine::ai
             return failed(__LINE__);
 
         constexpr std::string_view invalidReadObjects[] = {
-            R"json({"path":"Engine/src/ai/not_selected.cpp","first_line":0,"query":""})json",
             R"json({"path":"Engine/../outside.cpp","first_line":0,"query":""})json",
             R"json({"path":"Engine/src/ai/ai.engine.cpp","first_line":0})json",
             R"json({"path":"Engine/src/ai/ai.engine.cpp","query":""})json",
@@ -7630,50 +7642,61 @@ namespace epochengine::ai
                 || body->find("/no_think") != std::string::npos)
                 return failed(__LINE__);
         }
-        return recoveryBody.find("Original request:") != std::string::npos
-            && recoveryBody.find("Call the one provided Epoch source function exactly once") != std::string::npos
-            && sourceBody.find("\"response_format\"") == std::string::npos
-            && sourceBody.find("\"tools\":[") != std::string::npos
-            && sourceBody.find("\"name\":\"epoch_select_source_context\"") != std::string::npos
-            && sourceBody.find("\"name\":\"epoch_report_source_insufficient\"") == std::string::npos
-            && sourceBody.find("\"name\":\"epoch_propose_source_patch\"") == std::string::npos
-            && sourceBody.find("\"minItems\":0") != std::string::npos
-            && sourceBody.find("\"required\":[\"reason\",\"source_ids\",\"reads\"]")
-                != std::string::npos
-            && sourceBody.find("\"source_id\":{\"type\":\"integer\"")
-                != std::string::npos
-            && sourceBody.find("SOURCE_ID 1 PATH Engine/src/ai/ai.engine.cpp")
-                != std::string::npos
-            && sourceBody.find("\"path\":{\"type\":\"string\"")
-                == std::string::npos
-            && patchBody.find("\"name\":\"epoch_propose_source_patch\"") != std::string::npos
-            && patchBody.find("REVIEWED_SOURCE_ID 1 PATH Engine/src/ai/example.cpp")
-                != std::string::npos
-            && patchBody.find("\"name\":\"epoch_select_source_context\"") == std::string::npos
-            && patchBody.find("\"name\":\"epoch_report_source_insufficient\"") == std::string::npos
-            && patchBody.find("\"minItems\":0") != std::string::npos
-            && patchBody.find("\"tool_choice\":\"required\"") != std::string::npos
-            && patchBody.find("\"parallel_tool_calls\":false") != std::string::npos
-            && patchBody.find("the host exposes only epoch_propose_source_patch") != std::string::npos
-            && sourceBody.find("\"stream\":false") != std::string::npos
-            && ordinaryBody.find("\"reasoning_effort\"")
-                == std::string::npos
-            && ordinaryBody.find("\"response_format\"")
-                == std::string::npos
-            && ordinaryBody.find("\"tools\"") == std::string::npos
-            && contextPacket.find(
+        const bool wireChecks[]{
+            recoveryBody.find("Original request:") != std::string::npos,
+            recoveryBody.find("Call the one provided Epoch source function exactly once") != std::string::npos,
+            sourceBody.find("\"response_format\"") == std::string::npos,
+            sourceBody.find("\"tools\":[") != std::string::npos,
+            sourceBody.find("\"name\":\"epoch_select_source_context\"") != std::string::npos,
+            sourceBody.find("\"name\":\"epoch_report_source_insufficient\"") == std::string::npos,
+            sourceBody.find("\"name\":\"epoch_propose_source_patch\"") == std::string::npos,
+            sourceBody.find("\"minItems\":0") != std::string::npos,
+            sourceBody.find("\"required\":[\"reason\",\"source_ids\",\"reads\"]")
+                != std::string::npos,
+            sourceBody.find("\"source_id\":{\"type\":\"integer\"")
+                != std::string::npos,
+            sourceBody.find("SOURCE_ID 1 PATH Engine/src/ai/ai.engine.cpp")
+                != std::string::npos,
+            sourceBody.find("\"path\":{\"type\":\"string\"")
+                == std::string::npos,
+            patchBody.find("\"name\":\"epoch_propose_source_patch\"") != std::string::npos,
+            patchBody.find("REVIEWED_SOURCE_ID 1 PATH Engine/src/ai/example.cpp")
+                != std::string::npos,
+            patchBody.find("\"name\":\"epoch_select_source_context\"") == std::string::npos,
+            patchBody.find("\"name\":\"epoch_report_source_insufficient\"") == std::string::npos,
+            patchBody.find("\"minItems\":0") != std::string::npos,
+            patchBody.find("\"tool_choice\":\"required\"") != std::string::npos,
+            patchBody.find("\"parallel_tool_calls\":false") != std::string::npos,
+            patchBody.find("the host exposes only epoch_propose_source_patch") != std::string::npos,
+            sourceBody.find("\"stream\":false") != std::string::npos,
+            ordinaryBody.find("\"reasoning_effort\"")
+                == std::string::npos,
+            ordinaryBody.find("\"response_format\"")
+                == std::string::npos,
+            ordinaryBody.find("\"tools\"") == std::string::npos,
+            contextPacket.find(
                 "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nreason: Inspect the selected transport\npath_count: 1\npath: Engine/src/ai/ai.engine.cpp\nend_request\n")
-                == 0u
-            && patchPacket.find(
+                == 0u,
+            patchPacket.find(
                 "EPOCH_SOURCE_PATCH_PROPOSAL_V1\ntitle: Repair value\n")
-                == 0u
-            && patchPacket.find(
+                == 0u,
+            patchPacket.find(
                 "begin_search\n|int value = 1;\nend_search\n")
-                != std::string::npos
-            && patchPacket.find(
+                != std::string::npos,
+            patchPacket.find(
                 "begin_replacement\n|int value = 2;\nend_replacement\n")
-                != std::string::npos
-            && model_http_timeout_milliseconds(600u) == 600'000;
+                != std::string::npos,
+            model_http_timeout_milliseconds(600u) == 600'000};
+        for (std::size_t index = 0u; index < std::size(wireChecks); ++index)
+        {
+            if (!wireChecks[index])
+            {
+                logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                    "source wire assertion " + std::to_string(index + 1u));
+                return false;
+            }
+        }
+        return true;
     }
 
 

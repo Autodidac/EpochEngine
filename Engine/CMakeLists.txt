@@ -374,10 +374,19 @@ if(BUILD_TESTING)
         # Pure reusable dock geometry; no GUI host, renderer, or native window.
         add_executable(epoch_gui_bottom_dock_contract
             src/epochgui/gui.bottom_dock_contract.cpp)
-        target_sources(epoch_gui_bottom_dock_contract PRIVATE
-            FILE_SET epoch_gui_bottom_dock_modules TYPE CXX_MODULES
-                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
-                FILES ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx)
+        # The module exports controller vtables as well as geometry. Link its
+        # owning CPU library instead of compiling an implementation-less module.
+        if(EPOCH_CI_HEADLESS_ONLY)
+            set(_epoch_gui_contract_build_testing "${BUILD_TESTING}")
+            set(BUILD_TESTING OFF)
+            add_subdirectory(dep/EpochGui gui-contract-library)
+            set(BUILD_TESTING "${_epoch_gui_contract_build_testing}")
+            target_link_libraries(epoch_gui_bottom_dock_contract PRIVATE EpochGui)
+        else()
+            # Full-engine builds define this owned GUI target below. Do not
+            # introduce the standalone library's epoch_gui alias before it.
+            target_link_libraries(epoch_gui_bottom_dock_contract PRIVATE epoch_gui)
+        endif()
         epoch_apply_cxx_dialect(epoch_gui_bottom_dock_contract)
         epoch_apply_warnings(epoch_gui_bottom_dock_contract)
         epoch_apply_sanitizers(epoch_gui_bottom_dock_contract)
@@ -2678,6 +2687,8 @@ if(BUILD_TESTING)
 
 
     add_executable(epoch_ai_development_proposal_codec_contract
+        src/core.log.cpp
+        src/core.time.cpp
         src/ai/ai.development_proposal_codec.cpp
         src/ai/ai.development_proposal_codec_contract.cpp
     )
@@ -2685,7 +2696,13 @@ if(BUILD_TESTING)
         FILE_SET epoch_ai_development_proposal_codec_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
+                ${EPOCH_MODULE_DIR}/core.log.ixx
+                ${EPOCH_MODULE_DIR}/core.time.ixx
+                ${EPOCH_MODULE_DIR}/core.logger.ixx
                 ${EPOCH_MODULE_DIR}/ai.development_proposal_codec.ixx
+    )
+    target_include_directories(epoch_ai_development_proposal_codec_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
     target_compile_definitions(epoch_ai_development_proposal_codec_contract PRIVATE
         EPOCH_AI_DEVELOPMENT_PROPOSAL_CODEC_CONTRACT_MAIN=1

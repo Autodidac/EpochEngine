@@ -24,3 +24,16 @@ Repeated discovery that adds no verified evidence is deduplicated. Two stagnant 
 ## Authority
 
 Repository-map entries, search hits and compact navigation notes are discovery aids only. They cannot authorize writes. Exact reviewed source bytes, verified checkout identity, SOURCE_ID/REVIEWED_SOURCE_ID admission, sandbox-only mutation and operator/build gates remain authoritative.
+
+The repository index reads the selected source area locally. Its compact map
+contains bounded declaration/import metadata as well as verified PATH entries;
+it is not merely a list of filenames and is not complete patch evidence. Private
+runtime state and credentials must not be placed in indexed source. Navigation
+counts include only actual line-start PATH entries under the selected area.
+
+Restarting a stopped objective preserves its retained plan and accepted sandbox
+checkpoints. An explicitly different objective clears the previous mission plan;
+late results from the old generation still cannot stage a build. Two exhausted
+reasoning corrections stop instead of silently resetting the same retry budget.
+These are CPU contract guarantees, not evidence that a native candidate was
+successfully docked or chosen by an operator.
