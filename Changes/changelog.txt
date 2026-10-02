@@ -1,4 +1,5 @@
 October 1, 2026 - 0.90.33 contract and portable build repair (release preparation)
+- Fixed hosted CPU fixture setup for DOS short-name TEMP without weakening candidate-path admission; Windows short-TEMP checks pass 15/15 and Linux checks pass 62/62. Added the pthread-stubs autoconf-archive prerequisite to full Linux CI; publication waits for the follow-up hosted result.
 - Fixed recovered structured-read traversal admission, repository map navigation counts, and same-objective restart checkpoint continuity.
 - Updated cumulative-discovery pure fixtures without removing unsafe selector, source disclosure, stale result or bounded retry checks; Debug/Release pure engine contracts pass.
 - Repaired MSVC neuromorphic imported-inline compiler failures, CMake GUI vtable ownership and standalone codec logger dependencies; Windows headless checks pass 15/15.

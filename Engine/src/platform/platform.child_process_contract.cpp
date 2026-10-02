@@ -77,7 +77,12 @@ namespace
         [[nodiscard]] bool prepare(std::string_view prefix = "epoch-child-identity-")
         {
             std::error_code error{};
-            const auto temporary = std::filesystem::temp_directory_path(error);
+            auto temporary = std::filesystem::temp_directory_path(error);
+            if (error) return false;
+            // Host TEMP can use a DOS short-name alias on Windows CI. Only
+            // resolve the fixture parent; never canonicalize candidate-owned
+            // paths to bypass the production no-redirect validators.
+            temporary = std::filesystem::canonical(temporary, error);
             if (error) return false;
             const auto token = std::chrono::steady_clock::now().time_since_epoch().count();
             for (unsigned attempt = 0u; attempt < 16u; ++attempt)

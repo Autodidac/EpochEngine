@@ -37,6 +37,17 @@ proof before one focused source push and authorized stable-branch fast-forward.
 Do not rewrite old release tags or the preserved historical base commit.
 
 Package/receipt/publication gates and exact evidence are tracked in
+`Changes/release_sync_2026-10-01.md`. Hosted candidate `278687d1` passed MSBuild
+and the Linux headless lanes, but Windows CPU fixtures used a DOS short-name
+TEMP spelling and Linux full-engine dependency installation lacked
+`autoconf-archive`. The fixture repair resolves only the trusted temporary
+parent; candidate alias/traversal guards are unchanged. Windows 15/15 checks
+pass with short-name TEMP outside the checkout; Linux 62/62 checks pass after
+the fixture repair. The workflow now installs the missing prerequisite.
+Next: push the focused follow-up on both branches, regenerate exact-commit
+source/receipts and confirm all hosted lanes before binary publication.
+
+Detailed package/receipt/publication evidence is tracked in
 `Changes/release_sync_2026-10-01.md`. Native renderer smoke must be truthfully
 recorded as not run when skipped; CPU proof does not establish real Qwen -> build
 -> independent PID -> embedded Keep/Choose -> successor acceptance. Stop public

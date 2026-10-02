@@ -274,7 +274,11 @@ namespace
 
     int run_parent()
     {
-        const auto temporary = fs::temp_directory_path();
+        // TEMP is trusted host fixture setup, not a candidate path. Windows
+        // runners may spell it through a DOS short-name alias. Resolve that
+        // once before constructing owned fixtures; candidate aliases below
+        // must still be refused by the production admission checks.
+        const auto temporary = fs::canonical(fs::temp_directory_path());
         fs::path fixture;
         const auto token = std::chrono::steady_clock::now().time_since_epoch().count();
         for (unsigned attempt = 0u; attempt < 16u && fixture.empty(); ++attempt)

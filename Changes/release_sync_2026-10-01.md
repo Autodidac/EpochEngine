@@ -83,6 +83,19 @@ source with descriptor catalogs, or start operator-owned native runtime tests.
 
 ## Remaining exact gates
 
+Hosted follow-up: candidate `278687d1219159662192722b3d8869934a7e7ede`
+passed MSBuild run `36944581337`; CMake run `36944581988` passed Linux GCC/Clang
+headless checks but failed the two Windows fixture lanes and full Linux
+dependency installation. Windows fixtures now canonicalize only their trusted
+host TEMP parent, preserving candidate alias/reparse/traversal rejection.
+Local Windows checks pass 15/15 with DOS short-name TEMP outside the checkout
+(`windows-headless-short-temp-tests.log`); Linux passes 62/62 after rebuilding
+the affected fixtures (`linux-hosted-fixture-repair.log`). The hosted Linux
+earliest error is pthread-stubs requiring `autoconf-archive`; the workflow now
+installs it. Do not bypass these failures or admit the previous candidate.
+Bind the final receipts/exports to the focused follow-up commit and wait for
+the new hosted result. Native runtime acceptance remains operator-owned.
+
 1. Local source repair, production rebuilds, pure/CPU contracts and clean package
    staging are complete. Keep the exact evidence; stop on any later regression.
 2. Bind release receipts to the final committed tree and actual artifact bytes.
