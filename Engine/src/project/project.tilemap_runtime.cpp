@@ -12,6 +12,7 @@ module;
 #include <span>
 #include <string>
 #include <utility>
+#include <vector>
 
 module project.tilemap_runtime;
 

@@ -13,6 +13,7 @@ module;
 #include <iterator>
 #include <string>
 #include <utility>
+#include <vector>
 
 module editor.ai_development_controller;
 

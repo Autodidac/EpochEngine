@@ -18,7 +18,9 @@ module;
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <source_location>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>

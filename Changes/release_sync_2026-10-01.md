@@ -83,6 +83,25 @@ source with descriptor catalogs, or start operator-owned native runtime tests.
 
 ## Remaining exact gates
 
+Latest stop: follow-up `51c515ea` passes MSBuild and four CMake lanes, but the
+full Linux compile failed at missing direct standard headers with hosted
+libstdc++12. The clean alternate full-engine build uses extracted 12 headers
+without changing the local system; missing vector/optional/span/algorithm/array
+ownership is repaired in its production units. The complete clean build and
+62/62 CPU checks pass in `linux-stdlib12-final-build.log`. Final Windows dual
+build and pure checks pass, plus 15/15 short-TEMP headless checks. Normal Linux
+production full Release build and its 62/62 CPU checks also pass. Windows
+restaging and all 311 import checks pass.
+Do not publish the prepared 51c515ea packages. Rebuild both normal production
+outputs and regenerate exact-commit source, receipts and provenance after final
+proof. Site remains on HOLD; there is still no 0.90.33 GitHub release.
+
+The local Linux libraries require GLIBCXX_3.4.32 and are not admitted for the
+Ubuntu 22.04 baseline. Packaging now gates both GLIBC <= 2.35 and GLIBCXX <=
+3.4.30. Use the new exact-commit hosted Ubuntu 22.04 artifact after all hosted
+checks pass; audit that archive and bind its receipt to actual hosted build/test
+and package evidence. Windows uses its final locally built/staged artifact.
+
 Hosted follow-up: candidate `278687d1219159662192722b3d8869934a7e7ede`
 passed MSBuild run `36944581337`; CMake run `36944581988` passed Linux GCC/Clang
 headless checks but failed the two Windows fixture lanes and full Linux

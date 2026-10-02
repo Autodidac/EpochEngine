@@ -10,6 +10,7 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 module ai.mcp_orchestrator_bridge;
 

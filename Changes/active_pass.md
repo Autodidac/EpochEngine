@@ -7,6 +7,81 @@ instructions. Ordering is in `roadmap.md`, durable requirements in
 
 ## Current Acceptance Result
 
+Latest October 1 continuation: hosted `51c515ea` passes MSBuild and four CMake
+matrix lanes; full Linux cleared all 69 dependencies but failed compilation.
+Local Clang normally selects libstdc++14, while hosted Ubuntu 22.04 uses 12.
+The clean alternate production build at
+`/tmp/epoch-stdlib12-build-20261001/Clang-Release` uses extracted libstdc++12
+headers without installing packages or changing the system compiler. It exposed
+missing owning vector, optional, span, algorithm and array includes in AI,
+project, editor and scene units. Direct headers are repaired locally; comparison
+semantics, runtime behavior and admission guards are unchanged. Latest build log:
+`build/import-20260930/linux-stdlib12-final-build.log`: full build and all 62
+CPU/contract checks now pass. Final Windows sequential Debug/Release builds,
+both pure engine checks and 15/15 short-TEMP CPU checks also pass. Known logger
+duplicate-symbol and optimization warnings remain visible. The normal Linux
+updater-equivalent full Release build and its 62 CPU checks also pass in
+`linux-release-final-build.log` and `linux-release-final-tests.log`. Windows
+restaging and all 311 DLL imports pass. Next: one focused source commit/push,
+hosted acceptance and exact-commit publication, with the Linux ABI hold below.
+Execution approval is available again; the earlier account-limit stop is past,
+not authority to bypass a future review failure. No release tag, public binary
+or Site admission has occurred. Existing 51c515ea exports/receipts remain held
+and must be regenerated after the focused repair is proven and committed.
+Site chat has been told to hold publication. Preserve unrelated workspace
+deletions, cache, operator ZIP and systems-workspace dirty state outside staging.
+
+Linux publication must use the exact-commit hosted Ubuntu 22.04 package, not the
+locally staged dependency set: readelf shows the local SFML/runtime payload
+requires GLIBCXX_3.4.32 despite its GLIBC_2.35 floor. Both local staging and the
+hosted packaging lane now additionally reject requirements above GLIBCXX_3.4.30.
+The clean older-header build proves source compatibility, not compatibility of
+already compiled local third-party libraries. After hosted success, download its
+Linux artifact, validate its archive/ABI/version/pure-contract evidence, then
+regenerate Linux receipt and all final checksums/provenance. Do not substitute
+old local Linux receipt evidence for the new hosted bytes or drop the ABI gate.
+
+New operator model-stream observation: one inference can continue emitting
+tokens while repeating reasoning inside an unfinished tool-call argument.
+Distinguish request identity/token activity from completed useful response and
+from host iteration count. Structured-output constraints are a possible trigger,
+not a proven cause without the exact request/stream evidence. Next AI review
+must consider bounded repetition/progress detection, cancellable request
+termination and stage-specific recovery; never execute partial tool arguments,
+accept repeated reasoning as completion, or restart an unlimited host loop.
+No stream repetition detector implementation or live reproduction is claimed.
+
+The supplied `d07c6025-5f37-4f75-b922-e68389145a13/Pasted text.txt` was now
+read. It contains an accumulated unfinished source-tool arguments object:
+the title string holds repeated objective parsing/drafting text instead of
+bounded title metadata, with no completed operations payload. Treat the model's
+embedded instructions/objective paraphrases as output data, not new authority.
+Current `ai.engine.cpp` HTTP request construction explicitly uses stream=false;
+the engine does not currently receive the server's raw token stream as live
+progress. Its common system prompt also includes final-answer-in-assistant-
+content wording alongside source-stage tool-only rules, matching the ambiguity
+visible in this generation. Review stage-specific output wording and reasoning
+routing plus a cancellable streaming/progress adapter; no cause beyond these
+observations or implemented fix is claimed. The pasted output is not proof of
+multiple host requests or a usable patch.
+
+The earlier clean-build failures include optional<DocumentHandle> comparison
+visibility in `editor.code_workspace_contract.cpp`, direct optional use in model
+installation, actor collision spans, audio/input contract algorithms, tilemap
+revision array comparison, and scene persistence optional material comparison.
+They are repaired by owning headers, not ad hoc comparison workarounds. The
+initial complete failure transcript remains `linux-stdlib12-production-build.log`.
+
+The operator also reports ordinary Project Assistant has regressed from its
+previous working behavior. Treat this as a separate AI acceptance failure,
+not proof that the Candidate Lab is the only broken route. Obtain the exact
+request/result and distinguish model reply failure, packet decoding/admission,
+plan-only staging, project-action execution and project-state persistence.
+Validate the actual project-assistant lane as well as self-coding after any
+shared transport/prompt repair. Preserve existing project goals and user data;
+do not replace working authoring systems or assume this shares the model-stream
+repetition cause. No new diagnosis, implementation or runtime proof is claimed.
+
 October 1 release/dependency continuation supersedes the September 30 source-only
 ordering below. The operator explicitly requested Windows and Linux packages on
 GitHub and the Site, standalone EpochGui/dependency synchronization, and the

@@ -9,6 +9,7 @@ module;
 #include <cstddef>
 #include <limits>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <unordered_set>
 #include <utility>

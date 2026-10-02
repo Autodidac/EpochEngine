@@ -1,4 +1,6 @@
 October 1, 2026 - 0.90.33 contract and portable build repair (release preparation)
+- Repaired direct standard-header ownership hidden by newer local libraries; a clean full Clang Release build using hosted-compatible libstdc++12 headers passes all 62 CPU checks. Final Windows Debug/Release builds, pure contracts and 15 short-TEMP CPU checks pass; publication still waits for hosted acceptance and regenerated artifacts.
+- The normal updater-equivalent Linux full Release build also passes 62/62 checks. Added a GLIBCXX_3.4.30 release gate alongside GLIBC_2.35; local dependencies requiring GLIBCXX_3.4.32 stay unadmitted, and Linux publication uses the exact-commit hosted Ubuntu 22.04 package and its actual checks.
 - Fixed hosted CPU fixture setup for DOS short-name TEMP without weakening candidate-path admission; Windows short-TEMP checks pass 15/15 and Linux checks pass 62/62. Added the pthread-stubs autoconf-archive prerequisite to full Linux CI; publication waits for the follow-up hosted result.
 - Fixed recovered structured-read traversal admission, repository map navigation counts, and same-objective restart checkpoint continuity.
 - Updated cumulative-discovery pure fixtures without removing unsafe selector, source disclosure, stale result or bounded retry checks; Debug/Release pure engine contracts pass.

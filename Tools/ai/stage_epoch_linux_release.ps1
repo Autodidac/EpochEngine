@@ -168,7 +168,12 @@ if [[ -z "$max_glibc" || "$(printf '%s\n' 'GLIBC_2.35' "$max_glibc" | sort -V | 
     printf 'Packaged Linux runtime exceeds the GLIBC_2.35 baseline: %s\n' "$max_glibc" >&2
     exit 1
 fi
-printf 'shared_library_resolution.result=pass glibc=%s runpath=%s\n' "$max_glibc" "$runpath"
+max_glibcxx="$(readelf --version-info ./epoch ./lib/*.so* 2>/dev/null | grep -oE 'GLIBCXX_[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu | tail -n1)"
+if [[ -z "$max_glibcxx" || "$(printf '%s\n' 'GLIBCXX_3.4.30' "$max_glibcxx" | sort -V | tail -n1)" != 'GLIBCXX_3.4.30' ]]; then
+    printf 'Packaged Linux runtime exceeds the Ubuntu 22.04 GLIBCXX_3.4.30 baseline: %s\n' "$max_glibcxx" >&2
+    exit 1
+fi
+printf 'shared_library_resolution.result=pass glibc=%s glibcxx=%s runpath=%s\n' "$max_glibc" "$max_glibcxx" "$runpath"
 
 EPOCH_LOG_DIR='__LOGS__' ./epoch --version | grep -F 'Epoch v__VERSION__' >/dev/null
 EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null

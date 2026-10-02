@@ -4,6 +4,7 @@
  ************************************************/
 module;
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>

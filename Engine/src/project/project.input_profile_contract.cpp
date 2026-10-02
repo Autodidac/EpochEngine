@@ -4,6 +4,7 @@
  ************************************************/
 module;
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cstddef>

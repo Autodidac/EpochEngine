@@ -10,6 +10,7 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <system_error>

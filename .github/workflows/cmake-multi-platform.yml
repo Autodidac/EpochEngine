@@ -329,6 +329,12 @@ jobs:
             exit 1
           fi
           version_output="$(xvfb-run -a ./epoch --version 2>&1)"
+          max_glibcxx="$(readelf --version-info ./epoch ./lib/*.so* 2>/dev/null | grep -oE 'GLIBCXX_[0-9]+\.[0-9]+\.[0-9]+' | sort -Vu | tail -n1)"
+          if [[ -z "$max_glibcxx" || "$(printf '%s\n' 'GLIBCXX_3.4.30' "$max_glibcxx" | sort -V | tail -n1)" != 'GLIBCXX_3.4.30' ]]; then
+            printf 'Packaged Linux runtime exceeds the Ubuntu 22.04 GLIBCXX_3.4.30 baseline: %s\n' "$max_glibcxx" >&2
+            exit 1
+          fi
+          printf 'shared_library_resolution.result=pass glibc=%s glibcxx=%s runpath=%s\n' "$max_glibc" "$max_glibcxx" "$runpath"
           if ! grep -F "Epoch v$version" <<<"$version_output"; then
             printf 'Packaged version check failed. Expected Epoch v%s. Output:\n%s\n' "$version" "$version_output" >&2
             exit 1

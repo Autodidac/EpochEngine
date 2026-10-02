@@ -11,6 +11,7 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <set>
 #include <span>
 #include <sstream>
