@@ -9,6 +9,11 @@ operator intent is `Changes/mission_cache.md`.
 
 The v0.90.22 self-coding baseline uses cumulative, token-budgeted source discovery: a compact repository map and bounded needle searches feed a persistent reviewed-source workspace. Search metadata is navigation-only; exact reviewed bytes remain required for patch authority. Replacement-slice/24-expansion behavior is superseded.
 
+October 3 status: immutable v0.90.33 is published on GitHub and the Site. Later
+stage-prompt/streamed-response source repairs have build/pure-contract proof, not
+native Qwen/embedded-choice/successor acceptance. D1/P0 remains the next behavioral
+gate; packaging success does not complete it or the playable 2D objective.
+
 ## Product Mission
 
 Make Epoch a reusable engine for software and games, with an optional capable
@@ -43,14 +48,15 @@ the frozen base requires a deliberate compatibility-tested decision.
 ## Ordered Delivery And Continuity
 
 The operator's immediate target is **end of September 6, 2026
-(America/New_York)**. This is a priority, not a claim that the batch is complete
+(America/New_York)** (historical requested deadline, not a new rolling deadline).
+This is a priority, not a claim that the batch is complete
 or permission to bypass acceptance. The order below supersedes older dated
 schedules. Mission IDs (P0–P4, EXT, RSH, SDK) are stable references, not competing
 priority numbers.
 
 | Order | Bounded result | Required exit evidence |
 | --- | --- | --- |
-| D0 / P0 | Repair actual Qwen failure handling, prompt/persistence continuity, measured 30-second pacing and task/UI truth | Closest production contracts plus exact current Debug/Release builds; full failure evidence survives into repair |
+| D0 / P0 | Repair actual Qwen failure handling, prompt/persistence continuity, configured resource pacing and task/UI truth | Closest production contracts plus exact current Debug/Release builds; full failure evidence survives into repair |
 | D1 / P0 | Real model builds, embedded PID comparison and sandbox succession | Two accepted builds across Choose, Keep/Stop/close tests, enforced data/process boundary and no orphan/cross-project writes |
 | D2 / P2 + EXT + P1 | Finish current EpochGui/editor and Extensions workflow inventory; prove generated CLI/native-window/GUI software projects | Readable/interactable/history-safe controls; truthful package states; Save/Load/Build/Run/Stop/Reopen/rebuild and dependency-closure matrix |
 | D3 / P1 | Refresh then freeze the accepted reusable software/context base | Versioned compatibility contract and profile/backend tests; preserve original stable ref; no unfinished game-specific coupling |

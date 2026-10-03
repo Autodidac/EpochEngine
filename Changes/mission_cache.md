@@ -131,6 +131,12 @@ These are durable requirements, not completion claims:
   reason only after the relevant retry/expansion budget is exhausted.
 - Show that the model is still working: active phase, animated progress, elapsed
   time, cancellation, retries, and next action must remain visible and readable.
+- Distinguish one inference emitting repetitive unfinished arguments from the
+  host starting multiple iterations. Token/byte activity is not useful progress.
+  Keep per-stage prompt contracts unambiguous, retire malformed/runaway responses
+  with bounded recovery, never execute partial arguments, and preserve the same
+  accepted mission/source ancestry. Project Assistant diagnosis/acceptance is
+  separate from source-tool acceptance; neither should replace the other's plan.
 - September 6 usability correction: expose one session-wide self-coding Stop,
   not multiple synonymous controls. Show total self-coding time across setup,
   retries, builds and candidate choices separately from current-request time.

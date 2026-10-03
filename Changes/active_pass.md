@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 2, 2026. This is the only current resume point. Historical
+Updated October 3, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
@@ -22,24 +22,55 @@ provenance, workflow links and dependency revisions are recorded in
 `release_sync_2026-10-01.md`. The tag/source archives/packages stay at f33;
 a later documentation-only checkpoint does not rewrite published bytes.
 
-Site chat 01a03f60-0009-7ab2-b0cf-679ccfd9a78d received the final READY handoff
-after GitHub publication. Site admission/encryption/upload/deployment is still
-pending confirmation; do not claim a live Site update from dispatch alone.
+Site chat 01a03f60-0009-7ab2-b0cf-679ccfd9a78d confirmed publication of Site v108,
+source b7087c209cf8a16500de1a3b234e1716ae28bdc7, successful deployment
+appgdep_6abf3cb942b08191a0972914974e8d52. Windows/Linux public runtime and
+paired private encrypted source bind to the same exact f33 release bytes.
+All nine public objects passed independent HTTP/hash/header readback; the two
+encrypted source archives decrypted exactly to the admitted Git exports.
+Historical private rows remain inactive, old public objects retained. Site's
+86/86 contracts and production build pass; existing unrelated tooling audit/
+TypeScript issues are not claimed green. Full receipt is in release_sync.
 Old local Linux packages and earlier receipts remain excluded. Historical tags,
 macOS packaged authority and the preserved ad6c416d base are unchanged.
 
-Next bounded production gate remains AI behavior, not more release churn:
-resolve stage-specific final-content/tool-only prompt ambiguity, inspect safe
-reasoning routing and bounded cancellable progress/repetition recovery for the
-reported unfinished raw tool arguments; diagnose Project Assistant separately
-against its actual request/result. Preserve cumulative repository discovery,
-accepted mission checkpoints, user projects and candidate source ancestry.
-Do not execute partial tool arguments or equate advancing tokens with useful
-progress. Neither a repetition detector nor a Project Assistant repair is
-claimed. Native Qwen -> build -> separate PID -> embedded Keep/Choose ->
-successor acceptance remains operator-owned; no new runtime approval or OS
-confinement claim follows from this release. Stop public admission on future
-failed required lanes; preserve complete logs and repair their earliest cause.
+October 3 bounded AI source repair (not included in immutable v0.90.33):
+the shared final-assistant-content instruction no longer competes with the
+phase-specific source function contract. Ordinary/authoring replies retain
+their requested content/semantic-packet format; source planning, direct canonical
+packets and HTTP function calls retain separate stage instructions.
+HTTP generation requests streamed replies. A worker-owned bounded SSE adapter
+assembles one choice/one function, separates reasoning from visible content,
+requires terminal finish plus DONE, and then invokes the unchanged full-message
+SOURCE_ID/schema/codec checks. Partial arguments never enter staging. A server
+ignoring streaming can return one complete JSON response through the same request;
+its unfinished generation cannot receive early SSE checks. Conservative encoded
+metadata length checks and four-cycle reasoning-tail detection retire runaway
+streams before admission; source search/replacement repetition is not inspected.
+Existing worker cancellation/native retirement and at-most-one transport retry
+remain in force. Progress receiving is emitted on actual bytes, not proof of
+useful completion. Three-hour coding/three-minute chat budgets are unchanged.
+Debug/Release production builds and pure contracts pass; full Linux Clang Release
+and the separate hosted-compatible libstdc++12 full build each pass 62 CPU checks.
+Logs: build/import-20260930/ai-stream-*; final pure Windows checks exit 0.
+These are protocol/canary proofs, not live-model or docking qualification.
+
+Next action: operator native Qwen -> build -> separate PID -> embedded Keep/Choose
+-> successor run, preserving exact request identity, failure log and private
+source/data ancestry. Diagnose Project Assistant separately from its actual
+request/result; no regression cause or native repair is claimed without that
+transcript. Preserve cumulative repository discovery, accepted mission checkpoints
+and user projects. Do not equate advancing tokens with useful progress, overwrite
+released bytes, or start native runtime testing without exact approval. Stop
+runtime probes on a hang/crash and continue source/build checks. Stop public
+admission on failed required lanes. No OS confinement claim follows from routing.
+
+## Superseded dated evidence (archive, not next actions)
+
+The sections below retain earlier evidence and unresolved product requirements.
+Their dated build/publish/repair commands are historical, not competing plans.
+Resume only from Current Acceptance Result above; roadmap still orders unfinished
+product goals, and native behavior is not inferred from completed build work.
 
 October 2 follow-up supersedes the pending October 1 checkpoint below:
 `18d998e529b0d15ad021590b7fe7fa872eaafe2e` is synchronized on main/stable.

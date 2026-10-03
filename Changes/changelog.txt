@@ -1,3 +1,10 @@
+October 3, 2026 - bounded AI streamed-response source checkpoint (not a new release)
+- Removed the shared final-content instruction from source function stages; planning, direct packets, HTTP functions and Project Assistant semantic packets keep separate requested formats.
+- Assemble bounded SSE deltas on the request worker; require one choice/function and terminal finish/DONE before unchanged source-ID/schema/codec admission. Complete JSON fallback stays in the same HTTP request.
+- Reject truncated, multiple, mutated or late actions; retire repeated separate reasoning and oversized unfinished metadata with the existing bounded retry/retirement policy. Never inspect legitimate repeated source edit bytes for repetition or promote partial arguments.
+- Debug/Release builds and pure engine contracts pass; normal and hosted-compatible libstdc++12 full Linux builds each pass 62/62 CPU checks. No live-model, native GPU, docked choice/successor or Project Assistant regression repair is claimed.
+- Site v108 publication confirmed at b7087c209cf8a16500de1a3b234e1716ae28bdc7: nine public objects independently read back, exact encrypted source pair decrypted/activated, release signature and private-route denials verified. Existing Site dev-tool/TypeScript issues remain separate.
+
 October 2, 2026 - v0.90.33 GitHub release published
 - Published Windows/Linux runtimes, exact-commit ZIP/TAR source exports, receipts, checksums and provenance from f33d3d6758abf402747870df4f8887e7887a2035; all 14 remote asset digests/sizes match admitted bytes. Historical releases and macOS authority are unchanged.
 - Hosted CMake run 36963049417 passes all five lanes; full Clang compiles 1963 steps, passes 62/62 CPU checks and bounded Xvfb software OpenGL package smoke. MSBuild run 36963049433 passes.

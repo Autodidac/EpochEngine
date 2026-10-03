@@ -44,12 +44,32 @@ unchanged at eccef139f982a9e6b64295cd9c8b976905ef0990; richer package source was
 not overwritten by descriptor catalogs. Historical release refs/bytes and
 macOS 0.89.30 remain unchanged.
 
-Site chat received the READY handoff with these exact files, hashes and proofs.
-Site independently owns admission/private encrypted source/upload/deployment;
-its live publication is pending confirmation. Native GPU/Qwen/candidate PID/
-docked choice/successor acceptance remains operator-owned and unverified.
-Repetitive unfinished model tool arguments and Project Assistant regression
-are unresolved AI gates, not features proved fixed by build/CPU/software smoke.
+Site chat confirmed successful v108 publication: source
+`b7087c209cf8a16500de1a3b234e1716ae28bdc7`, deployment
+`appgdep_6abf3cb942b08191a0972914974e8d52`. The live project and downloads are
+https://epoch.adamrushford.chatgpt.site/projects/epoch-engine and
+https://epoch.adamrushford.chatgpt.site/downloads . Nine public objects passed
+independent HTTP 200/no-redirect readback, exact hash/size, MIME, attachment,
+immutable caching and nosniff checks before activation. Runtime/receipt sidecars
+match their exact names and bodies. The Site's runtime-only checksum manifest is
+418 bytes, SHA-256 `44826564b00be032fbded699d3025597f65488316211a6c4a0386d2246829672`;
+the native combined source/runtime manifest was not substituted or rewritten.
+Both private source archives were re-downloaded as ciphertext and decrypted
+offline to these exact source hashes; 1066 files match the committed Git export.
+Atomic paired Windows/Linux activation and source-version 0.90.33 were verified.
+Pinned Ed25519 integrity signature verifies; anonymous/forged private/admin
+access remains denied and consumed one-shot upload grants are closed. Old release
+objects and inactive private rows are retained, macOS/key/device policy unchanged.
+Site checks pass 86/86 and production build; pre-existing dev-tool audit and four
+TypeScript issues remain separate, not falsely claimed repaired. Site made no
+Engine GitHub writes.
+
+October 3 AI source follow-up is a later checkpoint, not replacement release
+bytes: stage-specific prompts and bounded streamed-response assembly now have
+production build/pure-canary proof. Native GPU/Qwen/candidate PID/docked choice/
+successor acceptance remains operator-owned and unverified. Project Assistant
+regression still needs its exact request/result. The release cannot claim either
+native AI behavior from CPU checks or the hosted software-renderer smoke.
 
 ## Bounded scope
 

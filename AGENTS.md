@@ -89,15 +89,17 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- Local source is in incomplete, unpublished **v0.90.1 preparation** after
-  v0.89.35 development. The active pass records remaining version/build gaps;
-  a constant or checkpoint is not a tested release. Last recorded public
-  Windows/Linux runtime/authenticated-source authority is `v0.89.34`; macOS
+- Public Windows/Linux runtime/source authority is immutable `v0.90.33` at
+  `f33d3d6758abf402747870df4f8887e7887a2035`, published on GitHub and the Site.
+  Later AI source checkpoints are not replacement release bytes or proof of
+  native Qwen/docked succession. The active pass owns the remaining gate. macOS
   packaged authority remains `v0.89.30`. Preserve
   `v0.89.34`, `v0.89.33`, `v0.89.30`, `v0.89.29`, `v0.89.28`, `v0.89.27`, and `v0.89.06` as
   immutable release history and preserve
-  `multicontext-base-stable` at
-  `ad6c416d930b348a61bc37ceb7d4522742be084a`. Do not mutate verified release
+  the original `multicontext-base-stable` checkpoint
+  `ad6c416d930b348a61bc37ceb7d4522742be084a` in history. Its branch was refreshed
+  by explicit operator authorization; that does not erase the original base or
+  authorize a future rewrite. Do not mutate verified release
   bytes, tags, manifests, checksums, or historical refs outside an explicitly
   authorized bounded release pass.
 

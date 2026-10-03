@@ -1,8 +1,9 @@
 # OS AI, MCP, Harness, And Evidence Policy
 
-Epoch local source candidate `v0.89.35` does not train or silently activate a
-model. Public Windows/Linux source and packaged-runtime authority is
-`v0.89.34`, while macOS remains `v0.89.30`. The candidate can
+Epoch does not train or silently activate a model. Public Windows/Linux source
+and packaged-runtime authority is immutable `v0.90.33` at `f33d3d6758ab` on
+GitHub and the Site; later AI source checkpoints are not those release bytes.
+macOS remains `v0.89.30`. The source can
 invoke the verified Epoch-local Qwen3.8 installation or offload inference to an
 operator-managed external model machine, and it keeps model transport, MCP
 authority, execution, and evidence as separate concerns. The published
@@ -833,10 +834,11 @@ them into the same `EPOCH_SOURCE_CONTEXT_REQUEST_V1` and
 `EPOCH_SOURCE_PATCH_PROPOSAL_V1` packets consumed by the trusted host. The model
 therefore does not have to reproduce fragile line-protocol punctuation, while
 the schema adapter grants no path, permission, apply, or execution authority.
-The source-edit schema accepts mutually exclusive `patch` and `context` actions.
-Patch requires nonempty title/rationale/operations and empty reason/paths. Context
-requires a reason and one to twelve paths, with no operations or edit metadata;
-it passes through the existing context codec/catalog gate before reading files.
+Each HTTP source stage exposes exactly one function: context selection takes
+host-issued SOURCE_ID values/read records, and patch proposals take reviewed IDs
+with bounded title/rationale/operations. Empty phase arrays report insufficient
+evidence; there is no competing action function or mixed read/edit mode. IDs map
+through the existing verified catalog and codec before any source is admitted.
 Legacy exact patch JSON remains readable. Unknown or duplicated fields and mixed
 read/edit responses are rejected. Proposal metadata does not have to repeat words
 from the operator's objective: lexical overlap does not prove relevance or safety.
@@ -848,8 +850,9 @@ Ordinary chat and authoring allow 180 seconds; model inventory discovery allows
 180 seconds for a response. These limits apply to individual requests, not the
 total multi-iteration mission. Window focus does not cancel the
 independent HTTP worker. One early transport-operation, API, hidden-reasoning,
-malformed-schema, or empty-content failure may retry with an explicit final-answer
-request. If a source-selection or source-proposal request remains reasoning-only
+malformed-schema, or empty-content failure may retry with an explicit stage-format
+request. Source function stages never simultaneously ask for a final answer in
+assistant content. If a source-selection or source-proposal request remains reasoning-only
 after that transport-level recovery, Candidate Lab keeps the same campaign/pass
 and may issue at most two host-diagnosed structured-response corrections against
 the same authority and reviewed evidence. Exhausting that bounded recovery stops
@@ -885,6 +888,27 @@ unchanged; these limits need real-model qualification and do not guarantee speed
 Transport diagnostics record stage, attempt, elapsed milliseconds, prompt and
 response sizes and output-token limit. They do not copy prompt, reply or reasoning
 contents, including undecodable-response snippets.
+
+HTTP generation uses OpenAI-compatible streamed chat deltas (SSE), not Bionic
+agent events. Worker-local assembly is bounded to an 8 MiB wire envelope and
+1 MiB per assembled text/action field. It accepts one choice/function, keeps
+reasoning separate, and requires terminal stop/tool_calls plus DONE before the
+existing full-message phase validation. Truncated/length-finished, multiple,
+mutated and late actions never stage source. A server ignoring stream=true may
+return complete JSON via the same request; early delta checks cannot run while
+that server withholds its nonstream response. No additional endpoint is opened.
+Separate reasoning checks for four identical adjacent blocks of at least
+96 bytes within a 4096-byte tail, sampled at most once per 96 newly received
+reasoning bytes rather than rescanning per token. Compact source-action metadata has conservative
+encoded-length guards (12 times schema length to allow escaped Unicode); final
+decoded schema bounds remain authoritative. Source search/replacement and normal
+assistant text are not repetition-scanned. Detection is a heuristic, not proof
+that every model loop is detected or a model is usable. Exceptions stay inside
+the CURL callback ABI and retire through the owning worker; WinHTTP retains its
+callback-lifetime/settled-close gate. Cancellation, stale-generation publication,
+unconfirmed retirement and retry limits are unchanged. Receiving status reflects
+actual bytes, not a completed or useful answer. Pure framing/canary tests prove
+these contracts; native model/Keep-Choose/successor qualification remains separate.
 
 While a request is pending, AI Controls displays local-model activity, the selected
 model and separately labeled current-request elapsed time; this is request
