@@ -52,7 +52,8 @@ GitHub main/stable matched before immutable exports; Site v109 atomically admitt
 both private encrypted archives and deployed successfully. Independent source-version
 HTTP readback is 0.90.34. Runtime 0.90.33 bytes/signature/privacy remain unchanged.
 Final full local Clang Release rebuild and 62/62 CPU tests pass; final hosted MSBuild
-and four CMake lanes pass, full hosted Clang is still pending at this receipt.
+and all five CMake lanes pass, including full hosted Clang's 62/62 tests. Its package
+authority check passed and binary stage/upload steps were skipped as requested.
 Exact provenance, hashes, Site identity and limits: `source_sync_2026-10-03.md`.
 Following documentation-only commits do not replace the admitted source archives.
 

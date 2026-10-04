@@ -41,11 +41,13 @@ Local original exports and nonsecret manifest: `build/source-0.90.34/` (ignored)
 - Final checkpoint hosted MSBuild run
   https://github.com/Autodidac/EpochEngine/actions/runs/37163826417 passes.
   CMake run https://github.com/Autodidac/EpochEngine/actions/runs/37163826428
-  has four passing lanes (Windows MSVC/cpp26, headless Linux Clang and GCC);
-  full Linux Clang remains in progress at receipt time, not claimed green.
+  passes all five lanes (Windows MSVC/cpp26, headless Linux Clang and GCC,
+  full Linux Clang). Full Clang passed 62/62 CPU tests. Complete transcript:
+  `build/import-20260930/source-09034-hosted-linux.log`.
 - CI retains build/tests but stages/uploads Linux runtime packages only when
   canonical source equals tracked Linux packaged authority. Source-only 0.90.34
-  therefore does not request a new binary smoke/package/release.
+  therefore does not request a new binary smoke/package/release. Hosted authority
+  check passed and both binary staging/upload steps were verified skipped.
 - No native Qwen -> build -> separate PID -> embedded Keep/Choose -> successor
   qualification occurred in this pass. Project Assistant regression also needs
   exact request/result evidence; the transport repair is not a claim that every
