@@ -34,7 +34,21 @@ TypeScript issues are not claimed green. Full receipt is in release_sync.
 Old local Linux packages and earlier receipts remain excluded. Historical tags,
 macOS packaged authority and the preserved ad6c416d base are unchanged.
 
-October 3 bounded AI source repair (not included in immutable v0.90.33):
+Operator's October 3 follow-up: label the AI repair source v0.90.34 and synchronize
+source only to GitHub and the Site. Do not create a binary release or alter
+v0.90.33 runtime/tag/receipts. Canonical source/resource metadata advances; tracked
+Windows/Linux packaged authority remains 0.90.33. Standalone Gui/Extensions heads
+are unchanged by this engine-owned AI repair; do not invent dependency releases.
+Site owns exact-commit private source admission independently of runtime activation.
+Check exact repository/channel identities separately; an empty GitHub release
+listing must not be generalized to source versions or the Site catalog.
+The source-only 0.90.34 Debug Editor rebuild and pure engine contract passed
+October 3 (source-09034-* logs under build/import-20260930). CI retains full
+build/tests but stages Linux runtime packages only when source and Linux packaged
+version authorities match. GitHub/Site source handoff is the immediate next gate;
+native acceptance remains operator-owned and is not implied by source admission.
+
+October 3 bounded v0.90.34 AI source repair (not included in immutable v0.90.33):
 the shared final-assistant-content instruction no longer competes with the
 phase-specific source function contract. Ordinary/authoring replies retain
 their requested content/semantic-packet format; source planning, direct canonical

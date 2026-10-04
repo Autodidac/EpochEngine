@@ -1,8 +1,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.33-1F7A4C?style=for-the-badge" alt="Current development source v0.90.33" />
-  <img src="https://img.shields.io/badge/Published_Runtime_Release-v0.89.30-2C6A8A?style=for-the-badge" alt="Published runtime release v0.89.30" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.34-1F7A4C?style=for-the-badge" alt="Current development source v0.90.34" />
+  <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.90.33-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.90.33" />
 </p>
 
 EpochEngine development source is restricted. Public distribution is through
@@ -78,11 +78,18 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.90.33`. Windows/Linux package preparation and
-  its exact validation gaps are recorded in
+- Active development source is `v0.90.34`, including the bounded AI streamed-reply
+  and stage-prompt repair. This is a source-only update, not native self-coding
+  acceptance or a new binary release. Published Windows/Linux runtimes remain
+  immutable `v0.90.33`; their verified provenance is recorded in
   [the release checkpoint](Changes/release_sync_2026-10-01.md). The release Site's
   signed latest-release API is authoritative for admitted runtime downloads;
   historical packages and tags remain immutable.
+- Source function stages no longer compete with a final-assistant-content
+  instruction. Streamed replies require complete terminal framing before source
+  admission; partial arguments and runaway metadata/reasoning are rejected through
+  bounded recovery. Real Qwen/docked successor and Project Assistant acceptance
+  remain separate operator-owned gates.
 - The public updater consumes Epoch-owned runtime releases, checksums, and build
   evidence from the ChatGPT Site instead of GitHub. Anonymous Site source
   discovery, source archives, and EpochEngine smart-Git are disabled; the

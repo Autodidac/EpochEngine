@@ -261,8 +261,24 @@ jobs:
         shell: bash
         run: ${{ matrix.test_command }}
 
-      - name: Stage Linux release package
+      - name: Check Linux packaged-version authority
         if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine'
+        id: linux-package-authority
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $versionModule = Join-Path $env:GITHUB_WORKSPACE 'Engine/modules/epoch.version.ixx'
+          $versionReader = Join-Path $env:GITHUB_WORKSPACE 'Tools/ai/get_epoch_version.ps1'
+          $sourceVersion = & $versionReader -VersionModule $versionModule
+          $packagedVersion = & $versionReader -VersionModule $versionModule -Platform linux-x64
+          $eligible = $sourceVersion -ceq $packagedVersion
+          "eligible=$($eligible.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if (-not $eligible) {
+            Write-Host "Source-only checkpoint $sourceVersion; Linux packaged authority remains $packagedVersion. Build/tests retained; binary staging skipped."
+          }
+
+      - name: Stage Linux release package
+        if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine' && steps.linux-package-authority.outputs.eligible == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -354,7 +370,7 @@ jobs:
           sha256sum "$stage_name.tar.gz" > "v$version"_checksums.txt
 
       - name: Upload Linux release package
-        if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine'
+        if: runner.os == 'Linux' && matrix.name == 'linux-clang-engine' && steps.linux-package-authority.outputs.eligible == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: epoch-linux-release

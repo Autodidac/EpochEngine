@@ -7,6 +7,12 @@ product requirements remain in owning contracts. Current ordering belongs only
 in `Changes/roadmap.md`; the one active gate is `Changes/active_pass.md`.
 A documentation cleanup must never silently delete or downgrade a goal.
 
+Repository/publication checks must identify the exact project and channel:
+source version, branch head, Git tags/releases and Site catalog are separate
+facts. An empty listing on one channel does not establish that the project has
+no current version, source update or release elsewhere. Resolve conflicting
+operator evidence before making a broader absence claim.
+
 ## Overall Intent And Pass Continuity
 
 - September 6 latest same-day scope: self-coding, readable interface and native
