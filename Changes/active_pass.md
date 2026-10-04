@@ -47,6 +47,14 @@ October 3 (source-09034-* logs under build/import-20260930). CI retains full
 build/tests but stages Linux runtime packages only when source and Linux packaged
 version authorities match. GitHub/Site source handoff is the immediate next gate;
 native acceptance remains operator-owned and is not implied by source admission.
+Source-only synchronization is complete at 23d62a5d08ccc1944ad8d2a8ac966a63054619fa:
+GitHub main/stable matched before immutable exports; Site v109 atomically admitted
+both private encrypted archives and deployed successfully. Independent source-version
+HTTP readback is 0.90.34. Runtime 0.90.33 bytes/signature/privacy remain unchanged.
+Final full local Clang Release rebuild and 62/62 CPU tests pass; final hosted MSBuild
+and four CMake lanes pass, full hosted Clang is still pending at this receipt.
+Exact provenance, hashes, Site identity and limits: `source_sync_2026-10-03.md`.
+Following documentation-only commits do not replace the admitted source archives.
 
 October 3 bounded v0.90.34 AI source repair (not included in immutable v0.90.33):
 the shared final-assistant-content instruction no longer competes with the
