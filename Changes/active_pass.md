@@ -26,7 +26,16 @@ ignored install tree had been removed; the first build failed on missing
 GLM/Vulkan headers, before edited AI code. The supported install-root override
 restored the build lane without installing/copying dependencies or editing
 compiler/module ownership. Logs: `build/endpoint-20261006/` (local, not shipped).
-Hosted Linux/Windows checks for this new commit are not yet established.
+Local build proof alone does not establish hosted or native acceptance.
+Source admission is now complete at engine checkpoint `94f8e47a`: GitHub main
+was pushed and Site v111 independently verified/encrypted/read back both exact
+exports before atomic private paired activation. Runtime bytes remain unchanged.
+Hosted MSBuild and four CMake lanes pass; full Linux engine validation was still
+running at receipt time. Details and the separate Site dependency advisories:
+`source_sync_2026-10-06.md`. The next acceptance gap is real endpoint inference
+and the existing native sandbox/PID/Keep-Choose/successor workflow, not another
+UI/window-stack rebuild. Runtime tests remain operator-owned unless explicitly
+authorized for the exact run.
 The operator's longer-term clean UI integration requirement is preserved in
 mission cache and the OS AI contract, not falsely marked implemented by endpoint
 connectivity. The immutable runtime authority below remains unchanged.
