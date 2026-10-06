@@ -15,6 +15,16 @@ operator evidence before making a broader absence claim.
 
 ## Overall Intent And Pass Continuity
 
+- October 6 EngCoder 0.6.5 integration: retain Epoch's styling/window ownership
+  and EngCoder's interface/style capabilities without duplicating window stacks
+  or scattering controls across new windows. External model API use is acceptable
+  first. Future full-agent integration must map task/events, approvals, workspace
+  ownership and model lifecycle into existing Epoch Chat/AI Controls; preserve
+  both applications' useful options, not blindly import their sources. EngCoder
+  training/learning controls are explicit external capabilities, never hidden
+  Epoch self-training. Endpoint connectivity alone does not prove native coding,
+  sandbox build, docked comparison or successor continuity.
+
 - September 6 latest same-day scope: self-coding, readable interface and native
   Keep/Choose selection must actually work; current EpochGui and Extensions
   major objectives take precedence over broad new engine features. Every

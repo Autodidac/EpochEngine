@@ -226,6 +226,7 @@ export namespace epochengine::ai
             int gpu_layers = -1;
             std::uint32_t timeout_seconds = 180;
             std::size_t best_of = 1;
+            bool stream_replies = true;
         };
 
         explicit EngineAiModel(Config cfg);
@@ -276,6 +277,20 @@ export namespace epochengine::ai
     [[nodiscard]] DirectRuntimeStatus discover_direct_runtime();
     [[nodiscard]] bool select_direct_runtime(std::string_view executable, std::string_view model);
     void select_openai_compatible_runtime();
+    struct LocalApiEndpoint
+    {
+        std::string base_url{};
+        std::string chat_completions_url{};
+        std::string responses_url{};
+        std::string agent_tasks_url{};
+        bool stream_replies = true;
+    };
+    // Local endpoint selection/persistence does not query, load or start a model.
+    // Responses/agent URLs are reference routes, not Chat Completions transports.
+    [[nodiscard]] std::vector<std::string> saved_local_api_endpoints();
+    [[nodiscard]] LocalApiEndpoint active_local_api_endpoint();
+    [[nodiscard]] bool select_local_api_endpoint(std::string_view endpoint);
+    [[nodiscard]] bool set_local_api_streaming(bool enabled);
     [[nodiscard]] std::string active_model_name();
     enum class LocalModelSelectionOrigin : unsigned char
     {

@@ -860,12 +860,42 @@ the pass; it does not silently approve reasoning text as source output. Expiry o
 the whole wall budget does not automatically restart the same expensive
 generation. Cancellation and failed native retirement are never retried.
 Timeout diagnostics preserve elapsed time, configured limit and attempt number.
-The default local LM Studio endpoint (HTTP loopback on port 1234) accepts a
-session-only credential through Model Settings > Paste API Key. Clear API Key
-disables that credential for the session. Until either action, the optional
-Editor-process `LM_API_TOKEN` environment variable supplies the credential for
-both inventory and generation. It is not persisted or logged and is
-not sent to other ports or remote endpoints. Redirects are disabled. Discovery
+Model Settings owns saved local API endpoints in the existing model picker:
+choose a preset or paste/type a loopback HTTP(S) base/Chat/Responses/task URL and
+use Save and Use Endpoint. Accepted hosts are `localhost`, `127.0.0.1` and
+`[::1]`; credentials, queries, fragments, arbitrary paths and remote hosts are
+rejected. At most 16 canonical base URLs and their reply modes are kept in the
+instance-private `cache/models/local_api_endpoints.conf`; no keys are persisted.
+Explicit environment configuration outranks the saved selection on restart.
+Switching endpoints clears pasted credentials, inventory and session model
+confirmation. Model choice remains endpoint-specific. Selection is locked while
+an Editor model request is queued, working or stopping, and while inventory is
+pending. Saving a URL does not send a prompt or start a server/model.
+
+The EngCoder preset is `http://127.0.0.1:14321/v1`; inventory uses `/v1/models`
+and requests use `/v1/chat/completions`. Supplied EngCoder 0.6.5 source explicitly
+rejects streaming, so this preset sends `stream:false`; a per-endpoint UI option
+selects complete or streamed replies without weakening final-message source
+validation. Complete responses do not provide token progress before their body
+arrives. LM Studio retains streamed replies. Collapsible route references expose
+`/v1/responses` and `/api/tasks` for copying only. Responses is a different wire
+format; EngCoder's full asynchronous agent has its own tasks/events, approvals,
+memory and execution authority. Neither is silently used as Chat or given Epoch
+sandbox/source authority. No EngCoder server, model or training job is auto-started.
+
+External EngCoder UI is acceptable during this integration. A later native UI
+mapping must retain Epoch's GUI primitives/style and useful EngCoder themes,
+session/model/runtime controls without a parallel window stack. Training/learning
+and full-agent lifecycle require explicit ownership/approval contracts first;
+endpoint support does not establish that integration or native succession proof.
+
+Any selected approved loopback endpoint accepts a session-only credential through
+Model Settings > Paste API Key, bound to its exact scheme/host/port identity.
+Clear API Key disables that credential for the session. Until either action,
+the optional Editor-process `LM_API_TOKEN` supplies inventory/generation auth
+only for the original LM Studio loopback port 1234 (including local aliases),
+never EngCoder or another port. Credentials are not persisted or logged.
+Redirects are disabled. Discovery
 preserves HTTP authentication errors in the visible model status instead of
 misreporting them as an empty inventory. Restart the Editor after configuring
 its environment. Discovery first uses native `/api/v1/models`, taking top-level

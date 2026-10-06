@@ -1,3 +1,10 @@
+October 6, 2026 - saved local endpoints and EngCoder 0.6.5 source integration
+- Existing Model Settings now select saved loopback endpoints or accept pasted/typed API URLs; LM Studio and EngCoder presets, per-endpoint complete/streamed replies and collapsible route references share the current Epoch UI. No new windowing stack or external source dump.
+- EngCoder's supplied 0.6.5 Chat API rejects streaming; its preset sends complete responses through the existing schema/admission path. Responses and full agent tasks remain separate reference routes, not implemented execution transports.
+- Persist bounded endpoint/transport preferences without keys. Session-pasted keys bind to the exact selected loopback identity and clear on endpoint switches; legacy LM_API_TOKEN remains restricted to the original LM Studio loopback port.
+- Runtime release authority stays v0.90.33; native model inference and docked sandbox succession are not claimed by this source-only pass.
+- Production Debug Editor build and pure engine contracts pass with existing host vcpkg dependencies; new contracts cover saved endpoint/transport codecs, malformed or credential-bearing URL rejection, per-endpoint auth isolation and both generated response modes. Hosted/new native acceptance is not inferred from these checks.
+
 v0.90.34 - October 3, 2026 source-only AI repair (no binary release)
 - Source version and Windows source resource metadata advance to 0.90.34; Windows/Linux packaged authority stays 0.90.33 and macOS stays 0.89.30. Legacy engine.version only re-exports the canonical version, without stale private 0.90.25 macros.
 - Operator requests GitHub and Site source synchronization only: no new binary release, runtime activation or rewritten historical tag/assets. Exact-commit ZIP/TAR exports are for the Site's existing private source admission, not public Site plaintext downloads.

@@ -1,11 +1,35 @@
 # Active Pass
 
-Updated October 3, 2026. This is the only current resume point. Historical
+Updated October 6, 2026. This is the only current resume point. Historical
 checkpoints/evidence belong in `changelog.txt` and Git, not alternative
 instructions. Ordering is in `roadmap.md`, durable requirements in
 `mission_cache.md`, and behavior in the owning subsystem contracts.
 
 ## Current Acceptance Result
+
+October 6 bounded source pass: add saved loopback endpoints in the existing Model
+Settings surface, including EngCoder 0.6.5 at `http://127.0.0.1:14321/v1`, and
+publish the focused source checkpoint to GitHub first and the owning Site chat
+second. No binary release, new listener, imported EngCoder UI/window stack, or
+native model/candidate launch is authorized in this pass. Preserve unrelated
+operator deletions and generated state. EngCoder's supplied source rejects
+`stream=true`; its preset uses complete responses, with a saved per-endpoint
+streaming option for other servers. Chat/Responses/full-agent task protocols stay
+distinct; `/api/tasks` is not an Epoch source-authority bypass.
+Acceptance: production Debug Editor build, pure engine contracts, focused diff,
+then exact committed ZIP/TAR private Site handoff. Native EngCoder/Qwen inference,
+embedded PID comparison and Keep/Choose succession remain unverified/operator-owned.
+Stop if build/contracts fail; do not widen into renderer or training changes.
+Production Debug build and pure engine contracts passed October 6 using the
+existing host `vcpkg/installed/x64-windows` dependency installation. The worktree's
+ignored install tree had been removed; the first build failed on missing
+GLM/Vulkan headers, before edited AI code. The supported install-root override
+restored the build lane without installing/copying dependencies or editing
+compiler/module ownership. Logs: `build/endpoint-20261006/` (local, not shipped).
+Hosted Linux/Windows checks for this new commit are not yet established.
+The operator's longer-term clean UI integration requirement is preserved in
+mission cache and the OS AI contract, not falsely marked implemented by endpoint
+connectivity. The immutable runtime authority below remains unchanged.
 
 October 2 release checkpoint supersedes the preparation/hold instructions below.
 GitHub v0.90.33 is PUBLIC/LATEST, published 04:42:27 UTC from immutable source

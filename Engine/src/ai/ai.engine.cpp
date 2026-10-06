@@ -98,6 +98,7 @@ namespace epochengine::ai
     {
         std::recursive_mutex g_aiStateMutex{};
         std::optional<std::string> g_localModelApiToken{};
+        std::string g_localModelApiTokenEndpoint{};
         std::atomic_uint64_t g_directInferenceOutputSequence{1u};
         std::atomic_bool g_modelHttpRetirementUncertain{false};
         std::atomic_uint64_t g_modelHttpNullContextCallbacks{0u};
@@ -316,7 +317,7 @@ namespace epochengine::ai
             return value;
         }
 
-        static std::string configured_endpoint()
+        static std::string configured_endpoint_override()
         {
             constexpr const char* candidates[] = {
                 "EPOCH_AI_ENDPOINT",
@@ -330,7 +331,13 @@ namespace epochengine::ai
                 if (!value.empty())
                     return value;
             }
-            return "http://localhost:1234";
+            return {};
+        }
+
+        static std::string configured_endpoint()
+        {
+            const auto override = configured_endpoint_override();
+            return override.empty() ? "http://localhost:1234" : override;
         }
 
         static std::string configured_model()
@@ -351,6 +358,10 @@ namespace epochengine::ai
         }
 
         std::string g_selectedEndpoint{ configured_endpoint() };
+        std::vector<std::string> g_savedLocalEndpoints{
+            "http://localhost:1234/v1", "http://127.0.0.1:14321/v1"};
+        bool g_endpointPreferencesLoaded{};
+        std::vector<std::string> g_nonStreamingLocalEndpoints{"http://127.0.0.1:14321/v1"};
         std::string g_selectedModel{ configured_model() };
         LocalModelSelectionOrigin g_selectedModelOrigin = g_selectedModel.empty()
             ? LocalModelSelectionOrigin::none : LocalModelSelectionOrigin::configured;
@@ -419,6 +430,12 @@ namespace epochengine::ai
             return std::filesystem::path{ executable_cache_bucket("models") } / "local_inference_runtime.conf";
         }
 
+        static std::filesystem::path local_endpoint_preference_file()
+        {
+            return std::filesystem::path{executable_cache_bucket("models")}
+                / "local_api_endpoints.conf";
+        }
+
         static bool ends_with(std::string_view s, std::string_view suf)
         {
             return s.size() >= suf.size() && s.substr(s.size() - suf.size()) == suf;
@@ -445,6 +462,8 @@ namespace epochengine::ai
                 "/api/v1",
                 "/api/v1/chat",
                 "/v1/chat/completions",
+                "/v1/responses",
+                "/api/tasks",
                 "/v1/models",
                 "/v1"
             };
@@ -471,6 +490,8 @@ namespace epochengine::ai
                 "/api/v1",
                 "/api/v1/chat",
                 "/v1/chat/completions",
+                "/v1/responses",
+                "/api/tasks",
                 "/v1/models",
                 "/v1"
             };
@@ -876,19 +897,116 @@ namespace epochengine::ai
             rstrip_slashes(suffix);
             if (!suffix.empty() && suffix != "/v1"
                 && suffix != "/v1/chat/completions" && suffix != "/v1/models"
+                && suffix != "/v1/responses" && suffix != "/api/tasks"
                 && suffix != "/api/v1/chat" && suffix != "/api/v1"
                 && suffix != "/api/v1/models")
                 return {};
             return scheme + "://" + host + port + "/v1/chat/completions";
         }
 
+        [[nodiscard]] static LocalApiEndpoint local_api_routes(std::string_view endpoint)
+        {
+            const auto chat = local_endpoint_identity(trim(endpoint));
+            if (chat.empty()) return {};
+            const auto root = chat.substr(0u,
+                chat.size() - std::string_view{"/v1/chat/completions"}.size());
+            return {root + "/v1", chat, root + "/v1/responses", root + "/api/tasks"};
+        }
+
+        struct LocalEndpointPreferences
+        {
+            std::vector<std::string> endpoints{};
+            std::string selected{};
+            std::vector<std::string> non_streaming{};
+        };
+        constexpr std::string_view kLocalEndpointsHeader = "EPOCH_LOCAL_API_ENDPOINTS_V1\n";
+
+        [[nodiscard]] static std::optional<LocalEndpointPreferences>
+            decode_endpoint_preferences(std::string_view bytes)
+        {
+            if (bytes.size() > 16'384u || !bytes.starts_with(kLocalEndpointsHeader))
+                return std::nullopt;
+            bytes.remove_prefix(kLocalEndpointsHeader.size());
+            LocalEndpointPreferences preferences{};
+            while (!bytes.empty())
+            {
+                const auto newline = bytes.find('\n');
+                if (newline == std::string_view::npos) return std::nullopt;
+                const auto line = bytes.substr(0u, newline);
+                bytes.remove_prefix(newline + 1u);
+                const bool selected = line.starts_with("selected=");
+                const bool nonStreaming = line.starts_with("nostream=");
+                if (!selected && !nonStreaming && !line.starts_with("endpoint=")) return std::nullopt;
+                const auto routes = local_api_routes(line.substr(9u));
+                if (routes.base_url.empty() || routes.base_url != line.substr(9u))
+                    return std::nullopt;
+                if (nonStreaming)
+                {
+                    if (preferences.non_streaming.size() >= 16u
+                        || std::find(preferences.non_streaming.begin(), preferences.non_streaming.end(),
+                            routes.base_url) != preferences.non_streaming.end()) return std::nullopt;
+                    preferences.non_streaming.push_back(routes.base_url);
+                }
+                else if (selected)
+                {
+                    if (!preferences.selected.empty()) return std::nullopt;
+                    preferences.selected = routes.base_url;
+                }
+                else
+                {
+                    if (preferences.endpoints.size() >= 16u
+                        || std::find(preferences.endpoints.begin(), preferences.endpoints.end(),
+                            routes.base_url) != preferences.endpoints.end()) return std::nullopt;
+                    preferences.endpoints.push_back(routes.base_url);
+                }
+            }
+            if (preferences.selected.empty()
+                || std::find(preferences.endpoints.begin(), preferences.endpoints.end(),
+                    preferences.selected) == preferences.endpoints.end()) return std::nullopt;
+            for (const auto& endpoint : preferences.non_streaming)
+                if (std::find(preferences.endpoints.begin(), preferences.endpoints.end(), endpoint)
+                    == preferences.endpoints.end()) return std::nullopt;
+            return preferences;
+        }
+
+        [[nodiscard]] static std::string encode_endpoint_preferences(
+            const LocalEndpointPreferences& preferences)
+        {
+            std::string bytes{kLocalEndpointsHeader};
+            bytes += "selected=" + preferences.selected + '\n';
+            for (const auto& endpoint : preferences.endpoints)
+                bytes += "endpoint=" + endpoint + '\n';
+            for (const auto& endpoint : preferences.non_streaming)
+                bytes += "nostream=" + endpoint + '\n';
+            return decode_endpoint_preferences(bytes) ? bytes : std::string{};
+        }
+
+        static void restore_endpoint_preferences_if_needed()
+        {
+            if (g_endpointPreferencesLoaded) return;
+            g_endpointPreferencesLoaded = true;
+            const auto preferences = decode_endpoint_preferences(
+                read_small_text_file(local_endpoint_preference_file(), 16'384u));
+            if (!preferences) return;
+            g_savedLocalEndpoints = preferences->endpoints;
+            g_nonStreamingLocalEndpoints = preferences->non_streaming;
+            // An explicit process configuration always outranks persisted UI state.
+            if (configured_endpoint_override().empty()) g_selectedEndpoint = preferences->selected;
+        }
+
         [[nodiscard]] static std::vector<std::pair<std::string, std::string>>
-            local_model_headers(const std::string& endpoint, std::string token)
+            local_model_headers(const std::string& endpoint, std::string token,
+                std::string_view authorizedEndpoint = kOriginalLocalEndpoint,
+                bool allowOriginalAliases = false)
         {
             const auto identity = local_endpoint_identity(endpoint);
-            if (identity != kOriginalLocalEndpoint
-                && identity != "http://127.0.0.1:1234/v1/chat/completions"
-                && identity != "http://[::1]:1234/v1/chat/completions")
+            const auto authorized = local_endpoint_identity(std::string{authorizedEndpoint});
+            const bool originalEnvironmentHost = allowOriginalAliases
+                && authorizedEndpoint == kOriginalLocalEndpoint
+                && (identity == kOriginalLocalEndpoint
+                    || identity == "http://127.0.0.1:1234/v1/chat/completions"
+                    || identity == "http://[::1]:1234/v1/chat/completions");
+            if (identity.empty() || (!originalEnvironmentHost && identity != authorized))
                 return {};
             if (token.empty()) return {};
             if (token.size() > 4096u || std::any_of(token.begin(), token.end(),
@@ -900,7 +1018,7 @@ namespace epochengine::ai
         [[nodiscard]] static std::string model_http_status_message(unsigned status)
         {
             if (status == 401u || status == 403u)
-                return "Local model authentication failed. For LM Studio on localhost:1234, "
+                return "Local model authentication failed at the selected endpoint; "
                     "open Model Settings and use Paste API Key, then Rescan Models.";
             return "Model endpoint returned HTTP status " + std::to_string(status);
         }
@@ -909,8 +1027,9 @@ namespace epochengine::ai
             model_request_headers(const std::string& endpoint)
         {
             const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
-            return local_model_headers(endpoint, g_localModelApiToken
-                ? *g_localModelApiToken : read_env_var("LM_API_TOKEN"));
+            return g_localModelApiToken
+                ? local_model_headers(endpoint, *g_localModelApiToken, g_localModelApiTokenEndpoint)
+                : local_model_headers(endpoint, read_env_var("LM_API_TOKEN"), kOriginalLocalEndpoint, true);
         }
 
         [[nodiscard]] static LocalModelPreference decode_model_preference(std::string_view bytes)
@@ -1053,6 +1172,7 @@ namespace epochengine::ai
 
         static void restore_runtime_preference_if_needed()
         {
+            restore_endpoint_preferences_if_needed();
             if (g_runtimePreferenceLoaded)
                 return;
             g_runtimePreferenceLoaded = true;
@@ -3439,7 +3559,7 @@ namespace epochengine::ai
                                 invalid_model_stream();
                         }
                     }
-                    return std::string{response}; // Server ignored stream=true, same request.
+                    return std::string{response}; // Explicit complete mode or server fallback, same request.
                 }
                 if (!line_.empty())
                 {
@@ -5247,7 +5367,8 @@ namespace epochengine::ai
             std::string_view input,
             std::size_t maximumTokens,
             bool recoveryRequest,
-            bool structuredSource)
+            bool structuredSource,
+            bool streamReplies = true)
         {
             const StructuredSourceReply sourceReply =
                 structured_source_reply_for(input, structuredSource);
@@ -5317,7 +5438,7 @@ namespace epochengine::ai
                 body += source_tools_json(sourceReply, sourceCatalog);
                 body += ",\"tool_choice\":\"required\",\"parallel_tool_calls\":false,";
             }
-            body += "\"stream\":true";
+            body += streamReplies ? "\"stream\":true" : "\"stream\":false";
             body += "}";
             return body;
         }
@@ -5332,7 +5453,8 @@ namespace epochengine::ai
             bool structuredSource,
             std::stop_token cancellation,
             ModelTerminalFailure& terminalFailure,
-            const ModelRequestObserver& observer = {})
+            const ModelRequestObserver& observer = {},
+            bool streamReplies = true)
         {
             terminalFailure = ModelTerminalFailure::none;
             const auto cancelled = [&]() -> std::string
@@ -5352,7 +5474,7 @@ namespace epochengine::ai
                     return cancelled();
                 const std::string body = openai_chat_request_body(
                     model, system_prompt, input, maximumTokens, recoveryRequest,
-                    structuredSource);
+                    structuredSource, streamReplies);
                 ModelReplyStream stream{sourceReply != StructuredSourceReply::none};
                 const ModelReplyChunkConsumer consumeChunk = [&](std::string_view chunk)
                     { stream.feed(chunk); };
@@ -6194,7 +6316,7 @@ namespace epochengine::ai
                     effective.output_tokens,
                     effective.timeout_seconds,
                     workload == InferenceWorkload::source_iteration, cancellation,
-                    out.terminal_failure, observer);
+                    out.terminal_failure, observer, effective.stream_replies);
 
             if (cancellation.stop_requested())
             {
@@ -6332,7 +6454,8 @@ namespace epochengine::ai
                 .backend = "openai_chat",
                 .endpoint = g_selectedEndpoint,
                 .model = g_selectedModel,
-                .best_of = 1
+                .best_of = 1,
+                .stream_replies = active_local_api_endpoint().stream_replies
             });
         }
 
@@ -6718,6 +6841,111 @@ namespace epochengine::ai
         init_engine_ai();
     }
 
+    std::vector<std::string> saved_local_api_endpoints()
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_endpoint_preferences_if_needed();
+        return g_savedLocalEndpoints;
+    }
+
+    LocalApiEndpoint active_local_api_endpoint()
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_endpoint_preferences_if_needed();
+        auto routes = local_api_routes(g_selectedEndpoint);
+        routes.stream_replies = std::find(g_nonStreamingLocalEndpoints.begin(),
+            g_nonStreamingLocalEndpoints.end(), routes.base_url) == g_nonStreamingLocalEndpoints.end();
+        return routes;
+    }
+
+    bool select_local_api_endpoint(std::string_view endpoint)
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback) return false;
+        const auto routes = local_api_routes(endpoint);
+        if (routes.base_url.empty())
+        {
+            g_modelDetectionStatus = "Endpoint not saved: use an HTTP(S) localhost, 127.0.0.1 or [::1] API URL without credentials, queries or fragments.";
+            return false;
+        }
+        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url, g_nonStreamingLocalEndpoints};
+        if (std::find(preferences.endpoints.begin(), preferences.endpoints.end(),
+                routes.base_url) == preferences.endpoints.end())
+        {
+            if (preferences.endpoints.size() >= 16u)
+            {
+                g_modelDetectionStatus = "Endpoint not saved: the 16-endpoint limit is reached.";
+                return false;
+            }
+            preferences.endpoints.push_back(routes.base_url);
+            // EngCoder 0.6.5 explicitly rejects stream=true on its engine API.
+            if (routes.base_url.ends_with(":14321/v1"))
+                preferences.non_streaming.push_back(routes.base_url);
+        }
+        const auto encoded = encode_endpoint_preferences(preferences);
+        if (encoded.empty() || !write_text_file(local_endpoint_preference_file(), encoded))
+        {
+            g_modelDetectionStatus = "Endpoint could not be saved; the current endpoint is unchanged.";
+            return false;
+        }
+        const bool changed = local_endpoint_identity(g_selectedEndpoint) != routes.chat_completions_url
+            || g_localTransport != LocalInferenceTransport::OpenAiCompatible;
+        g_savedLocalEndpoints = std::move(preferences.endpoints);
+        g_nonStreamingLocalEndpoints = std::move(preferences.non_streaming);
+        g_selectedEndpoint = routes.base_url;
+        g_localTransport = LocalInferenceTransport::OpenAiCompatible;
+        if (changed)
+        {
+            g_engineAi.reset();
+            g_modelUseConfirmedForSession = false;
+            g_selectedModel = configured_model();
+            g_selectedModelOrigin = g_selectedModel.empty()
+                ? LocalModelSelectionOrigin::none : LocalModelSelectionOrigin::configured;
+            g_selectedModelPreferenceLoaded = false;
+            g_rememberedModel = {};
+            g_detectedModels.clear();
+            g_detectedModelCapacities.clear();
+            if (g_localModelApiToken)
+                std::fill(g_localModelApiToken->begin(), g_localModelApiToken->end(), '\0');
+            g_localModelApiToken.reset();
+            g_localModelApiTokenEndpoint.clear();
+        }
+        persist_runtime_preference();
+        g_modelDetectionStatus = "Endpoint saved and selected. Rescan/confirm a model before Send or Start; no model request was sent.";
+        return true;
+    }
+
+    bool set_local_api_streaming(bool enabled)
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback) return false;
+        const auto routes = local_api_routes(g_selectedEndpoint);
+        if (routes.base_url.empty()) return false;
+        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url, g_nonStreamingLocalEndpoints};
+        if (std::find(preferences.endpoints.begin(), preferences.endpoints.end(), routes.base_url)
+            == preferences.endpoints.end())
+        {
+            if (preferences.endpoints.size() >= 16u) return false;
+            preferences.endpoints.push_back(routes.base_url);
+        }
+        std::erase(preferences.non_streaming, routes.base_url);
+        if (!enabled) preferences.non_streaming.push_back(routes.base_url);
+        const auto encoded = encode_endpoint_preferences(preferences);
+        if (encoded.empty() || !write_text_file(local_endpoint_preference_file(), encoded))
+        {
+            g_modelDetectionStatus = "Transport setting could not be saved; the current transport is unchanged.";
+            return false;
+        }
+        g_savedLocalEndpoints = std::move(preferences.endpoints);
+        g_nonStreamingLocalEndpoints = std::move(preferences.non_streaming);
+        g_engineAi.reset(); // Next request captures the new mode; no model request is sent here.
+        return true;
+    }
+
     std::string active_model_name()
     {
         const std::lock_guard<std::recursive_mutex> stateLock{g_aiStateMutex};
@@ -6852,13 +7080,16 @@ namespace epochengine::ai
     bool set_local_model_api_token(std::string_view token)
     {
         const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_endpoint_preferences_if_needed();
         try
         {
-            if (!token.empty() && local_model_headers(g_selectedEndpoint, std::string{token}).empty())
+            const auto authorized = local_endpoint_identity(g_selectedEndpoint);
+            if (!token.empty() && local_model_headers(g_selectedEndpoint, std::string{token}, authorized).empty())
                 return false;
             if (g_localModelApiToken)
                 std::fill(g_localModelApiToken->begin(), g_localModelApiToken->end(), '\0');
             g_localModelApiToken = std::string{token};
+            g_localModelApiTokenEndpoint = authorized;
             return true;
         }
         catch (...) { return false; }
@@ -7138,6 +7369,58 @@ namespace epochengine::ai
 
     bool local_model_preference_contract()
     {
+        const auto engCoder = local_api_routes("http://127.0.0.1:14321/v1");
+        const LocalEndpointPreferences savedEndpoints{
+            {"http://localhost:1234/v1", engCoder.base_url}, engCoder.base_url, {engCoder.base_url}};
+        const auto encodedEndpoints = encode_endpoint_preferences(savedEndpoints);
+        const auto decodedEndpoints = decode_endpoint_preferences(encodedEndpoints);
+        if (!decodedEndpoints || decodedEndpoints->endpoints != savedEndpoints.endpoints
+            || decodedEndpoints->selected != savedEndpoints.selected
+            || decodedEndpoints->non_streaming != savedEndpoints.non_streaming
+            || engCoder.chat_completions_url != "http://127.0.0.1:14321/v1/chat/completions"
+            || engCoder.responses_url != "http://127.0.0.1:14321/v1/responses"
+            || engCoder.agent_tasks_url != "http://127.0.0.1:14321/api/tasks") return false;
+        for (const auto& route : {engCoder.base_url, engCoder.chat_completions_url,
+                engCoder.responses_url, engCoder.agent_tasks_url})
+        {
+            if (local_api_routes(route + '/').base_url != engCoder.base_url
+                || normalize_openai_chat_endpoint(route) != engCoder.chat_completions_url
+                || normalize_model_list_endpoint(route) != "http://127.0.0.1:14321/v1/models")
+                return false;
+        }
+        for (const auto invalid : {"http://127.0.0.1:14321/v1?api_key=secret",
+                "http://secret@127.0.0.1:14321/v1", "http://127.0.0.1.evil.test:14321/v1",
+                "http://127.0.0.1:14321/unsupported", "http://127.0.0.1:14321/v1\nendpoint=x",
+                "file:///etc/passwd", "http://[::1]:65536/v1"})
+            if (!local_api_routes(invalid).base_url.empty()) return false;
+        for (const auto& invalid : {encodedEndpoints + "token=secret\n",
+                encodedEndpoints + "selected=" + engCoder.base_url + '\n',
+                encodedEndpoints + "endpoint=" + engCoder.base_url + '\n',
+                encodedEndpoints + "nostream=" + engCoder.base_url + '\n',
+                encodedEndpoints + "nostream=http://localhost:14322/v1\n",
+                std::string{kLocalEndpointsHeader} + "selected=" + engCoder.base_url + '\n',
+                encodedEndpoints.substr(0u, encodedEndpoints.size() - 1u),
+                std::string(16'385u, 'x')})
+            if (decode_endpoint_preferences(invalid)) return false;
+        const auto completeBody = openai_chat_request_body("contract-model", {}, "hello", 512u, false, false, false);
+        const auto streamedBody = openai_chat_request_body("contract-model", {}, "hello", 512u, false, false, true);
+        if (completeBody.find("\"stream\":false") == std::string::npos
+            || streamedBody.find("\"stream\":true") == std::string::npos) return false;
+        auto tooMany = savedEndpoints;
+        for (unsigned port = 14000u; port < 14015u; ++port)
+            tooMany.endpoints.push_back("http://127.0.0.1:" + std::to_string(port) + "/v1");
+        if (!encode_endpoint_preferences(tooMany).empty()) return false;
+        const auto syntheticHeaders = std::vector<std::pair<std::string, std::string>>{
+            {"Authorization", "Bearer synthetic-endpoint-token"}};
+        if (local_model_headers(engCoder.chat_completions_url, "synthetic-endpoint-token",
+                engCoder.chat_completions_url) != syntheticHeaders
+            || !local_model_headers(engCoder.chat_completions_url, "synthetic-endpoint-token").empty()
+            || !local_model_headers("http://127.0.0.1:14322/v1", "synthetic-endpoint-token",
+                engCoder.chat_completions_url).empty()
+            || !local_model_headers("http://localhost:14321/v1", "synthetic-endpoint-token",
+                engCoder.chat_completions_url).empty()
+            || !local_model_headers("http://127.0.0.1:1234/v1", "synthetic-endpoint-token",
+                kOriginalLocalEndpoint).empty()) return false;
         // The same codec, endpoint identity and precedence used by production,
         // with no global selection mutation, filesystem I/O or model transport.
         const std::string endpoint{"http://localhost:1234"};

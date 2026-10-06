@@ -1589,6 +1589,9 @@ namespace epochengine
             bool showPackageManagerModal{ false };
             bool showAiModelConsentModal{ false };
             bool showAiModelSettings{ false };
+            std::string aiEndpointDraft{ "http://127.0.0.1:14321/v1" };
+            bool showAiEndpointRoutes{};
+            std::string aiEndpointStatus{};
             bool showVoiceConsentModal{ false };
             std::string selectedPackageId{};
             std::string packageInstallStatus{ "The Site package catalog has not loaded." };
@@ -22688,6 +22691,87 @@ namespace epochengine
             }
 
             auto models = poll_ai_model_inventory(editor);
+            const auto endpoints = epochengine::ai::saved_local_api_endpoints();
+            const auto routes = epochengine::ai::active_local_api_endpoint();
+            const bool endpointEditable = !editor.aiModelInventoryPending;
+            const auto useEndpoint = [&](std::string_view endpoint)
+            {
+                if (!epochengine::ai::select_local_api_endpoint(endpoint))
+                {
+                    editor.aiEndpointStatus = epochengine::ai::model_detection_status();
+                    return false;
+                }
+                editor.aiEndpointDraft = epochengine::ai::active_local_api_endpoint().base_url;
+                editor.aiEndpointStatus = "Saved and selected. Models/API keys are endpoint-specific; confirm a model after the scan.";
+                editor.aiPendingModelSelection.clear();
+                editor.aiModelInventoryScanned = false;
+                request_ai_model_inventory_refresh(editor);
+                return true;
+            };
+            gui::label("Local API endpoints");
+            gui::wrapped_label("EngCoder: 127.0.0.1:14321. LM Studio: localhost:1234. "
+                "Select a saved endpoint, or paste/type a new loopback API URL below.", contentWidth);
+            if (endpointEditable)
+            {
+                std::vector<std::string_view> endpointViews;
+                for (const auto& endpoint : endpoints) endpointViews.emplace_back(endpoint);
+                const std::string endpointPickerId = std::string{selectBoxId} + "_endpoint";
+                const auto chosen = gui::select_box(gui::SelectBoxOptions{
+                    .id = endpointPickerId,
+                    .placeholder = "Choose endpoint",
+                    .selected = routes.base_url,
+                    .options = endpointViews,
+                    .size = {contentWidth, 30.0f},
+                    .row_height = 30.0f,
+                    .max_visible_options = 5});
+                if (chosen.changed && chosen.selected_index
+                    && *chosen.selected_index < endpoints.size()
+                    && useEndpoint(endpoints[*chosen.selected_index])) return;
+            }
+            else gui::wrapped_label("Finish the model scan before changing endpoints.", contentWidth);
+            gui::label("New endpoint URL");
+            (void)gui::edit_box(editor.aiEndpointDraft, {contentWidth, 30.0f}, 512u, false);
+            const std::array endpointActions{
+                gui::InlineButtonSpec{.label = "Paste Endpoint", .width = 152.0f,
+                    .enabled = endpointEditable},
+                gui::InlineButtonSpec{.label = "Save and Use Endpoint", .width = 184.0f,
+                    .enabled = endpointEditable && !editor.aiEndpointDraft.empty()}};
+            if (const auto action = gui::inline_button_row(endpointActions, 30.0f, 8.0f))
+            {
+                if (*action == 0u) editor.aiEndpointDraft = gui::clipboard_text().substr(0u, 512u);
+                else if (useEndpoint(editor.aiEndpointDraft)) return;
+            }
+            if (!editor.aiEndpointStatus.empty()) gui::wrapped_label(editor.aiEndpointStatus, contentWidth);
+            gui::property_row("Reply transport", routes.stream_replies ? "Streaming" : "Complete response (EngCoder compatible)");
+            const std::array endpointOptions{
+                gui::InlineButtonSpec{.label = routes.stream_replies ? "Use Complete Responses" : "Use Streaming Responses",
+                    .width = 222.0f, .enabled = endpointEditable},
+                gui::InlineButtonSpec{.label = editor.showAiEndpointRoutes ? "Hide API Routes" : "Show API Routes",
+                    .width = 144.0f}};
+            if (const auto action = gui::inline_button_row(endpointOptions, 30.0f, 8.0f))
+            {
+                if (*action == 1u) editor.showAiEndpointRoutes = !editor.showAiEndpointRoutes;
+                else if (!epochengine::ai::set_local_api_streaming(!routes.stream_replies))
+                    editor.aiEndpointStatus = epochengine::ai::model_detection_status();
+                else return;
+            }
+            if (editor.showAiEndpointRoutes && !routes.base_url.empty())
+            {
+                gui::property_row("Chat (used)", routes.chat_completions_url);
+                gui::property_row("Responses", routes.responses_url);
+                gui::property_row("Agent tasks", routes.agent_tasks_url);
+                const std::array routeActions{
+                    gui::InlineButtonSpec{.label = "Copy Chat URL", .width = 132.0f},
+                    gui::InlineButtonSpec{.label = "Copy Responses URL", .width = 170.0f},
+                    gui::InlineButtonSpec{.label = "Copy Agent URL", .width = 140.0f}};
+                if (const auto action = gui::inline_button_row(routeActions, 30.0f, 8.0f))
+                    (void)gui::set_clipboard_text(*action == 0u ? routes.chat_completions_url
+                        : *action == 1u ? routes.responses_url : routes.agent_tasks_url);
+                gui::wrapped_label("Epoch requests use Chat Completions. Responses and the full "
+                    "EngCoder agent task API are separate protocols; these URLs are references, "
+                    "not agent execution controls. Endpoint settings are kept in this instance's "
+                    "private model cache; API keys are never saved.", contentWidth);
+            }
             if (!editor.aiModelInventoryScanned
                 && !editor.aiModelInventoryPending)
             {
@@ -22703,8 +22787,8 @@ namespace epochengine
             gui::property_row("[model] Endpoint", manifest.endpoint);
             gui::property_row("API key", epochengine::ai::has_local_model_api_token()
                 ? "Configured (hidden)" : "Not configured");
-            gui::wrapped_label("Copy your LM Studio API key, then paste it here. "
-                "It is kept only for this Epoch session.", contentWidth);
+            gui::wrapped_label("Copy the API key for the selected local endpoint, then paste it here. "
+                "It is kept only for this Epoch session and cleared when the endpoint changes.", contentWidth);
             const std::array authActions{
                 gui::InlineButtonSpec{.label = "Paste API Key", .width = 152.0f,
                     .enabled = !inventoryPending},
@@ -22719,7 +22803,7 @@ namespace epochengine
                 token.clear();
                 if (accepted) request_ai_model_inventory_refresh(editor);
                 else editor.aiModelConsentStatus = "API key not accepted. Copy a valid key "
-                    "for the local LM Studio endpoint on port 1234 and try again.";
+                    "for the selected local endpoint and try again.";
             }
             gui::property_row(
                 "[model] Session",
