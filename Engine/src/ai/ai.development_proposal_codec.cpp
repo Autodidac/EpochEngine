@@ -429,48 +429,62 @@ namespace epochengine::ai::development_proposal_codec
 
         [[nodiscard]] std::optional<std::string_view> source_excerpt_content(
             std::string_view evidence,
-            std::string_view path) noexcept
+            std::string_view path,
+            std::string_view requiredMatch = {}) noexcept
         {
             const std::string sizeMarker =
                 "FILE_EXCERPT_SIZE " + std::string{path} + " ";
-            const std::size_t marker = evidence.find(sizeMarker);
-            if (marker == std::string_view::npos
-                || (marker != 0u && evidence[marker - 1u] != '\n'))
+            std::optional<std::string_view> selected{};
+            std::size_t cursor{};
+            while (cursor < evidence.size())
             {
-                return std::nullopt;
-            }
-            const std::size_t sizeBegin = marker + sizeMarker.size();
-            const std::size_t sizeEnd = evidence.find('\n', sizeBegin);
-            if (sizeEnd == std::string_view::npos)
-                return std::nullopt;
-            std::size_t byteCount{};
-            const auto parsed = std::from_chars(
-                evidence.data() + sizeBegin,
-                evidence.data() + sizeEnd,
-                byteCount);
-            if (parsed.ec != std::errc{}
-                || parsed.ptr != evidence.data() + sizeEnd)
-            {
-                return std::nullopt;
-            }
+                const std::size_t marker = evidence.find(sizeMarker, cursor);
+                if (marker == std::string_view::npos) break;
+                if (marker != 0u && evidence[marker - 1u] != '\n')
+                    return std::nullopt;
+                const std::size_t sizeBegin = marker + sizeMarker.size();
+                const std::size_t sizeEnd = evidence.find('\n', sizeBegin);
+                if (sizeEnd == std::string_view::npos)
+                    return std::nullopt;
+                std::size_t byteCount{};
+                const auto parsed = std::from_chars(
+                    evidence.data() + sizeBegin,
+                    evidence.data() + sizeEnd,
+                    byteCount);
+                if (parsed.ec != std::errc{}
+                    || parsed.ptr != evidence.data() + sizeEnd)
+                {
+                    return std::nullopt;
+                }
 
-            const std::string contentMarker =
-                "FILE_EXCERPT_BEGIN " + std::string{path} + "\n";
-            const std::size_t contentBegin = sizeEnd + 1u;
-            if (!evidence.substr(contentBegin).starts_with(contentMarker))
-                return std::nullopt;
-            const std::size_t bytesBegin = contentBegin + contentMarker.size();
-            if (byteCount > evidence.size() - bytesBegin)
-                return std::nullopt;
-            const std::string_view content =
-                evidence.substr(bytesBegin, byteCount);
-            const std::size_t terminatorBegin = bytesBegin + byteCount;
-            const std::string terminator = content.ends_with('\n')
-                ? "FILE_EXCERPT_END " + std::string{path} + "\n"
-                : "\nFILE_EXCERPT_END " + std::string{path} + "\n";
-            if (!evidence.substr(terminatorBegin).starts_with(terminator))
-                return std::nullopt;
-            return content;
+                const std::string contentMarker =
+                    "FILE_EXCERPT_BEGIN " + std::string{path} + "\n";
+                const std::size_t contentBegin = sizeEnd + 1u;
+                if (!evidence.substr(contentBegin).starts_with(contentMarker))
+                    return std::nullopt;
+                const std::size_t bytesBegin = contentBegin + contentMarker.size();
+                if (byteCount > evidence.size() - bytesBegin)
+                    return std::nullopt;
+                const std::string_view content =
+                    evidence.substr(bytesBegin, byteCount);
+                const std::size_t terminatorBegin = bytesBegin + byteCount;
+                const std::string terminator = content.ends_with('\n')
+                    ? "FILE_EXCERPT_END " + std::string{path} + "\n"
+                    : "\nFILE_EXCERPT_END " + std::string{path} + "\n";
+                if (!evidence.substr(terminatorBegin).starts_with(terminator))
+                    return std::nullopt;
+                if (requiredMatch.empty()) return content;
+                const auto found = content.find(requiredMatch);
+                if (found != std::string_view::npos)
+                {
+                    if (selected || content.find(requiredMatch,
+                            found + requiredMatch.size()) != std::string_view::npos)
+                        return std::nullopt;
+                    selected = content;
+                }
+                cursor = terminatorBegin + terminator.size();
+            }
+            return selected;
         }
 
         [[nodiscard]] std::optional<std::string_view>
@@ -1298,8 +1312,11 @@ namespace epochengine::ai::development_proposal_codec
                 "FILE_ABSENT " + change.relative_path + "\n";
             const auto original = exact_source_content(
                 exactSourceEvidence, change.relative_path);
+            const bool exactBlock = change.edit_kind
+                == SourceEditKind::replace_exact_block;
             const auto excerpt = source_excerpt_content(
-                exactSourceEvidence, change.relative_path);
+                exactSourceEvidence, change.relative_path,
+                exactBlock ? std::string_view{change.match_bytes} : std::string_view{});
             const auto reviewed = original ? original : excerpt;
             const bool provenAbsent =
                 exactSourceEvidence.find(absentMarker) != std::string_view::npos;
@@ -1309,8 +1326,6 @@ namespace epochengine::ai::development_proposal_codec
                     "Proposal rejected: exact counted source or excerpt evidence is missing for "
                     + change.relative_path + ".");
             }
-            const bool exactBlock = change.edit_kind
-                == SourceEditKind::replace_exact_block;
             if (exactBlock)
             {
                 if (!reviewed)

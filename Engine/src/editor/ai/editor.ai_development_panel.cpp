@@ -348,6 +348,7 @@ namespace epochengine::editor_ai_development_panel
             std::string evidence{};
             std::string status{};
             std::vector<ReviewedSlice> reviewed_slices{};
+            std::vector<ai::source_workspace::VerifiedRange> verified_ranges{};
         };
 
         [[nodiscard]] std::uint32_t reviewed_line_count(
@@ -1277,7 +1278,9 @@ namespace epochengine::editor_ai_development_panel
             std::string_view baseEvidence,
             std::string_view objective,
             const std::vector<ai::development_proposal_codec::ContextRead>& reads = {},
-            const std::size_t evidenceBudget = maximum_source_context_evidence_bytes)
+            const std::size_t evidenceBudget = maximum_source_context_evidence_bytes,
+            const std::vector<ai::source_workspace::VerifiedRange>& retainedRanges = {},
+            const std::vector<std::string>& currentPaths = {})
         {
             SourceContextLoadResult result{};
             if (sourceRoot.empty() || relativePaths.empty())
@@ -1335,12 +1338,6 @@ namespace epochengine::editor_ai_development_panel
                 result.status = "The context envelope leaves insufficient room for source excerpts.";
                 return result;
             }
-            const std::size_t perFileBudget =
-                (evidenceBudget - envelopeBytes)
-                / relativePaths.size();
-            const std::size_t excerptBudget =
-                (std::min)(maximum_source_excerpt_bytes, perFileBudget);
-
             std::error_code error{};
             const std::filesystem::path root = std::filesystem::weakly_canonical(
                 std::filesystem::path{sourceRoot}, error);
@@ -1352,12 +1349,71 @@ namespace epochengine::editor_ai_development_panel
                 return result;
             }
 
+            std::vector<ai::source_workspace::SourceDemand> demands{};
+            demands.reserve(relativePaths.size());
+            for (std::size_t index = 0u; index < relativePaths.size(); ++index)
+            {
+                const auto& text = relativePaths[index];
+                const std::filesystem::path relative{text};
+                if (relative.is_absolute() || relative.has_root_name()
+                    || std::ranges::any_of(relative, [](const auto& part) { return part == ".."; })
+                    || !source_context_extension(relative)
+                    || std::find(relativePaths.begin(), relativePaths.begin() + index, text)
+                        != relativePaths.begin() + index)
+                {
+                    result.status = "The reviewed source path is not a unique relative C++ source file inside the selected root: " + text + ".";
+                    return result;
+                }
+                error.clear();
+                const auto resolved = std::filesystem::weakly_canonical(root / relative, error);
+                if (error || !path_is_within(root, resolved))
+                {
+                    result.status = "The reviewed source path escapes the selected root: " + text + ".";
+                    return result;
+                }
+                const bool present = std::filesystem::exists(resolved, error);
+                std::size_t desired{};
+                if (present && !error)
+                {
+                    const auto size = std::filesystem::file_size(resolved, error);
+                    if (error || size > maximum_source_file_read_bytes)
+                    {
+                        result.status = "The reviewed source file exceeds its local read limit or is not a regular file: " + text + ".";
+                        return result;
+                    }
+                    const auto read = std::ranges::find(reads, text,
+                        &ai::development_proposal_codec::ContextRead::path);
+                    const bool directed = read != reads.end()
+                        && (read->first_line != 0u || !read->query.empty());
+                    desired = static_cast<std::size_t>((std::min)(size,
+                        static_cast<std::uintmax_t>(directed || size > maximum_full_source_context_bytes
+                            ? maximum_source_excerpt_bytes : maximum_full_source_context_bytes)));
+                    for (const auto& prior : retainedRanges)
+                        if (prior.path == text)
+                            desired = (std::min)(maximum_full_source_context_bytes,
+                                desired + prior.byte_count + 10u * text.size() + 384u);
+                    desired = (std::min)(desired, static_cast<std::size_t>(size));
+                }
+                if (error)
+                {
+                    result.status = "The reviewed path could not be inspected: " + text + ".";
+                    return result;
+                }
+                demands.push_back({desired, currentPaths.empty()
+                    || std::ranges::find(currentPaths, text) != currentPaths.end()});
+            }
+            const auto allocations = ai::source_workspace::allocate_source_bytes(
+                demands, evidenceBudget - envelopeBytes);
+
             result.evidence.assign(baseEvidence);
             if (!result.evidence.empty() && !result.evidence.ends_with('\n'))
                 result.evidence.push_back('\n');
 
-            for (const auto& relativeText : relativePaths)
+            for (std::size_t pathIndex = 0u; pathIndex < relativePaths.size(); ++pathIndex)
             {
+                const auto& relativeText = relativePaths[pathIndex];
+                const auto perFileBudget = allocations[pathIndex];
+                const auto excerptBudget = (std::min)(maximum_source_excerpt_bytes, perFileBudget);
                 const std::filesystem::path relativePath{relativeText};
                 if (relativePath.empty() || relativePath.is_absolute()
                     || relativePath.has_root_name()
@@ -1610,64 +1666,138 @@ namespace epochengine::editor_ai_development_panel
                     excerpted = true;
                 }
 
-                std::string block{};
-                const std::uint32_t firstLine = reviewed_first_line(bytes, excerptOffset);
-                const std::uint32_t lineCount = reviewed_line_count(sharedBytes);
-                if (excerpted)
+                core::sha256::Hasher sourceHasher{};
+                sourceHasher.update(bytes);
+                const auto sourceSha = core::sha256::hex(sourceHasher.finish());
+                struct Window final { std::size_t begin{}, end{}; };
+                std::vector<Window> windows{{excerptOffset, excerptOffset + sharedBytes.size()}};
+                std::size_t residentBytes = sharedBytes.size();
+                const auto extraEnvelope = 10u * relativeText.size() + 384u;
+                for (auto prior = retainedRanges.rbegin(); prior != retainedRanges.rend(); ++prior)
                 {
-                    block =
-                        "FILE_SOURCE_SIZE " + relativeText + " "
-                        + std::to_string(bytes.size()) + "\n"
-                        + "FILE_EXCERPT_OFFSET " + relativeText + " "
-                        + std::to_string(excerptOffset) + "\n"
-                        + "FILE_EXCERPT_LINES " + relativeText + " "
-                        + std::to_string(firstLine) + " "
-                        + std::to_string(firstLine + lineCount - (lineCount != 0u ? 1u : 0u)) + "\n"
-                        + "FILE_TOTAL_LINES " + relativeText + " "
-                        + std::to_string(reviewed_line_count(bytes)) + "\n"
-                        // Keep the counted-byte header adjacent to BEGIN;
-                        // the proposal codec validates that exact envelope.
-                        + "FILE_EXCERPT_SIZE " + relativeText + " "
-                        + std::to_string(sharedBytes.size()) + "\n"
-                        + "FILE_EXCERPT_BEGIN " + relativeText + "\n";
-                    block.append(sharedBytes);
-                    if (!block.ends_with('\n'))
-                        block.push_back('\n');
-                    block += "FILE_EXCERPT_END " + relativeText + "\n";
+                    if (prior->path != relativeText || prior->source_sha256 != sourceSha
+                        || prior->byte_offset >= bytes.size() || prior->byte_count == 0u
+                        || prior->byte_count > bytes.size() - prior->byte_offset)
+                        continue;
+                    const Window candidate{prior->byte_offset, prior->byte_offset + prior->byte_count};
+                    bool handled{};
+                    for (auto& window : windows)
+                    {
+                        if (candidate.begin >= window.begin && candidate.end <= window.end)
+                        {
+                            handled = true;
+                            break;
+                        }
+                        // Merge overlapping byte ranges and ranges on the same
+                        // physical line, so curated provenance never overlaps.
+                        const auto first = (std::min)(window.begin, candidate.begin);
+                        const auto last = (std::max)(window.end, candidate.end);
+                        const bool overlap = candidate.begin <= window.end && window.begin <= candidate.end;
+                        const bool sameLine = reviewed_first_line(bytes, (std::min)(window.end, candidate.end) - 1u)
+                            == reviewed_first_line(bytes, (std::max)(window.begin, candidate.begin));
+                        if (!overlap && !sameLine) continue;
+                        const auto added = last - first - (window.end - window.begin);
+                        if (added <= perFileBudget - residentBytes)
+                        {
+                            window = {first, last};
+                            residentBytes += added;
+                        }
+                        handled = true;
+                        break;
+                    }
+                    if (handled || windows.size() >= 4u
+                        || result.reviewed_slices.size() + windows.size()
+                            + relativePaths.size() - pathIndex >= maximum_source_context_paths)
+                        continue;
+                    if (candidate.end - candidate.begin + extraEnvelope > perFileBudget - residentBytes)
+                        continue;
+                    // Do not let a candidate that bridges two existing windows
+                    // create an overlap after the first merge.
+                    if (std::ranges::any_of(windows, [&](const Window& window)
+                        { return candidate.begin < window.end && window.begin < candidate.end; }))
+                        continue;
+                    windows.push_back(candidate);
+                    residentBytes += candidate.end - candidate.begin + extraEnvelope;
                 }
-                else
+                std::ranges::sort(windows, {}, &Window::begin);
+                // A newly widened range may cover another retained window.
+                for (std::size_t index = 1u; index < windows.size();)
                 {
-                    block =
-                        "FILE_CONTENT_SIZE " + relativeText + " "
-                        + std::to_string(sharedBytes.size()) + "\n"
-                        + "FILE_CONTENT_BEGIN " + relativeText + "\n";
-                    block.append(sharedBytes);
-                    if (!block.ends_with('\n'))
-                        block.push_back('\n');
-                    block += "FILE_CONTENT_END " + relativeText + "\n";
+                    if (windows[index].begin <= windows[index - 1u].end
+                        || reviewed_first_line(bytes, windows[index - 1u].end - 1u)
+                            == reviewed_first_line(bytes, windows[index].begin))
+                    {
+                        windows[index - 1u].end = (std::max)(windows[index - 1u].end, windows[index].end);
+                        windows.erase(windows.begin() + index);
+                    }
+                    else ++index;
                 }
-                if (result.evidence.size() + block.size()
-                    > evidenceBudget)
+                for (const auto& window : windows)
                 {
-                    result.status =
-                        "The reviewed source context exceeds its bounded evidence budget.";
-                    return result;
+                    excerptOffset = window.begin;
+                    sharedBytes = std::string_view{bytes}.substr(window.begin, window.end - window.begin);
+                    excerpted = window.begin != 0u || window.end != bytes.size();
+                    std::string block{};
+                    const std::uint32_t firstLine = reviewed_first_line(bytes, excerptOffset);
+                    const std::uint32_t lineCount = reviewed_line_count(sharedBytes);
+                    if (excerpted)
+                    {
+                        block =
+                            "FILE_SOURCE_SIZE " + relativeText + " "
+                            + std::to_string(bytes.size()) + "\n"
+                            + "FILE_EXCERPT_OFFSET " + relativeText + " "
+                            + std::to_string(excerptOffset) + "\n"
+                            + "FILE_EXCERPT_LINES " + relativeText + " "
+                            + std::to_string(firstLine) + " "
+                            + std::to_string(firstLine + lineCount - (lineCount != 0u ? 1u : 0u)) + "\n"
+                            + "FILE_TOTAL_LINES " + relativeText + " "
+                            + std::to_string(reviewed_line_count(bytes)) + "\n"
+                            // Keep the counted-byte header adjacent to BEGIN;
+                            // the proposal codec validates that exact envelope.
+                            + "FILE_EXCERPT_SIZE " + relativeText + " "
+                            + std::to_string(sharedBytes.size()) + "\n"
+                            + "FILE_EXCERPT_BEGIN " + relativeText + "\n";
+                        block.append(sharedBytes);
+                        if (!block.ends_with('\n'))
+                            block.push_back('\n');
+                        block += "FILE_EXCERPT_END " + relativeText + "\n";
+                    }
+                    else
+                    {
+                        block =
+                            "FILE_CONTENT_SIZE " + relativeText + " "
+                            + std::to_string(sharedBytes.size()) + "\n"
+                            + "FILE_CONTENT_BEGIN " + relativeText + "\n";
+                        block.append(sharedBytes);
+                        if (!block.ends_with('\n'))
+                            block.push_back('\n');
+                        block += "FILE_CONTENT_END " + relativeText + "\n";
+                    }
+                    if (result.evidence.size() + block.size()
+                        > evidenceBudget)
+                    {
+                        result.status =
+                            "The reviewed source context exceeds its bounded evidence budget.";
+                        return result;
+                    }
+                    if (sharedBytes.empty())
+                    {
+                        result.status =
+                            "The reviewed source range is empty: " + relativeText + ".";
+                        return result;
+                    }
+                    result.reviewed_slices.push_back(
+                        SourceContextLoadResult::ReviewedSlice{
+                            .relative_path = relativeText,
+                            .exact_bytes = std::string{sharedBytes},
+                            .first_line = firstLine,
+                            .last_line = firstLine + lineCount - 1u});
+                    result.verified_ranges.push_back({relativeText, sourceSha,
+                        excerptOffset, sharedBytes.size()});
+                    result.source_bytes += sharedBytes.size();
+                    result.evidence += block;
                 }
-                if (sharedBytes.empty())
-                {
-                    result.status =
-                        "The reviewed source range is empty: " + relativeText + ".";
-                    return result;
-                }
-                result.reviewed_slices.push_back(
-                    SourceContextLoadResult::ReviewedSlice{
-                        .relative_path = relativeText,
-                        .exact_bytes = std::string{sharedBytes},
-                        .first_line = firstLine,
-                        .last_line = firstLine + lineCount - 1u});
-                result.source_bytes += sharedBytes.size();
                 ++result.file_count;
-                result.evidence += block;
             }
 
             result.accepted = true;
@@ -1683,6 +1813,9 @@ namespace epochengine::editor_ai_development_panel
                     result.source_bytes,
                     result.navigation_fallbacks,
                     relativePaths.front());
+            result.status += epochengine::format_text(
+                " Working set: {} exact range(s); only FILE_CONTENT/FILE_EXCERPT blocks in this request are resident patch evidence.",
+                result.reviewed_slices.size());
             return result;
         }
         struct GroundingResult final
@@ -2652,6 +2785,7 @@ namespace epochengine::editor_ai_development_panel
                 std::uint64_t{1u}, orchestrator.campaign.record_generation);
             request.binding.operator_shared = true;
             request.expected_generation = 0u;
+            request.limits.maximum_entries = static_cast<std::uint32_t>(maximum_source_context_paths);
             request.reviewed_entries.reserve(loaded.reviewed_slices.size());
             for (std::size_t index = 0u;
                  index < loaded.reviewed_slices.size(); ++index)
@@ -5128,8 +5262,11 @@ namespace epochengine::editor_ai_development_panel
                     "END_ALREADY_REVIEWED_SOURCE_PATHS\n"
                     "Discovery is cumulative. Request only NEW paths or a NEW "
                     "line/query window that resolves the missing dependency. "
-                    "Do not repeat already reviewed evidence. The host retains "
-                    "previous verified source and repacks it within the context budget.";
+                    "Do not repeat an unchanged resident window. The host retains "
+                    "range metadata and re-reads matching source revisions within the context budget. "
+                    "REMEMBERED_RANGE is navigation only, not resident patch evidence; "
+                    "request a necessary older range again if its exact FILE_CONTENT/FILE_EXCERPT "
+                    "block is absent from the current request.";
                 output.model_prompt += cumulative_source_workspace.navigation_memory();
             }
             if (!model_reply_correction_diagnostic.empty())
@@ -5371,7 +5508,9 @@ namespace epochengine::editor_ai_development_panel
                 preservedReviewedPaths,
                 std::string_view{},
                 preservedObjective,
-                preservedReviewedReads);
+                preservedReviewedReads,
+                active_source_evidence_budget_bytes(),
+                cumulative_source_workspace.ranges());
             if (repairedContext.accepted)
             {
                 source_navigation_fallbacks += repairedContext.navigation_fallbacks;
@@ -7697,6 +7836,35 @@ namespace epochengine::editor_ai_development_panel
                 || readFixtureSource(fixture.path / navigationPath) != navigationSource)
                 return false;
             trace.stage = "source-window range failures";
+            const auto cumulativeRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .first_line = 900u}},
+                maximum_source_context_evidence_bytes, automaticRead.verified_ranges);
+            const auto overlappingRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .first_line = 200u}},
+                maximum_source_context_evidence_bytes, automaticRead.verified_ranges);
+            if (!cumulativeRead.accepted || cumulativeRead.file_count != 1u
+                || cumulativeRead.reviewed_slices.size() != 2u
+                || cumulativeRead.verified_ranges.size() != 2u
+                || cumulativeRead.evidence.find("// 100 ") == std::string::npos
+                || cumulativeRead.evidence.find("// 900 ") == std::string::npos
+                || !overlappingRead.accepted || overlappingRead.reviewed_slices.size() != 1u
+                || overlappingRead.reviewed_slices.front().first_line != 1u
+                || overlappingRead.source_bytes <= automaticRead.source_bytes)
+                return failed(__LINE__);
+            if (!writeFixtureSource(navigationPath, navigationSource + "// changed revision\n"))
+                return failed(__LINE__);
+            const auto changedRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .first_line = 900u}},
+                maximum_source_context_evidence_bytes, automaticRead.verified_ranges);
+            if (!changedRead.accepted || changedRead.reviewed_slices.size() != 1u
+                || changedRead.reviewed_slices.front().first_line != 900u
+                || changedRead.verified_ranges.front().source_sha256
+                    == automaticRead.verified_ranges.front().source_sha256
+                || !writeFixtureSource(navigationPath, navigationSource))
+                return failed(__LINE__);
             const auto missingLine = load_reviewed_source_context(
                 fixture.path.generic_string(), {navigationPath}, {}, {},
                 {ContextRead{.path = navigationPath, .first_line = 1'201u}});
@@ -7818,6 +7986,66 @@ namespace epochengine::editor_ai_development_panel
                 "Engine/src/editor/editor.reviewed_contract.cpp.";
             localOpenInput.architecture_evidence =
                 "PATH " + reviewedPath + "\n";
+
+            trace.stage = "working-set packing and curated range admission";
+            std::vector<std::string> packedPaths{navigationPath};
+            for (std::size_t index = 0u; index < 40u; ++index)
+            {
+                const auto path = "Engine/src/editor/editor.packed_" + std::to_string(index) + ".cpp";
+                if (!writeFixtureSource(path, std::string(2048u, ' ') + '\n'))
+                    return failed(__LINE__);
+                packedPaths.push_back(path);
+            }
+            const auto packedRead = load_reviewed_source_context(
+                fixture.path.generic_string(), packedPaths, {}, {},
+                {ContextRead{.path = navigationPath, .first_line = 900u}},
+                184u * 1024u, automaticRead.verified_ranges, {navigationPath});
+            Panel packedPanel{};
+            auto& packedState = *packedPanel.implementation_;
+            packedState.source_root = fixture.path.generic_string();
+            packedState.development_objective = "Inspect navigation source";
+            const auto packedBundle = packedState.build_curated_bundle(
+                localOpenInput, packedRead, logical_time_now().value);
+            if (!packedRead.accepted || packedRead.file_count != 41u
+                || packedRead.reviewed_slices.size() != 42u
+                || packedRead.evidence.size() > 184u * 1024u
+                || packedRead.source_bytes < 140u * 1024u
+                || !packedBundle || packedBundle.bundle.entries.size() != 42u)
+                return failed(__LINE__);
+
+            trace.stage = "evicted reviewed range can become resident again";
+            Panel residencyPanel{};
+            auto& residencyState = *residencyPanel.implementation_;
+            auto residencyInput = localOpenInput;
+            residencyInput.workspace_id = "range-residency-contract";
+            residencyInput.development_objective = "Inspect navigation target ownership";
+            const auto residencyEnvelope = 1u + 10u * navigationPath.size() + 384u;
+            residencyInput.architecture_evidence.assign(active_source_evidence_budget_bytes()
+                - residencyEnvelope - maximum_source_excerpt_bytes, ' ');
+            (void)residencyState.ensure(residencyInput.workspace_id,
+                residencyInput.source_snapshot_root, residencyInput.workspace_root);
+            residencyState.development_objective = residencyInput.development_objective;
+            std::string firstResident{};
+            for (const auto line : {1u, 900u, 1u})
+            {
+                residencyState.pending_source_context_paths = {navigationPath};
+                residencyState.pending_source_context_reads = {
+                    ContextRead{.path = navigationPath, .first_line = line}};
+                residencyState.pending_source_context_objective = residencyInput.development_objective;
+                const auto shared = residencyPanel.share_requested_source_context(residencyInput);
+                if (shared.action != (firstResident.empty()
+                        ? HostAction::materialize_source_workspace : HostAction::none)
+                    || residencyState.campaign_reviewed_evidence.size() != 1u
+                    || residencyState.cumulative_source_workspace.stagnant_rounds() != 0u
+                    || residencyState.campaign_reviewed_evidence.front().first_line != line)
+                    return failed(__LINE__);
+                const auto& currentSha = residencyState.campaign_reviewed_evidence.front().content_sha256;
+                if (firstResident.empty()) firstResident = currentSha;
+                else if ((line == 1u) != (firstResident == currentSha))
+                    return failed(__LINE__);
+            }
+            if (residencyState.cumulative_source_workspace.ranges().size() != 2u)
+                return failed(__LINE__);
 
             trace.stage = "hidden-pane progression and stopped-session restart";
             // Exercise the same non-render entry point used by the context
@@ -10675,7 +10903,9 @@ namespace epochengine::editor_ai_development_panel
             input.architecture_evidence,
             state.development_objective,
             sharedReads,
-            active_source_evidence_budget_bytes());
+            active_source_evidence_budget_bytes(),
+            pendingWorkspace.ranges(),
+            state.pending_source_context_paths);
         state.status_message = loaded.status;
         state.source_navigation_fallbacks += loaded.navigation_fallbacks;
         if (loaded.navigation_fallbacks != 0u)
@@ -10711,10 +10941,18 @@ namespace epochengine::editor_ai_development_panel
         {
             // A changed query/line, or a fallback annotation, is not new source.
             // Bind progress to the bytes actually supplied, not model intent.
+            const auto contentSha = Implementation::digest_text(slice.exact_bytes);
+            const bool alreadyResident = std::ranges::any_of(state.campaign_reviewed_evidence,
+                [&](const auto& prior)
+                {
+                    return prior.project_relative_path == slice.relative_path
+                        && prior.first_line == slice.first_line
+                        && prior.last_line == slice.last_line
+                        && prior.content_sha256 == contentSha;
+                });
             addedSourceEvidence = pendingWorkspace.remember_evidence(
                 slice.relative_path + "\n" + std::to_string(slice.first_line)
-                + "\n" + Implementation::digest_text(slice.exact_bytes))
-                || addedSourceEvidence;
+                + "\n" + contentSha) || !alreadyResident || addedSourceEvidence;
         }
         if (!state.cumulative_source_workspace.reviewed().empty()
             && !addedSourceEvidence)
@@ -10755,6 +10993,8 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         pendingWorkspace.note_discovery_round(addedSourceEvidence);
+        for (const auto& range : loaded.verified_ranges)
+            pendingWorkspace.remember_range(range);
         state.cumulative_source_workspace = std::move(pendingWorkspace);
         state.campaign_scope_digest = bundled.bundle.bundle_sha256;
         state.campaign_request_digest = bundled.bundle.request_sha256;
@@ -10768,8 +11008,9 @@ namespace epochengine::editor_ai_development_panel
         state.campaign_reviewed_paths.reserve(
             state.campaign_reviewed_evidence.size());
         for (const auto& evidence : state.campaign_reviewed_evidence)
-            state.campaign_reviewed_paths.push_back(
-                evidence.project_relative_path);
+            if (std::ranges::find(state.campaign_reviewed_paths,
+                    evidence.project_relative_path) == state.campaign_reviewed_paths.end())
+                state.campaign_reviewed_paths.push_back(evidence.project_relative_path);
         state.campaign_reviewed_reads = sharedReads;
         output.campaign_evidence.push_back(
             "Curated bundle SHA-256: " + state.campaign_scope_digest);

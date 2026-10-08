@@ -56,7 +56,8 @@ namespace epochengine::ai::source_discovery_contract
         const bool resetEvidence = workspace.remember_evidence("path:2:sha256-A");
 
         std::filesystem::remove_all(root, error);
-        return built && built.file_count == 3u && !hits.empty()
+        return source_workspace::run_contract()
+            && built && built.file_count == 3u && !hits.empty()
             && pathHits.size() == 1u && pathHits.front().line == 0u
             && pathHits.front().preview.empty()
             && map.find("PATH Engine/modules/gui.engine.ixx") != std::string::npos

@@ -17,6 +17,27 @@ Epoch Engine Self-Coding uses a host-owned retrieval layer. The model does not r
 
 The workspace is bounded by bytes/tokens, not a small operational file count. Individual navigation requests stay small so one model call cannot explode the working set. When LM Studio reports the loaded context length, Epoch may use the additional capacity as discovery grows; it does not fill the context window by default.
 
+The loader allocates from actual bounded file-size demand rather than splitting
+the source budget equally among all paths. It reserves useful minimum windows,
+completes small declarations, gives current requested paths surplus first, then
+distributes remaining space among older paths. Exact range residency remains
+limited by the prompt envelope; navigation history is not the prompt itself.
+
+The workspace retains at most four range descriptors per file and 256 total,
+containing path, byte offset/count and whole-file SHA-256, not another copy of
+source. The loader re-reads the authorized path and admits an older region only
+if that revision still matches and the byte/envelope budget permits. Overlapping
+or same-line ranges merge; disjoint regions retain separate counted envelopes
+and curated entries. Changed revisions invalidate old range descriptors for
+that path. A fresh objective clears the range memory.
+
+Curated entry capacity now matches the 256-path workspace ceiling, rather than
+silently retaining a separate 32-entry limit. Each request may contain several
+non-overlapping ranges of one file; its file list is still unique. Source-ID
+binding, total/entry/chunk byte ceilings and exact preimage validation remain.
+Legacy exact-block proposals may match any supplied range, but an ambiguous
+match across ranges is refused and excerpt-only evidence cannot replace a file.
+
 ## Stagnation
 
 Repeated discovery that adds no verified evidence is deduplicated. Two stagnant rounds stop the source-discovery loop and return a useful failure/question instead of spending a fixed sequence of replacement expansions.
@@ -31,10 +52,13 @@ Two unchanged actual reads preserve that accepted state and retire the stalled
 loop. Changed bytes or a genuinely different source range remain eligible.
 Fingerprint history is process-local, bounded to 4,096 entries of at most
 2,048 bytes each and reset for a new objective; it is not source storage or an
-edit grant. Retained path navigation does not yet guarantee residency of every
-earlier excerpt in every later prompt: byte budgets still select current ranges.
-Overlapping/evicted-window coverage and minimal working-set packing are the
-next retrieval optimization, not a claim of complete whole-project ingestion.
+edit grant. `REMEMBERED_RANGE` is navigation-only metadata. It does not guarantee
+residency or authorize a patch. A previously seen range that is absent from the
+current curated evidence may be requested and made resident again; an unchanged
+already-resident window remains stagnant. Only the exact counted blocks and
+current curated entries grant patch evidence. Dependency-aware ranking and
+native usefulness of the new packing remain acceptance work, not a claim of
+complete whole-project ingestion.
 
 ## Authority
 

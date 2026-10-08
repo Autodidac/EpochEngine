@@ -117,6 +117,11 @@ These are durable requirements, not completion claims:
   exact returned source ranges/bytes, preserve accepted navigation on failed
   sharing and avoid replaying expensive proposals over the same fallback window.
 - Preserve the existing sandbox/build/test/approval/promotion boundary.
+- Working-set residency is distinct from path/range memory. Small declarations
+  and current requested regions take budget priority; older exact regions may be
+  re-read only after whole-file revision verification. Evicted evidence can be
+  requested again. No path count, remembered fingerprint or packed CPU contract
+  proves that Qwen reached compilation or docked a successor.
 
 ## Engine Self-Coding
 

@@ -581,7 +581,21 @@ namespace epochengine::ai::development_proposal_codec
             }
 
             Proposal excerptWholeFile = valid;
-            return !validate_quality(
+            const std::string declaration = "export int validate();\n";
+            const std::string declarationEvidence =
+                "FILE_EXCERPT_SIZE Engine/src/ai/parser.cpp "
+                + std::to_string(declaration.size()) + "\n"
+                "FILE_EXCERPT_BEGIN Engine/src/ai/parser.cpp\n"
+                + declaration + "FILE_EXCERPT_END Engine/src/ai/parser.cpp\n";
+            // Either non-overlapping reviewed region can support an edit;
+            // two regions containing the same search block cannot.
+            return validate_quality(exactPatch, "Repair parser bounds validation",
+                    declarationEvidence + excerptEvidence)
+                && validate_quality(exactPatch, "Repair parser bounds validation",
+                    excerptEvidence + declarationEvidence)
+                && !validate_quality(exactPatch, "Repair parser bounds validation",
+                    excerptEvidence + excerptEvidence)
+                && !validate_quality(
                 excerptWholeFile,
                 "Repair parser bounds validation",
                 excerptEvidence);

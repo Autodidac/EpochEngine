@@ -27,10 +27,15 @@ False selector-only progress and failed-sharing mutation are repaired with
 transactional handoff and actual source fingerprints. Windows Debug/Release
 builds, rebuilt pure engine contracts and normal-environment 15/15 CPU CTests
 pass; evidence is in the changelog and `build/source-layout-20261007`.
-The next retrieval gap is useful dependency/working-set packing: retained path
-history does not mean every earlier excerpt resides in every later prompt.
-This repair prevents repeated fallback requests, not every insufficient-context
-answer. Actual model/build/choice proof remains open.
+Demand-aware working-set packing and revision-checked range retention are now
+implemented locally: small declarations remain complete, current paths take
+priority, and up to four old regions per file can be re-read inside the budget.
+Overlapping ranges merge; ambiguous edits across disjoint ranges are refused.
+Curated entries match the 256-path ceiling instead of stopping at 32. Historical
+but evicted ranges can become resident again without being treated as stagnant.
+Debug/Release build and pure/targeted CPU evidence belongs in the changelog.
+This is unpublished local source beyond the v0.90.35 admission, not native proof.
+Dependency-aware ranking and actual model/build/choice usefulness remain open.
 
 The layout migration, typed provider errors, request-owned activity/phase UI,
 foreground input cancellation and stage-specific streaming are implemented.
@@ -51,7 +56,11 @@ complete native AI succession.
    insufficient evidence, malformed proposal, provider timeout, compiler/test
    failure and preview attachment. Preserve current source and first-cause
    diagnostics across recovery; no blind overlapping generation or fresh
-   dependency installation per sandbox.
+   dependency installation per sandbox. Use the locally rebuilt
+   `build/windows-msvc-debug/Engine/Release/EpochEditor.exe` for the next
+   operator-owned run, not an older `x64/Release` executable. Confirm actual
+   resident FILE_CONTENT/FILE_EXCERPT ranges and curated entries before deciding
+   whether another dependency lookup, protocol repair or compiler fix is needed.
 2. Native runtime/model testing remains operator-owned. A new agent GUI/GPU/
    candidate/model launch requires an explicit exact-run request under AGENTS.
    At that proof, enable the endpoint's supported streaming mode after retiring
@@ -92,7 +101,9 @@ Runtime publication remains separate: no release/tag rewrite or Site runtime
 READY without the missing native/platform/package proof. The operator additionally
 authorized fast-forwarding multicontext-base-stable to mirror main until the
 software/context base reaches its later explicit freeze gate; preserve the
-original checkpoint in history. Delivery status belongs in the source receipt.
+original checkpoint in history. Continue with local source checkpoints for this
+goal; do not publish every repair or freeze before software-base acceptance.
+Delivery status belongs in the source receipt.
 
 Canonical source is tracked. Projects are authored durable data. Build outputs
 are reproducible. Candidate folders also hold edits, lineage and evidence:

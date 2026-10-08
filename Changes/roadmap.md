@@ -127,6 +127,9 @@ expose private SDK material. Current source and release receipts below govern.
   the accepted workspace; repeated fallback bytes cannot masquerade as progress.
   Retained context cannot cross candidate/project boundaries, authorize an edit
   outside bytes in that request, or enter project-assistant session state.
+  Demand-aware allocation, bounded revision-checked range retention and
+  evicted-range re-entry are implemented locally; native usefulness and
+  dependency ranking remain open. The 32-entry curated mismatch is repaired.
 - [ ] Enforce and test the candidate process's filesystem/network boundary.
   The current inherited OS identity plus Job Object is lifecycle supervision,
   not security confinement for arbitrary compiled candidate code.
