@@ -89,8 +89,10 @@ Release receipt: `release_sync_2026-10-01.md`; source admissions:
 `source_sync_2026-10-07.md`. The operator authorizes this bounded v0.90.35
 GitHub/Site source update, version/docs/README refresh and task-owned cleanup.
 Runtime publication remains separate: no release/tag rewrite or Site runtime
-READY without the missing native/platform/package proof. Stable-ref advancement
-is not part of this new request.
+READY without the missing native/platform/package proof. The operator additionally
+authorized fast-forwarding multicontext-base-stable to mirror main until the
+software/context base reaches its later explicit freeze gate; preserve the
+original checkpoint in history. Delivery status belongs in the source receipt.
 
 Canonical source is tracked. Projects are authored durable data. Build outputs
 are reproducible. Candidate folders also hold edits, lineage and evidence:

@@ -103,6 +103,9 @@ expose private SDK material. Current source and release receipts below govern.
 - Multicontext acceptance includes focus-owned physical input, clickable top-row controls, visible redocking guides, recoverable closed panes, and single-owner detached AI Chat behavior in Run mode.
 - Temporal scene acceptance includes create-after-Undo/delete-recreate behavior without inactive-history identity collisions.
 - The signed public runtime authority remains independent from this source-development number. A source version advance is not by itself a release publication.
+- The operator reauthorized `multicontext-base-stable` to mirror main through
+  these source repairs. Freeze only at the explicitly accepted reusable
+  software/context-base gate, not prematurely; original base history remains.
 - New implementation must update the owning architecture/release documents in the same pass; `Changes/active_pass.md` owns the current unresolved proof rather than accumulating stale historical checkpoints here.
 
 ## P0 — Self-Coding Candidate Lab
