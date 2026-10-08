@@ -34,8 +34,12 @@ the same engine-owned path.
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
-- Smart Update is binary-first. It discovers the newest matching versioned
-  runtime archive, verifies the signed release manifest and complete payload,
+- Smart Update is binary-first. Its toolbar item remains visible from an admitted available
+  receipt while checking/installing, disabled while busy, so transient operation
+  phases do not remove/reinsert it beside Run. Restart still requires verified
+  handoff evidence; this source behavior needs native visual confirmation.
+  It discovers the newest matching versioned runtime archive, verifies the
+  signed release manifest and complete payload,
   and stages replacement before considering source. Authorized encrypted source
   remains both an explicit operator choice and the fallback when a compatible
   package is absent or fails verification/staging; it never outranks a valid

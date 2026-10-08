@@ -30344,21 +30344,21 @@ namespace epochengine
             });
             chromeCommands.push_back(ChromeCommand::Run);
         }
-        if (editor.updateState == EditorUpdateState::Available
-            || editor.updateState == EditorUpdateState::RestartReady)
+        const auto updateToolbarState = editor_update_modal::update_toolbar_state(update_modal_flags());
+        if (updateToolbarState.visible)
         {
             const bool updateButtonActive = editor.showUpdateConfirmModal
                 || editor.showSourceUpdateConfirmModal
                 || editor.updateInstallPending;
             chromeCenter.push_back(gui::ChromeItemSpec{
                 .id = "chrome.update",
-                .label = update_toolbar_button_label(editor.updateState),
+                .label = updateToolbarState.label,
                 .preferred_width = 178.0f,
                 .compact_width = 132.0f,
                 .priority = 1u,
                 .pinned = true,
                 .overflowable = true,
-                .enabled = commandsEnabled,
+                .enabled = commandsEnabled && updateToolbarState.enabled,
                 .selected = updateButtonActive,
                 .role = gui::ChromeItemRole::Command
             });

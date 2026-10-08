@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 7, 2026. Only unfinished acceptance belongs here. Product order:
+Updated October 8, 2026. Only unfinished acceptance belongs here. Product order:
 `roadmap.md`; enduring intent: `mission_cache.md`; completed work/evidence:
 `changelog.txt`; behavior: the owning subsystem contracts. Historical dates and
 old process IDs are not live instructions or permissions.
@@ -14,12 +14,18 @@ validated build from the chosen sandbox. Original Engine and user projects must
 remain unchanged. A source selection, emitted tokens, staged patch or passing
 host contract is not a built successor.
 
-Latest operator run stopped after repeated insufficient-context proposals.
+The prior inspected operator run stopped after repeated insufficient-context proposals.
 `x64/Release/logs/Engine.AI.Transport.log` records proposal/selection cycles and
 private analytics for `session_117400489951233` record 16 -> 20 -> 26 retained
 files. No build/test/preview was admitted. This supports a retrieval/proposal
 stall, not a proven GPU, disconnect or docking failure. Inspect evidence by
 request/campaign identity; advancing bytes are not useful completion.
+
+The October 8 operator-owned run is left untouched. Last inspected dispatch for
+`session_117403545894914` has 16 reviewed files, a 200,120-byte coding prompt and
+no accepted build/test/preview receipt. Do not infer GPU saturation or a stopped
+process from incomplete telemetry. New source builds do not modify that request,
+its selected endpoint/model, credentials, original source or candidate data.
 
 ## Current Retrieval State And Remaining Gap
 
@@ -34,14 +40,25 @@ Overlapping ranges merge; ambiguous edits across disjoint ranges are refused.
 Curated entries match the 256-path ceiling instead of stopping at 32. Historical
 but evicted ranges can become resident again without being treated as stagnant.
 Debug/Release build and pure/targeted CPU evidence belongs in the changelog.
-This is unpublished local source beyond the v0.90.35 admission, not native proof.
-Dependency-aware ranking and actual model/build/choice usefulness remain open.
+One-hop module/include ownership and dependency-aware seed/catalog ranking are
+implemented, not native proof. Durable admitted plan text now survives validated
+orchestrator resume; fresh receipts/approvals are still required. Plan/proposal
+publication failures preserve prior state. Reselection retains the plan, and
+prompts prefer the next small buildable unit rather than the whole mission.
+Cold-editor-start checkpoint discovery, task-specific planning and actual
+file-by-file model/build/choice usefulness remain open. An unfinished generation
+cannot be restored as source or token/KV state.
 
 The layout migration, typed provider errors, request-owned activity/phase UI,
 foreground input cancellation and stage-specific streaming are implemented.
 Their prior Windows build/pure evidence is in the changelog. Reuse them; do not
 rebuild those systems because native acceptance is still open. This pass does
 not change backend frame/replay order, launch a model or alter active config.
+
+The updater toolbar now retains an evidence-backed available item through
+Checking/worker phases and disables it while busy. The label changes to Restart
+only with verified handoff state. This repairs the remove/reinsert state path;
+the reported visual flicker still needs the operator's native eye test.
 
 Operator-requested build-mode repair is implemented and build-verified separately:
 the same Windows projects expose Debug, Release, ReleaseWithDebugInfo and BuildAll,
@@ -104,6 +121,9 @@ software/context base reaches its later explicit freeze gate; preserve the
 original checkpoint in history. Continue with local source checkpoints for this
 goal; do not publish every repair or freeze before software-base acceptance.
 Delivery status belongs in the source receipt.
+The October 8 request explicitly authorizes the completed source batch on GitHub
+first and the Site source owner second; see `source_sync_2026-10-08.md`. No binary
+release or active-run/config mutation is part of this pass.
 
 Canonical source is tracked. Projects are authored durable data. Build outputs
 are reproducible. Candidate folders also hold edits, lineage and evidence:

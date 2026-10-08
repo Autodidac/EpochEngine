@@ -27,6 +27,31 @@ namespace epochengine::editor_update_modal
         bool sourceAuthorizationRunning = false;
     };
 
+    struct ToolbarState
+    {
+        bool visible{};
+        bool enabled{};
+        std::string_view label{};
+    };
+
+    // A discovered update remains a stable toolbar item while its operation
+    // runs. Transient Checking/worker phases must not remove the item and move
+    // Run underneath the pointer. Restart is exclusively verified handoff state.
+    [[nodiscard]] constexpr ToolbarState update_toolbar_state(const UpdateFlags flags) noexcept
+    {
+        const bool visible = flags.installableUpdate || flags.restartReady;
+        const bool busy = flags.updateRunning || flags.sourceWorkerRunning
+            || flags.sourceAuthorizationRunning;
+        return {visible, visible && !busy,
+            flags.restartReady ? "Restart" : "Update Available"};
+    }
+
+    static_assert(update_toolbar_state({.updateRunning = true, .installableUpdate = true}).visible);
+    static_assert(!update_toolbar_state({.updateRunning = true, .installableUpdate = true}).enabled);
+    static_assert(!update_toolbar_state({.updateRunning = true}).visible);
+    static_assert(update_toolbar_state({.restartReady = true}).label == "Restart");
+    static_assert(update_toolbar_state({.checkFailed = true, .installableUpdate = true}).visible);
+
     struct ActionStrip
     {
         std::array<float, 4> widths{};

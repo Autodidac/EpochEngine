@@ -169,7 +169,7 @@ namespace epochengine::ai::self_iteration_orchestrator
         [[nodiscard]] std::string serialize_payload(const Snapshot& snapshot)
         {
             std::ostringstream out{};
-            out << "schema=epoch.ai.self_iteration_orchestrator.v1\n"
+            out << "schema=epoch.ai.self_iteration_orchestrator.v2\n"
                 << "generation=" << snapshot.generation << '\n'
                 << "previous_state_sha256=" << snapshot.previous_state_sha256 << '\n'
                 << "orchestrator_id=" << snapshot.orchestrator_id << '\n'
@@ -186,6 +186,7 @@ namespace epochengine::ai::self_iteration_orchestrator
                 << "campaign_sha256=" << snapshot.campaign.state_digest << '\n'
                 << "campaign_generation=" << snapshot.campaign.record_generation << '\n'
                 << "plan_sha256=" << snapshot.plan_sha256 << '\n'
+                << "plan_bytes=" << escape_field(snapshot.plan_bytes) << '\n'
                 << "proposal_sha256=" << snapshot.proposal_sha256 << '\n'
                 << "candidate_sha256=" << snapshot.candidate_sha256 << '\n'
                 << "pending_operation_id=" << snapshot.pending_operation_id << '\n'
@@ -244,8 +245,9 @@ namespace epochengine::ai::self_iteration_orchestrator
             std::string_view value{};
             Snapshot result{};
             unsigned raw{};
-            if (!take("schema", value)
-                || value != "epoch.ai.self_iteration_orchestrator.v1"
+            if (!take("schema", value)) return false;
+            const bool contains_plan = value == "epoch.ai.self_iteration_orchestrator.v2";
+            if ((!contains_plan && value != "epoch.ai.self_iteration_orchestrator.v1")
                 || !number("generation", result.generation)
                 || !take("previous_state_sha256", value)) return false;
             result.previous_state_sha256.assign(value);
@@ -285,6 +287,12 @@ namespace epochengine::ai::self_iteration_orchestrator
                 || !take("plan_sha256", value)) return false;
             result.campaign.record_generation = persisted.campaign_generation;
             result.plan_sha256.assign(value);
+            if (contains_plan && (!take("plan_bytes", value)
+                || !unescape_field(value, result.plan_bytes)
+                || result.plan_bytes.size() > limits.maximum_plan_bytes
+                || (result.plan_bytes.empty() != result.plan_sha256.empty())
+                || (!result.plan_bytes.empty()
+                    && digest_text(result.plan_bytes) != result.plan_sha256))) return false;
             if (!take("proposal_sha256", value)) return false;
             result.proposal_sha256.assign(value);
             if (!take("candidate_sha256", value)) return false;
@@ -775,7 +783,9 @@ namespace epochengine::ai::self_iteration_orchestrator
         snapshot_.transport = transport;
         snapshot_.host = std::move(configuration.host);
         snapshot_.phase = Phase::awaiting_plan_request;
-        snapshot_.plan_sha256.clear();
+        // The accepted plan is read-only continuity. Pending operations and
+        // approvals are always discarded and a fresh plan receipt is required.
+        if (snapshot_.plan_bytes.empty()) snapshot_.plan_sha256.clear();
         snapshot_.proposal_sha256.clear();
         snapshot_.candidate_sha256.clear();
         snapshot_.pending_operation_id.clear();
@@ -794,7 +804,7 @@ namespace epochengine::ai::self_iteration_orchestrator
             return reject("Resume evidence exceeds the orchestration record budget.");
         state_path_ = checkpoint_path;
         configured_ = true;
-        return persist("Campaign resumed fail-closed; a fresh plan request is required.");
+        return persist("Campaign resumed fail-closed; saved plan memory is retained, but a fresh plan request is required.");
     }
 
     bool Orchestrator::action_matches(const ActionToken& action) const
@@ -1039,13 +1049,19 @@ namespace epochengine::ai::self_iteration_orchestrator
         if (snapshot_.phase != Phase::awaiting_plan_result
             || snapshot_.pending_operation_kind != OperationKind::model_plan
             || !receipt_matches(receipt) || plan_bytes.empty()
+            || plan_bytes.find('\0') != std::string_view::npos
             || plan_bytes.size() > limits_.maximum_plan_bytes)
             return reject("Plan result is stale, malformed, or outside the plan budget.");
-        snapshot_.plan_sha256 = digest_text(plan_bytes);
-        snapshot_.pending_operation_id.clear();
-        return commit(Phase::awaiting_curated_evidence,
+        Orchestrator staged = *this;
+        staged.snapshot_.plan_sha256 = digest_text(plan_bytes);
+        staged.snapshot_.plan_bytes.assign(plan_bytes);
+        staged.snapshot_.pending_operation_id.clear();
+        auto committed = staged.commit(Phase::awaiting_curated_evidence,
             EvidenceKind::plan_received, receipt.transition_id,
-            snapshot_.plan_sha256, std::move(summary), true);
+            staged.snapshot_.plan_sha256, std::move(summary), true);
+        if (!committed) return reject(committed.status);
+        *this = std::move(staged);
+        return committed;
     }
 
     Result Orchestrator::share_curated_evidence(
@@ -1087,20 +1103,24 @@ namespace epochengine::ai::self_iteration_orchestrator
             || !receipt_matches(receipt) || proposal_bytes.empty()
             || proposal_bytes.size() > snapshot_.campaign.budgets.maximum_candidate_bytes)
             return reject("Proposal result is stale, malformed, or outside the candidate budget.");
-        const auto staged = session_.stage_candidate(
+        Orchestrator transaction = *this;
+        const auto staged = transaction.session_.stage_candidate(
             snapshot_.campaign.session.identity, proposal_bytes);
         if (!staged) return reject(staged.status);
         auto counted = iteration_campaign::consume_budget(
             snapshot_.campaign, iteration_campaign::BudgetKind::candidate);
         if (!counted) return reject(counted.status);
-        snapshot_.campaign = std::move(counted.report);
-        snapshot_.campaign.session = session_.report();
-        snapshot_.proposal_sha256 = snapshot_.campaign.session.proposal_digest;
-        snapshot_.candidate_sha256 = snapshot_.campaign.session.candidate_digest;
-        snapshot_.pending_operation_id.clear();
-        return commit(Phase::awaiting_manual_review,
+        transaction.snapshot_.campaign = std::move(counted.report);
+        transaction.snapshot_.campaign.session = transaction.session_.report();
+        transaction.snapshot_.proposal_sha256 = transaction.snapshot_.campaign.session.proposal_digest;
+        transaction.snapshot_.candidate_sha256 = transaction.snapshot_.campaign.session.candidate_digest;
+        transaction.snapshot_.pending_operation_id.clear();
+        auto committed = transaction.commit(Phase::awaiting_manual_review,
             EvidenceKind::proposal_received, receipt.transition_id,
-            snapshot_.proposal_sha256, std::move(summary), true, true);
+            transaction.snapshot_.proposal_sha256, std::move(summary), true, true);
+        if (!committed) return reject(committed.status);
+        *this = std::move(transaction);
+        return committed;
     }
 
     Result Orchestrator::review_proposal(

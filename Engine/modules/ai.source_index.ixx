@@ -20,6 +20,7 @@ export namespace epochengine::ai::source_index
         text,
         identifier,
         path,
+        // Exact indexed path or module identity, not a source-text substring.
         imports,
         importers,
         references
@@ -57,6 +58,10 @@ export namespace epochengine::ai::source_index
             const std::filesystem::path& root,
             std::string_view required_prefix = {});
         [[nodiscard]] std::vector<SearchHit> search(const SearchQuery& query) const;
+        // Direct dependencies and same-module units only. No recursive source
+        // loading, filesystem access or edit authority is implied by a hit.
+        [[nodiscard]] std::vector<SearchHit> related_sources(
+            std::string_view relative_path, std::size_t maximum_hits = 8u) const;
         [[nodiscard]] std::string compact_map(
             std::string_view objective,
             std::size_t maximum_bytes = 48u * 1024u,
@@ -66,6 +71,20 @@ export namespace epochengine::ai::source_index
         void clear() noexcept;
 
     private:
+        struct Import final
+        {
+            std::string name{};
+            std::size_t line{};
+            bool header{};
+        };
+
+        struct Dependency final
+        {
+            std::size_t target{};
+            std::size_t line{};
+            bool header{};
+        };
+
         struct Entry final
         {
             std::string path{};
@@ -73,7 +92,12 @@ export namespace epochengine::ai::source_index
             std::string text{};
             std::string lower_text{};
             std::vector<std::string> symbols{};
-            std::vector<std::string> imports{};
+            std::string module_name{};
+            std::size_t module_line{};
+            bool module_interface{};
+            std::vector<Import> imports{};
+            std::vector<Dependency> dependencies{};
+            std::vector<std::size_t> module_units{};
         };
 
         std::filesystem::path root_{};

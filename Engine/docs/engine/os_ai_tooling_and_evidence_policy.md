@@ -269,6 +269,12 @@ not acquire supervisor or live-source authority by doing so.
   evidence, proposal, manual review, apply decision, sandbox result, validation,
   checkpoint, resume, and cancellation state machine. Engine-source and
   generated-project campaigns have distinct authority handles.
+  Complete admitted plan text is persisted with its digest under a bounded v2
+  payload; older hash-only payloads remain readable. Resume revalidates authority
+  and clears approvals/pending work, retaining the plan only as context for a
+  fresh receipt. Plan/proposal publication is transactional: capacity/I/O refusal
+  does not consume the current receipt or in-memory candidate state. Partial
+  streamed arguments and model KV state are never treated as saved source.
 - `ai.source_patch_bundle` owns the narrow text-only unified-diff artifact. Each
   admitted file is bound to a curated relative path, exact preimage SHA-256,
   size, encoding, and line-ending policy. Path escapes, binaries, symlinks,

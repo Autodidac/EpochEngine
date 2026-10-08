@@ -13,6 +13,19 @@ Epoch Engine Self-Coding uses a host-owned retrieval layer. The model does not r
 7. Permit edits only against REVIEWED_SOURCE_ID values backed by exact bytes supplied in that patch request.
 8. Stage edits in the disposable sandbox and retain the existing build/test/review/promotion gates.
 
+## Indexed Relationships
+
+Module imports resolve to unique indexed interfaces; quoted/angle includes
+resolve only to indexed paths (local directory, exact root, then unique suffix).
+Same-module declaration/implementation units form a bounded one-hop neighborhood.
+Initial source seeds and shortened catalogs retain these actual owners before
+heuristic directory matches. Imports/importers queries are exact path/module
+relationships, not substring aliases. Ambiguous owners/includes remain unresolved.
+Comments and ordinary/raw literals cannot create declarations or dependency
+edges; conditional compilation is not evaluated, so this is navigation metadata,
+not compiler truth. Compact maps reserve their footer and only emit edges whose
+targets are also admitted PATH entries.
+
 ## Budgets
 
 The workspace is bounded by bytes/tokens, not a small operational file count. Individual navigation requests stay small so one model call cannot explode the working set. When LM Studio reports the loaded context length, Epoch may use the additional capacity as discovery grows; it does not fill the context window by default.
@@ -56,8 +69,8 @@ edit grant. `REMEMBERED_RANGE` is navigation-only metadata. It does not guarante
 residency or authorize a patch. A previously seen range that is absent from the
 current curated evidence may be requested and made resident again; an unchanged
 already-resident window remains stagnant. Only the exact counted blocks and
-current curated entries grant patch evidence. Dependency-aware ranking and
-native usefulness of the new packing remain acceptance work, not a claim of
+current curated entries grant patch evidence. Dependency-aware ranking is
+implemented; native usefulness of the new packing remains acceptance work, not a claim of
 complete whole-project ingestion.
 
 ## Authority
@@ -76,3 +89,22 @@ late results from the old generation still cannot stage a build. Two exhausted
 reasoning corrections stop instead of silently resetting the same retry budget.
 These are CPU contract guarantees, not evidence that a native candidate was
 successfully docked or chosen by an operator.
+
+## Incremental Task Memory
+
+The orchestrator stores complete admitted plan text plus its SHA-256 inside its
+bounded, atomically replaced checkpoint. Payload v2 checks size, escaped fields and
+digest on reload; v1 hash-only checkpoints remain readable but cannot recover
+plan text. Failed plan/proposal publication leaves the pending receipt, counters
+and in-memory state unchanged for retry. A resume revalidates source/host/model
+authority and clears pending operations, approvals and validation. The saved plan
+is continuity data, not permission; it requires fresh admission before execution.
+Context reselection keeps it instead of overwriting it with the generic host loop.
+
+Proposals request the smallest next buildable unit, preferably one file or a
+required coupled edit set. Existing exact patch transactions journal completed
+units separately from compiler/runtime receipts. Mid-generation reload discards
+unfinished arguments: there is no token/KV-cache recovery or partial-file apply.
+Restart UI presently resumes its known checkpoint; cold-start checkpoint
+discovery and demonstrated file-by-file native recovery are still acceptance
+work. The current deterministic host plan is not a task-specific model planner.

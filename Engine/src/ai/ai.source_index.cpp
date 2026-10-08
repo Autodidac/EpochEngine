@@ -9,6 +9,8 @@ module;
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <map>
 #include <ranges>
 #include <set>
 #include <sstream>
@@ -54,7 +56,9 @@ namespace epochengine::ai::source_index
         {
             if (required_prefix.empty()) return true;
             const std::string normalized = relative.generic_string();
-            return normalized.starts_with(required_prefix);
+            std::string prefix{required_prefix};
+            while (!prefix.empty() && prefix.back() == '/') prefix.pop_back();
+            return normalized == prefix || normalized.starts_with(prefix + '/');
         }
 
         [[nodiscard]] std::vector<std::string> objective_terms(std::string_view objective)
@@ -88,12 +92,103 @@ namespace epochengine::ai::source_index
             return std::string{text};
         }
 
-        void collect_metadata(
-            std::string_view text,
-            std::vector<std::string>& symbols,
-            std::vector<std::string>& imports)
+        // Preserve offsets/newlines while excluding comments and ordinary/raw
+        // literals. Header operands stay visible for conservative include hints.
+        // This is lexical navigation, not a compiler or preprocessor evaluation.
+        [[nodiscard]] std::string indexed_code(std::string_view text)
+        {
+            std::string code{text};
+            const auto blank = [&](std::size_t first, std::size_t last)
+            {
+                for (auto offset = first; offset < last; ++offset)
+                    if (code[offset] != '\n' && code[offset] != '\r') code[offset] = ' ';
+            };
+            std::size_t lineBegin{};
+            for (std::size_t offset{}; offset < text.size();)
+            {
+                if (text[offset] == '\n') { lineBegin = ++offset; continue; }
+                if (text.substr(offset).starts_with("//"))
+                {
+                    auto end = text.find('\n', offset);
+                    // A continued line comment must not reveal fake directives.
+                    while (end != std::string_view::npos)
+                    {
+                        auto last = end;
+                        if (last > offset && text[last - 1u] == '\r') --last;
+                        if (last == offset || text[last - 1u] != '\\') break;
+                        end = text.find('\n', end + 1u);
+                    }
+                    if (end == std::string_view::npos) end = text.size();
+                    blank(offset, end);
+                    offset = end;
+                    continue;
+                }
+                if (text.substr(offset).starts_with("/*"))
+                {
+                    const auto close = text.find("*/", offset + 2u);
+                    const auto end = close == std::string_view::npos ? text.size() : close + 2u;
+                    blank(offset, end);
+                    offset = end;
+                    const auto newline = text.rfind('\n', end == 0u ? 0u : end - 1u);
+                    if (newline != std::string_view::npos) lineBegin = newline + 1u;
+                    continue;
+                }
+                if (text.substr(offset).starts_with("R\""))
+                {
+                    const auto open = text.find('(', offset + 2u);
+                    if (open != std::string_view::npos && open - offset <= 18u)
+                    {
+                        const std::string ending = ")" + std::string{text.substr(offset + 2u, open - offset - 2u)} + '"';
+                        const auto close = text.find(ending, open + 1u);
+                        const auto end = close == std::string_view::npos ? text.size() : close + ending.size();
+                        blank(offset, end);
+                        offset = end;
+                        const auto newline = text.rfind('\n', end - 1u);
+                        if (newline != std::string_view::npos) lineBegin = newline + 1u;
+                        continue;
+                    }
+                }
+                if (text[offset] == '"' || text[offset] == '\'')
+                {
+                    // Digit separators are not character literals.
+                    if (text[offset] == '\'' && offset > 0u && offset + 1u < text.size()
+                        && std::isalnum(static_cast<unsigned char>(text[offset - 1u])) != 0
+                        && std::isalnum(static_cast<unsigned char>(text[offset + 1u])) != 0)
+                    { ++offset; continue; }
+                    const auto prefix = trim(std::string_view{code}.substr(lineBegin, offset - lineBegin));
+                    const bool header = (std::string_view{prefix}.starts_with('#')
+                            && trim(std::string_view{prefix}.substr(1u)) == "include")
+                        || prefix == "import" || prefix == "export import";
+                    const char delimiter = text[offset];
+                    std::size_t end = offset + 1u;
+                    while (end < text.size())
+                    {
+                        if (text[end] == '\\') { end = (std::min)(end + 2u, text.size()); continue; }
+                        if (text[end++] == delimiter) break;
+                    }
+                    if (!header) blank(offset, end);
+                    offset = end;
+                    const auto newline = text.rfind('\n', end - 1u);
+                    if (newline != std::string_view::npos) lineBegin = newline + 1u;
+                    continue;
+                }
+                ++offset;
+            }
+            return code;
+        }
+
+        [[nodiscard]] bool module_identity(std::string_view name)
+        {
+            return !name.empty() && name.size() <= 256u
+                && std::ranges::all_of(name, [](unsigned char value)
+                { return std::isalnum(value) != 0 || value == '_' || value == '.' || value == ':'; });
+        }
+
+        template<class Metadata>
+        void collect_metadata(std::string_view text, Metadata& metadata)
         {
             std::size_t begin{};
+            std::size_t lineNumber{1u};
             while (begin <= text.size())
             {
                 const std::size_t end = text.find('\n', begin);
@@ -101,14 +196,54 @@ namespace epochengine::ai::source_index
                     end == std::string_view::npos ? text.size() - begin : end - begin);
                 if (!line.empty() && line.back() == '\r') line.remove_suffix(1u);
                 const std::string stripped = trim(line);
-                const std::string lower = lower_ascii(stripped);
-                if (lower.starts_with("import ") || lower.starts_with("export import ")
-                    || lower.starts_with("#include"))
+                std::string_view declarationText{stripped};
+                const bool exported = declarationText.starts_with("export ");
+                if (exported) declarationText.remove_prefix(7u);
+                if (declarationText.starts_with("module "))
                 {
-                    if (imports.size() < 128u && stripped.size() <= 512u)
-                        imports.push_back(stripped);
+                    const auto semicolon = declarationText.find(';');
+                    if (semicolon != std::string_view::npos)
+                    {
+                        const auto name = trim(declarationText.substr(7u, semicolon - 7u));
+                        if (module_identity(name) && name != ":private")
+                        {
+                            metadata.module_name = name;
+                            metadata.module_line = lineNumber;
+                            metadata.module_interface = exported;
+                        }
+                    }
+                }
+                std::string importName{};
+                bool header{};
+                if (declarationText.starts_with("import "))
+                {
+                    const auto semicolon = declarationText.find(';');
+                    if (semicolon != std::string_view::npos)
+                        importName = trim(declarationText.substr(7u, semicolon - 7u));
+                }
+                else if (declarationText.starts_with('#'))
+                {
+                    const auto directive = trim(declarationText.substr(1u));
+                    if (std::string_view{directive}.starts_with("include")
+                        && directive.size() > 7u
+                        && (std::isspace(static_cast<unsigned char>(directive[7u])) != 0
+                            || directive[7u] == '"' || directive[7u] == '<'))
+                        importName = trim(std::string_view{directive}.substr(7u));
+                }
+                if (!importName.empty() && (importName.front() == '"' || importName.front() == '<'))
+                {
+                    const auto close = importName.find(importName.front() == '<' ? '>' : '"', 1u);
+                    if (close != std::string::npos)
+                    { importName = importName.substr(1u, close - 1u); header = true; }
+                    else importName.clear();
+                }
+                if (!importName.empty() && importName.size() <= 512u
+                    && (header || module_identity(importName)) && metadata.imports.size() < 128u)
+                {
+                    metadata.imports.push_back({std::move(importName), lineNumber, header});
                 }
 
+                const std::string lower = lower_ascii(stripped);
                 const bool declaration = lower.starts_with("class ")
                     || lower.starts_with("struct ") || lower.starts_with("enum ")
                     || lower.starts_with("enum class ") || lower.starts_with("namespace ")
@@ -119,13 +254,30 @@ namespace epochengine::ai::source_index
                         && stripped.find(')') != std::string::npos
                         && stripped.find(';') != std::string::npos);
                 if (declaration && stripped.size() >= 3u && stripped.size() <= 320u
-                    && symbols.size() < 256u)
+                    && metadata.symbols.size() < 256u)
                 {
-                    symbols.push_back(stripped);
+                    metadata.symbols.push_back(stripped);
                 }
                 if (end == std::string_view::npos) break;
                 begin = end + 1u;
+                ++lineNumber;
             }
+        }
+
+        [[nodiscard]] std::size_t identifier_offset(std::string_view text, std::string_view needle)
+        {
+            const auto identifierChar = [](unsigned char value)
+            { return std::isalnum(value) != 0 || value == '_'; };
+            std::size_t offset{};
+            while ((offset = text.find(needle, offset)) != std::string_view::npos)
+            {
+                const auto end = offset + needle.size();
+                if ((offset == 0u || !identifierChar(static_cast<unsigned char>(text[offset - 1u])))
+                    && (end == text.size() || !identifierChar(static_cast<unsigned char>(text[end]))))
+                    return offset;
+                ++offset;
+            }
+            return std::string_view::npos;
         }
 
         [[nodiscard]] std::size_t line_for_offset(std::string_view text, std::size_t offset)
@@ -199,8 +351,9 @@ namespace epochengine::ai::source_index
                             indexed.path = relative.generic_string();
                             indexed.lower_path = lower_ascii(indexed.path);
                             indexed.text = std::move(bytes);
-                            indexed.lower_text = lower_ascii(indexed.text);
-                            collect_metadata(indexed.text, indexed.symbols, indexed.imports);
+                            const std::string code = indexed_code(indexed.text);
+                            indexed.lower_text = lower_ascii(code);
+                            collect_metadata(code, indexed);
                             symbolCount += indexed.symbols.size();
                             entries_.push_back(std::move(indexed));
                             indexedBytes += size;
@@ -213,8 +366,85 @@ namespace epochengine::ai::source_index
             if (error) error.clear();
         }
         std::ranges::sort(entries_, {}, &Entry::path);
+        // Resolve only into the already admitted index. No header probing,
+        // guessed filename-to-module mapping or traversal outside this scope.
+        std::map<std::string, std::size_t> paths{};
+        std::map<std::string, std::vector<std::size_t>> modules{};
+        std::map<std::string, std::vector<std::size_t>> interfaces{};
+        std::map<std::string, std::size_t> suffixes{};
+        constexpr auto ambiguous = std::numeric_limits<std::size_t>::max();
+        for (std::size_t i{}; i < entries_.size(); ++i)
+        {
+            const auto& indexed = entries_[i];
+            paths.emplace(indexed.path, i);
+            if (!indexed.module_name.empty())
+            {
+                modules[indexed.module_name].push_back(i);
+                if (indexed.module_interface || (indexed.module_name.find(':') != std::string::npos
+                    && std::string_view{indexed.path}.ends_with(".ixx")))
+                    interfaces[indexed.module_name].push_back(i);
+            }
+            std::size_t begin{};
+            while (begin < indexed.path.size())
+            {
+                auto [found, inserted] = suffixes.emplace(indexed.path.substr(begin), i);
+                if (!inserted && found->second != i) found->second = ambiguous;
+                const auto slash = indexed.path.find('/', begin);
+                if (slash == std::string::npos) break;
+                begin = slash + 1u;
+            }
+        }
+        for (auto& [name, units] : modules)
+            std::ranges::stable_sort(units, [&](std::size_t left, std::size_t right)
+            { return entries_[left].module_interface && !entries_[right].module_interface; });
+        for (std::size_t i{}; i < entries_.size(); ++i)
+        {
+            auto& indexed = entries_[i];
+            if (const auto owner = modules.find(indexed.module_name); owner != modules.end())
+            {
+                for (const auto unit : owner->second)
+                {
+                    if (unit != i) indexed.module_units.push_back(unit);
+                    if (indexed.module_units.size() == 64u) break;
+                }
+            }
+            for (const auto& imported : indexed.imports)
+            {
+                auto target = ambiguous;
+                if (!imported.header)
+                {
+                    std::string name = imported.name;
+                    if (name.starts_with(':') && !indexed.module_name.empty())
+                        name = indexed.module_name.substr(0u, indexed.module_name.find(':')) + name;
+                    const auto interface = interfaces.find(name);
+                    if (interface != interfaces.end() && interface->second.size() == 1u)
+                        target = interface->second.front();
+                }
+                else
+                {
+                    const std::filesystem::path operand{imported.name};
+                    if (!operand.is_absolute() && !operand.has_root_name())
+                    {
+                        const auto local = (std::filesystem::path{indexed.path}.parent_path()
+                            / operand).lexically_normal().generic_string();
+                        if (const auto found = paths.find(local); found != paths.end()) target = found->second;
+                        else if (const auto rootPath = paths.find(operand.lexically_normal().generic_string());
+                            rootPath != paths.end()) target = rootPath->second;
+                        else if (std::ranges::none_of(operand, [](const auto& part) { return part == ".."; }))
+                        {
+                            const auto suffix = suffixes.find(operand.lexically_normal().generic_string());
+                            if (suffix != suffixes.end()) target = suffix->second;
+                        }
+                    }
+                }
+                if (target != ambiguous && target != i
+                    && std::ranges::none_of(indexed.dependencies,
+                        [&](const Dependency& edge) { return edge.target == target; }))
+                    indexed.dependencies.push_back({target, imported.line, imported.header});
+            }
+        }
         return {true, entries_.size(), symbolCount,
-            "Repository source index is ready for bounded path, symbol, text, import, and reference search."};
+            "Repository source index is ready for bounded code search and scope-local module/include relationships."};
     }
 
     std::vector<SearchHit> RepositoryIndex::search(const SearchQuery& query) const
@@ -222,7 +452,31 @@ namespace epochengine::ai::source_index
         std::vector<SearchHit> hits{};
         if (query.text.empty() || entries_.empty()) return hits;
         const std::string needle = lower_ascii(query.text);
-        const std::size_t maximumHits = (std::clamp)(query.maximum_hits, std::size_t{1u}, std::size_t{64u});
+        if (query.maximum_hits == 0u) return hits;
+        const std::size_t maximumHits = (std::min)(query.maximum_hits, std::size_t{64u});
+        if (query.kind == SearchKind::imports || query.kind == SearchKind::importers)
+        {
+            std::set<std::size_t> targets{};
+            for (std::size_t i{}; i < entries_.size(); ++i)
+                if (entries_[i].path == query.text || entries_[i].module_name == query.text)
+                    targets.insert(i);
+            for (std::size_t i{}; i < entries_.size(); ++i)
+            {
+                const auto& entry = entries_[i];
+                for (const auto& edge : entry.dependencies)
+                {
+                    const bool outgoing = query.kind == SearchKind::imports;
+                    if (!(outgoing ? targets.contains(i) : targets.contains(edge.target))) continue;
+                    const auto& hit = outgoing ? entries_[edge.target] : entry;
+                    if (std::ranges::any_of(hits, [&](const SearchHit& found)
+                        { return found.relative_path == hit.path; })) continue;
+                    const auto line = outgoing ? hit.module_line : edge.line;
+                    hits.push_back({hit.path, line, 700,
+                        std::string{edge.header ? "include " : "import "} + entries_[edge.target].path});
+                }
+            }
+        }
+        else
         for (const auto& entry : entries_)
         {
             int score{};
@@ -234,17 +488,13 @@ namespace epochengine::ai::source_index
                 if (offset != std::string::npos) score = 600 - static_cast<int>((std::min)(offset, std::size_t{500u}));
                 break;
             case SearchKind::imports:
-                for (const auto& line : entry.imports)
-                {
-                    if (lower_ascii(line).find(needle) != std::string::npos)
-                    { score = 520; offset = entry.lower_text.find(lower_ascii(line)); break; }
-                }
-                break;
             case SearchKind::importers:
+                break;
             case SearchKind::references:
             case SearchKind::identifier:
             case SearchKind::text:
-                offset = entry.lower_text.find(needle);
+                offset = query.kind == SearchKind::text ? lower_ascii(entry.text).find(needle)
+                    : identifier_offset(entry.lower_text, needle);
                 if (offset != std::string::npos)
                 {
                     score = query.kind == SearchKind::identifier ? 560
@@ -270,6 +520,35 @@ namespace epochengine::ai::source_index
             return a.line < b.line;
         });
         if (hits.size() > maximumHits) hits.resize(maximumHits);
+        return hits;
+    }
+
+    std::vector<SearchHit> RepositoryIndex::related_sources(
+        std::string_view relative_path, std::size_t maximum_hits) const
+    {
+        std::vector<SearchHit> hits{};
+        if (maximum_hits == 0u) return hits;
+        const auto found = std::ranges::lower_bound(entries_, relative_path, {}, &Entry::path);
+        if (found == entries_.end() || found->path != relative_path) return hits;
+        const auto add = [&](std::size_t target, int score, std::string_view relation)
+        {
+            const auto& entry = entries_[target];
+            auto existing = std::ranges::find(hits, entry.path, &SearchHit::relative_path);
+            if (existing == hits.end())
+                hits.push_back({entry.path, entry.module_line, score, std::string{relation}});
+            else if (existing->score < score) existing->score = score;
+        };
+        for (const auto unit : found->module_units)
+            add(unit, entries_[unit].module_interface ? 900 : 600, "same module: " + found->module_name);
+        for (const auto& edge : found->dependencies)
+            add(edge.target, edge.header ? 700 : 800, edge.header ? "direct include" : "direct module import");
+        std::ranges::sort(hits, [](const SearchHit& left, const SearchHit& right)
+        {
+            if (left.score != right.score) return left.score > right.score;
+            return left.relative_path < right.relative_path;
+        });
+        if (hits.size() > (std::min)(maximum_hits, std::size_t{64u}))
+            hits.resize((std::min)(maximum_hits, std::size_t{64u}));
         return hits;
     }
 
@@ -300,31 +579,77 @@ namespace epochengine::ai::source_index
             if (a.first != b.first) return a.first > b.first;
             return a.second->path < b.second->path;
         });
-
-        std::string out = "EPOCH_SOURCE_REPOSITORY_MAP_V2\n";
-        out += "PATH lines are verified navigation authority. MAP lines are compact read-only hints, never edit authority.\n";
-        std::size_t emitted{};
+        // One-hop expansion from a small lexical seed, never a recursive graph
+        // crawl. Declaration owners stay discoverable even without objective
+        // keywords in their paths or text.
+        std::vector<std::pair<int, const Entry*>> seeds{
+            ranked.begin(), ranked.begin() + static_cast<std::ptrdiff_t>((std::min)(ranked.size(), std::size_t{8u}))};
+        for (const auto& [score, seed] : seeds)
+        {
+            if (score <= 1) continue;
+            for (const auto& hit : related_sources(seed->path, 8u))
+            {
+                const auto target = std::ranges::lower_bound(entries_, hit.relative_path, {}, &Entry::path);
+                if (target == entries_.end()) continue;
+                const int boost = (std::max)(1, score / 2) + hit.score / 32;
+                auto existing = std::ranges::find_if(ranked,
+                    [&](const auto& item) { return item.second == &*target; });
+                if (existing == ranked.end()) ranked.emplace_back(boost, &*target);
+                else existing->first = (std::max)(existing->first, boost);
+            }
+        }
+        std::ranges::sort(ranked, [](const auto& a, const auto& b)
+        {
+            if (a.first != b.first) return a.first > b.first;
+            return a.second->path < b.second->path;
+        });
+        constexpr std::string_view heading = "EPOCH_SOURCE_REPOSITORY_MAP_V2\n"
+            "PATH lines are verified navigation authority. MAP/EDGE lines are lexical read-only hints, never edit authority.\n";
+        constexpr std::string_view ending = "END_EPOCH_SOURCE_REPOSITORY_MAP_V2\n";
+        if (maximum_bytes < heading.size() + ending.size()) return {};
+        std::string out{heading};
+        struct Block final
+        {
+            std::string path{};
+            std::string body{};
+            std::vector<std::pair<std::string, std::string>> edges{};
+        };
+        std::vector<Block> blocks{};
+        std::size_t reserved = heading.size() + ending.size();
         for (const auto& [score, entry] : ranked)
         {
-            if (emitted >= maximum_files) break;
-            std::string block = "PATH " + entry->path + "\n";
+            if (blocks.size() >= maximum_files) break;
+            Block block{entry->path, "PATH " + entry->path + "\n", {}};
+            if (!entry->module_name.empty())
+                block.body += "MAP " + entry->path + " :: "
+                    + (entry->module_interface ? "interface " : "module unit ") + entry->module_name + "\n";
             std::size_t symbols{};
             for (const auto& symbol : entry->symbols)
             {
                 if (symbols++ >= 4u) break;
-                block += "MAP " + entry->path + " :: " + symbol + "\n";
+                block.body += "MAP " + entry->path + " :: " + symbol + "\n";
             }
-            std::size_t imports{};
-            for (const auto& importLine : entry->imports)
+            std::size_t size = block.body.size();
+            for (const auto& hit : related_sources(entry->path, 4u))
             {
-                if (imports++ >= 2u) break;
-                block += "EDGE " + entry->path + " :: " + importLine + "\n";
+                std::string edge = "EDGE " + entry->path + " -> " + hit.relative_path + " :: " + hit.preview + "\n";
+                size += edge.size();
+                block.edges.emplace_back(hit.relative_path, std::move(edge));
             }
-            if (out.size() + block.size() > maximum_bytes) break;
-            out += block;
-            ++emitted;
+            if (size > maximum_bytes - reserved) continue;
+            reserved += size;
+            blocks.push_back(std::move(block));
         }
-        out += "END_EPOCH_SOURCE_REPOSITORY_MAP_V2\n";
+        std::set<std::string> emittedPaths{};
+        for (const auto& block : blocks) emittedPaths.insert(block.path);
+        for (const auto& block : blocks)
+        {
+            out += block.body;
+            // An EDGE must not advertise a target omitted from PATH authority.
+            for (const auto& [target, edge] : block.edges)
+                if (emittedPaths.contains(target)) out += edge;
+        }
+        out += ending;
         return out;
     }
 

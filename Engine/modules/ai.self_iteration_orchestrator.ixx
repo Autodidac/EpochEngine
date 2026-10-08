@@ -211,6 +211,8 @@ export namespace epochengine::ai::self_iteration_orchestrator
         iteration_campaign::CampaignReport campaign{};
         std::string profile_sha256{};
         std::string plan_sha256{};
+        // Durable task memory, not a reused approval or an unfinished token stream.
+        std::string plan_bytes{};
         std::string proposal_sha256{};
         std::string candidate_sha256{};
         std::string pending_operation_id{};

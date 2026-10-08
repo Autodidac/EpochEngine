@@ -1243,10 +1243,27 @@ namespace epochengine::editor_ai_development_panel
             // source later; the real residency limit is the evidence/token
             // budget, not this initial navigation batch.
             constexpr std::size_t maximumSeedPaths = 16u;
+            const auto append_path = [&](const std::string& path)
+            {
+                if (result.paths.size() < maximumSeedPaths
+                    && std::ranges::find(result.paths, path) == result.paths.end())
+                    result.paths.push_back(path);
+            };
+            const auto directSeeds = (std::min)(ranked.size(), std::size_t{8u});
+            for (std::size_t i{}; i < directSeeds; ++i) append_path(ranked[i].path);
+            // Keep both keyword matches and their actual declaration/header
+            // owners in the initial working set. Round-robin direct relations
+            // avoid one highly connected implementation consuming the seed.
+            std::vector<std::vector<ai::source_index::SearchHit>> related{};
+            for (std::size_t i{}; i < directSeeds; ++i)
+                related.push_back(index.related_sources(ranked[i].path, 8u));
+            for (std::size_t depth{}; depth < 8u && result.paths.size() < maximumSeedPaths; ++depth)
+                for (const auto& neighbors : related)
+                    if (depth < neighbors.size()) append_path(neighbors[depth].relative_path);
             for (const auto& candidate : ranked)
             {
                 if (result.paths.size() >= maximumSeedPaths) break;
-                result.paths.push_back(candidate.path);
+                append_path(candidate.path);
             }
             result.top_score = ranked.front().score;
             result.score_margin = ranked.size() > 1u
@@ -1256,7 +1273,7 @@ namespace epochengine::editor_ai_development_panel
                 0.50 + static_cast<double>((std::min)(result.top_score, 500)) / 1000.0);
             result.accepted = true;
             result.status = epochengine::format_text(
-                "Needle-point host search seeded {} relevant source file(s) from {} repository-index term(s).",
+                "Needle-point host search seeded {} relevant source file(s), including direct indexed declaration/header owners, from {} repository-index term(s).",
                 result.paths.size(), terms.size());
             return result;
         }
@@ -3060,12 +3077,12 @@ namespace epochengine::editor_ai_development_panel
             if (sandbox_lab_enabled)
             {
                 const auto pending = *campaign_pending_operation;
-                campaign_plan_review =
+                campaign_plan_review = sandbox_lab_plan.empty() ?
                     "1. Use the host-curated source evidence to make the smallest grounded change that advances the objective.\n"
                     "2. Apply only the exact proposal inside the disposable candidate workspace.\n"
                     "3. Build and run the configured validation lanes; treat compiler and test output as evidence.\n"
-                    "4. On failure, repair the same candidate from verified diagnostics until it validates, then present it for human review.";
-                sandbox_lab_plan = campaign_plan_review;
+                    "4. On failure, repair the same candidate from verified diagnostics until it validates, then present it for human review."
+                    : sandbox_lab_plan;
                 campaign_plan_review_digest = digest_text(campaign_plan_review);
                 const auto generationBefore = campaign_scheduler->snapshot().generation;
                 auto completed = campaign_scheduler->complete_response(
@@ -3095,6 +3112,7 @@ namespace epochengine::editor_ai_development_panel
                 campaign_pending_response_digest.clear();
                 if (!planAccepted)
                     return false;
+                sandbox_lab_plan = campaign_plan_review;
 
                 auto approvedPlan = submit_supervisor(
                     ai::iteration_supervisor_control::CommandKind::approve,
@@ -3511,11 +3529,16 @@ namespace epochengine::editor_ai_development_panel
             if (available <= envelope + shortened.size())
                 return;
             const auto maximumCatalogBytes = available - envelope - shortened.size();
-            // The production catalog is lexicographic: modules can fill the
-            // whole prefix before the reviewed renderer implementation appears.
+            // A compact ranked map can still lose useful reviewed neighbors
+            // when mandatory exact source occupies most of the prompt.
             // Reorder existing complete records only; the full catalog remains
             // the authority and no reviewed/related path is invented here.
             std::array<std::vector<std::string_view>, 4u> priorityLines{};
+            std::vector<std::string> indexedNeighbors{};
+            for (const auto& reviewed : campaign_reviewed_paths)
+                for (const auto& hit : source_repository_index.related_sources(reviewed, 8u))
+                    if (std::ranges::find(indexedNeighbors, hit.relative_path) == indexedNeighbors.end())
+                        indexedNeighbors.push_back(hit.relative_path);
             const auto objectiveTerms = source_context_terms(development_objective);
             const auto objectiveSystems = resolve_source_systems(development_objective);
             const auto objectiveRelevant = [&](const std::string_view path)
@@ -3564,6 +3587,7 @@ namespace epochengine::editor_ai_development_panel
                 if (!line.starts_with("PATH ")) continue;
                 const auto path = line.substr(5u, line.size() - 6u);
                 std::size_t priority = 3u;
+                if (std::ranges::find(indexedNeighbors, path) != indexedNeighbors.end()) priority = 1u;
                 for (const auto& reviewed : campaign_reviewed_paths)
                 {
                     if (path == reviewed)
@@ -4722,6 +4746,7 @@ namespace epochengine::editor_ai_development_panel
                             capture_campaign_result(output, std::move(resumed));
                             if (accepted)
                             {
+                                sandbox_lab_plan = campaign_orchestrator->snapshot().plan_bytes;
                                 model_request_cancelled = false;
                                 model_request_failed = false;
                                 session_clock.resume(session_tick_ms(input));
@@ -7728,6 +7753,36 @@ namespace epochengine::editor_ai_development_panel
             const std::string focusedObjective =
                 "Add a contract proving direct llama.cpp transcript parsing "
                 "cannot be confused by an Assistant: line inside the user prompt.";
+            constexpr std::string_view ownerPath = "Engine/modules/core.declaration_owner.ixx";
+            constexpr std::string_view implementationPath = "Engine/src/editor/editor.lookup_fixture.cpp";
+            if (!writeFixtureSource(ownerPath,
+                    "export module core.declaration_owner;\nexport struct PlainOwner {};\n")
+                || !writeFixtureSource(implementationPath,
+                    "module core.declaration_owner;\nvoid AdmittedLookup() {}\n"))
+                return failed(__LINE__);
+            ai::source_index::RepositoryIndex ownerIndex{};
+            const auto ownerCatalog = build_source_path_catalog(fixture.path.generic_string(),
+                Domain::engine_source, "repair AdmittedLookup", ownerIndex);
+            const auto ownerSelection = curate_source_context(fixture.path.generic_string(),
+                Domain::engine_source, "repair AdmittedLookup", ownerIndex);
+            if (!ownerCatalog.accepted || !ownerSelection.accepted
+                || ownerSelection.paths.size() > 16u
+                || std::ranges::find(ownerSelection.paths, ownerPath) == ownerSelection.paths.end()
+                || std::ranges::find(ownerSelection.paths, implementationPath) == ownerSelection.paths.end()
+                || ownerCatalog.evidence.find("PATH " + std::string{ownerPath} + '\n') == std::string::npos)
+                return failed(__LINE__);
+            // A shortened production prompt keeps real indexed ownership ahead
+            // of unrelated paths even when no filename prefix is shared.
+            Panel ownerPriority{};
+            auto& ownerPriorityState = *ownerPriority.implementation_;
+            ownerPriorityState.source_repository_index = std::move(ownerIndex);
+            ownerPriorityState.campaign_reviewed_paths = {std::string{implementationPath}};
+            ownerPriorityState.source_path_catalog_evidence = ownerCatalog.evidence;
+            std::string ownerPrompt(active_source_prompt_budget_bytes() - 1024u, 'p');
+            ownerPriorityState.append_source_path_catalog(ownerPrompt);
+            if (ownerPrompt.size() > active_source_prompt_budget_bytes()
+                || ownerPrompt.find("PATH " + std::string{ownerPath} + '\n') == std::string::npos)
+                return failed(__LINE__);
             const SourceContextLoadResult excerptLoaded =
                 load_reviewed_source_context(
                     fixture.path.generic_string(),
@@ -8108,6 +8163,9 @@ namespace epochengine::editor_ai_development_panel
                 if (planned.action != HostAction::request_model_source_proposal
                     || planned.model_prompt.find("EPOCH_SELF_ITERATION_PROPOSAL_V2") == std::string::npos
                     || planned.model_prompt.find("RETAINED_INVESTIGATION_PLAN") == std::string::npos
+                    || planned.model_prompt.find("Retain completed work; continue the next step.") == std::string::npos
+                    || automaticState.campaign_orchestrator->snapshot().plan_bytes
+                        != "Retain completed work; continue the next step."
                     || !automaticState.campaign_pending_operation
                     || automaticState.campaign_pending_operation->kind()
                         != ai::self_iteration_orchestrator::OperationKind::model_proposal)
@@ -10509,8 +10567,6 @@ namespace epochengine::editor_ai_development_panel
                             awaiting_transport_response)
                 {
                     state.campaign_plan_review = admittedReply;
-                    if (state.sandbox_lab_enabled)
-                        state.sandbox_lab_plan = admittedReply;
                     state.campaign_plan_review_digest =
                         Implementation::digest_text(admittedReply);
                     const auto before = state.campaign_scheduler->snapshot()
@@ -10557,6 +10613,8 @@ namespace epochengine::editor_ai_development_panel
                         : state.status_message;
                     if (accepted)
                     {
+                        if (state.sandbox_lab_enabled)
+                            state.sandbox_lab_plan = admittedReply;
                         state.plan_reply_corrections = 0u;
                         output.campaign_evidence.push_back(
                             "Plan response SHA-256: "

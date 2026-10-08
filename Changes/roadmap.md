@@ -128,8 +128,8 @@ expose private SDK material. Current source and release receipts below govern.
   Retained context cannot cross candidate/project boundaries, authorize an edit
   outside bytes in that request, or enter project-assistant session state.
   Demand-aware allocation, bounded revision-checked range retention and
-  evicted-range re-entry are implemented locally; native usefulness and
-  dependency ranking remain open. The 32-entry curated mismatch is repaired.
+  evicted-range re-entry and one-hop dependency/owner ranking are implemented;
+  native usefulness remains open. The 32-entry curated mismatch is repaired.
 - [ ] Enforce and test the candidate process's filesystem/network boundary.
   The current inherited OS identity plus Job Object is lifecycle supervision,
   not security confinement for arbitrary compiled candidate code.
@@ -138,6 +138,11 @@ expose private SDK material. Current source and release receipts below govern.
 - [ ] Prove Keep/Choose retires every losing child/worker, persists exactly one
   next sandbox parent, and resumes the saved mission without repeating completed
   steps.
+
+  Complete admitted plan text is now durable and survives fail-closed resume;
+  reselection retains it, and proposal prompts prefer a small buildable unit.
+  Cold-start checkpoint discovery and demonstrated native incremental resume
+  remain open. Reload cannot save partial tool JSON or the model's KV state.
 
 - [ ] Preserve repair evidence at maximum prompt size: exact edit source, first
   causal compiler/test error, full-evidence hash and failed proposal precede

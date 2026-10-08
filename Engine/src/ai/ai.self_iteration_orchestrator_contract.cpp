@@ -13,6 +13,8 @@ module;
 
 module ai.self_iteration_orchestrator;
 
+import core.sha256;
+
 namespace epochengine::ai::self_iteration_orchestrator
 {
     namespace
@@ -73,6 +75,8 @@ namespace epochengine::ai::self_iteration_orchestrator
                 && before.evidence.size() == after.evidence.size()
                 && before.candidate_sha256 == after.candidate_sha256
                 && before.proposal_sha256 == after.proposal_sha256
+                && before.plan_sha256 == after.plan_sha256
+                && before.plan_bytes == after.plan_bytes
                 && before.campaign.record_generation == after.campaign.record_generation
                 && before.campaign.state_digest == after.campaign.state_digest
                 && before.campaign.counters == after.campaign.counters
@@ -118,6 +122,77 @@ namespace epochengine::ai::self_iteration_orchestrator
             if (blocked) fs::remove(requested.state_path, ec);
             fs::rename(backup, requested.state_path, ec);
             return unchanged && !ec && read_bytes(requested.state_path) == bytes;
+        }
+
+        [[nodiscard]] bool failed_model_publication_contract(
+            Orchestrator& orchestrator, const Result& requested, const std::uint64_t now)
+        {
+            namespace fs = std::filesystem;
+            const Snapshot before = orchestrator.snapshot();
+            const std::string bytes = read_bytes(requested.state_path);
+            const fs::path backup = requested.state_path.string() + ".previous";
+            std::error_code ec{};
+            fs::rename(requested.state_path, backup, ec);
+            if (ec) return false;
+            const bool blocked = fs::create_directory(requested.state_path, ec) && !ec;
+            Result refused{};
+            if (blocked)
+                refused = requested.pending_operation->kind() == OperationKind::model_plan
+                    ? orchestrator.record_plan(receipt(*requested.pending_operation, now),
+                        "One complete next step", "Complete plan")
+                    : orchestrator.record_proposal(receipt(*requested.pending_operation, now),
+                        "One complete exact candidate", "Complete proposal");
+            const bool unchanged = blocked && !refused
+                && refused.status.find("atomically replaced") != std::string::npos
+                && same_validation_state(before, refused.snapshot)
+                && same_validation_state(before, orchestrator.snapshot())
+                && read_bytes(backup) == bytes;
+            if (blocked) fs::remove(requested.state_path, ec);
+            fs::rename(backup, requested.state_path, ec);
+            return unchanged && !ec && read_bytes(requested.state_path) == bytes;
+        }
+
+        [[nodiscard]] bool saved_plan_contract(
+            const Configuration& configuration, const Result& planned, const std::uint64_t now)
+        {
+            const std::string original = read_bytes(planned.state_path);
+            const auto payload_start = original.find("\n\n");
+            if (payload_start == std::string::npos) return false;
+            auto reload = [&](const std::string& name, const std::string& payload,
+                const bool accepted, const bool retained)
+            {
+                const auto copy = configuration.cache_root / "reload" / (name + ".epochai");
+                const std::string envelope = "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V2\n"
+                    "payload_bytes=" + std::to_string(payload.size()) + "\npayload_sha256="
+                    + core::sha256::hex(core::sha256::hash(payload)) + "\n\n" + payload;
+                if (!write_bytes(copy, envelope)) return false;
+                Orchestrator restarted{};
+                const auto resumed = restarted.resume(configuration, copy, now);
+                if (!accepted) return !resumed && read_bytes(copy) == envelope;
+                return resumed && resumed.snapshot.phase == Phase::awaiting_plan_request
+                    && resumed.snapshot.pending_operation_id.empty()
+                    && !resumed.snapshot.campaign.session.candidate_approved
+                    && resumed.snapshot.campaign.session.validation.empty()
+                    && (retained
+                        ? resumed.snapshot.plan_bytes == planned.snapshot.plan_bytes
+                            && resumed.snapshot.plan_sha256 == planned.snapshot.plan_sha256
+                        : resumed.snapshot.plan_bytes.empty() && resumed.snapshot.plan_sha256.empty());
+            };
+            std::string payload = original.substr(payload_start + 2u);
+            if (!reload("saved-plan", payload, true, true)) return false;
+            const auto field = payload.find("\nplan_bytes=");
+            const auto field_end = payload.find('\n', field + 1u);
+            if (field == std::string::npos || field_end == std::string::npos) return false;
+            auto corrupt = payload;
+            corrupt.insert(field_end, "changed");
+            if (!reload("wrong-plan-digest", corrupt, false, false)) return false;
+            corrupt = payload;
+            corrupt.insert(field_end, "%00");
+            if (!reload("nul-plan", corrupt, false, false)) return false;
+            payload.erase(field + 1u, field_end - field);
+            payload.replace(payload.find("orchestrator.v2"), 15u, "orchestrator.v1");
+            return reload("legacy-plan-hash", payload, true, false)
+                && read_bytes(planned.state_path) == original;
         }
 
         [[nodiscard]] bool durable_reference_contract(
@@ -458,11 +533,26 @@ namespace epochengine::ai::self_iteration_orchestrator
             fs::remove_all(root, ec);
             return false;
         }
+        const auto before_plan = restarted.snapshot();
+        if (restarted.record_plan(receipt(*fresh_plan.pending_operation, now + 5u),
+                std::string{"broken\0plan", 11u}, "Invalid plan")
+            || restarted.record_plan(receipt(*fresh_plan.pending_operation, now + 5u),
+                std::string(128u * 1024u + 1u, 'x'), "Oversized plan")
+            || !same_validation_state(before_plan, restarted.snapshot())
+            || !failed_model_publication_contract(restarted, fresh_plan, now + 5u))
+        {
+            fs::remove_all(root, ec);
+            return false;
+        }
+        constexpr std::string_view saved_plan =
+            "Inspect the admitted file (100%).\nPropose one bounded patch, then validate it.";
         Result planned = restarted.record_plan(
             receipt(*fresh_plan.pending_operation, now + 5u),
-            "Inspect the admitted file, propose one bounded patch, then validate it.",
+            saved_plan,
             "Local model returned one bounded plan.");
         if (!planned || planned.snapshot.phase != Phase::awaiting_curated_evidence
+            || planned.snapshot.plan_bytes != saved_plan
+            || !saved_plan_contract(configuration, planned, now + 6u)
             || restarted.share_curated_evidence(
                 action(planned.snapshot, "share-wrong", now + 6u),
                 std::string(64u, '1'), std::string(64u, '2'), "wrong scope"))
@@ -477,6 +567,12 @@ namespace epochengine::ai::self_iteration_orchestrator
             "Operator shared only the exact curated scope.");
         Result proposal_request = shared ? restarted.request_proposal(
             action(shared.snapshot, "proposal-request", now + 7u)) : Result{};
+        if (!proposal_request || !proposal_request.pending_operation
+            || !failed_model_publication_contract(restarted, proposal_request, now + 8u))
+        {
+            fs::remove_all(root, ec);
+            return false;
+        }
         Result proposed = proposal_request && proposal_request.pending_operation
             ? restarted.record_proposal(
                 receipt(*proposal_request.pending_operation, now + 8u),

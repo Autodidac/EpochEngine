@@ -15,6 +15,17 @@ operator evidence before making a broader absence claim.
 
 ## Overall Intent And Pass Continuity
 
+- October 8 incremental-work requirement: save the short task plan and complete
+  small buildable source units so model reloads need not restart the mission.
+  Prefer one file, but retain coupled edits needed for a valid unit. Persist
+  completed work/diagnostics/next step separately from unfinished generation.
+  Reload must never apply partial tool JSON, reuse stale receipts or claim token
+  recovery. Native cold-start/file-by-file acceptance remains the P0 gate.
+- October 8 delivery authorization: finish the current source batch, push GitHub
+  main and the explicitly mirrored stable branch, then send the exact checkpoint
+  to the Site owner for paired private-source admission. Preserve active operator
+  runs/config, immutable runtimes, authored projects and unrelated solution edits.
+
 - October 7 build-mode clarification: reuse the same projects, never add a
   combined-build utility project. Debug/Release remain the portable baseline;
   Windows/MSVC adds optimized ReleaseWithDebugInfo and a fourth BuildAll

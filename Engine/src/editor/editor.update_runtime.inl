@@ -283,28 +283,6 @@
             editor.lastUpdateCheck = std::move(clean);
         }
 
-        [[nodiscard]] std::string update_toolbar_button_label(EditorUpdateState state)
-        {
-            switch (state)
-            {
-            case EditorUpdateState::Available:
-                return "Update Available";
-            case EditorUpdateState::RestartReady:
-                return "Restart";
-            case EditorUpdateState::Checking:
-                return "Checking...";
-            case EditorUpdateState::SourceWorkerRunning:
-                return "Source Update Running";
-            case EditorUpdateState::Canceled:
-                return "Update Available";
-            case EditorUpdateState::Failed:
-                return "Update Check Failed";
-            case EditorUpdateState::Idle:
-            default:
-                return "Update";
-            }
-        }
-
         [[nodiscard]] double editor_update_elapsed_seconds(const EditorState& editor)
         {
             if (editor.updateOperationStartedAt == std::chrono::steady_clock::time_point{})
