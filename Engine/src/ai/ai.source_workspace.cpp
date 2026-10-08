@@ -19,6 +19,7 @@ namespace epochengine::ai::source_workspace
         objective_ = std::move(objective);
         reviewed_.clear();
         searches_.clear();
+        evidence_.clear();
         discovery_rounds_ = 0u;
         stagnant_rounds_ = 0u;
     }
@@ -55,6 +56,17 @@ namespace epochengine::ai::source_workspace
     {
         return std::ranges::any_of(reviewed_, [path](const ReviewedSlice& item)
         { return std::string_view{item.path}.compare(path) == 0; });
+    }
+
+    bool Workspace::remember_evidence(std::string fingerprint)
+    {
+        // Bound history independently of model output and mission duration.
+        if (fingerprint.empty() || fingerprint.size() > 2048u
+            || evidence_.size() >= 4096u
+            || std::ranges::find(evidence_, fingerprint) != evidence_.end())
+            return false;
+        evidence_.push_back(std::move(fingerprint));
+        return true;
     }
 
     const std::vector<ReviewedSlice>& Workspace::reviewed() const noexcept { return reviewed_; }

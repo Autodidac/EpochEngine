@@ -5,8 +5,19 @@
 |   |-- include/          active public headers
 |   |-- modules/          C++23 module interfaces
 |   |-- src/              runtime and backend implementation files
+|   |   |-- core/         dependency-light primitive implementations
+|   |   |-- epoch/        engine composition, entry and internal API headers
+|   |   |-- build/        compiler feature probes (source, not build output)
+|   |   |-- ai/           source discovery, transactions, transport and campaign state
+|   |   |-- editor/       application and workspace orchestration
+|   |   |-- epochgui/     engine GUI/font adapters, not the portable library
+|   |   |-- project/      project persistence, builds, generated runtime admission
+|   |   |-- assets/       asset artifact code and private STB integration
+|   |   |-- authoring/    editable document implementations by domain
 |   |   |-- platform/     executable-root/runtime path ownership and platform-side internals
-|   |   |-- render/       internal render helpers that are not part of the public API
+|   |   |-- render/       backend-neutral rendering and context scoring
+|   |   |-- renderers/    backend-owned implementation, separated by backend
+|   |-- dep/              explicit portable snapshots/fixtures; see dep/README.md
 |   |-- resource/         Windows resources, icon, rc, and resource headers
 |   |-- ai/               external-model policy, reviewed eval fixtures, manifests, prompts
 |   |-- docs/             current engine documentation
@@ -15,3 +26,22 @@
 |-- Changes/              changelog, roadmap, release notes
 |-- Images/               repository/readme assets
 |-- Tools/                helper notes and setup references
+
+Not source authority / do not publish as source:
+- x64/Debug and x64/Release: ordinary local MSBuild output and executable-local
+  caches/logs. They are not proof of the published immutable release bytes.
+- build/: disposable validation/compiler output; source-layout-20261007 holds
+  isolated Debug/Release validation output without replacing the running Editor.
+- Engine/bin, Engine/Bin, Engine/build, Engine/built: configured tool output.
+- Projects/: user/generated project output. Keep the project source/assets you
+  want; its intermediate build/cache data can be regenerated. Do not blanket-delete.
+- Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_*: private
+  candidate source snapshots, build/evidence and succession state. Not canonical
+  source. Do not remove an active candidate or chosen successor's retained parent.
+- Explicit --candidate-data-root: private writable child state, not validated
+  candidate code/build inputs. Path separation alone is not OS confinement.
+
+Choose retains the tested sandbox successor as the next iteration's parent;
+it does not overwrite canonical Engine source or the active project's source.
+Keep retains the current parent. Source promotion is a separate reviewed action.
+The repository's historical physical basename does not change these roles.

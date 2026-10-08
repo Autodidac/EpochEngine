@@ -42,7 +42,7 @@ module;
 #include <compare>
 #include <vulkan/vulkan.h>
 
-#include <../src/platform.framework.hpp>
+#include <../src/platform/platform.framework.hpp>
 #ifndef EPOCH_USING_VULKAN
 #   define EPOCH_USING_VULKAN 1
 #endif

@@ -31,7 +31,7 @@
 module;
 
 #include "../include/core.stl_types.hpp"
-#include "../src/epoch.api_types.hpp"
+#include "../src/epoch/epoch.api_types.hpp"
 
 #include <unordered_map>
 

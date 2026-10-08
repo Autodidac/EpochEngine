@@ -15,6 +15,22 @@ operator evidence before making a broader absence claim.
 
 ## Overall Intent And Pass Continuity
 
+- October 7 build-mode clarification: reuse the same projects, never add a
+  combined-build utility project. Debug/Release remain the portable baseline;
+  Windows/MSVC adds optimized ReleaseWithDebugInfo and a fourth BuildAll
+  convenience mode using CMake to build all three sequentially. Keep outputs
+  separate; symbol-enabled Release is not a debug-runtime hybrid.
+
+- October 7 organization requirement: first-party implementations belong in
+  their subsystem folders, with matching CMake/MSVC paths and readable virtual
+  filters. Keep central module interfaces and public API ownership distinct
+  from internal headers. Clearly separate canonical source, generated project
+  source, candidate snapshots, compiler output and private mutable runtime data.
+  Choosing a candidate retains the sandbox successor; it does not overwrite
+  original Engine/project source. Never call dependency repositories synchronized
+  merely because their nested folders report Engine's Git status; exact mirrors
+  and engine-owned compatibility fixtures have different authorities.
+
 - October 6 EngCoder 0.6.5 integration: retain Epoch's styling/window ownership
   and EngCoder's interface/style capabilities without duplicating window stacks
   or scattering controls across new windows. External model API use is acceptable
@@ -86,7 +102,10 @@ These are durable requirements, not completion claims:
 - Physical input belongs to the focused native Epoch context. Detached/floating contexts must keep top-row GUI controls clickable, docking guides visible, and closed panes recoverable from the Window/command menu.
 - Detached AI Chat is a projection of one canonical editor AI/model/session owner. Undocking during Run must not instantiate a competing owner.
 - EpochGui owns reusable font/window shadow presentation rather than editor-domain or backend-specific duplicate implementations.
-- `EpochEngine.lib` is reusable library code and must not export an application entry point. Debug x64 and Release x64 ProjectLauncher builds must each link exactly one executable `main` and remain relocatable inside the extracted source tree.
+- Entry ownership is profile-specific: the normal Editor uses the Engine-owned
+  internal entry point; generated child/static-runtime builds suppress it with
+  `EPOCH_MAIN_IN_MAIN_CPP` and supply their own generated entry source. Both
+  Debug and Release must link exactly one executable entry and remain relocatable.
 - The oscillator benchmark example must remain discoverable from selected-object Properties -> Movement / Benchmark and as editable project script source.
 
 ## Current Source-Discovery Invariant (v0.90.22)
@@ -94,19 +113,23 @@ These are durable requirements, not completion claims:
 - Discovery is cumulative and host-owned: exact reviewed evidence grows across the iteration instead of being replaced by small source slices.
 - Navigation uses a compact repository map plus bounded path/symbol/text/import/reference searches; exact bytes remain required before an edit is authorized.
 - Budget by context/evidence size, not a practical fixed file count. Stop repeated zero-information discovery after two stagnant rounds.
+- A new selector, line guess or safe fallback is not itself new evidence. Count
+  exact returned source ranges/bytes, preserve accepted navigation on failed
+  sharing and avoid replaying expensive proposals over the same fallback window.
 - Preserve the existing sandbox/build/test/approval/promotion boundary.
 
 ## Engine Self-Coding
 
-- September 6 renewed 24-hour priority: complete the real Qwen repair/build/
-  comparison/succession workflow, with independent subagents on bounded work.
-  Add nonblocking 30-second cooldowns and measured resource checks before heavy
-  model/compiler/test/preview work, including after Keep/Choose. Show actual
+- Complete the real Qwen repair/build/comparison/succession workflow. Resource
+  pacing is configurable; the later operator request supersedes the original
+  30-second delay with the current six-second default. Retain measured resource
+  checks before model/compiler/test/preview work, including after Keep/Choose. Show actual
   running/queued/idle work; registered worker lifetimes are not active jobs.
-- The requested next feature release is v0.90.04 and becomes the current reusable
-  base only after native, build, safety, packaging and rollback gates pass.
-  Update current downloads, authenticated source, docs and authorized branches
-  together; never rewrite old verified objects or call an untested base stable.
+- Release identity follows current admission receipts, not the historical
+  v0.90.04 target. v0.90.35 source and immutable v0.90.33 Windows/Linux runtime
+  are separate authorities. A future accepted base needs native, build, safety,
+  packaging and rollback proof; update downloads/source/authorized branches only
+  in the explicitly requested delivery pass, preserving verified old objects.
 
 - Prioritize real outcomes over code volume; no padding, duplicate frameworks
   or unrelated expansion. Contracts/infrastructure do not prove the actual

@@ -21,6 +21,21 @@ The workspace is bounded by bytes/tokens, not a small operational file count. In
 
 Repeated discovery that adds no verified evidence is deduplicated. Two stagnant rounds stop the source-discovery loop and return a useful failure/question instead of spending a fixed sequence of replacement expansions.
 
+Navigation intent is not progress. A changed line/query that falls back to an
+already supplied window does not justify another coding request. The host
+records bounded path/actual-first-line/content SHA-256 fingerprints after exact
+reads. Navigation is prepared on a copy and committed only after authority,
+source loading, selected endpoint/model and curated-bundle admission succeed.
+Failed sharing leaves accepted selectors, context and evidence history intact.
+Two unchanged actual reads preserve that accepted state and retire the stalled
+loop. Changed bytes or a genuinely different source range remain eligible.
+Fingerprint history is process-local, bounded to 4,096 entries of at most
+2,048 bytes each and reset for a new objective; it is not source storage or an
+edit grant. Retained path navigation does not yet guarantee residency of every
+earlier excerpt in every later prompt: byte budgets still select current ranges.
+Overlapping/evicted-window coverage and minimal working-set packing are the
+next retrieval optimization, not a claim of complete whole-project ingestion.
+
 ## Authority
 
 Repository-map entries, search hits and compact navigation notes are discovery aids only. They cannot authorize writes. Exact reviewed source bytes, verified checkout identity, SOURCE_ID/REVIEWED_SOURCE_ID admission, sandbox-only mutation and operator/build gates remain authoritative.

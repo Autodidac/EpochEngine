@@ -4,12 +4,12 @@ The helper scripts under `Engine/` are optional, but they are still the fastest
 repeatable path for local builds when you want the tree, output folders, and
 docs flow to stay predictable.
 
-Epoch has one CMake-owned build graph. Visual Studio/MSBuild on Windows,
-CMake presets, VS Code/Codium CMake Tools, direct command-line configure/build
-commands, native Linux scripts, and Windows-hosted WSL builds are entry points
-into that graph rather than separate platform projects. A fix to target source,
-features, module ownership, or compile policy belongs in CMake first; helper
-scripts select and validate the matching toolchain and cache layout.
+Epoch has a shared source/ownership contract expressed in CMake and the existing
+native MSVC projects; the latter are not generated from CMake. Keep both graphs
+in sync when sources, dependencies or compile policy change. CMake presets,
+VS Code/Codium, native Linux scripts and WSL helpers select the corresponding
+toolchain/cache. Windows BuildAll uses CMake from the existing Editor project;
+there is no separate combined-build project.
 
 ## `build.sh`
 
@@ -100,13 +100,15 @@ When a pass changes runtime, editor, backend, AI, or capture behavior:
 - reconcile against the current Site-admitted Epoch checkpoint when the local branch has drifted
 - keep unrelated dirt out of the commit
 - commit only stable, verified changes
-- bump canonical `Engine/modules/epoch.version.ixx` and mirror the source
-  identity in updater-facing `Engine/modules/engine.version.ixx`
+- bump canonical `Engine/modules/epoch.version.ixx` and Windows source resource
+  metadata; `engine.version` re-exports that authority, not duplicate macros
+- preserve separately pinned packaged versions until actual platform releases
+  are admitted; a source update does not replace downloads
 - use a descriptive commit title without baking the version number into the
   commit message
 - rebuild `EpochEditor` in both `Debug|x64` and `Release|x64`
-- launch from the asset-bearing `x64/Debug/` or `x64/Release/` runtime, not
-  from a source folder
+- when the operator approves a native run, launch from the asset-bearing output
+  directory, never the source folder; build-only proof does not authorize GUI tests
 - close live windows after validation
 - avoid disposable runs from bad folders that leave stray logs or captures in
   the wrong place

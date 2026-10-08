@@ -28,7 +28,7 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
-// Engine/src/epoch.headers.cpp
-#include "../include/epoch.config.hpp"
-#include "../src/epoch.common.hpp"
+// Engine/src/epoch/epoch.headers.cpp
+#include "../../include/epoch.config.hpp"
+#include "epoch.common.hpp"
 // Intentionally empty.

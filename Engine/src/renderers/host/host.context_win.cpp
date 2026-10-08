@@ -36,7 +36,7 @@
 #if defined(_WIN32)
 #   include "../../../resource/resource.h"
 #   ifdef EPOCH_USING_WINMAIN
-#       include <../src/platform.framework.hpp>
+#       include <../src/platform/platform.framework.hpp>
 #   endif
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
@@ -1348,10 +1348,15 @@ namespace
             g_guiInputOwner = hwnd;
     }
 
-    inline void forget_gui_input_owner(HWND hwnd) noexcept
+    inline void forget_gui_input_owner(HWND hwnd, HWND successor = nullptr) noexcept
     {
         if (g_guiInputOwner == hwnd)
             g_guiInputOwner = nullptr;
+        const auto ctx = resolve_gui_context_for_hwnd(hwnd);
+        const auto next = resolve_gui_context_for_hwnd(successor);
+        if (ctx && ctx != next)
+            epochengine::gui::push_input_for_context(ctx.get(), {
+                .type = epochengine::gui::EventType::FocusLost });
     }
 
     [[nodiscard]] inline bool same_gui_input_surface(HWND lhs, HWND rhs) noexcept
@@ -1366,7 +1371,8 @@ namespace
         if (!mgr)
             return false;
 
-        return mgr->findWindowByHWND(lhs) == mgr->findWindowByHWND(rhs);
+        const auto* owner = mgr->findWindowByHWND(lhs);
+        return owner && owner == mgr->findWindowByHWND(rhs);
     }
 
     [[nodiscard]] inline bool accepts_gui_keyboard_input(HWND hwnd) noexcept
@@ -1374,25 +1380,17 @@ namespace
         if (!hwnd || ::IsWindow(hwnd) == FALSE)
             return false;
 
-        if (!resolve_gui_context_for_hwnd(hwnd))
+        const auto ctx = resolve_gui_context_for_hwnd(hwnd);
+        if (!ctx || !ctx->has_input_focus_safe())
             return false;
 
-        if (const HWND focused = ::GetFocus();
-            focused && ::IsWindow(focused) != FALSE)
-        {
-            if (!same_gui_input_surface(focused, hwnd))
-                return false;
-
-            remember_gui_input_owner(focused);
-        }
-
-        if (!g_guiInputOwner || ::IsWindow(g_guiInputOwner) == FALSE)
-        {
-            g_guiInputOwner = hwnd;
-            return true;
-        }
-
-        return same_gui_input_surface(g_guiInputOwner, hwnd);
+        GUITHREADINFO info{};
+        info.cbSize = sizeof(info);
+        const DWORD thread = ::GetWindowThreadProcessId(::GetForegroundWindow(), nullptr);
+        if (!thread || !::GetGUIThreadInfo(thread, &info))
+            return false;
+        const HWND focused = info.hwndFocus ? info.hwndFocus : info.hwndActive;
+        return same_gui_input_surface(focused, hwnd);
     }
 
     [[nodiscard]] inline bool has_proxy_shell_pair(
@@ -2095,7 +2093,7 @@ namespace
             remember_gui_input_owner(hwnd);
             return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_KILLFOCUS:
-            forget_gui_input_owner(hwnd);
+            forget_gui_input_owner(hwnd, reinterpret_cast<HWND>(wp));
             return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_NCDESTROY:
             forget_gui_input_owner(hwnd);
@@ -2157,7 +2155,7 @@ namespace
             remember_gui_input_owner(hwnd);
             return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_KILLFOCUS:
-            forget_gui_input_owner(hwnd);
+            forget_gui_input_owner(hwnd, reinterpret_cast<HWND>(wp));
             return DefSubclassProc(hwnd, msg, wp, lp);
         case WM_NCDESTROY:
             forget_gui_input_owner(hwnd);
@@ -5582,7 +5580,7 @@ namespace epochengine::core
             remember_gui_input_owner(hwnd);
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         case WM_KILLFOCUS:
-            forget_gui_input_owner(hwnd);
+            forget_gui_input_owner(hwnd, reinterpret_cast<HWND>(wParam));
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         case WM_NCDESTROY:
             forget_gui_input_owner(hwnd);

@@ -31,8 +31,8 @@
 module;
 
 #include <algorithm>
-#include "../include/core.stl_types.hpp"
-#include "../src/build.cpp_feature_probe.hpp"
+#include "../../include/core.stl_types.hpp"
+#include "../build/build.cpp_feature_probe.hpp"
 
 #include <chrono>
 #include <cstdint>

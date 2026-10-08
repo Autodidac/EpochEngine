@@ -30,10 +30,10 @@
  ***********************************************/
 module;
 
-#include "../include/epoch.runtime_legacy.hpp"
-#include "../include/epoch.app_api.h"
-#include "../src/epoch.api_types.hpp"
-#include "../include/core.stl_types.hpp"
+#include "../../include/epoch.runtime_legacy.hpp"
+#include "../../include/epoch.app_api.h"
+#include "epoch.api_types.hpp"
+#include "../../include/core.stl_types.hpp"
 
 #include <algorithm>
 #include <cmath>

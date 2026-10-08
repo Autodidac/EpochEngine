@@ -13,6 +13,7 @@ distinct authority:
 | What exact result must this pass prove? | [Active pass](../../Changes/active_pass.md) |
 | Which unresolved operator requirements must survive a handoff? | [Mission cache](../../Changes/mission_cache.md) |
 | What is already implemented and verified? | [Changelog](../../Changes/changelog.txt), source and named test evidence |
+| Which build mode and output folder should I use? | [Build modes](engine/runtime_and_editor_workflows.md#msvc-editor-and-generated-project-entry-ownership) — Debug/Release, Windows optimized symbols, CMake Build All; no combined-build project |
 | How do the systems fit together? | Architecture and subsystem contracts below |
 
 Epoch has one forward architecture:
@@ -28,6 +29,9 @@ Its focused subordinate contracts are:
   branches, observations, persistence, and replay;
 - `engine/temporal_authoring_platform.md` - documents, semantic history,
   compiled artifacts, physical caches, and authoring services;
+- [Neuromorphic framework](engine/neuromorphic_engine_framework.md) and
+  [event-driven rendering](engine/event_driven_rendering.md) - actual sparse
+  CPU/GL integration, truth classes, measured follow-ons and unproven consumers;
 - `engine/canvas2d_architecture.md` - renderer-neutral 2D camera, viewport,
   sprite/material batching, tile layers, composition, persistence, metrics,
   and baseline `T0-CPU`/`T1-GL` delivery contract.
@@ -38,7 +42,19 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-Active source development is v0.90.33. Normal EpochEditor builds receive the engine-owned internal entry point, while generated child/static-runtime builds suppress it with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. Native MSVC Debug x64, Release x64, and the sequential Debug+Release x64 solution workflow pass the October 1 build checks. Pure engine contracts pass in both configurations. Package admission and the remaining native candidate comparison acceptance are tracked in `../../Changes/release_sync_2026-10-01.md`; successful compilation is not proof of an embedded candidate PID or Choose/successor operation.
+Active repair source is v0.90.35; published Windows/Linux runtime packages
+remain immutable v0.90.33. Source-only synchronization is recorded in
+`../../Changes/source_sync_2026-10-07.md`; the exact next
+acceptance is in `../../Changes/active_pass.md`. No source version, transport
+timer or pure-contract pass proves a real model-built candidate or docked
+Keep/Choose succession.
+
+Normal EpochEditor builds receive the engine-owned internal entry point;
+generated child/static-runtime builds suppress it with `EPOCH_MAIN_IN_MAIN_CPP`
+and supply their generated entry source. Windows Debug, Release and
+ReleaseWithDebugInfo plus the same-project CMake BuildAll mode pass October 7
+build checks; no extra combined-build project exists. Source-folder changes must
+preserve that split and update CMake, MSVC items/filters and runtime path probes.
 
 The current editor/rendering integration also includes the production OpenGL event-driven cache, neuromorphic invalidation pressure, A/B selective/full benchmarking, renderer-neutral bounded lighting damage, multi-selection/group editing, focus-owned multicontext input, persistent renderer telemetry, and detached-pane recovery/single-owner AI Chat behavior. These are real integrated systems, but native GPU timing and multicontext visual/runtime behavior still require operator-side acceptance.
 
@@ -82,6 +98,7 @@ not set independent product priorities:
 - `engine/source_naming_architecture.md` - canonical C++ filename, module,
   owner, directory, and temporal-layer naming contract;
 - `engine/source_shape_audit.md`
+- [Dependency ownership and sync](../dep/README.md) - exact portable GUI mirror versus engine-owned descriptor fixtures; no automatic dependency replacement.
 - `../ai/README.md`
 
 Inventory/reference files:

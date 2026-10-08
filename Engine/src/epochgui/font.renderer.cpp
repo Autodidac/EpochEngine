@@ -30,10 +30,10 @@
  ***********************************************/
 module;
 
-#include "core.format_text.hpp"
+#include "../../include/core.format_text.hpp"
 
 #define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
+#include "../stb/stb_truetype.h"
 #undef STB_TRUETYPE_IMPLEMENTATION
 #include <algorithm>
 #include <array>

@@ -56,7 +56,7 @@ module;
 #include <vector>
 
 #if defined(_WIN32)
-#include "../platform.framework.hpp"
+#include "../platform/platform.framework.hpp"
 #endif
 
 module gui.engine;
@@ -539,6 +539,7 @@ namespace epochengine::gui
             bool prevMouseDown = false;
             bool mouseRightDown = false;
             bool prevMouseRightDown = false;
+            bool pointerInputAllowed = true;
             bool justReleased = false;
             bool rightJustReleased = false;
             bool insideWindow = false;
@@ -570,6 +571,34 @@ namespace epochengine::gui
 
         static thread_local FrameState g_frame{};
         static thread_local std::vector<InputEvent> g_pendingEvents{};
+
+        // Native focus loss is cancellation, not a button release. In
+        // particular, it must not activate a button when the user switches apps.
+        [[nodiscard]] static bool filter_frame_input(
+            bool keyboardAllowed, bool pointerAllowed) noexcept
+        {
+            bool cancelled = false;
+            for (std::size_t index = g_frame.events.size(); index > 0; --index)
+            {
+                if (g_frame.events[index - 1].type != EventType::FocusLost)
+                    continue;
+                g_frame.events.erase(g_frame.events.begin(), g_frame.events.begin() + index);
+                cancelled = true;
+                break;
+            }
+            if (!keyboardAllowed)
+                g_frame.events.clear();
+            else if (!pointerAllowed)
+                std::erase_if(g_frame.events, [](const InputEvent& event)
+                {
+                    return event.type == EventType::MouseMove
+                        || event.type == EventType::MouseDown
+                        || event.type == EventType::MouseUp
+                        || event.type == EventType::MouseWheel;
+                });
+            g_frame.pointerInputAllowed = pointerAllowed;
+            return cancelled || !pointerAllowed;
+        }
 
         [[nodiscard]] static const GuiResources::PaletteSprites& active_palette() noexcept
         {
@@ -2156,7 +2185,8 @@ namespace epochengine::gui
 
         [[nodiscard]] static bool point_in_modal_input_capture(Vec2 p) noexcept
         {
-            return g_frame.modalInput.pointer_allowed({ p.x, p.y });
+            return g_frame.pointerInputAllowed
+                && g_frame.modalInput.pointer_allowed({ p.x, p.y });
         }
 
         [[nodiscard]] static bool point_in_active_clip(Vec2 p) noexcept
@@ -3653,6 +3683,20 @@ namespace epochengine::gui
                 g_frame.events.insert(g_frame.events.end(), it->second.begin(), it->second.end());
                 it->second.clear();
             }
+        }
+
+        const bool nativeContext = rawCtx && (rawCtx->get_hwnd() || rawCtx->windowData);
+        const bool keyboardAllowed = !nativeContext || rawCtx->has_input_focus_safe();
+        const bool pointerAllowed = keyboardAllowed
+            && (!nativeContext || rawCtx->has_pointer_input_safe());
+        if (filter_frame_input(keyboardAllowed, pointerAllowed))
+        {
+            prevMouseDown = false;
+            prevMouseRightDown = false;
+            currentMouseDown = false;
+            currentMouseRightDown = false;
+            if (rawCtx)
+                g_contextPressedButtonKeys[rawCtx] = 0;
         }
 
         for (const auto& evt : g_frame.events)
@@ -6635,9 +6679,32 @@ namespace epochengine::gui
     [[nodiscard]] static bool source_editor_navigation_contract() noexcept;
     [[nodiscard]] static bool inline_button_auto_width_contract();
 
+    [[nodiscard]] static bool inactive_input_contract()
+    {
+        const auto previousEvents = std::move(g_frame.events);
+        const bool previousPointerAllowed = g_frame.pointerInputAllowed;
+        g_frame.events = {
+            {.type = EventType::MouseDown},
+            {.type = EventType::TextInput, .text = "stale"},
+            {.type = EventType::FocusLost},
+            {.type = EventType::KeyDown, .key = 65} };
+        const bool cancelled = filter_frame_input(true, true);
+        const bool freshOnly = cancelled && g_frame.events.size() == 1
+            && g_frame.events.front().type == EventType::KeyDown;
+        g_frame.events.push_back({.type = EventType::MouseWheel, .wheel_delta = 120});
+        const bool covered = filter_frame_input(true, false)
+            && g_frame.events.size() == 1
+            && !point_in_modal_input_capture({0.0f, 0.0f});
+        const bool inactive = filter_frame_input(false, false) && g_frame.events.empty();
+        g_frame.events = previousEvents;
+        g_frame.pointerInputAllowed = previousPointerAllowed;
+        return freshOnly && covered && inactive;
+    }
+
     bool run_runtime_surface_contract() noexcept
     {
-        if (!nested_content_clip_contract()
+        if (!inactive_input_contract()
+            || !nested_content_clip_contract()
             || !inline_button_auto_width_contract()
             || !source_editor_navigation_contract())
             return false;

@@ -31,4 +31,4 @@
  // This file is a single translation unit for stb_image, which is a public domain image library.
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb/stb_image.h"
+#include "../stb/stb_image.h"

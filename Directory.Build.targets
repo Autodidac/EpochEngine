@@ -1,0 +1,39 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <EpochOwnedBuildProject Condition="'$(MSBuildProjectName)'=='EpochEditor' or '$(MSBuildProjectName)'=='EpochEngine' or '$(MSBuildProjectName)'=='HeadlessCI' or '$(MSBuildProjectName)'=='EpochGui'">true</EpochOwnedBuildProject>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(EpochOwnedBuildProject)'=='true'">
+    <Link>
+      <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(MSBuildProjectName)'=='EpochGui' and '$(Configuration)'=='ReleaseWithDebugInfo'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp23</LanguageStandard>
+      <AdditionalIncludeDirectories>$(EpochGuiSourceRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(EpochOwnedBuildProject)'=='true' and ('$(Configuration)'=='Release' or '$(Configuration)'=='ReleaseWithDebugInfo')">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <DebugInformationFormat Condition="'$(Configuration)'=='Release'">None</DebugInformationFormat>
+      <DebugInformationFormat Condition="'$(Configuration)'=='ReleaseWithDebugInfo'">ProgramDatabase</DebugInformationFormat>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='Release'">false</GenerateDebugInformation>
+      <GenerateDebugInformation Condition="'$(Configuration)'=='ReleaseWithDebugInfo'">DebugFull</GenerateDebugInformation>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(EpochOwnedBuildProject)'=='true' and ('$(Configuration)'=='Release' or '$(Configuration)'=='ReleaseWithDebugInfo')">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+</Project>

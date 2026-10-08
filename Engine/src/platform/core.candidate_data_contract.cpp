@@ -187,7 +187,7 @@ namespace
         for (const auto& relative : {
                 fs::path{"Engine/CMakeLists.txt"},
                 fs::path{"Engine/include/epoch.engine.hpp"},
-                fs::path{"Engine/src/epoch.main.cpp"},
+                fs::path{"Engine/src/epoch/epoch.main.cpp"},
                 fs::path{"Engine/examples/EpochEngine/EpochEngine.vcxproj"},
                 fs::path{"x64/Release/EpochEditor.exe"}})
         {

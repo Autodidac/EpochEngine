@@ -142,7 +142,8 @@ namespace epochengine::gui
         MouseWheel,
         KeyDown,
         KeyUp,
-        TextInput
+        TextInput,
+        FocusLost
     };
 
     export struct InputEvent

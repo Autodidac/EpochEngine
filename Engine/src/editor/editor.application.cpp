@@ -75,8 +75,8 @@ module;
 #include <vector>
 
 #include "editor.update_modal_layout.hpp"
-#include "../build.cpp_feature_probe.hpp"
-#include "../context.passive_scoring.hpp"
+#include "../build/build.cpp_feature_probe.hpp"
+#include "../render/context.passive_scoring.hpp"
 
 module editor.core;
 
@@ -605,7 +605,21 @@ namespace epochengine
             ai::ModelTerminalFailure terminalFailure{ai::ModelTerminalFailure::none};
             std::stop_source cancellation{};
             std::atomic<ai::ModelRequestStage> stage{ai::ModelRequestStage::queued};
+            mutable std::mutex progressMutex{};
+            ai::ModelRequestProgress progress{};
+            std::chrono::steady_clock::time_point lastResponseAt{};
             std::atomic_bool ready{false};
+
+            void observe_progress(const ai::ModelRequestProgress& update)
+            {
+                std::scoped_lock lock(progressMutex);
+                if (update.attempt != progress.attempt)
+                    lastResponseAt = {};
+                if (update.response_bytes > progress.response_bytes
+                    || (update.attempt != progress.attempt && update.response_bytes))
+                    lastResponseAt = std::chrono::steady_clock::now();
+                progress = update;
+            }
         };
 
         [[nodiscard]] bool ai_reply_is_internal_protocol(std::string_view reply) noexcept
@@ -841,13 +855,45 @@ namespace epochengine
                 return true;
             }
 
-            [[nodiscard]] std::string_view request_activity() const noexcept
+            [[nodiscard]] std::string request_phase() const
+            {
+                if (!pending) return {};
+                std::scoped_lock lock(pending->progressMutex);
+                return pending->progress.phase;
+            }
+
+            [[nodiscard]] std::string request_activity() const
             {
                 if (!pending)
                     return {};
                 if (pending->cancellation.stop_requested())
                     return "Stopping this request and waiting for its worker to finish.";
-                switch (pending->stage.load(std::memory_order_acquire))
+                const auto stage = pending->stage.load(std::memory_order_acquire);
+                {
+                    std::scoped_lock lock(pending->progressMutex);
+                    const auto& progress = pending->progress;
+                    if (progress.attempt != 0u && (stage == ai::ModelRequestStage::queued
+                        || stage == ai::ModelRequestStage::sending || stage == ai::ModelRequestStage::request_sent
+                        || stage == ai::ModelRequestStage::awaiting_response || stage == ai::ModelRequestStage::receiving))
+                    {
+                        const auto header = epochengine::format_text(
+                            "{} | attempt {}/2 | prompt {} bytes. ",
+                            progress.phase, progress.attempt, progress.prompt_bytes);
+                        if (progress.response_bytes == 0u)
+                            return header + (progress.streaming_requested
+                                ? "Waiting for the model response; no stream bytes received yet. Loading, prompt processing and generation cannot be distinguished without provider telemetry."
+                                : "Waiting for the model response in Complete Responses mode; no bytes received yet. Enable Streaming Responses in Model Settings after this run for live activity.");
+                        const auto silence = pending->lastResponseAt.time_since_epoch().count() == 0
+                            ? 0 : std::chrono::duration_cast<std::chrono::seconds>(
+                                std::chrono::steady_clock::now() - pending->lastResponseAt).count();
+                        return header + epochengine::format_text(
+                            "Received {} bytes | {} stream events | text {} bytes | tool arguments {} bytes | reasoning {} bytes | last response {}s ago. Counts are bytes/events, not tokens; a partial reply is not an applied change.",
+                            progress.response_bytes, progress.response_events,
+                            progress.content_bytes, progress.tool_argument_bytes,
+                            progress.reasoning_bytes, (std::max)(std::int64_t{0}, silence));
+                    }
+                }
+                switch (stage)
                 {
                 case ai::ModelRequestStage::queued:
                     return "Queued for the model connection. No response is available yet.";
@@ -856,7 +902,7 @@ namespace epochengine
                 case ai::ModelRequestStage::request_sent:
                     return "Request sent. Waiting for the model response.";
                 case ai::ModelRequestStage::awaiting_response:
-                    return "Waiting for the model response. The endpoint does not report token progress.";
+                    return "Waiting for the model response. No response activity has been observed yet.";
                 case ai::ModelRequestStage::receiving:
                     return "Receiving the model response.";
                 case ai::ModelRequestStage::completed:
@@ -962,7 +1008,9 @@ namespace epochengine
                                             {
                                                 request->stage.store(stage,
                                                     std::memory_order_release);
-                                            }, &request->terminalFailure);
+                                            }, &request->terminalFailure,
+                                            [request](const ai::ModelRequestProgress& progress)
+                                            { request->observe_progress(progress); });
                             }
                             catch (const std::exception& e)
                             {
@@ -22742,7 +22790,7 @@ namespace epochengine
                 else if (useEndpoint(editor.aiEndpointDraft)) return;
             }
             if (!editor.aiEndpointStatus.empty()) gui::wrapped_label(editor.aiEndpointStatus, contentWidth);
-            gui::property_row("Reply transport", routes.stream_replies ? "Streaming" : "Complete response (EngCoder compatible)");
+            gui::property_row("Reply transport", routes.stream_replies ? "Streaming" : "Complete response (no live generation activity)");
             const std::array endpointOptions{
                 gui::InlineButtonSpec{.label = routes.stream_replies ? "Use Complete Responses" : "Use Streaming Responses",
                     .width = 222.0f, .enabled = endpointEditable},
@@ -23659,6 +23707,24 @@ namespace epochengine
                     == std::string_view::npos
                 || second.request_activity().find("Queued") == std::string_view::npos)
                 return false;
+            cancelled->observe_progress({.phase = "source selection", .attempt = 1u,
+                .streaming_requested = true, .streaming_received = true,
+                .prompt_bytes = 250u, .response_bytes = 128u, .response_events = 2u,
+                .reasoning_bytes = 16u});
+            if (first.request_phase() != "source selection" || !second.request_phase().empty()
+                || first.request_activity().find("Received 128 bytes") == std::string::npos
+                || first.request_activity().find("not tokens") == std::string::npos
+                || cancelled->lastResponseAt.time_since_epoch().count() == 0)
+                return false;
+            cancelled->observe_progress({.phase = "source selection", .attempt = 2u,
+                .streaming_requested = true, .prompt_bytes = 250u});
+            if (cancelled->lastResponseAt.time_since_epoch().count() != 0
+                || first.request_activity().find("no stream bytes received") == std::string::npos)
+                return false;
+            cancelled->stage.store(ai::ModelRequestStage::failed, std::memory_order_release);
+            if (first.request_activity().find("Request failed") == std::string::npos)
+                return false;
+            cancelled->stage.store(ai::ModelRequestStage::awaiting_response, std::memory_order_release);
             const auto firstToken = cancelled->cancellation.get_token();
             const auto secondToken = other->cancellation.get_token();
             if (!first.cancel_pending() || !firstToken.stop_requested()
@@ -28486,6 +28552,7 @@ namespace epochengine
                 .local_model_activity = editor.aiRetainedSourceRequest
                     ? "Next self-coding request is retained while the earlier project-assistant request finishes."
                     : ai_work_pending(editor) ? editor.aiWorkStatus : std::string{chat.request_activity()},
+                .local_model_request_phase = chat.request_phase(),
                 .external_mcp_available = local_mcp_connector_available(),
                 .external_mcp_status = editor.aiLocalMcp.status,
                 .external_mcp_process_id = editor.aiLocalMcp.bridgeProcessId,
@@ -40306,6 +40373,7 @@ namespace epochengine
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
                     .local_model_activity = std::string{chat.request_activity()},
+                    .local_model_request_phase = chat.request_phase(),
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =
@@ -40389,6 +40457,7 @@ namespace epochengine
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
                     .local_model_activity = std::string{chat.request_activity()},
+                    .local_model_request_phase = chat.request_phase(),
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
                     .external_mcp_process_id =

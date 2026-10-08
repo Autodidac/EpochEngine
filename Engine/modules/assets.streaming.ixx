@@ -34,7 +34,7 @@ module;
 #include <mutex>
 
 #include "../include/epoch.config.hpp"
-#include "../src/epoch.common.hpp"
+#include "../src/epoch/epoch.common.hpp"
 #include "../include/core.stl_types.hpp"
 
 export module assets.streaming;

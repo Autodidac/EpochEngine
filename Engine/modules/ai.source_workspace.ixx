@@ -27,6 +27,8 @@ export namespace epochengine::ai::source_workspace
         [[nodiscard]] bool merge(std::string path, std::size_t first_line = 0u,
             std::string query = {});
         [[nodiscard]] bool remember_search(std::string signature);
+        // Only host-verified path/range/content fingerprints count as progress.
+        [[nodiscard]] bool remember_evidence(std::string fingerprint);
         [[nodiscard]] bool contains_path(std::string_view path) const noexcept;
         [[nodiscard]] const std::vector<ReviewedSlice>& reviewed() const noexcept;
         [[nodiscard]] std::vector<std::string> reviewed_paths() const;
@@ -39,6 +41,7 @@ export namespace epochengine::ai::source_workspace
         std::string objective_{};
         std::vector<ReviewedSlice> reviewed_{};
         std::vector<std::string> searches_{};
+        std::vector<std::string> evidence_{};
         std::size_t discovery_rounds_{};
         std::size_t stagnant_rounds_{};
     };

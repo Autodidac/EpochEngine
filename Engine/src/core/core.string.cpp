@@ -30,7 +30,7 @@
  ***********************************************/
 module;
 
-#include "../include/core.stl_types.hpp"
+#include "../../include/core.stl_types.hpp"
 #include <string>
 
 module core.string;

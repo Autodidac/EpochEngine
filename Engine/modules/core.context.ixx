@@ -60,7 +60,7 @@ module;
 #   endif
 
     // Optional: if you still need your framework helpers, include it AFTER windows.h
-#   include <../src/platform.framework.hpp>
+#   include <../src/platform/platform.framework.hpp>
 #   ifdef min
 #       undef min
 #   endif
@@ -389,57 +389,80 @@ namespace epochengine::core
             guiOverlayPriority.store(enabled, std::memory_order_relaxed);
         }
 
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+        [[nodiscard]] bool owns_input_window_safe(HWND candidate) const noexcept
+        {
+            if (!candidate || ::IsWindow(candidate) == FALSE)
+                return false;
+
+            const auto matches = [candidate](HWND owned) noexcept
+            {
+                return owned
+                    && ::IsWindow(owned) != FALSE
+                    && (candidate == owned || ::IsChild(owned, candidate));
+            };
+
+            if (matches(hwnd))
+                return true;
+            if (windowData)
+            {
+                if (matches(windowData->hwndChild)
+                    || matches(windowData->host_hwnd)
+                    || matches(windowData->hwnd))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+#endif
+
         [[nodiscard]] bool has_input_focus_safe() const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            const auto belongs_to_context = [this](HWND candidate) noexcept
-            {
-                if (!candidate || ::IsWindow(candidate) == FALSE)
-                    return false;
-
-                const auto matches = [candidate](HWND owned) noexcept
-                {
-                    return owned
-                        && ::IsWindow(owned) != FALSE
-                        && (candidate == owned || ::IsChild(owned, candidate));
-                };
-
-                if (matches(hwnd))
-                    return true;
-                if (windowData)
-                {
-                    if (matches(windowData->hwndChild)
-                        || matches(windowData->host_hwnd)
-                        || matches(windowData->hwnd))
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            };
-
             const HWND foreground = ::GetForegroundWindow();
             DWORD foregroundProcessId{};
+            const DWORD foregroundThread = ::GetWindowThreadProcessId(foreground, &foregroundProcessId);
             if (!foreground
-                || ::GetWindowThreadProcessId(foreground, &foregroundProcessId) == 0
+                || foregroundThread == 0
                 || foregroundProcessId != ::GetCurrentProcessId())
             {
                 return false;
             }
 
-            HWND focused = nullptr;
             GUITHREADINFO guiInfo{};
             guiInfo.cbSize = sizeof(guiInfo);
-            if (::GetGUIThreadInfo(0, &guiInfo))
-                focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
-            if (!focused)
-                focused = ::GetFocus();
+            if (!::GetGUIThreadInfo(foregroundThread, &guiInfo))
+                return false;
+            const HWND focused = guiInfo.hwndFocus ? guiInfo.hwndFocus : guiInfo.hwndActive;
 
             // Focus can temporarily report only the top-level foreground host
             // while a child backend is transitioning. Accept that host only when
             // it belongs to this context; never accept another Epoch viewport.
-            return belongs_to_context(focused)
-                || (!focused && belongs_to_context(foreground));
+            return owns_input_window_safe(focused)
+                || (!focused && owns_input_window_safe(foreground));
+#else
+            return true;
+#endif
+        }
+
+        [[nodiscard]] bool has_pointer_input_safe() const noexcept
+        {
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            if (!has_input_focus_safe())
+                return false;
+            GUITHREADINFO guiInfo{};
+            guiInfo.cbSize = sizeof(guiInfo);
+            const DWORD thread = ::GetWindowThreadProcessId(::GetForegroundWindow(), nullptr);
+            if (!thread || !::GetGUIThreadInfo(thread, &guiInfo))
+                return false;
+            // Captured drags may leave the client area, but covered/inactive
+            // contexts must never poll another window's mouse buttons.
+            if (owns_input_window_safe(guiInfo.hwndCapture))
+                return true;
+            POINT cursor{};
+            return ::GetCursorPos(&cursor)
+                && owns_input_window_safe(::WindowFromPoint(cursor));
 #else
             return true;
 #endif
@@ -512,7 +535,7 @@ namespace epochengine::core
         bool is_mouse_button_held_safe(input::MouseButton b) const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            if ((hwnd || windowData) && !has_input_focus_safe())
+            if ((hwnd || windowData) && !has_pointer_input_safe())
                 return false;
 #endif
             // Keep held/pressed semantics in the input engine. Calling
@@ -526,7 +549,7 @@ namespace epochengine::core
         bool is_mouse_button_down_safe(input::MouseButton b) const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
-            if ((hwnd || windowData) && !has_input_focus_safe())
+            if ((hwnd || windowData) && !has_pointer_input_safe())
                 return false;
 #endif
             return is_mouse_button_down ? is_mouse_button_down(b)

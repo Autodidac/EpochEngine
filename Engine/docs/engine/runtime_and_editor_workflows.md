@@ -781,8 +781,9 @@ execution.
   presentation behavior.
 - Engine Development source proposals are two-pass and context-first. AI Controls
   owns ordinary-language objective entry and keeps model/endpoint evidence
-  visible. Epoch first sends a verified names-only C++ catalog; the model chooses
-  up to 12 paths, and the host records and validates that selection before
+  visible. Epoch uses host-side triage and a verified compact repository map;
+  model navigation chooses up to 12 paths per packet, not per whole project.
+  The host records and validates that selection before
   automatically opening only those bytes inside Candidate Lab. The model may
   request catalog-listed expansion, but cannot invent paths or permissions.
   Changing the objective invalidates reviewed evidence. The returned proposal
@@ -1056,8 +1057,8 @@ Current source ownership:
 | Editor command/result payloads | `Engine/modules/editor.core.ixx` |
 | Toolbar context combobox and visible status | `Engine/src/editor/editor.application.cpp` |
 | Editor state capture/restore for handoff | `Engine/src/editor/editor.application.cpp` |
-| Session loop, live context discovery, handoff fallback | `Engine/src/epoch.engine_legacy.cpp` |
-| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/engine.context.host.*.cpp` |
+| Session loop, live context discovery, handoff fallback | `Engine/src/epoch/epoch.engine_legacy.cpp` |
+| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/host.context_win.cpp`, `Engine/src/renderers/host/host.context_linux.cpp` |
 | Reusable GUI layout state | `Engine/include/gui`, `Engine/src/epochgui`, `Engine/dep/EpochGui` |
 | Engine GUI adapter/render/input bridge | `Engine/modules/gui.engine.ixx`, `Engine/src/epochgui/gui.engine.cpp` |
 
@@ -1475,8 +1476,8 @@ profile enables it; engine-source authority is never inherited by that project.
 
 In the operational panel, `Start With AI` accepts an ordinary description of the
 desired result. The operator does not name a source file or internal subsystem.
-Epoch keeps the selected provider and endpoint visible, asks the model to choose
-up to 12 paths from a verified names-only catalog, records the validated choice
+Epoch keeps the selected provider and endpoint visible, uses host triage or asks
+the model to navigate a verified compact map (up to 12 paths per packet), records the validated choice
 in Detailed Session Activity, opens only those bytes inside Candidate Lab, and
 continues into planning. The returned numbered plan is digest-bound, shown as
 the Saved Mission Plan, and fed back with selection checkpoints when the loop
@@ -1500,8 +1501,9 @@ prompts or replies. Validation subprocesses are explicitly labeled as tests,
 not comparison previews. Provider-side full model logs remain separate.
 
 Heavy host work is admitted through one process-wide ownership lease. The
-owner tick polls measured CPU/RAM and a nonblocking 30-second healthy/cooldown
-interval before model, compiler, validation and preview dispatch. The lease
+owner tick polls measured CPU/RAM and a configured nonblocking healthy/cooldown
+interval (six-second default)
+before model, compiler, validation and preview dispatch. The lease
 survives actual worker/child retirement, not just completion notification.
 Comparison pauses new heavy work; selection retires the losing preview before
 successor work, while the selected baseline may remain alive. Cancel, Restart
@@ -1530,9 +1532,10 @@ release work.
 
 `editor.ai_development_controller` maps production calls to trusted monotonic
 time, serializes execution entry, and rejects caller-driven backdating. Before
-source bytes reach a model, the host enumerates existing C++ paths beneath the
-approved read-only root and sends only that verified names-only catalog with the
-operator objective. The model may select or expand a coherent source slice, but
+source bytes reach a model, the host indexes existing C++ paths beneath the
+approved read-only root and offers a verified compact declaration/import/path
+map with the operator objective. That map is navigation metadata, not edit
+evidence. The model may expand cumulative reviewed source, but
 the host admits only canonical, catalog-listed paths and caps each request at 12.
 Safe compact replies are normalized before the same path checks; no normalization
 grants a new root, path, operation, permission, or write.
@@ -1552,7 +1555,8 @@ exact unique reviewed search and requested replacement bytes. Packet rejection
 queues no more than two complete host-diagnosed retries over the same evidence.
 OpenAI-compatible source calls preserve the provider's configured reasoning
 mode (no forced `reasoning_effort=none` or `/no_think`), use the bounded
-1,800-second source timeout, retry one early failed/empty call (not an exhausted
+10,800-second coding/review request deadline (180 seconds for ordinary chat and
+discovery), retry one eligible early transport failure (not an exhausted
 whole request budget), and keep an animated
 elapsed-time working indicator visible until the response or cancellation.
 AI Controls distinguishes `Current request` from `Total self-coding time`.
@@ -1561,7 +1565,8 @@ and Keep/Choose, including hidden-pane updates. Start/Restart resets the total;
 Stop or terminal failure freezes it; same-process Resume excludes the stopped
 interval. Saved sessions from another process have no reconstructed timer history.
 Plan/selection output limits are 4,096 tokens with concise actionable planning;
-patch/repair retains 32,768. Context/source capacity and wall budgets are unchanged.
+patch/repair retains 32,768. Context/output reservations remain checked; large
+model capacity does not authorize an unbounded transcript or source dump.
 Stage/elapsed/size diagnostics omit request and response bodies. These contracts
 do not prove native responsiveness or faster successful model output.
 Terminal timeout/cancellation/retirement metadata travels separately from model
@@ -1827,7 +1832,47 @@ Undo/Redo retains inactive historical slots for temporal reconstruction, but ina
 
 ## MSVC editor and generated-project entry ownership
 
-`Engine.sln` is the engine/editor development solution. It exposes `Debug | x64`, `Release | x64`, and `Debug+Release | x64`; the combined configuration executes the two normal x64 builds sequentially. Generated ProjectLauncher projects are not normal solution targets.
+`Engine.sln` is the engine/editor development solution. Windows x64 has four
+modes but only three actual configurations:
+
+| Mode | Behavior |
+| --- | --- |
+| Debug | Existing unoptimized debugging configuration and debug CRT |
+| Release | Optimized release CRT/NDEBUG, no generated debug symbols |
+| ReleaseWithDebugInfo | Release optimization and release CRT/NDEBUG plus compiler/linker PDBs |
+| BuildAll | Existing EpochEditor dispatches CMake Debug, Release and RelWithDebInfo sequentially |
+
+BuildAll is not another project or an executable, and does not merge the three
+configurations or run them. Failure stops the workflow before subsequent builds.
+There is no BuildDebugRelease utility project. Normal MSVC outputs are separate:
+`x64/Debug`, `x64/Release`, `x64/ReleaseWithDebugInfo`. BuildAll uses the
+multi-configuration CMake tree `build/windows-msvc-debug`; its Editor outputs
+are `Engine/Debug/EpochEditor.exe`, `Engine/Release/EpochEditor.exe` and
+`Engine/RelWithDebInfo/EpochEditor.exe` below that tree, not `x64/BuildAll`.
+Generated ProjectLauncher projects are not normal solution targets.
+
+MSVC ReleaseWithDebugInfo explicitly uses /O2 and /Zi with full linker debug
+information, /OPT:REF and /OPT:ICF; no debug CRT, _DEBUG or runtime-check mode is
+introduced. PDBs increase build/storage size, not debug-runtime overhead. Existing
+narrow per-file /Od module/compiler workarounds remain; this is not a claim of
+uniform optimization or measured zero performance cost.
+
+```powershell
+cmake --workflow --preset windows-msvc-both # Debug then Release
+cmake --workflow --preset windows-msvc-all  # Debug, Release, RelWithDebInfo
+```
+
+These are Windows/MSVC presets. No Linux RelWithDebInfo mode was added. Linux
+`build.sh` keeps Debug/Release, and can be called once for each configuration.
+For any already configured portable multi-config CMake tree, use
+`cmake -DBINARY_DIR=<tree> -P Tools/CMake/build_configurations.cmake` to build Debug
+and Release sequentially. It rejects single-config trees rather than silently
+building the wrong configuration.
+
+Engine-owned Directory.Build.props/targets add the new configuration and symbol
+policy when the unchanged portable EpochGui project is consumed here. The
+bundled library stays an exact standalone mirror. Candidate/source snapshots
+must retain these root build inputs alongside the project files.
 
 The normal `EpochEditor` executable intentionally relies on the engine's internal legacy `main`/`wWinMain` path. `epoch.editor_entry.cpp` is a thin editor shell and does not own application entry. Therefore `ENGINE_STATICLIB` alone must not suppress legacy entry ownership.
 

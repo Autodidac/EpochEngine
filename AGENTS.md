@@ -89,7 +89,8 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- Public Windows/Linux runtime/source authority is immutable `v0.90.33` at
+- Current development source is `v0.90.35`; public Windows/Linux packaged
+  runtime and its exact release-source authority are immutable `v0.90.33` at
   `f33d3d6758abf402747870df4f8887e7887a2035`, published on GitHub and the Site.
   Later AI source checkpoints are not replacement release bytes or proof of
   native Qwen/docked succession. The active pass owns the remaining gate. macOS
@@ -113,6 +114,10 @@
 
 - Useful MSBuild targets in `Engine.sln`: `EpochEditor`, `EpochEngine`, and
   `HeadlessCI`.
+- Windows x64 modes are Debug, Release, ReleaseWithDebugInfo and BuildAll.
+  BuildAll reuses EpochEditor to dispatch `cmake --workflow --preset windows-msvc-all`;
+  never restore a standalone combined-build project. The optimized-symbols mode
+  is Windows/MSVC-only. Portable helpers keep Debug/Release.
 - Build-safe pure engine contract check after rebuilding the editor target:
 
   ```powershell
@@ -185,6 +190,14 @@
 - Run `Tools/ai/validate_source_names.ps1` after adding or moving first-party
   C++ files. Update CMake, MSVC projects/shared items/filters, imports, includes,
   scripts, and docs in the same pass.
+- Keep first-party implementation/header files out of the flat `Engine/src`
+  root. Check physical/project references with `Tools/ai/validate_source_layout.ps1`
+  and virtual folders with `Tools/ai/update_source_filters.ps1`; use its explicit
+  `-Write` option to update filters. Module interfaces remain centrally owned.
+- `Engine/dep/dependencies.json` distinguishes exact portable mirrors from
+  engine-owned descriptor fixtures. Run `Tools/ai/validate_dependency_sync.ps1`
+  after dependency edits; use `-Remote` for a read-only upstream identity check.
+  Engine adapter changes do not automatically belong in the standalone GUI repo.
 - `core` owns dependency-light primitives and lifecycle. `epoch` owns public
   composition/runtime entry. Domain prefixes retain domain implementation.
 - Temporal resources flow from `authoring.*` documents to `asset.*` compiled

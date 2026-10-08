@@ -9,10 +9,15 @@ operator intent is `Changes/mission_cache.md`.
 
 The v0.90.22 self-coding baseline uses cumulative, token-budgeted source discovery: a compact repository map and bounded needle searches feed a persistent reviewed-source workspace. Search metadata is navigation-only; exact reviewed bytes remain required for patch authority. Replacement-slice/24-expansion behavior is superseded.
 
-October 3 status: immutable v0.90.33 is published on GitHub and the Site. Later
+October 7 status: immutable v0.90.33 is published on GitHub and the Site. Later
 stage-prompt/streamed-response source repairs have build/pure-contract proof, not
 native Qwen/embedded-choice/successor acceptance. D1/P0 remains the next behavioral
 gate; packaging success does not complete it or the playable 2D objective.
+
+Build architecture uses the same projects throughout: portable Debug/Release;
+Windows/MSVC adds optimized ReleaseWithDebugInfo and BuildAll dispatching CMake's
+three configurations. No combined-build utility project, Linux symbol-mode
+expansion or new runtime acceptance is implied.
 
 ## Product Mission
 
@@ -71,8 +76,8 @@ project acceptance can advance during D2; the full game-facing loop remains P3.
 Integrating the supplied planetary project now is not open-ended planetary/
 astronomical engine expansion, which remains a later mission.
 
-Use independent agents for disjoint useful source/tests/docs, but serialize
-heavy build/model/runtime work. Supporting GUI and minimal local research
+When delegation is explicitly requested, use independent agents for disjoint
+source/tests/docs, but serialize heavy build/model/runtime work. Supporting GUI and minimal local research
 retrieval may accompany P0. An unrelated subsystem cannot substitute for a
 blocked P0 result. D3 precedes major game-specific changes; do not freeze an
 unfinished source checkpoint merely to meet the date.
@@ -85,15 +90,15 @@ proven completion to history with its mission ID/evidence instead of silently
 dropping intent. Product behavior remains in its owning contract.
 
 Release validation applies to the accepted release scope, not to completion of
-all deferred missions. The authorized v0.90.04 batch must have honest feature
-coverage and an exact reviewed publication set. SDK delivery is last in today's
-batch, with its own private-access tests, not a reason to expose private material
-through an otherwise public release.
+all deferred missions. Historical same-day/version batch requests do not create
+a new release authorization. SDK delivery follows the ordered acceptance gates,
+with its own private-access tests; a public source/runtime publication must not
+expose private SDK material. Current source and release receipts below govern.
 
 ## Current Release State
 
-- Active source integration is **v0.90.33**. This is a development/source state, not a claim that all native acceptance lanes have passed.
-- The immediate Windows gate is the corrected internal-editor/generated-child entry-point split. EpochEditor Debug x64 and Release x64 must link with the engine-owned internal entry point, `Debug+Release | x64` must complete both normal builds, and a separately generated ProjectLauncher must retain its generated entry point without collision.
+- Active repair source is **v0.90.35**, consolidating source layout, transactional discovery, provider/activity/focus repairs and four same-project Windows build modes. Publication status and exact identity belong in `source_sync_2026-10-07.md`. Published Windows/Linux runtime authority remains immutable **v0.90.33**; macOS remains **v0.89.30**. Neither source publication nor pure contracts establish native model/docked successor acceptance.
+- The internal-editor/generated-child entry-point split passed the October 1 Windows Debug/Release and sequential dual-build checks. Preserve that split during source relocation; generated projects retain their own entry source. The immediate behavior gate remains D1, not rebuilding this completed entry-point architecture.
 - The current renderer/editor baseline includes event-driven OpenGL scene caching, neuromorphic invalidation pressure, vacated-region diagnostics, alternating selective/full benchmarking, multi-selection/group transforms, renderer-neutral bounded lighting damage, accurate presentation-vs-render FPS telemetry, and persistent statistics.
 - Multicontext acceptance includes focus-owned physical input, clickable top-row controls, visible redocking guides, recoverable closed panes, and single-owner detached AI Chat behavior in Run mode.
 - Temporal scene acceptance includes create-after-Undo/delete-recreate behavior without inactive-history identity collisions.
@@ -113,9 +118,12 @@ through an otherwise public release.
 - [ ] Prove that the visible working indicator, elapsed time, Stop Session,
   retry states, diagnostics, and terminal result remain readable at normal,
   narrow, and high-zoom layouts.
-- [ ] Prove selected source and request bytes cannot escape the reviewed
-  12-path ceiling, cross candidate/project boundaries, overwrite live source,
-  or enter project-assistant chat/session state.
+- [ ] Prove cumulative source navigation over the verified project index, exact
+  path/range/content progress and context-budget packing. Twelve paths bounds
+  one navigation packet, NOT the whole project. Failed sharing must preserve
+  the accepted workspace; repeated fallback bytes cannot masquerade as progress.
+  Retained context cannot cross candidate/project boundaries, authorize an edit
+  outside bytes in that request, or enter project-assistant session state.
 - [ ] Enforce and test the candidate process's filesystem/network boundary.
   The current inherited OS identity plus Job Object is lifecycle supervision,
   not security confinement for arbitrary compiled candidate code.
@@ -131,7 +139,8 @@ through an otherwise public release.
 - [ ] Make validation and checkpoint persistence transactional: oversized logs,
   malformed receipts, disk/I/O/state-capacity failures, stale replies and restart
   leave one recoverable state; automatic retry does not consume invalid evidence.
-- [ ] Enforce nonblocking 30-second cooldown and measured CPU/RAM admission
+- [ ] Prove configured nonblocking pacing (six-second default, not a fixed
+  30-second wait) and measured CPU/RAM admission
   before model/compiler/test/new-preview work. Show actual running/queued/idle
   activity and unsupported metrics; no new AI during Keep/Choose. Cancel/close
   retires global heavy ownership before another context starts.
@@ -292,6 +301,29 @@ stopped, built, run, and regenerated using documented commands and visible UI.
 Exit gate: capability and renderer matrices contain no unsupported presentation
 claim, and repeated resource replacement has bounded memory/handle behavior.
 
+### Neuromorphic / Event-Driven Continuation (Not Another Renderer Rewrite)
+
+Reuse the bounded sparse graph, CPU event-camera/adapters and production OpenGL
+invalidation bridge. Implemented contracts and integration state live in
+`Engine/docs/engine/neuromorphic_engine_framework.md`; native performance and
+cross-backend presentation are separate proof. No automatic model training or
+claimed spiking-hardware backend is implied.
+
+- [ ] Qualify sparse/static/localized/dense/camera-motion crossover using the
+  existing same-cache SELECTIVE/FULL benchmark. Record synchronized render cost,
+  actual presentation cadence, graph overhead/drop counts and correctness
+  separately. Never tune thresholds from unmeasured high cached-render FPS.
+- [ ] Before enabling partial reuse for another backend, consume shared scene/
+  lighting damage and prove old/new coverage, depth reconstruction, resize/
+  temporal reset and fallback for nonlocal effects. Keep current full redraw valid.
+- [ ] After P0/software-base acceptance, integrate a bounded event/perception
+  consumer with explicit timestamps, truth class and replay/reset ownership.
+  Event-native perception/foveation and gameplay wake-up are not yet integrated.
+- [ ] Explore cheap signal/host triage -> optional model planning only behind
+  explicit session/resource policy. Deterministic System-1 source scoring is
+  already implemented; it is not a learned neuromorphic agent. Expensive model
+  work remains cancellable, serialized and paused at comparison.
+
 ## RSH — Curated Model Research And Architecture Alignment
 
 - [ ] Implement a small version-bound local research pack for Engine self-coding:
@@ -339,7 +371,7 @@ review covers old and new goals without creating another parallel roadmap.
 
 Exit gate and owning planned contract:
 `Engine/docs/engine/sdk_reference_and_access_contract.md`. This is D5, the
-**final same-day milestone after the integration batch**, not an implemented
+**final integration milestone after the preceding batch**, not an implemented
 access feature or a replacement for P0. SDK work is not blocked on all deferred
 features or the entire later playable 2D milestone.
 

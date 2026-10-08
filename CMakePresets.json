@@ -166,6 +166,9 @@
   "buildPresets": [
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug", "configuration": "Debug" },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release", "configuration": "Release" },
+    { "name": "windows-msvc-both-debug", "configurePreset": "windows-msvc-debug", "configuration": "Debug", "targets": ["epoch"] },
+    { "name": "windows-msvc-both-release", "configurePreset": "windows-msvc-debug", "configuration": "Release", "targets": ["epoch"] },
+    { "name": "windows-msvc-all-symbols", "configurePreset": "windows-msvc-debug", "configuration": "RelWithDebInfo", "targets": ["epoch"] },
     { "name": "windows-msvc-cpp26-debug", "configurePreset": "windows-msvc-cpp26-debug", "configuration": "Debug" },
     { "name": "windows-clangcl-debug", "configurePreset": "windows-clangcl-debug", "configuration": "Debug" },
     { "name": "windows-clangcl-cpp26-debug", "configurePreset": "windows-clangcl-cpp26-debug", "configuration": "Debug" },
@@ -177,6 +180,27 @@
     { "name": "unix-makefiles-gcc-cpp26-debug", "configurePreset": "unix-makefiles-gcc-cpp26-debug" },
     { "name": "ci-headless", "configurePreset": "ci-headless", "configuration": "Release" },
     { "name": "ci-headless-cpp26", "configurePreset": "ci-headless-cpp26", "configuration": "Release" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "windows-msvc-both",
+      "displayName": "Windows MSVC Debug + Release",
+      "steps": [
+        { "type": "configure", "name": "windows-msvc-debug" },
+        { "type": "build", "name": "windows-msvc-both-debug" },
+        { "type": "build", "name": "windows-msvc-both-release" }
+      ]
+    },
+    {
+      "name": "windows-msvc-all",
+      "displayName": "Windows MSVC All: Debug, Release, Release with Debug Info",
+      "steps": [
+        { "type": "configure", "name": "windows-msvc-debug" },
+        { "type": "build", "name": "windows-msvc-both-debug" },
+        { "type": "build", "name": "windows-msvc-both-release" },
+        { "type": "build", "name": "windows-msvc-all-symbols" }
+      ]
+    }
   ],
   "testPresets": [
     {

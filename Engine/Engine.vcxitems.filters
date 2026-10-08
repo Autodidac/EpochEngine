@@ -1,256 +1,391 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{bfe53883-7de8-402f-b954-022ffcefb259}</UniqueIdentifier>
+    <Filter Include="Build Metadata">
+      <UniqueIdentifier>{4dc0f894-18c6-a016-ae5a-a0a382cb213c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{88d016ff-11dc-4da7-9ccf-b0f86a1f39e4}</UniqueIdentifier>
+    <Filter Include="Internal Headers">
+      <UniqueIdentifier>{e238aad4-ea24-bedd-e6fa-0d9a1ae12335}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\ai">
+      <UniqueIdentifier>{4c529d4f-4d2d-e234-dac6-61aa08ebdf1e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\build">
+      <UniqueIdentifier>{62257285-20fe-3671-0a90-1d69fe00b37f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\editor">
+      <UniqueIdentifier>{9c3782c5-8cde-53fd-1bb5-09532cdc9dbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\epoch">
+      <UniqueIdentifier>{f8689ccf-9bb2-4842-b521-9266440b88aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\platform">
+      <UniqueIdentifier>{653f199b-916d-edef-fbfe-26cc22922c1d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\render">
+      <UniqueIdentifier>{79765d47-1aa0-f550-a7a7-8ac9dec53a76}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers">
+      <UniqueIdentifier>{053184cc-17db-08ce-cfcb-6f68233519f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers\core">
+      <UniqueIdentifier>{54b416b3-da2d-160a-f03d-e82993f69d58}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers\directx">
+      <UniqueIdentifier>{f3051840-b855-7f96-3311-d8b5dc84c1df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers\opengl">
+      <UniqueIdentifier>{497f2b78-81f5-4624-f5c9-c3e2c2cc4628}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers\vulkan">
+      <UniqueIdentifier>{2deb13f6-fd86-7022-4e7d-2aa530456edf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\updater">
+      <UniqueIdentifier>{f673b35c-2152-91df-8323-cfb9dd44a1c7}</UniqueIdentifier>
     </Filter>
     <Filter Include="Module Files">
       <UniqueIdentifier>{b80c85b8-f247-488e-b9b9-cd7c155a129d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{e556c93a-d317-4752-b807-f1dd084ff695}</UniqueIdentifier>
+    <Filter Include="Module Files\ai">
+      <UniqueIdentifier>{de4672fb-d928-507e-3482-ec8c42849af6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\external scripts">
-      <UniqueIdentifier>{3be7745a-41c9-465a-8afe-9ac47d8de45d}</UniqueIdentifier>
+    <Filter Include="Module Files\application">
+      <UniqueIdentifier>{6a4da413-679f-dc98-2c1c-d8c6effae836}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\ai">
-      <UniqueIdentifier>{a0192b66-e6b7-44c3-8805-79830528079d}</UniqueIdentifier>
+    <Filter Include="Module Files\asset">
+      <UniqueIdentifier>{ee024991-9a07-46b2-b987-a87b7ab2a0c4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\gui">
-      <UniqueIdentifier>{b4355d44-3a99-455d-be05-e7adf671cea1}</UniqueIdentifier>
+    <Filter Include="Module Files\assets">
+      <UniqueIdentifier>{be707dfa-f6bb-5bd1-19ad-e84a42ddbee0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine">
-      <UniqueIdentifier>{4f0680f0-37d6-40c8-91f9-8a80999dde73}</UniqueIdentifier>
+    <Filter Include="Module Files\atlas">
+      <UniqueIdentifier>{c185dd7c-8da7-95b0-3977-adf4f19febc6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core">
-      <UniqueIdentifier>{2232ba10-a464-4399-a7d0-1681efe2ebfc}</UniqueIdentifier>
+    <Filter Include="Module Files\audio">
+      <UniqueIdentifier>{fe959623-0ac0-a741-1572-40891de73834}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\crossplatform">
-      <UniqueIdentifier>{abd1a9ae-a148-461f-ad21-d38e55c494d7}</UniqueIdentifier>
+    <Filter Include="Module Files\authoring">
+      <UniqueIdentifier>{66bd2245-2d10-a4d8-0f3d-cdf44f8d4d31}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\crossplatform\platform">
-      <UniqueIdentifier>{1a7c63fd-3d18-4a4f-8e4c-7ed547cb8e59}</UniqueIdentifier>
+    <Filter Include="Module Files\canvas2d">
+      <UniqueIdentifier>{2d4b21ce-32a7-54b6-e866-9f5e358ad54a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context">
-      <UniqueIdentifier>{036670d7-91d1-49ed-b675-64e52335355d}</UniqueIdentifier>
+    <Filter Include="Module Files\capability">
+      <UniqueIdentifier>{a99aa3fc-7212-8c46-5e04-0304ddcb7850}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\vulkan">
-      <UniqueIdentifier>{935dc56f-1177-4c94-9d79-86b7267ac932}</UniqueIdentifier>
+    <Filter Include="Module Files\context">
+      <UniqueIdentifier>{9ead1fc2-82af-98de-a244-511aef59cd02}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\raylib">
-      <UniqueIdentifier>{a000d9ca-654d-46c1-a2e7-8fffa8d5178a}</UniqueIdentifier>
+    <Filter Include="Module Files\core">
+      <UniqueIdentifier>{3e1a0c00-30db-b628-9839-f7f55644f662}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\software">
-      <UniqueIdentifier>{17dd8b26-b615-4ef3-b238-97689adef445}</UniqueIdentifier>
+    <Filter Include="Module Files\diagnostics">
+      <UniqueIdentifier>{48ad4760-f10f-c0ad-6cdf-4517eefa6aa2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\opengl">
-      <UniqueIdentifier>{eb85cc71-c8ee-49c9-ac11-f1ffdf2adbf3}</UniqueIdentifier>
+    <Filter Include="Module Files\directx">
+      <UniqueIdentifier>{32d9a818-1d97-a1a6-3946-9a4116e5dee8}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\sdl">
-      <UniqueIdentifier>{ad48e2c8-69e2-4421-8177-456f227c6159}</UniqueIdentifier>
+    <Filter Include="Module Files\ecs">
+      <UniqueIdentifier>{fef7d515-367b-f262-5ece-0ffffae8c540}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\sfml">
-      <UniqueIdentifier>{2252e37f-66ec-467a-99f9-fd4923fde33a}</UniqueIdentifier>
+    <Filter Include="Module Files\editor">
+      <UniqueIdentifier>{2b5fe00b-f792-dca9-7085-136eba1ca66b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\context\directx">
-      <UniqueIdentifier>{ee2b6d4a-65e4-42eb-bf8b-2d314c5429fc}</UniqueIdentifier>
+    <Filter Include="Module Files\engine">
+      <UniqueIdentifier>{5c4a47d3-ef80-b4ee-a98d-973d00126b43}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\core\ai">
-      <UniqueIdentifier>{1b2d90d1-5a64-4f8c-a2da-c9c37d894c44}</UniqueIdentifier>
+    <Filter Include="Module Files\epoch">
+      <UniqueIdentifier>{19f6793c-7536-a790-c0f9-fd34e6dff14c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine">
-      <UniqueIdentifier>{4a3d2bbe-62ff-465d-9751-8c8f5aa53573}</UniqueIdentifier>
+    <Filter Include="Module Files\event">
+      <UniqueIdentifier>{d89a4e47-fa9d-e960-2eec-4d6a7c8d620e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\simulation">
-      <UniqueIdentifier>{cec686ee-53e4-4ec6-9db8-57bb155f6ead}</UniqueIdentifier>
+    <Filter Include="Module Files\events">
+      <UniqueIdentifier>{764d6f6b-55b9-07e3-e1c7-267c2032c525}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\epochengine\simulation">
-      <UniqueIdentifier>{a701a79e-b662-49c6-b86f-53f6236bb361}</UniqueIdentifier>
+    <Filter Include="Module Files\extension">
+      <UniqueIdentifier>{b957cf8e-d297-3cac-c9d3-7510141cb53c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\ai">
-      <UniqueIdentifier>{0f93e72d-fd89-4b1b-abc4-1004fb445804}</UniqueIdentifier>
+    <Filter Include="Module Files\font">
+      <UniqueIdentifier>{f5869054-7e0b-fb83-4246-937963a6f225}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\voxel">
-      <UniqueIdentifier>{e79e4dfc-0456-4c93-9db4-2c827259747d}</UniqueIdentifier>
+    <Filter Include="Module Files\forest">
+      <UniqueIdentifier>{7af9bd72-a64c-d941-f139-9665bf28c627}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core">
-      <UniqueIdentifier>{451a6ad6-c07d-4fc2-8b2c-5f709574e3c3}</UniqueIdentifier>
+    <Filter Include="Module Files\game">
+      <UniqueIdentifier>{c385d664-b2fd-b1ab-61c0-5951bd507a0d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context">
-      <UniqueIdentifier>{64901bd1-e817-4bef-9f30-89b94c2e3dc7}</UniqueIdentifier>
+    <Filter Include="Module Files\gui">
+      <UniqueIdentifier>{f1c86250-0c03-1211-493d-ed3a0a6cb29d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends">
-      <UniqueIdentifier>{c8e3ff66-77c6-4eff-adfd-d53576a7531f}</UniqueIdentifier>
+    <Filter Include="Module Files\image">
+      <UniqueIdentifier>{7e466653-08a1-0531-b290-29294eeca47e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\noop">
-      <UniqueIdentifier>{156c4225-e916-4720-9bb9-d4823bdbc871}</UniqueIdentifier>
+    <Filter Include="Module Files\input">
+      <UniqueIdentifier>{707c594d-c6da-9abb-db30-8f04f71bae2e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\opengl">
-      <UniqueIdentifier>{f8294a0e-5c1f-4fde-8653-f4e3e2403965}</UniqueIdentifier>
+    <Filter Include="Module Files\launcher">
+      <UniqueIdentifier>{19ac6e98-d5aa-f9df-430d-4b6dd2cefa66}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\raylib">
-      <UniqueIdentifier>{a31bfe35-906a-4b00-81e3-274a854963d8}</UniqueIdentifier>
+    <Filter Include="Module Files\media">
+      <UniqueIdentifier>{7c5b949b-40d3-1df2-4574-4141a9e0467a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\sdl">
-      <UniqueIdentifier>{4edc424b-5425-4fdd-985f-a41635fc1f4f}</UniqueIdentifier>
+    <Filter Include="Module Files\network">
+      <UniqueIdentifier>{ac0f5c24-20b2-935c-430d-04b90bbc7120}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\sfml">
-      <UniqueIdentifier>{2f4f5f39-f53c-48a4-830a-c271bcb71769}</UniqueIdentifier>
+    <Filter Include="Module Files\noop">
+      <UniqueIdentifier>{479c2384-dd97-8fa0-832f-5df2d8427fe2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\software">
-      <UniqueIdentifier>{b233ec1d-06d6-4ca0-8857-f3c7b7df6f8a}</UniqueIdentifier>
+    <Filter Include="Module Files\opengl">
+      <UniqueIdentifier>{82d26114-2b66-a230-d8c9-39b509b4470b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan">
-      <UniqueIdentifier>{de3e8c0b-4f63-41ae-bdce-6545e23a2c76}</UniqueIdentifier>
+    <Filter Include="Module Files\package">
+      <UniqueIdentifier>{8f59a5e5-bf9c-a607-6c19-b0616b2198e2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan\crossplatform">
-      <UniqueIdentifier>{0512b756-848b-4a29-9d18-e69cd632c9a2}</UniqueIdentifier>
+    <Filter Include="Module Files\perf">
+      <UniqueIdentifier>{54e0691b-62f3-8d2e-d107-eaaca5c0b754}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan\geometry">
-      <UniqueIdentifier>{ee897788-a40b-4990-83e4-dcb2def85272}</UniqueIdentifier>
+    <Filter Include="Module Files\physics">
+      <UniqueIdentifier>{e08017fb-4d66-c7ab-b94a-4c43f5f4d8b9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan\camera">
-      <UniqueIdentifier>{8faac34e-1fd3-4b9e-bb4c-a6317542b492}</UniqueIdentifier>
+    <Filter Include="Module Files\platform">
+      <UniqueIdentifier>{8414ceef-82f9-57aa-fa5e-f49f40ed1cbd}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan\contextcore">
-      <UniqueIdentifier>{ba939402-dcdc-4b19-9edc-f96cd1573700}</UniqueIdentifier>
+    <Filter Include="Module Files\project">
+      <UniqueIdentifier>{30fc3db7-e837-2705-3a07-bfa132c9ff83}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions">
-      <UniqueIdentifier>{e35079dd-c82f-4d0b-a6bf-054d3aeeb548}</UniqueIdentifier>
+    <Filter Include="Module Files\raylib">
+      <UniqueIdentifier>{c466c099-d2d2-020f-06d1-6503904ccd3c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\vulkan\shaders">
-      <UniqueIdentifier>{15a92cca-160f-4aa8-a203-ebf784dd753d}</UniqueIdentifier>
+    <Filter Include="Module Files\render">
+      <UniqueIdentifier>{fca175dc-ddfa-6626-e22f-97c76edf502d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\directx">
-      <UniqueIdentifier>{4a0163bc-629e-4391-bf0e-49b4de63fc61}</UniqueIdentifier>
+    <Filter Include="Module Files\saveload">
+      <UniqueIdentifier>{6e20e826-2f8f-f283-adc9-9156016a4811}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\wasm">
-      <UniqueIdentifier>{455fc2e8-5801-4987-a20c-5b0bcbec252c}</UniqueIdentifier>
+    <Filter Include="Module Files\scene">
+      <UniqueIdentifier>{53db1fdd-f657-f449-805c-f9f27014f180}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\context\backends\android">
-      <UniqueIdentifier>{bc2651df-2a35-47a7-a063-1724928131b6}</UniqueIdentifier>
+    <Filter Include="Module Files\scripting">
+      <UniqueIdentifier>{c47da7a2-306b-4a0a-abaf-0e88b1c8d2d3}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\platform">
-      <UniqueIdentifier>{a2017f7c-ed47-428d-a368-49f143de6297}</UniqueIdentifier>
+    <Filter Include="Module Files\sdl">
+      <UniqueIdentifier>{8fb40040-1bb5-5dc6-6257-059a0553d19d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\networking">
-      <UniqueIdentifier>{017e96bf-6d1e-4f5c-9cee-a9d3e728f727}</UniqueIdentifier>
+    <Filter Include="Module Files\sfml">
+      <UniqueIdentifier>{bdd39770-6abf-72aa-956e-357d2bd97823}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\input">
-      <UniqueIdentifier>{8bc29a1c-9598-419a-9620-f0e14cf37c5c}</UniqueIdentifier>
+    <Filter Include="Module Files\simulation">
+      <UniqueIdentifier>{d8b222a1-ec9c-1d1d-af13-c535bb558a5e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\multithreading">
-      <UniqueIdentifier>{2ce30849-3d60-4490-a9fb-b30f35dde8ac}</UniqueIdentifier>
+    <Filter Include="Module Files\software">
+      <UniqueIdentifier>{f3a6cb4f-c2df-838d-5cb2-7b3ce69ae7a1}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\core\ecs">
-      <UniqueIdentifier>{0ef8e8c3-4033-4be2-bd81-e4a46b1c3e11}</UniqueIdentifier>
+    <Filter Include="Module Files\sprite">
+      <UniqueIdentifier>{fa55ca72-453f-c2ba-399c-8e8c1f01a88e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\events">
-      <UniqueIdentifier>{dd08c2f6-e80e-42ca-8942-208aafb5e109}</UniqueIdentifier>
+    <Filter Include="Module Files\systems">
+      <UniqueIdentifier>{675ff342-cd8d-8788-ea57-02eb474207eb}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\games">
-      <UniqueIdentifier>{c3227ece-a074-4cd5-bb67-7a07802e3879}</UniqueIdentifier>
+    <Filter Include="Module Files\taskgraph">
+      <UniqueIdentifier>{597c8c5b-8158-65b0-e10a-f1799be3774f}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\games\gamecore">
-      <UniqueIdentifier>{52ee0543-9b00-43b5-b44c-726f6cd8cfd9}</UniqueIdentifier>
+    <Filter Include="Module Files\telemetry">
+      <UniqueIdentifier>{577ee79e-a72e-46e5-edce-3d51e892f119}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\gui">
-      <UniqueIdentifier>{2ccfdfe5-0684-44e3-9d28-f15617a73c33}</UniqueIdentifier>
+    <Filter Include="Module Files\temporal">
+      <UniqueIdentifier>{b44a344a-43f8-1d2d-04eb-82c3607f5dfb}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\scene">
-      <UniqueIdentifier>{fff9e4cb-6565-42f1-89a6-4e686ef16cfe}</UniqueIdentifier>
+    <Filter Include="Module Files\terrain">
+      <UniqueIdentifier>{cfc9fa3a-7c03-af53-da20-c9cb03a5f08a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\scripting">
-      <UniqueIdentifier>{3aa5fac9-c015-46de-9c6e-c213cfcc0700}</UniqueIdentifier>
+    <Filter Include="Module Files\texture">
+      <UniqueIdentifier>{e3d13b1e-8cbe-1903-9797-0623e199bfac}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\textures">
-      <UniqueIdentifier>{7c0de147-5a32-4adc-8105-7d1148dd4631}</UniqueIdentifier>
+    <Filter Include="Module Files\timeline">
+      <UniqueIdentifier>{91fb0ed1-2258-a37b-32e4-a96400de2ac4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\textures\atlas">
-      <UniqueIdentifier>{d61d2d50-1b85-4fd3-88f3-d29b1dc37eb7}</UniqueIdentifier>
+    <Filter Include="Module Files\updater">
+      <UniqueIdentifier>{27ccfc6c-b3ee-f70a-4d69-f38c0bc90341}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\textures\sprite">
-      <UniqueIdentifier>{8cdf4ae0-fb03-4398-bff5-6fa768fbee9c}</UniqueIdentifier>
+    <Filter Include="Module Files\utility">
+      <UniqueIdentifier>{c5a2b3a0-51a7-f2c2-f937-e68ced9bff40}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\textures\font">
-      <UniqueIdentifier>{257e1949-1d53-4c01-bddf-0ec8ef2a416f}</UniqueIdentifier>
+    <Filter Include="Module Files\visuals">
+      <UniqueIdentifier>{c5715127-61fb-14d9-0530-68ae95d4c160}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\updater">
-      <UniqueIdentifier>{ab044649-9a0c-44e8-a553-56de92e0b72a}</UniqueIdentifier>
+    <Filter Include="Module Files\voxel">
+      <UniqueIdentifier>{9dc62c1a-2e7e-71b9-387c-5cb90dd768bc}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\utilities">
-      <UniqueIdentifier>{e0146995-fa5e-47b2-b274-9f032b8b2dc3}</UniqueIdentifier>
+    <Filter Include="Module Files\vulkan">
+      <UniqueIdentifier>{ae28a4ed-4bac-b4fe-e1a3-df02050b392c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\debug">
-      <UniqueIdentifier>{6db9a281-9cd7-4575-a48e-b979f741e88e}</UniqueIdentifier>
+    <Filter Include="Module Files\water">
+      <UniqueIdentifier>{27862d4b-c834-35a1-81c9-afbdd090e83a}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\packages">
-      <UniqueIdentifier>{4d35a4bc-03d2-45f3-94db-5fae7aac7a23}</UniqueIdentifier>
+    <Filter Include="Public Headers">
+      <UniqueIdentifier>{bf8ab015-dec6-395e-1166-56b0da73b148}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\render">
-      <UniqueIdentifier>{9504e146-38b9-4f01-9be3-4aa91cb02e6d}</UniqueIdentifier>
+    <Filter Include="Public Headers\ai">
+      <UniqueIdentifier>{1c4bc83c-59db-4a00-1408-5bbf47bf8fc4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\capability">
-      <UniqueIdentifier>{9b1c1c96-1787-45de-949a-5127d4057361}</UniqueIdentifier>
+    <Filter Include="Public Headers\core">
+      <UniqueIdentifier>{73157c93-a0c8-9675-81b2-91ef9ac7a078}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\authoring">
-      <UniqueIdentifier>{7a56a0a3-c219-44ec-b364-7d2f07869dc1}</UniqueIdentifier>
+    <Filter Include="Public Headers\engine">
+      <UniqueIdentifier>{be9338ff-991a-02b1-8de3-352c96986668}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\assets">
-      <UniqueIdentifier>{3cb8f496-426c-4d04-a0f4-7db730f0aa5a}</UniqueIdentifier>
+    <Filter Include="Public Headers\epoch">
+      <UniqueIdentifier>{a30dd33f-a176-4ea4-52e2-f0323346832c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\project">
-      <UniqueIdentifier>{3d5cc807-9112-4cc0-a58b-484547d2c861}</UniqueIdentifier>
+    <Filter Include="Public Headers\gui">
+      <UniqueIdentifier>{997e3778-2166-e04d-279d-6b63e3e2ef33}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\terrain">
-      <UniqueIdentifier>{e7f08d55-5db3-48f5-a203-3af0774e71be}</UniqueIdentifier>
+    <Filter Include="Public Headers\scripting">
+      <UniqueIdentifier>{54abe2da-7c49-bbfe-15cb-6d88655a7431}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\audio">
-      <UniqueIdentifier>{3f5ffbf2-ae2f-4bd4-99fd-6cbe36b88e1e}</UniqueIdentifier>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{88d016ff-11dc-4da7-9ccf-b0f86a1f39e4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\media">
-      <UniqueIdentifier>{88f4e0ae-e9ac-4f31-93e8-4961bc9d3952}</UniqueIdentifier>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{bfe53883-7de8-402f-b954-022ffcefb259}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\physics">
-      <UniqueIdentifier>{a8f7644e-8168-49b8-8370-96e121131cef}</UniqueIdentifier>
+    <Filter Include="Source Files\ai">
+      <UniqueIdentifier>{d98072a5-9c2a-5f88-00dd-e16665587788}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\epochengine\water">
-      <UniqueIdentifier>{df775d90-916b-47b0-9b19-0835b260c3da}</UniqueIdentifier>
+    <Filter Include="Source Files\assets">
+      <UniqueIdentifier>{46c42b2a-77ff-6f41-1648-edca0427dce2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine">
-      <UniqueIdentifier>{f0ad256c-4b7f-4896-b920-60642a13c3d2}</UniqueIdentifier>
+    <Filter Include="Source Files\assets\audio">
+      <UniqueIdentifier>{efa97642-c3f0-473e-5c6c-9062b9180a9d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine\context">
-      <UniqueIdentifier>{76da242c-5607-42af-a40e-001fe83f7a18}</UniqueIdentifier>
+    <Filter Include="Source Files\assets\gui">
+      <UniqueIdentifier>{c181511e-9e05-0b3a-a72b-0a124edfa9c2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine\context\directx">
-      <UniqueIdentifier>{ed0bdddc-6121-49e8-a3d4-e27b41caa903}</UniqueIdentifier>
+    <Filter Include="Source Files\assets\texture">
+      <UniqueIdentifier>{28296c4e-4ea2-0aca-2b40-7c9f934f0b70}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine\context\opengl">
-      <UniqueIdentifier>{71ab902d-2279-4dad-bc10-cbb90394809c}</UniqueIdentifier>
+    <Filter Include="Source Files\assets\tilemap">
+      <UniqueIdentifier>{26af5501-46eb-7a44-21ef-1f3a66e8fc90}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine\context\vulkan">
-      <UniqueIdentifier>{03fe2831-0650-4dce-ae7f-23057ca9aa25}</UniqueIdentifier>
+    <Filter Include="Source Files\audio">
+      <UniqueIdentifier>{d51d26ba-b11e-cfa4-f9c9-da95591957c4}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine\context\sfml">
-      <UniqueIdentifier>{b4dd6159-0f63-4b40-89aa-2bb1530b25d1}</UniqueIdentifier>
+    <Filter Include="Source Files\authoring">
+      <UniqueIdentifier>{a37e6348-a9a2-5487-84f1-40482b7bce82}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\epochengine\debug">
-      <UniqueIdentifier>{53a18b80-9cb6-4ffa-b85e-6c62338ca78b}</UniqueIdentifier>
+    <Filter Include="Source Files\authoring\gui">
+      <UniqueIdentifier>{12bd4794-877a-63f1-2f4a-5899ad6dce45}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\authoring\task_graph">
+      <UniqueIdentifier>{1f7a564f-d370-2190-fd38-77d5127117a5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\authoring\texture">
+      <UniqueIdentifier>{b8de7163-9f34-c135-f656-a6e112aeafbb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\authoring\tilemap">
+      <UniqueIdentifier>{92865bd1-498c-f97c-50b6-5fc1095a7fb8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\core">
+      <UniqueIdentifier>{02ca6cea-6616-5c3f-21c7-9655726aebd0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\editor">
+      <UniqueIdentifier>{2b30d10e-234f-3192-535b-72f3cbeea516}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\editor\ai">
+      <UniqueIdentifier>{047cd323-0c41-7581-d104-94f52b03c33e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\editor\systems">
+      <UniqueIdentifier>{e8bcda15-20b5-555c-d826-ad6f7629bc79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epoch">
+      <UniqueIdentifier>{a119746a-5f41-a99a-328e-c46af1294b44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\epochgui">
+      <UniqueIdentifier>{39851c7d-de12-fb1c-16ba-1ace9793d0e1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\extensions">
+      <UniqueIdentifier>{651d6768-a9f1-c1d5-2318-2e1d8ff21b75}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\forest">
+      <UniqueIdentifier>{b3f15805-7dd9-c005-e547-9df7cf230e2a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\input">
+      <UniqueIdentifier>{c74a6158-62f3-3235-a301-185fafb4c3f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\media">
+      <UniqueIdentifier>{c1c3d73c-31dd-b758-d406-805ace267bdf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\packages">
+      <UniqueIdentifier>{14809c2e-cf9d-5648-b985-9cc29ad0f507}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\physics">
+      <UniqueIdentifier>{e28683f4-2e5e-8444-7870-00f2aa25fa32}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\platform">
+      <UniqueIdentifier>{6017193b-fde7-d58f-e0a1-40340b3f6921}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\project">
+      <UniqueIdentifier>{1b6144ad-e9e4-2282-e946-0fcde3996b40}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\render">
+      <UniqueIdentifier>{e834878f-1bbb-30ee-6dab-9c426166a541}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers">
+      <UniqueIdentifier>{3e4801b8-b788-7497-3a8b-293820f4c59b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\canvas2d">
+      <UniqueIdentifier>{48e0f23f-869a-4f37-509a-17e83f5dc560}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\core">
+      <UniqueIdentifier>{781e6cae-3c11-fab8-f6db-6b972c5f4700}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\directx">
+      <UniqueIdentifier>{529a88e6-fa81-d77a-ffda-79f610b75acf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\host">
+      <UniqueIdentifier>{09f03a60-5400-dd2d-64a2-77f8c79c98c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\opengl">
+      <UniqueIdentifier>{4f75b2d4-810b-fbcf-313e-aef306f7b2f8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\platform">
+      <UniqueIdentifier>{fe797615-d6b7-4ad6-ea4b-bc81a45ccb74}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\raylib">
+      <UniqueIdentifier>{81aab095-0d18-4189-d278-b009e15a5e6a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\sdl">
+      <UniqueIdentifier>{c77b12e6-cc94-59c2-948d-dae95ec9ebd8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\sfml">
+      <UniqueIdentifier>{1033f532-0967-2565-8b24-828f990f17d2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\software">
+      <UniqueIdentifier>{e6aaa5d9-0b01-6edb-f199-216be8420aee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\renderers\vulkan">
+      <UniqueIdentifier>{241090e5-ad45-451a-cc72-4e5dcab34506}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\scripts">
+      <UniqueIdentifier>{4c55ccb4-3ab4-5f08-2448-5620a368968b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\simulation">
+      <UniqueIdentifier>{288cfcd1-7516-6488-cf3e-6f9a0e4854d3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\updater">
+      <UniqueIdentifier>{adcf2b3c-a32d-c38a-cfdd-221d013c918a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model.hpp">
-      <Filter>Header Files\ai</Filter>
+      <Filter>Internal Headers\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.service.hpp">
-      <Filter>Header Files\ai</Filter>
+      <Filter>Internal Headers\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.response.hpp">
-      <Filter>Header Files\ai</Filter>
+      <Filter>Internal Headers\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h">
       <Filter>Resource Files</Filter>
@@ -259,1294 +394,1437 @@
       <Filter>Resource Files</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.stl_types.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\core</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.format_text.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\core</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\engine</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.engine.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\scripting.epoch_api.h">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\scripting</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.app_api.h">
-      <Filter>Header Files</Filter>
+      <Filter>Public Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_process_impl.hpp">
-      <Filter>Header Files\epochengine\context\opengl</Filter>
+      <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.scene_preview.hpp">
-      <Filter>Header Files\epochengine\context\opengl</Filter>
+      <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.canvas2d_scene.hpp">
-      <Filter>Header Files\epochengine\context\opengl</Filter>
+      <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_detail.hpp">
-      <Filter>Header Files\epochengine\context\opengl</Filter>
+      <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_capture.hpp">
-      <Filter>Header Files\epochengine\context\opengl</Filter>
+      <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.context_detail.hpp">
-      <Filter>Header Files\epochengine\context\directx</Filter>
+      <Filter>Internal Headers\renderers\directx</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_shared.hpp">
-      <Filter>Header Files\epochengine\context\vulkan</Filter>
+      <Filter>Internal Headers\renderers\vulkan</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\build.cpp_feature_probe.hpp">
-      <Filter>Header Files\epochengine</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\build\build.cpp_feature_probe.hpp">
+      <Filter>Internal Headers\build</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Internal Headers\updater</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.api_types.hpp">
-      <Filter>Header Files\epochengine</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.api_types.hpp">
+      <Filter>Internal Headers\epoch</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.common.hpp">
-      <Filter>Header Files\epochengine</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.common.hpp">
+      <Filter>Internal Headers\epoch</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform.framework.hpp">
-      <Filter>Header Files\epochengine</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.framework.hpp">
+      <Filter>Internal Headers\platform</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.main.hpp">
-      <Filter>Header Files\epochengine</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.main.hpp">
+      <Filter>Internal Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core.context_backends.hpp">
-      <Filter>Header Files\epochengine\context</Filter>
+      <Filter>Internal Headers\renderers\core</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.version.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.popup_layout.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.panel_host.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.layout_primitives.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.floating_window.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.dockable_window.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.dock_layout.hpp">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Public Headers\gui</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\context.passive_scoring.hpp">
-      <Filter>Header Files\epochengine\debug</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\render\context.passive_scoring.hpp">
+      <Filter>Internal Headers\render</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)modules\sfml.compat.hpp">
-      <Filter>Header Files\epochengine\context\sfml</Filter>
+      <Filter>Module Files\sfml</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.runtime_legacy.hpp">
-      <Filter>Header Files\epochengine</Filter>
+      <Filter>Public Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_layout.hpp">
-      <Filter>Header Files\epochengine\context</Filter>
+      <Filter>Internal Headers\editor</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\ai\ai.self_iteration_analytics.hpp">
+      <Filter>Public Headers\ai</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
-      <Filter>Resource Files</Filter>
+      <Filter>Build Metadata</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\frag.spv">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\shaders</Filter>
+      <Filter>Build Metadata</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\vert.spv">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\shaders</Filter>
+      <Filter>Build Metadata</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.rotate_all_entities.cpp">
-      <Filter>Source Files\external scripts</Filter>
+      <Filter>Source Files\scripts</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.oscillate_selected_entity.cpp">
-      <Filter>Source Files\external scripts</Filter>
+      <Filter>Source Files\scripts</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md" />
+    <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md">
+      <Filter>Build Metadata</Filter>
+    </None>
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_view.inl">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_runtime.inl">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
-    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp">
+      <Filter>Source Files\editor</Filter>
+    </None>
+    <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp">
+      <Filter>Source Files\editor</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.handles.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.task.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\systems</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.version.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\engine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\visuals.engine.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\visuals</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.a2048_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.tetris_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.snake_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.sokoban_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.sliding_puzzle_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.sand.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\simulation</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.pacman_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.minesweeper_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.match3_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.frogger_like.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.cellular.ixx">
-      <Filter>Module Files\epochengine\games</Filter>
+      <Filter>Module Files\simulation</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.neuromorphic.ixx">
-      <Filter>Module Files\epochengine\simulation</Filter>
+      <Filter>Module Files\simulation</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.neuromorphic_adapters.ixx">
-      <Filter>Module Files\epochengine\simulation</Filter>
+      <Filter>Module Files\simulation</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.allocator.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\utility</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.atomicfunction.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\utility</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.commandline.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.codeinspector.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\utility</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.filewatch.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\utility</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.timer.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.logger.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.utilities.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.types.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.atlas_writer.ixx">
-      <Filter>Module Files\epochengine\textures</Filter>
+      <Filter>Module Files\image</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.loader.ixx">
-      <Filter>Module Files\epochengine\textures</Filter>
+      <Filter>Module Files\image</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.writer.ixx">
-      <Filter>Module Files\epochengine\textures</Filter>
+      <Filter>Module Files\image</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\texture.core.ixx">
-      <Filter>Module Files\epochengine\textures</Filter>
+      <Filter>Module Files\texture</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.manager.ixx">
-      <Filter>Module Files\epochengine\textures\atlas</Filter>
+      <Filter>Module Files\atlas</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.texture.ixx">
-      <Filter>Module Files\epochengine\textures\atlas</Filter>
+      <Filter>Module Files\atlas</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sprite.registry.ixx">
-      <Filter>Module Files\epochengine\textures\sprite</Filter>
+      <Filter>Module Files\sprite</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sprite.pool.ixx">
-      <Filter>Module Files\epochengine\textures\sprite</Filter>
+      <Filter>Module Files\sprite</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sprite.handle.ixx">
-      <Filter>Module Files\epochengine\textures\sprite</Filter>
+      <Filter>Module Files\sprite</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\directx.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\directx</Filter>
+      <Filter>Module Files\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.backend.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.renderer.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.canvas2d.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.textures.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sdl</Filter>
+      <Filter>Module Files\sdl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.renderer.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sdl</Filter>
+      <Filter>Module Files\sdl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.state.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sdl</Filter>
+      <Filter>Module Files\sdl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sdl.textures.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sdl</Filter>
+      <Filter>Module Files\sdl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.textures.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\software</Filter>
+      <Filter>Module Files\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.state.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\software</Filter>
+      <Filter>Module Files\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.renderer.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\software</Filter>
+      <Filter>Module Files\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.quad.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\software</Filter>
+      <Filter>Module Files\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\software.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\software</Filter>
+      <Filter>Module Files\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.freetype.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.platform.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.quad.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\input.engine.ixx">
-      <Filter>Module Files\epochengine\core\input</Filter>
+      <Filter>Module Files\input</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\input.controller.ixx">
-      <Filter>Module Files\epochengine\core\input</Filter>
+      <Filter>Module Files\input</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.commandqueue.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.control.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.multiplexer.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.admission.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\noop.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\noop</Filter>
+      <Filter>Module Files\noop</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sfml</Filter>
+      <Filter>Module Files\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.renderer.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sfml</Filter>
+      <Filter>Module Files\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.state.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sfml</Filter>
+      <Filter>Module Files\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\sfml.textures.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\sfml</Filter>
+      <Filter>Module Files\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.components.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.internal_private.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.core.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.storage.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entity.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.system.ixx">
-      <Filter>Module Files\epochengine\updater</Filter>
+      <Filter>Module Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.source_access.ixx">
-      <Filter>Module Files\epochengine\updater</Filter>
+      <Filter>Module Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx">
-      <Filter>Module Files\epochengine\updater</Filter>
+      <Filter>Module Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx">
-      <Filter>Module Files\epochengine\updater</Filter>
+      <Filter>Module Files\engine</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.tools.ixx">
-      <Filter>Module Files\epochengine\updater</Filter>
+      <Filter>Module Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.core.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.document.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.interaction.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.persistence.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.runtime.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.serializer.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.snapshot.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.surface_alignment.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.string_converter.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\utility</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.mpmc_bounded_queue.ixx">
-      <Filter>Module Files\epochengine\core\multithreading</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.compiler.ixx">
-      <Filter>Module Files\epochengine\scripting</Filter>
+      <Filter>Module Files\scripting</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.pump.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.framework.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.engine.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.engine.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Module Files\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\taskgraph.dotsystem.ixx">
-      <Filter>Module Files\epochengine\core\multithreading</Filter>
+      <Filter>Module Files\taskgraph</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\atlas.mipmap.ixx">
-      <Filter>Module Files\epochengine\textures\atlas</Filter>
+      <Filter>Module Files\atlas</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\font.renderer.ixx">
-      <Filter>Module Files\epochengine\textures\font</Filter>
+      <Filter>Module Files\font</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.input.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.menu.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Module Files\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\network.core.ixx">
-      <Filter>Module Files\epochengine\core\networking</Filter>
+      <Filter>Module Files\network</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.state.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.capture.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.preview.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.system.ixx">
-      <Filter>Module Files\epochengine\scripting</Filter>
+      <Filter>Module Files\scripting</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.cli.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.engine_bindings.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\scripting</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.window.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.textures.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.triangle.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\opengl</Filter>
+      <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.state.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.renderer.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\telemetry.engine.ixx">
-      <Filter>Module Files\epochengine\utilities</Filter>
+      <Filter>Module Files\telemetry</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_linux.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\raylib</Filter>
+      <Filter>Module Files\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.platform_utils.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\context</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.core.ixx">
-      <Filter>Module Files\epochengine\games\gamecore</Filter>
+      <Filter>Module Files\game</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\application.end_user.ixx">
-      <Filter>Module Files\epochengine\games\gamecore</Filter>
+      <Filter>Module Files\application</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\application.registry.ixx">
-      <Filter>Module Files\epochengine\games\gamecore</Filter>
+      <Filter>Module Files\application</Filter>
     </ClCompile>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.project_demo_bootstrap.cpp">
-      <Filter>Source Files\external scripts</Filter>
+      <Filter>Source Files\scripts</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.engine_arcade_scene.cpp">
-      <Filter>Source Files\external scripts</Filter>
+      <Filter>Source Files\scripts</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.editor_launcher.cpp">
-      <Filter>Source Files\external scripts</Filter>
+      <Filter>Source Files\scripts</Filter>
     </None>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entitycomponentmanager.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.entityhistory.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\events.input.ixx">
-      <Filter>Module Files\epochengine\events</Filter>
+      <Filter>Module Files\events</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.context.ixx">
-      <Filter>Module Files\epochengine\core\context</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_device.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\crossplatform</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_dispatcher.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\crossplatform</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_instance.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\crossplatform</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.platform_loader.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\crossplatform</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\host.context_linux.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform</Filter>
+      <Filter>Source Files\renderers\host</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\host.context_win.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform</Filter>
+      <Filter>Source Files\renderers\host</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx">
-      <Filter>Module Files\epochengine\events</Filter>
+      <Filter>Module Files\saveload</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\timeline.system.ixx">
-      <Filter>Module Files\epochengine\events</Filter>
+      <Filter>Module Files\timeline</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\media.timeline_preview.ixx">
-      <Filter>Module Files\epochengine\media</Filter>
+      <Filter>Module Files\media</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
-      <Filter>Module Files\epochengine\events</Filter>
+      <Filter>Module Files\event</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.application.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Module Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.core.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Module Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\temporal.request.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\temporal</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.quad.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\geometry</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.triangle.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\geometry</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_meshcube.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\geometry</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.camera.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\camera</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api_unit.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_api.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_runtime.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shared_context.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_commands.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_depth.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_descriptor.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_device.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_instance.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_memory.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_renderer.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shader_pipeline.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_swapchain.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_texture.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_window.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.facade.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_buffers.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore\partitions</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_shared_vk.ixx">
-      <Filter>Module Files\epochengine\core\context\backends\vulkan\contextcore</Filter>
+      <Filter>Module Files\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\engine.context.cpp">
-      <Filter>Source Files\epochengine\core\context</Filter>
+      <Filter>Source Files\renderers\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\core\core.context_command_queue.cpp">
-      <Filter>Source Files\epochengine\core\context</Filter>
+      <Filter>Source Files\renderers\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_buffers.cpp">
-      <Filter>Source Files\epochengine\core\context\vulkan</Filter>
+      <Filter>Source Files\renderers\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_texture.cpp">
-      <Filter>Source Files\epochengine\core\context\vulkan</Filter>
+      <Filter>Source Files\renderers\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.dispatch_storage.cpp">
-      <Filter>Source Files\epochengine\core\context\vulkan</Filter>
+      <Filter>Source Files\renderers\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.engine.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.select.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\perf</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.tier.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\perf</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.registry.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\systems</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.runtime.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.runtime.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.session.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.voice_session.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_stdio.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.eval.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.engine.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.model_install.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.scene.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.standard.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.plant_lab.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.gui.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.canvas2d_scene.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\renderers\canvas2d</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_evidence.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\renderers\canvas2d</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_scene_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\renderers\canvas2d</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\canvas2d.scene_contracts.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\renderers\canvas2d</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine.cpp">
+      <Filter>Source Files\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.headers.cpp">
+      <Filter>Source Files\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\render.graph_epoch.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.graph_epoch.cpp">
+      <Filter>Source Files\render</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.systems.cpp">
+      <Filter>Source Files\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.main.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.main.cpp">
+      <Filter>Source Files\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.runtime.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.runtime.cpp">
+      <Filter>Source Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.engine.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\raylib\core.context_raylib.cpp">
-      <Filter>Source Files\epochengine\core\context\raylib</Filter>
+      <Filter>Source Files\renderers\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_render.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_preview.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_present.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_draw.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_process_impl.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_detail.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_process.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_init.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_cleanup.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\core.context_opengl.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\core.context_sdl.cpp">
-      <Filter>Source Files\epochengine\core\context\sdl</Filter>
+      <Filter>Source Files\renderers\sdl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\core.context_directx.cpp">
-      <Filter>Source Files\epochengine\core\context\directx</Filter>
+      <Filter>Source Files\renderers\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.context.cpp">
-      <Filter>Source Files\epochengine\core\context\directx</Filter>
+      <Filter>Source Files\renderers\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.device.cpp">
-      <Filter>Source Files\epochengine\core\context\directx</Filter>
+      <Filter>Source Files\renderers\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.gui.cpp">
-      <Filter>Source Files\epochengine\core\context\directx</Filter>
+      <Filter>Source Files\renderers\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.preview.cpp">
-      <Filter>Source Files\epochengine\core\context\directx</Filter>
+      <Filter>Source Files\renderers\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.state.cpp">
-      <Filter>Source Files\epochengine\core\context\directx</Filter>
+      <Filter>Source Files\renderers\directx</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\core.context_software.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\core.context_vulkan.cpp">
-      <Filter>Source Files\epochengine\core\context\vulkan</Filter>
+      <Filter>Source Files\renderers\vulkan</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sfml\core.context_sfml.cpp">
-      <Filter>Source Files\epochengine\core\context\sfml</Filter>
+      <Filter>Source Files\renderers\sfml</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\render.smoke_harness.cpp">
-      <Filter>Source Files\external scripts</Filter>
+      <Filter>Source Files\renderers</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\launcher.update.ixx">
-      <Filter>Module Files\epochengine\updater</Filter>
+      <Filter>Module Files\launcher</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx">
-      <Filter>Module Files\epochengine\voxel</Filter>
+      <Filter>Module Files\voxel</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx">
-      <Filter>Module Files\epochengine\voxel</Filter>
+      <Filter>Module Files\voxel</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx">
-      <Filter>Header Files\gui</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.image.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.tile_workspace.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.input.ixx">
-      <Filter>Module Files\epochengine\gui</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx">
-      <Filter>Module Files\epochengine\debug</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.error.ixx">
-      <Filter>Module Files\epochengine\debug</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.id.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.string.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.path.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.math.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.log.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.format.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.env.ixx">
-      <Filter>Module Files\epochengine\core</Filter>
+      <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\diagnostics.engine.ixx">
-      <Filter>Module Files\epochengine\debug</Filter>
+      <Filter>Module Files\diagnostics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.capabilities.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.filesystem.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.child_process.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.work_admission.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx">
-      <Filter>Module Files\epochengine\core\platform</Filter>
+      <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.backend.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_capture.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.scene_preview.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.canvas2d_scene.cpp">
-      <Filter>Source Files\epochengine\core\context\opengl</Filter>
+      <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log_headless.cpp">
-      <Filter>Source Files\epochengine\core\context</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log_headless.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\raylib\raylib.api.cpp">
-      <Filter>Source Files\epochengine\core\context\raylib</Filter>
+      <Filter>Source Files\renderers\raylib</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\software\software.context_capture.cpp">
-      <Filter>Source Files\epochengine\core\context\software</Filter>
+      <Filter>Source Files\renderers\software</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.platform_context.cpp">
-      <Filter>Source Files\epochengine\core\context\vulkan</Filter>
+      <Filter>Source Files\renderers\vulkan</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.assert.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.assert.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.env.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.env.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.error.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.error.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.id.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.id.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.math.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.math.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.string.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.string.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.time.cpp">
-      <Filter>Source Files\epochengine\core</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.time.cpp">
+      <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.application.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine_legacy.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine_legacy.cpp">
+      <Filter>Source Files\epoch</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.source_access.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.system.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.source_worker_win.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\updater</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\image.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\hierarchy_tree.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\tile_workspace.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\epochgui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\scripts</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\utility.filewatch.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\utility.filewatch.cpp">
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\font.renderer.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp">
+      <Filter>Source Files\epochgui</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp">
-      <Filter>Source Files\epochengine</Filter>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp">
+      <Filter>Source Files\assets</Filter>
     </ClCompile>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.child_isolation.hpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Internal Headers\platform</Filter>
     </ClInclude>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process_contract.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\extensions</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.window.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\platform.context_epoch.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\renderers\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\forest</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.preview_mesh.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\forest</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\package</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.catalog.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\package</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\extension.catalog.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\extension</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\assets</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx">
-      <Filter>Module Files\epochengine\packages</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\events.bus.ixx">
-      <Filter>Module Files\epochengine\events</Filter>
+      <Filter>Module Files\events</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.world.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_cpu.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_evidence.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_limits.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_presentation.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_runtime.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_scene.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_tilemap.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.camera.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.neuromorphic_camera.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.neuromorphic_invalidation.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.portal.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.canvas2d_scene.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\canvas2d.scene_contracts.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\canvas2d</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture_artifact.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture_residency.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.streaming_feedback.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.ray.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.context_frame.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.graph.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_sfml.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_sdl.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_raylib.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_opengl_family.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device_null.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_textures.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.tilemap_workspace.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_textures.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.tilemap_workspace.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.sha256.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.build_validation.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_guard.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_executor.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_loop.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_session.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.project_profile.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_textures.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.tilemap_workspace.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_textures.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.tilemap_workspace.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.sha256.ixx">
+      <Filter>Module Files\core</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.build_validation.ixx">
+      <Filter>Module Files\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_guard.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_executor.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_loop.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_session.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.project_profile.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.curated_context_bundle.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_queue.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_scheduler.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_supervisor_control.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_supervisor_protocol.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_supervisor_adapter.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_orchestrator_bridge.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_bundle.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_orchestrator_bridge.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_bundle.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_proposal.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_stager.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_patch_adapter.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_validation_adapter.ixx">
-      <Filter>Module Files\epochengine\ai</Filter>
+      <Filter>Module Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_proposal_codec.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_executor.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_proposal_codec.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation.cpp">
+      <Filter>Source Files\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation_contract.cpp">
+      <Filter>Source Files\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_executor.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter_checkpoint.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter_contract.cpp">
-      <Filter>Source Files\epochengine\core\ai</Filter>
+      <Filter>Source Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_controller.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_panel.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.candidate_artifact.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.task_scheduler.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_panel.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_controller.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_panel.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.candidate_artifact.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.task_scheduler.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_panel.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_layout.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx">
-      <Filter>Module Files\epochengine</Filter>
+      <Filter>Module Files\editor</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_panel.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp">
+      <Filter>Source Files\editor\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_panel.cpp">
+      <Filter>Source Files\editor\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller_contract.cpp">
+      <Filter>Source Files\editor\ai</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_document_codec.cpp">
-      <Filter>Source Files\epochengine\authoring\gui</Filter>
+      <Filter>Source Files\authoring\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_templates.cpp">
-      <Filter>Source Files\epochengine\authoring\gui</Filter>
+      <Filter>Source Files\authoring\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_document_contract.cpp">
-      <Filter>Source Files\epochengine\authoring\gui</Filter>
+      <Filter>Source Files\authoring\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_compiler.cpp">
-      <Filter>Source Files\epochengine\authoring\gui</Filter>
+      <Filter>Source Files\authoring\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_compiler_contract.cpp">
-      <Filter>Source Files\epochengine\authoring\gui</Filter>
+      <Filter>Source Files\authoring\gui</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_panel.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace.cpp">
+      <Filter>Source Files\editor\systems</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_panel.cpp">
+      <Filter>Source Files\editor\systems</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace_contract.cpp">
+      <Filter>Source Files\editor\systems</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.legacy_components.ixx">
-      <Filter>Module Files\epochengine\core\ecs</Filter>
+      <Filter>Module Files\ecs</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.task_graph.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\task_graph\authoring.task_graph_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.authoring_history.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.hierarchy_adapter_contract.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp">
+      <Filter>Source Files\packages</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.task_graph.ixx">
+      <Filter>Module Files\authoring</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\task_graph\authoring.task_graph_contract.cpp">
+      <Filter>Source Files\authoring\task_graph</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.authoring_history.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_input_settings.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.hierarchy_adapter.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp">
+      <Filter>Source Files\editor</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico">
@@ -1559,408 +1837,381 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="Source Files\epochengine\audio">
-      <UniqueIdentifier>{745f96ec-b916-43ec-b8ca-df164463c19d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\input">
-      <UniqueIdentifier>{d4eeaf17-2892-4704-b13c-35dbe9619384}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\physics">
-      <UniqueIdentifier>{943352a1-3c42-477b-9e60-c6157ea58d6b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\authoring">
-      <UniqueIdentifier>{4e5e0878-b307-48f5-ad7d-66633a33083d}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\authoring\gui">
-      <UniqueIdentifier>{aed543dc-a22d-4104-b6eb-7d26e914e175}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\authoring\texture">
-      <UniqueIdentifier>{0304862f-2d95-4308-b1a6-4d29bc847130}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\authoring\tilemap">
-      <UniqueIdentifier>{c7f0a402-399c-4ee4-9008-2750e99a243f}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\project">
-      <UniqueIdentifier>{2d012ae0-0465-4bca-a747-b94aa914e9be}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\assets">
-      <UniqueIdentifier>{ccfacdae-e3be-4458-9677-d2fb1b86b08e}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\assets\gui">
-      <UniqueIdentifier>{0e74c10d-bd60-481b-969a-583d8bd03d47}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\assets\texture">
-      <UniqueIdentifier>{61ae8cf2-2baa-4f61-88c5-0e5e651cbe69}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\assets\audio">
-      <UniqueIdentifier>{96cc8613-1e67-49ed-a57d-ec3b8d31394b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\epochengine\assets\tilemap">
-      <UniqueIdentifier>{a00bb3bc-147a-4c4f-8f06-0d9ca345d056}</UniqueIdentifier>
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\capability.profile.ixx">
-      <Filter>Module Files\epochengine\capability</Filter>
+      <Filter>Module Files\capability</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.gui_document.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.gui_compiler.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.gui_artifact.ixx">
-      <Filter>Module Files\epochengine\assets</Filter>
+      <Filter>Module Files\asset</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.document.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.morphology.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_artifact.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\asset</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_import.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\asset</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.tilemap_artifact.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\asset</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.tilemap.ixx">
-      <Filter>Module Files\epochengine\authoring</Filter>
+      <Filter>Module Files\authoring</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.forest_library.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_library.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_pipeline.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_source.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_admission.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_library.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_pipeline.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_runtime.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration_session.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_controller.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.actor2d_runtime.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gameplay2d_runtime.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gui_runtime.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gui_library.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gui_epochgui.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.sprite_animation.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\terrain.foundation.ixx">
-      <Filter>Module Files\epochengine\terrain</Filter>
+      <Filter>Module Files\terrain</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.tier0.ixx">
-      <Filter>Module Files\epochengine\scene</Filter>
+      <Filter>Module Files\scene</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.math.ixx">
-      <Filter>Module Files\epochengine\render</Filter>
+      <Filter>Module Files\render</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx">
-      <Filter>Module Files\epochengine\voxel</Filter>
+      <Filter>Module Files\voxel</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx">
-      <Filter>Module Files\epochengine\water</Filter>
+      <Filter>Module Files\water</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.mixer.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device_sdl.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.playback_runtime.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.audio_import.ixx">
-      <Filter>Module Files\epochengine\audio</Filter>
+      <Filter>Module Files\asset</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.audio_profile.ixx">
-      <Filter>Module Files\epochengine\project</Filter>
+      <Filter>Module Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx">
-      <Filter>Module Files\epochengine\physics</Filter>
+      <Filter>Module Files\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.solver2d.ixx">
-      <Filter>Module Files\epochengine\physics</Filter>
+      <Filter>Module Files\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer_contract.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_contract.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_sdl.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime_contract.cpp">
-      <Filter>Source Files\epochengine\audio</Filter>
+      <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller.cpp">
-      <Filter>Source Files\epochengine\input</Filter>
+      <Filter>Source Files\input</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller_sdl.cpp">
-      <Filter>Source Files\epochengine\input</Filter>
+      <Filter>Source Files\input</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller_contract.cpp">
-      <Filter>Source Files\epochengine\input</Filter>
+      <Filter>Source Files\input</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\audio\asset.audio_import.cpp">
-      <Filter>Source Files\epochengine\assets\audio</Filter>
+      <Filter>Source Files\assets\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\audio\asset.audio_import_contract.cpp">
-      <Filter>Source Files\epochengine\assets\audio</Filter>
+      <Filter>Source Files\assets\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.audio_profile.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.audio_profile_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.sprite_animation.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.sprite_animation_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.manager.cpp">
-      <Filter>Source Files\epochengine\physics</Filter>
+      <Filter>Source Files\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.solver2d.cpp">
-      <Filter>Source Files\epochengine\physics</Filter>
+      <Filter>Source Files\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\physics\physics.solver2d_contract.cpp">
-      <Filter>Source Files\epochengine\physics</Filter>
+      <Filter>Source Files\physics</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset_registry.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.forest_library.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_resources.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_library.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_pipeline.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_source.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_library.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_pipeline.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration_session.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gameplay2d_acceptance.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gameplay2d_runtime.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gameplay2d_runtime_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gui_runtime.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gui_runtime_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gui_library.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gui_library_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.gui_epochgui.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_source.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.contracts.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.lifecycle_contract.cpp">
-      <Filter>Source Files\epochengine\project</Filter>
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact.cpp">
-      <Filter>Source Files\epochengine\assets\texture</Filter>
+      <Filter>Source Files\assets\texture</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_import.cpp">
-      <Filter>Source Files\epochengine\assets\texture</Filter>
+      <Filter>Source Files\assets\texture</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp">
-      <Filter>Source Files\epochengine\authoring\texture</Filter>
+      <Filter>Source Files\authoring\texture</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\tilemap\asset.tilemap_artifact.cpp">
-      <Filter>Source Files\epochengine\assets\tilemap</Filter>
+      <Filter>Source Files\assets\tilemap</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\gui\asset.gui_artifact.cpp">
-      <Filter>Source Files\epochengine\assets\gui</Filter>
+      <Filter>Source Files\assets\gui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_document.cpp">
-      <Filter>Source Files\epochengine\authoring\tilemap</Filter>
+      <Filter>Source Files\authoring\tilemap</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_contract.cpp">
-      <Filter>Source Files\epochengine\authoring\tilemap</Filter>
+      <Filter>Source Files\authoring\tilemap</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_tilemap.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\renderers\canvas2d</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\canvas2d\render.canvas2d_tilemap_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\renderers\canvas2d</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)src\media\media.timeline_preview_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\media</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\forest</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager_contract.cpp">
-      <Filter>Source Files\epochengine\physics</Filter>
+      <Filter>Source Files\physics</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact_contract.cpp">
-      <Filter>Source Files\epochengine\assets\texture</Filter>
+      <Filter>Source Files\assets\texture</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_contract.cpp">
-      <Filter>Source Files\epochengine\authoring\texture</Filter>
+      <Filter>Source Files\authoring\texture</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_layout_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\editor</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\platform\core.candidate_data_contract.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission_contract.cpp">
-      <Filter>Source Files\epochengine\core\crossplatform\platform</Filter>
+      <Filter>Source Files\platform</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp">
-      <Filter>Source Files\epochengine</Filter>
+      <Filter>Source Files\epochgui</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\simulation\simulation.neuromorphic_contract.cpp">
-      <Filter>Source Files\epochengine\simulation</Filter>
+      <Filter>Source Files\simulation</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_index.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_workspace.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_discovery_contract.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_index.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_workspace.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_discovery_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx">
+      <Filter>Module Files\render</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_index.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_workspace.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_discovery_contract.ixx">
+      <Filter>Module Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_index.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_workspace.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_discovery_contract.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -8,7 +8,7 @@
  ***********************************************/
 module;
 
-#include "../src/epoch.common.hpp"
+#include "../src/epoch/epoch.common.hpp"
 
 #include <array>
 #include <bit>

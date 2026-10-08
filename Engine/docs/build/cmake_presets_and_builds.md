@@ -25,6 +25,30 @@ Available presets:
 - `windows-msvc-release`
 - `windows-msvc-cpp26-debug`
 
+Windows/MSVC convenience workflows reuse the same targets:
+
+```powershell
+cmake --workflow --preset windows-msvc-both # Debug then Release
+cmake --workflow --preset windows-msvc-all  # Debug, Release, RelWithDebInfo
+```
+
+The existing `Engine.sln` projects expose Debug, Release,
+ReleaseWithDebugInfo and BuildAll on x64. BuildAll dispatches the second
+workflow from EpochEditor; it is not an additional project or binary. Direct
+MSVC outputs are `x64/<configuration>`; the workflow uses
+`build/windows-msvc-debug/Engine/<CMake configuration>`. The optimized-symbols
+mode is Windows/MSVC-only; portable scripts retain Debug/Release.
+
+For an already configured portable multi-config tree:
+
+```text
+cmake -DBINARY_DIR=<tree> -P Tools/CMake/build_configurations.cmake
+```
+
+This builds Debug then Release, stopping on failure. It does not add a Linux
+symbol-enabled preset. Full policy and source-snapshot requirements are in
+[runtime workflows](../engine/runtime_and_editor_workflows.md#msvc-editor-and-generated-project-entry-ownership).
+
 ## Windows (ClangCL)
 
 ```powershell

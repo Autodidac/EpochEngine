@@ -1,0 +1,21 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Engine integration only: keep the portable EpochGui snapshot unchanged. -->
+  <ItemGroup Condition="'$(MSBuildProjectName)'=='EpochGui'">
+    <ProjectConfiguration Include="ReleaseWithDebugInfo|x64">
+      <Configuration>ReleaseWithDebugInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseWithDebugInfo|Win32">
+      <Configuration>ReleaseWithDebugInfo</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Condition="'$(MSBuildProjectName)'=='EpochGui' and '$(Configuration)'=='ReleaseWithDebugInfo'">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <IntDir>$(MSBuildThisFileDirectory)Release\$(Platform)\EpochGui\$(Configuration)\</IntDir>
+  </PropertyGroup>
+</Project>

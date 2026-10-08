@@ -1,4 +1,4 @@
-# Neuromorphic Game Engine Framework
+# Neuromorphic Engine Framework
 
 ## Status
 
@@ -11,6 +11,49 @@ and covered by a CPU-only contract target.
 The layer is an event-driven control/perception fabric. It does not replace
 rasterization, the physics solver, the audio device, or the presentation clock
 when fixed-step, frame-step, or batch execution is objectively better.
+
+### Current ownership and evidence (October 7, 2026)
+
+This contract covers reusable software, editor and game consumers; it is not a
+second roadmap. `Changes/roadmap.md` orders unfinished delivery and the active
+pass keeps model-built sandbox succession first.
+
+| System | Actual implementation/integration | Remaining acceptance |
+| --- | --- | --- |
+| Sparse graph / `simulation.neuromorphic` | CPU bounded signals, weighted activation, leak/refractory gates, metrics and temporal reset; CPU contracts | Workload benchmarks and consumer-specific replay/cost proof |
+| Event camera / `render.neuromorphic_camera` | Sampled luminance-to-event API and CPU fixtures; no production perception consumer found | Native consumer, total observation/event budget, latency/memory and threshold evidence |
+| Timeline/task-graph adapters | Typed conversion and atomic graph compile with CPU fixtures | Actual authored graph/runtime/replay workflow; no continuous world-wide integration claimed |
+| Invalidation / `render.neuromorphic_invalidation` | Persistent network in `opengl.state`, evaluated by `opengl.preview`; only partial-to-full promotion | Native image/cost proof, event storms/reset/resize; other backends' partial caches remain unproved |
+| AI host triage | Deterministic path/identifier scoring in the existing self-coding panel; streaming activity and bounded discovery | Useful model patches, real builds and embedded succession; not learned/spiking agent integration |
+
+The current graph has no hidden learning/weight updates. Event-camera output is
+`visual_only`; timeline causes use `exact_cause`. Raster damage and validated
+host/source evidence remain authoritative. High cached-render throughput is
+not high presentation FPS, model throughput or proof of a whole-engine speedup.
+
+### Measured next design steps
+
+1. Keep correctness conservative: previous/current object and light damage,
+   camera/global revisions, depth/occlusion reconstruction and full fallback.
+   Unknown/nonlocal effects cannot be suppressed by activation policy.
+2. Use the existing alternating same-cache benchmark for sparse-to-dense
+   crossover. Account for graph activation, projection, redraw, presentation,
+   queue drops and synchronized GPU timing separately. Benchmark mode itself
+   changes pacing and is not normal-runtime throughput.
+3. Add one explicit bounded perception/simulation consumer only after current
+   P0/software-base gates. Preserve consumer-owned clocks, temporal reset and
+   event/output limits; do not poll a full image while claiming event-native input.
+4. Evaluate event-based AI wake-up as a cost hypothesis: cheap signals can
+   recommend work, but cannot start listeners, bypass session approval or alter
+   source/model authority. Comparison pauses model work; cancellation and
+   resource ownership still use the existing scheduler.
+5. Port policy contracts before optimizations. CLI/software correctness and
+   full-frame backend paths remain valid; native partial/foveated/hardware paths
+   require individual capability and cost evidence.
+
+These steps neither authorize a draw-order rewrite nor replace the full playable
+2D, portable software, GUI/Extensions and private SDK goals. No measured win,
+autonomous learning or hardware-accelerator support is claimed by this plan.
 
 ```text
 meaningful world cause

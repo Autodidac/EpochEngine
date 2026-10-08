@@ -47,6 +47,14 @@ namespace epochengine::ai::source_discovery_contract
         workspace.note_discovery_round(false);
         workspace.note_discovery_round(false);
 
+        const bool newEvidence = workspace.remember_evidence("path:2:sha256-A");
+        const bool repeatedEvidence = workspace.remember_evidence("path:2:sha256-A");
+        auto pending = workspace;
+        const bool pendingEvidence = pending.remember_evidence("path:3:sha256-B");
+        const bool rollbackPreserved = workspace.remember_evidence("path:3:sha256-B");
+        workspace.reset("new objective");
+        const bool resetEvidence = workspace.remember_evidence("path:2:sha256-A");
+
         std::filesystem::remove_all(root, error);
         return built && built.file_count == 3u && !hits.empty()
             && pathHits.size() == 1u && pathHits.front().line == 0u
@@ -54,9 +62,12 @@ namespace epochengine::ai::source_discovery_contract
             && map.find("PATH Engine/modules/gui.engine.ixx") != std::string::npos
             && map.find("ThemeVariant") != std::string::npos
             && first && !duplicate && second
-            && workspace.reviewed_paths().size() == 2u
-            && workspace.stagnant_rounds() == 2u
-            && workspace.navigation_memory().find("apply_theme") != std::string::npos;
+            && pending.reviewed_paths().size() == 2u
+            && pending.stagnant_rounds() == 2u
+            && pending.navigation_memory().find("apply_theme") != std::string::npos
+            && newEvidence && !repeatedEvidence && pendingEvidence
+            && rollbackPreserved && resetEvidence
+            && !workspace.remember_evidence(std::string(2049u, 'x'));
     }
 }
 

@@ -296,6 +296,15 @@ profiles.
 
 ## Renderer And Scene Integration
 
+Event-driven/neuromorphic execution is an optional per-subsystem cost policy,
+not another authoritative world or global scheduler. The implemented CPU sparse
+graph and OpenGL damage-pressure bridge, contract-only event-camera/adapters and
+measured follow-on design are separated in
+[neuromorphic framework](neuromorphic_engine_framework.md) and
+[event-driven rendering](event_driven_rendering.md). Existing full-frame paths
+remain valid. Visual activation never suppresses authoritative damage or grants
+AI source/execution authority; learning/foveation/new hardware are future work.
+
 The shared renderer spine owns logical buffers, textures, samplers, materials,
 meshes, targets, binding sets, passes, commands, and graph dependencies.
 Backends implement those contracts without leaking API objects into world or

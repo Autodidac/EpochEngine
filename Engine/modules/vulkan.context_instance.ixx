@@ -71,7 +71,7 @@ module;
 #       define NOMINMAX
 #   endif
 #   include <windows.h> // for LoadLibrary/GetProcAddress
-#   include <../src/platform.framework.hpp>
+#   include <../src/platform/platform.framework.hpp>
 #else
 #   include <dlfcn.h> // dlopen/dlsym
 #endif

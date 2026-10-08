@@ -288,6 +288,6 @@ The current source combines these systems rather than treating them as independe
 - Selection-set editing, marquee selection, group transforms, atomic batch creation, and temporal-history-safe recreate after Undo.
 - Focus-owned multicontext input, routed-pane docking recovery, and single-owner AI Chat projection.
 - EpochGui-owned font/window shadow intent.
-- MSVC entry-point ownership is mode-specific: normal EpochEditor uses the engine-owned internal entry point; generated child/static-runtime builds suppress that path with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. `Debug+Release | x64` runs the normal Debug and Release solution builds sequentially.
+- MSVC entry-point ownership is mode-specific: normal EpochEditor uses the engine-owned internal entry point; generated child/static-runtime builds suppress that path with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. The same projects expose Debug, Release and ReleaseWithDebugInfo. BuildAll dispatches CMake's three Windows configurations from EpochEditor; there is no separate combined-build project. Linux helpers retain Debug/Release.
 
 The renderer optimization currently has production partial color/depth reuse only in the OpenGL editor scene. Shared contracts are intentionally broader than the current optimized backend so Vulkan/DirectX/SDL/SFML/Raylib/software can adopt equivalent reuse without duplicating scene truth or lighting semantics.

@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="BuildAll|x64">
+      <Configuration>BuildAll</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
       <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseWithDebugInfo|Win32">
+      <Configuration>ReleaseWithDebugInfo</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
@@ -17,14 +25,18 @@
       <Configuration>Release</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseWithDebugInfo|x64">
+      <Configuration>ReleaseWithDebugInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(Configuration)'!='BuildAll'">
     <ClCompile Include="epoch.editor_entry.cpp" />
   </ItemGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(Configuration)'!='BuildAll'">
     <ResourceCompile Include="..\..\resource\WinResource.rc" />
   </ItemGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(Configuration)'!='BuildAll'">
     <ProjectReference Include="..\EpochEngine\EpochEngine.vcxproj">
       <Project>{bba639b7-2b54-4e38-90ac-667fc3303475}</Project>
     </ProjectReference>
@@ -46,7 +58,7 @@
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+  <PropertyGroup Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
@@ -59,12 +71,17 @@
     <PlatformToolset>v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+  <PropertyGroup Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='BuildAll'" Label="Configuration">
+    <ConfigurationType>Utility</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <VcpkgEnabled>false</VcpkgEnabled>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -73,13 +90,13 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+  <ImportGroup Label="PropertySheets" Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <ImportGroup Label="PropertySheets" Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -117,7 +134,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <PropertyGroup Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
     <IntDir>$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
@@ -136,16 +153,16 @@
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <PropertyGroup Label="Vcpkg" Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+  <PropertyGroup Label="Vcpkg" Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or '$(Configuration)|$(Platform)'=='Release|x64'">
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or ('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
     <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
     <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\</EpochVcpkgNestedInstallRoot>
     <EpochVcpkgInstallRoot Condition="!Exists('$(EpochVcpkgInstallRoot)include\') And Exists('$(EpochVcpkgNestedInstallRoot)include\')">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>
@@ -166,7 +183,7 @@
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+  <ItemDefinitionGroup Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>false</FunctionLevelLinking>
@@ -212,7 +229,7 @@
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+  <ItemDefinitionGroup Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <FunctionLevelLinking>false</FunctionLevelLinking>
@@ -250,7 +267,7 @@
     </ItemGroup>
     <Copy SourceFiles="@(EpochDebugVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochDebugVcpkgRuntimeDlls)'!=''" />
   </Target>
-  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'">
+  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64') And '$(VcpkgUseStatic)'!='true'">
     <ItemGroup>
       <EpochReleaseVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)bin\*.dll" />
     </ItemGroup>
@@ -260,6 +277,7 @@
     <MakeDir Directories="$(OutDir)assets\ai" />
     <Copy SourceFiles="$(SolutionDir)Engine\assets\ai\epoch.local_mcp_iteration.ps1" DestinationFolder="$(OutDir)assets\ai" SkipUnchangedFiles="true" />
   </Target>
+  <Import Project="..\..\..\Tools\MSVC\EpochBuildAll.targets" Condition="'$(Configuration)'=='BuildAll'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
 </Project>

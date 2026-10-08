@@ -34,11 +34,17 @@
 
 Debug/
 Release/
+ReleaseWithDebugInfo/
+/Tools/MSVC/x64/
 x64/*
 out/
 build_clang/
 built/
 build/
+!Engine/src/build/
+!Engine/src/build/*.hpp
+!Engine/src/build/*.cpp
+!Engine/src/build/*.ixx
 !Engine/docs/build/
 !Engine/docs/build/**
 build_gcc/
@@ -79,6 +85,7 @@ Engine/Bin/
 Engine/docs/api/
 
 *.cmake
+!Tools/CMake/build_configurations.cmake
 !Engine/cmake/triplets/x64-linux-epoch.cmake
 !Engine/cmake/epoch_headless_explicit_root_contract.cmake
 *.bin

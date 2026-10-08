@@ -5852,6 +5852,10 @@ namespace epochengine::editor_ai_development_panel
             return view;
         view.can_cancel = !input.local_model_cancelling;
         view.label = input.local_model_cancelling ? "Stopping model request"
+            : input.local_model_running && input.local_model_request_phase == "source selection"
+                ? "Finding source context"
+            : input.local_model_running && input.local_model_request_phase == "planning"
+                ? "Planning candidate changes"
             : input.local_model_running ? "Model request active"
             : "Local model queued";
         view.detail = input.local_model_cancelling
@@ -6416,6 +6420,11 @@ namespace epochengine::editor_ai_development_panel
             || working.label != "Model request active"
             || working.animation_phase < 0.0f || working.animation_phase >= 1.0f)
             return false;
+        activityInput.local_model_request_phase = "source selection";
+        if (describe_model_activity(activityInput).label != "Finding source context") return false;
+        activityInput.local_model_request_phase = "planning";
+        if (describe_model_activity(activityInput).label != "Planning candidate changes") return false;
+        activityInput.local_model_request_phase.clear();
         activityInput.local_model_cancelling = true;
         activityInput.local_model_activity = "Receiving the model response.";
         const auto stopping = describe_model_activity(activityInput);
@@ -7353,7 +7362,9 @@ namespace epochengine::editor_ai_development_panel
                     || providerState.provider_recovery_attempts != attempt
                     || providerState.provider_drop_recoveries != attempt
                     || recovered.status.find("same pass and sandbox")
-                        == std::string::npos)
+                        == std::string::npos
+                    || recovered.status.find("not recovered yet") == std::string::npos
+                    || recovered.status.find("connection reset by peer") == std::string::npos)
                 {
                     return failed(__LINE__);
                 }
@@ -7461,7 +7472,7 @@ namespace epochengine::editor_ai_development_panel
                     "Engine/modules/ai.engine.ixx",
                     aiModule)
                 || !writeFixtureSource(
-                    "Engine/src/epoch.engine_legacy.cpp",
+                    "Engine/src/epoch/epoch.engine_legacy.cpp",
                     legacyContract)
                 || !writeFixtureSource(
                     "Engine/src/physics/physics.manager_contract.cpp",
@@ -7948,6 +7959,43 @@ namespace epochengine::editor_ai_development_panel
                     "SOURCE_NAVIGATION_FALLBACK " + reviewedPath) == std::string::npos)
                 return false;
 
+            trace.stage = "actual-byte discovery stagnation and transactional rollback";
+            const auto retainedEvidence = recoveryState.source_context_evidence;
+            const auto retainedScope = recoveryState.campaign_scope_digest;
+            const auto retainedSelectors = recoveryState.cumulative_source_workspace.navigation_memory();
+            for (std::size_t round = 0u; round < 2u; ++round)
+            {
+                recoveryState.pending_source_context_paths = {reviewedPath};
+                recoveryState.pending_source_context_reads = {
+                    ContextRead{.path = reviewedPath,
+                        .query = round == 0u ? "missing_literal_two" : "missing_literal_three"}};
+                recoveryState.pending_source_context_objective = localOpenInput.development_objective;
+                const auto repeated = regionRecovery.share_requested_source_context(localOpenInput);
+                if (repeated.action == HostAction::materialize_source_workspace
+                    || repeated.action == HostAction::compile_source_workspace
+                    || recoveryState.cumulative_source_workspace.stagnant_rounds() != round + 1u
+                    || recoveryState.source_context_evidence != retainedEvidence
+                    || recoveryState.campaign_scope_digest != retainedScope
+                    || recoveryState.cumulative_source_workspace.navigation_memory() != retainedSelectors)
+                    return false;
+            }
+            if (!recoveryState.model_request_failed || recoveryState.sandbox_lab_enabled)
+                return false;
+
+            Panel unselectedContext{};
+            auto& unselectedState = *unselectedContext.implementation_;
+            (void)unselectedState.ensure(localOpenInput.workspace_id,
+                localOpenInput.source_snapshot_root, localOpenInput.workspace_root);
+            unselectedState.development_objective = localOpenInput.development_objective;
+            unselectedState.pending_source_context_paths = {reviewedPath};
+            unselectedState.pending_source_context_objective = localOpenInput.development_objective;
+            auto unselectedInput = localOpenInput;
+            unselectedInput.selected_model.clear();
+            (void)unselectedContext.share_requested_source_context(unselectedInput);
+            if (!unselectedState.cumulative_source_workspace.reviewed().empty()
+                || unselectedState.cumulative_source_workspace.discovery_rounds() != 0u)
+                return false;
+
             trace.stage = "curated source-window handoff";
             auto& localOpenState = *localOpen.implementation_;
             (void)localOpenState.ensure(
@@ -8217,7 +8265,15 @@ namespace epochengine::editor_ai_development_panel
                 TerminalReplyFixture{ai::ModelTerminalFailure::retirement_failed,
                     "retirement",
                     "Local model transport retirement failed: WinHTTP handle closure did not settle. No further request is admitted.",
-                    "retirement could not be confirmed"}};
+                    "retirement could not be confirmed"},
+                TerminalReplyFixture{ai::ModelTerminalFailure::provider_timeout,
+                    "provider-timeout",
+                    "Model endpoint returned HTTP status 503. The upstream inference timed out; the request was not resent.",
+                    "upstream inference timed out"},
+                TerminalReplyFixture{ai::ModelTerminalFailure::request_rejected,
+                    "request-rejected",
+                    "Model endpoint returned HTTP status 400. The request was rejected.",
+                    "provider rejected the request"}};
             constexpr std::array<std::string_view, 3u> terminalPhases{
                 "selection", "plan", "proposal"};
             for (const auto& terminal : terminalReplies)
@@ -9390,6 +9446,10 @@ namespace epochengine::editor_ai_development_panel
         const bool codingActive = state.sandbox_lab_pass_iteration > 0u
             && (input.local_model_running || input.local_model_queued
                 || !state.source_candidate_operations.empty());
+        const bool discoveringSource = (input.local_model_running || input.local_model_queued)
+            && input.local_model_request_phase == "source selection";
+        const bool planningChanges = (input.local_model_running || input.local_model_queued)
+            && input.local_model_request_phase == "planning";
         const bool implementationApplied = anyBuildPending || anyTestPending
             || state.source_build_verified || state.source_test_verified
             || state.source_release_build_verified || state.source_release_test_verified
@@ -9409,10 +9469,14 @@ namespace epochengine::editor_ai_development_panel
                 return {"Testing", "Validating the candidate against the configured test lanes."};
             if (anyBuildPending)
                 return {"Building", "Compiling the current candidate bytes."};
+            if (discoveringSource)
+                return {"Discovering Source", "Expanding retained source context. No code change or build has been admitted."};
+            if (planningChanges)
+                return {"Planning", "Waiting for the model's implementation plan; this is not a code change or build."};
             if (codingActive && state.source_repair_attempts > 0u)
                 return {"Revising", "Repairing the same candidate from verified compiler/test evidence."};
             if (codingActive)
-                return {"Coding", "Producing or applying the current candidate implementation."};
+                return {"Drafting Changes", "Waiting for a complete code proposal, or staging it in the sandbox. A model response is not build proof."};
             if (session.visible && !session.running
                 && !input.local_model_running && !input.local_model_queued
                 && !Implementation::source_work_pending(input))
@@ -9427,9 +9491,13 @@ namespace epochengine::editor_ai_development_panel
         auto workItems = [&]()
         {
             std::vector<WorkDisplayItem> items{};
+            if (discoveringSource || planningChanges)
+                items.push_back({discoveringSource
+                    ? "Discover additional source (previous context retained)"
+                    : "Prepare the implementation plan", WorkDisplayState::active});
             const auto implementationState = implementationApplied
                 ? WorkDisplayState::complete
-                : codingActive ? WorkDisplayState::active
+                : codingActive && !discoveringSource && !planningChanges ? WorkDisplayState::active
                 : WorkDisplayState::pending;
 
             if (!state.source_candidate_operations.empty())
@@ -9488,16 +9556,12 @@ namespace epochengine::editor_ai_development_panel
         }();
 
         std::size_t completedWork{};
-        bool hasActiveWork{};
         for (const auto& item : workItems)
         {
             completedWork += item.state == WorkDisplayState::complete ? 1u : 0u;
-            hasActiveWork = hasActiveWork || item.state == WorkDisplayState::active;
         }
         const float workProgress = workItems.empty() ? 0.0f
-            : (static_cast<float>(completedWork)
-                + (hasActiveWork ? 0.35f : 0.0f))
-                / static_cast<float>(workItems.size());
+            : static_cast<float>(completedWork) / static_cast<float>(workItems.size());
 
         gui::label("Engine Work");
         if (session.visible || state.sandbox_lab_enabled)
@@ -9520,11 +9584,11 @@ namespace epochengine::editor_ai_development_panel
                 gui::property_row("Model", input.selected_model);
 
             gui::progress_bar(gui::ProgressBarOptions{
-                .label = "Objective progress",
-                .status = primaryStatus.first + " - " + primaryStatus.second,
+                .label = "Verified workflow steps",
+                .status = epochengine::format_text("{} / {} complete - {}", completedWork, workItems.size(), primaryStatus.first),
                 .value = (std::clamp)(workProgress, 0.0f, 1.0f),
                 .size = {width, 22.0f},
-                .show_percent = true});
+                .show_percent = false});
 
             gui::label("Work Plan");
             for (const auto& item : workItems)
@@ -9742,8 +9806,10 @@ namespace epochengine::editor_ai_development_panel
                     state.candidate_preview_ready
                         ? std::string{
                             "Main editor = current | bottom context = candidate"}
-                        : std::string{
-                            "Current sandbox retained while candidate builds"});
+                        : anyBuildPending ? std::string{"Candidate build is running; no comparison is ready"}
+                        : anyTestPending ? std::string{"Candidate tests are running; no comparison is ready"}
+                        : state.candidate_preview_pending ? std::string{"Validated candidate is launching; waiting for its window"}
+                        : std::string{"No comparison is ready. Source discovery/model output is not a running candidate"});
                 gui::property_row(
                     "Candidate",
                     state.candidate_preview_ready
@@ -10096,11 +10162,12 @@ namespace epochengine::editor_ai_development_panel
                 ++state.provider_recovery_attempts;
                 ++state.provider_drop_recoveries;
                 state.status_message = epochengine::format_text(
-                    "Transient model/provider drop recovered in the same pass and sandbox; retry {}/{} is queued.",
+                    "Model/provider request failed; retry {}/{} is queued in the same pass and sandbox (not recovered yet). Cause: {}",
                     state.provider_recovery_attempts,
-                    Implementation::maximum_provider_recovery_cycles);
+                    Implementation::maximum_provider_recovery_cycles,
+                    admittedReply);
                 state.emit_iteration_analytics(
-                    "provider_drop_recovery", "recovered", "pending");
+                    "provider_drop_recovery", "retry_queued", "pending");
                 output = sourceSelection
                     ? state.source_context_model_request()
                     : state.source_model_request();
@@ -10154,6 +10221,12 @@ namespace epochengine::editor_ai_development_panel
                         break;
                     case ai::ModelTerminalFailure::retirement_failed:
                         failure = "Native model transport retirement could not be confirmed. Restart Epoch before another model request.";
+                        break;
+                    case ai::ModelTerminalFailure::provider_timeout:
+                        failure = "The provider or its upstream inference timed out. The upstream generation may still be running; the request was not resent.";
+                        break;
+                    case ai::ModelTerminalFailure::request_rejected:
+                        failure = "The provider rejected the request. Check authentication, model selection and request compatibility before resuming.";
                         break;
                     case ai::ModelTerminalFailure::none:
                         break;
@@ -10548,23 +10621,23 @@ namespace epochengine::editor_ai_development_panel
             output.status = state.status_message;
             return output;
         }
-        bool addedSourceEvidence{};
+        // Prepare navigation off-state. Failed reads, missing model selection or
+        // refused bundles must not erase retained selectors or claim progress.
+        auto pendingWorkspace = state.cumulative_source_workspace;
         for (const auto& path : state.pending_source_context_paths)
         {
             const auto read = std::ranges::find(
                 state.pending_source_context_reads, path,
                 &ai::development_proposal_codec::ContextRead::path);
-            addedSourceEvidence = state.cumulative_source_workspace.merge(
+            (void)pendingWorkspace.merge(
                 path,
                 read == state.pending_source_context_reads.end() ? 0u : read->first_line,
-                read == state.pending_source_context_reads.end() ? std::string{} : read->query)
-                || addedSourceEvidence;
+                read == state.pending_source_context_reads.end() ? std::string{} : read->query);
         }
-        state.cumulative_source_workspace.note_discovery_round(addedSourceEvidence);
         const std::vector<std::string> sharedSourcePaths =
-            state.cumulative_source_workspace.reviewed_paths();
+            pendingWorkspace.reviewed_paths();
         std::vector<ai::development_proposal_codec::ContextRead> sharedReads{};
-        for (const auto& reviewed : state.cumulative_source_workspace.reviewed())
+        for (const auto& reviewed : pendingWorkspace.reviewed())
         {
             if (reviewed.first_line != 0u || !reviewed.query.empty())
             {
@@ -10633,6 +10706,40 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
 
+        bool addedSourceEvidence{};
+        for (const auto& slice : loaded.reviewed_slices)
+        {
+            // A changed query/line, or a fallback annotation, is not new source.
+            // Bind progress to the bytes actually supplied, not model intent.
+            addedSourceEvidence = pendingWorkspace.remember_evidence(
+                slice.relative_path + "\n" + std::to_string(slice.first_line)
+                + "\n" + Implementation::digest_text(slice.exact_bytes))
+                || addedSourceEvidence;
+        }
+        if (!state.cumulative_source_workspace.reviewed().empty()
+            && !addedSourceEvidence)
+        {
+            state.pending_source_context_paths.clear();
+            state.pending_source_context_reads.clear();
+            state.pending_source_context_reason.clear();
+            state.pending_source_context_objective.clear();
+            state.cumulative_source_workspace.note_discovery_round(false);
+            state.emit_iteration_analytics("source_discovery_stagnant", "unchanged", "pending");
+            if (state.cumulative_source_workspace.stagnant_rounds()
+                >= Implementation::maximum_stagnant_source_discovery_rounds)
+            {
+                state.model_request_failed = true;
+                state.sandbox_lab_enabled = false;
+                state.status_message = "Source discovery stopped after two reads returned no new verified source bytes. "
+                    "The last accepted context and sandbox are preserved; no new coding or build request was started.";
+                output.status = state.status_message;
+                return output;
+            }
+            return state.queue_source_context_reply_correction(
+                "Those selectors returned source bytes already reviewed, including any host fallback window. "
+                "Choose a missing dependency or a valid different line/literal range; another identical coding request was not started.");
+        }
+
         auto bundled = state.build_curated_bundle(
             input, loaded, logical_time_now().value);
         if (!bundled)
@@ -10647,6 +10754,8 @@ namespace epochengine::editor_ai_development_panel
             output.status = state.status_message;
             return output;
         }
+        pendingWorkspace.note_discovery_round(addedSourceEvidence);
+        state.cumulative_source_workspace = std::move(pendingWorkspace);
         state.campaign_scope_digest = bundled.bundle.bundle_sha256;
         state.campaign_request_digest = bundled.bundle.request_sha256;
         state.campaign_bundle_summary = bundled.bundle.evidence_summary;
@@ -10755,6 +10864,23 @@ namespace epochengine::editor_ai_development_panel
             output.include_paths = input.domain == Domain::engine_source
                 ? std::vector<std::string>{"Engine.sln", "Engine"}
                 : std::vector<std::string>{"Projects"};
+            if (input.domain == Domain::engine_source)
+            {
+                // Root build policy belongs to the exact source snapshot too.
+                // Optional presence retains compatibility with older parents.
+                for (const char* buildInput : {
+                    "Directory.Build.props", "Directory.Build.targets",
+                    "CMakeLists.txt", "CMakePresets.json",
+                    "Tools/MSVC/EpochBuildAll.targets",
+                    "Tools/CMake/build_configurations.cmake"})
+                {
+                    std::error_code buildInputError{};
+                    if (std::filesystem::is_regular_file(
+                            std::filesystem::path{state.source_root} / buildInput,
+                            buildInputError) && !buildInputError)
+                        output.include_paths.emplace_back(buildInput);
+                }
+            }
             output.excluded_components = {
                 ".git",
                 ".vs",

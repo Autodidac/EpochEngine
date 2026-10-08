@@ -49,15 +49,15 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.service.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.response.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_shared.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\build.cpp_feature_probe.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\build\build.cpp_feature_probe.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_layout.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.api_types.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.common.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform.framework.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.api_types.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.common.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.framework.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.child_isolation.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch.main.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\context.passive_scoring.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.main.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\render\context.passive_scoring.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core.context_backends.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_capture.hpp" />
@@ -69,45 +69,45 @@
   <ItemGroup>
     <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\frag.spv">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\vert.spv">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_view.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_runtime.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.rotate_all_entities.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.oscillate_selected_entity.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -200,9 +200,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
       <AdditionalOptions>/bigobj /Zm2000 %(AdditionalOptions)</AdditionalOptions>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\taskgraph.dotsystem.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx" />
@@ -413,33 +413,33 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.runtime.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log_headless.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log_headless.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.dispatch_storage.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\image.stb.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_texture.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_buffers.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.platform_context.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.application.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /Od /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.scene.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.standard.cpp" />
@@ -545,12 +545,12 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\host.context_linux.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\host\host.context_win.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine_legacy.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine_legacy.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.cpp" />
@@ -570,20 +570,20 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\tile_workspace.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\utility.filewatch.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\font.renderer.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.assert.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.env.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.error.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.id.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.log.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.math.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\utility.filewatch.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.assert.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.env.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.error.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.id.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.math.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.string.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core.time.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.string.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.time.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.engine.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.engine.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.headers.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.headers.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\platform.context_epoch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.child_process.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission.cpp" />
@@ -591,7 +591,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.window.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\render.graph_epoch.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.graph_epoch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer_contract.cpp" />
@@ -651,37 +651,37 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\gui\asset.gui_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_document.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.systems.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.main.cpp">
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.systems.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.main.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\render.smoke_harness.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch.runtime.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.runtime.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.project_demo_bootstrap.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.engine_arcade_scene.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.editor_launcher.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
 
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.sha256.ixx" />

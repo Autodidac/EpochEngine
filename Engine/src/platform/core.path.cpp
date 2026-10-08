@@ -389,7 +389,7 @@ namespace epochengine::core::path
         const path root = candidate.lexically_normal();
         return exists_noerr(root / "Engine" / "CMakeLists.txt")
             && exists_noerr(root / "Engine" / "include" / "epoch.engine.hpp")
-            && exists_noerr(root / "Engine" / "src" / "epoch.main.cpp")
+            && exists_noerr(root / "Engine" / "src" / "epoch" / "epoch.main.cpp")
             && exists_noerr(root / "Engine" / "examples" / "EpochEngine" / "EpochEngine.vcxproj");
     }
 

@@ -125,16 +125,18 @@ authority; research content cannot grant it.
 
 Use separate inventories for editable source and read-only reference entries.
 A documentation hit must not become an editable source path. The existing
-12-path editable C++ working-set limit and strict root/preimage checks are not
-silently expanded by adding research. The model may replace its working set
-within the existing bounded navigation/retry policy and preserve useful
-context across iterations without collecting an unbounded transcript.
+12-path navigation-packet limit, cumulative workspace ceiling and strict
+root/preimage checks are not silently expanded by adding research. Retained
+source is cumulative and byte-budgeted, not a replacement-only 12-file project.
+Reference text cannot grant edit authority. Preserve useful context without
+collecting an unbounded transcript; actual-byte stagnation is host-checked.
 
 Prompt construction must account for the complete encoded request, not just
 individual sections. Plan for bytes, model context and output reserve. Current
-implementation limits described in the active pass include a 256 KiB complete
-prompt, up to 184 KiB reviewed source, 32 KiB repair diagnostics and a 16 KiB
-failed-proposal envelope. Those separate maxima are **not additive permission**
+implementation uses a 256 KiB baseline prompt budget, optionally growing with
+reported model capacity up to 2 MiB, with at most 512 KiB source evidence,
+32 KiB repair diagnostics and a 16 KiB failed-proposal excerpt. Complete encoded
+request size and output/context reservations still apply. Those separate maxima are **not additive permission**
 to overflow the request; negotiated smaller limits take precedence.
 
 Budget in this order:
@@ -188,8 +190,8 @@ results; they do not invent token progress for a non-streaming transport.
 
 Research, model and candidate work must share the existing cancellation,
 generation and resource-admission owners. A cancelled lookup/reply cannot
-restart a stopped session or approve work. New heavy work respects the planned
-30-second nonblocking cooldown and measured host-resource checks; a reference
+restart a stopped session or approve work. New heavy work respects configured
+nonblocking pacing (six-second default) and measured host-resource checks; a reference
 query does not bypass the Keep/Choose pause or start another engine process.
 
 ## Read permission, outbound sharing and execution

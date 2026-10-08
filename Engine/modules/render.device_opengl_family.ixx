@@ -32,7 +32,7 @@ module;
 
 #include "../include/engine.config.hpp"
 #include "../include/epoch.config.hpp"
-#include "../src/epoch.common.hpp"
+#include "../src/epoch/epoch.common.hpp"
 #include <algorithm>
 #include <array>
 #include <string>

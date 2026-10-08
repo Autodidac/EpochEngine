@@ -54,7 +54,7 @@ module;
 
 #if defined(_WIN32)
 #   ifdef EPOCH_USING_WINMAIN
-#       include "../src/platform.framework.hpp"
+#       include "../src/platform/platform.framework.hpp"
 #   endif
 #endif
 

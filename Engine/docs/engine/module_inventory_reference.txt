@@ -9,7 +9,7 @@ Public headers
 
 Primary module families
 - `core.*`, `context.*`, `platform.*`, `render.*`, `perf.*`, `updater.*` spine/runtime ownership
-- `engine.visuals` central visual profile for frame clears, scene clears,
+- `visuals.engine` central visual profile for frame clears, scene clears,
   object/selection colors, look markers, and editor opacity parity
 - `ai.*` OS-model selection, model-asset metadata, evidence packets, eval gates,
   and MCP/tool-harness planning surfaces
@@ -19,28 +19,23 @@ Primary module families
 - `package.registry` source-owned package descriptors for runtime-minis,
   core opt-in packages, and research/downloadable package candidates
 - `opengl.*`, `sdl.*`, `raylib.*`, `sfml.*`, `software.*`, `vulkan.*`, `noop.context` backend/context integrations
-- `ecs.*` and `aentity.*` ECS surfaces
+- `ecs.*` ECS surfaces; legacy names are historical, not current ownership
 - `atlas.*`, sprite, image, texture, and GUI support
 - `epoch.*` higher-level engine/runtime entry surfaces that still intentionally brand the top-level API
 
-Great renaming conversions
-- `aengine.core.*` -> `core.*`
-- `aengine.context.*` -> `context.*`
-- `aengine.updater.*` -> `updater.*`
-- `aengine.saveload.*` -> `saveload.*`
-- `aengine.scripting.*` -> `scripting.*`
-- `aengine.taskgraph.*` -> `taskgraph.*`
-- `aengine.event.*` -> `event.*`
-- `aengine.engine_*` -> `engine.*`
-- `acontext.opengl.*` -> `opengl.*`
-- `acontext.sdl.*` -> `sdl.*`
-- `acontext.raylib.*` -> `raylib.*`
-- `acontext.sfml.*` -> `sfml.*`
-- `acontext.softrenderer.*` -> `software.*`
-- `acontext.vulkan.*` -> `vulkan.*`
-- `aecs.*` -> `ecs.*`
-- `aatlas.*` -> `atlas.*`
-- `aimage.loader` / `epoch.image.writer` / `aimage.writer` -> `image.loader` / `image.writer`
+Ownership and implementation
+- Module interfaces remain in Engine/modules; import identities do not change
+  when implementation files move into subsystem folders.
+- Engine/src/core holds primitive implementations; Engine/src/epoch holds
+  composition, internal legacy runtime and entry implementation.
+- Engine/src/render holds backend-neutral implementation; renderer adapters
+  remain under Engine/src/renderers/<backend>.
+- Engine/src/epochgui owns engine/font adapters; Engine/dep/EpochGui is the
+  exact portable-library mirror, not another engine adapter copy.
+- See source_naming_architecture.md and repository_layout_reference.txt for
+  naming, internal/public headers, cache and source authority.
+- Historical rename mappings belong in legacy_feature_map.md and Git history;
+  they are not instructions to re-run a completed migration.
 
 Examples and tooling
 - `Engine/examples/EpochEditor/`

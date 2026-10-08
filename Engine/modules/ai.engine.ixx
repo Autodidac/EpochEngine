@@ -86,6 +86,23 @@ export namespace epochengine::ai
     // Payload-free, caller-worker notifications; never an OS transport callback.
     using ModelRequestObserver = std::function<void(ModelRequestStage)>;
 
+    // Worker-owned transport evidence only. No prompt, reply, key or reasoning
+    // text is published, and byte/event counts are deliberately not token counts.
+    struct ModelRequestProgress final
+    {
+        std::string phase{};
+        std::uint32_t attempt{};
+        bool streaming_requested{};
+        bool streaming_received{};
+        std::size_t prompt_bytes{};
+        std::size_t response_bytes{};
+        std::size_t response_events{};
+        std::size_t content_bytes{};
+        std::size_t tool_argument_bytes{};
+        std::size_t reasoning_bytes{};
+    };
+    using ModelProgressObserver = std::function<void(const ModelRequestProgress&)>;
+
     struct InferenceBudget final
     {
         std::size_t context_tokens{};
@@ -199,7 +216,9 @@ export namespace epochengine::ai
         none,
         total_timeout,
         cancelled,
-        retirement_failed
+        retirement_failed,
+        provider_timeout,
+        request_rejected
     };
 
     struct EngineAiReply
@@ -234,7 +253,8 @@ export namespace epochengine::ai
             std::string_view user_input,
             InferenceWorkload workload = InferenceWorkload::chat,
             std::stop_token cancellation = {},
-            ModelRequestObserver observer = {});
+            ModelRequestObserver observer = {},
+            ModelProgressObserver progress_observer = {});
 
     private:
         Config m_cfg{};
@@ -253,7 +273,8 @@ export namespace epochengine::ai
         InferenceWorkload workload = InferenceWorkload::chat,
         std::stop_token cancellation = {},
         ModelRequestObserver observer = {},
-        ModelTerminalFailure* terminal_failure = nullptr);
+        ModelTerminalFailure* terminal_failure = nullptr,
+        ModelProgressObserver progress_observer = {});
     [[nodiscard]] std::string default_workspace_root();
     [[nodiscard]] std::string review_fixtures_root();
     [[nodiscard]] std::string evals_root();

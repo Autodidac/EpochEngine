@@ -20,6 +20,9 @@ module-interface identity.
 
 Mature implementation areas are physically owned:
 
+- October 7 relocation moves all 25 former flat `src` implementation/header
+  files into `core`, `epoch`, `platform`, `render`, `epochgui`, `assets` and
+  `build`. Public headers and central module identities are unchanged;
 - renderer code is under `src/renderers/<backend>`;
 - reusable GUI code is under `src/epochgui` and `dep/EpochGui`;
 - editor, project, authoring, asset, AI, platform, script, physics, and audio
@@ -29,6 +32,14 @@ Mature implementation areas are physically owned:
 
 CMake, Visual Studio shared items, projects, and filters are equal build
 surfaces. A source move updates all of them in the same pass.
+Visual Studio now projects physical ownership rather than stale
+`epochengine/core/context/...` categories or unfiltered additions. The
+deterministic `update_source_filters.ps1` preserves item compilation conditions
+and makes new source ownership visible. `validate_source_layout.ps1` checks the
+flat-root prohibition and source references; neither edits generated projects.
+Repository-root admission probes and their fixtures use the relocated
+`src/epoch/epoch.main.cpp` marker. Moving files without updating these probes
+would break source discovery even if compilation passed.
 
 ## Architectural Boundaries
 
@@ -60,6 +71,9 @@ Compatibility entry points may remain when external callers require them, but
 they must be thin and explicitly named. Generic bridge terminology is retired
 in favor of adapter, transfer, facade, host, capture, presentation, serializer,
 or legacy-runtime roles.
+`src/epoch/epoch.engine_legacy.cpp` remains a large legacy implementation, not
+a completed thin-facade extraction. This pass changes its physical ownership
+and include paths only; it does not silently redesign its runtime or draw order.
 
 The published updater implementation remains sealed. Its compatibility module
 name is not permission to reorganize updater behavior during ordinary source
@@ -77,3 +91,7 @@ A source-shape pass is complete only when:
 
 Generated dependency/install trees are disposable. If a mechanical operation
 touches one, regenerate it from the manifest before trusting compiler output.
+The October 7 migration operates on tracked first-party source/build references
+only. Candidate snapshots, outputs, third-party source, unrelated solution edits
+and operator runtime/research deletions remain untouched. Actual build/contract
+results and outstanding platform proof belong in `Changes/active_pass.md`.

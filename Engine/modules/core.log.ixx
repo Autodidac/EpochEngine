@@ -70,6 +70,6 @@ export namespace epochengine::core::log
     inline void error(epochengine::string_view tag, epochengine::string_view msg) { write(level::error, tag, msg); }
 
     // C ABI adapter for non-module translation units (App project, tools, etc.)
-    // Implemented in src/core.log.cpp.
+    // Implemented in src/core/core.log.cpp.
     extern "C" void core_log_write(std::uint32_t lvl, const char* tag_utf8, const char* msg_utf8);
 }

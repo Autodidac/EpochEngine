@@ -114,6 +114,13 @@ namespace epochengine::ai
             catch (...) { /* Observers cannot disrupt request ownership. */ }
         }
 
+        void notify_model_progress(const ModelProgressObserver& observer,
+            const ModelRequestProgress& progress) noexcept
+        {
+            try { if (observer) observer(progress); }
+            catch (...) { /* Telemetry cannot change request ownership. */ }
+        }
+
         struct ScopedModelObservation final
         {
             const ModelRequestObserver& observer;
@@ -1023,6 +1030,44 @@ namespace epochengine::ai
             return "Model endpoint returned HTTP status " + std::to_string(status);
         }
 
+        static std::string extract_json_error_message(const std::string& response);
+
+        class ModelHttpFailure final : public std::runtime_error
+        {
+        public:
+            ModelHttpFailure(unsigned status, const std::string& response)
+                : std::runtime_error(model_http_status_message(status)), status(status)
+            {
+                // Classify only the API error message, never a successful model
+                // result. Do not copy provider bodies (which can echo prompts,
+                // credentials or paths) into ordinary logs or the chat surface.
+                const auto detail = lowercase_ascii(extract_json_error_message(response));
+                provider_timeout = status == 408u || status == 504u
+                    || (status >= 500u && (detail.find("timed out") != std::string::npos
+                        || detail.find("timeout") != std::string::npos
+                        || detail.find("time-out") != std::string::npos
+                        || detail.find("deadline") != std::string::npos));
+                rejected = status >= 400u && status < 500u
+                    && status != 408u && status != 429u;
+            }
+
+            [[nodiscard]] std::string diagnostic() const
+            {
+                if (provider_timeout)
+                    return std::string{what()} +
+                        ". The provider or its upstream inference timed out before Epoch's request budget expired. "
+                        "The upstream generation may still be running; the same request was not resent. "
+                        "Check the provider's inference timeout and active generation before resuming.";
+                return std::string{what()} + (rejected
+                    ? ". The request was rejected; identical automatic retries cannot repair authentication, model selection or unsupported request parameters."
+                    : ". The provider returned a temporary HTTP failure.");
+            }
+
+            unsigned status{};
+            bool provider_timeout{};
+            bool rejected{};
+        };
+
         [[nodiscard]] static std::vector<std::pair<std::string, std::string>>
             model_request_headers(const std::string& endpoint)
         {
@@ -1915,7 +1960,7 @@ namespace epochengine::ai
             if (cancellation.stop_requested())
                 throw std::runtime_error("WinHTTP: local-model request cancelled");
             if (httpStatus < 200u || httpStatus >= 300u)
-                throw std::runtime_error(model_http_status_message(httpStatus));
+                throw ModelHttpFailure(httpStatus, resp);
             return resp;
             }
             catch (...)
@@ -2202,9 +2247,7 @@ namespace epochengine::ai
 
             if (http_status < 200 || http_status >= 300)
             {
-                std::ostringstream oss;
-                oss << model_http_status_message(static_cast<unsigned>(http_status));
-                throw std::runtime_error(oss.str());
+                throw ModelHttpFailure(static_cast<unsigned>(http_status), resp);
             }
 
             return resp;
@@ -2954,6 +2997,17 @@ namespace epochengine::ai
             }
         }
 
+        [[nodiscard]] static std::string_view model_reply_kind(std::string_view reply) noexcept
+        {
+            if (reply.empty()) return "unusable_reply";
+            if (reply.compare("EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1") == 0) return "insufficient_context";
+            if (reply.starts_with("EPOCH_SOURCE_CONTEXT_REQUEST_V1\n")) return "source_context_request";
+            if (reply.starts_with("EPOCH_SELF_ITERATION_PLAN_V2\n")) return "implementation_plan";
+            if (reply.starts_with("EPOCH_SOURCE_PATCH_PROPOSAL_V1\n")
+                || reply.starts_with("EPOCH_SOURCE_PROPOSAL_V1\n")) return "source_proposal";
+            return "assistant_text";
+        }
+
         [[nodiscard]] static InferenceBudget request_inference_budget(
             InferenceWorkload workload, std::string_view input) noexcept
         {
@@ -3514,6 +3568,16 @@ namespace epochengine::ai
         public:
             explicit ModelReplyStream(bool sourceAction) noexcept : sourceAction_(sourceAction) {}
 
+            void update_progress(ModelRequestProgress& progress) const noexcept
+            {
+                progress.streaming_received = modeChosen_ && !jsonFallback_;
+                progress.response_bytes = wireBytes_;
+                progress.response_events = events_;
+                progress.content_bytes = content_.size();
+                progress.tool_argument_bytes = arguments_.size();
+                progress.reasoning_bytes = reasoningBytes_;
+            }
+
             void feed(std::string_view chunk)
             {
                 if (chunk.size() > kMaximumModelHttpEnvelopeBytes - wireBytes_)
@@ -3611,6 +3675,7 @@ namespace epochengine::ai
 
             void event()
             {
+                ++events_;
                 const std::string data = std::move(event_);
                 event_.clear();
                 if (data == "[DONE]")
@@ -3634,8 +3699,9 @@ namespace epochengine::ai
                 const auto role = model_json_string(model_json_field(parts, "role"));
                 if (!role.empty() && role != "assistant") invalid_model_stream();
                 append(content_, model_json_string(model_json_field(parts, "content")));
-                check_model_reasoning_tail(reasoningTail_,
-                    model_json_string(model_json_field(parts, "reasoning_content")), uncheckedReasoningBytes_);
+                const auto reasoning = model_json_string(model_json_field(parts, "reasoning_content"));
+                reasoningBytes_ += reasoning.size();
+                check_model_reasoning_tail(reasoningTail_, reasoning, uncheckedReasoningBytes_);
                 const auto tools = model_json_field(parts, "tool_calls");
                 if (!tools.empty() && tools.compare("null") != 0)
                 {
@@ -3674,7 +3740,7 @@ namespace epochengine::ai
 
             std::string line_, event_, content_, reasoningTail_, id_, name_, arguments_, finishReason_;
             ModelActionMetadataGuard metadata_;
-            std::size_t wireBytes_{}, uncheckedReasoningBytes_{};
+            std::size_t wireBytes_{}, uncheckedReasoningBytes_{}, reasoningBytes_{}, events_{};
             bool sourceAction_{}, modeChosen_{}, jsonFallback_{}, toolSeen_{}, finished_{}, done_{};
         };
 
@@ -5454,7 +5520,8 @@ namespace epochengine::ai
             std::stop_token cancellation,
             ModelTerminalFailure& terminalFailure,
             const ModelRequestObserver& observer = {},
-            bool streamReplies = true)
+            bool streamReplies = true,
+            const ModelProgressObserver& progressObserver = {})
         {
             terminalFailure = ModelTerminalFailure::none;
             const auto cancelled = [&]() -> std::string
@@ -5476,8 +5543,18 @@ namespace epochengine::ai
                     model, system_prompt, input, maximumTokens, recoveryRequest,
                     structuredSource, streamReplies);
                 ModelReplyStream stream{sourceReply != StructuredSourceReply::none};
+                ModelRequestProgress progress{
+                    .phase = std::string{source_stage_name(source_request_stage(input, structuredSource))},
+                    .attempt = recoveryRequest ? 2u : 1u,
+                    .streaming_requested = streamReplies,
+                    .prompt_bytes = input.size()};
+                notify_model_progress(progressObserver, progress);
                 const ModelReplyChunkConsumer consumeChunk = [&](std::string_view chunk)
-                    { stream.feed(chunk); };
+                {
+                    stream.feed(chunk);
+                    stream.update_progress(progress);
+                    notify_model_progress(progressObserver, progress);
+                };
                 const std::string wireResponse = run_model_transport_attempt(cancellation, [&]() -> std::string
                 {
 #if defined(_WIN32)
@@ -5496,6 +5573,8 @@ namespace epochengine::ai
                 if (cancellation.stop_requested())
                     return cancelled();
                 const std::string resp = stream.finish(wireResponse);
+                stream.update_progress(progress);
+                notify_model_progress(progressObserver, progress);
                 if (rawResponse)
                     *rawResponse = resp;
                 if (sourceReply != StructuredSourceReply::none)
@@ -5581,6 +5660,7 @@ namespace epochengine::ai
                     + "; output_token_limit=" + std::to_string(maximumTokens)
                     + ". Window focus does not control this worker; Stop remains available.";
                 core::log::info("ai", epochengine::string_view{startedMessage.data(), startedMessage.size()});
+                logger::get("Engine.AI.Transport").log(logger::LogLevel::INFO, startedMessage);
                 try
                 {
                     std::string rawResponse{};
@@ -5592,8 +5672,10 @@ namespace epochengine::ai
                         + "; elapsed_ms=" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::steady_clock::now() - attemptStarted).count())
                         + "; response_bytes=" + std::to_string(rawResponse.size())
-                        + "; visible_reply_bytes=" + std::to_string(reply.size());
+                        + "; visible_reply_bytes=" + std::to_string(reply.size())
+                        + "; reply_kind=" + std::string{model_reply_kind(reply)};
                     core::log::info("ai", epochengine::string_view{receivedMessage.data(), receivedMessage.size()});
+                    logger::get("Engine.AI.Transport").log(logger::LogLevel::INFO, receivedMessage);
                     if (cancellation.stop_requested())
                         return cancelled();
                     if (model_reply_has_visible_content(reply,
@@ -5636,6 +5718,21 @@ namespace epochengine::ai
                     // another request would overlap an unretired operation.
                     // Preserve the typed failure through cancellation checks.
                     throw;
+                }
+                catch (const ModelHttpFailure& http)
+                {
+                    if (cancellation.stop_requested())
+                        return cancelled();
+                    lastFailure = "Local OpenAI-compatible request failed: " + http.diagnostic();
+                    logger::get("Engine.AI.Transport").log(logger::LogLevel::Error, lastFailure);
+                    if (http.provider_timeout || http.rejected)
+                    {
+                        terminalFailure = http.provider_timeout
+                            ? ModelTerminalFailure::provider_timeout
+                            : ModelTerminalFailure::request_rejected;
+                        core::log::error("ai", epochengine::string_view{lastFailure.data(), lastFailure.size()});
+                        return lastFailure;
+                    }
                 }
                 catch (const ModelTransportTimeout& timeout)
                 {
@@ -6253,7 +6350,8 @@ namespace epochengine::ai
         std::string_view user_input,
         InferenceWorkload workload,
         std::stop_token cancellation,
-        ModelRequestObserver observer)
+        ModelRequestObserver observer,
+        ModelProgressObserver progress_observer)
     {
         ScopedModelObservation observation{observer, cancellation};
         EngineAiReply out{};
@@ -6316,7 +6414,7 @@ namespace epochengine::ai
                     effective.output_tokens,
                     effective.timeout_seconds,
                     workload == InferenceWorkload::source_iteration, cancellation,
-                    out.terminal_failure, observer, effective.stream_replies);
+                    out.terminal_failure, observer, effective.stream_replies, progress_observer);
 
             if (cancellation.stop_requested())
             {
@@ -7746,6 +7844,25 @@ namespace epochengine::ai
             logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error, message);
             return false;
         };
+        // Real proxy failures carry a non-2xx JSON error, not a successful
+        // assistant completion. Neither transport nor campaign may restart an
+        // upstream timeout or a permanently rejected request as a "drop".
+        const ModelHttpFailure proxyTimeout{503u,
+            R"({"error":{"message":"Upstream request failed: Timeout was reached"}})"};
+        const ModelHttpFailure gatewayTimeout{504u, "<html>gateway timeout</html>"};
+        const ModelHttpFailure unsupported{400u,
+            R"({"error":{"message":"Unsupported stream parameter; private prompt"}})"};
+        const ModelHttpFailure unauthorized{401u, "private credentials"};
+        const ModelHttpFailure busy{503u, R"({"error":{"message":"server busy"}})"};
+        const ModelHttpFailure limited{429u, R"({"error":{"message":"rate limit"}})"};
+        if (!proxyTimeout.provider_timeout || proxyTimeout.rejected
+            || !gatewayTimeout.provider_timeout || !unsupported.rejected
+            || !unauthorized.rejected || busy.provider_timeout || busy.rejected
+            || limited.provider_timeout || limited.rejected
+            || proxyTimeout.diagnostic().find("not resent") == std::string::npos
+            || unsupported.diagnostic().find("private prompt") != std::string::npos
+            || unauthorized.diagnostic().find("private credentials") != std::string::npos)
+            return failed(__LINE__);
         // Use the same system prompt and body builders as submit(), not a dummy
         // "system" fixture which cannot detect contradictory stage instructions.
         using Stage = SourceRequestStage;
@@ -8075,6 +8192,13 @@ namespace epochengine::ai
                 ModelReplyStream stream{true};
                 for (std::size_t index = 0u; index < streamWire.size(); index += chunkSize)
                     stream.feed(std::string_view{streamWire}.substr(index, chunkSize));
+                ModelRequestProgress streamProgress{};
+                stream.update_progress(streamProgress);
+                if (!streamProgress.streaming_received
+                    || streamProgress.response_bytes != streamWire.size()
+                    || streamProgress.response_events < 3u
+                    || streamProgress.tool_argument_bytes != streamArgs.size()
+                    || streamProgress.content_bytes != 0u) return failed(__LINE__);
                 toolCallsPresent = false;
                 if (normalize_openai_source_tool_reply(stream.finish(streamWire),
                     StructuredSourceReply::patch, patchCatalog, toolCallsPresent) != patchPacket
@@ -8089,6 +8213,19 @@ namespace epochengine::ai
             ModelReplyStream chatStream{false};
             for (const char byte : chatWire) chatStream.feed(std::string_view{&byte, 1u});
             const auto chatResult = chatStream.finish(chatWire);
+            ModelRequestProgress chatProgress{};
+            chatStream.update_progress(chatProgress);
+            if (!chatProgress.streaming_received || !chatProgress.reasoning_bytes
+                || !chatProgress.content_bytes || chatProgress.tool_argument_bytes
+                || chatProgress.response_bytes != chatWire.size()) return failed(__LINE__);
+            ModelReplyStream completeResponse{true};
+            completeResponse.feed(patchToolResponse);
+            (void)completeResponse.finish(patchToolResponse);
+            ModelRequestProgress completeProgress{};
+            completeResponse.update_progress(completeProgress);
+            if (completeProgress.streaming_received || completeProgress.response_events
+                || completeProgress.response_bytes != patchToolResponse.size()) return failed(__LINE__);
+            notify_model_progress([](const ModelRequestProgress&) { throw std::runtime_error("observer"); }, chatProgress);
             if (extract_openai_choice_message_content(chatResult) != "Ready: \"quoted\" \\ path\nUTF-8: \xc3\xa9"
                 || chatResult.find("Private draft") != std::string::npos) return failed(__LINE__);
             ModelActionMetadataGuard sourceGuard;
@@ -8555,7 +8692,8 @@ namespace epochengine::ai
         InferenceWorkload workload,
         std::stop_token cancellation,
         ModelRequestObserver observer,
-        ModelTerminalFailure* terminal_failure)
+        ModelTerminalFailure* terminal_failure,
+        ModelProgressObserver progress_observer)
     {
         if (terminal_failure)
             *terminal_failure = ModelTerminalFailure::none;
@@ -8626,7 +8764,7 @@ namespace epochengine::ai
                         && stage != ModelRequestStage::retirement_failed
                         && stage != ModelRequestStage::failed)
                         notify_model_stage(observer, stage);
-                });
+                }, progress_observer);
         }
         if (terminal_failure)
             *terminal_failure = reply.terminal_failure;

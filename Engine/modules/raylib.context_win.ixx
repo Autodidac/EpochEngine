@@ -47,7 +47,7 @@ module;
 #define NOMINMAX
 #endif
 
-#include <../src/platform.framework.hpp>
+#include <../src/platform/platform.framework.hpp>
 
 #endif
 

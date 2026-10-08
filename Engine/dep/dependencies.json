@@ -1,0 +1,28 @@
+{
+  "schema": "epoch.vendored_dependencies.v1",
+  "dependencies": [
+    {
+      "name": "EpochGui",
+      "path": "Engine/dep/EpochGui",
+      "repository": "Autodidac/EpochGui",
+      "revision": "c52e91293749a7a34959bfc042c582c3ac182504",
+      "tree": "4f8fd154151cace2ecaea4aa69532daf4fff73bb",
+      "mode": "exact_mirror"
+    },
+    {
+      "name": "EpochEngineExtensions",
+      "path": "Engine/dep/EpochEngineExtensions",
+      "repository": "Autodidac/EpochEngineExtensions",
+      "revision": "eccef139f982a9e6b64295cd9c8b976905ef0990",
+      "tree": "e0d07b41af9f8b065b1a6caef402b1ee83e073fd",
+      "mode": "engine_owned_descriptor_fixture",
+      "note": "Not an upstream mirror. Upstream optional packages remain external; this local catalog/terrain fixture is engine-owned compatibility data."
+    },
+    {
+      "name": "EpochPackageDescriptors",
+      "path": "Engine/dep/EpochPackageDescriptors",
+      "mode": "engine_owned_descriptors",
+      "note": "No standalone repository; model descriptor metadata only, never weights or automatic execution."
+    }
+  ]
+}

@@ -44,7 +44,7 @@ module;
 #include <vector>
 
 #if defined(_WIN32)
-#     include <../src/platform.framework.hpp>
+#     include <../src/platform/platform.framework.hpp>
 //#   include <windowsx.h>
 //#   include <shellapi.h>
 #   include <commctrl.h>

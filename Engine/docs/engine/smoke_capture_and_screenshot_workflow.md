@@ -3,12 +3,27 @@
 This doc records the working validation loop for backend, editor, AI, and
 systems passes so future automation can follow one predictable method.
 
+Native launches below require the operator's explicit exact-run approval under
+AGENTS.md. A request to update docs/screenshots is not permission to launch a
+model, GUI, candidate or GPU test. Reuse attributed operator captures when no
+new run is authorized; never relabel an older screenshot as a newer binary.
+
+The v0.90.35 README uses the operator's October 7 v0.90.34 AI workbench capture
+at `Images/readme/windows-ai-workbench-v09034-20261007.png`. It shows cumulative
+source discovery before the checkpoint, not successful native sandbox succession.
+Older images remain additive archives.
+
 ## Launch root
 
 For Windows editor and multicontext smoke tests, launch from:
 
 - `x64/Debug/`
 - `x64/Release/`
+- `x64/ReleaseWithDebugInfo/` for the Windows/MSVC optimized-symbols mode
+
+The same-project CMake BuildAll workflow instead places asset-bearing outputs
+under `build/windows-msvc-debug/Engine/{Debug,Release,RelWithDebInfo}`. There is
+no `BuildAll` executable or separate combined-build project.
 
 Those folders carry the runtime assets used by the main editor host and the
 docked backend panes. Do not launch disposable tests from source folders unless

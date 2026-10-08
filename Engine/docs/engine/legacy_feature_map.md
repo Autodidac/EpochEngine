@@ -18,7 +18,7 @@ important behavior while cleaning up the repo.
   `Engine/modules/scripting.system.ixx`
 - File watching:
   `Engine/modules/utility.filewatch.ixx`,
-  `Engine/src/utility.filewatch.cpp`
+  `Engine/src/platform/utility.filewatch.cpp`
 - Image writing:
   `Engine/modules/image.writer.ixx`,
   `Engine/modules/image.atlas_writer.ixx`

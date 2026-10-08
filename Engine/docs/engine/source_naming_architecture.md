@@ -139,6 +139,10 @@ buffers never become canonical authoring state.
 - public external headers: `Engine/include`;
 - module interfaces: `Engine/modules`;
 - internal implementation: `Engine/src/<owner>`;
+- no first-party implementation/header files remain directly at `Engine/src`;
+  core primitives use `src/core`, engine composition uses `src/epoch`, build
+  probes use `src/build`, platform wrappers use `src/platform`, and backend-
+  neutral rendering helpers use `src/render`;
 - renderer implementation: `Engine/src/renderers/<backend>`;
 - reusable GUI implementation: `Engine/src/epochgui` and
   `Engine/dep/EpochGui`;
@@ -148,6 +152,13 @@ buffers never become canonical authoring state.
 
 Moves update CMake, MSVC projects, shared items, filters, includes, imports,
 scripts, and documentation in the same commit.
+Visual Studio filters follow the physical implementation folder, central module
+owner or public-header owner. `Tools/ai/update_source_filters.ps1 -Write`
+regenerates this view without changing compilation conditions; omit `-Write`
+for a check. `Tools/ai/validate_source_layout.ps1` rejects new flat implementations
+and missing CMake/MSVC source references. `dependencies.json` and
+`Tools/ai/validate_dependency_sync.ps1` protect separately owned portable code;
+an engine adapter edit is not automatically a standalone library edit.
 
 ## Compatibility Policy
 

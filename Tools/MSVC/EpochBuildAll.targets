@@ -1,0 +1,22 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Only EpochEditor's BuildAll mode imports these targets. No extra project. -->
+  <PropertyGroup>
+    <EpochCMakeRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</EpochCMakeRoot>
+  </PropertyGroup>
+  <Target Name="Build">
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --workflow --preset windows-msvc-all" />
+  </Target>
+  <Target Name="EpochConfigureAll">
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --preset windows-msvc-debug" />
+  </Target>
+  <Target Name="Rebuild" DependsOnTargets="EpochConfigureAll">
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --build --preset windows-msvc-both-debug --clean-first" />
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --build --preset windows-msvc-both-release --clean-first" />
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --build --preset windows-msvc-all-symbols --clean-first" />
+  </Target>
+  <Target Name="Clean" DependsOnTargets="EpochConfigureAll">
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --build --preset windows-msvc-debug --target clean" />
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --build --preset windows-msvc-both-release --target clean" />
+    <Exec WorkingDirectory="$(EpochCMakeRoot)" Command="cmake --build --preset windows-msvc-all-symbols --target clean" />
+  </Target>
+</Project>

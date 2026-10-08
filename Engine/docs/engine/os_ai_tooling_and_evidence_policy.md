@@ -873,11 +873,24 @@ an Editor model request is queued, working or stopping, and while inventory is
 pending. Saving a URL does not send a prompt or start a server/model.
 
 The EngCoder preset is `http://127.0.0.1:14321/v1`; inventory uses `/v1/models`
-and requests use `/v1/chat/completions`. Supplied EngCoder 0.6.5 source explicitly
-rejects streaming, so this preset sends `stream:false`; a per-endpoint UI option
-selects complete or streamed replies without weakening final-message source
-validation. Complete responses do not provide token progress before their body
-arrives. LM Studio retains streamed replies. Collapsible route references expose
+and requests use `/v1/chat/completions`. The original supplied EngCoder 0.6.5
+rejected streaming, so the compatibility preset and saved complete-response mode
+remain preserved. The October 7 local-override-repair checkout implements Chat
+SSE. Use the existing per-endpoint Use Streaming Responses option after active
+requests retire; version names alone are not capability proof. Complete responses
+cannot expose live generation before their body arrives. Worker-owned progress
+reports request phase, attempt, prompt/received bytes, parsed SSE event count,
+text/tool-argument/reasoning byte counts and time since the last received bytes.
+These are transport observations, not token counts or claims that a model is
+currently generating. Hidden reasoning, source deltas and credentials are not
+published by telemetry. JSON fallback reports bytes but no SSE events; incomplete
+tool calls never become executable source. Retry starts reset progress for that
+attempt, terminal/cancellation state outranks stale counters, and different chat
+requests own independent synchronized progress. The UI distinguishes discovery,
+planning, code proposals, builds, tests and candidate windows; verified workflow
+steps replace the artificial active-work percentage. Payload-free logs classify
+returned replies as insufficient context, source requests, plans, proposals or
+unusable replies. LM Studio retains streamed replies. Collapsible route references expose
 `/v1/responses` and `/api/tasks` for copying only. Responses is a different wire
 format; EngCoder's full asynchronous agent has its own tasks/events, approvals,
 memory and execution authority. Neither is silently used as Chat or given Epoch
@@ -908,6 +921,16 @@ Host-owned terminal metadata is separate from assistant text and survives the
 chat-worker/panel boundary. Whole-budget timeout, cancellation and unconfirmed
 retirement cannot trigger a higher-level automatic plan or packet retry, and a
 project-assistant completion cannot be consumed by the source campaign.
+Non-2xx inference responses retain HTTP classification across WinHTTP/libcurl
+and the worker/panel boundary. Provider/upstream timeout (408/504 or a 5xx API
+error naming a timeout) and permanent 4xx rejection are terminal, distinct from
+Epoch's own wall deadline. A proxy timeout does not prove upstream generation
+has stopped; Epoch does not resend it automatically. Temporary 429/busy 5xx
+failures keep bounded recovery. Classification inspects only the error message;
+raw provider bodies are not copied into logs, chat or source staging. Queued
+retries are not described or recorded as successful recovery. The dedicated
+`Engine.AI.Transport` log stores stage/attempt/sizes and classified HTTP failures,
+not credentials, prompts, reasoning or response bodies.
 Planning and source-selection requests allow at most 4,096 output tokens;
 code proposals/repairs retain 32,768. The host-owned stage envelope selects that
 budget, not quoted source text. Context/source-byte limits and the independent

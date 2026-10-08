@@ -203,12 +203,12 @@ endif()
 
 if(EPOCH_CI_HEADLESS_USES_MODULE_LOG)
     list(APPEND EPOCH_CI_HEADLESS_SOURCES
-        src/core.log.cpp
-        src/core.time.cpp
+        src/core/core.log.cpp
+        src/core/core.time.cpp
     )
 else()
     list(APPEND EPOCH_CI_HEADLESS_SOURCES
-        src/core.log_headless.cpp
+        src/core/core.log_headless.cpp
     )
 endif()
 
@@ -306,8 +306,8 @@ if(BUILD_TESTING)
 
         # CPU-only scheduler proof belongs in the lightweight component lane too.
         add_executable(epoch_editor_task_scheduler_contract
-            src/core.log.cpp
-            src/core.time.cpp
+            src/core/core.log.cpp
+            src/core/core.time.cpp
             src/editor/systems/editor.task_scheduler_contract.cpp
         )
         target_sources(epoch_editor_task_scheduler_contract PRIVATE
@@ -341,7 +341,7 @@ if(BUILD_TESTING)
         # CPU-only mainline neuromorphic graph/camera/renderer-invalidation proof.
         # No GUI, GPU, native window, or runtime launch is involved.
         add_executable(epoch_neuromorphic_contract
-            src/core.time.cpp
+            src/core/core.time.cpp
             src/simulation/simulation.neuromorphic_contract.cpp
         )
         target_sources(epoch_neuromorphic_contract PRIVATE
@@ -489,8 +489,8 @@ if(EPOCH_CONFIGURES_MODULE_TARGETS)
     add_library(epoch_software_base STATIC
         src/epoch/epoch.software_application.cpp
         src/platform/platform.window.cpp
-        src/core.log.cpp
-        src/core.time.cpp
+        src/core/core.log.cpp
+        src/core/core.time.cpp
     )
     add_library(Epoch::SoftwareBase ALIAS epoch_software_base)
     target_sources(epoch_software_base PUBLIC
@@ -578,8 +578,8 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
         src/ai/ai.development_proposal_codec.cpp
         src/ai/ai.model_install.cpp
         src/ai/ai.project_profile.cpp
-        src/core.log.cpp
-        src/core.time.cpp
+        src/core/core.log.cpp
+        src/core/core.time.cpp
         src/platform/core.path.cpp
     )
     target_sources(epoch_ai_transport_contract PRIVATE
@@ -673,12 +673,11 @@ add_library(epoch_gui STATIC
     dep/EpochGui/src/epochgui/rounded_rect.cpp
     dep/EpochGui/src/epochgui/node_graph_workspace.cpp
     dep/EpochGui/src/epochgui/system_workspace.cpp
-    src/epochgui/gui.dockable_window.cpp
-    src/epochgui/gui.dock_layout.cpp
-    src/epochgui/gui.floating_window.cpp
-    src/epochgui/gui.panel_host.cpp
-    src/epochgui/gui.popup_layout.cpp
-    src/epochgui/gui.text_control.cpp
+    dep/EpochGui/src/epochgui/dockable_window.cpp
+    dep/EpochGui/src/epochgui/floating_window.cpp
+    dep/EpochGui/src/epochgui/panel_host.cpp
+    dep/EpochGui/src/epochgui/popup_layout.cpp
+    dep/EpochGui/src/epochgui/text_control.cpp
     dep/EpochGui/src/epochgui/text_editor.cpp
     dep/EpochGui/src/epochgui/tile_workspace.cpp
 )
@@ -717,7 +716,7 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override packag
 set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override packaged macOS version revision")
 
 set(EPOCH_SOURCES
-    src/epoch.engine_legacy.cpp
+    src/epoch/epoch.engine_legacy.cpp
     src/updater/updater.device_identity.cpp
     src/updater/updater.source_access.cpp
     src/updater/updater.system.cpp
@@ -881,8 +880,8 @@ set(EPOCH_SOURCES
     src/project/project.gameplay2d_acceptance.cpp
     src/project/project.gameplay2d_runtime.cpp
     src/project/project.gameplay2d_runtime_contract.cpp
-    src/utility.filewatch.cpp
-    src/font.renderer.cpp
+    src/platform/utility.filewatch.cpp
+    src/epochgui/font.renderer.cpp
     src/project/project.asset_registry.cpp
     src/project/project.forest_library.cpp
     src/project/project.texture_resources.cpp
@@ -893,26 +892,26 @@ set(EPOCH_SOURCES
     src/project/project.lifecycle_contract.cpp
     src/assets/texture/asset.texture_artifact.cpp
     src/assets/texture/asset.texture_import.cpp
-    src/core.assert.cpp
-    src/core.env.cpp
-    src/core.error.cpp
-    src/core.id.cpp
-    src/core.log.cpp
-    src/core.math.cpp
+    src/core/core.assert.cpp
+    src/core/core.env.cpp
+    src/core/core.error.cpp
+    src/core/core.id.cpp
+    src/core/core.log.cpp
+    src/core/core.math.cpp
     src/platform/core.path.cpp
-    src/core.string.cpp
-    src/core.time.cpp
+    src/core/core.string.cpp
+    src/core/core.time.cpp
     src/ai/ai.engine.cpp
-    src/epoch.engine.cpp
-    src/epoch.headers.cpp
+    src/epoch/epoch.engine.cpp
+    src/epoch/epoch.headers.cpp
     src/renderers/platform/platform.context_epoch.cpp
     src/platform/platform.child_process.cpp
     src/platform/platform.window.cpp
     src/platform/platform.work_admission.cpp
-    src/render.graph_epoch.cpp
-    src/epoch.systems.cpp
-    src/epoch.main.cpp
-    src/epoch.runtime.cpp
+    src/render/render.graph_epoch.cpp
+    src/epoch/epoch.systems.cpp
+    src/epoch/epoch.main.cpp
+    src/epoch/epoch.runtime.cpp
 )
 
 if(WIN32)
@@ -981,7 +980,7 @@ if(MSVC)
     )
 
     set_source_files_properties(
-        src/epoch.engine_legacy.cpp
+        src/epoch/epoch.engine_legacy.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000"
     )
@@ -1119,8 +1118,8 @@ endif()
 
 add_executable(epoch_renderer_smoke EXCLUDE_FROM_ALL
     src/renderers/render.smoke_harness.cpp
-    src/core.log.cpp
-    src/core.time.cpp
+    src/core/core.log.cpp
+    src/core/core.time.cpp
 )
 
 target_sources(epoch_renderer_smoke PRIVATE
@@ -1554,7 +1553,7 @@ if(EPOCH_VULKAN_ACTIVE)
 
     if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
-            src/image.stb.cpp
+            src/assets/image.stb.cpp
             src/renderers/vulkan/vulkan.platform_context.cpp
             src/renderers/vulkan/vulkan.dispatch_storage.cpp
         )
@@ -2687,8 +2686,8 @@ if(BUILD_TESTING)
 
 
     add_executable(epoch_ai_development_proposal_codec_contract
-        src/core.log.cpp
-        src/core.time.cpp
+        src/core/core.log.cpp
+        src/core/core.time.cpp
         src/ai/ai.development_proposal_codec.cpp
         src/ai/ai.development_proposal_codec_contract.cpp
     )
@@ -2747,8 +2746,8 @@ if(BUILD_TESTING)
     )
 
     add_executable(epoch_script_compiler_contract
-        src/core.log.cpp
-        src/core.time.cpp
+        src/core/core.log.cpp
+        src/core/core.time.cpp
         src/platform/core.path.cpp
         src/platform/platform.child_process.cpp
         src/scripts/scripting.compiler_contract.cpp

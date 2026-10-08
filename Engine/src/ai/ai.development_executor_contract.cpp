@@ -437,7 +437,10 @@ namespace epochengine::ai::development_executor
             constexpr std::string_view solution{"solution-v1"};
             constexpr std::string_view implementation{"implementation-v1"};
             constexpr std::string_view module{"module-v1"};
+            constexpr std::string_view buildPolicy{"release-symbol-policy-v1"};
             if (!write(source / "Engine.sln", solution)
+                || !write(source / "Directory.Build.props", buildPolicy)
+                || !write(source / "Directory.Build.targets", buildPolicy)
                 || !write(
                     source / "Engine/src/ai/ai.worker.cpp",
                     implementation)
@@ -455,7 +458,8 @@ namespace epochengine::ai::development_executor
             const WorkspaceRequest request{
                 .source_root = source.generic_string(),
                 .workspace_root = sandbox.generic_string(),
-                .include_paths = {"Engine.sln", "Engine"},
+                .include_paths = {"Engine.sln", "Engine",
+                    "Directory.Build.props", "Directory.Build.targets"},
                 .excluded_components = {
                     "build",
                     "built",
@@ -465,9 +469,10 @@ namespace epochengine::ai::development_executor
             const WorkspaceResult copied =
                 materializer.materialize(request);
             const std::uint64_t expectedBytes =
-                solution.size() + implementation.size() + module.size();
+                solution.size() + implementation.size() + module.size()
+                    + 2u * buildPolicy.size();
             if (!copied
-                || copied.file_count != 3u
+                || copied.file_count != 5u
                 || copied.total_bytes != expectedBytes
                 || copied.evidence_digest != digest(copied.evidence_manifest)
                 || copied.evidence_manifest.find(
@@ -476,6 +481,8 @@ namespace epochengine::ai::development_executor
                 || copied.evidence_manifest.find("vcpkg_installed")
                     != std::string::npos
                 || read(sandbox / "Engine.sln") != solution
+                || read(sandbox / "Directory.Build.props") != buildPolicy
+                || read(sandbox / "Directory.Build.targets") != buildPolicy
                 || read(sandbox / "Engine/src/ai/ai.worker.cpp")
                     != implementation
                 || read(sandbox / "Engine/modules/ai.worker.ixx")

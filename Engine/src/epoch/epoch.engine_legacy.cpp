@@ -37,13 +37,13 @@
  //    because your ContextType in your current modules is not an enum with those
  //    exact enumerators (or they are not visible here). Default handles it.
  //
-#include "core.format_text.hpp"
+#include "../../include/core.format_text.hpp"
 //#include "pch.h"
 
-#include "../include/engine.config.hpp"
-#include "../src/epoch.api_types.hpp"
-#include "../include/epoch.engine.hpp"
-#include "../include/epoch.runtime_legacy.hpp"
+#include "../../include/engine.config.hpp"
+#include "epoch.api_types.hpp"
+#include "../../include/epoch.engine.hpp"
+#include "../../include/epoch.runtime_legacy.hpp"
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -5830,15 +5830,15 @@ namespace epochengine::core
                                 const bool mouse_left_down =
                                     ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
                                 const bool up_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Up);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Up);
                                 const bool down_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Down);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Down);
                                 const bool left_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Left);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Left);
                                 const bool right_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Right);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Right);
                                 const bool enter_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Enter);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Enter);
 
                                 ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                                 clear_before_ui_frame(ctx);
@@ -6252,15 +6252,15 @@ namespace epochengine::core
                                 const bool mouse_left_down =
                                     ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
                                 const bool up_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Up);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Up);
                                 const bool down_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Down);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Down);
                                 const bool left_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Left);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Left);
                                 const bool right_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Right);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Right);
                                 const bool enter_pressed =
-                                    epochengine::input::keyPressed.test(epochengine::input::Key::Enter);
+                                    ctx->is_key_down_safe(epochengine::input::Key::Enter);
 
                                 ctx->clear_scene_viewport();
                                 ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
@@ -10282,15 +10282,15 @@ namespace epochengine::core
                             const bool mouse_left_down =
                                 ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseLeft);
                             const bool up_pressed =
-                                epochengine::input::keyPressed.test(epochengine::input::Key::Up);
+                                ctx->is_key_down_safe(epochengine::input::Key::Up);
                             const bool down_pressed =
-                                epochengine::input::keyPressed.test(epochengine::input::Key::Down);
+                                ctx->is_key_down_safe(epochengine::input::Key::Down);
                             const bool left_pressed =
-                                epochengine::input::keyPressed.test(epochengine::input::Key::Left);
+                                ctx->is_key_down_safe(epochengine::input::Key::Left);
                             const bool right_pressed =
-                                epochengine::input::keyPressed.test(epochengine::input::Key::Right);
+                                ctx->is_key_down_safe(epochengine::input::Key::Right);
                             const bool enter_pressed =
-                                epochengine::input::keyPressed.test(epochengine::input::Key::Enter);
+                                ctx->is_key_down_safe(epochengine::input::Key::Enter);
 
                             ctx->clear_scene_viewport();
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);

@@ -52,7 +52,7 @@ module;
 #define _WINSOCKAPI_
 #endif
 
-#include <../src/platform.framework.hpp>  // include Windows headers
+#include <../src/platform/platform.framework.hpp>  // include Windows headers
 #else
 #include <dlfcn.h>
 #endif

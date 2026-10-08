@@ -48,6 +48,21 @@ camera navigation, and global shortcuts behind that grab must not receive the
 same input. This is the same ownership rule used by modal layers; visual
 top-layer order alone is not sufficient.
 
+Native Windows input admission uses the foreground thread's actual focused
+surface, not a renderer thread's stale `GetFocus()` or remembered GUI owner.
+Unknown HWNDs are never equivalent merely because both have no context lookup.
+Pointer polling additionally requires the context under the cursor, or its
+own active native capture for a drag. A covered/inactive context discards queued
+pointer events and held-button state; keyboard/text events are discarded when
+its context loses focus. `FocusLost` cancels older queued interactions without
+manufacturing a release/click, including loss and reacquisition between frames.
+Logical text selection is retained, but input cannot edit it while inactive.
+Launcher arrow/Enter navigation uses context-safe edge queries as well.
+These checks do not pause background AI/build work or change draw/replay order.
+Pure GUI contracts cover queue cancellation and inactive/covered admission;
+native Alt-Tab, overlapping windows and captured-drag behavior require operator
+eye testing.
+
 Large workflow dialogs such as Package Manager derive their bounded size from
 the current viewport. Their content regions grow and scroll within one measured
 body budget, while progress and action controls remain anchored and reachable.
@@ -187,7 +202,7 @@ menu replay remain unchanged.
   semantic meaning but do not define their own color tables. `gui.engine` exposes
   those tokens through reusable message roles, `semantic_block`, semantic console
   tasks, and opt-in semantic console actions.
-- Cross-backend visual parity starts in `engine.visuals`. Frame clears, scene
+- Cross-backend visual parity starts in `visuals.engine`. Frame clears, scene
   clears, object colors, selection colors, look markers, and editor-only opacity
   factors are shared there so OpenGL, Vulkan, DirectX, Raylib, SDL, and SFML can
   converge on one visual profile. Future GUI theme tables and graph palettes

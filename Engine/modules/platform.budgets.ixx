@@ -35,7 +35,7 @@
 module;
 
 #include "../include/epoch.config.hpp"
-#include "../src/epoch.common.hpp"
+#include "../src/epoch/epoch.common.hpp"
 //#include "../include/core.stl_types.hpp"
 #include <algorithm>
 #include <string_view>
