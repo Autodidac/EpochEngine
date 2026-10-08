@@ -124,6 +124,10 @@ Delivery status belongs in the source receipt.
 The October 8 request explicitly authorizes the completed source batch on GitHub
 first and the Site source owner second; see `source_sync_2026-10-08.md`. No binary
 release or active-run/config mutation is part of this pass.
+GitHub code checkpoint 16773c7c is pushed on main/stable. Site publication is
+held by the subsequent operator wrap-up instruction in that chat; v112 retains
+the preceding source pair. Preserve transfer archives and request renewed
+direction before resuming Site work. The code is not claimed published there.
 
 Canonical source is tracked. Projects are authored durable data. Build outputs
 are reproducible. Candidate folders also hold edits, lineage and evidence:
