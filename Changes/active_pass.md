@@ -124,6 +124,9 @@ the fast-forward stable mirror. Preserve the original base in history; freeze
 only after reusable software/context acceptance. Delivery belongs in
 source_sync_2026-10-08.md. Site publication is held by its subsequent operator
 wrap-up instruction; renewed direction is required. GitHub and Site are separate.
+The tested code batch is pushed on main/stable at `717d2c27`; both remote heads
+were read back and original stable ancestry was verified. Hosted checks and
+native new-code succession are not claimed by that source push.
 
 Tracked source is canonical; authored Projects are durable. Build output is
 reproducible. Candidate folders retain edits, lineage and evidence: never delete

@@ -30,7 +30,7 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
-### October 8–9 continuation (validated local code, pending new source push)
+### October 8–9 continuation (GitHub source pushed; Site still held)
 
 The subsequent source batch adds compact supervisor/worker handoffs, v3 retained
 plan/host-outcome memory, model-session RAM consent, exact multi-block edits,
@@ -48,6 +48,16 @@ failed on the host-omitted build probe header. That old candidate and transcript
 are retained; they are not patched manually or counted as new-code build proof.
 The new Debug/Release output and source checkpoint are distinct from that run.
 The prior Site hold below remains authoritative; no handoff/resume was sent.
+
+Code checkpoint `717d2c27a481925cae88327a38050e2f75d2e6a9`, tree
+`0c3784c4d7f637b917c3914b5d342077c3f263a6`, contains 1,079 tracked files.
+GitHub main and multicontext-base-stable were pushed atomically and independently
+read back at that exact commit. The local stable mirror is also fast-forwarded;
+the original `ad6c416d` remains an ancestor. No generated artifacts, unrelated
+solution/workspace changes or secrets entered the checkpoint. No dependency
+repository push was needed. No new Site transfer archive or binary release was
+created. Hosted checks for this new code are not yet claimed complete; local
+Debug/Release and focused CPU proof are the evidence above.
 
 ### Earlier delivered source checkpoint
 
