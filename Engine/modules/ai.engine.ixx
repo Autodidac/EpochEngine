@@ -142,6 +142,19 @@ export namespace epochengine::ai
         return {};
     }
 
+    // Conservative code-text estimate, not a tokenizer or model capability.
+    // Reserve the requested output and system/tool framing before source packing.
+    [[nodiscard]] constexpr std::size_t source_prompt_byte_budget(
+        std::size_t context_tokens, std::size_t output_tokens) noexcept
+    {
+        const auto framing = context_tokens / 8u < 8192u ? context_tokens / 8u : 8192u;
+        if (output_tokens >= context_tokens || framing >= context_tokens - output_tokens)
+            return 0u;
+        const auto input = context_tokens - output_tokens - framing;
+        return input > (2u * 1024u * 1024u) / 3u
+            ? 2u * 1024u * 1024u : input * 3u;
+    }
+
     struct DirectRuntimeStatus
     {
         std::string executable{};
@@ -312,6 +325,10 @@ export namespace epochengine::ai
     [[nodiscard]] LocalApiEndpoint active_local_api_endpoint();
     [[nodiscard]] bool select_local_api_endpoint(std::string_view endpoint);
     [[nodiscard]] bool set_local_api_streaming(bool enabled);
+    // Operator-declared loaded context for APIs that omit capacity metadata.
+    // Zero restores automatic detection. Bound to this endpoint and model.
+    [[nodiscard]] std::size_t local_model_context_override();
+    [[nodiscard]] bool set_local_model_context_override(std::size_t tokens);
     [[nodiscard]] std::string active_model_name();
     enum class LocalModelSelectionOrigin : unsigned char
     {

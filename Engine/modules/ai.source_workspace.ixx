@@ -34,10 +34,12 @@ export namespace epochengine::ai::source_workspace
     {
         std::size_t desired_bytes{};
         bool current_request{};
+        std::size_t retained_bytes{};
+        std::size_t requested_bytes{};
     };
 
-    // Small declarations stay complete; current requests get surplus before
-    // historical windows. Allocation never exceeds either demand or budget.
+    // Reserve useful current reads before retained history can consume capacity.
+    // Retain the remaining working set before widening. Never exceed the budget.
     [[nodiscard]] std::vector<std::size_t> allocate_source_bytes(
         const std::vector<SourceDemand>& demands, std::size_t budget);
 

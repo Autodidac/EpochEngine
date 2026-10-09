@@ -18,6 +18,7 @@ export namespace epochengine::ai::development_proposal_codec
     // Transport/resource ceilings, not a per-task file or buildable-unit policy.
     inline constexpr std::size_t maximum_patch_blocks = 64u;
     inline constexpr std::size_t maximum_context_reads = 256u;
+    inline constexpr std::size_t maximum_context_evidence_bytes = 2u * 1024u * 1024u;
 
     enum class SourceArea : std::uint8_t
     {

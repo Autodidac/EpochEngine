@@ -729,7 +729,9 @@ namespace epochengine::ai::development_proposal_codec
         std::string_view architecture_evidence)
     {
         constexpr std::size_t maximumObjectiveBytes = 8u * 1024u;
-        constexpr std::size_t maximumEvidenceBytes = 512u * 1024u;
+        constexpr std::size_t maximumEvidenceBytes = maximum_context_evidence_bytes;
+        // Never silently clip counted source or a path midway through its frame.
+        if (architecture_evidence.size() > maximumEvidenceBytes) return {};
         const std::string_view root = area == SourceArea::engine
             ? std::string_view{"Engine/"}
             : std::string_view{"Projects/"};
@@ -1640,7 +1642,8 @@ namespace epochengine::ai::development_proposal_codec
         std::string_view architecture_evidence)
     {
         constexpr std::size_t maximumObjectiveBytes = 8u * 1024u;
-        constexpr std::size_t maximumEvidenceBytes = 512u * 1024u;
+        constexpr std::size_t maximumEvidenceBytes = maximum_context_evidence_bytes;
+        if (architecture_evidence.size() > maximumEvidenceBytes) return {};
         const std::string_view root = area == SourceArea::engine
             ? std::string_view{"Engine/"}
             : std::string_view{"Projects/"};

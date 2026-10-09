@@ -376,8 +376,8 @@ entry, maps production calls to trusted monotonic time, and refuses public
 source-completion evidence unless its internal transaction executor produced it
 inside the selected iteration root. AI Controls accepts the desired result in
 ordinary language. The host first sends only a verified names-only catalog of
-existing C++ paths; the selected model chooses a coherent slice of at most 12
-paths, and the host revalidates that exact list before opening any file. The
+indexed C++ paths; the selected model chooses a coherent working set within
+the byte budget, and the host revalidates that exact list before opening any file. The
 operator does not need to name a subsystem, filename, symbol, diagnostic code,
 or protocol token. AI Controls owns read-only inspection of the selected model,
 endpoint, admitted paths, sandbox, current phase, elapsed work, retries, next
@@ -408,6 +408,17 @@ bytes and retains the mission plan. Selection does not copy bytes to live source
 replace the parent editor, promote a candidate, or grant
 Git, updater, release, package, network, listener, or server authority. Automated
 live-source replacement is deliberately not part of this milestone.
+
+Candidate execution stays in a separate process: Epoch scripting can host
+project/runtime modules, but loading a self-modified engine into the original
+process would remove crash isolation and would not prove the rebuilt successor.
+The Windows host records a native attachment lease, not a foreign renderer or
+callback pointer. PID/process incarnation, window cookie, parent, styles and
+admitted geometry are rechecked; candidate exit or lost attachment stops the
+comparison and preserves files. These source guards do not prove cross-process
+responsiveness. Native qualification must cover fullscreen/maximize/restore,
+focus loss, minimize, DPI/resize, child exit and close/Keep/Choose/Stop. No
+automatic in-process fallback may conceal a failed independent-process test.
 
 This is currently application-level transaction isolation plus process lifecycle
 supervision, not an OS security sandbox. Windows candidates still use the
@@ -922,6 +933,15 @@ confirmation. Model choice remains endpoint-specific. Selection is locked while
 an Editor model request is queued, working or stopping, and while inventory is
 pending. Saving a URL does not send a prompt or start a server/model.
 
+The same picker offers Save Context Size and Use Automatic Size. An optional
+actual loaded token capacity is saved without secrets for the exact endpoint
+and model, bounded by any capacity reported by that provider. Context changes
+are disabled during an active engine session; they never reload a model, cancel
+an inference or alter an existing campaign. Source packing and transport reserve
+output/tool framing using one shared estimate; full source is available on
+demand within the actual byte budget rather than obsolete per-file windows.
+See ai_source_discovery_architecture.md for limits, residency and authority.
+
 The EngCoder preset is `http://127.0.0.1:14321/v1`; inventory uses `/v1/models`
 and requests use `/v1/chat/completions`. Streaming is now the default, including
 for newly selected EngCoder endpoints. The original supplied EngCoder 0.6.5
@@ -947,7 +967,8 @@ format; EngCoder's full asynchronous agent has its own tasks/events, approvals,
 memory and execution authority. Neither is silently used as Chat or given Epoch
 sandbox/source authority. No EngCoder server, model or training job is auto-started.
 
-The inspected EngCoder 0.6.9 full task API uses its configured global workspace;
+The supplied EngCoder 0.7.1 source was inspected without running or importing
+its GUI, training services or server. Its full task API, like 0.6.9, uses the configured global workspace;
 its TaskRequest does not bind a private Epoch candidate root or tool allowlist.
 Persistent external task/session roles are not a substitute for that boundary.
 Epoch therefore uses separate administrative supervisor and coding-worker
@@ -956,9 +977,10 @@ plan/handoff and host-outcome checkpoint. Epoch owns exact edits, compiler actor
 and human candidate choice. This is role integration, not full `/api/tasks`
 execution or a grant of filesystem/network authority to EngCoder.
 
-External EngCoder UI is acceptable during this integration. A later native UI
-mapping must retain Epoch's GUI primitives/style and useful EngCoder themes,
-session/model/runtime controls without a parallel window stack. Training/learning
+The October 9 operator clarification excludes importing EngCoder's GUI. Backend
+integration must use Epoch's existing interface and reconstruct only necessary
+controls with owned GUI primitives, without a parallel window stack. Existing
+external EngCoder UI remains operator-owned. Training/learning
 and full-agent lifecycle require explicit ownership/approval contracts first;
 endpoint support does not establish that integration or native succession proof.
 
@@ -1069,17 +1091,25 @@ Ordinary AI Authoring uses a separate bounded data protocol,
 calls through fixed allowlists. `scene.create` and `gui.create` are idempotent
 minimum-count requests: matching canonical scene objects or GUI widgets are reused
 and only a missing remainder may be created. `scene.reconcile` expresses an exact
-final count from zero through eight and creates or removes only the difference.
+final count from zero through 4,096 and creates or removes only the difference.
 `scene.transform` applies bounded finite position, rotation, or scale values to
-one exact canonical object. Counts remain one through eight. Replies are bounded
-to 32 KiB and exactly one call; malformed, unknown, duplicate, incomplete, or
+one exact canonical object. Create counts range from one through 4,096. Native
+scene/light/ground/camera capacities still apply and are never silently clamped.
+Replies are bounded to 32 KiB and 256 semantic calls; malformed, unknown, duplicate, incomplete, or
 trailing content fails closed.
 
-Epoch displays the parsed title, summary, and the one call before mutation. Only
+Epoch displays the parsed title, summary, and every call before mutation. Only
 the operator's visible `Apply Plan` action creates call-scoped
-authority. The host revalidates the single-call plan, applies it through the same
+authority for that exact complete batch. There is no per-command approval loop
+or eight-object negotiation. The host revalidates all calls before mutation, applies them through the same
 scene and GUI semantic gateways used by human controls, and appends structured
-tool evidence. Opening AI Authoring does not change the active project or enter
+tool evidence. If a later semantic command fails, canonical scene/GUI documents,
+projections, selection, revision and undo history are restored; partial edits are
+not left behind. Successful commands retain ordinary semantic undo history, not
+a new whole-batch undo operation. New objects receive host IDs; a subsequent
+placement plan uses fresh inventory rather than inventing those IDs. Pure
+contracts cover ground/light/100 cubes and rollback after a stale transform.
+Native model/scene eye-test acceptance remains separate. Opening AI Authoring does not change the active project or enter
 the Engine Development Sandbox.
 
 Any completed local-model response that validates as this bounded authoring

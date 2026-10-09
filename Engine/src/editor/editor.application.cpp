@@ -1638,6 +1638,8 @@ namespace epochengine
             bool showAiModelConsentModal{ false };
             bool showAiModelSettings{ false };
             std::string aiEndpointDraft{ "http://127.0.0.1:14321/v1" };
+            std::string aiContextCapacityDraft{};
+            std::string aiContextCapacityIdentity{};
             bool showAiEndpointRoutes{};
             std::string aiEndpointStatus{};
             bool showVoiceConsentModal{ false };
@@ -7543,19 +7545,14 @@ namespace epochengine
             if (!count)
                 return 1u;
             unsigned value{};
-            for (const char character : count->value)
-            {
-                if (character < '0' || character > '9')
-                    return 0u;
-                value = value * 10u
-                    + static_cast<unsigned>(character - '0');
-            }
+            const auto converted = std::from_chars(count->value.data(),
+                count->value.data() + count->value.size(), value);
+            if (converted.ec != std::errc{}
+                || converted.ptr != count->value.data() + count->value.size()) return 0u;
             return value;
         }
 
         constexpr std::size_t kAiGoalMaximumMilestones = 24u;
-        constexpr std::size_t kAiGoalMaximumCallsPerMilestone = 1u;
-        constexpr std::size_t kAiGoalMaximumObjectsPerMilestone = 8u;
 
         [[nodiscard]] std::optional<std::string>
             recover_bare_ai_authoring_call(std::string_view response)
@@ -7864,10 +7861,12 @@ namespace epochengine
                     prompt += editor.aiGoalLastMilestoneReceipt + "\n";
                 }
                 prompt +=
-                    "Propose exactly one smallest useful next milestone using "
-                    "exactly one semantic call. Mutate no more than 8 scene or "
-                    "GUI objects through that call. A broad game objective must be "
-                    "decomposed across separately approved milestones. This "
+                    "Propose the next useful milestone as one complete reviewed "
+                    "plan containing all semantic calls needed for that step. "
+                    "Honor requested object counts (including 100 cubes); do not "
+                    "negotiate them down or require approval per command. "
+                    "The operator approves the displayed plan once. A broad game "
+                    "objective may require subsequent plans with fresh inventory. This "
                     "lane may author only the active project scene or GUI; it "
                     "must not modify Epoch source, train a model, collect a "
                     "dataset, or access unrelated personal AI work. Never "
@@ -8196,7 +8195,7 @@ namespace epochengine
             return true;
         }
 
-        [[nodiscard]] bool apply_ai_authoring_plan(EditorState& editor)
+        [[nodiscard]] bool apply_ai_authoring_plan(EditorState& editor, bool publishTrace = true)
         {
             if (!editor.aiAuthoringPlan
                 || editor.aiAuthoringPlan.plan.calls.empty()
@@ -8207,7 +8206,7 @@ namespace epochengine
                 return false;
             }
 
-            if (editor.aiAuthoringPlan.plan.calls.size() != 1u)
+            if (editor.aiAuthoringPlan.plan.calls.size() > epochengine::ai::kAuthoringMaximumCalls)
             {
                 if (editor.aiAuthoringPlanForGoal)
                 {
@@ -8215,32 +8214,19 @@ namespace epochengine
                     editor.aiGoalPlanNextQueued = false;
                 }
                 editor.aiAuthoringStatus =
-                    "AI authoring approval requires exactly one visible command. "
+                    "AI authoring plan exceeded its command materialization limit. "
                     "The plan was rejected before any scene or GUI change.";
                 return false;
             }
 
-            if (editor.aiAuthoringPlanForGoal
-                && editor.aiAuthoringPlan.plan.calls.size()
-                    > kAiGoalMaximumCallsPerMilestone)
-            {
-                editor.aiGoalRunning = false;
-                editor.aiGoalPlanNextQueued = false;
-                editor.aiAuthoringStatus =
-                    "The goal milestone exceeded the one-command safety budget. "
-                    "The goal was paused for a smaller plan.";
-                return false;
-            }
-
             const auto registry =
-                epochengine::ai::make_epoch_project_tool_registry();
+                epochengine::ai::make_epoch_project_tool_registry({
+                    .maximum_session_steps = static_cast<std::uint32_t>(epochengine::ai::kAuthoringMaximumCalls)});
             epochengine::ai::McpSessionAuthority authority{
                 .session_id = "editor-authoring-preview",
                 .granted_capabilities =
                     epochengine::ai::McpToolCapability::author};
-            const std::size_t objectBudget = editor.aiAuthoringPlanForGoal
-                ? kAiGoalMaximumObjectsPerMilestone
-                : std::size_t{32u};
+            const std::size_t objectBudget = epochengine::ai::kAuthoringMaximumObjects;
             std::size_t totalObjects = 0u;
             for (const auto& call : editor.aiAuthoringPlan.plan.calls)
             {
@@ -8292,6 +8278,20 @@ namespace epochengine
             const std::string planSignature = ai_authoring_plan_signature(
                 editor.aiAuthoringPlan.plan);
             const std::uint64_t revisionBeforePlan = editor.sceneDocumentRevision;
+            // Validate the entire visible plan first; retain canonical documents
+            // and projections so a later command failure cannot leave half a
+            // multi-command approval applied. Successful commands retain normal
+            // semantic undo history; no source/file/runtime authority is added.
+            auto originalScene = editor.sceneDocument;
+            auto originalGui = editor.guiDocument
+                ? std::make_unique<authoring::gui::GuiDocument>(*editor.guiDocument)
+                : nullptr;
+            auto originalEntities = editor.entities;
+            const auto originalSelectedId = editor.selectedEntityId;
+            auto originalSelectedIds = editor.selectedEntityIds;
+            const auto originalSelectedIndex = editor.selectedEntity;
+            auto originalGuiWidgets = editor.guiDocumentWidgets;
+            const auto originalGuiRoot = editor.guiDocumentRoot;
             for (const auto& call : editor.aiAuthoringPlan.plan.calls)
             {
                 idempotentOnly = idempotentOnly
@@ -8453,7 +8453,7 @@ namespace epochengine
 
                 if (callSucceeded)
                     ++appliedCommands;
-                epochengine::ai::append_tool_trace(
+                if (publishTrace) epochengine::ai::append_tool_trace(
                     epochengine::ai::McpCaptureRecord{
                         .session_id = editor.projectId.empty()
                             ? std::string{"editor-authoring"}
@@ -8476,9 +8476,21 @@ namespace epochengine
                             : epochengine::ai::McpErrorCode::execution_failed});
                 if (!callSucceeded)
                 {
+                    editor.sceneDocument = std::move(originalScene);
+                    editor.guiDocument = std::move(originalGui);
+                    editor.entities = std::move(originalEntities);
+                    editor.selectedEntityId = originalSelectedId;
+                    editor.selectedEntityIds = std::move(originalSelectedIds);
+                    editor.selectedEntity = originalSelectedIndex;
+                    editor.guiDocumentWidgets = std::move(originalGuiWidgets);
+                    editor.guiDocumentRoot = originalGuiRoot;
+                    editor.sceneDocumentRevision = revisionBeforePlan;
+                    editor.sceneInteractionDirty = editor.sceneLightingDirty = true;
+                    editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
                     editor.aiAuthoringStatus = callFailure.empty()
-                        ? "AI authoring stopped after a semantic command failed; review the scene history."
+                        ? "AI authoring plan failed; all commands were rolled back."
                         : std::move(callFailure);
+                    editor.aiAuthoringStatus += " The approved batch was rolled back; no partial scene/GUI edit remains.";
                     push_editor_log(
                         editor,
                         "[ai] " + editor.aiAuthoringStatus);
@@ -22938,6 +22950,42 @@ namespace epochengine
                 manifest.source_iteration_budget_available
                     ? "Host budget ready; model evidence still required"
                     : "Unavailable");
+            const auto contextOverride = epochengine::ai::local_model_context_override();
+            const auto contextIdentity = routes.base_url + '\n' + activeModel;
+            if (editor.aiContextCapacityIdentity != contextIdentity)
+            {
+                editor.aiContextCapacityIdentity = contextIdentity;
+                editor.aiContextCapacityDraft = contextOverride != 0u ? std::to_string(contextOverride) : std::string{};
+            }
+            gui::property_row("Context capacity source", contextOverride != 0u ? "Operator setting (bounded by reported capacity)"
+                : manifest.loaded_context_capacity_tokens != 0u ? "Loaded model reported by provider"
+                : manifest.maximum_context_capacity_tokens != 0u ? "Provider maximum (check loaded size)" : "Unknown: conservative fallback");
+            gui::wrapped_label("Loaded context tokens (optional). Use the actual server setting, "
+                "not the model's theoretical maximum. Epoch reserves output/tool space, keeps "
+                "complete files when they fit, and uses focused regions for larger files.", contentWidth);
+            (void)gui::edit_box(editor.aiContextCapacityDraft, {contentWidth, 30.0f}, 7u, false);
+            std::size_t declaredContext{};
+            const auto capacityText = std::string_view{editor.aiContextCapacityDraft};
+            const auto parsedContext = std::from_chars(capacityText.data(), capacityText.data() + capacityText.size(), declaredContext);
+            const bool validContext = !capacityText.empty() && parsedContext.ec == std::errc{}
+                && parsedContext.ptr == capacityText.data() + capacityText.size()
+                && declaredContext >= 8192u && declaredContext <= 1024u * 1024u;
+            const bool contextEditable = !inventoryPending && !activeModel.empty()
+                && (!editor.aiDevelopmentPanel || editor.aiDevelopmentPanel->active_session_id() == 0u);
+            const std::array contextActions{
+                gui::InlineButtonSpec{.label = "Save Context Size", .width = 166.0f, .enabled = contextEditable && validContext},
+                gui::InlineButtonSpec{.label = "Use Automatic Size", .width = 172.0f, .enabled = contextEditable && contextOverride != 0u}};
+            if (const auto action = gui::inline_button_row(contextActions, 30.0f, 8.0f))
+            {
+                if (epochengine::ai::set_local_model_context_override(*action == 0u ? declaredContext : 0u))
+                {
+                    if (*action == 1u) editor.aiContextCapacityDraft.clear();
+                    editor.aiEndpointStatus = "Context size saved for this endpoint/model; no request or model reload was started.";
+                    return;
+                }
+                editor.aiEndpointStatus = "Context size could not be saved; existing settings are unchanged.";
+            }
+            if (!contextEditable) gui::wrapped_label("Finish or stop engine work before changing its context budget.", contentWidth);
 
             const auto epochLocalAi =
                 epochengine::ai::epoch_local_ai_install_status();
@@ -23387,6 +23435,39 @@ namespace epochengine
                     "CALL scene.create archetype=light count=1\n"))
             {
                 return false;
+            }
+
+            trace.stage = "multi_command_hundred_cube_authoring";
+            {
+                auto state = std::make_unique<EditorState>();
+                state->entities.clear();
+                state->aiAuthoringPlanForGoal = true;
+                state->aiAuthoringPlan = epochengine::ai::parse_authoring_plan(
+                    "EPOCH_AUTHORING_PLAN_V1\nTITLE Hundred cube scene\n"
+                    "SUMMARY Create ground, light and exactly one hundred cubes.\n"
+                    "CALL scene.reconcile archetype=ground count=1\n"
+                    "CALL scene.reconcile archetype=light count=1\n"
+                    "CALL scene.reconcile archetype=cube count=100\nEND\n");
+                if (!state->aiAuthoringPlan || !apply_ai_authoring_plan(*state, false)
+                    || state->sceneDocument.objects().size() != 102u
+                    || std::ranges::count_if(state->entities, [](const auto& entity)
+                        { return entity.type == "StaticMesh"; }) != 100u
+                    || !state->sceneDocument.can_undo()) return false;
+                const auto revision = state->sceneDocumentRevision;
+                const auto count = state->entities.size();
+                const auto history = state->sceneDocument.history().size();
+                state->aiAuthoringPlanApplied = false;
+                state->aiAuthoringPlan = epochengine::ai::parse_authoring_plan(
+                    "EPOCH_AUTHORING_PLAN_V1\nTITLE Reject stale placement\n"
+                    "SUMMARY Test whole-plan rollback after a stale object ID.\n"
+                    "CALL scene.reconcile archetype=cube count=101\n"
+                    "CALL scene.transform object_id=1 position=0,2,0\nEND\n");
+                if (!state->aiAuthoringPlan || apply_ai_authoring_plan(*state, false)
+                    || state->sceneDocumentRevision != revision
+                    || state->entities.size() != count
+                    || state->sceneDocument.history().size() != history
+                    || state->aiAuthoringStatus.find("batch was rolled back") == std::string::npos)
+                    return false;
             }
 
             trace.stage = "path_admission";

@@ -248,9 +248,9 @@ export namespace epochengine::ai
         std::vector<McpToolDescriptor> tools_{};
     };
 
-    [[nodiscard]] inline McpToolRegistry make_epoch_project_tool_registry()
+    [[nodiscard]] inline McpToolRegistry make_epoch_project_tool_registry(McpLimits limits = {})
     {
-        McpToolRegistry registry{};
+        McpToolRegistry registry{limits};
         const auto add = [&registry](
             std::string name,
             std::string title,
@@ -354,6 +354,11 @@ export namespace epochengine::ai
         default: return "unknown";
         }
     }
+
+    // Materialization limits match the default canonical scene capacity. These
+    // bound host work, not model capability or one-command approval workflow.
+    inline constexpr std::size_t kAuthoringMaximumCalls = 256u;
+    inline constexpr unsigned kAuthoringMaximumObjects = 4096u;
 
     namespace authoring_plan_detail
     {
@@ -555,7 +560,7 @@ export namespace epochengine::ai
             const McpArgument* count = argument(call, "count");
             if (sceneReconcileTool && !count)
             {
-                message = "scene.reconcile requires an exact count from 0 through 8.";
+                message = "scene.reconcile requires an exact count from 0 through 4096.";
                 return false;
             }
             if (count)
@@ -566,11 +571,11 @@ export namespace epochengine::ai
                 const auto converted = std::from_chars(first, last, parsed);
                 const unsigned minimum = sceneReconcileTool ? 0u : 1u;
                 if (converted.ec != std::errc{} || converted.ptr != last
-                    || parsed < minimum || parsed > 8u)
+                    || parsed < minimum || parsed > kAuthoringMaximumObjects)
                 {
                     message = sceneReconcileTool
-                        ? "The exact reconciliation count must be an integer from 0 through 8."
-                        : "The optional count must be an integer from 1 through 8.";
+                        ? "The exact reconciliation count must be an integer from 0 through 4096."
+                        : "The optional count must be an integer from 1 through 4096.";
                     return false;
                 }
             }
@@ -589,7 +594,7 @@ export namespace epochengine::ai
         std::string_view response)
     {
         constexpr std::size_t maximumResponseBytes = 32u * 1024u;
-        constexpr std::size_t maximumCalls = 1u;
+        constexpr std::size_t maximumCalls = kAuthoringMaximumCalls;
         constexpr std::size_t maximumTitleBytes = 160u;
         constexpr std::size_t maximumSummaryBytes = 768u;
         constexpr std::size_t maximumTokenBytes = 256u;
@@ -698,7 +703,7 @@ export namespace epochengine::ai
             if (result.plan.calls.size() >= maximumCalls)
             {
                 result.code = AuthoringPlanCode::budget_exhausted;
-                result.message = "The authoring plan exceeded the one-change review budget.";
+                result.message = "The authoring plan exceeded the command materialization budget.";
                 return result;
             }
 
@@ -777,7 +782,8 @@ export namespace epochengine::ai
             return result;
         }
 
-        const McpToolRegistry registry = make_epoch_project_tool_registry();
+        const McpToolRegistry registry = make_epoch_project_tool_registry({
+            .maximum_session_steps = static_cast<std::uint32_t>(kAuthoringMaximumCalls)});
         McpSessionAuthority previewAuthority{
             .session_id = "editor-authoring-preview",
             .granted_capabilities = McpToolCapability::author};
@@ -805,27 +811,27 @@ export namespace epochengine::ai
             "Return only one bounded Epoch authoring plan in this exact envelope; do not use Markdown or prose outside it:\n"
             "EPOCH_AUTHORING_PLAN_V1\n"
             "TITLE short title\n"
-            "SUMMARY one sentence describing the single visible change\n"
+            "SUMMARY one sentence describing the complete visible change\n"
             "CALL tool.name name=value\n"
             "END\n\n"
-            "Emit exactly one CALL line. Replace tool.name and its arguments with one allowed operation below; never copy multiple operations into the response.\n"
+            "Emit the CALL lines needed to accomplish the requested scene or GUI change, in execution order (up to 256). Epoch shows and validates every call; one operator approval applies the complete displayed plan. Never reduce a requested count such as 100 to eight or split it into separately approved eight-object steps.\n"
             "If one critical user detail is missing and guessing would make the change unsafe or target the wrong object, do not invent it. Return only:\n"
             "EPOCH_AUTHORING_QUESTION_V1\n"
             "QUESTION one concise blocking question\n"
             "END\n"
             "Allowed operations and arguments:\n"
             " - scene.clear: scope=all\n"
-            " - scene.create: archetype=<cube|ground|light|spawn|camera> and optional count=1..8\n"
-            " - scene.reconcile: archetype=<cube|ground|light|spawn|camera> and count=0..8\n"
+            " - scene.create: archetype=<cube|ground|light|spawn|camera> and optional count=1..4096\n"
+            " - scene.reconcile: archetype=<cube|ground|light|spawn|camera> and count=0..4096\n"
             " - scene.transform: object_id=<stable id> and one or more of position=x,y,z rotation=x,y,z scale=x,y,z; optional placement=<support|free>\n"
-            " - gui.create: widget=<panel|button|text|image|image_button|tabs|input|slider|scroll> and optional count=1..8\n"
+            " - gui.create: widget=<panel|button|text|image|image_button|tabs|input|slider|scroll> and optional count=1..4096\n"
             "Treat the supplied canonical scene inventory as authoritative. Reuse existing objects instead of duplicating them.\n"
             "Use scene.reconcile when the request describes a desired final count. It preserves matching objects and creates or removes only the difference.\n"
             "scene.reconcile changes counts only. Use scene.transform with the exact stable object_id from the inventory to change position, rotation, or scale. Vector values are x,y,z without spaces.\n"
             "Solid meshes default to placement=support and Epoch snaps their lower face to the primary support surface after position or scale changes. Use placement=free only when the operator explicitly requests free vertical placement.\n"
             "Use scene.create only for explicitly additive requests. Use scene.clear scope=all only when the operator explicitly asks to clear, replace, reset, or start over, and disclose that removal in SUMMARY.\n"
             "When a request describes a complete final scene, reconcile every constrained archetype, including count=0 for conflicting managed archetypes. Preserve editor infrastructure unless removal is explicitly required.\n"
-            "Propose exactly one smallest useful visible change. Every later change requires a fresh scene inventory and separate operator approval.\n"
+            "Honor the complete requested counts. Native scene/light/ground/camera capacity still applies; the host will not silently clamp them. New objects receive host IDs: do not invent IDs for transforms in the same plan. If a later placement step needs newly created IDs, use a fresh inventory after this plan is applied.\n"
             "Do not request files, source edits, native commands, Git, builds, runs, network access, updater work, or approval.";
     }
 
@@ -1227,18 +1233,35 @@ export namespace epochengine::ai
         const auto secondPromptCall = firstPromptCall == std::string::npos
             ? std::string::npos
             : authoringPrompt.find("\nCALL ", firstPromptCall + 1u);
+        std::string maximumPlan = "EPOCH_AUTHORING_PLAN_V1\nTITLE Reviewed placements\n"
+            "SUMMARY Place canonical objects using one reviewed batch.\n";
+        for (std::size_t index{}; index < kAuthoringMaximumCalls; ++index)
+            maximumPlan += "CALL scene.transform object_id=42 position=0,2,0\n";
+        const auto admittedMaximum = parse_authoring_plan(maximumPlan + "END\n");
+        const auto refusedMaximum = parse_authoring_plan(maximumPlan
+            + "CALL scene.transform object_id=42 position=0,3,0\nEND\n");
         if (!authoring || authoring.plan.calls.size() != 1u
+            || !admittedMaximum || admittedMaximum.plan.calls.size() != kAuthoringMaximumCalls
+            || refusedMaximum.code != AuthoringPlanCode::budget_exhausted
             || firstPromptCall == std::string::npos
             || secondPromptCall != std::string::npos
-            || authoringPrompt.find("Emit exactly one CALL line.")
+            || authoringPrompt.find("one operator approval applies the complete displayed plan")
                 == std::string::npos
-            || parse_authoring_plan(
+            || !parse_authoring_plan(
                 "EPOCH_AUTHORING_PLAN_V1\n"
-                "TITLE Too broad\n"
-                "SUMMARY Reject more than one opaque mutation.\n"
+                "TITLE Hundred cube scene\n"
+                "SUMMARY Add ground and exactly one hundred cubes in one reviewed plan.\n"
                 "CALL scene.reconcile archetype=ground count=1\n"
-                "CALL scene.reconcile archetype=cube count=1\n"
-                "END\n").code != AuthoringPlanCode::budget_exhausted
+                "CALL scene.reconcile archetype=cube count=100\n"
+                "END\n")
+            || parse_authoring_plan(
+                "EPOCH_AUTHORING_PLAN_V1\nTITLE Too large\nSUMMARY Reject an unbounded count.\n"
+                "CALL scene.reconcile archetype=cube count=42949672960\nEND\n").code
+                    != AuthoringPlanCode::invalid_argument
+            || parse_authoring_plan(
+                "EPOCH_AUTHORING_PLAN_V1\nTITLE Capacity\nSUMMARY Respect canonical scene capacity.\n"
+                "CALL scene.reconcile archetype=cube count=4097\nEND\n").code
+                    != AuthoringPlanCode::invalid_argument
             || parse_authoring_plan(
                 "EPOCH_AUTHORING_PLAN_V1\n"
                 "TITLE Bad clear\n"

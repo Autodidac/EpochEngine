@@ -2,6 +2,78 @@
 
 Epoch Engine Self-Coding uses a host-owned retrieval layer. The model does not receive the whole repository and does not gain arbitrary filesystem authority.
 
+## Operator Workflow And Its Actual Boundaries
+
+1. **Describe the engine change.** Epoch routes engine-source work away from
+   Project Assistant scene/GUI authoring. The host indexes the selected source
+   authority, retrieves objective-ranked exact bytes and materializes one private
+   candidate source snapshot. Indexed paths remain available for later reads;
+   secrets, generated output and authored project state are not source context.
+2. **Supervisor generation.** The selected provider receives the objective,
+   exact reviewed source, verified repository map and any saved host observations.
+   It returns a compact task-specific plan and `NEXT_GENERATION` coding handoff.
+   This is a separate role/request using the same selected model, not a second
+   background model or an external EngCoder agent with filesystem authority.
+   Before this repair it saw path/range metadata without the source bodies,
+   which could produce a repeated investigation handoff instead of a design.
+3. **Coding generations.** Each request is reconstructed from the saved plan,
+   recent host facts and currently supplied exact source. It is not an ongoing
+   provider conversation or a recovered KV/token cache. The worker should edit
+   immediately when the next buildable unit is grounded; otherwise it batches
+   known missing regions into one read action. Complete files are supplied when
+   they fit; oversized implementations require exact windows. There is no promise
+   that the entire repository or two enormous files fit one loaded context.
+   Source-ID numbers are request-local; saved paths must be resolved against
+   the current catalog rather than reusing IDs from a previous generation.
+4. **Accepted actions, not raw thoughts.** Exactly one complete read or patch
+   tool call is validated. A patch uses current reviewed IDs and exact original
+   blocks; several blocks in one file form one atomic postimage. Incomplete tool
+   arguments and reasoning streams are not written to source. Read requests grant
+   no edit, build or promotion authority. Unusable replies carry the actual host
+   diagnostic into a bounded correction, rather than being treated as progress.
+5. **Durable progress.** Admitted plans, host observations and accepted patch
+   transactions are checkpointed. Source reads retain revision-bound descriptors;
+   exact bytes must still be reread and verified before later use. Previously
+   needed declarations and disjoint implementation regions receive residency
+   priority before a new read is widened when the combined demand fits. Provider
+   reload loses the unfinished response, not completed sandbox edits; permissions
+   and pending operations do not survive as automatic authority. Known-checkpoint
+   resume exists; cold-editor discovery and native recovery remain open gates.
+6. **Build and repair.** An accepted buildable unit enters host-owned compiler
+   and contract validation. Read-only host dependencies are reused rather than
+   installed into each candidate. A failure returns its causal diagnostics and
+   current candidate bytes to the worker. Code, a successful request, an admitted
+   patch and a passing compiler are distinct milestones. The task list is model
+   guidance; semantic completion is not proved merely by its wording or a build.
+7. **Independent candidate comparison.** After the required receipts, the host
+   launches a separately supervised Editor PID with private writable runtime data
+   and embeds its native window for comparison. This is not an in-process engine
+   script/hot-load. Process/window leases handle lifecycle ownership; native
+   fullscreen, focus, resize, failure and docking acceptance still require proof.
+   Source path routing and process Job Objects are not OS security confinement.
+8. **Human decision and promotion.** In the current implementation, human Pass /
+   Choose finishes that objective, preserves the validated sandbox and remembers
+   it as a future parent. Fail / Revise retires its preview and continues on that
+   same sandbox with retained mission memory. Choose does not overwrite the
+   original Engine checkout or authored project. Starting another objective from
+   the chosen parent and explicitly reviewed live-source promotion are separate
+   operations; a second native successor is still an acceptance requirement.
+
+The visible candidate/pass counters describe workflow generations, not files
+completed or percentage of the requested feature. Three accepted source-sharing
+turns trigger a brief administrative reconciliation; other reads/repairs reuse
+the plan. A new source read can be legitimate without being useful coding
+progress. The native acceptance gate is an actual useful patch, compiler/test
+receipts, embedded independent PID, human decision and subsequent chosen-parent
+build, not repeated planning or token generation.
+
+Storage: canonical checkout source and authored Projects are durable; build
+outputs are reproducible; `Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_*`
+retains candidate source, checkpoints, lineage and logs. Do not delete chosen or
+recoverable candidate ancestry as ordinary cache. Model settings and transport
+logs are executable-local, so Debug and Release do not silently share them. See
+`repository_layout_reference.txt` for the folder ownership map.
+
 ## Flow
 
 1. Build a read-only repository index for the selected source area.
@@ -52,15 +124,59 @@ remain excluded. Indexing still stays inside the selected scope.
 
 ## Budgets
 
-The workspace is bounded by bytes/tokens, not a small operational file count. Individual navigation requests stay small so one model call cannot explode the working set. When LM Studio reports the loaded context length, Epoch may use the additional capacity as discovery grows; it does not fill the context window by default.
+The workspace is bounded by bytes/tokens, not a small operational file count.
+Packet ceilings protect decoding; they are not limits on a multi-generation task.
+All indexed paths in the selected source area remain available to request, not
+only the initial seed. Generated outputs, runtime state and credentials are not
+source. A catalog entry grants read navigation, never a live-source write.
+
+Model Settings accepts an optional actual loaded context size, saved for the
+exact local endpoint/model. Use it when inventory omits capacity; EngCoder's
+inspected `/v1/models` does so. The operator reports 81,920 tokens for Next Flash.
+That is a setting to enter after stopping the current campaign, not permission
+to hot-change it or a capability inferred from the model name. Automatic mode
+uses reported loaded capacity, otherwise reported maximum or legacy fallback.
+The override cannot exceed a reported capacity. Accepted settings range from
+8,192 to 1,048,576 tokens; direct-CLI providers do not inherit HTTP overrides.
+
+Panel packing and source transport share one conservative code-text estimate:
+reserve requested output and system/tool framing, then estimate three input
+bytes per remaining token, at most 2 MiB. This is not an exact tokenizer or an
+overflow guarantee. At 81,920 context / 32,768 output tokens it permits 122,880
+prompt bytes; source evidence reserves another quarter for protocol/navigation.
+Do not assume two enormous implementation files fit that window. Reported or
+declared smaller capacities are not raised to an obsolete 256 KiB floor.
+Source prompt formatting uses the same 2 MiB evidence ceiling instead of
+silently clipping at 512 KiB. Above that ceiling it returns no prompt; exact
+counted source frames must remain complete, not become truncated authority.
 
 The loader allocates from actual bounded file-size demand rather than splitting
 the source budget equally among all paths. It reserves useful minimum windows,
-completes small declarations, gives current requested paths surplus first, then
-distributes remaining space among older paths. Exact range residency remains
-limited by the prompt envelope; navigation history is not the prompt itself.
+then reserves useful current reads before completing passive small files or
+replaying historical ranges. Current declarations up to 64 KiB request complete
+files; large implementations request 8 KiB per selector within the shared budget.
+Remaining capacity preserves exact remembered regions before widening reads.
+This prevents retained broad history from reducing a new function read to a
+few lines. Under genuine oversubscription these targets are not guaranteed;
+the supplied ranges remain the exact authority, not the requested sizes.
+Passive paths reconstruct all revision-verified disjoint regions when their
+allocation fits instead of enlarging the newest region and evicting the others.
+Overlapping or adjacent remembered reads form a verified byte union, not
+duplicate demand on the next allocation. Under genuine pressure a new read
+keeps a useful share rather than reserving the entire envelope for old bytes.
+Automatic reads supply complete
+files when they fit their actual allocation, up to the 1 MiB curated-entry
+safety ceiling. Several complete files can share a request; the old 96 KiB file
+and 32 KiB excerpt limits no longer force another discovery pass. Explicit
+line/query cursors still select the requested region. Passive paths request their
+revision-verified bytes rather than unrelated broad windows. Exact range
+residency remains limited by the prompt envelope; navigation history is not the
+prompt itself.
+Multiple automatic lookups in a complete resident file share one source frame.
+They must not be refused by charging duplicate framing before recognizing that
+the whole file satisfies them. Explicit line cursors retain their own semantics.
 
-The workspace retains at most four range descriptors per file and 256 total,
+The workspace retains at most 256 range descriptors globally, without a four-per-file limit,
 containing path, byte offset/count and whole-file SHA-256, not another copy of
 source. The loader re-reads the authorized path and admits an older region only
 if that revision still matches and the byte/envelope budget permits. Overlapping
@@ -105,6 +221,8 @@ actual source/search evidence supplies a line or exact literal.
 
 Automatic literal lookup prefers the first match outside revision-verified prior
 ranges and emits up to sixteen `SOURCE_QUERY_MATCH_LINES` plus the selected line.
+The search continues beyond those display hints until an unseen match is found;
+covered regions are skipped without enumerating every repeated literal.
 An explicit nonzero line retains fixed forward-search semantics. These hints
 are navigation only; every counted exact source window gets its own binding to
 the same reviewed source ID. Compiler repair prioritizes bounded windows around
@@ -171,7 +289,8 @@ authority and clears pending operations, approvals and validation. Memory is
 continuity data, never carried permission or source-edit evidence.
 
 Fresh Candidate Lab objectives use a separate administrative supervisor turn
-through the same selected model provider: three to six objective-specific tasks,
+through the same selected model provider with current exact reviewed source and
+the verified navigation map, not only filenames/line observations: three to six objective-specific tasks,
 dependencies/success criteria and a concrete `NEXT_GENERATION` handoff ending
 with `END_NEXT_GENERATION`, requested under 300 words. The complete plan/handoff
 is digest-bound and retained. Worker turns receive that plan, recent host
@@ -181,12 +300,18 @@ the design. After three accepted source-sharing turns, the next generation is a
 brief supervisor reconciliation against the retained facts; it saves a revised
 handoff and resets the review counter. Other reads/repairs reuse the plan without
 another planning inference. This cadence is not a retry/file/mission limit.
+Workers use actual supplied-source observations to recognize completed
+investigation and advance the next unfinished task. A saved investigation
+handoff is not an investigation-only lock. Known missing dependencies should be
+batched; observed function/definition names and explicit match cursors take
+precedence over repeated generic type/theme searches.
 Host-only plan-origin metadata distinguishes re-admitting saved memory from an
 actual supervisor response: only the latter resets the persisted review counter.
 A reload during a worker request therefore retains the administrative cadence.
 
 The process-local host journal retains complete recent records in at most
-12 KiB: admitted read targets/reasons, atomically applied paths/digest, and trusted
+12 KiB: admitted read targets/reasons and actual supplied line ranges/bytes with
+complete/partial status, atomically applied paths/digest, and trusted
 validation outcomes. It enters the next durable campaign checkpoint and prompt
 as observations, not executable instructions, raw reasoning or completion proof.
 Actual patch journals and validation receipts remain authoritative. Chosen/revised

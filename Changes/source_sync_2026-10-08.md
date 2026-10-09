@@ -30,6 +30,39 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 9 source-informed supervisor follow-up
+
+The final follow-up also fixes current-read starvation and duplicate complete-file
+frame accounting exposed by the next operator run. Project Assistant permits
+one reviewed multi-command batch, honors 100 cubes and rolls back the whole
+batch on a later semantic failure. Native model/scene and independent-process
+succession acceptance remain with the operator. The latest isolated Debug output
+is `build/source-push-20261008/handoff-debug/EpochEditor.exe`; the operator's
+ordinary Debug/Release executable, active requests and private credentials are
+not replaced or changed by that build. Four focused rebuilt CPU contracts and
+the final pure Editor suite pass at 05:02:56; detailed build receipts are in the
+changelog. No new dependency source, tag, runtime package or Site admission.
+
+The focused next source checkpoint includes actual source bodies in supervisor
+initial/review generations, implementation-first worker handoff, saved actual
+context-size settings, complete-file packing when it fits, declaration/disjoint
+region retention and overlap-demand normalization. No raw token stream becomes
+source, and current source authority/preimage/byte guards remain intact.
+The README restores its preceding narrative and overview/story sections with
+Site hyperlinks removed and historical Windows/multicontext/Linux proof kept.
+The operator will supply the new multi-object scene shot after AI testing.
+
+Production isolated Debug pure contracts pass at 03:13:50; after no Editor
+remained, the normal `x64/Debug` build and pure suite pass at 03:25:11.
+Focused discovery/materializer/admission/codec CTests pass 4/4. Naming (610),
+layout/project references, exact dependency-sync and diff guards pass. The
+existing logger warning remains. No dependency source changes need publication.
+The operator explicitly keeps native runtime testing; no model/GUI/renderer or
+candidate launch is performed for these new fixes, and native useful
+patch/build/docking/succession is not claimed. Runtime release authorities and
+the prior Site hold stay unchanged. The commit names the exact source batch;
+do not export dirty unrelated solution/workspace changes or runtime caches.
+
 ### October 8–9 continuation (GitHub source pushed; Site still held)
 
 The subsequent source batch adds compact supervisor/worker handoffs, v3 retained

@@ -433,6 +433,16 @@ namespace epochengine::ai::development_proposal_codec
                 SourceArea::project,
                 "EPOCH_SOURCE_EDIT_REQUEST_V1\nInspect a project",
                 "PATH Projects/demo/project.main.cpp\n");
+            // Large admitted evidence must survive prompt framing exactly.
+            const auto largeEvidence = std::string{evidence} + std::string(600u * 1024u, ' ')
+                + "\nEXACT_EVIDENCE_TAIL\n";
+            for (const auto& prompt : {context_request_prompt(SourceArea::engine, objective, largeEvidence),
+                    protocol_prompt(SourceArea::engine, objective, largeEvidence)})
+                if (prompt.find(largeEvidence) == std::string::npos) return failed(__LINE__);
+            const std::string oversizedEvidence(maximum_context_evidence_bytes + 1u, ' ');
+            if (!context_request_prompt(SourceArea::engine, objective, oversizedEvidence).empty()
+                || !protocol_prompt(SourceArea::engine, objective, oversizedEvidence).empty())
+                return failed(__LINE__);
             for (const auto* prompt : {&context, &projectContext, &engine, &project, &grounded})
             {
                 if (prompt->find("ACTION CONTRACT") == std::string::npos

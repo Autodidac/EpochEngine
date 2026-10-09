@@ -15,6 +15,17 @@ operator evidence before making a broader absence claim.
 
 ## Overall Intent And Pass Continuity
 
+- October 9 integration clarification: use the supplied EngCoder 0.7.1 backend
+  behind Epoch's existing interface; do not import its GUI/window stack. Preserve
+  useful supervisor/worker/task memory behavior, but qualify private candidate
+  root, tool allowlist, event and approval ownership before full-task execution.
+  Its inspected task API still binds the global configured workspace. Existing
+  Chat inference integration does not establish full-agent integration.
+- Project Assistant must honor requested scene counts such as 100 cubes and
+  present one complete multi-command plan for one explicit approval. Keep fixed
+  semantic tools, canonical capacity and rollback on failure; do not restore
+  artificial eight-object/one-command milestones or grant general execution.
+
 - October 8 incremental-work requirement: save the short task plan and complete
   small buildable source units so model reloads need not restart the mission.
   Use an administrative supervisor generation to retain the task list and
@@ -130,12 +141,20 @@ These are durable requirements, not completion claims:
 - Discovery is cumulative and host-owned: exact reviewed evidence grows across the iteration instead of being replaced by small source slices.
 - Navigation uses a compact repository map plus bounded path/symbol/text/import/reference searches; exact bytes remain required before an edit is authorized.
 - Budget by context/evidence size, not a practical fixed file count. Stop repeated zero-information discovery after two stagnant rounds.
+- Use the actual loaded context, including an explicit endpoint/model setting
+  when inventory omits it. The operator reports Next Flash at 81,920 tokens.
+  Reserve output/framing; read complete files when they fit and sparse exact
+  regions when they do not. Do not discard a fifth useful region of a large
+  file or mistake sixteen displayed search hints for the search limit.
 - A new selector, line guess or safe fallback is not itself new evidence. Count
   exact returned source ranges/bytes, preserve accepted navigation on failed
   sharing and avoid replaying expensive proposals over the same fallback window.
 - Preserve the existing sandbox/build/test/approval/promotion boundary.
+- The supervisor must inspect current exact source, not only read receipts and
+  filenames, then hand off a concrete edit or one batched missing lookup.
+  The coder must not repeat satisfied investigation as its default next task.
 - Working-set residency is distinct from path/range memory. Small declarations
-  and current requested regions take budget priority; older exact regions may be
+  and retained exact regions take priority before widening current requests; older exact regions may be
   re-read only after whole-file revision verification. Evicted evidence can be
   requested again. No path count, remembered fingerprint or packed CPU contract
   proves that Qwen reached compilation or docked a successor.
@@ -217,10 +236,17 @@ These are durable requirements, not completion claims:
   Live Engine source, active projects, unrelated sandboxes, Git, releases, Site
   state, listeners, approvals, and host validation evidence stay outside model
   authority.
+- All indexed engine source should remain discoverable on demand; initial seeds
+  are not the allowed universe. Preserve exact atomic edits and visible changed
+  paths/hunk review so sandbox freedom does not become unnoticed live mutation.
 - Preserve a numbered mission plan and continuity. After each successful build,
   launch the candidate editor as a separate supervised PID/context in the parent
   grid, present current versus candidate evidence, and expose Keep Current,
   Choose Candidate, and the same session-wide Stop Self-Coding control.
+- Separate-process candidate lifetime is intentional crash isolation. Project
+  C++ scripting/multicontext remains useful, but must not quietly replace a
+  rebuilt-engine comparison with in-process hot-loading. Qualify fullscreen,
+  focus/minimize, resize/DPI, child exit and closure before trusting docking.
 - Keep/Choose must retire the losing child, retain exactly one sandbox parent,
   and continue with the next unfinished plan step. Automatic replacement of live
   source remains a future, separately reviewed policy.

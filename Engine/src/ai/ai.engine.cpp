@@ -371,6 +371,14 @@ namespace epochengine::ai
         // Streaming is the default for compatible APIs, including current
         // EngCoder. Preserve an explicit saved opt-out for older providers.
         std::vector<std::string> g_nonStreamingLocalEndpoints{};
+        struct LocalContextOverride final
+        {
+            std::string endpoint{};
+            std::string model{};
+            std::size_t tokens{};
+            friend bool operator==(const LocalContextOverride&, const LocalContextOverride&) = default;
+        };
+        std::vector<LocalContextOverride> g_localContextOverrides{};
         std::string g_selectedModel{ configured_model() };
         LocalModelSelectionOrigin g_selectedModelOrigin = g_selectedModel.empty()
             ? LocalModelSelectionOrigin::none : LocalModelSelectionOrigin::configured;
@@ -927,6 +935,7 @@ namespace epochengine::ai
             std::vector<std::string> endpoints{};
             std::string selected{};
             std::vector<std::string> non_streaming{};
+            std::vector<LocalContextOverride> context_overrides{};
         };
         constexpr std::string_view kLocalEndpointsHeader = "EPOCH_LOCAL_API_ENDPOINTS_V1\n";
 
@@ -943,6 +952,24 @@ namespace epochengine::ai
                 if (newline == std::string_view::npos) return std::nullopt;
                 const auto line = bytes.substr(0u, newline);
                 bytes.remove_prefix(newline + 1u);
+                if (line.starts_with("context="))
+                {
+                    const auto first = line.find('\t');
+                    const auto second = first == std::string_view::npos ? first : line.find('\t', first + 1u);
+                    if (first == std::string_view::npos || second == std::string_view::npos
+                        || preferences.context_overrides.size() >= 16u) return std::nullopt;
+                    std::size_t tokens{};
+                    const auto parsed = std::from_chars(line.data() + 8u, line.data() + first, tokens);
+                    const auto endpoint = line.substr(first + 1u, second - first - 1u);
+                    const auto model = line.substr(second + 1u);
+                    if (parsed.ec != std::errc{} || parsed.ptr != line.data() + first
+                        || tokens < 8192u || tokens > 1u * 1024u * 1024u
+                        || local_api_routes(endpoint).base_url != endpoint || !valid_preferred_model(model)
+                        || std::ranges::any_of(preferences.context_overrides, [&](const auto& value)
+                            { return value.endpoint == endpoint && value.model == model; })) return std::nullopt;
+                    preferences.context_overrides.push_back({std::string{endpoint}, std::string{model}, tokens});
+                    continue;
+                }
                 const bool selected = line.starts_with("selected=");
                 const bool nonStreaming = line.starts_with("nostream=");
                 if (!selected && !nonStreaming && !line.starts_with("endpoint=")) return std::nullopt;
@@ -975,6 +1002,9 @@ namespace epochengine::ai
             for (const auto& endpoint : preferences.non_streaming)
                 if (std::find(preferences.endpoints.begin(), preferences.endpoints.end(), endpoint)
                     == preferences.endpoints.end()) return std::nullopt;
+            for (const auto& value : preferences.context_overrides)
+                if (std::ranges::find(preferences.endpoints, value.endpoint) == preferences.endpoints.end())
+                    return std::nullopt;
             return preferences;
         }
 
@@ -987,6 +1017,8 @@ namespace epochengine::ai
                 bytes += "endpoint=" + endpoint + '\n';
             for (const auto& endpoint : preferences.non_streaming)
                 bytes += "nostream=" + endpoint + '\n';
+            for (const auto& value : preferences.context_overrides)
+                bytes += "context=" + std::to_string(value.tokens) + '\t' + value.endpoint + '\t' + value.model + '\n';
             return decode_endpoint_preferences(bytes) ? bytes : std::string{};
         }
 
@@ -999,6 +1031,7 @@ namespace epochengine::ai
             if (!preferences) return;
             g_savedLocalEndpoints = preferences->endpoints;
             g_nonStreamingLocalEndpoints = preferences->non_streaming;
+            g_localContextOverrides = preferences->context_overrides;
             // An explicit process configuration always outranks persisted UI state.
             if (configured_endpoint_override().empty()) g_selectedEndpoint = preferences->selected;
         }
@@ -2529,9 +2562,15 @@ namespace epochengine::ai
 
         [[nodiscard]] static std::size_t selected_model_context_capacity() noexcept
         {
+            if (g_localTransport != LocalInferenceTransport::OpenAiCompatible) return 0u;
             const auto capacity = selected_model_capacity();
-            return capacity.loaded_context_tokens != 0u
+            const auto endpoint = local_api_routes(g_selectedEndpoint).base_url;
+            const auto declared = std::ranges::find_if(g_localContextOverrides, [&](const auto& value)
+                { return value.endpoint == endpoint && value.model == g_selectedModel; });
+            const auto detected = capacity.loaded_context_tokens != 0u
                 ? capacity.loaded_context_tokens : capacity.maximum_context_tokens;
+            if (declared == g_localContextOverrides.end()) return detected;
+            return detected != 0u ? (std::min)(declared->tokens, detected) : declared->tokens;
         }
 
         static std::string extract_json_error_message(const std::string& response)
@@ -3030,18 +3069,10 @@ namespace epochengine::ai
                 if (loadedCapacity >= 8'192u)
                 {
                     budget.context_tokens = loadedCapacity;
-                    // Prompt bytes remain bounded independently of model capacity.
-                    // Epoch grows evidence only as discovery requires it instead of
-                    // filling a large context window by default.
-                    const std::size_t byteCapacity = loadedCapacity > (std::numeric_limits<std::size_t>::max)() / 4u
-                        ? (std::numeric_limits<std::size_t>::max)()
-                        : loadedCapacity * 4u;
-                    budget.maximum_prompt_bytes = (std::clamp)(
-                        byteCapacity / 2u,
-                        std::size_t{256u * 1024u},
-                        std::size_t{2u * 1024u * 1024u});
                     if (budget.output_tokens >= budget.context_tokens)
                         budget.output_tokens = (std::max)(std::size_t{2'048u}, budget.context_tokens / 8u);
+                    budget.maximum_prompt_bytes = source_prompt_byte_budget(
+                        budget.context_tokens, budget.output_tokens);
                 }
             }
             const auto stage = source_request_stage(
@@ -3259,7 +3290,7 @@ namespace epochengine::ai
         {
             // Selection is read-only. Coding may either request missing bytes
             // or propose an exact edit, never both in one response. Each tool
-            // retains its own schema and authority; the decoder admits one call.
+            // retains its own schema and explicit whole-plan approval authority.
             if (shape == StructuredSourceReply::context)
                 return "[" + source_context_tool_definition(catalog.paths.size()) + "]";
             if (shape == StructuredSourceReply::patch)
@@ -7030,7 +7061,7 @@ namespace epochengine::ai
             g_modelDetectionStatus = "Endpoint not saved: use an HTTP(S) localhost, 127.0.0.1 or [::1] API URL without credentials, queries or fragments.";
             return false;
         }
-        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url, g_nonStreamingLocalEndpoints};
+        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url, g_nonStreamingLocalEndpoints, g_localContextOverrides};
         if (std::find(preferences.endpoints.begin(), preferences.endpoints.end(),
                 routes.base_url) == preferences.endpoints.end())
         {
@@ -7082,7 +7113,7 @@ namespace epochengine::ai
         if (!g_projectAiAllowsLocalFallback) return false;
         const auto routes = local_api_routes(g_selectedEndpoint);
         if (routes.base_url.empty()) return false;
-        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url, g_nonStreamingLocalEndpoints};
+        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url, g_nonStreamingLocalEndpoints, g_localContextOverrides};
         if (std::find(preferences.endpoints.begin(), preferences.endpoints.end(), routes.base_url)
             == preferences.endpoints.end())
         {
@@ -7101,6 +7132,44 @@ namespace epochengine::ai
         g_nonStreamingLocalEndpoints = std::move(preferences.non_streaming);
         g_engineAi.reset(); // Next request captures the new mode; no model request is sent here.
         return true;
+    }
+
+    std::size_t local_model_context_override()
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        if (g_localTransport != LocalInferenceTransport::OpenAiCompatible) return 0u;
+        const auto routes = local_api_routes(g_selectedEndpoint);
+        const auto value = std::ranges::find_if(g_localContextOverrides, [&](const auto& item)
+            { return item.endpoint == routes.base_url && item.model == g_selectedModel; });
+        return value == g_localContextOverrides.end() ? 0u : value->tokens;
+    }
+
+    bool set_local_model_context_override(std::size_t tokens)
+    {
+        const std::lock_guard<std::recursive_mutex> lock{g_aiStateMutex};
+        restore_runtime_preference_if_needed();
+        apply_project_ai_profile_if_present();
+        if (!g_projectAiAllowsLocalFallback || g_localTransport != LocalInferenceTransport::OpenAiCompatible
+            || !valid_preferred_model(g_selectedModel) || (tokens != 0u && (tokens < 8192u || tokens > 1024u * 1024u)))
+            return false;
+        const auto routes = local_api_routes(g_selectedEndpoint);
+        if (routes.base_url.empty()) return false;
+        LocalEndpointPreferences preferences{g_savedLocalEndpoints, routes.base_url,
+            g_nonStreamingLocalEndpoints, g_localContextOverrides};
+        if (std::ranges::find(preferences.endpoints, routes.base_url) == preferences.endpoints.end())
+        {
+            if (preferences.endpoints.size() >= 16u) return false;
+            preferences.endpoints.push_back(routes.base_url);
+        }
+        std::erase_if(preferences.context_overrides, [&](const auto& value)
+            { return value.endpoint == routes.base_url && value.model == g_selectedModel; });
+        if (tokens != 0u) preferences.context_overrides.push_back({routes.base_url, g_selectedModel, tokens});
+        const auto encoded = encode_endpoint_preferences(preferences);
+        if (encoded.empty() || !write_text_file(local_endpoint_preference_file(), encoded)) return false;
+        g_savedLocalEndpoints = std::move(preferences.endpoints);
+        g_localContextOverrides = std::move(preferences.context_overrides);
+        return true; // No inference, model reload or client cancellation.
     }
 
     std::string active_model_name()
@@ -7420,15 +7489,16 @@ namespace epochengine::ai
         manifest.manifest_path = manifests_root() + "/open_source_model_provider.json";
         const InferenceBudget sourceBudget =
             inference_budget(InferenceWorkload::source_iteration);
-        const auto detectedCapacity = selected_model_capacity();
-        const std::size_t activeCapacity = detectedCapacity.loaded_context_tokens != 0u
-            ? detectedCapacity.loaded_context_tokens
-            : detectedCapacity.maximum_context_tokens;
+        const auto detectedCapacity = g_localTransport == LocalInferenceTransport::OpenAiCompatible
+            ? selected_model_capacity() : DetectedModelCapacity{};
+        const std::size_t activeCapacity = selected_model_context_capacity();
         manifest.loaded_context_capacity_tokens = detectedCapacity.loaded_context_tokens;
         manifest.maximum_context_capacity_tokens = detectedCapacity.maximum_context_tokens;
         manifest.host_context_budget_tokens = activeCapacity != 0u
             ? activeCapacity : sourceBudget.context_tokens;
         manifest.host_output_budget_tokens = sourceBudget.output_tokens;
+        if (manifest.host_output_budget_tokens >= manifest.host_context_budget_tokens)
+            manifest.host_output_budget_tokens = (std::max)(std::size_t{2048u}, manifest.host_context_budget_tokens / 8u);
         manifest.source_iteration_budget_available =
             manifest.available
             && manifest.host_context_budget_tokens > manifest.host_output_budget_tokens;
@@ -7528,12 +7598,14 @@ namespace epochengine::ai
     {
         const auto engCoder = local_api_routes("http://127.0.0.1:14321/v1");
         const LocalEndpointPreferences savedEndpoints{
-            {"http://localhost:1234/v1", engCoder.base_url}, engCoder.base_url, {engCoder.base_url}};
+            {"http://localhost:1234/v1", engCoder.base_url}, engCoder.base_url, {engCoder.base_url},
+            {{engCoder.base_url, "engcoder-foundation", 81'920u}}};
         const auto encodedEndpoints = encode_endpoint_preferences(savedEndpoints);
         const auto decodedEndpoints = decode_endpoint_preferences(encodedEndpoints);
         if (!decodedEndpoints || decodedEndpoints->endpoints != savedEndpoints.endpoints
             || decodedEndpoints->selected != savedEndpoints.selected
             || decodedEndpoints->non_streaming != savedEndpoints.non_streaming
+            || decodedEndpoints->context_overrides != savedEndpoints.context_overrides
             || engCoder.chat_completions_url != "http://127.0.0.1:14321/v1/chat/completions"
             || engCoder.responses_url != "http://127.0.0.1:14321/v1/responses"
             || engCoder.agent_tasks_url != "http://127.0.0.1:14321/api/tasks"
@@ -7562,10 +7634,20 @@ namespace epochengine::ai
                 encodedEndpoints + "endpoint=" + engCoder.base_url + '\n',
                 encodedEndpoints + "nostream=" + engCoder.base_url + '\n',
                 encodedEndpoints + "nostream=http://localhost:14322/v1\n",
+                encodedEndpoints + "context=81920\t" + engCoder.base_url + "\tengcoder-foundation\n",
+                encodedEndpoints + "context=0\t" + engCoder.base_url + "\tother\n",
+                encodedEndpoints + "context=81920x\t" + engCoder.base_url + "\tother\n",
+                encodedEndpoints + "context=2097152\t" + engCoder.base_url + "\tother\n",
+                encodedEndpoints + "context=81920\thttp://localhost:14322/v1\tother\n",
                 std::string{kLocalEndpointsHeader} + "selected=" + engCoder.base_url + '\n',
                 encodedEndpoints.substr(0u, encodedEndpoints.size() - 1u),
                 std::string(16'385u, 'x')})
             if (decode_endpoint_preferences(invalid)) return false;
+        if (source_prompt_byte_budget(81'920u, 32'768u) != 122'880u
+            || source_prompt_byte_budget(8192u, 8192u) != 0u
+            || source_prompt_byte_budget(262'144u, 32'768u) != 663'552u
+            || source_prompt_byte_budget(1024u * 1024u, 8192u) != 2u * 1024u * 1024u)
+            return false;
         const auto completeBody = openai_chat_request_body("contract-model", {}, "hello", 512u, false, false, false);
         const auto streamedBody = openai_chat_request_body("contract-model", {}, "hello", 512u, false, false, true);
         if (completeBody.find("\"stream\":false") == std::string::npos
