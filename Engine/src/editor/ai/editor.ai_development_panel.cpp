@@ -206,11 +206,9 @@ namespace epochengine::editor_ai_development_panel
             if (tokens < 8'192u)
                 return ai::inference_budget(ai::InferenceWorkload::source_iteration)
                     .maximum_prompt_bytes;
-            // A fallback manifest is not a detected loaded capacity.
-            if (manifest.loaded_context_capacity_tokens == 0u
-                && manifest.maximum_context_capacity_tokens == 0u
-                && ai::local_model_context_override() == 0u)
-                return ai::inference_budget(ai::InferenceWorkload::source_iteration).maximum_prompt_bytes;
+            // The default is a host packing policy, not a claim that the
+            // provider reported its loaded capacity. Explicit/detected smaller
+            // contexts still reduce this budget through the manifest.
             return ai::source_prompt_byte_budget(tokens, manifest.host_output_budget_tokens);
         }
 
@@ -1351,7 +1349,8 @@ namespace epochengine::editor_ai_development_panel
             const std::vector<ai::development_proposal_codec::ContextRead>& reads = {},
             const std::size_t evidenceBudget = maximum_source_context_evidence_bytes,
             const std::vector<ai::source_workspace::VerifiedRange>& retainedRanges = {},
-            const std::vector<std::string>& currentPaths = {})
+            const std::vector<std::string>& currentPaths = {},
+            const std::vector<std::string>& protectedPaths = {})
         {
             SourceContextLoadResult result{};
             if (sourceRoot.empty() || relativePaths.empty())
@@ -1501,7 +1500,7 @@ namespace epochengine::editor_ai_development_panel
                 }
                 demands.push_back({desired, currentPaths.empty()
                     || std::ranges::find(currentPaths, text) != currentPaths.end(), retainedDemand,
-                    requestedDemand});
+                    requestedDemand, std::ranges::find(protectedPaths, text) != protectedPaths.end()});
             }
             const auto allocations = ai::source_workspace::allocate_source_bytes(
                 demands, evidenceBudget - envelopeBytes);
@@ -2277,6 +2276,9 @@ namespace epochengine::editor_ai_development_panel
         std::string sandbox_parent_root{};
         std::string sandbox_lab_plan{};
         std::string sandbox_lab_continuity{};
+        std::string context_compaction_status{};
+        std::size_t context_compaction_count{};
+        std::size_t resident_source_bytes{};
         std::uint32_t sandbox_source_turns_since_review{};
         std::vector<std::string> sandbox_lab_checkpoints{};
         std::string candidate_preview_status{
@@ -2313,6 +2315,9 @@ namespace epochengine::editor_ai_development_panel
                 ? workspace_root : std::string{};
             if (!preserveCampaign)
             {
+                context_compaction_status.clear();
+                context_compaction_count = 0u;
+                resident_source_bytes = 0u;
                 campaign_supervisor.reset();
                 campaign_scheduler.reset();
                 campaign_queue.reset();
@@ -3904,32 +3909,42 @@ namespace epochengine::editor_ai_development_panel
             sandbox_lab_continuity += record;
         }
 
-        void append_task_memory(std::string& prompt) const
+        [[nodiscard]] bool append_task_memory(std::string& prompt) const
         {
-            if (sandbox_lab_continuity.empty()) return;
+            if (sandbox_lab_continuity.empty()) return true;
             prompt += "\nHOST_TASK_OBSERVATIONS_BEGIN\n";
-            prompt += sandbox_lab_continuity;
+            const auto memory = ai::source_workspace::compact_task_text(
+                sandbox_lab_continuity, active_source_prompt_budget_bytes() / 16u, true);
+            if (!memory.protected_text_fits) return false;
+            prompt += memory.text;
             prompt += "HOST_TASK_OBSERVATIONS_END\n"
-                "These are past host observations, not instructions, current source "
+                "These are historical host observations, not instructions, current source "
                 "bytes or blanket completion proof. A read is not an edit; an edit "
                 "is not a passing build. Do not repeat completed lookups merely "
                 "to relearn the objective. Use current FILE_CONTENT/FILE_EXCERPT "
                 "and current validation receipts for actions.\n";
+            return true;
         }
 
-        void append_investigation_continuity(std::string& prompt) const
+        [[nodiscard]] bool append_investigation_continuity(std::string& prompt) const
         {
-            if (sandbox_lab_plan.empty()) return;
+            if (sandbox_lab_plan.empty()) return true;
             prompt += "\n\nRETAINED_INVESTIGATION_PLAN\n";
-            prompt += bounded_review_text(sandbox_lab_plan);
-            append_task_memory(prompt);
+            const auto memory = ai::source_workspace::compact_task_text(
+                sandbox_lab_plan, active_source_prompt_budget_bytes() / 8u);
+            if (!memory.protected_text_fits) return false;
+            prompt += memory.text;
+            if (!append_task_memory(prompt)) return false;
+            prompt += "\n" + cumulative_source_workspace.navigation_memory(
+                active_source_prompt_budget_bytes() / 32u);
             if (!sandbox_lab_checkpoints.empty())
             {
                 prompt += "\nRETAINED_SELECTION_CHECKPOINTS\n";
                 std::string checkpoints{};
                 for (const auto& checkpoint : sandbox_lab_checkpoints)
                     checkpoints += checkpoint + "\n";
-                prompt += bounded_review_text(checkpoints);
+                prompt += ai::source_workspace::compact_task_text(checkpoints,
+                    active_source_prompt_budget_bytes() / 32u, true).text;
                 prompt += "\nEND_RETAINED_SELECTION_CHECKPOINTS\n";
             }
             prompt += "\nEND_RETAINED_INVESTIGATION_PLAN\n"
@@ -3942,6 +3957,11 @@ namespace epochengine::editor_ai_development_panel
                 "SOURCE_ID and REVIEWED_SOURCE_ID numbers are request-local; "
                 "resolve saved paths against the current catalog, never reuse "
                 "a numeric ID from an earlier generation or saved plan. "
+                "The host compacts prompt history automatically. REMEMBERED_RANGE "
+                "records describe archived verified navigation, not code currently "
+                "visible to you; only current FILE blocks authorize exact edits. "
+                "Request a specific archived dependency if missing rather than "
+                "restarting the whole investigation. Do not count words or steps. "
                 "Start editing immediately when the current bytes cover the next "
                 "buildable unit. Do not reread merely to confirm paths or repeat "
                 "the supervisor's discovery. If the current source is insufficient, request the exact "
@@ -3954,6 +3974,7 @@ namespace epochengine::editor_ai_development_panel
                 "observed callable/definition names rather than repeatedly guessing "
                 "generic theme/type words. Use SOURCE_QUERY_MATCH_LINES for explicit "
                 "cursors. Do not restart a generic investigation or invent a defect.";
+            return true;
         }
 
         [[nodiscard]] std::size_t source_request_evidence_budget_bytes() const
@@ -3963,7 +3984,7 @@ namespace epochengine::editor_ai_development_panel
                 : ai::development_proposal_codec::SourceArea::project;
             std::string envelope = ai::development_proposal_codec::protocol_prompt(
                 area, development_objective, {});
-            append_investigation_continuity(envelope);
+            if (!append_investigation_continuity(envelope)) return 0u;
             if (!append_repair_diagnostic(envelope)) return 0u;
             // Reserve mandatory task/repair framing before loading FILE bytes.
             // The campaign digest wrapper and correction framing are separate
@@ -3998,8 +4019,8 @@ namespace epochengine::editor_ai_development_panel
                     "generation. The coding generation returns its read/edit result "
                     "to the host; the supervisor periodically reconciles that "
                     "evidence without restarting the mission.\n"
-                    "Plan against this digest-bound reviewed scope in three to six "
-                    "concise actionable steps covering focused investigation, the "
+                    "Plan against this digest-bound reviewed scope in actionable "
+                    "tasks covering focused investigation, the "
                     "next buildable edit, dependencies, build and test. Make "
                     "the steps specific to this objective, with a concrete success "
                     "criterion and relevant reviewed paths when useful. Do not "
@@ -4022,8 +4043,11 @@ namespace epochengine::editor_ai_development_panel
                 prompt += "\nSUPERVISOR_REVIEWED_SOURCE_END\n";
                 if (sandbox_lab_enabled && !sandbox_lab_plan.empty())
                 {
+                    const auto memory = ai::source_workspace::compact_task_text(sandbox_lab_plan,
+                        active_source_prompt_budget_bytes() / 8u);
+                    if (!memory.protected_text_fits) return {};
                     prompt += "\nPERSISTED_SANDBOX_PLAN\n"
-                        + bounded_review_text(sandbox_lab_plan)
+                        + memory.text
                         + "\nCOMPLETED_SELECTION_CHECKPOINTS\n";
                     for (const auto& checkpoint : sandbox_lab_checkpoints)
                         prompt += checkpoint + "\n";
@@ -4037,14 +4061,18 @@ namespace epochengine::editor_ai_development_panel
                 else
                 {
                     prompt +=
-                        "\nReturn three to six numbered implementation tasks, not "
+                        "\nReturn the implementation tasks needed for this objective, not "
                         "an introduction or a generic subsystem checklist.";
                 }
-                append_task_memory(prompt);
+                if (!append_task_memory(prompt)) return {};
                 prompt +=
                     "\nEnd with NEXT_GENERATION followed by one concrete handoff "
                     "(next task, needed source/dependencies, expected result), then "
-                    "END_NEXT_GENERATION. Keep the entire response under 300 words. "
+                    "END_NEXT_GENERATION. No word or step quota; do not count or "
+                    "discuss length. Produce a refreshed mission checkpoint: retain "
+                    "source owners, decisions, receipt-backed completed work, open "
+                    "dependencies and the next actionable unit; remove repeated "
+                    "discovery narrative. The host handles context compaction. "
                     "Do not emit a source proposal, reasoning monologue or tool call. "
                     "Do not claim edits, builds, approval, Git, release, or live-source authority.";
                 if (prompt.size() > active_source_prompt_budget_bytes()) return {};
@@ -4063,7 +4091,7 @@ namespace epochengine::editor_ai_development_panel
                 + "\nEND_CAMPAIGN_BINDING\n\n"
                 + ai::development_proposal_codec::protocol_prompt(
                     area, development_objective, source_context_evidence);
-            append_investigation_continuity(prompt);
+            if (!append_investigation_continuity(prompt)) return {};
             if (!append_repair_diagnostic(prompt))
                 return {};
             append_source_path_catalog(prompt);
@@ -4860,15 +4888,12 @@ namespace epochengine::editor_ai_development_panel
                 snapshot.phase,
                 source_workspace_ready && !source_workspace_pending,
                 static_cast<bool>(campaign_orchestrator));
-            gui::label("Guided Session");
-            gui::property_row(
-                "Progress",
-                epochengine::format_text(
-                    "Step {} of 6 - {}",
-                    presentation.step,
-                    presentation.title));
-            gui::wrapped_label(presentation.next_action, width);
-            gui::property_row(
+            if (advanced_controls)
+            {
+                gui::label("Provider / Host Workflow");
+                gui::property_row("Host phase", presentation.title);
+                gui::wrapped_label(presentation.next_action, width);
+                gui::property_row(
                 "Model",
                 campaign_provider
                         == ai::project_profile::Provider::external_mcp
@@ -4887,7 +4912,8 @@ namespace epochengine::editor_ai_development_panel
                     ? std::string{"Not ready"}
                     : input.selected_transport.empty()
                         ? std::string{"Transport not configured"}
-                        : std::string{"Ready - "} + input.selected_transport);
+                        : std::string{"Configured - "} + input.selected_transport);
+            }
 
             if (input.external_mcp_available
                 && (!campaign_orchestrator || terminal))
@@ -5327,7 +5353,7 @@ namespace epochengine::editor_ai_development_panel
                             + (input.selected_endpoint.empty()
                                 ? std::string{"the selected provider"}
                                 : input.selected_endpoint)
-                            + ". Source-file contents are not included in this planning step.",
+                            + ". This supervisor step includes the current exact reviewed source; it cannot edit or execute it.",
                         width);
                     const std::string sendLabel{"Send for Plan"};
                     if (gui::button(sendLabel, {width, 30.0f}))
@@ -5598,7 +5624,8 @@ namespace epochengine::editor_ai_development_panel
                     "REMEMBERED_RANGE is navigation only, not resident patch evidence; "
                     "request a necessary older range again if its exact FILE_CONTENT/FILE_EXCERPT "
                     "block is absent from the current request.";
-                output.model_prompt += cumulative_source_workspace.navigation_memory();
+                if (sandbox_lab_plan.empty()) output.model_prompt += cumulative_source_workspace.navigation_memory(
+                    active_source_prompt_budget_bytes() / 32u);
             }
             if (!model_reply_correction_diagnostic.empty())
             {
@@ -5619,7 +5646,7 @@ namespace epochengine::editor_ai_development_panel
                 output.model_prompt +=
                     "\nEND_EPOCH_SOURCE_CONTEXT_CORRECTION_V1";
             }
-            append_investigation_continuity(output.model_prompt);
+            if (!append_investigation_continuity(output.model_prompt)) return reject_model_prompt_budget();
             if (!append_repair_diagnostic(output.model_prompt, !hasReviewedSource))
                 return reject_model_prompt_budget();
             append_source_path_catalog(output.model_prompt,
@@ -5667,7 +5694,7 @@ namespace epochengine::editor_ai_development_panel
                 output.model_prompt += model_reply_correction_diagnostic;
                 output.model_prompt += "\nEND_EPOCH_SOURCE_PROTOCOL_CORRECTION_V1";
             }
-            append_investigation_continuity(output.model_prompt);
+            if (!append_investigation_continuity(output.model_prompt)) return reject_model_prompt_budget();
             if (!append_repair_diagnostic(output.model_prompt))
                 return reject_model_prompt_budget();
             append_source_path_catalog(output.model_prompt);
@@ -6802,6 +6829,31 @@ namespace epochengine::editor_ai_development_panel
                 || !memory.sandbox_lab_continuity.ends_with('\n'))
                 return false;
         }
+        {
+            Panel handoffFixture{};
+            auto& memory = *handoffFixture.implementation_;
+            memory.sandbox_lab_plan = "1. Preserve existing saved preference values.\n"
+                "   Append the new choice without renumbering existing entries.\n\n";
+            for (std::size_t index{}; index < 120u; ++index)
+                memory.sandbox_lab_plan += "Old investigation record " + std::to_string(index)
+                    + ": " + std::string(160u, 'x') + '\n';
+            const std::string handoff = "NEXT_GENERATION\nImplement the exact palette owners and preserve saved enum values.\nEND_NEXT_GENERATION\n";
+            memory.sandbox_lab_plan += handoff;
+            std::string prompt{};
+            if (!memory.append_investigation_continuity(prompt)
+                || prompt.find(handoff) == std::string::npos
+                || prompt.find("Append the new choice without renumbering") == std::string::npos
+                || prompt.find("Older records compacted") == std::string::npos
+                || Implementation::bounded_review_text(memory.sandbox_lab_plan).find(handoff) != std::string::npos)
+                return false;
+            memory.sandbox_lab_plan = "NEXT_GENERATION\n"
+                + std::string(active_source_prompt_budget_bytes() / 8u, 'x')
+                + "\nEND_NEXT_GENERATION\n";
+            prompt.clear();
+            if (memory.append_investigation_continuity(prompt)
+                || memory.source_request_evidence_budget_bytes() != 0u)
+                return false;
+        }
         const auto failed = [](int line)
         {
             logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
@@ -7380,10 +7432,26 @@ namespace epochengine::editor_ai_development_panel
         budgetPromptState.development_objective.append(
             8u * 1024u - budgetPromptState.development_objective.size(), 'o');
         budgetPromptState.campaign_scope_digest = std::string(64u, 'a');
+        std::string failedProposal = "FAILED_PROPOSAL_FIRST \xe2\x82\xac\n";
+        constexpr std::string_view failedProposalEnd{"\nFAILED_PROPOSAL_LAST \xf0\x9f\x8c\x8d\n"};
+        failedProposal.append(16u * 1024u - failedProposal.size() - failedProposalEnd.size(), 'f');
+        failedProposal += failedProposalEnd;
+        budgetPromptState.source_repair_diagnostic =
+            "\nVERIFIED_HOST_REPAIR_CONTEXT_V1\nGATE Debug compiler\nREPAIR_ATTEMPT 1 OF 3\n"
+            + std::string{"HOST_FULL_EVIDENCE_SHA256 "}
+            + Implementation::digest_text(verboseFailure) + "\n"
+            + repairExcerpt + "\nEND_VERIFIED_HOST_REPAIR_CONTEXT_V1\n"
+            + "\nFAILED_CANDIDATE_PROPOSAL_REFERENCE\n" + failedProposal
+            + "\nEND_FAILED_CANDIDATE_PROPOSAL_REFERENCE\n";
+        budgetPromptState.model_reply_correction_diagnostic = std::string(2048u, 'd');
         // Exercise the selected model's bounded evidence window, not the
-        // cumulative workspace ceiling, with one navigation batch of paths.
+        // cumulative workspace ceiling. Reserve the actual mandatory repair
+        // envelope before generating source, exactly as production packing does.
+        const auto fixtureSourceBudget = budgetPromptState.source_request_evidence_budget_bytes();
+        if (fixtureSourceBudget <= 4096u) return failed(__LINE__);
         const std::size_t fixtureEvidenceBytes = (std::min)(
-            active_source_evidence_budget_bytes(), repairPromptBudget / 2u);
+            active_source_evidence_budget_bytes(),
+            fixtureSourceBudget - 4096u);
         std::array<std::string, 12u> sourceBlocks{};
         const auto sourceBlock = [](const std::string& path, const std::string& content)
         {
@@ -7453,18 +7521,6 @@ namespace epochengine::editor_ai_development_panel
             budgetPromptState.source_path_catalog_evidence += pathLine;
         }
         budgetPromptState.source_path_catalog_evidence += lateCatalog;
-        std::string failedProposal = "FAILED_PROPOSAL_FIRST \xe2\x82\xac\n";
-        constexpr std::string_view failedProposalEnd{"\nFAILED_PROPOSAL_LAST \xf0\x9f\x8c\x8d\n"};
-        failedProposal.append(16u * 1024u - failedProposal.size() - failedProposalEnd.size(), 'f');
-        failedProposal += failedProposalEnd;
-        budgetPromptState.source_repair_diagnostic =
-            "\nVERIFIED_HOST_REPAIR_CONTEXT_V1\nGATE Debug compiler\nREPAIR_ATTEMPT 1 OF 3\n"
-            + std::string{"HOST_FULL_EVIDENCE_SHA256 "}
-            + Implementation::digest_text(verboseFailure) + "\n"
-            + repairExcerpt + "\nEND_VERIFIED_HOST_REPAIR_CONTEXT_V1\n"
-            + "\nFAILED_CANDIDATE_PROPOSAL_REFERENCE\n" + failedProposal
-            + "\nEND_FAILED_CANDIDATE_PROPOSAL_REFERENCE\n";
-        budgetPromptState.model_reply_correction_diagnostic = std::string(2048u, 'd');
         const auto expectedSource = budgetPromptState.source_context_evidence;
         const auto expectedCatalog = budgetPromptState.source_path_catalog_evidence;
         const auto expectedRepair = budgetPromptState.source_repair_diagnostic;
@@ -8400,6 +8456,29 @@ namespace epochengine::editor_ai_development_panel
                         && slice.exact_bytes == declarationBytes; })) return failed(__LINE__);
             for (const auto& range : neededRanges)
                 if (std::ranges::none_of(retainedRead.verified_ranges, [&](const auto& supplied)
+                    { return supplied.path == range.path && supplied.source_sha256 == range.source_sha256
+                        && supplied.byte_offset <= range.byte_offset
+                        && supplied.byte_offset + supplied.byte_count >= range.byte_offset + range.byte_count; }))
+                    return failed(__LINE__);
+            trace.stage = "mission compaction archives unrelated source before evicting task owners";
+            std::vector<std::string> broadPaths{declarationPath, navigationPath, std::string{completeOne}};
+            for (std::size_t i{}; i < 12u; ++i)
+            {
+                const auto path = "Engine/src/ai/ai.passive_" + std::to_string(i) + ".cpp";
+                if (!writeFixtureSource(path, "// irrelevant old read\n" + std::string(8192u, ' ') + '\n'))
+                    return failed(__LINE__);
+                broadPaths.push_back(path);
+            }
+            const auto missionSet = ai::source_workspace::select_working_set(broadPaths,
+                {std::string{completeOne}}, "Next edit depends on " + declarationPath + " and " + navigationPath);
+            const auto missionRead = load_reviewed_source_context(fixture.path.generic_string(),
+                missionSet.resident_paths, {}, {}, {}, 128u * 1024u, neededRanges,
+                {std::string{completeOne}}, missionSet.resident_paths);
+            if (!missionRead.accepted || missionSet.archived_paths.size() != 12u
+                || missionRead.file_count != 3u || missionRead.evidence.find("irrelevant old read") != std::string::npos)
+                return failed(__LINE__);
+            for (const auto& range : neededRanges)
+                if (std::ranges::none_of(missionRead.verified_ranges, [&](const auto& supplied)
                     { return supplied.path == range.path && supplied.source_sha256 == range.source_sha256
                         && supplied.byte_offset <= range.byte_offset
                         && supplied.byte_offset + supplied.byte_count >= range.byte_offset + range.byte_count; }))
@@ -10541,10 +10620,6 @@ namespace epochengine::editor_ai_development_panel
         auto workItems = [&]()
         {
             std::vector<WorkDisplayItem> items{};
-            if (discoveringSource || planningChanges)
-                items.push_back({discoveringSource
-                    ? "Discover additional source (previous context retained)"
-                    : "Prepare the implementation plan", WorkDisplayState::active});
             const auto implementationState = implementationApplied
                 ? WorkDisplayState::complete
                 : codingActive && !discoveringSource && !planningChanges ? WorkDisplayState::active
@@ -10574,9 +10649,9 @@ namespace epochengine::editor_ai_development_panel
                 items.push_back({std::move(objective), implementationState});
             }
 
-            const auto buildState = state.source_build_verified
-                    || state.source_release_build_verified
-                    || state.source_headless_build_verified
+            const auto buildState = (state.source_build_verified
+                    && state.source_release_build_verified
+                    && state.source_headless_build_verified)
                     || state.candidate_preview_pending || state.candidate_preview_ready
                 ? WorkDisplayState::complete
                 : anyBuildPending ? WorkDisplayState::active
@@ -10613,7 +10688,7 @@ namespace epochengine::editor_ai_development_panel
         const float workProgress = workItems.empty() ? 0.0f
             : static_cast<float>(completedWork) / static_cast<float>(workItems.size());
 
-        gui::label("Engine Work");
+        gui::label("Engine Work / Live Status");
         if (session.visible || state.sandbox_lab_enabled)
         {
             const std::string elapsed = session.elapsed.empty()
@@ -10632,6 +10707,36 @@ namespace epochengine::editor_ai_development_panel
                 passAge % 60u));
             if (!input.selected_model.empty())
                 gui::property_row("Model", input.selected_model);
+            gui::property_row("Endpoint", input.selected_endpoint.empty()
+                ? std::string{"Not selected"} : input.selected_endpoint);
+            const auto activity = describe_model_activity(input);
+            if (activity.visible)
+            {
+                gui::progress_bar(gui::ProgressBarOptions{
+                    .label = activity.label,
+                    .status = activity.elapsed.empty() ? std::string{} : "Current request " + activity.elapsed,
+                    .value = 0.0f, .size = {width, 22.0f}, .show_percent = false,
+                    .activity = true, .activity_phase = activity.animation_phase});
+                gui::wrapped_label(activity.detail, width);
+            }
+            const auto manifest = ai::active_model_manifest();
+            gui::label("Context / Checkpoint");
+            gui::property_row("Context budget", epochengine::format_text(
+                "{} tokens | {} output reserved | {} KiB prompt estimate",
+                manifest.host_context_budget_tokens, manifest.host_output_budget_tokens,
+                active_source_prompt_budget_bytes() / 1024u));
+            gui::property_row("Resident source", epochengine::format_text(
+                "{} files | {} KiB | {} known ranges retrievable",
+                state.campaign_reviewed_paths.size(), state.resident_source_bytes / 1024u,
+                state.cumulative_source_workspace.ranges().size()));
+            gui::property_row("Source reads", epochengine::format_text(
+                "{} admitted | {} corrections | {} compiler repairs",
+                state.source_context_expansions, state.model_reply_corrections, state.source_repair_attempts));
+            gui::property_row("Checkpoint", state.sandbox_lab_plan.empty()
+                ? std::string{"Waiting for supervisor plan"}
+                : std::string{"Plan and host observations retained; unfinished tokens are not saved"});
+            if (!state.context_compaction_status.empty())
+                gui::wrapped_label(state.context_compaction_status, width);
 
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = "Verified workflow steps",
@@ -10640,7 +10745,7 @@ namespace epochengine::editor_ai_development_panel
                 .size = {width, 22.0f},
                 .show_percent = false});
 
-            gui::label("Work Plan");
+            gui::label("Verified Milestones / Not Model Percent Complete");
             for (const auto& item : workItems)
             {
                 const std::string_view marker = item.state == WorkDisplayState::complete
@@ -10672,7 +10777,7 @@ namespace epochengine::editor_ai_development_panel
             gui::wrapped_label(state.status_message, width);
 
         const auto activity = describe_model_activity(input);
-        if (activity.visible)
+        if (activity.visible && !session.visible && !state.sandbox_lab_enabled)
         {
             gui::progress_bar(gui::ProgressBarOptions{
                 .label = activity.label,
@@ -11698,12 +11803,15 @@ namespace epochengine::editor_ai_development_panel
                 read == state.pending_source_context_reads.end() ? 0u : read->first_line,
                 read == state.pending_source_context_reads.end() ? std::string{} : read->query);
         }
-        const std::vector<std::string> sharedSourcePaths =
-            pendingWorkspace.reviewed_paths();
+        const auto workingSet = ai::source_workspace::select_working_set(
+            pendingWorkspace.reviewed_paths(), state.pending_source_context_paths,
+            state.sandbox_lab_plan);
+        const auto& sharedSourcePaths = workingSet.resident_paths;
         auto sharedReads = state.pending_source_context_reads;
         for (const auto& reviewed : pendingWorkspace.reviewed())
         {
             if ((reviewed.first_line != 0u || !reviewed.query.empty())
+                && std::ranges::find(sharedSourcePaths, reviewed.path) != sharedSourcePaths.end()
                 && std::ranges::find(state.pending_source_context_paths, reviewed.path)
                     == state.pending_source_context_paths.end())
             {
@@ -11743,7 +11851,7 @@ namespace epochengine::editor_ai_development_panel
             sharedReads,
             state.source_request_evidence_budget_bytes(),
             pendingWorkspace.ranges(),
-            state.pending_source_context_paths);
+            state.pending_source_context_paths, sharedSourcePaths);
         state.status_message = loaded.status;
         state.source_navigation_fallbacks += loaded.navigation_fallbacks;
         if (loaded.navigation_fallbacks != 0u)
@@ -11865,6 +11973,56 @@ namespace epochengine::editor_ai_development_panel
                     evidence.project_relative_path) == state.campaign_reviewed_paths.end())
                 state.campaign_reviewed_paths.push_back(evidence.project_relative_path);
         state.campaign_reviewed_reads = sharedReads;
+        state.resident_source_bytes = loaded.source_bytes;
+        std::size_t archivedRanges{};
+        std::size_t archivedBytes{};
+        for (const auto& known : state.cumulative_source_workspace.ranges())
+        {
+            std::size_t covered{};
+            for (const auto& resident : loaded.verified_ranges)
+            {
+                if (resident.path != known.path || resident.source_sha256 != known.source_sha256) continue;
+                const auto begin = (std::max)(resident.byte_offset, known.byte_offset);
+                const auto end = (std::min)(resident.byte_offset + resident.byte_count,
+                    known.byte_offset + known.byte_count);
+                if (begin < end) covered += end - begin;
+            }
+            if (covered < known.byte_count)
+            { ++archivedRanges; archivedBytes += known.byte_count - covered; }
+        }
+        const auto compactPlan = ai::source_workspace::compact_task_text(
+            state.sandbox_lab_plan, active_source_prompt_budget_bytes() / 8u);
+        const auto compactJournal = ai::source_workspace::compact_task_text(
+            state.sandbox_lab_continuity, active_source_prompt_budget_bytes() / 16u, true);
+        if (!workingSet.archived_paths.empty() || archivedRanges != 0u
+            || compactPlan.omitted_records != 0u || compactJournal.omitted_records != 0u)
+        {
+            ++state.context_compaction_count;
+            state.context_compaction_status = epochengine::format_text(
+                "Context compacted #{}: evidence {} -> {} bytes; {} source files / {} ranges resident. "
+                "{} historical ranges ({} bytes) remain retrievable; {} observation/plan records omitted from this prompt. "
+                "No files or completed edits deleted.", state.context_compaction_count,
+                state.source_context_evidence.size(), loaded.evidence.size(), loaded.file_count,
+                loaded.verified_ranges.size(), archivedRanges, archivedBytes,
+                compactPlan.omitted_records + compactJournal.omitted_records);
+            output.campaign_evidence.push_back(state.context_compaction_status);
+            state.note_task_observation(state.context_compaction_status);
+            state.emit_iteration_analytics("context_compacted", "retained", "pending");
+            logger::get("Engine.AI.Context").log(logger::LogLevel::INFO,
+                state.context_compaction_status, std::source_location::current());
+            for (const auto& path : workingSet.archived_paths)
+                logger::get("Engine.AI.Context").logf(logger::LogLevel::INFO,
+                    std::source_location::current(), "Archived prompt source; path={}; navigation_retained=true", path);
+        }
+        logger::get("Engine.AI.Context").logf(logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Context budget; tokens={}; output_reserve_tokens={}; prompt_limit_bytes={}; evidence_bytes={}; "
+            "source_bytes={}; resident_files={}; archived_files={}; known_ranges={}; "
+            "budget_is_estimate=true; byte_compaction=true; token_kv_recovery=false",
+            ai::active_model_manifest().host_context_budget_tokens,
+            ai::active_model_manifest().host_output_budget_tokens, active_source_prompt_budget_bytes(),
+            loaded.evidence.size(), loaded.source_bytes, loaded.file_count, workingSet.archived_paths.size(),
+            state.cumulative_source_workspace.ranges().size());
         // Metadata only: no credentials, prompt/source bytes or raw query text.
         // Scope/session identity and actual ranges make the next native run
         // diagnosable even when the provider does not expose token progress.

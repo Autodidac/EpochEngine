@@ -30,6 +30,30 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 9 context compaction and normal binary follow-up
+
+Automatic HTTP packing defaults to 81920 tokens, with smaller reported/declared
+contexts respected. Supervisor word/step quotas are removed. Mission-owner
+working sets, whole-record plan compaction and protected complete handoffs keep
+relevant source/task state before unrelated read history. Archived source stays
+retrievable; visible notices and payload-free budget logs expose compaction.
+AI Controls groups live request, checkpoint/residency and real host milestones.
+
+The operator stopped the older Debug run. All normal Windows Editor/HeadlessCI
+modes build; final pure suites pass at 17:44:56 (Debug), 17:45:12 (Release) and
+17:45:29 (ReleaseWithDebugInfo). Build receipts are under
+build/context-compaction-20261009 and each output's logs. Source naming, layout,
+dependency and diff guards pass; mirrored dependency code is unchanged.
+The optional headless EngCoder backend is built locally under ignored
+addons/EngCoder/bin, with GUI disabled and existing dependencies reused; help
+check and installer AST pass. It is not a public payload, activated service or
+full-agent Epoch integration. No model/GPU/docked-candidate test was launched.
+
+This tested batch is the authorized focused GitHub main/stable source checkpoint.
+Site publication remains held. No source export, native-success claim or runtime
+release/tag change is admitted; unrelated solution/workspace/runtime files stay
+outside the commit. The normal x64/Release Editor is the next operator-test binary.
+
 ### October 9 stopped-run validation and repair follow-up
 
 The older Release run actually applied code and passed six validation actors;

@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 9, 2026, after the stopped-run validation/repair fixes. Only unfinished acceptance
+Updated October 9, 2026, after context compaction and the three normal Windows builds. Only unfinished acceptance
 belongs here. Product order: roadmap.md; durable intent: mission_cache.md;
 completed work/evidence: changelog.txt; behavior: owning subsystem contracts.
 Historical process IDs and dates are evidence, not live instructions.
@@ -16,6 +16,44 @@ A read, emitted tokens, accepted patch or passing host contract is not a built
 successor. Preserve older unfinished goals; do not widen this gate.
 
 ## Latest Native Evidence
+
+The operator stopped the normal Debug run (PID 25044) before updating binaries.
+Its campaign was session_117412737122305, analytics key
+`e29c983220edec25a6e6889ef7891f22194dd26e609a07ffe0d015c0573792ca`.
+Completed worker replies through 17:20:20 were five reads, not patches. The old
+unknown-context fallback packed roughly 210–233 KiB prompts. Actual source logs
+show declarations, palette/mapping and selector regions rotating out of residency
+while unrelated prior files remained. This is observed host working-set churn;
+no provider disconnect, new build or preview is inferred from those replies.
+
+The repair defaults automatic HTTP context to 81,920 tokens (smaller detected/
+declared values win), removes word/step quotas, keeps complete task records and
+the full next-generation handoff, and prioritizes current reads plus mission
+owners over unrelated historical files. Archived source remains retrievable;
+no candidate edit, file or full checkpoint is deleted. Compaction notices and
+budget/residency logs distinguish resident bytes from remembered navigation.
+AI Controls collates live status, request, context/checkpoint and actual verified
+milestones instead of the misleading Step N of 6 label. Visual/native usefulness
+remains operator-tested, not proved by those labels.
+
+After the operator closed the Editor, normal Debug, Release and
+ReleaseWithDebugInfo Editor/HeadlessCI binaries were rebuilt. Complete pure
+engine contracts pass at 17:44:56, 17:45:12 and 17:45:29 respectively. Logs are
+`build/context-compaction-20261009/{Debug,Release,ReleaseWithDebugInfo}-final.log`;
+each binary's `logs/Engine.Editor.SelfTest.log` has the final receipt. Regressions
+cover mission-owner residency, archived unrelated history, wrapped task details,
+handoffs beyond the UI preview, refused oversized handoffs, and repair packing
+against the real envelope. Naming/layout/dependency guards pass. Initial fixture
+expectation/budget/helper errors were repaired before final proof. No model,
+GUI, renderer, full generated-project validation or candidate was launched.
+
+The operator-requested headless EngCoder 0.7.1 backend was built locally from
+the supplied Async UI 1 source with existing dependencies and GUI disabled.
+`addons/EngCoder/bin` contains the backend executables/DLLs; the server help
+check exits successfully. No listener, model or training job was started, no
+EngCoder GUI was imported, and no original engine source was assigned to it.
+Its global-workspace `/api/tasks` route is still not connected to Epoch candidate
+execution. Installation is not full-agent integration or native succession proof.
 
 The stopped Release run (PID 39408, started 05:27:47) used the older 05:22:40
 executable, not the later 06:17 Debug repair. Its retained sandbox is
@@ -279,10 +317,11 @@ a scene. AI acceptance remains first.
    Confirm actual dispatch, admitted ranges, supervisor handoff, useful atomic
    patch and compiler receipt. Old native results cannot prove new-code behavior.
    Do not hot-change an active inference, executable or configuration.
-   After the operator finishes the current Debug run, test the rebuilt normal
-   Release executable above. Save 81920 for the exact EngCoder endpoint/model
-   in Model Settings, then test fresh packing/dispatch. The existing normal
-   Debug process is not the new repair binary.
+   The operator closed the old run; all three normal Windows modes now contain
+   the repair. Test the normal x64/Release/EpochEditor.exe. Automatic context
+   defaults to 81920 when the provider omits capacity; only enter an override
+   when the actual loaded value differs. Start a fresh mission and inspect its
+   compaction/residency and useful patch/build receipts, not the old session.
 2. Read the complete first failing build transcript and repair its earliest cause
    once. Distinguish missing host snapshot/dependency inputs from model errors.
    Reuse host dependencies read-only; do not reinstall them per candidate.

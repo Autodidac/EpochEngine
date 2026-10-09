@@ -1442,6 +1442,12 @@ Editor. They identify a binary build, not a source commit or validation receipt.
    that memory, current exact source bodies and any causal failure. This is not
    retained model KV state or recovery of unfinished tokens. A sparse working set
    fits the selected context budget; omitted source must be retrieved, not guessed.
+   Automatic HTTP packing defaults to 81,920 tokens when the provider reports no
+   capacity; smaller detected/operator values win. The host prioritizes requested
+   files and saved mission owners, archives unrelated read history as retrievable
+   metadata, and compacts whole task/observation records without clipping the
+   next-generation handoff. It reports compaction and actual residency in the
+   Context / Checkpoint section. The supervisor has no word/step quota.
    Source IDs are request-local. Reloading the provider can retry the interrupted
    unit without discarding previously committed candidate edits. Known-checkpoint
    resume exists; automatic discovery after a cold Editor start is still open.
@@ -1469,6 +1475,14 @@ Editor. They identify a binary build, not a source commit or validation receipt.
    Live-source promotion is a separate reviewed, explicitly approved transaction.
    Retained candidates contain edits, lineage and evidence: process retirement
    is not permission to delete recoverable source ancestry as ordinary cache.
+
+AI Controls collates live request timing, session/pass identity, model/endpoint,
+context/output/prompt budgets, resident versus known source, saved checkpoint
+and compaction notices. Verified Milestones count actual host receipts, not a
+model percentage or the former Step N of 6 label. The build milestone requires
+Debug, Release and HeadlessCI build receipts together; later validation and
+independent preview remain distinct. Native arrangement/eye testing is separate
+from the pure contract proofs.
 
 Epoch runs an operator-selected external model through a local
 OpenAI-compatible endpoint or a directly selected `llama-cli`/GGUF pair. It

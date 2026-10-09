@@ -2569,7 +2569,8 @@ namespace epochengine::ai
                 { return value.endpoint == endpoint && value.model == g_selectedModel; });
             const auto detected = capacity.loaded_context_tokens != 0u
                 ? capacity.loaded_context_tokens : capacity.maximum_context_tokens;
-            if (declared == g_localContextOverrides.end()) return detected;
+            if (declared == g_localContextOverrides.end()) return detected != 0u
+                ? detected : inference_budget(InferenceWorkload::source_iteration).context_tokens;
             return detected != 0u ? (std::min)(declared->tokens, detected) : declared->tokens;
         }
 
@@ -3062,8 +3063,9 @@ namespace epochengine::ai
             InferenceWorkload workload, std::string_view input) noexcept
         {
             auto budget = inference_budget(workload);
-            if (workload == InferenceWorkload::source_iteration
-                || workload == InferenceWorkload::source_self_review)
+            // Every role uses the same loaded context policy. A provider or
+            // explicit operator capacity can reduce the default; chat and
+            // authoring must not silently pack against an unrelated old limit.
             {
                 const std::size_t loadedCapacity = selected_model_context_capacity();
                 if (loadedCapacity >= 8'192u)
@@ -5485,7 +5487,7 @@ namespace epochengine::ai
             if (stage == SourceRequestStage::plan)
             {
                 prompt +=
-                    " - Current stage: planning only. Return a concise numbered implementation plan in plain text with 3 to 6 independently testable steps, at most 300 words total. Begin with the next concrete action, not an introduction, repeated objective or generic audit checklist. Distinguish proposed investigation from confirmed findings. Preserve completed steps when resuming. Do not return a source-patch packet, a JSON object or an insufficient-evidence sentinel; unresolved questions belong in the investigation steps. Source selection and edits are separate requests.\n";
+                    " - Current stage: mission supervisor. Return an actionable task checkpoint and concrete next-generation handoff in plain text. There is no word or step quota: do not count, debate length, narrate drafting, or repeat the objective. Preserve decisions, relevant source owners, completed work backed by host receipts, remaining tasks and the next buildable unit. Reconcile the retained checkpoint instead of restarting discovery. When history grows, replace repetitive narrative with the current task state; never summarize exact patch preimages as source evidence. Distinguish confirmed findings from missing evidence. Do not return a source-patch packet, a JSON object or an insufficient-evidence sentinel; source selection and edits are separate requests.\n";
             }
             else if (stage == SourceRequestStage::context
                 || stage == SourceRequestStage::patch)
@@ -8067,9 +8069,9 @@ namespace epochengine::ai
             const auto expectedTokens = fixture.stage == Stage::plan || fixture.stage == Stage::context
                 ? 4'096u : 32'768u;
             if (!requestBudget.valid() || requestBudget.output_tokens != expectedTokens
-                || requestBudget.context_tokens != 65'536u
+                || requestBudget.context_tokens != 81'920u
                 || requestBudget.timeout_seconds != 10'800u
-                || requestBudget.maximum_prompt_bytes != 256u * 1024u
+                || requestBudget.maximum_prompt_bytes != source_prompt_byte_budget(81'920u, 32'768u)
                 || requestBudget.maximum_reply_bytes != 1024u * 1024u
                 || request_inference_budget(InferenceWorkload::chat, fixture.input).output_tokens != 2'048u)
                 return failed(__LINE__);
@@ -8095,8 +8097,10 @@ namespace epochengine::ai
                     || system.find("The first response line must be an EPOCH_SOURCE_") != std::string::npos)
                     return failed(__LINE__);
                 if (fixture.stage == Stage::plan
-                    && (system.find("planning only") == std::string::npos
-                        || system.find("numbered implementation plan in plain text") == std::string::npos
+                    && (system.find("Current stage: mission supervisor") == std::string::npos
+                        || system.find("actionable task checkpoint") == std::string::npos
+                        || system.find("no word or step quota") == std::string::npos
+                        || system.find("300 words") != std::string::npos
                         || source_packet_reply(fixture.stage)))
                     return failed(__LINE__);
                 if (fixture.shape == StructuredSourceReply::context

@@ -36,12 +36,36 @@ export namespace epochengine::ai::source_workspace
         bool current_request{};
         std::size_t retained_bytes{};
         std::size_t requested_bytes{};
+        bool mission_critical{};
     };
 
     // Reserve useful current reads before retained history can consume capacity.
     // Retain the remaining working set before widening. Never exceed the budget.
     [[nodiscard]] std::vector<std::size_t> allocate_source_bytes(
         const std::vector<SourceDemand>& demands, std::size_t budget);
+
+    struct WorkingSet final
+    {
+        std::vector<std::string> resident_paths{};
+        std::vector<std::string> archived_paths{};
+    };
+
+    // Compact only prompt residency, never source or cumulative provenance.
+    // Explicit current reads and known owners named by the task remain active.
+    [[nodiscard]] WorkingSet select_working_set(
+        const std::vector<std::string>& reviewed,
+        const std::vector<std::string>& requested, std::string_view task);
+
+    struct CompactedText final
+    {
+        std::string text{};
+        std::size_t omitted_records{};
+        bool protected_text_fits{true};
+    };
+    // Whole-record compaction preserves the concrete handoff and task records;
+    // no word counting, UTF-8 slicing or invented completion/summary evidence.
+    [[nodiscard]] CompactedText compact_task_text(
+        std::string_view text, std::size_t budget, bool recent_first = false);
 
     class Workspace final
     {

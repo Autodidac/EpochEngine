@@ -136,10 +136,10 @@ source. A catalog entry grants read navigation, never a live-source write.
 
 Model Settings accepts an optional actual loaded context size, saved for the
 exact local endpoint/model. Use it when inventory omits capacity; EngCoder's
-inspected `/v1/models` does so. The operator reports 81,920 tokens for Next Flash.
-That is a setting to enter after stopping the current campaign, not permission
-to hot-change it or a capability inferred from the model name. Automatic mode
-uses reported loaded capacity, otherwise reported maximum or legacy fallback.
+inspected `/v1/models` does so. Automatic HTTP mode uses reported loaded capacity,
+otherwise reported maximum, otherwise an 81,920-token default for every role.
+The fallback is packing policy, not measured model capacity or permission to
+hot-change a running campaign. A smaller reported/declared context wins.
 The override cannot exceed a reported capacity. Accepted settings range from
 8,192 to 1,048,576 tokens; direct-CLI providers do not inherit HTTP overrides.
 
@@ -156,8 +156,8 @@ counted source frames must remain complete, not become truncated authority.
 
 The loader allocates from actual bounded file-size demand rather than splitting
 the source budget equally among all paths. It reserves useful minimum windows,
-then reserves useful current reads before completing passive small files or
-replaying historical ranges. Current declarations up to 64 KiB request complete
+then reserves useful current reads and mission-owner remembered bytes before
+completing passive small files or replaying unrelated historical ranges. Current declarations up to 64 KiB request complete
 files; large implementations request 8 KiB per selector within the shared budget.
 Remaining capacity preserves exact remembered regions before widening reads.
 This prevents retained broad history from reducing a new function read to a
@@ -168,6 +168,26 @@ allocation fits instead of enlarging the newest region and evicting the others.
 Overlapping or adjacent remembered reads form a verified byte union, not
 duplicate demand on the next allocation. Under genuine pressure a new read
 keeps a useful share rather than reserving the entire envelope for old bytes.
+
+Each admitted read reconciles the resident working set with the saved mission.
+Currently requested paths and known owners named by full path or unique basename
+stay resident; unrelated prior owners become archived navigation. Without known
+owners, the host preserves the broad working set rather than guessing relevance.
+The cumulative workspace keeps those paths, hashes and verified ranges; no source,
+candidate edit or checkpoint is deleted. Archived metadata is not current FILE
+content or patch authority. A worker retrieves a missing archived dependency
+with an exact lookup, without restarting the mission.
+
+Host prompt compaction keeps complete task records and the entire
+NEXT_GENERATION/END_NEXT_GENERATION block, never the 4 KiB UI preview of a plan.
+Repeated/old observations may be omitted with an explicit marker; the original
+checkpoint and host logs remain authoritative. If the protected handoff cannot
+fit, dispatch is refused rather than clipped. This is deterministic working-set
+and record compaction, not token/KV recovery or an invented semantic summary.
+The model supervisor separately refreshes the task checkpoint from actual evidence.
+Visible compaction notices and Engine.AI.Context logs report resident bytes/files,
+retrievable ranges, omitted records and selected context/output/prompt budgets.
+These are byte estimates, not tokenizer counts or completed-work percentages.
 Automatic reads supply complete
 files when they fit their actual allocation, up to the 1 MiB curated-entry
 safety ceiling. Several complete files can share a request; the old 96 KiB file
@@ -294,9 +314,11 @@ continuity data, never carried permission or source-edit evidence.
 
 Fresh Candidate Lab objectives use a separate administrative supervisor turn
 through the same selected model provider with current exact reviewed source and
-the verified navigation map, not only filenames/line observations: three to six objective-specific tasks,
+the verified navigation map, not only filenames/line observations: objective-specific tasks,
 dependencies/success criteria and a concrete `NEXT_GENERATION` handoff ending
-with `END_NEXT_GENERATION`, requested under 300 words. The complete plan/handoff
+with `END_NEXT_GENERATION`. There is no word/step quota or counting instruction.
+The checkpoint preserves source owners, design decisions, receipt-backed completed
+work, remaining dependencies and one next actionable unit. The complete plan/handoff
 is digest-bound and retained. Worker turns receive that plan, recent host
 observations and current exact source, and return one useful read or buildable
 edit unit rather than restating/replanning the mission. Source reselection keeps

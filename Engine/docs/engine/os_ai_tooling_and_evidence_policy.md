@@ -1003,6 +1003,17 @@ external EngCoder UI remains operator-owned. Training/learning
 and full-agent lifecycle require explicit ownership/approval contracts first;
 endpoint support does not establish that integration or native succession proof.
 
+The operator-requested headless backend can be built locally with
+`Tools/ai/install_engcoder_backend.ps1 -SourceRoot <supplied-source>` and an
+existing dependency cache/toolchain. It disables GUI/tests and dependency
+installation, stages only backend executables/DLLs under ignored addons/EngCoder,
+and starts no listener, model or training job. This optional tool installation is
+not linked into Epoch, a public package, or admission of its full task API.
+Never launch it from the original source directory with an implicit workspace:
+its server defaults tools to the working directory and training enabled. Any
+later lifecycle adapter must explicitly bind private candidate/data roots, disable
+unrequested training and qualify tool/network authority before runtime activation.
+
 Any selected approved loopback endpoint accepts a session-only credential through
 Model Settings > Paste API Key, bound to its exact scheme/host/port identity.
 Clear API Key disables that credential for the session. Until either action,
@@ -1040,10 +1051,16 @@ not credentials, prompts, reasoning or response bodies.
 Planning and source-selection requests allow at most 4,096 output tokens;
 code proposals/repairs retain 32,768. The host-owned stage envelope selects that
 budget, not quoted source text. Context/source-byte limits and the independent
-wall ceiling are unchanged. Plans request three to six concrete steps and at
-most 300 words; selection requests ask for one coherent working set, not a
+wall ceiling remain separate. Automatic HTTP packing defaults to 81,920 context
+tokens when inventory omits capacity; reported/declared smaller capacities win.
+Plans return actionable task checkpoints without word/step quotas; the host
+compacts complete records and preserves the complete next-generation handoff.
+Current requested source and mission owners stay resident before unrelated
+historical source, which remains retrievable. Compaction is reported visibly and
+in Engine.AI.Context, with byte estimates distinguished from token counts.
+Selection requests ask for one coherent working set, not a
 speculative investigation without file bytes. Provider reasoning mode remains
-unchanged; these limits need real-model qualification and do not guarantee speed.
+unchanged; these budgets need real-model qualification and do not guarantee speed.
 Transport diagnostics record stage, attempt, elapsed milliseconds, prompt and
 response sizes and output-token limit. They do not copy prompt, reply or reasoning
 contents, including undecodable-response snippets.
