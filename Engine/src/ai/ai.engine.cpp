@@ -5608,7 +5608,8 @@ namespace epochengine::ai
             ModelTerminalFailure& terminalFailure,
             const ModelRequestObserver& observer = {},
             bool streamReplies = true,
-            const ModelProgressObserver& progressObserver = {})
+            const ModelProgressObserver& progressObserver = {},
+            std::string_view workloadPhase = {})
         {
             terminalFailure = ModelTerminalFailure::none;
             const auto cancelled = [&]() -> std::string
@@ -5620,6 +5621,9 @@ namespace epochengine::ai
                 structured_source_reply_for(input, structuredSource);
             const SourceReferenceCatalog sourceCatalog =
                 source_reference_catalog(input);
+            const std::string phase = workloadPhase.empty()
+                ? std::string{source_stage_name(source_request_stage(input, structuredSource))}
+                : std::string{workloadPhase};
             std::string replyDiagnostic;
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
@@ -5631,10 +5635,11 @@ namespace epochengine::ai
                     structuredSource, streamReplies);
                 ModelReplyStream stream{sourceReply != StructuredSourceReply::none};
                 ModelRequestProgress progress{
-                    .phase = std::string{source_stage_name(source_request_stage(input, structuredSource))},
+                    .phase = phase,
                     .attempt = recoveryRequest ? 2u : 1u,
                     .streaming_requested = streamReplies,
-                    .prompt_bytes = input.size()};
+                    .prompt_bytes = input.size(),
+                    .timeout_seconds = timeoutSeconds};
                 notify_model_progress(progressObserver, progress);
                 const ModelReplyChunkConsumer consumeChunk = [&](std::string_view chunk)
                 {
@@ -5741,7 +5746,7 @@ namespace epochengine::ai
                 const auto startedMessage = "Local model transport attempt "
                     + std::to_string(attempt + 1u) + "/2 started; per-attempt wall budget "
                     + std::to_string(timeoutSeconds)
-                    + "s; stage=" + std::string{source_stage_name(source_request_stage(input, structuredSource))}
+                    + "s; stage=" + phase
                     + "; prompt_bytes=" + std::to_string(input.size())
                     + "; output_token_limit=" + std::to_string(maximumTokens)
                     + ". Window focus does not control this worker; Stop remains available.";
@@ -5753,7 +5758,7 @@ namespace epochengine::ai
                     std::string reply = request_once(
                         attempt > 0u, &rawResponse);
                     const auto receivedMessage = "Local model transport returned; stage="
-                        + std::string{source_stage_name(source_request_stage(input, structuredSource))}
+                        + phase
                         + "; attempt=" + std::to_string(attempt + 1u)
                         + "; elapsed_ms=" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::steady_clock::now() - attemptStarted).count())
@@ -5840,6 +5845,7 @@ namespace epochengine::ai
                         static_cast<std::uint64_t>((std::max)(elapsed, decltype(elapsed){0})),
                         timeoutSeconds, timeout.total_budget, timeout.what());
                     core::log::warn("ai", epochengine::string_view{lastFailure.data(), lastFailure.size()});
+                    logger::get("Engine.AI.Transport").log(logger::LogLevel::Error, lastFailure);
                 }
                 catch (const std::exception& ex)
                 {
@@ -5875,6 +5881,10 @@ namespace epochengine::ai
                 "ai",
                 epochengine::string_view{
                     lastFailure.data(), lastFailure.size()});
+            // Exhausted connection/decoding failures are host outcomes, not
+            // assistant prose to feed into authoring or source parsers.
+            if (terminalFailure == ModelTerminalFailure::none)
+                terminalFailure = ModelTerminalFailure::request_failed;
             return lastFailure;
         }
 
@@ -6507,7 +6517,8 @@ namespace epochengine::ai
                     effective.output_tokens,
                     effective.timeout_seconds,
                     workload == InferenceWorkload::source_iteration, cancellation,
-                    out.terminal_failure, observer, effective.stream_replies, progress_observer);
+                    out.terminal_failure, observer, effective.stream_replies, progress_observer,
+                    workload == InferenceWorkload::authoring ? "project authoring/tool plan" : "");
 
             if (cancellation.stop_requested())
             {
@@ -8187,7 +8198,7 @@ namespace epochengine::ai
         const auto codingBudget = inference_budget(InferenceWorkload::source_iteration);
         if (!codingBudget.valid() || codingBudget.timeout_seconds != 10'800u
             || inference_budget(InferenceWorkload::chat).timeout_seconds != 180u
-            || inference_budget(InferenceWorkload::authoring).timeout_seconds != 180u
+            || inference_budget(InferenceWorkload::authoring).timeout_seconds != 900u
             || inference_budget(InferenceWorkload::source_self_review).timeout_seconds != 10'800u
             || model_http_timeout_milliseconds(codingBudget.timeout_seconds) != 10'800'000
             || model_http_timeout_milliseconds(1u) != 180'000

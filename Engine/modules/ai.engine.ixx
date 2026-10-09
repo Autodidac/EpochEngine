@@ -100,6 +100,7 @@ export namespace epochengine::ai
         std::size_t content_bytes{};
         std::size_t tool_argument_bytes{};
         std::size_t reasoning_bytes{};
+        std::uint32_t timeout_seconds{};
     };
     using ModelProgressObserver = std::function<void(const ModelRequestProgress&)>;
 
@@ -130,7 +131,10 @@ export namespace epochengine::ai
         case InferenceWorkload::chat:
             return {16'384u, 2'048u, 64u * 1024u, 64u * 1024u, 180u};
         case InferenceWorkload::authoring:
-            return {32'768u, 4'096u, 128u * 1024u, 128u * 1024u, 180u};
+            // A scene/tool plan can outlast a conversation, especially while
+            // an operator-managed model loads. Keep a finite, visible ceiling
+            // without restarting an expired generation or accepting fragments.
+            return {32'768u, 4'096u, 128u * 1024u, 128u * 1024u, 15u * 60u};
         case InferenceWorkload::source_iteration:
             // Local coding includes prompt evaluation and long reasoning. The
             // finite per-attempt budget is independent of window focus; an
@@ -231,7 +235,8 @@ export namespace epochengine::ai
         cancelled,
         retirement_failed,
         provider_timeout,
-        request_rejected
+        request_rejected,
+        request_failed
     };
 
     struct EngineAiReply

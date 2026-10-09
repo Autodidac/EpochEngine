@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 9, 2026, after the isolated fresh-read/authoring repair. Only unfinished acceptance
+Updated October 9, 2026, after the isolated source-retry/assistant/chat repair. Only unfinished acceptance
 belongs here. Product order: roadmap.md; durable intent: mission_cache.md;
 completed work/evidence: changelog.txt; behavior: owning subsystem contracts.
 Historical process IDs and dates are evidence, not live instructions.
@@ -16,6 +16,43 @@ A read, emitted tokens, accepted patch or passing host contract is not a built
 successor. Preserve older unfinished goals; do not widen this gate.
 
 ## Latest Native Evidence
+
+The later Release run (PID 39408, started 05:27:47) completed a supervisor plan
+at 05:47:39 and a source read at 05:54:13, then sent another worker request at
+05:54:20. No applied patch, successful compiler receipt or docked candidate was
+shown at that check. The 05:32 assistant screenshot separately shows a real
+180-second authoring timeout being mislabeled as an empty plan. The subsequent
+accepted plan paused for explicit low-RAM model consent; this is not proof of a
+cooldown deadlock. Leave that Release executable/model/campaign untouched.
+
+Source review found another exact host defect: source-selection correction and
+insufficient-evidence recovery discarded resident FILE bodies from the next
+stateless generation and forced another read-only turn. They now preserve the
+last admitted source, task memory and diagnostics through the coding contract,
+allowing either a grounded edit or a missing lookup. Rejected evidence remains
+excluded, and initial pre-admission selection remains read-only.
+
+The isolated Debug production build and complete pure engine suite pass at
+06:13:57. New regressions verify exact bodies through recovery under the real
+prompt budget, typed failure handling before authoring/tool parsing, immediate
+user-row queuing, delayed dispatch, guarded retry metadata and trimming, plus
+User/Assistant/Agent role labels. Authoring/tool plans now have a visible
+15-minute request budget; conversation/discovery remain three minutes and coding
+three hours. Rounded semantic chat bubbles and row-bound right-click Retry are
+implemented but require the operator's UI eye test. Source naming (610), layout
+and exact dependency-sync guards pass; no mirrored dependency source changed.
+Build: `build/assistant-repair-20261009/debug-build-final.log`; pure receipt:
+`build/assistant-repair-20261009/Debug/logs/Engine.Editor.SelfTest.log`.
+Executable: `build/assistant-repair-20261009/Debug/EpochEditor.exe`. No model,
+GUI, renderer or candidate was launched; native succession remains open. The
+first pure run exposed a mismatched new terminal-fallback fixture expectation;
+the final rebuilt run passes. Existing core logger link warning remains.
+After no Editor process remained, the same source built to normal
+`x64/Debug/EpochEditor.exe`; its complete pure suite passes at 06:18:38.
+Build: `build/assistant-repair-20261009/debug-build-normal.log`. The Release
+executable retains its 05:22:40 timestamp; no GUI/model was launched or live
+configuration changed. The normal Debug output is the operator's next test
+binary, not another source authority or a replacement packaged release.
 
 The newest operator campaign started at 03:46:46, using
 `Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_117409839120385`
@@ -239,8 +276,8 @@ a scene. AI acceptance remains first.
   Objects are routing/lifecycle controls, not OS confinement.
 
 Six-second pacing and host CPU/RAM admission remain. GPU/VRAM/macOS protection
-is not implemented. Three-minute chat/discovery and three-hour coding request
-budgets are not mission duration or external deadlines.
+is not implemented. Three-minute chat/discovery, fifteen-minute authoring/tool
+and three-hour coding request budgets are not mission duration or external deadlines.
 
 ## Source, Storage And Delivery Boundary
 

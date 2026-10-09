@@ -314,6 +314,16 @@ belong in proper GUI windows:
   surfaces without editor-side drawing. Project-assistant mode uses the assistant
   semantic tone; isolated engine self-coding uses the engine tone, so authority
   domains remain visually distinct in every console using the shared primitive.
+  Epoch AI labels are User, Assistant and Agent, with Agent reserved for engine
+  self-iteration status. Opt-in message bubbles use existing rounded semantic
+  backgrounds, bounded wrapping, content-sized rows and right-aligned user
+  messages; ordinary Output/text lists keep their existing presentation.
+  Send first publishes the user row and presents a frame before routing/model
+  preparation. Queued requests block duplicate submission. Right-click Retry
+  Request resubmits the original operator input through normal routing and fresh
+  approval, never an assistant/protocol packet or a previous approval. The menu
+  binds the exact row text and closes if transcript trimming replaces that row;
+  busy requests disable Retry. Selection/copy controls remain available.
   Font line metrics reserve raster/descender padding, and focused text controls
   own a visible high-contrast caret across chat, script, and ordinary edit fields.
   Partially clipped glyphs are omitted rather than destination-scaled because

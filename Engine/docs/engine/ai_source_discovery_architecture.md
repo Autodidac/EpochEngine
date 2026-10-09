@@ -23,6 +23,10 @@ Epoch Engine Self-Coding uses a host-owned retrieval layer. The model does not r
    known missing regions into one read action. Complete files are supplied when
    they fit; oversized implementations require exact windows. There is no promise
    that the entire repository or two enormous files fit one loaded context.
+   Source-selection corrections and insufficient-evidence recovery preserve the
+   same exact FILE blocks and use the coding contract once source is admitted;
+   they must not replace source with read receipts or force a read-only turn.
+   Initial path selection without admitted source remains read-only.
    Source-ID numbers are request-local; saved paths must be resolved against
    the current catalog rather than reusing IDs from a previous generation.
 4. **Accepted actions, not raw thoughts.** Exactly one complete read or patch

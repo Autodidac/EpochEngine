@@ -695,10 +695,39 @@ namespace epochengine
             return std::string{reply.substr(offset)};
         }
 
+        [[nodiscard]] std::optional<bool> ai_chat_confirmation(std::string_view input)
+        {
+            while (!input.empty() && std::isspace(static_cast<unsigned char>(input.front()))) input.remove_prefix(1u);
+            while (!input.empty() && std::isspace(static_cast<unsigned char>(input.back()))) input.remove_suffix(1u);
+            std::string lower{input};
+            for (auto& ch : lower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            constexpr std::array approveTerms{
+                std::string_view{"yes"}, std::string_view{"y"}, std::string_view{"ok"},
+                std::string_view{"okay"}, std::string_view{"approve"}, std::string_view{"apply"},
+                std::string_view{"do it"}, std::string_view{"go ahead"}, std::string_view{"proceed"},
+                std::string_view{"continue"}, std::string_view{"use it"}, std::string_view{"run it"}};
+            constexpr std::array rejectTerms{
+                std::string_view{"no"}, std::string_view{"n"}, std::string_view{"nope"},
+                std::string_view{"reject"}, std::string_view{"discard"}, std::string_view{"cancel"},
+                std::string_view{"never mind"}, std::string_view{"nevermind"}};
+            if (std::ranges::find(approveTerms, lower) != approveTerms.end()) return true;
+            if (std::ranges::find(rejectTerms, lower) != rejectTerms.end()) return false;
+            return std::nullopt;
+        }
+
         struct AiChat
         {
             static constexpr std::size_t kMaxLines = 200;
             std::vector<std::string> lines{};
+            // Parallel to visible lines; only operator requests are retryable.
+            // Protocol packets, approvals and status messages carry no action.
+            std::vector<std::optional<std::string>> retryInputs{};
+            std::string queuedInput{};
+            unsigned queuedInputFrames{};
+            std::uint64_t queuedCompletionGeneration{};
+            bool queuedInputRetryable{};
+            bool suppressUserEcho{};
+            AiDeferredRequestKind statusRequestKind{AiDeferredRequestKind::Chat};
             std::string input{};
             std::string pendingPrompt{};
             std::string latestRawReply{};
@@ -716,8 +745,7 @@ namespace epochengine
 
             AiChat()
             {
-                lines.emplace_back("ai> Ready. Epoch will ask before using a discovered local model.");
-                trim_lines();
+                append_status("Ready. Epoch will ask before using a discovered local model.");
             }
 
             AiChat(const AiChat&) = delete;
@@ -742,6 +770,7 @@ namespace epochengine
 
                 latestCompletionWorkload = pendingWorkload;
                 latestCompletionRequestKind = pendingRequestKind;
+                statusRequestKind = pendingRequestKind;
                 latestTerminalFailure = pending->terminalFailure;
                 latestTerminalStatus.clear();
 
@@ -809,8 +838,7 @@ namespace epochengine
                             std::string reply =
                                 normalize_editor_text_for_gui(latestRawReply);
                             if (reply.empty()) reply = "(empty reply)";
-                            lines.emplace_back("ai> " + reply);
-                            trim_lines();
+                            append_status(reply);
                         }
                     }
                     pendingPrompt.clear();
@@ -818,11 +846,11 @@ namespace epochengine
                 else
                 {
                     ++completionGeneration;
-                    lines.emplace_back(
-                        std::string("ai> (error) ") + pending->error);
+                    latestTerminalFailure = ai::ModelTerminalFailure::request_failed;
+                    latestTerminalStatus = pending->error;
+                    append_status(std::string("(error) ") + pending->error);
                     latestRawReply.clear();
                     pendingPrompt.clear();
-                    trim_lines();
                 }
 
                 if (worker.joinable())
@@ -878,11 +906,14 @@ namespace epochengine
                     {
                         const auto header = epochengine::format_text(
                             "{} | attempt {}/2 | prompt {} bytes. ",
-                            progress.phase, progress.attempt, progress.prompt_bytes);
+                            progress.phase, progress.attempt, progress.prompt_bytes)
+                            + (progress.timeout_seconds == 0u ? std::string{}
+                                : epochengine::format_text("Request deadline {} min. ",
+                                    progress.timeout_seconds / 60u));
                         if (progress.response_bytes == 0u)
                             return header + (progress.streaming_requested
                                 ? "Waiting for the model response; no stream bytes received yet. Loading, prompt processing and generation cannot be distinguished without provider telemetry."
-                                : "Waiting for the model response in Complete Responses mode; no bytes received yet. Enable Streaming Responses in Model Settings after this run for live activity.");
+                                : "Waiting for the complete reply; this transport gives no live output. Streaming shows incoming activity when the provider supports it. Neither mode applies an unfinished response.");
                         const auto silence = pending->lastResponseAt.time_since_epoch().count() == 0
                             ? 0 : std::chrono::duration_cast<std::chrono::seconds>(
                                 std::chrono::steady_clock::now() - pending->lastResponseAt).count();
@@ -934,17 +965,55 @@ namespace epochengine
                 text = normalize_editor_text_for_gui(text);
                 if (text.empty())
                     return;
-                lines.emplace_back("ai> " + std::move(text));
-                trim_lines();
+                append_line((statusRequestKind == AiDeferredRequestKind::SourceIteration
+                    ? "Agent: " : "Assistant: ") + std::move(text));
             }
 
-            void append_user_message(std::string text)
+            void append_user_message(std::string text, std::string retryInput = {})
             {
+                if (suppressUserEcho) return;
                 text = normalize_editor_text_for_gui(text);
                 if (text.empty())
                     return;
-                lines.emplace_back("you> " + std::move(text));
-                trim_lines();
+                append_line("User: " + std::move(text), retryInput.empty()
+                    ? std::nullopt : std::optional<std::string>{std::move(retryInput)});
+            }
+
+            [[nodiscard]] bool queue_input(std::string text, bool retryable)
+            {
+                if (pending || worker.joinable() || requestRetirementFailed
+                    || !queuedInput.empty() || text.empty() || is_ws_only(text)) return false;
+                append_user_message(text, retryable ? text : std::string{});
+                queuedInput = std::move(text);
+                queuedCompletionGeneration = completionGeneration;
+                queuedInputRetryable = retryable;
+                // The first subsequent frame draws the message. Routing and
+                // model preparation start only after that frame was presented.
+                queuedInputFrames = 2u;
+                return true;
+            }
+
+            [[nodiscard]] std::optional<std::string> take_queued_input()
+            {
+                if (queuedInput.empty() || pending || worker.joinable()
+                    || requestRetirementFailed) return std::nullopt;
+                if (queuedInputFrames > 0u && --queuedInputFrames > 0u)
+                    return std::nullopt;
+                return std::exchange(queuedInput, {});
+            }
+
+            [[nodiscard]] std::vector<std::uint8_t> retryable_lines() const
+            {
+                std::vector<std::uint8_t> result(lines.size());
+                for (std::size_t i = 0u; i < lines.size() && i < retryInputs.size(); ++i)
+                    result[i] = retryInputs[i].has_value() ? 1u : 0u;
+                return result;
+            }
+
+            [[nodiscard]] std::optional<std::string> retry_input(std::size_t line) const
+            {
+                return line < lines.size() && line < retryInputs.size()
+                    ? retryInputs[line] : std::nullopt;
             }
 
             void submit(std::string text)
@@ -958,7 +1027,8 @@ namespace epochengine
                 epochengine::ai::InferenceWorkload workload =
                     epochengine::ai::InferenceWorkload::chat,
                 AiDeferredRequestKind requestKind =
-                    AiDeferredRequestKind::Chat)
+                    AiDeferredRequestKind::Chat,
+                bool echoRequest = true)
             {
                 std::scoped_lock selectionLock(aiModelSelectionMutex);
                 if (text.empty() || is_ws_only(text))
@@ -970,13 +1040,11 @@ namespace epochengine
 
                 if (pending || worker.joinable() || requestRetirementFailed)
                 {
-                    lines.emplace_back("ai> (busy)");
-                    trim_lines();
+                    append_status("(busy)");
                     return false;
                 }
 
-                lines.emplace_back("you> " + displayText);
-                trim_lines();
+                if (echoRequest) append_user_message(displayText);
                 clear_completion_payload();
                 pendingPrompt = displayText;
 
@@ -1049,13 +1117,24 @@ namespace epochengine
                 return true;
             }
         private:
+            void append_line(std::string text,
+                std::optional<std::string> retryInput = std::nullopt)
+            {
+                retryInputs.resize(lines.size());
+                lines.emplace_back(std::move(text));
+                retryInputs.emplace_back(std::move(retryInput));
+                trim_lines();
+            }
+
             void trim_lines()
             {
                 if (lines.size() > kMaxLines)
                 {
+                    const auto removed = static_cast<std::ptrdiff_t>(lines.size() - kMaxLines);
                     lines.erase(
                         lines.begin(),
-                        lines.begin() + static_cast<std::ptrdiff_t>(lines.size() - kMaxLines));
+                        lines.begin() + removed);
+                    retryInputs.erase(retryInputs.begin(), retryInputs.begin() + removed);
                 }
             }
         };
@@ -7927,9 +8006,11 @@ namespace epochengine
                 {
                     return line.find(token) != std::string::npos;
                 };
-                if (line.starts_with("you>"))
+                if (line.starts_with("you>") || line.starts_with("User: "))
                     roles.push_back(gui::TextMessageRole::user);
-                else if (line.starts_with("ai>"))
+                else if (line.starts_with("Agent: "))
+                    roles.push_back(gui::TextMessageRole::engine);
+                else if (line.starts_with("ai>") || line.starts_with("Assistant: "))
                     roles.push_back(gui::TextMessageRole::assistant);
                 else if (line.starts_with("[ERROR]") || line.starts_with("[error]")
                     || contains(" failed") || contains(" rejected")
@@ -22854,9 +22935,13 @@ namespace epochengine
                 else if (useEndpoint(editor.aiEndpointDraft)) return;
             }
             if (!editor.aiEndpointStatus.empty()) gui::wrapped_label(editor.aiEndpointStatus, contentWidth);
-            gui::property_row("Reply transport", routes.stream_replies ? "Streaming" : "Complete response (no live generation activity)");
+            gui::property_row("Reply delivery", routes.stream_replies ? "Live activity (streaming)" : "Wait for complete reply");
+            gui::wrapped_label("Streaming shows arriving activity; complete-reply mode waits silently. "
+                "Both wait for a completed, validated plan before offering Apply. "
+                "This setting does not change the model's reasoning or make it faster.", contentWidth);
+            gui::property_row("Request deadlines", "Chat 3 min / Project plans 15 min / Engine coding 3 h");
             const std::array endpointOptions{
-                gui::InlineButtonSpec{.label = routes.stream_replies ? "Use Complete Responses" : "Use Streaming Responses",
+                gui::InlineButtonSpec{.label = routes.stream_replies ? "Wait for Complete Reply" : "Show Live Reply Activity",
                     .width = 222.0f, .enabled = endpointEditable},
                 gui::InlineButtonSpec{.label = editor.showAiEndpointRoutes ? "Hide API Routes" : "Show API Routes",
                     .width = 144.0f}};
@@ -23396,6 +23481,42 @@ namespace epochengine
         }
     }
 
+    namespace
+    {
+        [[nodiscard]] bool consume_failed_project_ai_reply(EditorState& editor,
+            const AiChat& chat, AiDeferredRequestKind kind, bool publishTrace = true)
+        {
+            if (chat.latestTerminalFailure == ai::ModelTerminalFailure::none
+                || (kind != AiDeferredRequestKind::Authoring
+                    && kind != AiDeferredRequestKind::Tooling)) return false;
+            const std::string status = chat.latestTerminalStatus.empty()
+                ? "The model request failed before a completed plan was received. No change was applied."
+                : chat.latestTerminalStatus;
+            if (kind == AiDeferredRequestKind::Authoring)
+            {
+                editor.aiAuthoringPlan = {};
+                editor.aiAuthoringPlanApplied = false;
+                if (editor.aiAuthoringPlanForGoal)
+                {
+                    editor.aiGoalRunning = false;
+                    editor.aiGoalPlanNextQueued = false;
+                }
+                editor.aiAuthoringPlanForGoal = false;
+                editor.aiAuthoringStatus = status;
+            }
+            else
+            {
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = false;
+                editor.aiToolStatus = status;
+            }
+            if (publishTrace)
+                push_editor_log(editor, (kind == AiDeferredRequestKind::Authoring
+                    ? "[ai-project] " : "[ai-tool] ") + status);
+            return true;
+        }
+    }
+
     bool editor_ai_source_path_contract() noexcept
     {
         // No files, model, compiler or renderer are created: connect the actual
@@ -23418,6 +23539,97 @@ namespace epochengine
         } trace;
         try
         {
+            trace.stage = "chat_publish_before_dispatch_and_retry";
+            {
+                AiChat queued{};
+                const std::string request = "Create a ground, a light and one hundred cubes.";
+                if (!queued.queue_input(request, true) || queued.pending
+                    || queued.lines.back() != "User: " + request
+                    || queued.retry_input(queued.lines.size() - 1u) != request
+                    || queued.queue_input("Do not replace the retained request", true)
+                    || queued.take_queued_input().has_value()) return false;
+                // No worker/provider is used. One presentation frame precedes
+                // exactly one handoff of the original request, not its label.
+                const auto admitted = queued.take_queued_input();
+                if (!admitted || *admitted != request || !queued.queuedInput.empty()
+                    || queued.take_queued_input().has_value()) return false;
+                const auto beforeEcho = queued.lines.size();
+                queued.suppressUserEcho = true;
+                queued.append_user_message("Plan: " + request);
+                queued.suppressUserEcho = false;
+                if (queued.lines.size() != beforeEcho) return false;
+                queued.append_user_message("yes");
+                if (queued.retry_input(queued.lines.size() - 1u)) return false;
+                queued.statusRequestKind = AiDeferredRequestKind::SourceIteration;
+                queued.append_status("Working in the candidate");
+                if (!queued.lines.back().starts_with("Agent: ")
+                    || queued.retry_input(queued.lines.size() - 1u)) return false;
+                queued.statusRequestKind = AiDeferredRequestKind::Chat;
+                queued.append_status("Ready to plan");
+                const auto roles = ai_chat_message_roles(queued.lines);
+                if (roles[beforeEcho - 1u] != gui::TextMessageRole::user
+                    || roles[roles.size() - 2u] != gui::TextMessageRole::engine
+                    || !queued.lines.back().starts_with("Assistant: ")) return false;
+                for (std::size_t i = 0; i < AiChat::kMaxLines; ++i)
+                    queued.append_status("history " + std::to_string(i));
+                if (queued.lines.size() != AiChat::kMaxLines
+                    || std::ranges::any_of(queued.retryable_lines(),
+                        [](std::uint8_t value) { return value != 0u; })) return false;
+                if (!queued.queue_input(request, true)
+                    || !queued.retry_input(queued.lines.size() - 1u)
+                    || queued.retryInputs.size() != queued.lines.size()) return false;
+                queued.pending = std::make_shared<AiChatRequestState>();
+                if (queued.take_queued_input() || queued.queue_input("busy request", true)) return false;
+            }
+
+            trace.stage = "failed_project_transport_is_not_an_empty_plan";
+            {
+                auto state = std::make_unique<EditorState>();
+                const auto revision = state->sceneDocumentRevision;
+                const auto entities = state->entities.size();
+                constexpr std::array failures{
+                    ai::ModelTerminalFailure::total_timeout,
+                    ai::ModelTerminalFailure::provider_timeout,
+                    ai::ModelTerminalFailure::cancelled,
+                    ai::ModelTerminalFailure::retirement_failed,
+                    ai::ModelTerminalFailure::request_rejected,
+                    ai::ModelTerminalFailure::request_failed};
+                for (const auto failure : failures)
+                {
+                    AiChat reply{};
+                    reply.pendingRequestKind = AiDeferredRequestKind::Authoring;
+                    reply.pendingWorkload = ai::InferenceWorkload::authoring;
+                    reply.pending = std::make_shared<AiChatRequestState>();
+                    reply.pending->terminalFailure = failure;
+                    reply.pending->reply = "Transport failed; no completed authoring response.";
+                    reply.pending->ready.store(true, std::memory_order_release);
+                    reply.pump();
+                    state->aiGoalRunning = true;
+                    state->aiGoalPlanNextQueued = true;
+                    state->aiAuthoringPlanForGoal = true;
+                    if (!consume_failed_project_ai_reply(*state, reply,
+                            AiDeferredRequestKind::Authoring, false)
+                        || state->aiAuthoringPlan || state->aiAuthoringPlanApplied
+                        || state->aiGoalRunning || state->aiGoalPlanNextQueued
+                        || state->aiAuthoringStatus != reply.latestTerminalStatus
+                        || !reply.latestRawReply.empty()
+                        || state->sceneDocumentRevision != revision
+                        || state->entities.size() != entities) return false;
+                    state->aiToolPlanApplied = true;
+                    if (!consume_failed_project_ai_reply(*state, reply,
+                            AiDeferredRequestKind::Tooling, false)
+                        || state->aiToolPlan || state->aiToolPlanApplied
+                        || state->aiToolStatus != reply.latestTerminalStatus) return false;
+                }
+                AiChat completed{};
+                // A truly completed empty reply remains a parser error; it is
+                // distinct from all the transport outcomes exercised above.
+                if (consume_failed_project_ai_reply(*state, completed,
+                        AiDeferredRequestKind::Authoring, false)
+                    || ai::parse_authoring_plan(completed.latestRawReply).code
+                        != ai::AuthoringPlanCode::empty) return false;
+            }
+
             trace.stage = "authoring_reply_recovery";
             const auto recoveredAuthoring = recover_bare_ai_authoring_call(
                 "I will make the smallest visible change.\n"
@@ -25312,6 +25524,7 @@ namespace epochengine
                         - (pending ? 34.0f : 0.0f)) },
                     .lines = paneChatLines,
                     .line_roles = ai_chat_message_roles(paneChatLines),
+                    .message_bubbles = true,
                     .max_line_chars = 240,
                     .selectable = true,
                     .stick_to_bottom = true
@@ -25474,7 +25687,8 @@ namespace epochengine
                     push_editor_log(
                         editor, "[ai-project] " + editor.aiAuthoringStatus);
                 }
-                else if (expectedAuthoringReply)
+                else if (expectedAuthoringReply
+                    && !consume_failed_project_ai_reply(editor, chat, completedKind))
                 {
                     const std::string authoringReply = recover_prefixed_ai_protocol(
                         chat.latestRawReply,
@@ -25557,7 +25771,8 @@ namespace epochengine
                     && chat.completionGeneration
                         > editor.aiToolRequestedGeneration;
                 editor.aiToolAwaitingReply = false;
-                if (expectedToolReply)
+                if (expectedToolReply
+                    && !consume_failed_project_ai_reply(editor, chat, completedKind))
                 {
                     const std::string toolingReply = recover_prefixed_ai_protocol(
                         chat.latestRawReply,
@@ -26212,6 +26427,9 @@ namespace epochengine
             }
 
             const auto selection = epochengine::ai::local_model_selection();
+            chat.statusRequestKind = requestKind;
+            if (requestKind == AiDeferredRequestKind::Chat)
+                chat.append_user_message(display, display);
             const bool needsCodingChoice = requestKind == AiDeferredRequestKind::SourceIteration
                 && selection.model_id == "nvidia/nemotron-3-nano-4b"
                 && selection.origin != epochengine::ai::LocalModelSelectionOrigin::explicit_selection;
@@ -26250,6 +26468,7 @@ namespace epochengine
                 if (command.prompt.empty() || is_ws_only(command.prompt))
                     break;
                 if (chat.pending
+                    || !chat.queuedInput.empty()
                     || editor.aiDeferredRequestKind
                         != AiDeferredRequestKind::None)
                 {
@@ -26265,13 +26484,8 @@ namespace epochengine
                     break;
                 }
                 {
-                    const std::string detachedProjectPrompt =
-                        build_project_assistant_chat_prompt(
-                            editor, command.prompt);
-                    if (submit_ai_request(
-                            detachedProjectPrompt,
-                            command.prompt,
-                            AiDeferredRequestKind::Chat))
+                    if (chat.queue_input(command.prompt, !editor.aiIntentClarificationPending
+                            && !ai_chat_confirmation(command.prompt).has_value()))
                     {
                         editor.aiAuthoringStatus =
                             "Detached Project Assistant message queued with active-project context; waiting for the shared AI/build work lane.";
@@ -28425,6 +28639,7 @@ namespace epochengine
 
         auto request_ai_authoring_plan = [&](bool goalMilestone = false) -> bool
         {
+            chat.statusRequestKind = AiDeferredRequestKind::Authoring;
             if (goalMilestone
                 && (!editor.aiGoalActive || !editor.aiGoalRunning))
             {
@@ -28452,6 +28667,7 @@ namespace epochengine
                     editor.aiGoalCompletedMilestones + 1u,
                     editor.aiGoal)
                 : "Plan: " + editor.aiAuthoringRequest;
+            chat.append_user_message(display, "/plan " + std::string{request});
             const std::string prompt = build_ai_authoring_prompt(
                 editor,
                 request,
@@ -28491,6 +28707,7 @@ namespace epochengine
 
         auto request_ai_tool_plan = [&]() -> bool
         {
+            chat.statusRequestKind = AiDeferredRequestKind::Tooling;
             std::string_view request{editor.aiToolRequest};
             while (!request.empty()
                 && (request.front() == ' ' || request.front() == '\t'
@@ -28514,6 +28731,8 @@ namespace epochengine
                 return false;
             }
 
+            chat.append_user_message("Tool plan: " + std::string{request},
+                "/tool " + std::string{request});
             std::string prompt = epochengine::ai::tool_plan_protocol_prompt();
             prompt +=
                 "\n\nACTIVE_PROJECT_EVIDENCE_V1\nPROJECT_ID ";
@@ -28630,7 +28849,8 @@ namespace epochengine
                 std::move(prompt),
                 std::move(display),
                 workload,
-                requestKind);
+                requestKind,
+                false);
             editor.aiDeferredModelLease.reset();
             if (requestKind == AiDeferredRequestKind::Tooling)
             {
@@ -29010,24 +29230,7 @@ namespace epochengine
         const auto ai_confirmation = [&](std::string_view request)
             -> std::optional<bool>
         {
-            const std::string lower = ai_lower_text(trim_ai_command(request));
-            constexpr std::array approveTerms{
-                std::string_view{"yes"}, std::string_view{"y"},
-                std::string_view{"ok"}, std::string_view{"okay"},
-                std::string_view{"approve"}, std::string_view{"apply"},
-                std::string_view{"do it"}, std::string_view{"go ahead"},
-                std::string_view{"proceed"}, std::string_view{"continue"},
-                std::string_view{"use it"}, std::string_view{"run it"}};
-            constexpr std::array rejectTerms{
-                std::string_view{"no"}, std::string_view{"n"},
-                std::string_view{"nope"}, std::string_view{"reject"},
-                std::string_view{"discard"}, std::string_view{"cancel"},
-                std::string_view{"never mind"}, std::string_view{"nevermind"}};
-            for (const std::string_view term : approveTerms)
-                if (lower.compare(term) == 0) return true;
-            for (const std::string_view term : rejectTerms)
-                if (lower.compare(term) == 0) return false;
-            return std::nullopt;
+            return ai_chat_confirmation(request);
         };
         const auto clarification_route = [&](std::string_view request)
             -> std::optional<AiChatIntent>
@@ -29061,6 +29264,7 @@ namespace epochengine
         };
         auto start_engine_source_iteration = [&](std::string_view request) -> bool
         {
+            chat.statusRequestKind = AiDeferredRequestKind::SourceIteration;
             const std::string_view input = trim_ai_command(request);
             if (input.empty())
             {
@@ -29103,6 +29307,8 @@ namespace epochengine
             std::string_view request) -> bool
         {
             const std::string_view input = trim_ai_command(request);
+            chat.statusRequestKind = intent == AiChatIntent::EngineSource
+                ? AiDeferredRequestKind::SourceIteration : AiDeferredRequestKind::Chat;
             switch (intent)
             {
             case AiChatIntent::EngineSource:
@@ -29345,6 +29551,7 @@ namespace epochengine
         if (editor.aiGoalPlanNextQueued
             && editor.aiGoalActive
             && editor.aiGoalRunning
+            && chat.queuedInput.empty()
             && !editor.aiAuthoringAwaitingReply
             && !goalPlanAwaitingApproval
             && !source_model_slot_busy(editor, chat)
@@ -29353,6 +29560,25 @@ namespace epochengine
             && !ai_source_native_work_active(editor, chat))
         {
             (void)request_ai_authoring_plan(true);
+        }
+
+        if (editor.aiDeferredRequestKind == AiDeferredRequestKind::None)
+        {
+            if (auto queued = chat.take_queued_input())
+            {
+                struct UserEchoScope final
+                {
+                    AiChat& chat;
+                    explicit UserEchoScope(AiChat& value) : chat(value)
+                        { chat.suppressUserEcho = true; }
+                    ~UserEchoScope() { chat.suppressUserEcho = false; }
+                } echoScope{chat};
+                if (!chat.queuedInputRetryable
+                    && chat.queuedCompletionGeneration != chat.completionGeneration)
+                    chat.append_status("The staged response changed after your message was queued. Please review it and confirm again; the earlier approval was not replayed.");
+                else
+                    (void)submit_ai_chat_input(std::move(*queued));
+            }
         }
 
         auto play_active_context = [&]()
@@ -40204,6 +40430,10 @@ namespace epochengine
             chat_render_pos,
             chat_render_size);
         const auto chatLineRoles = ai_chat_message_roles(chat.lines);
+        const auto chatRetryableLines = chat.retryable_lines();
+        const bool chatCanAccept = !chat.pending && !chat.worker.joinable()
+            && !chat.requestRetirementFailed && chat.queuedInput.empty()
+            && editor.aiDeferredRequestKind == AiDeferredRequestKind::None;
         const std::string aiChatPanelId = epochengine::format_text(
             "editor-ai-chat.{}.{}",
             editor.projectId.empty() ? "no-project" : editor.projectId,
@@ -40214,6 +40444,9 @@ namespace epochengine
             .size = chat_render_size,
             .lines = chat.lines,
             .line_roles = chatLineRoles,
+            .retryable_lines = chatRetryableLines,
+            .retry_enabled = chatCanAccept && !editor.aiIntentClarificationPending,
+            .message_bubbles = true,
             .max_visible_lines = 180,
             .log_id = aiChatPanelId,
             .follow_tail = editor.aiChatFollowTail,
@@ -40225,9 +40458,9 @@ namespace epochengine
             .input_keyboard_policy =
                 gui::TextInputKeyboardPolicy::focused_and_hovered,
             .show_send_button = true,
-            .send_button_enabled = !chat.pending,
+            .send_button_enabled = chatCanAccept,
             .send_button_width = 88.0f,
-            .send_button_label = chat.pending ? "Send > (busy)" : "Send >",
+            .send_button_label = chatCanAccept ? "Send >" : "Send > (queued/busy)",
             .task_label = showEngineTask
                 ? engineWorkActive
                     ? "Engine objective (running)"
@@ -40277,12 +40510,27 @@ namespace epochengine
         if (r.log_user_scrolled && !r.log_at_end)
             editor.aiChatFollowTail = false;
 
-        if ((r.input.submitted || r.send_clicked) && !chat.pending)
+        if (r.retry_line_index && chatCanAccept && !editor.aiIntentClarificationPending)
+        {
+            if (const auto text = chat.retry_input(*r.retry_line_index))
+            {
+                if (chat.queue_input(*text, true))
+                {
+                    editor.aiChatFollowTail = true;
+                    ++editor.aiChatScrollToEndGeneration;
+                }
+            }
+        }
+        else if ((r.input.submitted || r.send_clicked) && chatCanAccept)
         {
             const std::string text = chat.input;
-            if (submit_ai_chat_input(text))
+            const bool retryable = !editor.aiIntentClarificationPending
+                && !ai_confirmation(text).has_value();
+            if (chat.queue_input(text, retryable))
             {
                 chat.input.clear();
+                editor.aiChatFollowTail = true;
+                ++editor.aiChatScrollToEndGeneration;
             }
         }
 

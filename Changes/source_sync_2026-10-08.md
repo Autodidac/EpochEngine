@@ -30,6 +30,28 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 9 source-retry, assistant and chat follow-up
+
+The focused source batch preserves exact admitted source through selection
+corrections/insufficient-evidence recovery and uses the coding contract instead
+of forcing another read-only generation. Assistant/tool failures retain their
+transport cause before parsing; project plans allow 15 minutes, with visible
+delivery/deadline labels. User messages queue visibly before dispatch, guarded
+right-click Retry uses original input and fresh routing/approval, and reusable
+chat controls provide User/Assistant/Agent labels and rounded semantic bubbles.
+
+Production isolated Debug and complete pure contracts pass at 06:13:57; after
+no Editor remained, normal x64/Debug builds and passes at 06:18:38. The normal
+Debug executable SHA-256 is
+`7bb53a153d09652626020a2fee3a1000584530fe039f39f9447895864e3befeb`.
+Build receipts are under `build/assistant-repair-20261009/`. Source naming,
+layout, exact dependency-sync and diff guards pass. No dependency mirrors changed.
+GUI/model/GPU/candidate acceptance remains operator-owned; these receipts do
+not claim native Qwen success or a docked successor. Release is not replaced.
+GitHub delivery remains the authorized focused main/stable checkpoint; Site
+publication stays held and no new runtime release/source export is staged.
+Unrelated solution/workspace changes remain excluded.
+
 ### October 9 source-informed supervisor follow-up
 
 Code checkpoint `6f57640d22a44e1123d2111cf26560794a4eefc4`, tree

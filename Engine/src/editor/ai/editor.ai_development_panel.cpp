@@ -5534,6 +5534,8 @@ namespace epochengine::editor_ai_development_panel
 
         [[nodiscard]] RenderResult source_context_model_request()
         {
+            if (source_context_evidence.size() > active_source_evidence_budget_bytes())
+                return reject_model_prompt_budget();
             RenderResult output{};
             const auto area = active_domain == Domain::engine_source
                 ? ai::development_proposal_codec::SourceArea::engine
@@ -5543,8 +5545,17 @@ namespace epochengine::editor_ai_development_panel
                     == ai::project_profile::Provider::external_mcp
                 ? ModelTransport::external_mcp
                 : ModelTransport::local_inference;
-            output.model_prompt =
-                ai::development_proposal_codec::context_request_prompt(
+            // A selection retry is still a new, stateless inference. Receipts
+            // cannot stand in for the source the worker just read. Once exact
+            // source is admitted, preserve it and allow an edit as well as a
+            // missing lookup; otherwise the host forces another discovery-only
+            // turn even when the next buildable unit is already grounded.
+            const bool hasReviewedSource = !campaign_reviewed_paths.empty()
+                && !source_context_evidence.empty();
+            output.model_prompt = hasReviewedSource
+                ? ai::development_proposal_codec::protocol_prompt(
+                    area, development_objective, source_context_evidence)
+                : ai::development_proposal_codec::context_request_prompt(
                     area,
                     development_objective,
                     "The verified PATH catalog follows under "
@@ -5575,7 +5586,8 @@ namespace epochengine::editor_ai_development_panel
                     "\n\nEPOCH_SOURCE_CONTEXT_CORRECTION_V1\n"
                     "The previous source selection was rejected. No edits "
                     "were staged and rejected source evidence was not sent. Return a fresh bounded "
-                    "context request using the current wire format. Diagnostics "
+                    "context request if bytes are missing, or a grounded source action if the retained "
+                    "FILE blocks already cover the next task. Use the current wire format. Diagnostics "
                     "describe the old failure, not a new output contract.\nCORRECTION_ATTEMPT ";
                 output.model_prompt +=
                     std::to_string(model_reply_corrections);
@@ -5588,7 +5600,7 @@ namespace epochengine::editor_ai_development_panel
                     "\nEND_EPOCH_SOURCE_CONTEXT_CORRECTION_V1";
             }
             append_investigation_continuity(output.model_prompt);
-            if (!append_repair_diagnostic(output.model_prompt, true))
+            if (!append_repair_diagnostic(output.model_prompt, !hasReviewedSource))
                 return reject_model_prompt_budget();
             append_source_path_catalog(output.model_prompt,
                 source_path_catalog_evidence.empty()
@@ -7486,6 +7498,7 @@ namespace epochengine::editor_ai_development_panel
             return failed(__LINE__);
         const auto maximumReselection = budgetPromptState.source_context_model_request();
         if (maximumReselection.action != HostAction::request_model_source_proposal
+            || !checkBudgetPrompt(maximumReselection.model_prompt, true)
             || maximumReselection.model_prompt.size() > repairPromptBudget
             || maximumReselection.model_prompt.find(expectedRepair) == std::string::npos
             || maximumReselection.model_prompt.find(compilerDiagnostic) == std::string::npos
@@ -7511,6 +7524,7 @@ namespace epochengine::editor_ai_development_panel
             || maximumPlainRetry.action != HostAction::request_model_source_proposal
             || !checkBudgetPrompt(maximumPlainRetry.model_prompt, false)
             || maximumPlainSelection.action != HostAction::request_model_source_proposal
+            || !checkBudgetPrompt(maximumPlainSelection.model_prompt, false)
             || maximumPlainSelection.model_prompt.size() > repairPromptBudget
             || maximumPlainSelection.model_prompt.find("REPAIR_DIAGNOSTIC_REFERENCE_BEGIN")
                 != std::string::npos
@@ -9238,7 +9252,11 @@ namespace epochengine::editor_ai_development_panel
                 TerminalReplyFixture{ai::ModelTerminalFailure::request_rejected,
                     "request-rejected",
                     "Model endpoint returned HTTP status 400. The request was rejected.",
-                    "provider rejected the request"}};
+                    "provider rejected the request"},
+                TerminalReplyFixture{ai::ModelTerminalFailure::request_failed,
+                    "request-failed",
+                    "Model transport exhausted its attempts without a completed response.",
+                    "connection or completed response failed"}};
             constexpr std::array<std::string_view, 3u> terminalPhases{
                 "selection", "plan", "proposal"};
             for (const auto& terminal : terminalReplies)
@@ -11222,6 +11240,9 @@ namespace epochengine::editor_ai_development_panel
                         break;
                     case ai::ModelTerminalFailure::request_rejected:
                         failure = "The provider rejected the request. Check authentication, model selection and request compatibility before resuming.";
+                        break;
+                    case ai::ModelTerminalFailure::request_failed:
+                        failure = "The connection or completed response failed. No model action was admitted; review the transport diagnostic before retrying.";
                         break;
                     case ai::ModelTerminalFailure::none:
                         break;

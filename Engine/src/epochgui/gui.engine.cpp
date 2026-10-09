@@ -397,6 +397,8 @@ namespace epochengine::gui
             float dragGrabOffset = 0.0f;
             bool contextMenuOpen = false;
             Vec2 contextMenuPos{};
+            std::size_t contextLineIndex{};
+            std::string contextLineText{};
         };
 
         struct ScrollAreaState
@@ -1957,6 +1959,12 @@ namespace epochengine::gui
                             light.accent.r, light.accent.g, light.accent.b,
                             light.accent.a, 8, 8),
                         8, 8);
+                    register_rounded_control(atlas, g_resources.semanticDark[index].background,
+                        "__agui_round/semantic_dark/" + name,
+                        {dark.background.r, dark.background.g, dark.background.b, dark.background.a});
+                    register_rounded_control(atlas, g_resources.semanticLight[index].background,
+                        "__agui_round/semantic_light/" + name,
+                        {light.background.r, light.background.g, light.background.b, light.background.a});
                 }
 
                 g_resources.atlasBuilt = true;
@@ -10154,10 +10162,10 @@ namespace epochengine::gui
         const float contentWidth = (std::max)(1.0f, width - 2.0f * kBoxInnerPadding - scrollbarWidth);
         const float contentHeight = (std::max)(1.0f, height - 2.0f * kBoxInnerPadding);
         const float linePitch = line_advance_amount(kFontScale);
-        const float rowGap = 2.0f;
+        const float rowGap = options.message_bubbles ? 8.0f : 2.0f;
         const float edgePadding = kGlyphRasterPadding;
-        const float messageInsetX = 6.0f;
-        const float messageInsetY = 3.0f;
+        const float messageInsetX = options.message_bubbles ? 12.0f : 6.0f;
+        const float messageInsetY = options.message_bubbles ? 8.0f : 3.0f;
         const std::size_t lineCount = options.lines.size();
 
         const auto line_role = [&](std::size_t lineIndex) noexcept
@@ -10175,7 +10183,9 @@ namespace epochengine::gui
             const float inset = role_is_styled(line_role(lineIndex))
                 ? messageInsetX
                 : 0.0f;
-            return (std::max)(1.0f, contentWidth - inset * 2.0f);
+            const float boxWidth = options.message_bubbles && inset > 0.0f
+                ? contentWidth * 0.88f : contentWidth;
+            return (std::max)(1.0f, boxWidth - inset * 2.0f);
         };
 
         const auto line_view = [&](std::size_t lineIndex) noexcept -> std::string_view
@@ -10369,37 +10379,55 @@ namespace epochengine::gui
                     }
                     state.contextMenuOpen = true;
                     state.contextMenuPos = g_frame.mousePos;
+                    state.contextLineIndex = lineIndex;
+                    state.contextLineText = options.lines[lineIndex];
                     openedContextMenuThisFrame = true;
                 }
 
                 const TextMessageRole role = line_role(lineIndex);
                 const bool styledRole = role_is_styled(role);
+                const std::string_view line = line_view(lineIndex);
+                const bool bubble = options.message_bubbles && styledRole;
+                const float maximumBoxWidth = bubble ? contentWidth * 0.88f : contentWidth;
+                const float boxWidth = bubble && line.find('\n') == std::string_view::npos
+                    ? (std::min)(maximumBoxWidth, (std::max)(80.0f,
+                        measure_text_width(line, kFontScale) + messageInsetX * 2.0f))
+                    : maximumBoxWidth;
+                const float boxX = bubble && role == TextMessageRole::user
+                    ? contentX + contentWidth - boxWidth : contentX;
+                const auto bubbleStyle = gui_lib::rounded_rect::RoundedRectStyle{
+                    .enabled = true, .control_radius = 8.0f};
                 if (styledRole)
                 {
                     const auto& semantic = active_semantic_pair(
                         semantic_tone_for_message_role(role));
-                    draw_sprite(
-                        semantic.background,
-                        contentX,
-                        rowY,
-                        contentWidth,
-                        rowHeight - rowGap);
-                    draw_sprite(
-                        semantic.accent,
-                        contentX,
-                        rowY,
-                        4.0f,
-                        rowHeight - rowGap);
+                    if (bubble)
+                        draw_rounded_sprite(semantic.background, boxX, rowY,
+                            boxWidth, rowHeight - rowGap, bubbleStyle);
+                    else
+                    {
+                        draw_sprite(semantic.background, boxX, rowY, boxWidth, rowHeight - rowGap);
+                        draw_sprite(semantic.accent, boxX, rowY, 4.0f, rowHeight - rowGap);
+                    }
                 }
 
                 const auto [firstSelected, lastSelected] = selected_line_range();
                 if (options.selectable && state.hasSelection && lineIndex >= firstSelected && lineIndex <= lastSelected)
-                    draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
+                {
+                    if (bubble) draw_rounded_sprite(palette.buttonActive, boxX, rowY,
+                        boxWidth, rowHeight - rowGap, bubbleStyle);
+                    else draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f,
+                        contentWidth + 4.0f, rowHeight);
+                }
                 else if (lineHovered)
-                    draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f, contentWidth + 4.0f, rowHeight);
+                {
+                    if (bubble) draw_rounded_sprite(palette.buttonHover, boxX, rowY,
+                        boxWidth, rowHeight - rowGap, bubbleStyle);
+                    else draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f,
+                        contentWidth + 4.0f, rowHeight);
+                }
 
-                const std::string_view line = line_view(lineIndex);
-                const float textX = contentX + (styledRole ? messageInsetX : 0.0f);
+                const float textX = boxX + (styledRole ? messageInsetX : 0.0f);
                 const float textY = rowY + (styledRole ? messageInsetY : 0.0f);
                 const float textWidth = line_text_width(lineIndex);
                 if (options.wrap_lines)
@@ -10438,12 +10466,23 @@ namespace epochengine::gui
         if (state.hasSelection && state.selectedLine < lineCount)
             result.selected_line = state.selectedLine;
 
+        // A trimmed/replaced log must not replay whichever message inherited
+        // the old row index while the popup was open.
+        if (state.contextMenuOpen
+            && (state.contextLineIndex >= options.lines.size()
+                || options.lines[state.contextLineIndex] != state.contextLineText))
+            state.contextMenuOpen = false;
+
         if (state.contextMenuOpen)
         {
             const float rowHeight = 28.0f;
             const float menuPadding = 4.0f;
             const float menuWidth = 188.0f;
-            const float menuHeight = menuPadding * 2.0f + rowHeight * 3.0f + kContentPadding * 2.0f;
+            const bool retryable = state.contextLineIndex < options.retryable_lines.size()
+                && options.retryable_lines[state.contextLineIndex] != 0u;
+            const float menuHeight = menuPadding * 2.0f
+                + rowHeight * (retryable ? 4.0f : 3.0f)
+                + kContentPadding * (retryable ? 3.0f : 2.0f);
             Vec2 menuPos = state.contextMenuPos;
             menuPos.x = (std::min)(menuPos.x, (std::max)(0.0f, g_frame.origin.x + g_frame.windowSize.x - menuWidth - kContentPadding));
             menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
@@ -10495,6 +10534,13 @@ namespace epochengine::gui
                 if (button("Clear Selection", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
                     state.hasSelection = false;
+                    state.contextMenuOpen = false;
+                }
+                if (retryable && button_with_state("Retry Request",
+                        {menuWidth - 2.0f * menuPadding, rowHeight},
+                        false, options.retry_enabled))
+                {
+                    result.retry_line_index = state.contextLineIndex;
                     state.contextMenuOpen = false;
                 }
 
@@ -10698,6 +10744,9 @@ namespace epochengine::gui
                 .size = { availableWidth, logHeight },
                 .lines = options.lines,
                 .line_roles = options.line_roles,
+                .retryable_lines = options.retryable_lines,
+                .retry_enabled = options.retry_enabled,
+                .message_bubbles = options.message_bubbles,
                 .max_line_chars = options.max_visible_lines == 0 ? 768u : options.max_visible_lines * 16u,
                 .selectable = true,
                 .stick_to_bottom = options.follow_tail,
@@ -10707,6 +10756,7 @@ namespace epochengine::gui
             result.log_at_end = log.at_end;
             result.log_scroll_y = log.scroll_y;
             result.log_maximum_scroll_y = log.maximum_scroll_y;
+            result.retry_line_index = log.retry_line_index;
         }
 
         const float messageY = logPos.y + logHeight

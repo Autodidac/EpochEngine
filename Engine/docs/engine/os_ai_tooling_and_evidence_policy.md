@@ -889,6 +889,13 @@ the schema adapter grants no path, permission, apply, or execution authority.
 HTTP context selection exposes only its read-only function with host-issued
 SOURCE_ID values/read records. Source IDs are unique in the selected list;
 distinct read records may repeat an ID. Identical selectors remain invalid.
+That read-only phase applies before source admission. Later source-selection
+corrections and insufficient-evidence recovery carry the current exact FILE
+blocks, saved plan and host observations through the ordinary coding contract.
+They permit either a grounded patch or a missing read, not a compulsory new
+discovery-only generation. Rejected bytes are never substituted for the last
+admitted working set. A stateless request must not receive receipts in place of
+the source needed to act; oversized mandatory evidence still fails intact.
 Canonical framing uses read_path for additional windows of an admitted path.
 Coding exposes mutually exclusive read-context
 and exact-patch functions, admitting exactly one call: missing source can be
@@ -906,8 +913,10 @@ Exact-byte grounding, ownership checks, actual validation and operator candidate
 choice remain separate requirements.
 Source iteration and source self-review have a bounded 10,800-second (three-hour)
 per-attempt wall budget, including model loading, prompt evaluation and reasoning.
-Ordinary chat and authoring allow 180 seconds; model inventory discovery allows
-180 seconds for a response. These limits apply to individual requests, not the
+Ordinary chat and model inventory discovery allow 180 seconds; project authoring
+and tool plans allow 900 seconds including model loading and prompt evaluation.
+The activity surface displays the actual request deadline and workload phase.
+These limits apply to individual requests, not the
 total multi-iteration mission. Window focus does not cancel the
 independent HTTP worker. A genuine early transport/API exception may receive one
 short transport retry. A completed invalid/missing source action instead returns
@@ -1003,6 +1012,11 @@ Host-owned terminal metadata is separate from assistant text and survives the
 chat-worker/panel boundary. Whole-budget timeout, cancellation and unconfirmed
 retirement cannot trigger a higher-level automatic plan or packet retry, and a
 project-assistant completion cannot be consumed by the source campaign.
+Exhausted connection/response failures also retain a typed terminal cause.
+Authoring and tooling handlers consume failures before attempting plan parsing:
+a timed-out response is not an empty authoring plan. Failure clears the staged
+plan and pauses persistent authoring dispatch without changing the scene.
+Only a successfully completed empty response reaches the empty-plan diagnostic.
 Non-2xx inference responses retain HTTP classification across WinHTTP/libcurl
 and the worker/panel boundary. Provider/upstream timeout (408/504 or a 5xx API
 error naming a timeout) and permanent 4xx rejection are terminal, distinct from
