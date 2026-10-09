@@ -32,6 +32,15 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ### October 9 source-informed supervisor follow-up
 
+Code checkpoint `6f57640d22a44e1123d2111cf26560794a4eefc4`, tree
+`c7c14699f2291fac2deb7adb8ae6335e04288057`, was atomically pushed to GitHub
+main and multicontext-base-stable; both remote heads were independently read
+back at that commit. The original stable base remains an ancestor. The following
+receipt-only update changes no tested code. Hosted checks are not yet claimed.
+Site publication remains held; no handoff, source export or release was sent.
+EpochGui remains an exact clean mirror and no dependency repository update is
+needed. Unrelated solution/workspace changes and tool_trace.jsonl remain local.
+
 The final follow-up also fixes current-read starvation and duplicate complete-file
 frame accounting exposed by the next operator run. Project Assistant permits
 one reviewed multi-command batch, honors 100 cubes and rolls back the whole
@@ -42,6 +51,8 @@ ordinary Debug/Release executable, active requests and private credentials are
 not replaced or changed by that build. Four focused rebuilt CPU contracts and
 the final pure Editor suite pass at 05:02:56; detailed build receipts are in the
 changelog. No new dependency source, tag, runtime package or Site admission.
+Isolated executable SHA-256:
+`ab33b7844621bcbb25e6e2973078b597a242dc876fcf78d246ede536fdd93e0a`.
 
 The focused next source checkpoint includes actual source bodies in supervisor
 initial/review generations, implementation-first worker handoff, saved actual
