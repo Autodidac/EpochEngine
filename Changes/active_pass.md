@@ -335,10 +335,16 @@ wrap-up instruction; renewed direction is required. GitHub and Site are separate
 The preceding tested code batch was pushed on main/stable at `717d2c27`; both remote heads
 were read back and original stable ancestry was verified. Hosted checks and
 native new-code succession are not claimed by that source push.
-The final October 9 source/authoring repair is committed at `6f57640d` and
+The preceding October 9 source/authoring repair is committed at `6f57640d` and
 atomically pushed/read back on both GitHub branches. Its receipt-only follow-up
 changes no tested code. Site remains held, native testing remains operator-owned,
 and no release/dependency publication is claimed.
+The stopped-run validation/repair code is committed at `5a15c9e4` and atomically
+pushed/read back on both GitHub branches. Its Release/isolated Debug proof is
+recorded above; this delivery is not native full-validation/docking acceptance.
+The workflow document now explains supervisor/worker generations, checkpoints,
+exact sandbox edits, seven host checks, independent preview and Choose versus
+live-source promotion. No Site resume or dependency publication occurred.
 
 Tracked source is canonical; authored Projects are durable. Build output is
 reproducible. Candidate folders retain edits, lineage and evidence: never delete

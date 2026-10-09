@@ -48,8 +48,11 @@ Isolated Debug passes at 16:25:40. Build logs and Debug receipt are under
 The currently open normal Debug Editor and stopped candidates remain unchanged.
 Native model/full-validation/docked succession is not claimed. No dependency
 source changed, no release is staged, and the prior Site hold remains in force.
-The tested focused batch is ready for the authorized GitHub main/stable checkpoint;
-only verified remote readback can establish delivery.
+Tested code checkpoint `5a15c9e43014489620de74321419a5c27d76694c` was pushed
+atomically to GitHub main and multicontext-base-stable; both remote heads were
+independently read back at that exact commit. This receipt follow-up changes no
+tested code. The original stable checkpoint remains in history. No Site resume,
+binary release or dependency publication was performed.
 
 ### October 9 source-retry, assistant and chat follow-up
 
