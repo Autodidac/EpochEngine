@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 9, 2026, after the isolated source-retry/assistant/chat repair. Only unfinished acceptance
+Updated October 9, 2026, after the stopped-run validation/repair fixes. Only unfinished acceptance
 belongs here. Product order: roadmap.md; durable intent: mission_cache.md;
 completed work/evidence: changelog.txt; behavior: owning subsystem contracts.
 Historical process IDs and dates are evidence, not live instructions.
@@ -17,13 +17,51 @@ successor. Preserve older unfinished goals; do not widen this gate.
 
 ## Latest Native Evidence
 
-The later Release run (PID 39408, started 05:27:47) completed a supervisor plan
-at 05:47:39 and a source read at 05:54:13, then sent another worker request at
-05:54:20. No applied patch, successful compiler receipt or docked candidate was
-shown at that check. The 05:32 assistant screenshot separately shows a real
-180-second authoring timeout being mislabeled as an empty plan. The subsequent
-accepted plan paused for explicit low-RAM model consent; this is not proof of a
-cooldown deadlock. Leave that Release executable/model/campaign untouched.
+The stopped Release run (PID 39408, started 05:27:47) used the older 05:22:40
+executable, not the later 06:17 Debug repair. Its retained sandbox is
+`Engine/examples/EpochEditor/workspace/cache/ai/iterations/session_117410280308738`,
+analytics key `4ef6fbe170839442121371e7f696f0ae86891f992236d94036a1c76831176f6d`.
+The complete logs show 22 coding passes, 21 source expansions and four navigation
+fallbacks, not a 40-pass retirement limit. Work item 40 was HeadlessCI execution.
+Qwen's proposal applied at 09:38:56; Debug compile/contracts, Release
+compile/contracts and HeadlessCI build/run all passed. Full validation failed
+at 09:44:18 before preview. No docked child or chosen successor is proved.
+
+All four project profiles materialized beneath the private runtime data root,
+but save/reopen searched the candidate code root's Projects directory instead.
+Generated project builds also ascended from that sibling data directory into
+the original engine checkout; their logs lost the headers and native stderr.
+These host defects are repaired: scene routing follows private Projects, source
+resolution follows the candidate executable, and incremental MSBuild retains
+stderr/exit evidence while reusing the explicitly admitted host dependency cache.
+The original hidden compiler cause is not invented or claimed reproduced.
+
+The next repair had packed source before reserving its validation diagnostic
+and failed proposal. That can overflow the request budget and stop the campaign
+without dispatch. Current-candidate source now packs after the actual mandatory
+task/repair envelope; subsequent repair reads use the same remaining budget.
+No pre-edit baseline fallback or silent truncation is allowed. The stopped
+candidate and its logs were not hand-edited, deleted or relabeled as new proof.
+
+Normal `x64/Release/EpochEditor.exe` rebuilt at 16:22:13; its complete pure
+engine suite passes at 16:23:43. SHA-256:
+`d8eb9938d6d8b9f433e54e47c6e853f4ac7c9efdf1b1170b6e27411a13e0ff2f`.
+Isolated Debug built under `build/iteration-validation-repair-20261009/Debug/`
+and its complete pure suite passes at 16:25:40. New regressions cover repair
+envelope/source continuity, exhausted capacity and all profile scene routes;
+the generated PowerShell AST and native stderr/exit-code policy also pass.
+Naming (610), layout and exact dependency-sync guards pass. Build logs:
+`build/iteration-validation-repair-20261009/{release-build,debug-build-isolated}.log`.
+About now displays compile time/configuration; Systems adds executable identity.
+Their native visual acceptance remains with the operator.
+
+The normal Debug Editor reopened at 16:02:46 (PID 25044) and locked the initial
+Debug link (LNK1168). It was not stopped or replaced; the isolated Debug output
+avoids that lock. Release is the new normal operator-test binary. No GUI,
+model, renderer, generated-project/full-validation or candidate run was launched
+by this repair; only the approved pure contracts ran. Existing logger link and
+Release optimizer-override warnings remain. Native full validation/docking is
+still an open acceptance gate, not a source-only success claim.
 
 Source review found another exact host defect: source-selection correction and
 insufficient-evidence recovery discarded resident FILE bodies from the next
@@ -241,8 +279,10 @@ a scene. AI acceptance remains first.
    Confirm actual dispatch, admitted ranges, supervisor handoff, useful atomic
    patch and compiler receipt. Old native results cannot prove new-code behavior.
    Do not hot-change an active inference, executable or configuration.
-   After the operator finishes the current run, use Debug Model Settings to save
-   81920 for the exact EngCoder endpoint/model, then test fresh packing/dispatch.
+   After the operator finishes the current Debug run, test the rebuilt normal
+   Release executable above. Save 81920 for the exact EngCoder endpoint/model
+   in Model Settings, then test fresh packing/dispatch. The existing normal
+   Debug process is not the new repair binary.
 2. Read the complete first failing build transcript and repair its earliest cause
    once. Distinguish missing host snapshot/dependency inputs from model errors.
    Reuse host dependencies read-only; do not reinstall them per candidate.

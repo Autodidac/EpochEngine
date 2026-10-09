@@ -606,6 +606,12 @@ execution.
 - build diagnostics should now cover the generated child-project build path too:
   entry source, generated project file, build script, build log, and expected
   output executable should all be visible from the Project workspace
+- Windows generated build scripts use incremental MSBuild, retain every log
+  header and native stderr, and record the real exit code. A PowerShell host
+  exception is logged separately instead of leaving a two-line empty failure.
+  Candidate full validation explicitly reuses the admitted host dependency
+  cache without manifest installation, and builds candidate engine source rather
+  than the original checkout above its separate private Projects directory.
 - generated child projects, including the Sandbox shell, should repair stale
   Windows toolset metadata to `v143` before invoking MSBuild, and the checked-in
   engine projects they reference should stay on the same VS 2022 toolset.
@@ -624,6 +630,8 @@ execution.
   route from the real engine binary. The route materializes the selected
   profile, production-loads its canonical scene, atomically saves it, reopens
   and compares it, builds the child, then runs generated `--project-self-test`.
+  Candidate children resolve those scene paths beneath their private data root,
+  consistently with profile materialization; ordinary editor paths are unchanged.
   Gameplay-capable child evidence includes the immutable Canvas2D hash plus
   logical texture bytes, emitted sprite/batch counts, collision surfaces and
   peak contacts, resident audio bytes, and Canvas2D rejection count. The live
@@ -1415,6 +1423,52 @@ The remaining acceptance is the actual model-to-two-build/choice workflow and
 candidate execution boundary, not writing those foundations again. See the
 active pass for exact evidence and blockers; component proof is not native
 editor or successful self-coding proof.
+
+Development builds can share the same version badge. About displays the compiled
+date/time and configuration; Systems also displays the running executable path.
+Use those values to distinguish a rebuilt output from an older still-open
+Editor. They identify a binary build, not a source commit or validation receipt.
+
+### How Engine Self-Iteration Actually Works
+
+1. **Objective and supervisor.** Engine intent routes the visible User request
+   into one isolated mission. The selected external model receives source-informed
+   planning instructions and returns a task list plus NEXT_GENERATION handoff.
+   Supervisor and coder are distinct generation roles using that provider, not
+   two autonomous background model processes. The host periodically reconciles
+   their actual outcomes rather than accepting claims of completion.
+2. **Memory and source.** Completed plan/handoff, observations, reviewed paths
+   and exact ranges are checkpointed. Each new worker request is assembled from
+   that memory, current exact source bodies and any causal failure. This is not
+   retained model KV state or recovery of unfinished tokens. A sparse working set
+   fits the selected context budget; omitted source must be retrieved, not guessed.
+   Source IDs are request-local. Reloading the provider can retry the interrupted
+   unit without discarding previously committed candidate edits. Known-checkpoint
+   resume exists; automatic discovery after a cold Editor start is still open.
+3. **Incremental edits.** The worker returns a read request or complete exact-block
+   patch. Epoch validates paths, revisions, preimages and overlaps, then commits
+   the complete transaction only inside the candidate. Reasoning, partial tool
+   arguments and interrupted file output are not edits. Later units read that
+   updated candidate, not the original pre-edit source. The ordinary project is
+   separate; the original engine is not the model's writable workspace.
+4. **Build and repair.** On Windows, the host queues Debug compile/contracts,
+   Release compile/contracts, HeadlessCI build/run, then full project validation:
+   seven distinct receipts for the same candidate. Shared dependencies remain
+   host inputs, not new installations. A failure sends its verified cause and
+   current-candidate source back for bounded repair in the same sandbox. Exhausted
+   retries or invalid evidence stop progression; tokens, reads and passing only
+   some gates do not count as a completed successor.
+5. **Independent comparison.** After all gates pass, the host can launch the
+   validated candidate executable as a separately supervised PID and attach its
+   preview beside the current Editor. Private runtime data is separate from
+   candidate code. A model reply never substitutes for this real process/window
+   evidence. Native docking/lifetime acceptance remains open in the active pass.
+6. **Choice and source authority.** Keep Current rejects that proposed successor;
+   Choose Candidate retains its sandbox as the next iteration's parent. It does
+   not overwrite the original engine, authored projects or packaged release.
+   Live-source promotion is a separate reviewed, explicitly approved transaction.
+   Retained candidates contain edits, lineage and evidence: process retirement
+   is not permission to delete recoverable source ancestry as ordinary cache.
 
 Epoch runs an operator-selected external model through a local
 OpenAI-compatible endpoint or a directly selected `llama-cli`/GGUF pair. It

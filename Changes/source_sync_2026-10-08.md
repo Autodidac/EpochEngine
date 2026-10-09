@@ -30,6 +30,27 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 9 stopped-run validation and repair follow-up
+
+The older Release run actually applied code and passed six validation actors;
+full validation then failed before preview. Repair private profile scene routing,
+candidate-code root selection, explicit shared dependency-cache input and
+generated Windows stderr/exit logging. Reserve the real repair envelope before
+packing current-candidate source, including subsequent missing-source requests.
+About/System identity distinguishes rebuilt binaries sharing v0.90.35.
+
+Normal Release rebuilt at 16:22:13 and passes the complete pure engine suite at
+16:23:43; SHA-256
+`d8eb9938d6d8b9f433e54e47c6e853f4ac7c9efdf1b1170b6e27411a13e0ff2f`.
+Isolated Debug passes at 16:25:40. Build logs and Debug receipt are under
+`build/iteration-validation-repair-20261009/`; Release receipt is under
+`x64/Release/logs/`. Source naming, layout and dependency-sync guards pass.
+The currently open normal Debug Editor and stopped candidates remain unchanged.
+Native model/full-validation/docked succession is not claimed. No dependency
+source changed, no release is staged, and the prior Site hold remains in force.
+The tested focused batch is ready for the authorized GitHub main/stable checkpoint;
+only verified remote readback can establish delivery.
+
 ### October 9 source-retry, assistant and chat follow-up
 
 The focused source batch preserves exact admitted source through selection

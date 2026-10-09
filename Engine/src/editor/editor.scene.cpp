@@ -1298,6 +1298,16 @@ namespace
 
     [[nodiscard]] static fs::path resolve_epoch_repo_root(const fs::path& project_root)
     {
+        // Private runtime data is a sibling of the candidate source, so
+        // ascending from a generated project can reach the original checkout.
+        // A candidate must build its own code, never that unrelated ancestor.
+        if (!epochengine::core::path::candidate_data_root().empty())
+        {
+            if (const auto found = ascend_to_repo_root(
+                    epochengine::core::path::executable_path()); found)
+                return *found;
+            return {};
+        }
         if (const auto found = epochengine::core::path::find_epoch_repo_root(project_root); !found.empty())
             return found;
 
@@ -4242,7 +4252,7 @@ namespace
             "    <VcpkgManifestRoot Condition=\"'$(VcpkgManifestRoot)'==''\">$(EpochRepoRoot)Engine\\</VcpkgManifestRoot>\n"
             "    <EpochExtraDefines Condition=\"'$(EpochExtraDefines)'==''\">EPOCH_MAIN_IN_MAIN_CPP=1</EpochExtraDefines>\n"
              "    <VcpkgTriplet Condition=\"'$(VcpkgTriplet)'==''\">x64-windows</VcpkgTriplet>\n"
-             "    <EpochVcpkgInstallRoot>$(EpochRepoRoot)Engine\\vcpkg_installed\\$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>\n"
+             "    <EpochVcpkgInstallRoot Condition=\"'$(EpochVcpkgInstallRoot)'==''\">$(EpochRepoRoot)Engine\\vcpkg_installed\\$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>\n"
              "    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\\</EpochVcpkgNestedInstallRoot>\n"
             "    <EpochVcpkgInstallRoot Condition=\"Exists('$(EpochVcpkgNestedInstallRoot)include\\')\">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>\n"
             "  </PropertyGroup>\n"
@@ -4385,11 +4395,11 @@ namespace
             "    '[INFO] Repo root: ' + $repoRoot | Tee-Object -FilePath $logPath -Append\n"
             "    '[INFO] SolutionDir: ' + $solutionDir | Tee-Object -FilePath $logPath -Append\n"
             "    '[INFO] Build lock: ' + $repoBuildLockPath | Tee-Object -FilePath $logPath -Append\n"
-            "    '[INFO] Epoch child build project: ' + $projectFile | Tee-Object -FilePath $logPath\n"
+            "    '[INFO] Epoch child build project: ' + $projectFile | Tee-Object -FilePath $logPath -Append\n"
             "    '[INFO] MSBuild: ' + $msbuild | Tee-Object -FilePath $logPath -Append\n"
             "    $msbuildArgs = @(\n"
             "        $projectFile,\n"
-            "        '/t:Rebuild',\n"
+            "        '/t:Build',\n"
             "        ('/p:Configuration=' + $Configuration),\n"
             "        ('/p:Platform=' + $Platform),\n"
             "        '/p:PlatformToolset=v143',\n"
@@ -4397,10 +4407,28 @@ namespace
             "        ('/p:VcpkgManifestRoot=' + $vcpkgManifestRoot),\n"
             "        '/p:EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1',\n"
             "        '/m:1',\n"
+            "        '/nr:false',\n"
             "        '/clp:ErrorsOnly'\n"
             "    )\n"
-            "    & $msbuild @msbuildArgs 2>&1 | Tee-Object -FilePath $logPath -Append\n"
-            "    $buildExit = $LASTEXITCODE\n"
+            "    if (-not [string]::IsNullOrWhiteSpace($env:EPOCH_CANDIDATE_DEPENDENCY_ROOT)) {\n"
+            "        $dependencyRoot = $env:EPOCH_CANDIDATE_DEPENDENCY_ROOT.TrimEnd('\\', '/') + '\\'\n"
+            "        $tripletRoot = Join-Path $dependencyRoot 'x64-windows'\n"
+            "        if (-not (Test-Path -LiteralPath (Join-Path $tripletRoot 'include'))) { $tripletRoot = Join-Path $tripletRoot 'x64-windows' }\n"
+            "        if (-not (Test-Path -LiteralPath (Join-Path $tripletRoot 'include'))) { throw 'The admitted host dependency triplet is unavailable.' }\n"
+            "        $msbuildArgs += @('/p:VcpkgManifestInstall=false', '/p:VcpkgAutoBootstrap=false', ('/p:VcpkgInstalledDir=' + $dependencyRoot), ('/p:EpochVcpkgInstallRoot=' + $tripletRoot + '\\'))\n"
+            "    }\n"
+            "    $nativeErrorPreference = $ErrorActionPreference\n"
+            "    try {\n"
+            "        # Windows PowerShell treats native stderr as ErrorRecord. Preserve it and the actual exit code.\n"
+            "        $ErrorActionPreference = 'Continue'\n"
+            "        & $msbuild @msbuildArgs 2>&1 | Tee-Object -FilePath $logPath -Append\n"
+            "        $buildExit = $LASTEXITCODE\n"
+            "    } finally { $ErrorActionPreference = $nativeErrorPreference }\n"
+            "    ('[INFO] MSBuild exit code: ' + $buildExit) | Tee-Object -FilePath $logPath -Append\n"
+            "}\n"
+            "catch {\n"
+            "    ('[ERROR] Project build host: ' + $_.Exception.Message) | Tee-Object -FilePath $logPath -Append\n"
+            "    $buildExit = 1\n"
             "}\n"
             "finally {\n"
             "    if ($null -ne $buildLock) { $buildLock.Dispose() }\n"
@@ -4967,6 +4995,14 @@ namespace epochengine
                 candidateProjects / "Example")
             && project_path_below(candidateProjects / "Example" / "worlds" / "scene.epoch",
                 candidateProjects / "Example");
+        for (const auto& profile : kProjectProfiles)
+        {
+            const fs::path scene{profile.scene_path};
+            const auto routed = candidate_project_path_lexical(candidateData, scene);
+            if (routed.empty() || routed != (candidateData / scene).lexically_normal()
+                || !project_path_below(routed, candidateProjects))
+                return false;
+        }
         const JsonStringFieldResult missing =
             inspect_json_string_field(R"({"id":"legacy"})", "capability_profile");
         const JsonStringFieldResult valid =

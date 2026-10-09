@@ -485,7 +485,13 @@ host PATH, proxy/model credentials, automation flags or user-profile settings.
 OS system paths and fixed noninteractive tool settings complete the allowlist.
 Compiler discovery and the original read-only dependency authority remain
 host-owned across Choose. MSBuild disables automatic response files and node
-reuse. These paths are preferences, not permission enforcement: Windows APIs or
+reuse. Full-validation generated-project builds receive that dependency cache
+as an explicit host-owned environment input, with manifest installation and
+bootstrap disabled; they must not create another dependency install in the
+candidate. Their engine source root comes from the candidate executable, not
+from ascending the separate runtime-data directory into the original checkout.
+Profile scene save/reopen tests use the private data-root Projects directory.
+These paths are preferences, not permission enforcement: Windows APIs or
 arbitrary candidate code can still access resources allowed by the inherited
 token until an actual OS execution boundary is implemented and tested.
 
@@ -741,7 +747,11 @@ the Release editor's `--engine-validation-self-test`,
 covering aggregate contracts, registered project profiles, generated-child
 self-tests, and the AI gate. Failure in any actor may feed bounded verified
 diagnostics into at most three fresh-generation repair proposals. Each changed
-repair has a new digest. The manual workflow waits for exact operator approval;
+repair has a new digest. Before loading current-candidate FILE bodies, the host
+reserves the actual plan, task journal, bounded causal diagnostic and failed
+proposal framing within the selected context budget. Later repair reads use
+the same remaining capacity. A rejected repack cannot silently fall back to
+pre-edit source or dispatch a truncated repair. The manual workflow waits for exact operator approval;
 Candidate Lab automatically requests the next proposal after successful fresh
 repair materialization and continues the authorized sandbox validation sequence.
 Neither mode grants live-source promotion. Cancellation and stale completions

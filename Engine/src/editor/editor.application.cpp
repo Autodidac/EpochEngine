@@ -14028,6 +14028,19 @@ namespace epochengine
                 result.summary = "The sandbox test could not prepare runtime data separate from its validated code.";
                 return result;
             }
+            if (fullValidation)
+            {
+                const auto dependencies = ai_source_host_dependency_root();
+                if (!dependencies || !request.environment)
+                {
+                    result.summary = "Full validation requires the verified host dependency cache; it will not install dependencies in a candidate.";
+                    return result;
+                }
+                // An explicit host-owned compiler input, not inherited model
+                // credentials or permission to use the original engine code.
+                request.environment->push_back({"EPOCH_CANDIDATE_DEPENDENCY_ROOT",
+                    dependencies->generic_string()});
+            }
             if (cancellation.stop_requested())
             {
                 result.cancelled = true;
@@ -40112,6 +40125,8 @@ namespace epochengine
                 dockLine("[renderer] Next gate", renderer_next_feature_gate(ctx)),
                 dockLine("[build] Compiler", compiler_identity()),
                 dockLine("[build] Configuration", build_configuration_label()),
+                dockLine("[build] Compiled", __DATE__ " " __TIME__),
+                dockLine("[build] Executable", core::path::executable_path().generic_string()),
                 "[systems] Use the central System Info workspace for graph surfaces, backend details, and live system lists. Video owns time controls and timeline/video authoring."
             };
             renderDockStatusPanel("systems", dockLines);
@@ -42200,7 +42215,7 @@ namespace epochengine
         if (editor.showAboutModal)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize{ 560.0f, 292.0f };
+            const gui::Vec2 modalSize{ 560.0f, 316.0f };
             const gui::Vec2 modalPos{
                 (std::max)(0.0f, (w - modalSize.x) * 0.5f),
                 (std::max)(0.0f, (h - modalSize.y) * 0.5f)
@@ -42220,16 +42235,19 @@ namespace epochengine
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 22.0f });
             gui::label(std::string("Version: ") + epochengine::GetEngineDisplayString());
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 46.0f });
+            gui::label(std::string("Built: ") + __DATE__ " " __TIME__
+                + " | " + std::string(build_configuration_label()));
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 70.0f });
             gui::wrapped_label("Multi-backend engine/editor shell with project-driven scene play, docked scripting, and engine-owned tools.", contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 86.0f });
-            gui::label(std::string("Renderer: ") + renderer_name(ctx));
             gui::set_cursor({ contentPos.x + 8.0f, contentY + 110.0f });
+            gui::label(std::string("Renderer: ") + renderer_name(ctx));
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 134.0f });
             gui::label(std::string("Project: ") + editor.projectName);
-            gui::set_cursor({ contentPos.x + 8.0f, contentY + 136.0f });
+            gui::set_cursor({ contentPos.x + 8.0f, contentY + 160.0f });
             gui::wrapped_label(
                 "Update Epoch uses the same modern update path as the toolbar button. Project Source Code Download caches a source snapshot as project material and does not update or restart Epoch.",
                 contentWidth);
-            const gui::Vec2 buttonRow{ contentPos.x + 8.0f, contentY + 198.0f };
+            const gui::Vec2 buttonRow{ contentPos.x + 8.0f, contentY + 222.0f };
             gui::set_cursor(buttonRow);
             if (gui::button("Update Epoch", { 154.0f, 30.0f }))
             {

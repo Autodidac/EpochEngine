@@ -4385,8 +4385,10 @@ namespace epochengine::core
                 : std::filesystem::path{ profile->scene_path };
         if (scenePath.is_relative())
         {
-            const auto runtimeRoot = epochengine::core::path::runtime_root_dir();
-            if (!runtimeRoot.empty())
+            if (!epochengine::core::path::candidate_data_root().empty())
+                scenePath = epochengine::editor_resolve_candidate_project_path(scenePath);
+            else if (const auto runtimeRoot = epochengine::core::path::runtime_root_dir();
+                !runtimeRoot.empty())
                 scenePath = runtimeRoot / scenePath;
         }
         scenePath = scenePath.lexically_normal();

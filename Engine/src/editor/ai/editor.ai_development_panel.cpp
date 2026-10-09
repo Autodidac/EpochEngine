@@ -3956,6 +3956,26 @@ namespace epochengine::editor_ai_development_panel
                 "cursors. Do not restart a generic investigation or invent a defect.";
         }
 
+        [[nodiscard]] std::size_t source_request_evidence_budget_bytes() const
+        {
+            const auto area = active_domain == Domain::engine_source
+                ? ai::development_proposal_codec::SourceArea::engine
+                : ai::development_proposal_codec::SourceArea::project;
+            std::string envelope = ai::development_proposal_codec::protocol_prompt(
+                area, development_objective, {});
+            append_investigation_continuity(envelope);
+            if (!append_repair_diagnostic(envelope)) return 0u;
+            // Reserve mandatory task/repair framing before loading FILE bytes.
+            // The campaign digest wrapper and correction framing are separate
+            // from evidence. Optional catalog entries use the remaining space.
+            constexpr std::size_t framingReserve = 2u * 1024u;
+            const auto budget = active_source_prompt_budget_bytes();
+            if (envelope.size() >= budget
+                || budget - envelope.size() <= framingReserve) return 0u;
+            return (std::min)(active_source_evidence_budget_bytes(),
+                budget - envelope.size() - framingReserve);
+        }
+
         [[nodiscard]] std::string campaign_model_prompt(
             const ai::self_iteration_orchestrator::OperationKind kind) const
         {
@@ -5757,7 +5777,6 @@ namespace epochengine::editor_ai_development_panel
             const std::string preservedSandboxBase = sandbox_base_root;
             const std::string preservedWorkspaceRoot = workspace_root;
             const std::string preservedObjective = development_objective;
-            const std::string preservedBaseline = source_baseline_evidence;
             const std::string preservedCatalog = source_path_catalog_evidence;
             const auto preservedExpansions = source_context_expansions;
             const auto preservedWorkspaceFileCount = source_workspace_file_count;
@@ -5825,28 +5844,6 @@ namespace epochengine::editor_ai_development_panel
             source_workspace_file_count = preservedWorkspaceFileCount;
             source_workspace_total_bytes = preservedWorkspaceTotalBytes;
 
-            const auto repairedContext = load_reviewed_source_context(
-                preservedWorkspaceRoot,
-                preservedReviewedPaths,
-                std::string_view{},
-                preservedObjective,
-                repairReads,
-                active_source_evidence_budget_bytes(),
-                cumulative_source_workspace.ranges(),
-                causalPaths);
-            if (repairedContext.accepted)
-            {
-                source_navigation_fallbacks += repairedContext.navigation_fallbacks;
-                source_context_evidence = repairedContext.evidence;
-                source_baseline_evidence = repairedContext.evidence;
-                campaign_reviewed_reads = std::move(repairReads);
-            }
-            else
-            {
-                source_context_evidence = preservedBaseline;
-                source_baseline_evidence = preservedBaseline;
-            }
-
             constexpr std::size_t maximumFailureEvidenceBytes =
                 32u * 1024u;
             const auto failureEvidenceDigest = digest_text(failureEvidence);
@@ -5864,8 +5861,8 @@ namespace epochengine::editor_ai_development_panel
             source_repair_diagnostic += failureEvidenceDigest;
             source_repair_diagnostic += "\n";
             source_repair_diagnostic += failureEvidence;
-            if (repairedContext.accepted && !causalPaths.empty())
-                source_repair_diagnostic += "\nCompiler locations in already reviewed files are supplied as exact current-candidate source windows; repair the first causal error before requesting unrelated source.\n";
+            if (!causalPaths.empty())
+                source_repair_diagnostic += "\nCompiler locations in already reviewed files are requested as current-candidate source windows; use only the exact FILE blocks actually supplied and repair the first causal error before requesting unrelated source.\n";
             source_repair_diagnostic +=
                 "\nEND_VERIFIED_HOST_REPAIR_CONTEXT_V1\n";
             if (!failedProposal.empty())
@@ -5876,6 +5873,28 @@ namespace epochengine::editor_ai_development_panel
                     source_repair_diagnostic += "\n[Failed proposal excerpt truncated at 16 KiB.]";
                 source_repair_diagnostic += "\nEND_FAILED_CANDIDATE_PROPOSAL_REFERENCE\n";
             }
+
+            // Validation transcripts and the failed action can consume more
+            // than the generic prompt reserve. Loading source first used to
+            // overfill the next request, retiring a successfully built candidate
+            // without dispatching its repair. Pack against the actual envelope.
+            const auto repairedContext = load_reviewed_source_context(
+                preservedWorkspaceRoot, preservedReviewedPaths, {},
+                preservedObjective, repairReads,
+                source_request_evidence_budget_bytes(),
+                cumulative_source_workspace.ranges(), causalPaths);
+            if (!repairedContext.accepted)
+            {
+                output = reject_model_prompt_budget();
+                status_message += " Current candidate source could not be repacked: "
+                    + repairedContext.status;
+                output.status = status_message;
+                return output;
+            }
+            source_navigation_fallbacks += repairedContext.navigation_fallbacks;
+            source_context_evidence = repairedContext.evidence;
+            source_baseline_evidence = repairedContext.evidence;
+            campaign_reviewed_reads = std::move(repairReads);
 
             status_message = epochengine::format_text(
                 "Verified {} failure opened bounded repair attempt {}/{} in the same candidate workspace; the selected coding model receives the current candidate source plus verified diagnostics.",
@@ -7104,6 +7123,30 @@ namespace epochengine::editor_ai_development_panel
         std::string fullPrompt(repairPromptBudget, 'p');
         if (exhaustedRepairState.append_repair_diagnostic(fullPrompt)
             || fullPrompt != std::string(repairPromptBudget, 'p'))
+            return false;
+        // A real full-validation failure includes a 32 KiB diagnostic and a
+        // failed proposal. Both must survive; exact source receives the space
+        // left after mandatory framing rather than the old fixed reserve.
+        exhaustedRepairState.development_objective = "Repair the saved candidate";
+        exhaustedRepairState.sandbox_lab_plan = "1. Repair the first causal test failure.";
+        exhaustedRepairState.source_repair_diagnostic.assign(
+            (std::min)(repairPromptBudget / 2u, std::size_t{48u * 1024u}), 'd');
+        const auto repairedEvidenceBudget =
+            exhaustedRepairState.source_request_evidence_budget_bytes();
+        if (repairedEvidenceBudget == 0u
+            || repairedEvidenceBudget > active_source_evidence_budget_bytes())
+            return false;
+        exhaustedRepairState.source_context_evidence.assign(repairedEvidenceBudget, 's');
+        const auto repairPrompt = exhaustedRepairState.campaign_model_prompt(
+            ai::self_iteration_orchestrator::OperationKind::model_proposal);
+        if (repairPrompt.empty() || repairPrompt.size() > repairPromptBudget
+            || repairPrompt.find(exhaustedRepairState.source_repair_diagnostic)
+                == std::string::npos
+            || repairPrompt.find(exhaustedRepairState.source_context_evidence)
+                == std::string::npos)
+            return false;
+        exhaustedRepairState.source_repair_diagnostic.assign(repairPromptBudget, 'd');
+        if (exhaustedRepairState.source_request_evidence_budget_bytes() != 0u)
             return false;
         if (!validationRetired()
             || cancelledValidation.has_verified_source_candidate()
@@ -11698,7 +11741,7 @@ namespace epochengine::editor_ai_development_panel
             input.architecture_evidence,
             state.development_objective,
             sharedReads,
-            active_source_evidence_budget_bytes(),
+            state.source_request_evidence_budget_bytes(),
             pendingWorkspace.ranges(),
             state.pending_source_context_paths);
         state.status_message = loaded.status;
