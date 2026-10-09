@@ -17,6 +17,12 @@ operator evidence before making a broader absence claim.
 
 - October 8 incremental-work requirement: save the short task plan and complete
   small buildable source units so model reloads need not restart the mission.
+  Use an administrative supervisor generation to retain the task list and
+  explicit next-worker handoff, then reconcile actual read/edit/validation
+  observations periodically rather than relearning the original prompt. Keep
+  this memory distinct from exact source, approvals and compiler proof. The
+  supervisor/worker may share the selected provider; full EngCoder agent tasks
+  require a qualified private-workspace/tool boundary first.
   Prefer one file, but retain coupled edits needed for a valid unit. Persist
   completed work/diagnostics/next step separately from unfinished generation.
   Reload must never apply partial tool JSON, reuse stale receipts or claim token

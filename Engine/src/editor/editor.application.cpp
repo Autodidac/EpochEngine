@@ -1809,6 +1809,8 @@ namespace epochengine
             // The exact host action is retained while resources settle. A
             // generation change cancels it; polling never reconstructs work.
             platform::work_admission::Controller aiWorkAdmission{};
+            platform::work_admission::ModelMemoryApproval aiModelMemoryApproval{};
+            platform::work_admission::ModelMemoryScope aiQueuedModelMemoryScope{};
             std::optional<editor_ai_development_panel::RenderResult> aiWorkAction{};
             bool aiWorkLocalHttp{};
             std::uint64_t aiWorkArtifactEpoch{};
@@ -1818,6 +1820,8 @@ namespace epochengine
             bool aiSourceParkedRetirement{};
             bool aiWorkRetirementBarrier{};
             std::uint64_t aiWorkObservedFinish{};
+            platform::work_admission::Reason aiWorkReason{
+                platform::work_admission::Reason::idle};
             std::string aiWorkStatus{};
             // Host compiler dependencies survive sandbox parent selection.
             // This is never populated from a model/panel action source root.
@@ -1877,10 +1881,12 @@ namespace epochengine
             editor.aiRetainedSourceEpoch = 0u;
             editor.aiRetainedSourceToken = 0u;
             editor.aiWorkAdmission.cancel();
+            editor.aiQueuedModelMemoryScope = {};
             editor.aiWorkAction.reset();
             editor.aiWorkLocalHttp = false;
             editor.aiWorkArtifactEpoch = 0u;
             editor.aiWorkToken = 0u;
+            editor.aiWorkReason = platform::work_admission::Reason::idle;
             editor.aiWorkStatus.clear();
             // An executing operation owns its lease until real retirement.
         }
@@ -2047,6 +2053,21 @@ namespace epochengine
             return true;
         }
 
+        [[nodiscard]] platform::work_admission::ModelMemoryScope ai_model_memory_scope(
+            const EditorState& editor)
+        {
+            const auto session = editor.aiDevelopmentPanel
+                ? editor.aiDevelopmentPanel->active_session_id() : 0u;
+            if (session == 0u) return {};
+            std::scoped_lock lock(aiModelSelectionMutex);
+            const auto manifest = epochengine::ai::active_model_manifest();
+            return {
+                session,
+                epochengine::ai::active_model_name(), manifest.endpoint,
+                std::string{epochengine::ai::local_inference_transport_name(
+                    epochengine::ai::current_local_inference_transport())}};
+        }
+
         [[nodiscard]] bool queue_ai_work_at(
             EditorState& editor, platform::work_admission::WorkKind kind,
             const editor_ai_development_panel::RenderResult* action,
@@ -2060,6 +2081,7 @@ namespace epochengine
                     && !editor.aiSourceModelLease
                 ? std::make_shared<AiModelSelectionLease>()
                 : std::shared_ptr<AiModelSelectionLease>{};
+            auto memoryScope = ai_model_memory_scope(editor);
             std::scoped_lock lock(coordinator.mutex);
             if (coordinator.token == (std::numeric_limits<std::uint64_t>::max)())
                 return false;
@@ -2072,8 +2094,15 @@ namespace epochengine
                 return false;
             }
             editor.aiWorkToken = token;
+            editor.aiQueuedModelMemoryScope = kind == platform::work_admission::WorkKind::model && !action
+                ? memoryScope : platform::work_admission::ModelMemoryScope{};
+            if (kind == platform::work_admission::WorkKind::model && action)
+                editor.aiModelMemoryApproval.revoke(editor.aiWorkAdmission);
+            else
+                (void)editor.aiModelMemoryApproval.apply(editor.aiWorkAdmission, memoryScope);
             editor.aiWorkLocalHttp = action == nullptr;
             editor.aiWorkArtifactEpoch = editor.aiSourceArtifactEpoch;
+            editor.aiWorkReason = platform::work_admission::Reason::idle;
             if (modelLease) editor.aiSourceModelLease = std::move(modelLease);
             editor.aiWorkStatus = "Queued: checking host RAM/CPU and allowing a 6-second cooldown. No work has started.";
             return true;
@@ -2141,6 +2170,10 @@ namespace epochengine
                 cancel_ai_work_admission(editor);
                 return false;
             }
+            const auto memoryScope = ai_model_memory_scope(editor);
+            if (editor.aiWorkAdmission.pending().kind != platform::work_admission::WorkKind::model
+                || editor.aiWorkLocalHttp)
+                (void)editor.aiModelMemoryApproval.apply(editor.aiWorkAdmission, memoryScope);
             std::scoped_lock lock(coordinator.mutex);
             if (editor.aiWorkObservedFinish != coordinator.finishRevision)
             {
@@ -2151,7 +2184,26 @@ namespace epochengine
             const bool busy = hostWorkActive || coordinator.owner != 0u
                 || coordinator.retirementBlocked || coordinator.retiringContexts != 0u;
             const auto decision = editor.aiWorkAdmission.poll(now, sample, choice, busy);
+            if (editor.aiWorkReason != decision.reason)
+                logger::get("Engine.AI.Admission").logf(logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Queued work admission; token={}; artifact_epoch={}; reason={}; remaining_ms={}; memory_override={}; available_memory_bytes={}; total_memory_bytes={}; cpu_busy_fraction={}; sample_at_ms={}; memory_valid={}; cpu_valid={}; owner_active={}; retirement_blocked={}",
+                    editor.aiWorkToken, editor.aiWorkArtifactEpoch,
+                    admission::reason_message(decision.reason), decision.remaining_ms,
+                    editor.aiWorkAdmission.memory_pressure_approved(),
+                    sample.available_memory_bytes, sample.total_memory_bytes,
+                    sample.cpu_busy_fraction, sample.captured_at_ms,
+                    sample.memory_valid, sample.cpu_valid,
+                    coordinator.owner != 0u, coordinator.retirementBlocked);
+            editor.aiWorkReason = decision.reason;
             editor.aiWorkStatus = std::string{admission::reason_message(decision.reason)};
+            if (decision.reason == admission::Reason::memory_pressure
+                && editor.aiWorkAdmission.pending().kind == admission::WorkKind::model)
+                editor.aiWorkStatus = "Paused - RAM approval needed. The next model request is retained, not running. Approve model calls in AI Controls, or free memory.";
+            if (editor.aiWorkAdmission.memory_pressure_approved())
+                editor.aiWorkStatus += editor.aiModelMemoryApproval.matches(memoryScope)
+                    ? " Low-RAM approval applies to model calls in this session only."
+                    : " Low-RAM exception approved for this request only.";
             if (coordinator.retirementBlocked)
                 editor.aiWorkStatus = "A previous context could not confirm native worker/process retirement. Stop the session and restart Epoch before new heavy work.";
             if (decision.remaining_ms != 0u)
@@ -23134,6 +23186,7 @@ namespace epochengine
         // close. No storage lock spans native attachment removal or a join.
         void request_editor_source_session_stop(EditorState& editor)
         {
+            editor.aiModelMemoryApproval.revoke(editor.aiWorkAdmission);
             cancel_ai_work_admission(editor);
             editor.aiSourceAwaitingReply = false;
             editor.aiLocalMcp.awaitingResponse = false;
@@ -23496,6 +23549,52 @@ namespace epochengine
                     .cpu_busy_fraction = 0.25,
                     .memory_valid = true, .cpu_valid = true};
             };
+            trace.stage = "one_request_low_memory_approval";
+            {
+                AiHeavyWorkCoordinator memoryCoordinator{};
+                auto state = std::make_unique<EditorState>();
+                auto lowMemory = sample(0u);
+                lowMemory.available_memory_bytes = 1024ull * 1024u * 1024u;
+                if (!queue_ai_work_at(*state, Kind::model, nullptr, 0u, memoryCoordinator)
+                    || admit_ai_work_at(*state, false, true, 0u, lowMemory, memoryCoordinator)
+                    || state->aiWorkReason != platform::work_admission::Reason::memory_pressure
+                    || state->aiWorkStatus.find("AI Controls") == std::string::npos)
+                    return false;
+                const auto token = state->aiWorkToken;
+                if (state->aiWorkAdmission.approve_memory_pressure(token + 1u)
+                    || !state->aiWorkAdmission.approve_memory_pressure(token)) return false;
+                // Approval cannot consume another actor's lease or bypass choice.
+                memoryCoordinator.owner = token + 1u;
+                lowMemory.captured_at_ms = 6'000u;
+                if (admit_ai_work_at(*state, false, true, 6'000u, lowMemory, memoryCoordinator)
+                    || state->aiWorkReason != platform::work_admission::Reason::other_work_active)
+                    return false;
+                memoryCoordinator.owner = 0u;
+                state->aiCandidateChallengerProcess = {0u, 1u};
+                if (admit_ai_work_at(*state, false, true, 6'000u, lowMemory, memoryCoordinator)
+                    || state->aiWorkReason != platform::work_admission::Reason::awaiting_choice)
+                    return false;
+                state->aiCandidateChallengerProcess = {};
+                lowMemory.captured_at_ms = 7'000u;
+                if (admit_ai_work_at(*state, false, true, 7'000u, lowMemory, memoryCoordinator)
+                    || state->aiWorkStatus.find("approved for this request only") == std::string::npos)
+                    return false;
+                lowMemory.captured_at_ms = 13'000u;
+                if (!admit_ai_work_at(*state, false, true, 13'000u, lowMemory, memoryCoordinator)
+                    || memoryCoordinator.owner != token || ai_work_pending(*state)
+                    || state->aiWorkAdmission.memory_pressure_approved()) return false;
+                release_ai_work_lease_at(*state, 13'000u, memoryCoordinator);
+                if (!queue_ai_work_at(*state, Kind::model, nullptr, 14'000u, memoryCoordinator)
+                    || state->aiWorkAdmission.memory_pressure_approved()
+                    || !state->aiWorkAdmission.approve_memory_pressure(state->aiWorkToken))
+                    return false;
+                ++state->aiSourceArtifactEpoch;
+                lowMemory.captured_at_ms = 20'000u;
+                if (admit_ai_work_at(*state, false, true, 20'000u, lowMemory, memoryCoordinator)
+                    || ai_work_pending(*state) || state->aiWorkAdmission.memory_pressure_approved())
+                    return false;
+            }
+            trace.stage = "exact_admission_token";
             editor_ai_development_panel::RenderResult retained{};
             retained.action = Action::compile_source_workspace;
             retained.workspace_generation = 7u;
@@ -24282,6 +24381,7 @@ namespace epochengine
         it->second.aiDeferredModelLease.reset();
         it->second.aiDeferredDispatchQueued = false;
         cancel_ai_work_admission(it->second);
+        it->second.aiModelMemoryApproval.revoke(it->second.aiWorkAdmission);
         it->second.showUpdateConfirmModal = false;
         it->second.showSourceUpdateConfirmModal = false;
         it->second.previewMode = core::ScenePreviewMode::Editor;
@@ -24782,6 +24882,7 @@ namespace epochengine
         editor.aiDeferredModelLease.reset();
         editor.aiDeferredDispatchQueued = false;
         cancel_ai_work_admission(editor);
+        editor.aiModelMemoryApproval.revoke(editor.aiWorkAdmission);
         editor.showUpdateConfirmModal = false;
         editor.showSourceUpdateConfirmModal = false;
         editor.updateState = EditorUpdateState::Idle;
@@ -26169,6 +26270,7 @@ namespace epochengine
 
         const auto rejectSourceDispatch = [&](const std::string& status)
         {
+            editor.aiModelMemoryApproval.revoke(editor.aiWorkAdmission);
             log_ai_candidate_event("dispatch_rejected: " + status);
             invalidate_ai_source_artifacts(editor);
             editor.aiSourceAwaitingReply = false;
@@ -26248,6 +26350,7 @@ namespace epochengine
             }
             else if (action.candidate_decision == CandidateDecision::stop_lab)
             {
+                editor.aiModelMemoryApproval.revoke(editor.aiWorkAdmission);
                 retire_ai_candidate(editor,
                     editor.aiCandidateChallengerProcess,
                     editor.aiCandidateChallengerSnapshot,
@@ -28545,9 +28648,14 @@ namespace epochengine
                 .local_model_running = chat.source_request_running(),
                 .local_model_queued = editor.aiDeferredRequestKind == AiDeferredRequestKind::SourceIteration
                     || editor.aiRetainedSourceRequest.has_value()
+                    || (ai_work_pending(editor) && editor.aiWorkAdmission.pending().kind
+                        == platform::work_admission::WorkKind::model)
                     || (editor.aiWorkAction && editor.aiWorkAction->action
                         == editor_ai_development_panel::HostAction::request_model_source_proposal),
                 .local_model_cancelling = chat.source_request_cancelling(),
+                .local_model_approval_required = ai_work_pending(editor)
+                    && editor.aiWorkReason == platform::work_admission::Reason::memory_pressure
+                    && editor.aiWorkAdmission.pending().kind == platform::work_admission::WorkKind::model,
                 .local_model_elapsed_ms = chat.source_request_running() ? chat.elapsed_milliseconds() : 0u,
                 .local_model_activity = editor.aiRetainedSourceRequest
                     ? "Next self-coding request is retained while the earlier project-assistant request finishes."
@@ -34679,6 +34787,36 @@ namespace epochengine
                 // The panel owns one session-wide Stop control. Its common
                 // stop action also cancels these retained/admission/child leases.
             }
+            if (ai_work_pending(editor)
+                && editor.aiWorkArtifactEpoch == editor.aiSourceArtifactEpoch
+                && editor.aiWorkReason == platform::work_admission::Reason::memory_pressure
+                && editor.aiWorkAdmission.pending().kind == platform::work_admission::WorkKind::model)
+            {
+                gui::wrapped_label(
+                    "The loaded model may already own this RAM. Continuing risks exhausting RAM or crashing. Approve only this request, or model calls for this session and selected model/endpoint. Builds and previews still require enough RAM; all other resource and ownership checks remain.",
+                    inspectorWidth);
+                if (gui::button("Allow This Model Request", {inspectorWidth, 30.0f})
+                    && editor.aiWorkAdmission.approve_memory_pressure(editor.aiWorkToken))
+                {
+                    logger::get("Engine.AI.Admission").logf(logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Operator approved one model request despite low RAM; token={}; artifact_epoch={}",
+                        editor.aiWorkToken, editor.aiWorkArtifactEpoch);
+                    chat.append_status("Low-RAM exception approved for this queued request only. Other resource and ownership checks remain active.");
+                }
+                const auto memoryScope = ai_model_memory_scope(editor);
+                if (memoryScope.valid() && memoryScope == editor.aiQueuedModelMemoryScope
+                    && gui::button("Allow Model Calls This Session", {inspectorWidth, 30.0f})
+                    && editor.aiModelMemoryApproval.approve(
+                        editor.aiWorkAdmission, editor.aiWorkToken, memoryScope))
+                {
+                    logger::get("Engine.AI.Admission").logf(logger::LogLevel::INFO,
+                        std::source_location::current(),
+                        "Operator approved session model calls despite low RAM; token={}; session={}; artifact_epoch={}",
+                        editor.aiWorkToken, memoryScope.session, editor.aiWorkArtifactEpoch);
+                    chat.append_status("Low-RAM approval granted for model calls in this session only. Stop, restart, or changing model/endpoint revokes it. Builds and previews remain guarded.");
+                }
+            }
             auto guardedInput = source_iteration_input(inspectorWidth);
             if (!editor.automationConsumed
                 && editor.automationCommand
@@ -34778,9 +34916,15 @@ namespace epochengine
                             guardedInput.selected_model = model;
                             const auto started = editor.aiDevelopmentPanel->begin_source_iteration(
                                 guardedInput, objective);
-                            if (started.action != editor_ai_development_panel::HostAction::
-                                    request_model_source_proposal
-                                || started.model_transport != editor_ai_development_panel::ModelTransport::local_inference)
+                            // Host triage prepares a sandbox before dispatching
+                            // the model. The rig must follow that real production
+                            // action, not require the obsolete selection-first path.
+                            const bool materializing = started.action
+                                == editor_ai_development_panel::HostAction::materialize_source_workspace;
+                            const bool modelSelection = started.action
+                                == editor_ai_development_panel::HostAction::request_model_source_proposal
+                                && started.model_transport == editor_ai_development_panel::ModelTransport::local_inference;
+                            if (!materializing && !modelSelection)
                             {
                                 finishSelfCodingSmoke(false,
                                     started.status.empty()
@@ -40370,9 +40514,13 @@ namespace epochengine
                         == AiDeferredRequestKind::SourceIteration
                         || editor.aiRetainedSourceRequest.has_value(),
                     .local_model_cancelling = chat.source_request_cancelling(),
+                    .local_model_approval_required = ai_work_pending(editor)
+                        && editor.aiWorkReason == platform::work_admission::Reason::memory_pressure
+                        && editor.aiWorkAdmission.pending().kind == platform::work_admission::WorkKind::model,
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
-                    .local_model_activity = std::string{chat.request_activity()},
+                    .local_model_activity = ai_work_pending(editor) ? editor.aiWorkStatus
+                        : std::string{chat.request_activity()},
                     .local_model_request_phase = chat.request_phase(),
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,
@@ -40454,9 +40602,13 @@ namespace epochengine
                         == AiDeferredRequestKind::SourceIteration
                         || editor.aiRetainedSourceRequest.has_value(),
                     .local_model_cancelling = chat.source_request_cancelling(),
+                    .local_model_approval_required = ai_work_pending(editor)
+                        && editor.aiWorkReason == platform::work_admission::Reason::memory_pressure
+                        && editor.aiWorkAdmission.pending().kind == platform::work_admission::WorkKind::model,
                     .local_model_elapsed_ms = chat.source_request_running()
                         ? chat.elapsed_milliseconds() : 0u,
-                    .local_model_activity = std::string{chat.request_activity()},
+                    .local_model_activity = ai_work_pending(editor) ? editor.aiWorkStatus
+                        : std::string{chat.request_activity()},
                     .local_model_request_phase = chat.request_phase(),
                     .external_mcp_available = local_mcp_connector_available(),
                     .external_mcp_status = editor.aiLocalMcp.status,

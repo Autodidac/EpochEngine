@@ -433,14 +433,22 @@ namespace epochengine::ai::development_executor
             fs::create_directories(bounded, error);
             if (error)
                 return false;
+            fs::create_directories(source / "Engine/src/build/cache", error);
+            if (error) return false;
+            fs::create_directories(source / "Engine/build", error);
+            if (error) return false;
 
             constexpr std::string_view solution{"solution-v1"};
             constexpr std::string_view implementation{"implementation-v1"};
             constexpr std::string_view module{"module-v1"};
             constexpr std::string_view buildPolicy{"release-symbol-policy-v1"};
+            constexpr std::string_view buildProbe{"#pragma once\n// first-party build feature probe\n"};
             if (!write(source / "Engine.sln", solution)
                 || !write(source / "Directory.Build.props", buildPolicy)
                 || !write(source / "Directory.Build.targets", buildPolicy)
+                || !write(source / "Engine/src/build/build.cpp_feature_probe.hpp", buildProbe)
+                || !write(source / "Engine/build/generated.hpp", "output-cache")
+                || !write(source / "Engine/src/build/cache/generated.hpp", "nested-cache")
                 || !write(
                     source / "Engine/src/ai/ai.worker.cpp",
                     implementation)
@@ -470,9 +478,9 @@ namespace epochengine::ai::development_executor
                 materializer.materialize(request);
             const std::uint64_t expectedBytes =
                 solution.size() + implementation.size() + module.size()
-                    + 2u * buildPolicy.size();
+                    + 2u * buildPolicy.size() + buildProbe.size();
             if (!copied
-                || copied.file_count != 5u
+                || copied.file_count != 6u
                 || copied.total_bytes != expectedBytes
                 || copied.evidence_digest != digest(copied.evidence_manifest)
                 || copied.evidence_manifest.find(
@@ -483,6 +491,9 @@ namespace epochengine::ai::development_executor
                 || read(sandbox / "Engine.sln") != solution
                 || read(sandbox / "Directory.Build.props") != buildPolicy
                 || read(sandbox / "Directory.Build.targets") != buildPolicy
+                || read(sandbox / "Engine/src/build/build.cpp_feature_probe.hpp") != buildProbe
+                || fs::exists(sandbox / "Engine/build/generated.hpp")
+                || fs::exists(sandbox / "Engine/src/build/cache/generated.hpp")
                 || read(sandbox / "Engine/src/ai/ai.worker.cpp")
                     != implementation
                 || read(sandbox / "Engine/modules/ai.worker.ixx")

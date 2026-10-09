@@ -113,6 +113,8 @@ export namespace epochengine::ai::mcp_orchestrator_bridge
         std::string summary{};
         bool passed{};
         bool operator_approved{};
+        // Host-only plan reuse. Not a model tool field or execution permission.
+        bool retained_plan{};
     };
 
     struct HostApproval final

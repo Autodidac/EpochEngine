@@ -628,7 +628,8 @@ namespace epochengine::ai::mcp_orchestrator_bridge
         switch (operation.kind())
         {
         case self_iteration_orchestrator::OperationKind::model_plan:
-            applied = orchestrator.record_plan(receipt, result.content, result.summary);
+            applied = orchestrator.record_plan(receipt, result.content, result.summary,
+                result.retained_plan);
             break;
         case self_iteration_orchestrator::OperationKind::model_proposal:
             applied = orchestrator.record_proposal(receipt, result.content, result.summary);

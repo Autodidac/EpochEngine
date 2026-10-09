@@ -101,6 +101,7 @@ namespace epochengine::ai::source_discovery_contract
             && ownerMap.find("PATH Engine/modules/core.context.ixx") != std::string::npos
             && ownerMap.find("EDGE Engine/src/epochgui/gui.engine.cpp -> Engine/modules/gui.engine.ixx") != std::string::npos
             && ownerMap.find("EngineSecret") == std::string::npos
+            && map.find("PATH Engine/src/epochgui/gui.empty.cpp\n") != std::string::npos
             && mapBounded;
         // Rebuilding the index discards removed edges instead of retaining old
         // ownership as if it were source from the new checkout revision.

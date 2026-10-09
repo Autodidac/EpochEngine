@@ -1200,9 +1200,16 @@ namespace epochengine::ai::development_executor
             {
                 if (owned_runtime_workspace_path(relative))
                     return true;
+                fs::path prefix{};
                 for (const fs::path& component : relative)
                 {
+                    prefix /= component;
                     const std::string text = component.generic_string();
+                    // This is a first-party source owner, not Engine/build or
+                    // a generated output directory. Its probe header is required
+                    // by core.log in both ordinary and candidate builds.
+                    if (same_path_identity(prefix.generic_string(), "Engine/src/build"))
+                        continue;
                     if (std::any_of(
                             request.excluded_components.begin(),
                             request.excluded_components.end(),

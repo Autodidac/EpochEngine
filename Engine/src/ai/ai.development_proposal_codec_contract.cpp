@@ -83,6 +83,51 @@ namespace epochengine::ai::development_proposal_codec
                     == "int validate() { return 1; }\n";
         }
 
+        [[nodiscard]] bool same_file_patch_contract()
+        {
+            std::string packet = valid_patch_packet();
+            const auto begin = packet.find("begin_operation\n");
+            const auto end = packet.find("end_operation\n") + std::string_view{"end_operation\n"}.size();
+            std::string second = packet.substr(begin, end - begin);
+            second.replace(second.find("int validate() { return 0; }"), 28u,
+                "int result() { return 2; }");
+            second.replace(second.find("int validate() { return 1; }"), 28u,
+                "int result() { return 3; }");
+            packet.replace(packet.find("operation_count: 1"), 18u, "operation_count: 2");
+            packet.insert(packet.find("end_proposal\n"), second);
+            const auto decoded = decode(packet);
+            if (!decoded || decoded.proposal.changes.size() != 2u) return false;
+            const auto& path = decoded.proposal.changes.front().relative_path;
+            const std::string before = "int validate() { return 0; }\nint result() { return 2; }\n";
+            const auto combined = compose_postimage(decoded.proposal, path, before, true);
+            if (!combined || combined.bytes != "int validate() { return 1; }\nint result() { return 3; }\n")
+                return false;
+            auto overlap = decoded.proposal;
+            overlap.changes.back() = overlap.changes.front();
+            if (compose_postimage(overlap, path, before, true)) return false;
+            overlap.changes.back().match_bytes = "return 0;";
+            if (compose_postimage(overlap, path, before, true)) return false;
+            auto chained = decoded.proposal;
+            chained.changes.back().match_bytes = chained.changes.front().replacement_bytes;
+            if (compose_postimage(chained, path, before, true)) return false;
+            auto noop = decoded.proposal;
+            noop.changes.front().replacement_bytes = noop.changes.front().match_bytes;
+            if (compose_postimage(noop, path, before, true)
+                || compose_postimage(decoded.proposal, path, before, false)
+                || compose_postimage(decoded.proposal, path, before + before, true)
+                || compose_postimage(decoded.proposal, path, before, true, 10u)) return false;
+            auto mixed = decoded.proposal;
+            mixed.changes.back().edit_kind = SourceEditKind::replace_file;
+            if (compose_postimage(mixed, path, before, true)) return false;
+            // Changing lengths and reversing operation order must preserve all
+            // original anchors, never search an intermediate postimage.
+            auto reordered = decoded.proposal;
+            std::swap(reordered.changes.front(), reordered.changes.back());
+            reordered.changes.back().replacement_bytes = "int longer_validate() { return 111; }\n";
+            const auto reverse = compose_postimage(reordered, path, before, true);
+            return reverse && reverse.bytes == "int longer_validate() { return 111; }\nint result() { return 3; }\n";
+        }
+
         [[nodiscard]] bool ordered_decode_contract()
         {
             const DecodeResult decoded = decode(valid_packet());
@@ -285,6 +330,17 @@ namespace epochengine::ai::development_proposal_codec
 
             const std::string single = "EPOCH_SOURCE_CONTEXT_REQUEST_V1\npath: "
                 + std::string{firstPath} + "\n";
+            const auto multiple = decode_context_request(single + "first_line: 120\nquery: first\nread_path: "
+                + std::string{firstPath} + "\nfirst_line: 900\nquery: second\nend_request\n", SourceArea::engine);
+            if (!multiple || multiple.request.paths.size() != 1u || multiple.request.reads.size() != 2u
+                || multiple.request.reads[1].first_line != 900u
+                || decode_context_request(single + "first_line: 120\nread_path: "
+                    + std::string{firstPath} + "\nfirst_line: 120\nend_request\n", SourceArea::engine)
+                || decode_context_request(single + "read_path: " + std::string{secondPath}
+                    + "\nfirst_line: 1\nend_request\n", SourceArea::engine)
+                || decode_context_request(single + "read_path: " + std::string{firstPath}
+                    + "\nend_request\n", SourceArea::engine))
+                return false;
             for (const auto line : {"0", "1", "1000000"})
             {
                 const auto bounds = decode_context_request(single
@@ -320,17 +376,17 @@ namespace epochengine::ai::development_proposal_codec
                 return false;
 
             std::string complete = "EPOCH_SOURCE_CONTEXT_REQUEST_V1\n";
-            for (std::size_t index = 0u; index < 12u; ++index)
+            for (std::size_t index = 0u; index < maximum_context_reads; ++index)
             {
                 complete += "path: Engine/src/ai/ai.read_" + std::to_string(index)
                     + ".cpp\nfirst_line: " + std::to_string(index + 1u)
                     + "\nquery: bounded\n";
             }
             const auto maximum = decode_context_request(complete, SourceArea::engine);
-            return maximum && maximum.request.paths.size() == 12u
-                && maximum.request.reads.size() == 12u
+            return maximum && maximum.request.paths.size() == maximum_context_reads
+                && maximum.request.reads.size() == maximum_context_reads
                 && !decode_context_request(complete
-                    + "path: Engine/src/ai/ai.read_12.cpp\nquery: extra\n",
+                    + "path: Engine/src/ai/ai.read_extra.cpp\nquery: extra\n",
                     SourceArea::engine);
         }
 
@@ -401,9 +457,14 @@ namespace epochengine::ai::development_proposal_codec
                 && (context.find("path: Engine/") != std::string::npos || failed(__LINE__))
                 && (context.find("fix bugs") != std::string::npos || failed(__LINE__))
                 && (context.find(evidence) != std::string::npos || failed(__LINE__))
-                && (context.find("up to twelve") != std::string::npos || failed(__LINE__))
+                && (context.find("up to twelve") == std::string::npos || failed(__LINE__))
+                && (engine.find("MAY target the same path") != std::string::npos || failed(__LINE__))
+                && (engine.find("at most four operations") == std::string::npos || failed(__LINE__))
                 && (context.find("first_line: N") != std::string::npos || failed(__LINE__))
                 && (context.find("query: text") != std::string::npos || failed(__LINE__))
+                && (context.find("Never guess line numbers") != std::string::npos || failed(__LINE__))
+                && (context.find("use reads=[]") != std::string::npos || failed(__LINE__))
+                && (engine.find("omit selectors and inspect the automatic window first") != std::string::npos || failed(__LINE__))
                 && (engine.find("another region of the same file") != std::string::npos || failed(__LINE__))
                 && (context.find("does not add source-file bytes")
                     != std::string::npos || failed(__LINE__))
@@ -456,10 +517,12 @@ namespace epochengine::ai::development_proposal_codec
                 && (engine.find("generic logger") != std::string::npos || failed(__LINE__))
                 && (engine.find("FILE_CONTENT_SIZE") != std::string::npos || failed(__LINE__))
                 && (engine.find("one ownership dot") != std::string::npos || failed(__LINE__))
-                && (engine.find("one to four related") != std::string::npos || failed(__LINE__))
+                && (engine.find("one to four related") == std::string::npos || failed(__LINE__))
                 && (engine.find("set operation_count to that exact integer")
                     != std::string::npos || failed(__LINE__))
                 && (engine.find("at most four operations")
+                    == std::string::npos || failed(__LINE__))
+                && (engine.find("MAY target the same path")
                     != std::string::npos || failed(__LINE__))
                 && (engine.find("exactly one bounded source change")
                     == std::string::npos || failed(__LINE__))
@@ -605,6 +668,7 @@ namespace epochengine::ai::development_proposal_codec
         {
             if (!ordered_decode_contract()) return 1;
             if (!exact_patch_decode_contract()) return 8;
+            if (!same_file_patch_contract()) return 10;
             if (!strict_envelope_contract()) return 2;
             if (!path_and_operation_contract()) return 3;
             if (!strict_context_request_contract()) return 4;

@@ -616,6 +616,29 @@ UI rendering reads that state without touching worker output. Its elapsed time
 and animated activity are not token progress. Stop takes precedence over a
 late receiving/completed stage until the worker actually finishes.
 
+Queued heavyweight model work normally requires measured available host RAM,
+CPU headroom and a six-second healthy interval. A loaded model can legitimately
+hold most RAM; low available memory is not proof that inference has failed.
+When RAM alone blocks a queued source-model request, its activity reads
+`Paused - RAM approval needed` and includes the actual admission reason, not a
+generic model wait. AI Controls offers `Allow This Model Request` or
+`Allow Model Calls This Session`, each with an exhaustion/crash warning. The
+first approval belongs to the exact pending token/source generation. The second
+is in-memory consent owned by one Editor context, bound to its explicit Start/
+Restart identity and the exact local model, endpoint and transport. Successive
+local model calls may reuse it after context expansion or repair; a new session,
+Stop, context park/close, model/endpoint/transport change or external MCP request
+revokes it. It is never saved with a checkpoint or restored after restart.
+Both waive only available-RAM thresholds; neither authorizes a compiler,
+validation or preview. Cooldown, valid/fresh measurements, CPU limits, active
+worker retirement, exact source authority and Keep/Choose protections remain.
+`Engine.AI.Admission` logs reason transitions and the exact approval token/epoch
+without prompts, source content or credentials. A queue history message is not
+evidence that the cooldown is still its current blocker; inspect the current
+admission reason and actual transport-send receipt.
+Campaign analytics now distinguish `coding_pass_queued` from the actual
+`model_transport_started`. A queued pass is not evidence of inference activity.
+
 The console-only `Engine/examples/AiTransportContract` probe is deliberately
 absent from default builds, CTest, runtime startup and installation. Build its
 MSVC project directly or enable `EPOCH_BUILD_AI_TRANSPORT_CONTRACT=ON` and build
@@ -789,8 +812,9 @@ runtime gates.
 
 `ai.development_proposal_codec` uses a two-stage bounded protocol. The operator
 states an outcome in ordinary language; Epoch first supplies a verified C++ path
-catalog without source bytes, and the selected model requests a coherent slice
-of at most 12 files. The host accepts the full
+catalog without source bytes, and the selected model requests a coherent working
+set within the current byte budget (up to 256 listed paths/read records per
+packet, not a twelve-file task limit). The host accepts the full
 `EPOCH_SOURCE_CONTEXT_REQUEST_V1` envelope and the common safe compact forms
 emitted by current agentic models: `PATH <canonical-path>` or a bare canonical
 path after the header. Optional reason/count/terminator fields may be inferred,
@@ -805,11 +829,17 @@ The second request includes the selected counted `FILE_CONTENT` or
 protocol, not a command language: no Markdown fences, unknown fields, trailing
 bytes, model-selected permissions, or approximate edits are accepted. The model
 may request another listed source slice when the current evidence is incomplete;
-Epoch performs at most three context reselections and never lets the model invent
-a path. Each request is the complete next set of at most twelve paths, not an
-append-only list: relevant old paths may be retained and irrelevant ones replaced.
-Direct context requests and insufficient-evidence retries share that budget; an
-already-reserved retry is not charged twice when its selected paths arrive.
+Epoch retains a bounded cumulative discovery workspace and never lets the model
+invent a path. Each navigation call admits up to 256 unique paths and distinct
+read windows within the source/prompt budget; several windows may refer to one
+selected file. Exact patches admit up to 64 non-overlapping blocks, including
+multiple blocks of one immutable preimage, grouped into one atomic postimage per
+file. No chained, approximate, overlapping or unreviewed edit becomes admissible
+because a packet ceiling was enlarged.
+Accepted old evidence remains discovery history, while resident exact bytes are
+packed within the current prompt budget. Direct requests and insufficient-evidence
+navigation use the same real-evidence progress accounting; two unchanged reads
+stop the stalled loop rather than restarting an identical expensive request.
 Source iteration also recognizes exactly
 `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` as a safe refusal after expansion is
 exhausted. Framed and raw direct-CLI transcripts use the same line-boundary
@@ -821,16 +851,21 @@ extracts exactly through the matching line-framed `end_proposal` or
 and never enters the strict codec; malformed bytes inside the selected envelope
 remain a hard rejection. The editor consumes each completed source-model
 generation exactly once and clears the transient raw reply after routing it. A
-rejected packet may receive at most two complete, fresh correction attempts
+rejected packet may receive at most two complete, fresh host correction attempts
 carrying only a bounded deterministic host diagnostic and the same reviewed
 evidence. No correction stages bytes, changes paths, bypasses review, or expands
-authority. Sharing a newly reviewed context resets the prior request's correction
-and diagnostic-recheck state. Model-supplied `first_line` and literal `query`
+authority. Action/schema corrections and provider recovery share that two-retry
+no-progress budget. Rebinding the controller does not reset it; only newly
+admitted source bytes or an accepted patch does. Exhaustion preserves the cause,
+saved plan and sandbox and stops, without a blind format-recovery replan.
+Model-supplied `first_line` and literal `query`
 selectors are navigation hints inside an already-approved source path, not new
 authority. If a hinted line is stale/out of range or a literal no longer exists,
 the host keeps the approved file and falls back to its objective-centered bounded
 window instead of rejecting the whole source selection. The fallback is recorded
 in Candidate Lab observability and never expands the approved path set.
+Automatic rereads prefer the newest valid remembered region. A failed selector
+is normalized individually; other valid reads of the same file remain intact.
 
 OpenAI-compatible workloads leave the selected provider's reasoning mode unchanged.
 They do not send an unsupported `reasoning_effort: none`/off override or a Qwen
@@ -840,11 +875,19 @@ them into the same `EPOCH_SOURCE_CONTEXT_REQUEST_V1` and
 `EPOCH_SOURCE_PATCH_PROPOSAL_V1` packets consumed by the trusted host. The model
 therefore does not have to reproduce fragile line-protocol punctuation, while
 the schema adapter grants no path, permission, apply, or execution authority.
-Each HTTP source stage exposes exactly one function: context selection takes
-host-issued SOURCE_ID values/read records, and patch proposals take reviewed IDs
-with bounded title/rationale/operations. Empty phase arrays report insufficient
-evidence; there is no competing action function or mixed read/edit mode. IDs map
-through the existing verified catalog and codec before any source is admitted.
+HTTP context selection exposes only its read-only function with host-issued
+SOURCE_ID values/read records. Source IDs are unique in the selected list;
+distinct read records may repeat an ID. Identical selectors remain invalid.
+Canonical framing uses read_path for additional windows of an admitted path.
+Coding exposes mutually exclusive read-context
+and exact-patch functions, admitting exactly one call: missing source can be
+requested without inventing an edit or losing its reason to an empty-patch
+sentinel. Patch operations still use reviewed IDs and bounded metadata. Empty
+phase arrays report insufficient evidence; there is no mixed read/edit mode or
+parallel-call admission. IDs map through the existing verified catalog and codec
+before any source is admitted. Failed selectors are replaced by verified fallback
+anchors only after source/bundle admission; raw query text and source bodies are
+excluded from residency metadata logs.
 Legacy exact patch JSON remains readable. Unknown or duplicated fields and mixed
 read/edit responses are rejected. Proposal metadata does not have to repeat words
 from the operator's objective: lexical overlap does not prove relevance or safety.
@@ -855,14 +898,15 @@ per-attempt wall budget, including model loading, prompt evaluation and reasonin
 Ordinary chat and authoring allow 180 seconds; model inventory discovery allows
 180 seconds for a response. These limits apply to individual requests, not the
 total multi-iteration mission. Window focus does not cancel the
-independent HTTP worker. One early transport-operation, API, hidden-reasoning,
-malformed-schema, or empty-content failure may retry with an explicit stage-format
-request. Source function stages never simultaneously ask for a final answer in
-assistant content. If a source-selection or source-proposal request remains reasoning-only
-after that transport-level recovery, Candidate Lab keeps the same campaign/pass
-and may issue at most two host-diagnosed structured-response corrections against
-the same authority and reviewed evidence. Exhausting that bounded recovery stops
-the pass; it does not silently approve reasoning text as source output. Expiry of
+independent HTTP worker. A genuine early transport/API exception may receive one
+short transport retry. A completed invalid/missing source action instead returns
+EPOCH_SOURCE_ACTION_REJECTED_V1 with its precise host diagnostic, without another
+transport-format generation. The public AI reply path preserves it and the
+editor routes it to the shared host correction budget, not the proposal-header
+decoder. Source function stages never simultaneously ask for a final answer in
+assistant content. Reasoning and unfinished arguments cannot enter the source
+codec. Exhausting bounded host recovery stops the pass; it does not silently
+approve reasoning text as source output. Expiry of
 the whole wall budget does not automatically restart the same expensive
 generation. Cancellation and failed native retirement are never retried.
 Timeout diagnostics preserve elapsed time, configured limit and attempt number.
@@ -879,11 +923,12 @@ an Editor model request is queued, working or stopping, and while inventory is
 pending. Saving a URL does not send a prompt or start a server/model.
 
 The EngCoder preset is `http://127.0.0.1:14321/v1`; inventory uses `/v1/models`
-and requests use `/v1/chat/completions`. The original supplied EngCoder 0.6.5
-rejected streaming, so the compatibility preset and saved complete-response mode
-remain preserved. The October 7 local-override-repair checkout implements Chat
-SSE. Use the existing per-endpoint Use Streaming Responses option after active
-requests retire; version names alone are not capability proof. Complete responses
+and requests use `/v1/chat/completions`. Streaming is now the default, including
+for newly selected EngCoder endpoints. The original supplied EngCoder 0.6.5
+rejected streaming; an explicit saved complete-response choice remains preserved
+for that compatibility case. The inspected EngCoder 0.6.9 implementation supports
+Chat SSE. Use the existing per-endpoint Use Streaming Responses option after
+active requests retire; version names alone are not capability proof. Complete responses
 cannot expose live generation before their body arrives. Worker-owned progress
 reports request phase, attempt, prompt/received bytes, parsed SSE event count,
 text/tool-argument/reasoning byte counts and time since the last received bytes.
@@ -901,6 +946,15 @@ unusable replies. LM Studio retains streamed replies. Collapsible route referenc
 format; EngCoder's full asynchronous agent has its own tasks/events, approvals,
 memory and execution authority. Neither is silently used as Chat or given Epoch
 sandbox/source authority. No EngCoder server, model or training job is auto-started.
+
+The inspected EngCoder 0.6.9 full task API uses its configured global workspace;
+its TaskRequest does not bind a private Epoch candidate root or tool allowlist.
+Persistent external task/session roles are not a substitute for that boundary.
+Epoch therefore uses separate administrative supervisor and coding-worker
+generations through the existing selected Chat provider, retaining its own
+plan/handoff and host-outcome checkpoint. Epoch owns exact edits, compiler actors
+and human candidate choice. This is role integration, not full `/api/tasks`
+execution or a grant of filesystem/network authority to EngCoder.
 
 External EngCoder UI is acceptable during this integration. A later native UI
 mapping must retain Epoch's GUI primitives/style and useful EngCoder themes,

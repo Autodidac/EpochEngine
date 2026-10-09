@@ -35,7 +35,8 @@ namespace epochengine::editor_ai_development
 
     namespace
     {
-        constexpr std::size_t maximum_operations = 12u;
+        constexpr std::size_t maximum_operations =
+            ai::development_proposal_codec::maximum_patch_blocks;
         constexpr std::size_t maximum_evidence_items = 12u;
         constexpr std::size_t maximum_text_bytes = 4096u;
 
@@ -1000,6 +1001,12 @@ namespace epochengine::editor_ai_development
              index < decoded.proposal.changes.size(); ++index)
         {
             const auto& change = decoded.proposal.changes[index];
+            // A model may submit many independent blocks in the same file.
+            // Seal one full host-composed postimage per canonical file, so the
+            // existing executor/journal retains atomic, unique-path writes.
+            if (std::ranges::any_of(payloads, [&](const auto& payload)
+                { return payload.relative_path == change.relative_path; }))
+                continue;
             if (change.area != expectedArea)
             {
                 return impl_->remember({
@@ -1026,46 +1033,16 @@ namespace epochengine::editor_ai_development
                     ControllerCode::invalid_request,
                     before.status});
             }
-            std::string postimage = change.replacement_bytes;
-            if (change.edit_kind
-                == ai::development_proposal_codec::SourceEditKind::
-                    replace_exact_block)
-            {
-                if (!before.state->exists)
-                {
-                    return impl_->remember({
-                        ControllerCode::invalid_request,
-                        "Exact-block source edits require an existing preimage."});
-                }
-                const std::size_t first =
-                    before.bytes.find(change.match_bytes);
-                const std::size_t second =
-                    first == std::string::npos
-                    ? std::string::npos
-                    : before.bytes.find(
-                        change.match_bytes,
-                        first + change.match_bytes.size());
-                if (change.match_bytes.empty()
-                    || first == std::string::npos
-                    || second != std::string::npos)
-                {
-                    return impl_->remember({
-                        ControllerCode::invalid_request,
-                        "Exact-block source edit rejected because its search "
-                        "bytes are absent or ambiguous in the host-captured preimage."});
-                }
-                postimage = before.bytes;
-                postimage.replace(
-                    first,
-                    change.match_bytes.size(),
-                    change.replacement_bytes);
-            }
-            if (postimage.size() > 16u * 1024u * 1024u)
+            auto composed = ai::development_proposal_codec::compose_postimage(
+                decoded.proposal, change.relative_path, before.bytes,
+                before.state->exists);
+            if (!composed)
             {
                 return impl_->remember({
                     ControllerCode::invalid_request,
-                    "Source proposal postimage exceeds the bounded file size."});
+                    std::move(composed.status)});
             }
+            std::string postimage = std::move(composed.bytes);
             std::string sandboxStatus{};
             if (!prepare_sandbox_preimage(
                     impl_->configuration,
@@ -1091,7 +1068,7 @@ namespace epochengine::editor_ai_development
                 .after = after});
             payloads.push_back({
                 .stable_operation_id =
-                    static_cast<std::uint64_t>(index + 1u),
+                    static_cast<std::uint64_t>(payloads.size() + 1u),
                 .relative_path = change.relative_path,
                 .replacement_bytes = std::move(postimage)});
         }

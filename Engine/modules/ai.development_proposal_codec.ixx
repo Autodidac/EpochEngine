@@ -15,6 +15,9 @@ export module ai.development_proposal_codec;
 export namespace epochengine::ai::development_proposal_codec
 {
     inline constexpr std::uint32_t schema_version = 1u;
+    // Transport/resource ceilings, not a per-task file or buildable-unit policy.
+    inline constexpr std::size_t maximum_patch_blocks = 64u;
+    inline constexpr std::size_t maximum_context_reads = 256u;
 
     enum class SourceArea : std::uint8_t
     {
@@ -71,7 +74,7 @@ export namespace epochengine::ai::development_proposal_codec
     struct DecodeLimits final
     {
         std::size_t maximum_reply_bytes{1024u * 1024u};
-        std::size_t maximum_operations{12u};
+        std::size_t maximum_operations{maximum_patch_blocks};
         std::size_t maximum_metadata_bytes{4096u};
         std::size_t maximum_path_bytes{1024u};
         std::size_t maximum_file_bytes{256u * 1024u};
@@ -186,10 +189,28 @@ export namespace epochengine::ai::development_proposal_codec
         }
     };
 
+    struct PostimageResult final
+    {
+        bool accepted{};
+        std::string bytes{};
+        std::string status{};
+
+        [[nodiscard]] explicit operator bool() const noexcept { return accepted; }
+    };
+
+    // All same-file searches resolve against one immutable host preimage.
+    // Independent edits are composed into one atomic file operation.
+    [[nodiscard]] PostimageResult compose_postimage(
+        const Proposal& proposal,
+        std::string_view relative_path,
+        std::string_view preimage,
+        bool preimage_exists,
+        std::size_t maximum_bytes = 16u * 1024u * 1024u);
+
     [[nodiscard]] ContextRequestDecodeResult decode_context_request(
         std::string_view reply,
         SourceArea area,
-        std::size_t maximum_paths = 12u,
+        std::size_t maximum_paths = maximum_context_reads,
         std::size_t maximum_reason_bytes = 512u,
         std::size_t maximum_path_bytes = 1024u);
 

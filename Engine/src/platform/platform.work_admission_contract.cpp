@@ -115,6 +115,113 @@ namespace
         if (invalid_gate.queue({1u, WorkKind::model}, 0u)
             || invalid_gate.poll(0u, healthy(0u), false, false).reason != Reason::invalid_policy)
             return 34;
+
+        Controller approved{};
+        auto lowMemory = healthy(0u);
+        lowMemory.available_memory_bytes = gib;
+        if (approved.approve_memory_pressure(1u)
+            || !approved.queue({1u, WorkKind::model}, 0u)
+            || approved.poll(0u, lowMemory, false, false).reason != Reason::memory_pressure
+            || approved.approve_memory_pressure(2u)
+            || !approved.approve_memory_pressure(1u)
+            || !approved.memory_pressure_approved()) return 38;
+        if (approved.poll(0u, lowMemory, false, false).remaining_ms != 6'000u)
+            return 39;
+        lowMemory.captured_at_ms = 6'000u;
+        lowMemory.cpu_busy_fraction = 0.95;
+        if (approved.poll(6'000u, lowMemory, false, false).reason != Reason::cpu_pressure)
+            return 40;
+        lowMemory.cpu_busy_fraction = 0.20;
+        lowMemory.memory_valid = false;
+        if (approved.poll(6'000u, lowMemory, false, false).reason != Reason::resources_unavailable)
+            return 41;
+        lowMemory.memory_valid = true;
+        lowMemory.captured_at_ms = 0u;
+        if (approved.poll(6'000u, lowMemory, false, false).reason != Reason::resources_stale)
+            return 46;
+        lowMemory.captured_at_ms = 6'000u;
+        if (!approved.queue({1u, WorkKind::model}, 6'000u)
+            || !approved.memory_pressure_approved()) return 47;
+        if (approved.poll(6'000u, lowMemory, true, false).reason != Reason::awaiting_choice
+            || approved.poll(6'000u, lowMemory, false, true).reason != Reason::other_work_active
+            || approved.poll(6'000u, lowMemory, false, false).remaining_ms != 6'000u)
+            return 42;
+        lowMemory.captured_at_ms = 12'000u;
+        if (!approved.consume(1u, 12'000u, lowMemory, false, false)
+            || approved.memory_pressure_approved()
+            || approved.approve_memory_pressure(1u)
+            || !approved.queue({2u, WorkKind::model}, 12'000u)
+            || approved.memory_pressure_approved()
+            || approved.poll(12'000u, lowMemory, false, false).reason != Reason::memory_pressure)
+            return 43;
+        if (!approved.approve_memory_pressure(2u)) return 44;
+        approved.cancel();
+        if (approved.memory_pressure_approved()
+            || !approved.queue({3u, WorkKind::compiler}, 12'000u)
+            || approved.approve_memory_pressure(3u)
+            || approved.poll(12'000u, lowMemory, false, false).reason != Reason::memory_pressure)
+            return 45;
+        Controller fractionApproved{};
+        lowMemory.total_memory_bytes = 256u * gib;
+        lowMemory.available_memory_bytes = 3u * gib;
+        lowMemory.captured_at_ms = 0u;
+        if (!fractionApproved.queue({1u, WorkKind::model}, 0u)
+            || fractionApproved.poll(0u, lowMemory, false, false).reason != Reason::memory_pressure
+            || !fractionApproved.approve_memory_pressure(1u)
+            || fractionApproved.poll(0u, lowMemory, false, false).remaining_ms != 6'000u)
+            return 48;
+        lowMemory.captured_at_ms = 6'000u;
+        if (!fractionApproved.consume(1u, 6'000u, lowMemory, false, false)) return 49;
+        ModelMemoryApproval sessionApproval{};
+        ModelMemoryScope scope{1u, "selected-model", "http://127.0.0.1:14321/v1", "http"};
+        Controller sessionGate{};
+        lowMemory = healthy(0u);
+        lowMemory.available_memory_bytes = gib;
+        if (sessionApproval.approve(sessionGate, 1u, scope)
+            || !sessionGate.queue({1u, WorkKind::model}, 0u)
+            || sessionApproval.apply(sessionGate, scope)
+            || sessionApproval.approve(sessionGate, 2u, scope)
+            || sessionApproval.approve(sessionGate, 1u, {})
+            || !sessionApproval.approve(sessionGate, 1u, scope)) return 50;
+        (void)sessionGate.poll(0u, lowMemory, false, false);
+        lowMemory.captured_at_ms = 6'000u;
+        if (!sessionGate.consume(1u, 6'000u, lowMemory, false, false)
+            || !sessionGate.queue({2u, WorkKind::model}, 6'000u)
+            || sessionGate.memory_pressure_approved()
+            || !sessionApproval.apply(sessionGate, scope)
+            || !sessionGate.memory_pressure_approved()) return 51;
+        sessionGate.cancel();
+        std::uint64_t nextToken = 3u;
+        for (const auto kind : {WorkKind::compiler, WorkKind::validation, WorkKind::preview})
+        {
+            if (!sessionGate.queue({nextToken++, kind}, 6'000u)
+                || sessionApproval.apply(sessionGate, scope)
+                || sessionApproval.approve(sessionGate, sessionGate.pending().token, scope)
+                || sessionGate.memory_pressure_approved()
+                || sessionGate.poll(6'000u, lowMemory, false, false).reason != Reason::memory_pressure)
+                return 52;
+            sessionGate.cancel();
+        }
+        // Changing any scope component revokes consent, even when changing back.
+        for (unsigned field = 0u; field < 4u; ++field)
+        {
+            if (!sessionGate.queue({10u + field, WorkKind::model}, 6'000u)
+                || !sessionApproval.approve(sessionGate, sessionGate.pending().token, scope)) return 53;
+            auto changed = scope;
+            if (field == 0u) ++changed.session;
+            if (field == 1u) changed.model += "-other";
+            if (field == 2u) changed.endpoint += "/other";
+            if (field == 3u) changed.transport = "external-mcp";
+            if (sessionApproval.apply(sessionGate, changed)
+                || sessionGate.memory_pressure_approved()
+                || sessionApproval.apply(sessionGate, scope)) return 54;
+            sessionGate.cancel();
+        }
+        if (!sessionGate.queue({20u, WorkKind::model}, 6'000u)
+            || !sessionApproval.approve(sessionGate, 20u, scope)) return 55;
+        sessionApproval.revoke(sessionGate);
+        if (sessionGate.memory_pressure_approved() || sessionApproval.matches(scope)
+            || sessionApproval.apply(sessionGate, scope)) return 56;
         return 0;
     }
 }

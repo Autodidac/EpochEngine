@@ -14,6 +14,13 @@ stage-prompt/streamed-response source repairs have build/pure-contract proof, no
 native Qwen/embedded-choice/successor acceptance. D1/P0 remains the next behavioral
 gate; packaging success does not complete it or the playable 2D objective.
 
+October 8 continuation implements compact administrative supervisor/worker
+handoffs and durable host-outcome memory, broad path-first discovery, explicit
+model-session RAM consent and source-owned build-input copying. Debug/Release
+and CPU contract proof do not complete D1: native docked successor, second build
+and cold-editor recovery are still the active gate. Reuse the implemented paths;
+do not restart their design from the older baseline label above.
+
 Build architecture uses the same projects throughout: portable Debug/Release;
 Windows/MSVC adds optimized ReleaseWithDebugInfo and BuildAll dispatching CMake's
 three configurations. No combined-build utility project, Linux symbol-mode

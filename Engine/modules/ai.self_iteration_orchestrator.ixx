@@ -121,6 +121,10 @@ export namespace epochengine::ai::self_iteration_orchestrator
         bool engine_source_campaign_permitted{};
         bool project_source_campaign_permitted{};
         bool sandbox_apply_permitted{};
+        // Host-observed task continuity. This is memory, never source authority
+        // or a carried approval. Preserved through provider/model restarts.
+        std::string continuity_bytes{};
+        std::uint32_t source_turns_since_review{};
     };
 
     struct ActionToken final
@@ -213,6 +217,8 @@ export namespace epochengine::ai::self_iteration_orchestrator
         std::string plan_sha256{};
         // Durable task memory, not a reused approval or an unfinished token stream.
         std::string plan_bytes{};
+        std::string continuity_bytes{};
+        std::uint32_t source_turns_since_review{};
         std::string proposal_sha256{};
         std::string candidate_sha256{};
         std::string pending_operation_id{};
@@ -256,7 +262,8 @@ export namespace epochengine::ai::self_iteration_orchestrator
         [[nodiscard]] Result record_plan(
             OperationReceipt receipt,
             std::string_view plan_bytes,
-            std::string summary);
+            std::string summary,
+            bool retained_plan = false);
         [[nodiscard]] Result share_curated_evidence(
             ActionToken action,
             std::string scope_sha256,

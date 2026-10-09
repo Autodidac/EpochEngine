@@ -368,7 +368,9 @@ namespace epochengine::ai
         std::vector<std::string> g_savedLocalEndpoints{
             "http://localhost:1234/v1", "http://127.0.0.1:14321/v1"};
         bool g_endpointPreferencesLoaded{};
-        std::vector<std::string> g_nonStreamingLocalEndpoints{"http://127.0.0.1:14321/v1"};
+        // Streaming is the default for compatible APIs, including current
+        // EngCoder. Preserve an explicit saved opt-out for older providers.
+        std::vector<std::string> g_nonStreamingLocalEndpoints{};
         std::string g_selectedModel{ configured_model() };
         LocalModelSelectionOrigin g_selectedModelOrigin = g_selectedModel.empty()
             ? LocalModelSelectionOrigin::none : LocalModelSelectionOrigin::configured;
@@ -1047,12 +1049,19 @@ namespace epochengine::ai
                         || detail.find("timeout") != std::string::npos
                         || detail.find("time-out") != std::string::npos
                         || detail.find("deadline") != std::string::npos));
+                provider_model_unloaded = detail.find("model unloaded") != std::string::npos
+                    || detail.find("explicitmodelunloaderror") != std::string::npos;
                 rejected = status >= 400u && status < 500u
                     && status != 408u && status != 429u;
             }
 
             [[nodiscard]] std::string diagnostic() const
             {
+                if (provider_model_unloaded)
+                    return std::string{what()} +
+                        ". The upstream model was unloaded during this request. No partial action was admitted "
+                        "and Epoch did not reload it or resend the request. Select an available model before resuming; "
+                        "the saved plan and accepted sandbox remain retained.";
                 if (provider_timeout)
                     return std::string{what()} +
                         ". The provider or its upstream inference timed out before Epoch's request budget expired. "
@@ -1065,6 +1074,7 @@ namespace epochengine::ai
 
             unsigned status{};
             bool provider_timeout{};
+            bool provider_model_unloaded{};
             bool rejected{};
         };
 
@@ -3000,6 +3010,7 @@ namespace epochengine::ai
         [[nodiscard]] static std::string_view model_reply_kind(std::string_view reply) noexcept
         {
             if (reply.empty()) return "unusable_reply";
+            if (reply.starts_with("EPOCH_SOURCE_ACTION_REJECTED_V1\n")) return "source_action_rejected";
             if (reply.compare("EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1") == 0) return "insufficient_context";
             if (reply.starts_with("EPOCH_SOURCE_CONTEXT_REQUEST_V1\n")) return "source_context_request";
             if (reply.starts_with("EPOCH_SELF_ITERATION_PLAN_V2\n")) return "implementation_plan";
@@ -3171,8 +3182,6 @@ namespace epochengine::ai
 
             std::string annotated{};
             annotated.reserve(input.size() + catalog.paths.size() * 20u);
-            std::vector<std::uint32_t> emittedReviewedIds{};
-            emittedReviewedIds.reserve(catalog.reviewed_count);
             std::size_t begin{};
             while (begin <= input.size())
             {
@@ -3201,11 +3210,11 @@ namespace epochengine::ai
                         ? std::string_view{"FILE_CONTENT_BEGIN "}.size()
                         : std::string_view{"FILE_EXCERPT_BEGIN "}.size();
                     const auto id = catalog.id_for(comparison.substr(prefix));
-                    if (id && *id <= catalog.reviewed_count
-                        && std::ranges::find(emittedReviewedIds, *id)
-                            == emittedReviewedIds.end())
+                    if (id && *id <= catalog.reviewed_count)
                     {
-                        emittedReviewedIds.push_back(*id);
+                        // Each disjoint excerpt needs its own binding. A label
+                        // only on the first window makes later exact bytes look
+                        // unrelated to the source ID supplied to the tool.
                         annotated += "REVIEWED_SOURCE_ID ";
                         annotated += std::to_string(*id);
                         annotated += " PATH ";
@@ -3227,9 +3236,9 @@ namespace epochengine::ai
             std::size_t sourceCount)
         {
             const auto maximum = (std::max)(std::size_t{1u}, sourceCount);
-            return std::string{R"json({"type":"function","function":{"name":"epoch_select_source_context","description":"Select only NEW verified source evidence to append to the cumulative workspace by host-issued SOURCE_ID. Previously reviewed evidence is retained by Epoch. Never type or invent repository paths. This is read-only context navigation and never applies edits. If no bounded selection is justified, return an empty source_ids array and empty reads array with the reason.","strict":true,"parameters":{"type":"object","additionalProperties":false,"properties":{"reason":{"type":"string","minLength":1,"maxLength":512},"source_ids":{"type":"array","minItems":0,"maxItems":12,"items":{"type":"integer","minimum":1,"maximum":)json"}
+            return std::string{R"json({"type":"function","function":{"name":"epoch_select_source_context","description":"Read the verified project by host-issued SOURCE_ID, including remembered regions absent from current FILE blocks. Batch all known necessary reads; independent windows may reuse source_id. List each ID once in source_ids. The host sparsely packs returned bytes to the model context budget, not a twelve-file task limit. Only current FILE blocks are resident edit evidence. This read-only function never applies edits. If no selection is justified, return empty source_ids and reads with the reason.","strict":true,"parameters":{"type":"object","additionalProperties":false,"properties":{"reason":{"type":"string","minLength":1,"maxLength":512},"source_ids":{"type":"array","minItems":0,"maxItems":256,"items":{"type":"integer","minimum":1,"maximum":)json"}
                 + std::to_string(maximum)
-                + R"json(}},"reads":{"type":"array","maxItems":12,"items":{"type":"object","additionalProperties":false,"properties":{"source_id":{"type":"integer","minimum":1,"maximum":)json"
+                + R"json(}},"reads":{"type":"array","maxItems":256,"items":{"type":"object","additionalProperties":false,"properties":{"source_id":{"type":"integer","minimum":1,"maximum":)json"
                 + std::to_string(maximum)
                 + R"json(},"first_line":{"type":"integer","minimum":0,"maximum":1000000},"query":{"type":"string","maxLength":256}},"required":["source_id","first_line","query"]}}},"required":["reason","source_ids","reads"]}}})json";
         }
@@ -3238,7 +3247,7 @@ namespace epochengine::ai
             std::size_t reviewedCount)
         {
             const auto maximum = (std::max)(std::size_t{1u}, reviewedCount);
-            return std::string{R"json({"type":"function","function":{"name":"epoch_propose_source_patch","description":"Propose one bounded atomic exact-block source edit set using only REVIEWED_SOURCE_ID values supplied with exact source bytes. Never type repository paths and never request source through this function. If the reviewed bytes do not justify a safe edit, return an empty operations array and explain why in rationale.","strict":true,"parameters":{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","minLength":1,"maxLength":160},"rationale":{"type":"string","minLength":1,"maxLength":1024},"operations":{"type":"array","minItems":0,"maxItems":4,"items":{"type":"object","additionalProperties":false,"properties":{"source_id":{"type":"integer","minimum":1,"maximum":)json"}
+            return std::string{R"json({"type":"function","function":{"name":"epoch_propose_source_patch","description":"Propose an atomic edit set from exact REVIEWED_SOURCE_ID bytes. Multiple operations MAY use the same source_id for separate non-overlapping blocks. Each search targets the ORIGINAL file, never a previous replacement. Include all edits needed for a coherent buildable result; there is no four-edit or one-edit-per-file restriction. The host groups blocks into one atomic sandbox write per file. Request missing bytes through the context function. If no edit is justified, return empty operations with a reason.","strict":true,"parameters":{"type":"object","additionalProperties":false,"properties":{"title":{"type":"string","minLength":1,"maxLength":160},"rationale":{"type":"string","minLength":1,"maxLength":1024},"operations":{"type":"array","minItems":0,"maxItems":64,"items":{"type":"object","additionalProperties":false,"properties":{"source_id":{"type":"integer","minimum":1,"maximum":)json"}
                 + std::to_string(maximum)
                 + R"json(},"summary":{"type":"string","minLength":1,"maxLength":512},"search":{"type":"string","minLength":1,"maxLength":32768},"replacement":{"type":"string","maxLength":32768}},"required":["source_id","summary","search","replacement"]}}},"required":["title","rationale","operations"]}}})json";
         }
@@ -3248,14 +3257,14 @@ namespace epochengine::ai
             StructuredSourceReply shape,
             const SourceReferenceCatalog& catalog)
         {
-            // Exactly one phase-specific tool is ever exposed. The model no
-            // longer chooses between context, patch, and insufficient actions.
-            // An empty result inside the selected phase is the deterministic
-            // insufficient-evidence signal.
+            // Selection is read-only. Coding may either request missing bytes
+            // or propose an exact edit, never both in one response. Each tool
+            // retains its own schema and authority; the decoder admits one call.
             if (shape == StructuredSourceReply::context)
                 return "[" + source_context_tool_definition(catalog.paths.size()) + "]";
             if (shape == StructuredSourceReply::patch)
-                return "[" + source_patch_tool_definition(catalog.reviewed_count) + "]";
+                return "[" + source_patch_tool_definition(catalog.reviewed_count)
+                    + "," + source_context_tool_definition(catalog.paths.size()) + "]";
             return "[]";
         }
 
@@ -3951,10 +3960,10 @@ namespace epochengine::ai
             std::vector<development_proposal_codec::ContextRead>& reads)
         {
             std::vector<std::string> recoveredPaths{};
-            recoveredPaths.reserve(12u);
+            recoveredPaths.reserve(development_proposal_codec::maximum_context_reads);
             const auto addPath = [&](std::string path)
             {
-                if (path.empty() || recoveredPaths.size() >= 12u)
+                if (path.empty() || recoveredPaths.size() >= development_proposal_codec::maximum_context_reads)
                     return;
                 if (std::ranges::find(recoveredPaths, path)
                     == recoveredPaths.end())
@@ -3984,7 +3993,8 @@ namespace epochengine::ai
                 if (std::ranges::any_of(recoveredReads,
                     [&read](const auto& existing)
                     {
-                        return existing.path == read.path;
+                        return existing.path == read.path
+                            && existing.first_line == read.first_line && existing.query == read.query;
                     }))
                 {
                     continue;
@@ -4054,11 +4064,12 @@ namespace epochengine::ai
             if (cursor.consume(']')) return true;
             for (;;)
             {
-                if (reads.size() >= 12u) return false;
+                if (reads.size() >= development_proposal_codec::maximum_context_reads) return false;
                 development_proposal_codec::ContextRead read{};
                 if (!parse_context_read(cursor, read)) return false;
                 if (std::ranges::any_of(reads, [&read](const auto& existing)
-                    { return existing.path == read.path; }))
+                    { return existing.path == read.path
+                        && existing.first_line == read.first_line && existing.query == read.query; }))
                     return false;
                 reads.push_back(std::move(read));
                 if (cursor.consume(']')) return true;
@@ -4071,7 +4082,8 @@ namespace epochengine::ai
             const std::vector<std::string>& paths,
             const std::vector<development_proposal_codec::ContextRead>& reads)
         {
-            if (paths.empty() || paths.size() > 12u || reads.size() > paths.size())
+            if (paths.empty() || paths.size() > development_proposal_codec::maximum_context_reads
+                || reads.size() > development_proposal_codec::maximum_context_reads)
                 return {};
             for (const auto& read : reads)
             {
@@ -4086,13 +4098,14 @@ namespace epochengine::ai
                     || path.find_first_of("\r\n\0", 0u, 3u) != std::string::npos)
                     return {};
                 packet += "path: " + path + "\n";
-                const auto read = std::ranges::find_if(reads,
-                    [&path](const auto& selection) { return selection.path == path; });
-                if (read != reads.end())
+                bool firstRead = true;
+                for (const auto& read : reads)
                 {
-                    packet += "first_line: " + std::to_string(read->first_line) + "\n";
-                    if (!read->query.empty())
-                        packet += "query: " + read->query + "\n";
+                    if (read.path != path) continue;
+                    if (!firstRead) packet += "read_path: " + path + "\n";
+                    firstRead = false;
+                    packet += "first_line: " + std::to_string(read.first_line) + "\n";
+                    if (!read.query.empty()) packet += "query: " + read.query + "\n";
                 }
             }
             packet += "end_request\n";
@@ -4193,7 +4206,7 @@ namespace epochengine::ai
                 return true;
             for (;;)
             {
-                if (operations.size() >= 4u)
+                if (operations.size() >= development_proposal_codec::maximum_patch_blocks)
                     return false;
                 StructuredPatchOperation operation{};
                 if (!parse_patch_operation(cursor, operation))
@@ -4306,7 +4319,8 @@ namespace epochengine::ai
         [[nodiscard]] static bool parse_source_id_context_read(
             StructuredJsonCursor& cursor,
             SourceIdContextRead& read,
-            std::uint32_t maximumId)
+            std::uint32_t maximumId,
+            std::string* diagnostic = nullptr)
         {
             if (!cursor.consume('{') || cursor.consume('}'))
                 return false;
@@ -4322,7 +4336,10 @@ namespace epochengine::ai
                 {
                     const auto value = cursor.bounded_integer(maximumId);
                     if (!value || *value == 0u)
+                    {
+                        if (diagnostic) *diagnostic = "A reads source_id must be an integer from 1 through " + std::to_string(maximumId) + ", using the current host catalog.";
                         return false;
+                    }
                     read.source_id = *value;
                     sourceIdSeen = true;
                 }
@@ -4330,7 +4347,10 @@ namespace epochengine::ai
                 {
                     const auto value = cursor.bounded_integer(1'000'000u);
                     if (!value)
+                    {
+                        if (diagnostic) *diagnostic = "A reads first_line must be an integer from 0 through 1000000; zero selects automatic navigation.";
                         return false;
+                    }
                     read.first_line = *value;
                     firstLineSeen = true;
                 }
@@ -4341,24 +4361,38 @@ namespace epochengine::ai
                         || value->find_first_of("\r\n\0", 0u, 3u)
                             != std::string::npos
                         || !development_proposal_codec::valid_context_text(*value))
+                    {
+                        if (diagnostic) *diagnostic = "A reads query must be literal UTF-8 text of at most 256 bytes without CR, LF or NUL; use an empty string when no literal is known.";
                         return false;
+                    }
                     read.query = std::move(*value);
                     querySeen = true;
                 }
                 else
+                {
+                    if (diagnostic) *diagnostic = "Each reads object permits source_id, first_line and query exactly once; no other fields.";
                     return false;
+                }
                 if (cursor.consume('}'))
                     break;
                 if (!cursor.consume(','))
                     return false;
             }
-            return sourceIdSeen && firstLineSeen && querySeen;
+            if (!sourceIdSeen || !firstLineSeen || !querySeen)
+            {
+                if (diagnostic) *diagnostic = "Each reads object requires source_id, first_line and query, including zero/empty values for unused selectors.";
+                return false;
+            }
+            return true;
         }
 
         [[nodiscard]] static std::string normalize_source_id_context_tool_arguments(
             std::string_view arguments,
-            const SourceReferenceCatalog& catalog)
+            const SourceReferenceCatalog& catalog,
+            std::string* diagnostic = nullptr)
         {
+            if (diagnostic) *diagnostic =
+                "epoch_select_source_context requires reason, unique source_ids, and reads within the 256-record transport ceiling. Each read requires a selected source_id, first_line 0..1000000, and a literal UTF-8 query of at most 256 bytes without newlines. Distinct windows of the same source_id are allowed; returned source is packed to the context byte budget.";
             StructuredJsonCursor cursor{arguments};
             if (!cursor.consume('{') || cursor.consume('}'))
                 return {};
@@ -4385,8 +4419,12 @@ namespace epochengine::ai
                 }
                 else if (key->compare("source_ids") == 0 && !idsSeen)
                 {
-                    if (!parse_source_id_array(cursor, ids, maximumId, 12u))
+                    if (!parse_source_id_array(cursor, ids, maximumId,
+                            development_proposal_codec::maximum_context_reads))
+                    {
+                        if (diagnostic) *diagnostic = "source_ids must contain distinct integers from 1 through " + std::to_string(maximumId) + " within the transport record budget. Reuse IDs in distinct reads, not in source_ids.";
                         return {};
+                    }
                     idsSeen = true;
                 }
                 else if (key->compare("reads") == 0 && !readsSeen)
@@ -4397,13 +4435,21 @@ namespace epochengine::ai
                     {
                         for (;;)
                         {
-                            if (idReads.size() >= 12u)
+                            if (idReads.size() >= development_proposal_codec::maximum_context_reads)
+                            {
+                                if (diagnostic) *diagnostic = "epoch_select_source_context exceeded its transport read-record budget.";
                                 return {};
+                            }
                             SourceIdContextRead read{};
-                            if (!parse_source_id_context_read(cursor, read, maximumId)
-                                || std::ranges::any_of(idReads, [&read](const auto& existing)
-                                    { return existing.source_id == read.source_id; }))
+                            if (!parse_source_id_context_read(cursor, read, maximumId, diagnostic))
                                 return {};
+                            if (std::ranges::any_of(idReads, [&read](const auto& existing)
+                                { return existing.source_id == read.source_id
+                                    && existing.first_line == read.first_line && existing.query == read.query; }))
+                            {
+                                if (diagnostic) *diagnostic = "epoch_select_source_context repeats an identical read window. Use different first_line/query values for multiple regions of the same source_id.";
+                                return {};
+                            }
                             idReads.push_back(std::move(read));
                             if (cursor.consume(']'))
                                 break;
@@ -4445,7 +4491,11 @@ namespace epochengine::ai
             for (auto& idRead : idReads)
             {
                 if (std::ranges::find(ids, idRead.source_id) == ids.end())
+                {
+                    if (diagnostic) *diagnostic = "epoch_select_source_context reads contains source_id "
+                        + std::to_string(idRead.source_id) + " missing from source_ids. Include each read's ID once in source_ids.";
                     return {};
+                }
                 const std::string_view path = catalog.path(idRead.source_id);
                 if (path.empty())
                     return {};
@@ -4455,7 +4505,9 @@ namespace epochengine::ai
                     .query = std::move(idRead.query)
                 });
             }
-            return context_request_packet(reason, paths, reads);
+            auto packet = context_request_packet(reason, paths, reads);
+            if (!packet.empty() && diagnostic) diagnostic->clear();
+            return packet;
         }
 
         struct SourceIdPatchOperation final
@@ -4568,7 +4620,7 @@ namespace epochengine::ai
                     {
                         for (;;)
                         {
-                            if (operations.size() >= 4u)
+                            if (operations.size() >= development_proposal_codec::maximum_patch_blocks)
                                 return {};
                             SourceIdPatchOperation operation{};
                             if (!parse_source_id_patch_operation(cursor, operation, maximumId))
@@ -4836,7 +4888,7 @@ namespace epochengine::ai
                 }
                 else if (*key == "paths" && !pathsSeen)
                 {
-                    if (!parse_string_array(cursor, paths, 12u))
+                    if (!parse_string_array(cursor, paths, development_proposal_codec::maximum_context_reads))
                         return {};
                     pathsSeen = true;
                 }
@@ -4924,7 +4976,7 @@ namespace epochengine::ai
                 }
                 else if (*key == "paths" && !pathsSeen)
                 {
-                    if (!parse_string_array(cursor, paths, 12u))
+                    if (!parse_string_array(cursor, paths, development_proposal_codec::maximum_context_reads))
                         return {};
                     pathsSeen = true;
                 }
@@ -5321,8 +5373,8 @@ namespace epochengine::ai
                     {
                         *validationDiagnostic =
                             "Local model returned " + std::to_string(call.tool_call_count)
-                            + " source tool calls in one response; this phase exposes one "
-                            "legal function and accepts exactly one call.";
+                            + " source tool calls in one response; Epoch accepts exactly "
+                            "one source action, never combined reads and edits.";
                     }
                     else
                     {
@@ -5334,14 +5386,13 @@ namespace epochengine::ai
                 return {};
             }
 
-            const std::string_view expectedName =
-                shape == StructuredSourceReply::context
-                    ? std::string_view{"epoch_select_source_context"}
-                    : shape == StructuredSourceReply::patch
-                    ? std::string_view{"epoch_propose_source_patch"}
-                    : std::string_view{};
-            if (expectedName.empty()
-                || std::string_view{call.name}.compare(expectedName) != 0)
+            const bool contextCall = call.name == "epoch_select_source_context";
+            const bool allowed = (contextCall
+                    && (shape == StructuredSourceReply::context
+                        || shape == StructuredSourceReply::patch))
+                || (call.name == "epoch_propose_source_patch"
+                    && shape == StructuredSourceReply::patch);
+            if (!allowed)
             {
                 if (validationDiagnostic)
                 {
@@ -5349,14 +5400,14 @@ namespace epochengine::ai
                         "Local model called source function '" + call.name
                         + "' during the " + std::string{shape == StructuredSourceReply::context
                             ? "source-selection" : "code-proposal"}
-                        + " phase; Epoch exposed only '" + std::string{expectedName} + "'.";
+                        + " phase; the function is not permitted in this stage.";
                 }
                 return {};
             }
 
             std::string normalized =
-                shape == StructuredSourceReply::context
-                    ? normalize_source_id_context_tool_arguments(call.arguments, catalog)
+                contextCall
+                    ? normalize_source_id_context_tool_arguments(call.arguments, catalog, validationDiagnostic)
                     : normalize_source_id_patch_tool_arguments(call.arguments, catalog);
             if (normalized.starts_with("EPOCH_SOURCE_CONTEXT_REQUEST_V1\n")
                 || normalized.starts_with("EPOCH_SOURCE_PATCH_PROPOSAL_V1\n")
@@ -5365,11 +5416,10 @@ namespace epochengine::ai
                 return normalized;
             }
 
-            if (validationDiagnostic)
+            if (validationDiagnostic && validationDiagnostic->empty())
             {
                 *validationDiagnostic =
-                    "Local model called the correct source function, but its arguments "
-                    "failed the host-issued SOURCE_ID and phase schema validation.";
+                    "epoch_propose_source_patch requires title, rationale and operations within the 64-block transport ceiling. Every operation requires source_id, summary, exact nonempty search and replacement. The same reviewed source_id may be repeated for independent non-overlapping ORIGINAL-source blocks. Use the separate context function for missing bytes; do not mix read and edit fields.";
             }
             return {};
         }
@@ -5411,13 +5461,13 @@ namespace epochengine::ai
             {
                 prompt += stage == SourceRequestStage::context
                     ? " - Current stage: source-context selection only, not an edit or a plan. Select one coherent next working set and give one short reason; defer bug investigation until source bytes are returned.\n"
-                    : " - Current stage: propose exact sandbox edits when the reviewed source establishes them; otherwise return the phase's insufficient-evidence result without inventing an edit.\n";
+                    : " - Current stage: propose the next bounded exact sandbox edit when reviewed bytes establish it. If bytes are missing, request the specific next source context instead of inventing an edit.\n";
                 prompt += directRuntime
                     ? " - Wire format: return only the canonical line-framed packet specified in this request. If no edit or source selection can be justified, return only EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1. No Markdown fences or explanatory prose.\n"
                     : (stage == SourceRequestStage::context
                         ? " - Action contract: the host exposes exactly one legal function for this phase. Call epoch_select_source_context exactly once and return no assistant prose. Use an empty source_ids array and empty reads array when no bounded selection is justified.\n"
-                        : " - Action contract: the host exposes exactly one legal function for this phase. Call epoch_propose_source_patch exactly once and return no assistant prose. Use an empty operations array when the reviewed source does not justify a safe edit.\n");
-                prompt += " - Action metadata is compact: title names the change; reason, rationale and summary state the decision briefly. Do not put reasoning transcripts, repeated objectives or source code in metadata. Source bytes belong only in the edit fields.\n";
+                        : " - Action contract: call exactly one source function and return no assistant prose: epoch_propose_source_patch for a justified exact edit, or epoch_select_source_context for missing source bytes. Never combine calls. Use an empty operations array only when neither a safe edit nor a useful source read is justified.\n");
+                prompt += " - Emit the next action directly; do not narrate planning or repeatedly restate the objective. Action metadata is compact: title names the change; reason, rationale and summary state the decision briefly. Do not put reasoning transcripts or source code in metadata. Source bytes belong only in the edit fields.\n";
             }
             else if (stage == SourceRequestStage::legacy_proposal)
             {
@@ -5447,23 +5497,25 @@ namespace epochengine::ai
             {
                 requestInput = sourceReply == StructuredSourceReply::none
                     ? "Return only the complete result in the host-requested stage format. Do not expose analysis, debug text, or drafting notes.\nOriginal request:\n" + requestInput
-                    : "The previous source action was unusable. Call the one provided Epoch source function exactly once. Keep metadata concise; do not repeat the objective or put reasoning inside arguments. Do not return assistant prose, JSON outside the function arguments, Markdown, or multiple tool calls.\nOriginal request:\n" + requestInput;
+                    : "The previous source action was unusable. Call exactly one provided Epoch source function. Keep metadata concise; do not repeat the objective or put reasoning inside arguments. Do not return assistant prose, JSON outside the function arguments, Markdown, or multiple tool calls.\nOriginal request:\n" + requestInput;
             }
 
             if (sourceReply == StructuredSourceReply::patch)
             {
                 requestInput +=
-                    "\nSource action: the host exposes only epoch_propose_source_patch "
-                    "for this phase. Call it exactly once. Use only REVIEWED_SOURCE_ID "
-                    "values; never type repository paths. Put every bounded exact-block "
-                    "edit in its operations array. If the reviewed bytes do not justify "
-                    "a safe edit, return operations=[] and explain why in rationale.";
+                    "\nSource action: choose exactly one function. Use epoch_propose_source_patch "
+                    "with only REVIEWED_SOURCE_ID values for the next bounded exact-block "
+                    "edit. If required bytes are missing, use epoch_select_source_context "
+                    "with host-issued SOURCE_ID values and a short reason for the next read. "
+                    "Never type repository paths, combine calls or invent selectors. Only "
+                    "when neither an edit nor a useful read is justified, return operations=[] "
+                    "and explain why in rationale.";
             }
             else if (sourceReply == StructuredSourceReply::context)
             {
                 requestInput +=
                     "\nSource action: the host exposes only epoch_select_source_context "
-                    "for this phase. Call it exactly once with zero to twelve justified "
+                    "for this phase. Batch the justified reads in one call using "
                     "host-issued SOURCE_ID values. If no bounded selection is justified, "
                     "return source_ids=[] and reads=[]. Never type or invent a repository "
                     "path. Do not propose edits in this stage.";
@@ -5477,9 +5529,13 @@ namespace epochengine::ai
                     "use source_ids plus reads=[]. A read is {source_id,first_line,query}; "
                     "first_line is 1-based (0 means automatic), maximum 1000000, and query "
                     "is an optional exact literal of at most 256 UTF-8 bytes without "
-                    "CR/LF/NUL. epoch_propose_source_patch accepts only REVIEWED_SOURCE_ID "
-                    "values. Empty phase arrays are the insufficient-evidence result; a "
-                    "separate competing action is never exposed. IDs do not expand source "
+                    "CR/LF/NUL. Automatic literal queries prefer an unseen match and report "
+                    "SOURCE_QUERY_MATCH_LINES; use an explicit first_line for a fixed cursor. "
+                    "epoch_propose_source_patch accepts only REVIEWED_SOURCE_ID "
+                    "values. Selectors must come from observed source or verified search "
+                    "hits, not guesses. Use first_line=0 and query=\"\" for an unknown region. "
+                    "Empty phase arrays are the insufficient-evidence result. Choose one "
+                    "read or edit action, never both. IDs do not expand source "
                     "or execution authority.";
             }
 
@@ -5596,7 +5652,7 @@ namespace epochengine::ai
                             "ai",
                             epochengine::string_view{
                                 replyDiagnostic.data(), replyDiagnostic.size()});
-                        return {};
+                        return "EPOCH_SOURCE_ACTION_REJECTED_V1\n" + replyDiagnostic;
                     }
                 }
                 std::string parsed = normalize_assistant_text(extract_lmstudio_message_content(resp));
@@ -5621,9 +5677,8 @@ namespace epochengine::ai
                     core::log::warn(
                         "ai",
                         "Source request returned assistant content without tool_calls; "
-                        "rejecting content before editor staging and retrying the "
-                        "required function-call contract.");
-                    return {};
+                        "rejecting content before staging; the host owns the bounded action correction.");
+                    return "EPOCH_SOURCE_ACTION_REJECTED_V1\n" + replyDiagnostic;
                 }
 
                 if (!resp.empty())
@@ -5678,6 +5733,10 @@ namespace epochengine::ai
                     logger::get("Engine.AI.Transport").log(logger::LogLevel::INFO, receivedMessage);
                     if (cancellation.stop_requested())
                         return cancelled();
+                    // Schema/content failures belong to the host's single
+                    // correction budget, not an additional transport retry.
+                    if (reply.starts_with("EPOCH_SOURCE_ACTION_REJECTED_V1\n"))
+                        return reply;
                     if (model_reply_has_visible_content(reply,
                         source_request_stage(input, structuredSource)))
                         return reply;
@@ -5710,6 +5769,8 @@ namespace epochengine::ai
                                 "Local model returned reasoning without a usable stage result. Epoch retried with the explicit stage contract but received no usable result."}
                             : std::string{
                                 "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response."};
+                        if (sourceReply != StructuredSourceReply::none)
+                            return "EPOCH_SOURCE_ACTION_REJECTED_V1\nNo completed source function was decoded. Call exactly one allowed function with complete arguments; reasoning and partial arguments are not an action.";
                     }
                 }
                 catch (const ModelTransportRetirementFailure&)
@@ -6296,6 +6357,7 @@ namespace epochengine::ai
         }
         [[nodiscard]] bool model_reply_is_failure(std::string_view text)
         {
+            if (text.starts_with("EPOCH_SOURCE_ACTION_REJECTED_V1\n")) return true;
             const std::string lower = lowercase_ascii(std::string{text});
             for (const std::string_view prefix : {
                 "local model api error", "local openai-compatible request failed",
@@ -6978,9 +7040,6 @@ namespace epochengine::ai
                 return false;
             }
             preferences.endpoints.push_back(routes.base_url);
-            // EngCoder 0.6.5 explicitly rejects stream=true on its engine API.
-            if (routes.base_url.ends_with(":14321/v1"))
-                preferences.non_streaming.push_back(routes.base_url);
         }
         const auto encoded = encode_endpoint_preferences(preferences);
         if (encoded.empty() || !write_text_file(local_endpoint_preference_file(), encoded))
@@ -7477,7 +7536,14 @@ namespace epochengine::ai
             || decodedEndpoints->non_streaming != savedEndpoints.non_streaming
             || engCoder.chat_completions_url != "http://127.0.0.1:14321/v1/chat/completions"
             || engCoder.responses_url != "http://127.0.0.1:14321/v1/responses"
-            || engCoder.agent_tasks_url != "http://127.0.0.1:14321/api/tasks") return false;
+            || engCoder.agent_tasks_url != "http://127.0.0.1:14321/api/tasks"
+            || !engCoder.stream_replies) return false;
+        const LocalEndpointPreferences streamingEndpoints{
+            savedEndpoints.endpoints, engCoder.base_url, {}};
+        const auto decodedStreaming = decode_endpoint_preferences(
+            encode_endpoint_preferences(streamingEndpoints));
+        if (!decodedStreaming || !decodedStreaming->non_streaming.empty()
+            || decodedStreaming->selected != engCoder.base_url) return false;
         for (const auto& route : {engCoder.base_url, engCoder.chat_completions_url,
                 engCoder.responses_url, engCoder.agent_tasks_url})
         {
@@ -7853,6 +7919,8 @@ namespace epochengine::ai
         const ModelHttpFailure unsupported{400u,
             R"({"error":{"message":"Unsupported stream parameter; private prompt"}})"};
         const ModelHttpFailure unauthorized{401u, "private credentials"};
+        const ModelHttpFailure unloaded{400u,
+            R"({"error":{"message":"ExplicitModelUnloadError: Model unloaded by user or API request; private prompt"}})"};
         const ModelHttpFailure busy{503u, R"({"error":{"message":"server busy"}})"};
         const ModelHttpFailure limited{429u, R"({"error":{"message":"rate limit"}})"};
         if (!proxyTimeout.provider_timeout || proxyTimeout.rejected
@@ -7862,6 +7930,11 @@ namespace epochengine::ai
             || proxyTimeout.diagnostic().find("not resent") == std::string::npos
             || unsupported.diagnostic().find("private prompt") != std::string::npos
             || unauthorized.diagnostic().find("private credentials") != std::string::npos)
+            return failed(__LINE__);
+        if (!unloaded.rejected || !unloaded.provider_model_unloaded
+            || unloaded.provider_timeout
+            || unloaded.diagnostic().find("unloaded during") == std::string::npos
+            || unloaded.diagnostic().find("private prompt") != std::string::npos)
             return failed(__LINE__);
         // Use the same system prompt and body builders as submit(), not a dummy
         // "system" fixture which cannot detect contradictory stage instructions.
@@ -7941,10 +8014,11 @@ namespace epochengine::ai
                         || body.find("\"name\":\"epoch_report_source_insufficient\"") != std::string::npos))
                     return failed(__LINE__);
                 if (fixture.shape == StructuredSourceReply::patch
-                    && (system.find("epoch_propose_source_patch exactly once") == std::string::npos
+                    && (system.find("call exactly one source function") == std::string::npos
+                        || system.find("epoch_select_source_context for missing source bytes") == std::string::npos
                         || system.find("put only the final answer in assistant content") != std::string::npos
                         || body.find("\"name\":\"epoch_propose_source_patch\"") == std::string::npos
-                        || body.find("\"name\":\"epoch_select_source_context\"") != std::string::npos
+                        || body.find("\"name\":\"epoch_select_source_context\"") == std::string::npos
                         || body.find("\"name\":\"epoch_report_source_insufficient\"") != std::string::npos))
                     return failed(__LINE__);
             }
@@ -8136,6 +8210,19 @@ namespace epochengine::ai
             || !patchCatalog.path(2u, true).empty())
             return failed(__LINE__);
 
+        const std::string disjointInput =
+            "FILE_EXCERPT_BEGIN Engine/src/ai/example.cpp\nint first;\nFILE_EXCERPT_END Engine/src/ai/example.cpp\n"
+            "FILE_EXCERPT_BEGIN Engine/src/ai/example.cpp\nint second;\nFILE_EXCERPT_END Engine/src/ai/example.cpp\n";
+        const auto disjointCatalog = source_reference_catalog(disjointInput);
+        const auto disjointAnnotated = source_reference_annotated_input(disjointInput, disjointCatalog);
+        const std::string binding = "REVIEWED_SOURCE_ID 1 PATH Engine/src/ai/example.cpp\n";
+        const auto firstBinding = disjointAnnotated.find(binding);
+        if (disjointCatalog.paths.size() != 1u || disjointCatalog.reviewed_count != 1u
+            || firstBinding == std::string::npos
+            || disjointAnnotated.find(binding, firstBinding + binding.size()) == std::string::npos
+            || disjointAnnotated.find("REVIEWED_SOURCE_ID 2") != std::string::npos)
+            return failed(__LINE__);
+
         const std::string sourceBody = openai_chat_request_body(
             "qwen/test", "system", contextInput, 512u, false, true);
         const std::string patchBody = openai_chat_request_body(
@@ -8160,6 +8247,60 @@ namespace epochengine::ai
             patchToolResponse, StructuredSourceReply::patch,
             patchCatalog, toolCallsPresent);
         if (!toolCallsPresent || patchToolPacket != patchPacket)
+            return failed(__LINE__);
+
+        // Large files need separated edits, not a file-wide rewrite or enum-only
+        // intermediate. The model wire must carry more than four same-file blocks.
+        std::string multiArguments = R"json({"title":"Edit independent values","rationale":"Change all reviewed values","operations":[)json";
+        std::string multiPreimage{};
+        std::string multiExpected{};
+        for (std::size_t i = 0u; i < development_proposal_codec::maximum_patch_blocks; ++i)
+        {
+            if (i != 0u) multiArguments += ',';
+            const auto search = "int value_" + std::to_string(i) + " = 1;";
+            const auto replacement = "int value_" + std::to_string(i) + " = 2;";
+            multiArguments += "{\"source_id\":1,\"summary\":\"Change independent value\",\"search\":\""
+                + search + "\",\"replacement\":\"" + replacement + "\"}";
+            multiPreimage += search + "\n";
+            multiExpected += replacement + "\n";
+        }
+        const auto multiPacket = normalize_source_id_patch_tool_arguments(
+            multiArguments + "]}", patchCatalog);
+        const auto multiDecoded = development_proposal_codec::decode(multiPacket);
+        if (!multiDecoded || multiDecoded.proposal.changes.size()
+                != development_proposal_codec::maximum_patch_blocks)
+            return failed(__LINE__);
+        const auto multiPostimage = development_proposal_codec::compose_postimage(
+            multiDecoded.proposal, patchCatalog.path(1u, true), multiPreimage, true);
+        if (!multiPostimage || multiPostimage.bytes != multiExpected
+            || !normalize_source_id_patch_tool_arguments(multiArguments
+                + ",{\"source_id\":1,\"summary\":\"Extra\",\"search\":\"a\",\"replacement\":\"b\"}]}", patchCatalog).empty())
+            return failed(__LINE__);
+
+        // Coding can request catalog bytes without gaining patch authority.
+        // The normal source-context handoff retains the plan and sandbox.
+        toolCallsPresent = false;
+        const std::string missingBytesToolResponse = R"json({"choices":[{"message":{"tool_calls":[{"type":"function","function":{"name":"epoch_select_source_context","arguments":"{\"reason\":\"Inspect the selected transport\",\"source_ids\":[2],\"reads\":[]}"}}]}}]})json";
+        const auto codingContextPacket = normalize_openai_source_tool_reply(
+            missingBytesToolResponse, StructuredSourceReply::patch,
+            patchCatalog, toolCallsPresent);
+        if (!toolCallsPresent || codingContextPacket != contextPacket)
+            return failed(__LINE__);
+
+        const auto multipleReads = normalize_source_id_context_tool_arguments(
+            R"json({"reason":"Read missing definitions","source_ids":[1],"reads":[{"source_id":1,"first_line":1,"query":"choices"},{"source_id":1,"first_line":900,"query":"palette"}]})json", patchCatalog);
+        const auto decodedReads = development_proposal_codec::decode_context_request(
+            multipleReads, development_proposal_codec::SourceArea::engine);
+        std::string readDiagnostic{};
+        if (!model_reply_is_failure("EPOCH_SOURCE_ACTION_REJECTED_V1\nInvalid read")
+            || model_reply_kind("EPOCH_SOURCE_ACTION_REJECTED_V1\nInvalid read").compare("source_action_rejected") != 0
+            || !decodedReads || decodedReads.request.paths.size() != 1u || decodedReads.request.reads.size() != 2u
+            || !normalize_source_id_context_tool_arguments(
+                R"json({"reason":"Read missing definitions","source_ids":[1],"reads":[{"source_id":1,"first_line":1,"query":"choices"},{"source_id":1,"first_line":1,"query":"choices"}]})json", patchCatalog, &readDiagnostic).empty()
+            || readDiagnostic.find("identical read window") == std::string::npos
+            || !normalize_source_id_context_tool_arguments(
+                R"json({"reason":"Read missing definitions","source_ids":[1],"reads":[{"source_id":2,"first_line":1,"query":"choices"}]})json", patchCatalog, &readDiagnostic).empty()
+            || readDiagnostic.find("missing from source_ids") == std::string::npos)
             return failed(__LINE__);
 
         // Exercise the same chunk assembler used by the HTTP worker without
@@ -8325,6 +8466,14 @@ namespace epochengine::ai
             return failed(__LINE__);
 
         toolCallsPresent = false;
+        const std::string combinedReadEditResponse = R"json({"choices":[{"message":{"tool_calls":[{"type":"function","function":{"name":"epoch_select_source_context","arguments":"{\"reason\":\"Need source\",\"source_ids\":[1],\"reads\":[]}"}},{"type":"function","function":{"name":"epoch_propose_source_patch","arguments":"{\"title\":\"Edit\",\"rationale\":\"Change\",\"operations\":[]}"}}]}}]})json";
+        if (!normalize_openai_source_tool_reply(
+                combinedReadEditResponse, StructuredSourceReply::patch,
+                patchCatalog, toolCallsPresent).empty()
+            || !toolCallsPresent)
+            return failed(__LINE__);
+
+        toolCallsPresent = false;
         if (!normalize_openai_source_tool_reply(
                 patchToolResponse, StructuredSourceReply::context,
                 patchCatalog, toolCallsPresent).empty()
@@ -8434,7 +8583,7 @@ namespace epochengine::ai
             return failed(__LINE__);
         std::string tooManyPaths =
             R"json({"action":"context","title":"","rationale":"","operations":[],"reason":"Need source","paths":[)json";
-        for (std::size_t index = 0u; index < 13u; ++index)
+        for (std::size_t index = 0u; index <= development_proposal_codec::maximum_context_reads; ++index)
         {
             if (index != 0u) tooManyPaths += ',';
             tooManyPaths += "\"Engine/src/ai/ai.context_" + std::to_string(index) + ".cpp\"";
@@ -8519,7 +8668,7 @@ namespace epochengine::ai
 
         std::string maximumReadPaths = "{\"reason\":\"Inspect selected regions\",\"paths\":[";
         std::string maximumReadObjects = "],\"reads\":[";
-        for (std::size_t index = 0u; index < 12u; ++index)
+        for (std::size_t index = 0u; index < development_proposal_codec::maximum_context_reads; ++index)
         {
             if (index != 0u)
             {
@@ -8535,9 +8684,9 @@ namespace epochengine::ai
             maximumReadPaths + maximumReadObjects + "]}");
         const auto maximumRead = development_proposal_codec::decode_context_request(
             maximumReadPacket, development_proposal_codec::SourceArea::engine);
-        if (!maximumRead || maximumRead.request.reads.size() != 12u
+        if (!maximumRead || maximumRead.request.reads.size() != development_proposal_codec::maximum_context_reads
             || !normalize_structured_context_reply(maximumReadPaths + maximumReadObjects
-                + ",{\"path\":\"Engine/src/ai/ai.read_12.cpp\",\"first_line\":1,\"query\":\"symbol\"}]}").empty())
+                + ",{\"path\":\"Engine/src/ai/ai.read_extra.cpp\",\"first_line\":1,\"query\":\"symbol\"}]}").empty())
             return failed(__LINE__);
 
         const std::string recoveryBody = openai_chat_request_body(
@@ -8551,7 +8700,7 @@ namespace epochengine::ai
         }
         const bool wireChecks[]{
             recoveryBody.find("Original request:") != std::string::npos,
-            recoveryBody.find("Call the one provided Epoch source function exactly once") != std::string::npos,
+            recoveryBody.find("Call exactly one provided Epoch source function") != std::string::npos,
             sourceBody.find("\"response_format\"") == std::string::npos,
             sourceBody.find("\"tools\":[") != std::string::npos,
             sourceBody.find("\"name\":\"epoch_select_source_context\"") != std::string::npos,
@@ -8569,12 +8718,12 @@ namespace epochengine::ai
             patchBody.find("\"name\":\"epoch_propose_source_patch\"") != std::string::npos,
             patchBody.find("REVIEWED_SOURCE_ID 1 PATH Engine/src/ai/example.cpp")
                 != std::string::npos,
-            patchBody.find("\"name\":\"epoch_select_source_context\"") == std::string::npos,
+            patchBody.find("\"name\":\"epoch_select_source_context\"") != std::string::npos,
             patchBody.find("\"name\":\"epoch_report_source_insufficient\"") == std::string::npos,
             patchBody.find("\"minItems\":0") != std::string::npos,
             patchBody.find("\"tool_choice\":\"required\"") != std::string::npos,
             patchBody.find("\"parallel_tool_calls\":false") != std::string::npos,
-            patchBody.find("the host exposes only epoch_propose_source_patch") != std::string::npos,
+            patchBody.find("Source action: choose exactly one function") != std::string::npos,
             sourceBody.find("\"stream\":true") != std::string::npos,
             ordinaryBody.find("\"reasoning_effort\"")
                 == std::string::npos,

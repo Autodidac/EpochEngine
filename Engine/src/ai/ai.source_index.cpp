@@ -327,7 +327,8 @@ namespace epochengine::ai::source_index
                 const bool outside = error || relative.empty() || relative.is_absolute()
                     || *relative.begin() == "..";
                 if (outside || entry.is_symlink(error) || error
-                    || ignored_component(entry.path().filename().generic_string()))
+                    || (ignored_component(entry.path().filename().generic_string())
+                        && lower_ascii(relative.generic_string()) != "engine/src/build"))
                     cursor.disable_recursion_pending();
             }
             else if (!error && entry.is_regular_file(error) && !error
@@ -570,10 +571,10 @@ namespace epochengine::ai::source_index
                 for (const auto& symbol : entry.symbols)
                     if (lower_ascii(symbol).find(term) != std::string::npos) { score += 24; break; }
             }
-            if (score > 0) ranked.emplace_back(score, &entry);
+            // Relevance orders the project; it must not hide unrelated paths
+            // that a coding generation may discover are dependencies.
+            ranked.emplace_back(score, &entry);
         }
-        if (ranked.empty())
-            for (const auto& entry : entries_) ranked.emplace_back(1, &entry);
         std::ranges::sort(ranked, [](const auto& a, const auto& b)
         {
             if (a.first != b.first) return a.first > b.first;
@@ -619,7 +620,21 @@ namespace epochengine::ai::source_index
         for (const auto& [score, entry] : ranked)
         {
             if (blocks.size() >= maximum_files) break;
-            Block block{entry->path, "PATH " + entry->path + "\n", {}};
+            const std::string pathLine = "PATH " + entry->path + "\n";
+            if (pathLine.size() > maximum_bytes - reserved) continue;
+            reserved += pathLine.size();
+            out += pathLine;
+            blocks.push_back({entry->path, {}, {}});
+        }
+        std::set<std::string> emittedPaths{};
+        for (const auto& block : blocks) emittedPaths.insert(block.path);
+        // Reserve navigation authority before optional verbose metadata. Large
+        // symbol/edge blocks cannot evict small valid project path records.
+        for (auto& block : blocks)
+        {
+            const auto found = std::ranges::lower_bound(entries_, block.path, {}, &Entry::path);
+            if (found == entries_.end() || found->path != block.path) continue;
+            const auto* entry = &*found;
             if (!entry->module_name.empty())
                 block.body += "MAP " + entry->path + " :: "
                     + (entry->module_interface ? "interface " : "module unit ") + entry->module_name + "\n";
@@ -629,25 +644,24 @@ namespace epochengine::ai::source_index
                 if (symbols++ >= 4u) break;
                 block.body += "MAP " + entry->path + " :: " + symbol + "\n";
             }
-            std::size_t size = block.body.size();
             for (const auto& hit : related_sources(entry->path, 4u))
             {
+                if (!emittedPaths.contains(hit.relative_path)) continue;
                 std::string edge = "EDGE " + entry->path + " -> " + hit.relative_path + " :: " + hit.preview + "\n";
-                size += edge.size();
                 block.edges.emplace_back(hit.relative_path, std::move(edge));
             }
-            if (size > maximum_bytes - reserved) continue;
-            reserved += size;
-            blocks.push_back(std::move(block));
-        }
-        std::set<std::string> emittedPaths{};
-        for (const auto& block : blocks) emittedPaths.insert(block.path);
-        for (const auto& block : blocks)
-        {
-            out += block.body;
+            if (block.body.size() <= maximum_bytes - reserved)
+            {
+                out += block.body;
+                reserved += block.body.size();
+            }
             // An EDGE must not advertise a target omitted from PATH authority.
             for (const auto& [target, edge] : block.edges)
-                if (emittedPaths.contains(target)) out += edge;
+                if (edge.size() <= maximum_bytes - reserved)
+                {
+                    out += edge;
+                    reserved += edge.size();
+                }
         }
         out += ending;
         return out;

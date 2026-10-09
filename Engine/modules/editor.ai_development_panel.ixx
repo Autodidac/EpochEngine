@@ -134,6 +134,7 @@ export namespace epochengine::editor_ai_development_panel
         bool local_model_running{};
         bool local_model_queued{};
         bool local_model_cancelling{};
+        bool local_model_approval_required{};
         std::uint64_t local_model_elapsed_ms{};
         std::string local_model_activity{};
         std::string local_model_request_phase{};
@@ -217,6 +218,8 @@ export namespace epochengine::editor_ai_development_panel
         // is hidden. Advances automatic planning without drawing any GUI.
         [[nodiscard]] RenderResult advance_source_iteration(const Input& input);
         [[nodiscard]] SessionActivityView session_activity(const Input& input) const;
+        // Changes only on an explicit Start/Restart, not source reads/repairs.
+        [[nodiscard]] std::uint64_t active_session_id() const;
         [[nodiscard]] RenderResult stop_source_iteration();
         [[nodiscard]] bool has_reviewed_plan() const;
         [[nodiscard]] RenderResult approve_latest_plan();

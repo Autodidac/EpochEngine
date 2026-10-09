@@ -235,7 +235,7 @@ export namespace epochengine::ai::development_guard
         std::size_t maximum_allowlist_rules{32u};
         std::size_t maximum_operators{8u};
         std::size_t maximum_proposals{64u};
-        std::size_t maximum_operations_per_proposal{32u};
+        std::size_t maximum_operations_per_proposal{64u};
         std::size_t maximum_intents_per_operation{32u};
         std::size_t maximum_content_transitions_per_operation{32u};
         std::uint64_t maximum_content_bytes_per_transition{16u * 1024u * 1024u};

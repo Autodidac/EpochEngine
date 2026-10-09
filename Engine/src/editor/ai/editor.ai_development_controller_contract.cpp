@@ -515,6 +515,37 @@ namespace epochengine::editor_ai_development
                 return false;
             }
 
+            std::string multi = model_exact_patch_packet(
+                "Engine/src/ai/ai.example.cpp", "be", "BE");
+            std::string tail = model_exact_patch_packet(
+                "Engine/src/ai/ai.example.cpp", "fore", "FORE");
+            const auto opBegin = tail.find("begin_operation\n");
+            const auto opEnd = tail.find("end_operation\n") + std::string_view{"end_operation\n"}.size();
+            multi.replace(multi.find("operation_count: 1"), 18u, "operation_count: 2");
+            multi.insert(multi.find("end_proposal\n"), tail.substr(opBegin, opEnd - opBegin));
+            for (std::size_t pos{}; (pos = multi.find("_final_newline: true", pos)) != std::string::npos;)
+                multi.replace(pos, 20u, "_final_newline: false");
+            const auto multiSandbox = workspace.root / "multi-sandbox";
+            std::filesystem::create_directories(multiSandbox, error);
+            if (error) return false;
+            auto multiConfig = config;
+            multiConfig.workspace_root = multiSandbox.generic_string();
+            DevelopmentController multiBlock{multiConfig};
+            if (!multiBlock.propose_model_reply(multi, OperationKind::engine_source_edit, {1'100u}))
+                return false;
+            const auto multiStaged = multiBlock.snapshot();
+            if (multiStaged.operations.size() != 1u
+                || multiStaged.operations.front().before != expectedBefore
+                || multiStaged.operations.front().after.digest != evidence_digest("BEFORE\n")
+                || !multiBlock.review("review.host", "Review both exact blocks.", {1'200u})
+                || !multiBlock.approve("operator.primary", "Approve both blocks atomically.", {1'300u}, {2'000u})
+                || !multiBlock.authorize({1'400u}, {200u})
+                || !multiBlock.execute_authorized_model_source_changes({1'450u}))
+                return false;
+            std::ifstream multiInput{multiSandbox / "Engine/src/ai/ai.example.cpp", std::ios::binary};
+            const std::string multiActual{std::istreambuf_iterator<char>{multiInput}, std::istreambuf_iterator<char>{}};
+            if (multiActual != "BEFORE\n") return false;
+
             if (!controller.review(
                     "review.host", "Exact source bytes reviewed.", {1'200u})
                 || !controller.approve(

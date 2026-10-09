@@ -30,6 +30,27 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 8–9 continuation (validated local code, pending new source push)
+
+The subsequent source batch adds compact supervisor/worker handoffs, v3 retained
+plan/host-outcome memory, model-session RAM consent, exact multi-block edits,
+path-first navigation and the missing source-owned build-header snapshot fix.
+Final retained-plan cadence correction also preserves the review counter during
+plan reuse/reload, with production/direct persistence regression proof.
+Production Debug and Release pure suites pass at 00:06:19 and 00:07:23; rebuilt
+discovery/materializer/admission CTests pass 3/3. Naming (610), layout/project
+references, dependency-sync and diff guards pass. This is source/build proof,
+not native new-code Qwen/docked-successor or cold-editor recovery acceptance.
+No dependencies changed and no replacement runtime is being published.
+
+The inspected operator run actually applied a model patch at 22:59:59, then
+failed on the host-omitted build probe header. That old candidate and transcript
+are retained; they are not patched manually or counted as new-code build proof.
+The new Debug/Release output and source checkpoint are distinct from that run.
+The prior Site hold below remains authoritative; no handoff/resume was sent.
+
+### Earlier delivered source checkpoint
+
 The operator authorizes GitHub first (main and fast-forward stable mirror), then
 the Site owner chat **Create personal project portfolio** for exact paired
 private source admission. Delivery receipts will name the actual committed

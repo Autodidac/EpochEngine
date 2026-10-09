@@ -169,7 +169,7 @@ namespace epochengine::ai::self_iteration_orchestrator
         [[nodiscard]] std::string serialize_payload(const Snapshot& snapshot)
         {
             std::ostringstream out{};
-            out << "schema=epoch.ai.self_iteration_orchestrator.v2\n"
+            out << "schema=epoch.ai.self_iteration_orchestrator.v3\n"
                 << "generation=" << snapshot.generation << '\n'
                 << "previous_state_sha256=" << snapshot.previous_state_sha256 << '\n'
                 << "orchestrator_id=" << snapshot.orchestrator_id << '\n'
@@ -187,6 +187,8 @@ namespace epochengine::ai::self_iteration_orchestrator
                 << "campaign_generation=" << snapshot.campaign.record_generation << '\n'
                 << "plan_sha256=" << snapshot.plan_sha256 << '\n'
                 << "plan_bytes=" << escape_field(snapshot.plan_bytes) << '\n'
+                << "continuity_bytes=" << escape_field(snapshot.continuity_bytes) << '\n'
+                << "source_turns_since_review=" << snapshot.source_turns_since_review << '\n'
                 << "proposal_sha256=" << snapshot.proposal_sha256 << '\n'
                 << "candidate_sha256=" << snapshot.candidate_sha256 << '\n'
                 << "pending_operation_id=" << snapshot.pending_operation_id << '\n'
@@ -246,7 +248,9 @@ namespace epochengine::ai::self_iteration_orchestrator
             Snapshot result{};
             unsigned raw{};
             if (!take("schema", value)) return false;
-            const bool contains_plan = value == "epoch.ai.self_iteration_orchestrator.v2";
+            const bool contains_continuity = value == "epoch.ai.self_iteration_orchestrator.v3";
+            const bool contains_plan = contains_continuity
+                || value == "epoch.ai.self_iteration_orchestrator.v2";
             if ((!contains_plan && value != "epoch.ai.self_iteration_orchestrator.v1")
                 || !number("generation", result.generation)
                 || !take("previous_state_sha256", value)) return false;
@@ -293,6 +297,10 @@ namespace epochengine::ai::self_iteration_orchestrator
                 || (result.plan_bytes.empty() != result.plan_sha256.empty())
                 || (!result.plan_bytes.empty()
                     && digest_text(result.plan_bytes) != result.plan_sha256))) return false;
+            if (contains_continuity && (!take("continuity_bytes", value)
+                || !unescape_field(value, result.continuity_bytes)
+                || result.continuity_bytes.size() > 16u * 1024u
+                || !number("source_turns_since_review", result.source_turns_since_review))) return false;
             if (!take("proposal_sha256", value)) return false;
             result.proposal_sha256.assign(value);
             if (!take("candidate_sha256", value)) return false;
@@ -564,6 +572,8 @@ namespace epochengine::ai::self_iteration_orchestrator
             || configuration.created_at_unix_seconds == 0u
             || configuration.objective.empty()
             || configuration.objective.size() > 4096u
+            || configuration.continuity_bytes.size() > 16u * 1024u
+            || configuration.continuity_bytes.find('\0') != std::string::npos
             || !safe_identifier(configuration.host.binding_id)
             || !lowercase_hex(configuration.host.configuration_sha256, 64u)
             || configuration.host.generation == 0u || !configuration.host.stdio_only
@@ -672,6 +682,8 @@ namespace epochengine::ai::self_iteration_orchestrator
         snapshot_.provider = configuration.provider;
         snapshot_.transport = transport;
         snapshot_.host = std::move(configuration.host);
+        snapshot_.continuity_bytes = std::move(configuration.continuity_bytes);
+        snapshot_.source_turns_since_review = configuration.source_turns_since_review;
         snapshot_.orchestrator_id = digest_text(snapshot_.campaign.campaign_id + "\n"
             + snapshot_.profile_sha256 + "\n" + host_fingerprint(snapshot_.host));
         snapshot_.phase = Phase::awaiting_plan_request;
@@ -1044,7 +1056,8 @@ namespace epochengine::ai::self_iteration_orchestrator
     Result Orchestrator::record_plan(
         OperationReceipt receipt,
         const std::string_view plan_bytes,
-        std::string summary)
+        std::string summary,
+        const bool retained_plan)
     {
         if (snapshot_.phase != Phase::awaiting_plan_result
             || snapshot_.pending_operation_kind != OperationKind::model_plan
@@ -1055,6 +1068,9 @@ namespace epochengine::ai::self_iteration_orchestrator
         Orchestrator staged = *this;
         staged.snapshot_.plan_sha256 = digest_text(plan_bytes);
         staged.snapshot_.plan_bytes.assign(plan_bytes);
+        // Re-admitting existing memory is not a supervisor reconciliation.
+        // Keep its cadence through a crash/reload during the worker request.
+        if (!retained_plan) staged.snapshot_.source_turns_since_review = 0u;
         staged.snapshot_.pending_operation_id.clear();
         auto committed = staged.commit(Phase::awaiting_curated_evidence,
             EvidenceKind::plan_received, receipt.transition_id,

@@ -6,7 +6,9 @@ module;
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
 export module platform.work_admission;
 
@@ -108,6 +110,23 @@ export namespace epochengine::platform::work_admission
         [[nodiscard]] const Policy& policy() const noexcept { return policy_; }
         [[nodiscard]] Request pending() const noexcept { return pending_; }
 
+        // Explicit operator approval belongs to one queued model operation.
+        // It cannot override worker/choice ownership, stale metrics or CPU load.
+        [[nodiscard]] bool approve_memory_pressure(std::uint64_t token) noexcept
+        {
+            if (token == 0u || token != pending_.token
+                || pending_.kind != WorkKind::model) return false;
+            memory_pressure_approved_ = true;
+            return true;
+        }
+
+        [[nodiscard]] bool memory_pressure_approved() const noexcept
+        {
+            return pending_.token != 0u && memory_pressure_approved_;
+        }
+
+        void revoke_memory_pressure() noexcept { memory_pressure_approved_ = false; }
+
         // Tokens are monotonic within this controller's lifetime. Retired
         // generations remain retired after any number of later operations.
         [[nodiscard]] bool queue(Request request, std::uint64_t now) noexcept
@@ -118,6 +137,7 @@ export namespace epochengine::platform::work_admission
             if (pending_.token != 0u)
                 return pending_ == request;
             pending_ = request;
+            memory_pressure_approved_ = false;
             not_before_ = (std::max)(next_allowed_, after_cooldown(now));
             healthy_since_.reset();
             return true;
@@ -174,6 +194,7 @@ export namespace epochengine::platform::work_admission
                 return false;
             retired_token_ = pending_.token;
             pending_ = {};
+            memory_pressure_approved_ = false;
             next_allowed_ = after_cooldown(now);
             healthy_since_.reset();
             return true;
@@ -190,6 +211,7 @@ export namespace epochengine::platform::work_admission
         {
             if (pending_.token != 0u) retired_token_ = pending_.token;
             pending_ = {};
+            memory_pressure_approved_ = false;
             healthy_since_.reset();
             was_blocked_ = false;
         }
@@ -225,8 +247,9 @@ export namespace epochengine::platform::work_admission
                 return Reason::resources_stale;
             const double available_fraction = static_cast<double>(sample.available_memory_bytes)
                 / static_cast<double>(sample.total_memory_bytes);
-            if (sample.available_memory_bytes < policy_.minimum_available_memory_bytes
-                || available_fraction < policy_.minimum_available_memory_fraction)
+            if (!memory_pressure_approved_
+                && (sample.available_memory_bytes < policy_.minimum_available_memory_bytes
+                    || available_fraction < policy_.minimum_available_memory_fraction))
                 return Reason::memory_pressure;
             if (sample.cpu_busy_fraction > policy_.maximum_cpu_busy_fraction)
                 return Reason::cpu_pressure;
@@ -241,5 +264,61 @@ export namespace epochengine::platform::work_admission
         std::optional<std::uint64_t> healthy_since_{};
         std::optional<std::uint64_t> last_poll_{};
         bool was_blocked_{};
+        bool memory_pressure_approved_{};
+    };
+
+    // In-memory operator consent, owned by one Editor context. Never serialize
+    // it with a checkpoint or inherit it from another campaign/context.
+    struct ModelMemoryScope final
+    {
+        std::uint64_t session{};
+        std::string model{};
+        std::string endpoint{};
+        std::string transport{};
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return session != 0u && !model.empty() && !endpoint.empty() && !transport.empty();
+        }
+        [[nodiscard]] bool operator==(const ModelMemoryScope&) const noexcept = default;
+    };
+
+    class ModelMemoryApproval final
+    {
+    public:
+        [[nodiscard]] bool approve(Controller& controller, std::uint64_t token,
+            const ModelMemoryScope& scope)
+        {
+            if (!scope.valid() || token == 0u || controller.pending().token != token
+                || controller.pending().kind != WorkKind::model) return false;
+            auto retained = scope;
+            if (!controller.approve_memory_pressure(token)) return false;
+            scope_ = std::move(retained);
+            return true;
+        }
+
+        [[nodiscard]] bool apply(Controller& controller, const ModelMemoryScope& scope)
+        {
+            if (!scope_) return false;
+            if (!scope.valid() || *scope_ != scope)
+            {
+                revoke(controller);
+                return false;
+            }
+            return controller.approve_memory_pressure(controller.pending().token);
+        }
+
+        [[nodiscard]] bool matches(const ModelMemoryScope& scope) const noexcept
+        {
+            return scope_ && scope.valid() && *scope_ == scope;
+        }
+
+        void revoke(Controller& controller) noexcept
+        {
+            scope_.reset();
+            controller.revoke_memory_pressure();
+        }
+
+    private:
+        std::optional<ModelMemoryScope> scope_{};
     };
 }

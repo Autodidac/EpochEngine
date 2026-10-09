@@ -159,7 +159,7 @@ namespace epochengine::ai::self_iteration_orchestrator
             const auto payload_start = original.find("\n\n");
             if (payload_start == std::string::npos) return false;
             auto reload = [&](const std::string& name, const std::string& payload,
-                const bool accepted, const bool retained)
+                const bool accepted, const bool retained, const bool memory_retained = true)
             {
                 const auto copy = configuration.cache_root / "reload" / (name + ".epochai");
                 const std::string envelope = "EPOCH_AI_SELF_ITERATION_ORCHESTRATOR_V2\n"
@@ -173,6 +173,10 @@ namespace epochengine::ai::self_iteration_orchestrator
                     && resumed.snapshot.pending_operation_id.empty()
                     && !resumed.snapshot.campaign.session.candidate_approved
                     && resumed.snapshot.campaign.session.validation.empty()
+                    && (retained && memory_retained
+                        ? resumed.snapshot.continuity_bytes == planned.snapshot.continuity_bytes
+                            && resumed.snapshot.source_turns_since_review == planned.snapshot.source_turns_since_review
+                        : resumed.snapshot.continuity_bytes.empty())
                     && (retained
                         ? resumed.snapshot.plan_bytes == planned.snapshot.plan_bytes
                             && resumed.snapshot.plan_sha256 == planned.snapshot.plan_sha256
@@ -189,8 +193,23 @@ namespace epochengine::ai::self_iteration_orchestrator
             corrupt = payload;
             corrupt.insert(field_end, "%00");
             if (!reload("nul-plan", corrupt, false, false)) return false;
+            const auto continuity = payload.find("\ncontinuity_bytes=");
+            const auto continuity_end = payload.find('\n', continuity + 1u);
+            const auto turns_end = payload.find('\n', continuity_end + 1u);
+            if (continuity == std::string::npos || continuity_end == std::string::npos
+                || turns_end == std::string::npos) return false;
+            corrupt = payload;
+            corrupt.insert(continuity_end, "%00");
+            if (!reload("nul-continuity", corrupt, false, false)) return false;
+            corrupt = payload;
+            corrupt.insert(continuity_end, std::string(16u * 1024u + 1u, 'x'));
+            if (!reload("oversized-continuity", corrupt, false, false)) return false;
+            payload.erase(continuity + 1u, turns_end - continuity);
+            auto legacy_v2 = payload;
+            legacy_v2.replace(legacy_v2.find("orchestrator.v3"), 15u, "orchestrator.v2");
+            if (!reload("legacy-v2-plan", legacy_v2, true, true, false)) return false;
             payload.erase(field + 1u, field_end - field);
-            payload.replace(payload.find("orchestrator.v2"), 15u, "orchestrator.v1");
+            payload.replace(payload.find("orchestrator.v3"), 15u, "orchestrator.v1");
             return reload("legacy-plan-hash", payload, true, false)
                 && read_bytes(planned.state_path) == original;
         }
@@ -480,10 +499,26 @@ namespace epochengine::ai::self_iteration_orchestrator
                 IterationTargetKind::project_source),
             .created_at_unix_seconds = now,
             .project_source_campaign_permitted = true,
-            .sandbox_apply_permitted = true};
+            .sandbox_apply_permitted = true,
+            .continuity_bytes = "READ admitted: Source/main.cpp; current exact bytes retained.\nNo patch/build yet.\n",
+            .source_turns_since_review = 3u};
+        for (const auto& invalid_memory : {
+                std::string(16u * 1024u + 1u, 'x'), std::string{"bad\0memory", 10u}})
+        {
+            auto invalid_configuration = configuration;
+            invalid_configuration.continuity_bytes = invalid_memory;
+            Orchestrator invalid{};
+            if (invalid.begin(invalid_configuration))
+            {
+                fs::remove_all(root, ec);
+                return false;
+            }
+        }
         Orchestrator first{};
         Result begun = inspected.accepted ? first.begin(configuration) : Result{};
         if (!begun || begun.snapshot.phase != Phase::awaiting_plan_request
+            || begun.snapshot.continuity_bytes != configuration.continuity_bytes
+            || begun.snapshot.source_turns_since_review != 3u
             || begun.snapshot.transport != TransportKind::guarded_local_mcp_child
             || begun.snapshot.campaign.session.source.target_kind
                 != IterationTargetKind::project_source
@@ -546,12 +581,35 @@ namespace epochengine::ai::self_iteration_orchestrator
         }
         constexpr std::string_view saved_plan =
             "Inspect the admitted file (100%).\nPropose one bounded patch, then validate it.";
+        auto retained_configuration = configuration;
+        retained_configuration.cache_root /= "retained-plan";
+        Orchestrator retained{};
+        auto retained_step = retained.begin(retained_configuration);
+        if (retained_step)
+            retained_step = retained.request_plan(action(retained_step.snapshot,
+                "retained-plan-request", now + 4u));
+        if (!retained_step || !retained_step.pending_operation)
+        {
+            fs::remove_all(root, ec);
+            return false;
+        }
+        retained_step = retained.record_plan(receipt(*retained_step.pending_operation,
+            now + 5u), saved_plan, "Host reused retained plan without supervisor inference.", true);
+        if (!retained_step || retained_step.snapshot.source_turns_since_review
+                != configuration.source_turns_since_review
+            || !saved_plan_contract(retained_configuration, retained_step, now + 6u))
+        {
+            fs::remove_all(root, ec);
+            return false;
+        }
         Result planned = restarted.record_plan(
             receipt(*fresh_plan.pending_operation, now + 5u),
             saved_plan,
             "Local model returned one bounded plan.");
         if (!planned || planned.snapshot.phase != Phase::awaiting_curated_evidence
             || planned.snapshot.plan_bytes != saved_plan
+            || planned.snapshot.continuity_bytes != configuration.continuity_bytes
+            || planned.snapshot.source_turns_since_review != 0u
             || !saved_plan_contract(configuration, planned, now + 6u)
             || restarted.share_curated_evidence(
                 action(planned.snapshot, "share-wrong", now + 6u),
