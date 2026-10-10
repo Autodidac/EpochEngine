@@ -2,7 +2,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.35-1F7A4C?style=for-the-badge" alt="Current development source v0.90.35" />
-  <img src="https://img.shields.io/badge/Windows_Linux_Release_Candidate-v0.90.35-2C6A8A?style=for-the-badge" alt="Windows/Linux release candidate v0.90.35" />
+  <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.90.35-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.90.35" />
 </p>
 
 EpochEngine development source is available in this repository. Verified runtime

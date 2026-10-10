@@ -266,7 +266,7 @@ asset must have a companion
 require no credential; source reads require server authorization; administrative
 writes remain protected by a hosted secret that must never enter source,
 manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
-GitHub. Development and the authorized Windows/Linux release candidate are
+GitHub. Development and the authorized Windows/Linux release line are
 `v0.90.35`; exact admission receipts live in `Changes/release_sync_2026-10-10.md`.
 The signed Site API remains the updater authority; the operator also authorizes
 matching GitHub release assets. Keep all historical releases immutable, including

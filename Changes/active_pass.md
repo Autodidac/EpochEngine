@@ -2,8 +2,9 @@
 
 Updated October 10, 2026. Product order: roadmap.md; durable operator intent:
 mission_cache.md; completed implementation/build history: changelog.txt;
-exact delivery receipts: source_sync_2026-10-08.md. Historical dates/PIDs are
-evidence, not instructions to reuse an old executable or campaign.
+exact delivery receipts: release_sync_2026-10-10.md and
+source_sync_2026-10-08.md. Historical dates/PIDs are evidence, not instructions
+to reuse an old executable or campaign.
 
 ## Current Gate — Useful AI Work Through Sandbox Succession (P0)
 
@@ -131,35 +132,40 @@ Six-second pacing and host CPU/RAM admission remain. GPU/VRAM/macOS protection
 is not implemented. Request budgets (conversation 3 min, authoring 15 min,
 source iteration/self-review 3 h) are not mission duration or external deadlines.
 
-## Operator-Authorized Release Pass — October 10
+## Completed Operator-Authorized Release — October 10
 
-The operator now explicitly requests new Windows/Linux releases and approves one
-brief staged Windows launch check. Stage v0.90.35 from one committed source tree,
-rebuild the changed packaged-version pins, rerun production/pure/package guards
-and use the Ubuntu 22.04 full Clang CI package lane for Linux while local WSL's
-VHD is missing. Keep the running normal Debug Editor untouched. No Qwen/candidate
-test is part of package proof; stop the native package probe on crash/hang.
+Windows/Linux v0.90.35 is published on GitHub and Site v123 at exact release
+source b9d5f8a18ff045fc957342cba81039cebf31ef08. All five hosted CMake jobs and
+MSBuild pass; full Ubuntu 22.04 Clang passes 62/62 tests and the packaged software
+OpenGL check. Windows production/pure/HeadlessCI checks, all 311 imports and the
+single approved 300-frame staged OpenGL startup pass. Original CI inputs and
+final package/source bodies are audited; independent complete downloads and
+the pinned Site Ed25519 signature verify. The exact paired private source is
+active only after protected download/decryption checks. Full receipts and the
+two existing Site dependency advisories are in release_sync_2026-10-10.md.
 
-Do not tag or publish a failed/unverified artifact. Exact artifact hashes,
-source identity, build-validation receipts, notices and independent GitHub/Site
-downloads precede a completion claim. Keep all v0.90.33 objects/tags/manifests
-immutable; new metadata may select v0.90.35 only after verified publication.
-Native AI succession and macOS v0.89.30 remain separate, unchanged gates.
+The release gate is complete, not an instruction to repeat publication or
+runtime probes. Old v0.90.33 objects/tags/manifests and macOS v0.89.30 remain
+immutable. Local WSL's missing VHD is not relabeled as local Linux proof. The
+operator's normal Release Editor PID 29836 remains untouched; the package smoke
+does not prove native Qwen/docked Choose/second-succession acceptance.
 
 ## Source, Storage And Delivery Boundary
 
-Development stays v0.90.35. Immutable Windows/Linux runtime stays v0.90.33 at
-f33d3d6758abf402747870df4f8887e7887a2035; macOS stays v0.89.30. No runtime/tag/
-download replacement or native-success claim. Same Windows projects expose
+Development and immutable Windows/Linux runtime are v0.90.35; exact release
+source is b9d5f8a18ff045fc957342cba81039cebf31ef08 on both sites. Historical
+v0.90.33 at f33d3d6758abf402747870df4f8887e7887a2035 remains unchanged; macOS
+stays v0.89.30. Closing docs do not retag or replace published bytes and do not
+claim native AI success. Same Windows projects expose
 Debug, Release, ReleaseWithDebugInfo and BuildAll; portable builds Debug/Release.
 Never restore a combined-build project or rewrite original stable history.
 
-Tested code checkpoint b3aae56e and its code-identical receipt checkpoint f8ecd7e8
-are pushed to GitHub main/stable, preserving original ad6c416d ancestry. Site v120
-now publishes the exact f8ecd7e8 paired source after independent download/hash/
-offline decryption checks and one atomic activation. All 25 prior source records
-remain retained inactive for rollback. Closing delivery-only documentation changes
-no tested code and does not replace that immutable published source pair.
+GitHub main/stable preserve the original ad6c416d ancestry. Site v123 publishes
+the exact b9d5f8a1 paired source with protected download/hash/offline decryption
+proof and one atomic activation. Both new source records are active; all 27 prior
+records, including Site v120's f8ecd7e8 pair, remain inactive for rollback.
+Delivery-only closing documentation changes no tested code and does not replace
+that immutable published source pair.
 Site v119's four standalone source pairs and the new canonical EpochGuiCurrent
 mirror at c52e9129 remain verified unchanged by anonymous clone/fsck. Old
 EpochGui.git b9716742 history/tags/refs remain unchanged. PlatformEngine is v0.1.1;

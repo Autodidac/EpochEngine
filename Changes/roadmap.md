@@ -9,8 +9,9 @@ operator intent is `Changes/mission_cache.md`.
 
 The v0.90.22 self-coding baseline uses cumulative, token-budgeted source discovery: a compact repository map and bounded needle searches feed a persistent reviewed-source workspace. Search metadata is navigation-only; exact reviewed bytes remain required for patch authority. Replacement-slice/24-expansion behavior is superseded.
 
-October 7 status: immutable v0.90.33 is published on GitHub and the Site. Later
-stage-prompt/streamed-response source repairs have build/pure-contract proof, not
+October 10 status: v0.90.35 Windows/Linux packaging and publication receipts are
+in `release_sync_2026-10-10.md`; preserved v0.90.33 history is not overwritten.
+Stage-prompt/streamed-response source repairs have build/pure-contract proof, not
 native Qwen/embedded-choice/successor acceptance. D1/P0 remains the next behavioral
 gate; packaging success does not complete it or the playable 2D objective.
 
@@ -104,7 +105,7 @@ expose private SDK material. Current source and release receipts below govern.
 
 ## Current Release State
 
-- Active repair source is **v0.90.35**, consolidating source layout, transactional discovery, provider/activity/focus repairs and four same-project Windows build modes. Publication status and exact identity belong in `source_sync_2026-10-07.md`. Published Windows/Linux runtime authority remains immutable **v0.90.33**; macOS remains **v0.89.30**. Neither source publication nor pure contracts establish native model/docked successor acceptance.
+- Active source and published Windows/Linux runtime are **v0.90.35**, consolidating source layout, transactional discovery, provider/activity/focus repairs and four same-project Windows build modes. Exact source/artifact identities and completed GitHub/Site v123 readback belong in `release_sync_2026-10-10.md`. Historical Windows/Linux **v0.90.33** remains immutable; macOS remains **v0.89.30**. Neither source publication nor pure contracts establish native model/docked successor acceptance.
 - The internal-editor/generated-child entry-point split passed the October 1 Windows Debug/Release and sequential dual-build checks. Preserve that split during source relocation; generated projects retain their own entry source. The immediate behavior gate remains D1, not rebuilding this completed entry-point architecture.
 - The current renderer/editor baseline includes event-driven OpenGL scene caching, neuromorphic invalidation pressure, vacated-region diagnostics, alternating selective/full benchmarking, multi-selection/group transforms, renderer-neutral bounded lighting damage, accurate presentation-vs-render FPS telemetry, and persistent statistics.
 - Multicontext acceptance includes focus-owned physical input, clickable top-row controls, visible redocking guides, recoverable closed panes, and single-owner detached AI Chat behavior in Run mode.

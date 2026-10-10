@@ -42,8 +42,8 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-Active repair source and the authorized Windows/Linux release candidate are
-v0.90.35. Packaging/publication receipts are recorded in
+Active source and the Windows/Linux release line are v0.90.35.
+Exact packaging/publication receipts are recorded in
 `../../Changes/release_sync_2026-10-10.md`; prior source synchronization is in
 `../../Changes/source_sync_2026-10-08.md`. Historical Windows/Linux v0.90.33 and
 macOS v0.89.30 remain immutable. The exact next

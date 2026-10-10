@@ -187,8 +187,9 @@ These are durable requirements, not completion claims:
   checks before model/compiler/test/preview work, including after Keep/Choose. Show actual
   running/queued/idle work; registered worker lifetimes are not active jobs.
 - Release identity follows current admission receipts, not the historical
-  v0.90.04 target. v0.90.35 source and immutable v0.90.33 Windows/Linux runtime
-  are separate authorities. A future accepted base needs native, build, safety,
+  v0.90.04 target. The current exact source and platform-runtime identities are
+  owned by `release_sync_2026-10-10.md`; preserved v0.90.33 history must not be
+  replaced with new bytes. A future accepted base needs native, build, safety,
   packaging and rollback proof; update downloads/source/authorized branches only
   in the explicitly requested delivery pass, preserving verified old objects.
 
