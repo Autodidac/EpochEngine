@@ -42,9 +42,11 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-Active repair source is v0.90.35; published Windows/Linux runtime packages
-remain immutable v0.90.33. Source-only synchronization is recorded in
-`../../Changes/source_sync_2026-10-07.md`; the exact next
+Active repair source and the authorized Windows/Linux release candidate are
+v0.90.35. Packaging/publication receipts are recorded in
+`../../Changes/release_sync_2026-10-10.md`; prior source synchronization is in
+`../../Changes/source_sync_2026-10-08.md`. Historical Windows/Linux v0.90.33 and
+macOS v0.89.30 remain immutable. The exact next
 acceptance is in `../../Changes/active_pass.md`. No source version, transport
 timer or pure-contract pass proves a real model-built candidate or docked
 Keep/Choose succession.

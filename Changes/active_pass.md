@@ -167,8 +167,10 @@ Audio/Media are source foundations, not completed Engine integrations.
 The operator-authorized Extensions v0.2.1 reconciliation is merged/tested on
 GitHub at a003bcab, preserving both eccef139 and 16007d4b ancestries and all
 package/terrain source. Debug and Release pass 13/13 CPU contracts each. Exact
-paired exports are handed to the Site owner for verified fast-forward publication;
-an actual clone/download/deployment receipt, not a queued handoff, closes delivery.
+paired exports are published and independently read back. Site v122/5cc66a73,
+deployment appgdep_6aca16e5fd74819187cf0157550aaa80, passes page/download checks
+and anonymous clone/fsck with both ancestries and all original tags preserved.
+GitHub v0.2.1 publishes the same exact source pair and checksum sidecars.
 Historical v0.1.0/v0.2.0 tags/archives and the Engine fixture remain unchanged.
 
 Tracked source is canonical; authored Projects are durable; builds reproducible.

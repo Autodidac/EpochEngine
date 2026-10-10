@@ -72,9 +72,32 @@ Both exact committed exports contain 88 regular paths under
 - TAR.GZ: 56,199 bytes; SHA-256
   `e0a752ff4c890baa16c82cdb65f6b132dd6fd924d8627bc0ec62732209d7c67d`.
 
-The exact pair and merge are handed to the existing Site owner for fast-forward
-mirror publication and independent download/clone checks. The terminal Site
-deployment/readback receipt is still pending; a queued handoff is not publication.
+GitHub v0.2.1 is public at the exact merge, with both archives and checksum
+sidecars independently downloaded and hashed. Site v122 source
+`5cc66a73a2fcf1680c1e79719f0a66f9efe81fb5`, saved version
+`appgprj_6a8f35c0c4b881919e4e7c6577aab711~appgver_191a638f716c8191ad49236de1576eb0`,
+deployment `appgdep_6aca16e5fd74819187cf0157550aaa80`, succeeded. The Extensions
+project and downloads pages return 200; the canonical mirror anonymously clones
+to a003bcab/tree986d824 with 88 files, fsck passing and both original ancestries.
+The Engine chat separately fetched/read back that same main and all version refs.
+Old v0.1.0 tag object da2fcbdac5eba965d1de6b805b9341428677bc2e still peels to
+0b5b738aac024ea1f303a8d802660d840200960d; old lightweight v0.2.0 remains 16007d4b.
+New v0.2.1 names a003bcab. All 14 new objects, 42 unrelated baseline objects and
+11 old Extensions objects (67 total) independently download to expected hashes;
+public headers, exact license exports and checksum sidecars verify. Atomic
+activation is complete and the consumed grant returns 404.
+
+The initial v121 page overlay assumed an optional changelog existed and caused
+page errors. The owner repaired that cause, added a missing-array regression and
+deployed v122; final page checks and production build pass. Site lint has zero
+errors/ten baseline warnings. Old Engine runtime/latest/integrity/catalog bodies
+and Ed25519 signature are unchanged; all 27 private source rows remain unchanged
+with only the f8ecd7 pair active. Public Engine source/Git returns 404 and
+anonymous/forged private/admin requests return 401. Known Site dependency
+advisories remain separate unresolved work, not a zero-vulnerability claim.
+The owner removed only 51,585,056 bytes of task-owned staging/clones/helpers;
+canonical state and the receipt at
+`work/release-verification/extensions-v0.2.1-a003bcab/live-receipt.json` remain.
 Historical v0.1.0/v0.2.0 tags, both parents and old source archives are preserved.
 No new runtime release, package activation or historical tag movement is part of
 this source reconciliation.

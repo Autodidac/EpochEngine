@@ -238,22 +238,25 @@ three source identity macros in lockstep with `epoch.version.ixx`; packaged
 version overrides remain release-staging inputs rather than source metadata.
 
 
-EpochEngine development source is restricted. The public ChatGPT Site must not
+EpochEngine source is independently published on GitHub by operator authorization.
+Source delivery through the ChatGPT Site is restricted. The public Site must not
 advertise or anonymously serve its smart-Git repository, source archives,
 commit/tree browser, or mutable source aliases. Approved source access requires
 a server-side user entitlement and an authenticated, short-lived download; a
 client-only gate or static shared secret is not acceptable. EpochGui remains an
 independent public smart-Git repository at
-`https://epoch.adamrushford.chatgpt.site/git/EpochGui.git`.
+`https://epoch.adamrushford.chatgpt.site/git/EpochGuiCurrent.git`.
+The old `EpochGui.git` mirror and its unrelated history remain preserved.
 
 Hosted repositories and source archives must be full committed-source
 snapshots. Freeze the reviewed publishable working set into one commit before
 hosting it; never expose transient uncommitted state or trim source to match a
 runtime/updater-shell payload. The standalone EpochGui repository must be
 byte-for-byte equivalent to `Engine/dep/EpochGui` at the corresponding release.
-Preserve `multicontext-base-stable` at exact commit
-`ad6c416d930b348a61bc37ceb7d4522742be084a`; do not recreate that history from
-a runtime archive or substitute the v0.89.06 tag.
+Preserve original stable checkpoint `ad6c416d930b348a61bc37ceb7d4522742be084a`
+in history. The operator-authorized `multicontext-base-stable` branch mirrors
+main by fast-forward; do not rewrite its ancestry, recreate it from a runtime
+archive or substitute the v0.89.06 tag.
 
 Epoch-owned update publication is Site-native. Publish release/build manifests
 under `/api/epoch/` and immutable versioned runtime assets under
@@ -263,12 +266,12 @@ asset must have a companion
 require no credential; source reads require server authorization; administrative
 writes remain protected by a hosted secret that must never enter source,
 manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
-GitHub. `v0.89.32` is the current development source; `v0.89.30` is the fully
-published packaged-runtime authority. Preserve v0.89.29, v0.89.28, v0.89.27,
-and immutable v0.89.06 as rollback history until an explicit cleanup pass. The
-Site remains the only EpochEngine release authority. Publish Windows ZIP and
-Linux tar.gz
-runtime forms, with a checksum
+GitHub. Development and the authorized Windows/Linux release candidate are
+`v0.90.35`; exact admission receipts live in `Changes/release_sync_2026-10-10.md`.
+The signed Site API remains the updater authority; the operator also authorizes
+matching GitHub release assets. Keep all historical releases immutable, including
+Windows/Linux v0.90.33 at f33d3d6758abf402747870df4f8887e7887a2035 and macOS
+v0.89.30. Publish Windows ZIP and Linux tar.gz runtime forms, with a checksum
 sidecar for every public object and live post-deploy digest verification.
 
 The updater contract stays binary-first:
@@ -366,7 +369,12 @@ Before publishing a Linux/WSL2 asset:
   `$ORIGIN/lib`, GLIBC baseline, archive contents, and checksums, but the result
   must be reported as lacking fresh runtime-smoke evidence. Omit the switch for
   a fully runtime-smoked release candidate.
-- rebuild from the same bumped source commit that will be tagged
+- rebuild from the same bumped production source that will be tagged; a closing
+  docs-only commit must carry an exact production-input comparison and both
+  build-commit and release-commit identities in provenance. If a README is
+  refreshed in an already validated archive, preserve every executable/library,
+  mode and symlink, independently compare all entries and record the repack and
+  new artifact hash. Never relabel it as byte-identical to the original CI archive.
 - use the validated Clang full-engine path for the package build, through
   `Engine/build.sh clang Release`, unless a later release pass proves another
   Linux compiler path

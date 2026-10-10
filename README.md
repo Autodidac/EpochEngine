@@ -2,7 +2,7 @@
 
 <p align="left">
   <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.35-1F7A4C?style=for-the-badge" alt="Current development source v0.90.35" />
-  <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.90.33-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.90.33" />
+  <img src="https://img.shields.io/badge/Windows_Linux_Release_Candidate-v0.90.35-2C6A8A?style=for-the-badge" alt="Windows/Linux release candidate v0.90.35" />
 </p>
 
 EpochEngine development source is available in this repository. Verified runtime
@@ -78,10 +78,11 @@ For engine/tooling developers:
 ## Current Snapshot
 
 - Active development source is `v0.90.35`, including source-informed supervisor
-  handoffs, incremental task memory and cumulative source-residency repairs. This is a source-only update, not native self-coding
-  acceptance or a new binary release. Published Windows/Linux runtimes remain
-  immutable `v0.90.33`; their verified provenance is recorded in
-  [the release checkpoint](Changes/release_sync_2026-10-01.md). The release Site's
+  handoffs, incremental task memory and cumulative source-residency repairs.
+  Windows/Linux `v0.90.35` packaging and publication evidence is recorded in
+  [the current release checkpoint](Changes/release_sync_2026-10-10.md).
+  Native self-coding succession remains an open acceptance gate. Historical
+  `v0.90.33` packages and their source authority remain immutable. The release Site's
   signed latest-release API is authoritative for admitted runtime downloads;
   historical packages and tags remain immutable.
 - Source function stages no longer compete with a final-assistant-content

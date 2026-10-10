@@ -31,8 +31,10 @@ archive for historical context and milestone tracing.
 
 Current orientation:
 
-- Latest recorded signed runtime line: `v0.89.30`
-- Current development source line: `v0.90.33`
+- Current development and authorized Windows/Linux release candidate: `v0.90.35`;
+  exact packaging/publication status: `release_sync_2026-10-10.md`.
+- Historical Windows/Linux authority `v0.90.33` is preserved; macOS remains
+  `v0.89.30`. A candidate is not a completed publication or native AI proof.
 
 ## What the engine has become so far
 
