@@ -102,20 +102,17 @@ ownership before connecting it. Installation is not full-agent integration.
 
 ## Exact Next Actions And Stop Conditions
 
-1. Finish the exact source-only Site handoff of the Clang-corrected checkpoint
-   and this receipt-only documentation follow-up. Admit only a verified paired
-   export, retaining old source admissions and immutable runtime downloads.
-2. Operator: test a fresh rebuilt Release or ReleaseWithDebugInfo Editor with
+1. Operator: test a fresh rebuilt Release or ReleaseWithDebugInfo Editor with
    Next Flash at port 14321 and its session key. Automatic context defaults to
    81920; override only if the actual loaded size differs. Confirm useful
    supervisor/worker handoff, exact current reads, an atomic patch and all seven
    actual validation receipts. Old campaigns do not prove new-code behavior.
-3. Qualify independent PID launch, embedding, Keep/Choose/Stop, loser retirement
+2. Qualify independent PID launch, embedding, Keep/Choose/Stop, loser retirement
    and a second real validated build from the chosen parent. Include fullscreen,
    maximize/restore, focus/minimize, DPI/resize, child exit and host/context close.
    Stop runtime probing on crash, hang or GPU instability; preserve logs and
    inspect leftovers. In-process hot-loading is not equivalent succession proof.
-4. Implement/qualify cold-start checkpoint discovery and explicit safe resume.
+3. Implement/qualify cold-start checkpoint discovery and explicit safe resume.
    Restore completed plan/edits, discard unfinished arguments, revalidate files
    and authority with fresh receipts; never carry approval or claim token/KV
    recovery. Qualify filesystem/network/IPC containment separately: private
@@ -142,12 +139,14 @@ download replacement or native-success claim. Same Windows projects expose
 Debug, Release, ReleaseWithDebugInfo and BuildAll; portable builds Debug/Release.
 Never restore a combined-build project or rewrite original stable history.
 
-Tested code checkpoint b3aae56e is pushed to GitHub main/stable, preserving
-original ad6c416d ancestry. The receipt-only follow-up changes no tested code.
-The preceding exact 02eb source pair is verified active in Site v115. The next
-Clang-corrected pair requires a real admission/download receipt, not a queued
-message. Final Site v119 verifies four standalone source pairs and the new
-canonical EpochGuiCurrent mirror at c52e9129 by anonymous clone/fsck. Old
+Tested code checkpoint b3aae56e and its code-identical receipt checkpoint f8ecd7e8
+are pushed to GitHub main/stable, preserving original ad6c416d ancestry. Site v120
+now publishes the exact f8ecd7e8 paired source after independent download/hash/
+offline decryption checks and one atomic activation. All 25 prior source records
+remain retained inactive for rollback. Closing delivery-only documentation changes
+no tested code and does not replace that immutable published source pair.
+Site v119's four standalone source pairs and the new canonical EpochGuiCurrent
+mirror at c52e9129 remain verified unchanged by anonymous clone/fsck. Old
 EpochGui.git b9716742 history/tags/refs remain unchanged. PlatformEngine is v0.1.1;
 Audio/Media are source foundations, not completed Engine integrations.
 Extensions Site v0.2.0/16007d4b has seven terrain paths absent from GitHub eccef139:

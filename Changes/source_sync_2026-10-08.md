@@ -30,6 +30,48 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 10 final Clang-corrected source publication
+
+Exact source checkpoint `f8ecd7e820c6608147d8c246813fafd28b7f13c6`, tree
+`6d6d044a3764fe4a7979c1b106e8bb51f491ea11`, is pushed/read back on GitHub main
+and multicontext-base-stable. Its production inputs are byte-identical to tested
+`b3aae56e`; only four documentation paths differ. Both exports contain 1,081
+committed raw-Unicode paths under `EpochEngine-0.90.35-source/`, preserving
+tracked Git export attributes and line endings, not dirty working-copy bytes.
+
+- Windows ZIP: 65,769,560 bytes; SHA-256
+  `8b60f7111e2cfead4e276d63013aa9c6353a371bc6f0cc9fa946e10770854703`.
+- Linux TAR.GZ: 65,207,602 bytes; SHA-256
+  `5d48623ba006e22503592bd1834d8ab50a59f73f102c1053f00c047705751530`.
+
+Site v120 source `e04d2b50cea7bd08ae9b0233ec8abf91d8aaf214`, saved version
+`appgprj_6a8f35c0c4b881919e4e7c6577aab711~appgver_f35f11a97c088191896d724fd20d7260`,
+deployment `appgdep_6aca031d71408191a4544b4c88c32ad0`, succeeded in environment 9.
+Both protected uploads, independent encrypted downloads and offline AES-GCM
+decryptions passed exact size/hash checks before one atomic paired activation.
+D1 readback verifies the two new active rows and all 25 previous rows retained
+inactive for rollback; the consumed grant returns 404. Live source-version is
+0.90.35 and the Engine project names f8ecd7e8 with the full Clang 62/62 receipt.
+The publication is final, not a queued handoff or native AI succession proof.
+
+All nine immutable runtime assets, twenty standalone source assets, five EngCoder
+assets and eight GUI mirror objects re-download to unchanged hashes. Current GUI
+c52e9129/tree4f8fd154/53 files and historical GUI refs remain unchanged; Extensions
+16007d4b/v0.2.0 remains intact pending its separate reconciliation decision.
+Latest/integrity/catalog bodies remain unchanged and the Ed25519 signature verifies.
+Public Engine Git/plain source returns 404; anonymous and forged private/admin
+requests return 401. All 96 Site tests and production build pass; lint reports
+zero errors/ten existing warnings. The two earlier high dependency advisories
+remain unresolved separate security work, not a successful security repair.
+Site nonsecret receipts are retained under work/release-verification/epoch-source-f8ecd7.
+
+Only the two unadmitted b3aae56e transfer archives were removed locally (130,994,183
+bytes); they can be regenerated from that Git commit. Final f8ecd7e8 exports,
+admitted historical exports, build outputs, proof logs, authored projects,
+candidate lineage and unrelated operator changes remain untouched. The final
+closing documentation receipt does not change tested production inputs or require
+another export/release: the Site's exact published checkpoint remains f8ecd7e8.
+
 ### October 10 full-engine Clang follow-up and verified delivery
 
 Checkpoint `02eb2436a9c4b669c10767897cc0c09ac3cc3ca3`, tree
