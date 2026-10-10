@@ -47,8 +47,17 @@ No GUI/model/candidate is launched; native acceptance remains operator-owned.
 Ubuntu's registered VHD is missing, so hosted Clang proof is not substituted
 with an invented local Linux result. No dependency mirror source changed.
 Public runtime authorities, Site hold and unrelated dirty solution/workspace
-files remain unchanged. GitHub delivery below must name actual read-back heads,
-not merely a requested push or passing local build.
+files remain unchanged.
+
+Code checkpoint `7a7b85d23cd4056cb27c28b51768ac6937bb9ba8` was atomically pushed
+to GitHub main and multicontext-base-stable; both heads were independently read
+back at that exact commit. Original stable ancestry is preserved. EpochGui's
+exact clean mirror and upstream main/tree remain c52e91293749a7a34959bfc042c582c3ac182504;
+engine-owned descriptor fixtures are not standalone mirrors and need no push.
+Hosted MSBuild run 38015016901 and the linux-clang/linux-gcc jobs of CMake run
+38015016930 pass; full linux-clang-engine was still building at this receipt.
+This documentation-only receipt does not change the tested source or restart
+its CI. No Site handoff, dependency repository write or release occurred.
 
 ### October 9 context compaction and normal binary follow-up
 

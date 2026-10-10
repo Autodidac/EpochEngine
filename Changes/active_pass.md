@@ -412,6 +412,11 @@ the fast-forward stable mirror. Preserve the original base in history; freeze
 only after reusable software/context acceptance. Delivery belongs in
 source_sync_2026-10-08.md. Site publication is held by its subsequent operator
 wrap-up instruction; renewed direction is required. GitHub and Site are separate.
+The current Project Assistant/input/Clang code repair is pushed and read back on
+main/stable at `7a7b85d2`. Hosted MSBuild and linux-clang/linux-gcc checks pass;
+full linux-clang-engine is still building at this receipt. The documentation-only
+follow-up changes no tested code and does not restart CI. No dependency mirror,
+Site or release publication is claimed.
 The preceding tested code batch was pushed on main/stable at `717d2c27`; both remote heads
 were read back and original stable ancestry was verified. Hosted checks and
 native new-code succession are not claimed by that source push.
