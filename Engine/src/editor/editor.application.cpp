@@ -60,6 +60,7 @@ module;
 #include <map>
 #include <mutex>
 #include <optional>
+#include <source_location>
 #include <span>
 #include <stop_token>
 #include <shared_mutex>

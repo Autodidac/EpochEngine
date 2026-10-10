@@ -30,6 +30,54 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 10 full-engine Clang follow-up and verified delivery
+
+Checkpoint `02eb2436a9c4b669c10767897cc0c09ac3cc3ca3`, tree
+`1a53e7926d151df9576f7f802c93713421d55e0c`, was atomically pushed to GitHub main
+and multicontext-base-stable, then independently read back. Both committed
+source exports contain 1,081 raw-Unicode tracked paths and use prefix
+`EpochEngine-0.90.35-source/`:
+
+- ZIP: 65,774,813 bytes; SHA-256
+  `1db6189b8bf5b3a8b246f6f6d560e6a347b9d5589b2b836145d5e12b8d671704`.
+- TAR.GZ: 65,214,908 bytes; SHA-256
+  `c36bf575263f8eca1c97d0caa49be845b2f990f6dc7036388065c95592f52bf5`.
+
+Site v115, commit `1e1072b4d849c53aa9960e1177a9cbe539cda859`, deployment
+`appgdep_6ac9ab2d680481918d1cf1909ecd69e3`, publishes that exact pair. The owner
+verified upload, independent download and offline decryption against both
+plaintext hashes. Earlier 23 source rows remain retained inactive; nine runtime
+assets and five EngCoder v114 assets remain unchanged. Existing Ed25519 admission
+signature verifies; public Git/plaintext routes return 404 and anonymous/forged
+private/admin requests return 401. All 92 Site contracts and its production
+build pass. This is source publication, not a new runtime release or native
+self-coding success.
+
+GitHub MSBuild run 38018518837 and four jobs of CMake run 38018518968 pass.
+Only linux-clang-engine fails: the complete 4,443-line log shows missing
+source_location inclusion at three editor.application.cpp calls. The owner now
+includes that header in the global module fragment; no renderer, queue order or
+AI protocol is changed. Optimized-symbols Editor/HeadlessCI rebuild and the
+complete pure suite pass at 04:36:02 on October 10; normal Release Editor/HeadlessCI
+rebuild and its pure suite pass at 04:39:50. Build and complete failed
+CI logs stay under build/batched-authoring-20261009. Hosted confirmation of this
+new correction is still required; local Ubuntu is blocked by its missing VHD.
+The operator's running normal Debug Editor is not stopped or overwritten.
+
+The interrupted standalone publication resumes in the existing Site-owner
+chat. v116 is confirmed deployed; archive activation and new mirror clone proof
+must be recorded separately, not inferred from deployment alone. The operator
+explicitly approves creating a new canonical EpochGui mirror from c52e9129 and
+preserving old b9716742 history/availability; their unrelated histories cannot
+fast-forward. PlatformEngine remains v0.1.1; Audio/Media are source foundations,
+not new implemented native engines or release packages.
+
+Do not downgrade Extensions Site v0.2.0/16007d4b to unversioned GitHub eccef139.
+Seven paths in the admitted Site terrain source are absent from GitHub:
+root CMakeLists.txt, catalog/extensions.json, tiered_terrain LICENSE/README/module/
+contract test, and tests/validate_catalog.cmake. Preserve both histories and
+source objects pending the separately requested reconciliation decision.
+
 ### October 9 renewed Site source delivery and adaptive authoring
 
 The operator renewed GitHub/Site source synchronization after the earlier hold.

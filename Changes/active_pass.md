@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 9, 2026, after AI cutoff and adaptive authoring repair. Only unfinished acceptance
+Updated October 10, 2026, after the full-engine Clang include repair. Only unfinished acceptance
 belongs here. Product order: roadmap.md; durable intent: mission_cache.md;
 completed work/evidence: changelog.txt; behavior: owning subsystem contracts.
 Historical process IDs and dates are evidence, not live instructions.
@@ -41,7 +41,16 @@ changes. Runtime UI/model/docking proof remains with the operator.
 The later hosted linux-clang-engine failure in run 38015016930 is distinct from
 the earlier initializer_list repair: ai.engine.cpp used from_chars without
 including charconv. The complete failed transcript identifies that first cause;
-the owning translation unit now includes it. New hosted confirmation is pending.
+the owning translation unit now includes it. Subsequent run 38018518968 passes
+Windows MSVC/cpp26 and Linux headless Clang/GCC; only full linux-clang-engine
+fails. Its complete 4,443-line transcript identifies three uses of
+std::source_location in editor.application.cpp without the owning standard
+include. Add source_location in that translation unit's global module fragment,
+not a module-import visibility workaround. Optimized-symbols Editor/HeadlessCI
+rebuild and the pure suite pass at 04:36:02 on October 10; normal Release
+Editor/HeadlessCI rebuild and its pure suite pass at 04:39:50. The current Debug
+Editor PID 26772 remains untouched. New hosted full-engine confirmation remains
+separate; Ubuntu's registered VHD is still missing.
 The supplied README scene is operator-confirmed Project Assistant evidence:
 Qwen Next Flash created 100 cube objects and implemented lighting. It is not
 candidate succession evidence. Historical Linux/multicontext proof remains.
@@ -456,7 +465,17 @@ source_sync_2026-10-08.md. The October 9 operator explicitly renewed Site source
 publication after the earlier wrap-up hold. Send the exact tested committed
 source pair to the existing Site owner; wait for its publication receipt.
 GitHub and Site are separate; this does not authorize replacing runtime bytes.
-The current Project Assistant/input/Clang code repair is pushed and read back on
+AI cutoff/adaptive authoring checkpoint 02eb2436a9c4b669c10767897cc0c09ac3cc3ca3
+is pushed/read back on main and stable. Its exact committed ZIP/TAR pair is
+published and independently verified in Site v115; runtime and EngCoder assets
+remain unchanged. The current one-include full-Clang follow-up retains that
+tested AI code. Site v116 is deployed for standalone source references; final
+artifact/mirror activation receipts belong in source_sync_2026-10-08.md.
+The operator approves a new canonical EpochGui mirror at c52e9129 while
+preserving the old unrelated b9716742 mirror, history and availability.
+Extensions Site v0.2.0 has terrain code/tests absent from GitHub eccef139;
+preserve both and obtain a separate reconciliation decision before replacement.
+The preceding Project Assistant/input/Clang code repair is pushed and read back on
 main/stable at `7a7b85d2`. Hosted MSBuild and linux-clang/linux-gcc checks pass;
 full linux-clang-engine subsequently failed on the charconv include above. The documentation-only
 follow-up changes no tested code and does not restart CI. No dependency mirror,
