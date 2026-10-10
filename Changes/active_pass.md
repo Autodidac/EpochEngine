@@ -131,6 +131,21 @@ Six-second pacing and host CPU/RAM admission remain. GPU/VRAM/macOS protection
 is not implemented. Request budgets (conversation 3 min, authoring 15 min,
 source iteration/self-review 3 h) are not mission duration or external deadlines.
 
+## Operator-Authorized Release Pass — October 10
+
+The operator now explicitly requests new Windows/Linux releases and approves one
+brief staged Windows launch check. Stage v0.90.35 from one committed source tree,
+rebuild the changed packaged-version pins, rerun production/pure/package guards
+and use the Ubuntu 22.04 full Clang CI package lane for Linux while local WSL's
+VHD is missing. Keep the running normal Debug Editor untouched. No Qwen/candidate
+test is part of package proof; stop the native package probe on crash/hang.
+
+Do not tag or publish a failed/unverified artifact. Exact artifact hashes,
+source identity, build-validation receipts, notices and independent GitHub/Site
+downloads precede a completion claim. Keep all v0.90.33 objects/tags/manifests
+immutable; new metadata may select v0.90.35 only after verified publication.
+Native AI succession and macOS v0.89.30 remain separate, unchanged gates.
+
 ## Source, Storage And Delivery Boundary
 
 Development stays v0.90.35. Immutable Windows/Linux runtime stays v0.90.33 at

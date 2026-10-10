@@ -92,6 +92,11 @@
 - Current development source is `v0.90.35`; public Windows/Linux packaged
   runtime and its exact release-source authority are immutable `v0.90.33` at
   `f33d3d6758abf402747870df4f8887e7887a2035`, published on GitHub and the Site.
+  On October 10 the operator explicitly authorized a new Windows/Linux
+  `v0.90.35` release pass and one brief staged Windows package launch. Tracked
+  packaged-version pins now identify that candidate; publication still requires
+  exact source/artifact receipts and both-site readback. Preserve v0.90.33 and
+  every historical asset/tag; a candidate pin is not proof of publication.
   Later AI source checkpoints are not replacement release bytes or proof of
   native Qwen/docked succession. The active pass owns the remaining gate. macOS
   packaged authority remains `v0.89.30`. Preserve
